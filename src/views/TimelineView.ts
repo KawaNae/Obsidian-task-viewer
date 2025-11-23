@@ -30,6 +30,10 @@ export class TimelineView extends ItemView {
         return 'Timeline View';
     }
 
+    getIcon() {
+        return 'calendar-with-checkmark';
+    }
+
     async onOpen() {
         this.container = this.contentEl;
         this.container.empty();
@@ -223,8 +227,7 @@ export class TimelineView extends ItemView {
         };
 
         // Debug Info
-        const totalTasks = this.taskIndex.getTasks().length;
-        toolbar.createSpan({ text: ` | Total Tasks: ${totalTasks} | Start: ${this.viewState.startDate}` });
+
     }
 
     private navigateDate(days: number) {
@@ -237,18 +240,19 @@ export class TimelineView extends ItemView {
     private renderGrid() {
         const grid = this.container.createDiv('timeline-grid');
         const dates = this.getDatesToShow();
-        const colTemplate = `60px repeat(${this.viewState.daysToShow}, minmax(0, 1fr))`;
+        const colTemplate = `30px repeat(${this.viewState.daysToShow}, minmax(0, 1fr))`;
 
         // 1. Header Row
         const headerRow = grid.createDiv('timeline-row header-row');
         headerRow.style.gridTemplateColumns = colTemplate;
 
         // Time Axis Header
-        headerRow.createDiv('header-cell').setText('Time');
+        headerRow.createDiv('header-cell').setText(' ');
         // Day Headers
         dates.forEach(date => {
             const cell = headerRow.createDiv('header-cell');
-            cell.setText(date);
+            const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+            cell.setText(`${date} (${dayName})`);
             cell.dataset.date = date;
         });
 
@@ -257,7 +261,7 @@ export class TimelineView extends ItemView {
         allDayRow.style.gridTemplateColumns = colTemplate;
 
         // Time Axis All-Day
-        allDayRow.createDiv('all-day-cell').setText('All Day');
+        allDayRow.createDiv('all-day-cell').setText(' ');
         // Day All-Day Cells
         dates.forEach(date => {
             const cell = allDayRow.createDiv('all-day-cell');
@@ -301,7 +305,7 @@ export class TimelineView extends ItemView {
         for (let i = 0; i < 24; i++) {
             const label = container.createDiv('time-label');
             label.style.top = `${i * 60}px`;
-            label.setText(`${i}:00`);
+            label.setText(`${i}`);
         }
     }
 

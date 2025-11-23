@@ -1,8 +1,8 @@
 /* Variables */
 :root {
     --hour-height: 60px;
-    --time-axis-width: 60px;
-    --header-height: 40px;
+    --time-axis-width: 30px;
+    --header-height: 30px;
     --all-day-min-height: 40px;
 }
 
@@ -60,10 +60,13 @@
 
 .header-cell {
     border-right: 1px solid var(--background-modifier-border);
-    padding: 8px;
+    padding: 2px;
     text-align: center;
     font-weight: bold;
     height: var(--header-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* 2. All-Day Row */
@@ -79,7 +82,7 @@
 
 .all-day-cell {
     border-right: 1px solid var(--background-modifier-border);
-    padding: 4px;
+    padding: 2px;
     min-height: var(--all-day-min-height);
     position: relative;
 }
