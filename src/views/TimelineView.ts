@@ -12,6 +12,7 @@ export class TimelineView extends ItemView {
     private dragHandler: DragHandler;
     private selectedTaskId: string | null = null;
     private handleOverlay: HTMLElement | null = null;
+    private unsubscribe: (() => void) | null = null;
 
     constructor(leaf: WorkspaceLeaf, taskIndex: TaskIndex) {
         super(leaf);
@@ -51,6 +52,7 @@ export class TimelineView extends ItemView {
         );
 
         // Background click to deselect
+        // Background click to deselect
         this.container.addEventListener('click', (e) => {
             const target = e.target as HTMLElement;
             // If clicking handle, do nothing (handled by DragHandler or button click)
@@ -65,12 +67,14 @@ export class TimelineView extends ItemView {
         });
 
         // Subscribe to data changes
-        this.taskIndex.onChange(() => {
+        this.unsubscribe = this.taskIndex.onChange(() => {
             this.render();
         });
 
         // Window resize listener
-        this.registerDomEvent(window, 'resize', () => {
+        // Use the window of the container (handles popout windows)
+        const win = this.container.ownerDocument.defaultView || window;
+        this.registerDomEvent(win, 'resize', () => {
             this.updateHandlePositions();
         });
 
@@ -78,7 +82,17 @@ export class TimelineView extends ItemView {
         this.render();
     }
 
-    render() {
+    async onClose() {
+        if (this.dragHandler) {
+            this.dragHandler.destroy();
+        }
+        if (this.unsubscribe) {
+            this.unsubscribe();
+            this.unsubscribe = null;
+        }
+    }
+
+    private render() {
         this.container.empty();
 
         this.renderToolbar();
@@ -426,6 +440,23 @@ export class TimelineView extends ItemView {
 
         // Use MarkdownRenderer
         await MarkdownRenderer.render(this.app, fullText, contentContainer, task.file, this);
+
+        // Handle Internal Links
+        const internalLinks = contentContainer.querySelectorAll('a.internal-link');
+        internalLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const target = (link as HTMLElement).dataset.href;
+                if (target) {
+                    this.app.workspace.openLinkText(target, task.file, true);
+                }
+            });
+            // Prevent drag/selection start
+            link.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+            });
+        });
 
         // Handle Checkbox Clicks
         const checkboxes = contentContainer.querySelectorAll('input[type="checkbox"]');

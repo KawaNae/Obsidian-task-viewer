@@ -21,17 +21,50 @@ export class DragHandler {
     private isOverAllDay: boolean = false;
     private lockedAllDayRow: HTMLElement | null = null;
 
+    private boundPointerDown: (e: PointerEvent) => void;
+    private boundPointerMove: (e: PointerEvent) => void;
+    private boundPointerUp: (e: PointerEvent) => void;
+    private currentDoc: Document;
+
     constructor(container: HTMLElement, taskIndex: TaskIndex, onTaskClick: (taskId: string) => void, onTaskMove: () => void) {
         this.container = container;
         this.taskIndex = taskIndex;
         this.onTaskClick = onTaskClick;
         this.onTaskMove = onTaskMove;
-        this.container.addEventListener('pointerdown', this.onPointerDown.bind(this));
-        document.addEventListener('pointermove', this.onPointerMove.bind(this));
-        document.addEventListener('pointerup', this.onPointerUp.bind(this));
+
+        this.boundPointerDown = this.onPointerDown.bind(this);
+        this.boundPointerMove = this.onPointerMove.bind(this);
+        this.boundPointerUp = this.onPointerUp.bind(this);
+
+        this.container.addEventListener('pointerdown', this.boundPointerDown);
+
+        // Initialize with current ownerDocument
+        this.currentDoc = this.container.ownerDocument || document;
+        this.currentDoc.addEventListener('pointermove', this.boundPointerMove);
+        this.currentDoc.addEventListener('pointerup', this.boundPointerUp);
+    }
+
+    destroy() {
+        this.container.removeEventListener('pointerdown', this.boundPointerDown);
+        if (this.currentDoc) {
+            this.currentDoc.removeEventListener('pointermove', this.boundPointerMove);
+            this.currentDoc.removeEventListener('pointerup', this.boundPointerUp);
+        }
     }
 
     private onPointerDown(e: PointerEvent) {
+        // Check if document has changed (e.g. view moved to new window)
+        const newDoc = this.container.ownerDocument || document;
+        if (newDoc !== this.currentDoc) {
+            console.log('DragHandler: Document changed, re-binding listeners');
+            this.currentDoc.removeEventListener('pointermove', this.boundPointerMove);
+            this.currentDoc.removeEventListener('pointerup', this.boundPointerUp);
+
+            this.currentDoc = newDoc;
+            this.currentDoc.addEventListener('pointermove', this.boundPointerMove);
+            this.currentDoc.addEventListener('pointerup', this.boundPointerUp);
+        }
+
         const target = e.target as HTMLElement;
 
         // Check for handle click first (detached handles)
@@ -131,7 +164,8 @@ export class DragHandler {
         const snappedDeltaY = Math.round(deltaY / 15) * 15;
 
         // --- Cross-Day & All-Day Logic ---
-        const elBelow = document.elementFromPoint(e.clientX, e.clientY);
+        const doc = this.container.ownerDocument || document;
+        const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
 
         // 1. Check All-Day Area
         const allDayCell = elBelow?.closest('.all-day-cell') as HTMLElement;

@@ -38,8 +38,11 @@ export class TaskIndex {
         return this.getTasks().filter(t => t.date === date);
     }
 
-    onChange(callback: () => void) {
+    onChange(callback: () => void): () => void {
         this.listeners.push(callback);
+        return () => {
+            this.listeners = this.listeners.filter(cb => cb !== callback);
+        };
     }
 
     private notifyListeners() {

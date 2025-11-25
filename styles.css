@@ -11,6 +11,11 @@
     box-sizing: border-box;
 }
 
+/* Hide Obsidian View Header for Timeline View */
+.workspace-leaf-content[data-type="timeline-view"] .view-header {
+    display: none !important;
+}
+
 /* Main Container */
 .task-viewer-container {
     height: 100%;
@@ -18,6 +23,8 @@
     flex-direction: column;
     overflow: hidden;
     background-color: var(--background-primary);
+    position: relative;
+    /* Fix for handle alignment */
 }
 
 /* Toolbar */
@@ -67,6 +74,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 /* 2. All-Day Row */
@@ -85,6 +96,7 @@
     padding: 2px;
     min-height: var(--all-day-min-height);
     position: relative;
+    min-width: 0;
 }
 
 /* 3. Timeline Row (Scrollable Area) */
@@ -137,7 +149,7 @@
     padding: 4px 2px;
     /* Keep the user-requested padding */
     font-size: 0.9em;
-    cursor: pointer;
+
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     z-index: 5;
     width: 90%;

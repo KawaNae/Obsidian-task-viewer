@@ -39,16 +39,14 @@ export default class TaskViewerPlugin extends Plugin {
         let leaf: WorkspaceLeaf | null = null;
         const leaves = workspace.getLeavesOfType(VIEW_TYPE_TIMELINE);
 
-        if (leaves.length > 0) {
-            leaf = leaves[0];
-        } else {
+        if (leaves.length === 0) {
             leaf = workspace.getRightLeaf(false);
-            if (leaf) {
-                await leaf.setViewState({ type: VIEW_TYPE_TIMELINE, active: true });
-            }
+        } else {
+            leaf = workspace.getLeaf(true);
         }
 
         if (leaf) {
+            await leaf.setViewState({ type: VIEW_TYPE_TIMELINE, active: true });
             workspace.revealLeaf(leaf);
         }
     }
