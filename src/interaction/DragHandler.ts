@@ -56,7 +56,7 @@ export class DragHandler {
         // Check if document has changed (e.g. view moved to new window)
         const newDoc = this.container.ownerDocument || document;
         if (newDoc !== this.currentDoc) {
-            console.log('DragHandler: Document changed, re-binding listeners');
+            // console.log('DragHandler: Document changed, re-binding listeners');
             this.currentDoc.removeEventListener('pointermove', this.boundPointerMove);
             this.currentDoc.removeEventListener('pointerup', this.boundPointerUp);
 

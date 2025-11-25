@@ -240,7 +240,6 @@ export class TimelineView extends ItemView {
             this.render();
         };
 
-        // Debug Info
 
     }
 
