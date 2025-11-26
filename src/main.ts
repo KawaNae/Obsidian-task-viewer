@@ -1,12 +1,18 @@
 import { Plugin, WorkspaceLeaf } from 'obsidian';
 import { TaskIndex } from './services/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/TimelineView';
+import { TaskViewerSettings, DEFAULT_SETTINGS } from './types';
+import { TaskViewerSettingTab } from './settings';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
+    public settings: TaskViewerSettings;
 
     async onload() {
         console.log('Loading Task Viewer Plugin (Rewrite)');
+
+        // Load Settings
+        await this.loadSettings();
 
         // Initialize Services
         this.taskIndex = new TaskIndex(this.app);
@@ -15,7 +21,7 @@ export default class TaskViewerPlugin extends Plugin {
         // Register View
         this.registerView(
             VIEW_TYPE_TIMELINE,
-            (leaf) => new TimelineView(leaf, this.taskIndex)
+            (leaf) => new TimelineView(leaf, this.taskIndex, this)
         );
 
         // Add Ribbon Icon
@@ -29,6 +35,24 @@ export default class TaskViewerPlugin extends Plugin {
             name: 'Open Timeline View',
             callback: () => {
                 this.activateView();
+            }
+        });
+
+        // Register Settings Tab
+        this.addSettingTab(new TaskViewerSettingTab(this.app, this));
+    }
+
+    async loadSettings() {
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    }
+
+    async saveSettings() {
+        await this.saveData(this.settings);
+
+        // Refresh all Timeline Views
+        this.app.workspace.getLeavesOfType(VIEW_TYPE_TIMELINE).forEach(leaf => {
+            if (leaf.view instanceof TimelineView) {
+                leaf.view.refresh();
             }
         });
     }

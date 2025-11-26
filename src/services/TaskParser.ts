@@ -1,13 +1,13 @@
 import { Task } from '../types';
 
 export class TaskParser {
-    // Regex to match: - [x] Task Content @YYYY-MM-DDTHH:mm-HH:mm
+    // Regex to match: - [x] Task Content @YYYY-MM-DDTHH:mm>HH:mm
     // Supports:
     // @YYYY-MM-DD
     // @YYYY-MM-DDTHH:mm
-    // @YYYY-MM-DDTHH:mm-HH:mm
-    // @YYYY-MM-DDTHH:mm-YYYY-MM-DDTHH:mm (Cross-day, simplified to start date for now)
-    private static readonly TASK_REGEX = /^(\s*)-\s*\[(.)\]\s*(.*?)\s*@(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2}))?(?:-(?:(\d{2}:\d{2})|(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2})))?.*$/;
+    // @YYYY-MM-DDTHH:mm>HH:mm
+    // @YYYY-MM-DDTHH:mm>YYYY-MM-DDTHH:mm (Cross-day)
+    private static readonly TASK_REGEX = /^(\s*)-\s*\[(.)\]\s*(.*?)\s*@(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2}))?(?:>(?:(\d{2}:\d{2})|(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})))?.*$/;
 
     static parse(line: string, filePath: string, lineNumber: number): Task | null {
         const match = line.match(this.TASK_REGEX);
@@ -22,7 +22,8 @@ export class TaskParser {
             content,
             date,
             startTime,
-            endTime
+            endTimeSimple,
+            endTimeFull
         ] = match;
 
         let status: 'todo' | 'done' | 'cancelled' = 'todo';
@@ -37,7 +38,7 @@ export class TaskParser {
             status,
             date,
             startTime,
-            endTime,
+            endTime: endTimeFull || endTimeSimple,
             originalText: line,
             children: []
         };
@@ -50,7 +51,7 @@ export class TaskParser {
         if (task.startTime) {
             timeStr += `T${task.startTime}`;
             if (task.endTime) {
-                timeStr += `-${task.endTime}`;
+                timeStr += `>${task.endTime}`;
             }
         }
 

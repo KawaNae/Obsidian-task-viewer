@@ -281,3 +281,34 @@
     /* Higher than normal tasks */
     box-shadow: 0 0 0 2px var(--background-primary), 0 4px 8px rgba(0, 0, 0, 0.3);
 }
+
+/* Selected State for Colored Tasks */
+.task-card.colored-task.selected {
+    border-color: var(--file-color) !important;
+}
+
+/* Current Time Indicator */
+.current-time-indicator {
+    position: absolute;
+    width: 100%;
+    height: 2px;
+    background-color: red;
+    z-index: 15;
+    /* Above grid, below tasks (tasks are 5, selected 10, all-day 25... wait tasks are 5) */
+    /* Actually, we want it ON TOP of tasks to be visible? Or below? Usually below tasks so text is readable. */
+    /* But if it's below tasks, it might be hidden by opaque tasks. */
+    /* Let's put it above tasks but pointer-events: none */
+    z-index: 40;
+    pointer-events: none;
+}
+
+.current-time-indicator::before {
+    content: '';
+    position: absolute;
+    left: -4px;
+    top: -3px;
+    width: 8px;
+    height: 8px;
+    background-color: red;
+    border-radius: 50%;
+}

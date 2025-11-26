@@ -21,3 +21,13 @@ export interface ViewState {
     startDate: string;      // YYYY-MM-DD
     daysToShow: number;     // 1, 3, 7, etc.
 }
+
+export interface TaskViewerSettings {
+    startHour: number;      // 0-23
+    fileColors: Record<string, string>; // File path -> Hex color
+}
+
+export const DEFAULT_SETTINGS: TaskViewerSettings = {
+    startHour: 5,
+    fileColors: {}
+};
