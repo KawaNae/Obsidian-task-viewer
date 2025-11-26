@@ -36,6 +36,7 @@ export class TaskParser {
             line: lineNumber,
             content: content.trim(),
             status,
+            statusChar,
             date,
             startTime,
             endTime: endTimeFull || endTimeSimple,
@@ -45,7 +46,7 @@ export class TaskParser {
     }
 
     static format(task: Task): string {
-        const statusChar = task.status === 'done' ? 'x' : (task.status === 'cancelled' ? '-' : ' ');
+        const statusChar = task.statusChar || (task.status === 'done' ? 'x' : (task.status === 'cancelled' ? '-' : ' '));
         let timeStr = `@${task.date}`;
 
         if (task.startTime) {

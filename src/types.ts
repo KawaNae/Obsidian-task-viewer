@@ -4,6 +4,7 @@ export interface Task {
     line: number;           // Line number (0-indexed)
     content: string;        // Task description (without checkbox and time)
     status: 'todo' | 'done' | 'cancelled';
+    statusChar: string;     // The actual character inside [ ]
 
     // Date/Time info
     date: string;           // YYYY-MM-DD
@@ -24,10 +25,12 @@ export interface ViewState {
 
 export interface TaskViewerSettings {
     startHour: number;      // 0-23
-    fileColors: Record<string, string>; // File path -> Hex color
+    applyGlobalStyles: boolean; // Whether to apply checkbox styles globally
+    frontmatterColorKey: string; // Key to look for in frontmatter for color
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
     startHour: 5,
-    fileColors: {}
+    applyGlobalStyles: false,
+    frontmatterColorKey: 'color'
 };

@@ -1,0 +1,7 @@
+/* Variables */
+:root {
+    --hour-height: 60px;
+    --time-axis-width: 30px;
+    --header-height: 30px;
+    --all-day-min-height: 40px;
+}

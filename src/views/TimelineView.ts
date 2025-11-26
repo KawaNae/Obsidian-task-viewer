@@ -24,7 +24,7 @@ export class TimelineView extends ItemView {
         this.taskIndex = taskIndex;
         this.plugin = plugin;
         this.viewState = {
-            startDate: new Date().toISOString().split('T')[0],
+            startDate: this.getVisualDateOfNow(),
             daysToShow: 3
         };
     }
@@ -107,6 +107,23 @@ export class TimelineView extends ItemView {
         this.render();
     }
 
+    private getLocalDateString(date: Date): string {
+        const year = date.getFullYear();
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const day = date.getDate().toString().padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    private getVisualDateOfNow(): string {
+        const now = new Date();
+        const startHour = this.plugin.settings.startHour;
+        let visualDateOfNow = new Date(now);
+        if (now.getHours() < startHour) {
+            visualDateOfNow.setDate(visualDateOfNow.getDate() - 1);
+        }
+        return this.getLocalDateString(visualDateOfNow);
+    }
+
     private renderCurrentTimeIndicator() {
         // Remove existing indicators
         const existingIndicators = this.container.querySelectorAll('.current-time-indicator');
@@ -124,15 +141,8 @@ export class TimelineView extends ItemView {
             minutesFromStart += 24 * 60;
         }
 
-        // Determine which visual day "Now" belongs to
-        // If now is 04:00 and startHour is 05:00, it belongs to the PREVIOUS calendar day's visual day.
-        // If now is 06:00 and startHour is 05:00, it belongs to TODAY'S calendar day.
-
-        let visualDateOfNow = new Date(now);
-        if (now.getHours() < startHour) {
-            visualDateOfNow.setDate(visualDateOfNow.getDate() - 1);
-        }
-        const visualDateString = visualDateOfNow.toISOString().split('T')[0];
+        // Use local date string to match the column data-date (which assumes local dates)
+        const visualDateString = this.getVisualDateOfNow();
 
         // Find the column for this visual date
         const dayCol = this.container.querySelector(`.day-timeline-column[data-date="${visualDateString}"]`) as HTMLElement;
@@ -284,7 +294,7 @@ export class TimelineView extends ItemView {
 
         const todayBtn = toolbar.createEl('button', { text: 'Today' });
         todayBtn.onclick = () => {
-            this.viewState.startDate = new Date().toISOString().split('T')[0];
+            this.viewState.startDate = this.getVisualDateOfNow();
             this.render();
         };
 
@@ -538,31 +548,76 @@ export class TimelineView extends ItemView {
         });
     }
 
-    private getFileColor(filePath: string): string | null {
-        const fileColors = this.plugin.settings.fileColors;
-        if (!fileColors) return null;
-
-        // Normalize separators
-        const normalizedFile = filePath.replace(/\\\\/g, '/');
-
-        for (const [path, color] of Object.entries(fileColors)) {
-            const normalizedPath = path.replace(/\\\\/g, '/');
-
-            // Check for match
-            // 1. Suffix match (Filename or Extension)
-            // 2. Prefix match (Folder)
-            if (normalizedFile.endsWith(normalizedPath) || normalizedFile.startsWith(normalizedPath)) {
-                return color;
-            }
-        }
-        return null;
-    }
-
     private applyTaskColor(el: HTMLElement, filePath: string) {
-        const color = this.getFileColor(filePath);
+        const key = this.plugin.settings.frontmatterColorKey;
+        if (!key) return;
+
+        const cache = this.app.metadataCache.getCache(filePath);
+        const color = cache?.frontmatter?.[key];
+
         if (color) {
             el.style.setProperty('border-left', `4px solid ${color}`, 'important');
+
+            const hsl = this.hexToHSL(color);
+            if (hsl) {
+                const { h, s, l } = hsl;
+                el.style.setProperty('--accent-h', h.toString());
+                el.style.setProperty('--accent-s', s + '%');
+                el.style.setProperty('--accent-l', l + '%');
+
+                el.style.setProperty('--color-accent-hsl', `var(--accent-h), var(--accent-s), var(--accent-l)`);
+                el.style.setProperty('--file-accent', `hsl(var(--accent-h), var(--accent-s), var(--accent-l))`);
+                el.style.setProperty('--file-accent-hover', `hsl(calc(var(--accent-h) - 1), calc(var(--accent-s) * 1.01), calc(var(--accent-l) * 1.075))`);
+            } else {
+                // Fallback for named colors or invalid hex
+                el.style.setProperty('--file-accent', color);
+                el.style.setProperty('--file-accent-hover', color);
+            }
         }
+    }
+
+    private hexToHSL(hex: string): { h: number, s: number, l: number } | null {
+        if (!hex.startsWith('#')) return null;
+
+        let r = 0, g = 0, b = 0;
+        if (hex.length === 4) {
+            r = parseInt('0x' + hex[1] + hex[1]);
+            g = parseInt('0x' + hex[2] + hex[2]);
+            b = parseInt('0x' + hex[3] + hex[3]);
+        } else if (hex.length === 7) {
+            r = parseInt('0x' + hex[1] + hex[2]);
+            g = parseInt('0x' + hex[3] + hex[4]);
+            b = parseInt('0x' + hex[5] + hex[6]);
+        } else {
+            return null;
+        }
+
+        if (isNaN(r) || isNaN(g) || isNaN(b)) return null;
+
+        r /= 255;
+        g /= 255;
+        b /= 255;
+
+        const cmin = Math.min(r, g, b);
+        const cmax = Math.max(r, g, b);
+        const delta = cmax - cmin;
+        let h = 0, s = 0, l = 0;
+
+        if (delta === 0) h = 0;
+        else if (cmax === r) h = ((g - b) / delta) % 6;
+        else if (cmax === g) h = (b - r) / delta + 2;
+        else h = (r - g) / delta + 4;
+
+        h = Math.round(h * 60);
+        if (h < 0) h += 360;
+
+        l = (cmax + cmin) / 2;
+        s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
+
+        s = +(s * 100).toFixed(1);
+        l = +(l * 100).toFixed(1);
+
+        return { h, s, l };
     }
 
     private calculateTaskLayout(tasks: Task[], date: string): Map<string, { width: number, left: number }> {
@@ -685,6 +740,15 @@ export class TimelineView extends ItemView {
 
             const menu = new Menu();
 
+            // Open File
+            menu.addItem((item) => {
+                item.setTitle('Open File')
+                    .setIcon('document')
+                    .onClick(async () => {
+                        await this.app.workspace.openLinkText(task.file, '', true);
+                    });
+            });
+
             // Delete
             menu.addItem((item) => {
                 item.setTitle('Delete')
@@ -728,13 +792,12 @@ export class TimelineView extends ItemView {
             menu.showAtPosition({ x: event.pageX, y: event.pageY });
         });
     }
-
     private async renderTaskContent(el: HTMLElement, task: Task) {
         const contentContainer = el.createDiv('task-content-container');
 
         // Construct full markdown
         // Strip time info from parent task line for display
-        const statusChar = task.status === 'done' ? 'x' : (task.status === 'cancelled' ? '-' : ' ');
+        const statusChar = task.statusChar || (task.status === 'done' ? 'x' : (task.status === 'cancelled' ? '-' : ' '));
         const cleanParentLine = `- [${statusChar}] ${task.content}`;
 
         const fullText = [cleanParentLine, ...task.children].join('\n');
@@ -765,8 +828,18 @@ export class TimelineView extends ItemView {
             checkbox.addEventListener('click', (e) => {
                 // If it's the main task (index 0)
                 if (index === 0) {
-                    const newStatus = (checkbox as HTMLInputElement).checked ? 'done' : 'todo';
-                    this.taskIndex.updateTask(task.id, { status: newStatus });
+                    const isChecked = (checkbox as HTMLInputElement).checked;
+                    const newStatus = isChecked ? 'done' : 'todo';
+
+                    // Update statusChar as well to ensure visual change
+                    // If checking: default to 'x'
+                    // If unchecking: default to ' '
+                    const newStatusChar = isChecked ? 'x' : ' ';
+
+                    this.taskIndex.updateTask(task.id, {
+                        status: newStatus,
+                        statusChar: newStatusChar
+                    });
                 } else {
                     // For children
                     const childLineIndex = index - 1; // 0-based index into children array

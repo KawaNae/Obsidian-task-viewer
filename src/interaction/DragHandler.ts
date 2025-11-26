@@ -309,18 +309,14 @@ export class DragHandler {
 
             const scrollArea = this.container.querySelector('.timeline-scroll-area');
             if (scrollArea) {
+                const startScrollTop = scrollArea.scrollTop;
                 scrollArea.scrollTop += this.autoScrollSpeed;
+                const actualScroll = scrollArea.scrollTop - startScrollTop;
 
-                // Boundary Check (Clamp)
-                if (scrollArea.scrollTop < 0) scrollArea.scrollTop = 0;
-                if (scrollArea.scrollTop > scrollArea.scrollHeight - scrollArea.clientHeight) {
-                    scrollArea.scrollTop = scrollArea.scrollHeight - scrollArea.clientHeight;
-                }
-
-                // Update drag element position during scroll
-                if (this.dragEl && this.mode === 'move') {
+                // Update drag element position ONLY if we actually scrolled
+                if (actualScroll !== 0 && this.dragEl && this.mode === 'move') {
                     const currentTop = parseInt(this.dragEl.style.top || '0');
-                    const newTop = currentTop + this.autoScrollSpeed;
+                    const newTop = currentTop + actualScroll;
 
                     // Clamp to day boundaries (0 to 24h)
                     const maxTop = 1440 - (parseInt(this.dragEl.style.height || '60'));

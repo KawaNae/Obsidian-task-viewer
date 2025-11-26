@@ -23,9 +23,34 @@ const copyStaticFiles = {
   setup(build) {
     build.onEnd(() => {
       try {
+        // 1. Generate styles.css locally
+        const cssDir = 'src/styles';
+        const cssFiles = [
+          '_variables.css',
+          '_base.css',
+          '_timeline.css',
+          '_task-card.css',
+          '_checkboxes.css',
+          '_global.css'
+        ];
+
+        let cssContent = '';
+        for (const file of cssFiles) {
+          const filePath = path.join(cssDir, file);
+          if (fs.existsSync(filePath)) {
+            cssContent += fs.readFileSync(filePath, 'utf8') + '\n';
+          } else {
+            console.warn(`Warning: CSS file not found: ${filePath}`);
+          }
+        }
+        fs.writeFileSync('styles.css', cssContent);
+
+        // 2. Copy files to outDir
         fs.copyFileSync('manifest.json', path.join(outDir, 'manifest.json'));
         fs.copyFileSync('styles.css', path.join(outDir, 'styles.css'));
-        console.log('Copied manifest.json and styles.css to output directory');
+        fs.copyFileSync('main.js', path.join(outDir, 'main.js'));
+
+        console.log('Built locally and copied to ' + outDir);
       } catch (e) {
         console.error('Failed to copy static files:', e);
       }
@@ -60,7 +85,7 @@ const context = await esbuild.context({
   logLevel: "info",
   sourcemap: prod ? false : "inline",
   treeShaking: true,
-  outfile: path.join(outDir, "main.js"),
+  outfile: "main.js",
   plugins: [copyStaticFiles],
 });
 

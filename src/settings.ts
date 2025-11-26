@@ -30,55 +30,26 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        containerEl.createEl('h3', { text: 'File Colors' });
-        containerEl.createEl('p', { text: 'Assign colors to specific files to distinguish their tasks in the timeline.' });
-
-        // List existing mappings
-        for (const [path, color] of Object.entries(this.plugin.settings.fileColors)) {
-            new Setting(containerEl)
-                .setName(path)
-                .setDesc('Color: ' + color)
-                .addColorPicker(colorPicker => colorPicker
-                    .setValue(color)
-                    .onChange(async (value) => {
-                        this.plugin.settings.fileColors[path] = value;
-                        await this.plugin.saveSettings();
-                    }))
-                .addButton(button => button
-                    .setButtonText('Remove')
-                    .onClick(async () => {
-                        delete this.plugin.settings.fileColors[path];
-                        await this.plugin.saveSettings();
-                        this.display(); // Refresh to remove the item
-                    }));
-        }
-
-        // Add new mapping
-        let newPath = '';
-        let newColor = '#ff0000';
+        new Setting(containerEl)
+            .setName('Apply Global Checkbox Styles')
+            .setDesc('If enabled, the plugin will apply its checkbox styles to the entire Obsidian editor, replacing the need for a separate CSS snippet.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.applyGlobalStyles)
+                .onChange(async (value) => {
+                    this.plugin.settings.applyGlobalStyles = value;
+                    await this.plugin.saveSettings();
+                    this.plugin.updateGlobalStyles();
+                }));
 
         new Setting(containerEl)
-            .setName('Add File Color')
-            .setDesc('Enter the file path (relative to vault root) and pick a color.')
+            .setName('Frontmatter Color Key')
+            .setDesc('The key to look for in the file\'s frontmatter to determine the task color (e.g. "color" or "timeline-color").')
             .addText(text => text
-                .setPlaceholder('Folder/File.md')
-                .onChange(value => {
-                    newPath = value;
-                }))
-            .addColorPicker(colorPicker => colorPicker
-                .setValue(newColor)
-                .onChange(value => {
-                    newColor = value;
-                }))
-            .addButton(button => button
-                .setButtonText('Add')
-                .setCta()
-                .onClick(async () => {
-                    if (newPath) {
-                        this.plugin.settings.fileColors[newPath] = newColor;
-                        await this.plugin.saveSettings();
-                        this.display(); // Refresh to show the new item
-                    }
+                .setPlaceholder('color')
+                .setValue(this.plugin.settings.frontmatterColorKey)
+                .onChange(async (value) => {
+                    this.plugin.settings.frontmatterColorKey = value;
+                    await this.plugin.saveSettings();
                 }));
     }
 }

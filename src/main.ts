@@ -40,6 +40,9 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Register Settings Tab
         this.addSettingTab(new TaskViewerSettingTab(this.app, this));
+
+        // Apply global styles if enabled
+        this.updateGlobalStyles();
     }
 
     async loadSettings() {
@@ -55,6 +58,14 @@ export default class TaskViewerPlugin extends Plugin {
                 leaf.view.refresh();
             }
         });
+    }
+
+    updateGlobalStyles() {
+        if (this.settings.applyGlobalStyles) {
+            document.body.classList.add('task-viewer-global-styles');
+        } else {
+            document.body.classList.remove('task-viewer-global-styles');
+        }
     }
 
     async activateView() {
@@ -77,5 +88,6 @@ export default class TaskViewerPlugin extends Plugin {
 
     onunload() {
         console.log('Unloading Task Viewer Plugin');
+        document.body.classList.remove('task-viewer-global-styles');
     }
 }

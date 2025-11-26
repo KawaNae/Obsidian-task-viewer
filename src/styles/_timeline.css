@@ -1,0 +1,113 @@
+/* Timeline Grid Container (Flex Column of Rows) */
+.timeline-grid {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    /* Rows handle scrolling */
+    position: relative;
+}
+
+/* Common Row Style */
+.timeline-row {
+    display: grid;
+    /* Grid columns set in JS: 60px repeat(N, 1fr) */
+    width: 100%;
+    /* Reserve space for scrollbar in ALL rows to align columns */
+    scrollbar-gutter: stable;
+}
+
+/* 1. Header Row */
+.header-row {
+    background-color: var(--background-secondary);
+    border-bottom: 1px solid var(--background-modifier-border);
+    z-index: 30;
+    flex-shrink: 0;
+    /* Don't shrink */
+    overflow-y: hidden;
+    /* No scrollbar, but gutter reserves space */
+}
+
+.header-cell {
+    border-right: 1px solid var(--background-modifier-border);
+    padding: 2px;
+    text-align: center;
+    font-weight: bold;
+    height: var(--header-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* 2. All-Day Row */
+.all-day-row {
+    background-color: var(--background-primary);
+    border-bottom: 2px solid var(--background-modifier-border);
+    z-index: 20;
+    flex-shrink: 0;
+    /* Don't shrink */
+    overflow-y: hidden;
+    /* No scrollbar, but gutter reserves space */
+}
+
+.all-day-cell {
+    border-right: 1px solid var(--background-modifier-border);
+    padding: 2px;
+    min-height: var(--all-day-min-height);
+    position: relative;
+    min-width: 0;
+}
+
+/* 3. Timeline Row (Scrollable Area) */
+.timeline-scroll-area {
+    flex: 1;
+    /* Take remaining height */
+    overflow-y: scroll;
+    /* Always show scrollbar (or allow it) */
+    position: relative;
+}
+
+/* Time Axis Column */
+.time-axis-column {
+    background-color: var(--background-secondary);
+    border-right: 1px solid var(--background-modifier-border);
+    position: relative;
+    height: calc(24 * var(--hour-height));
+    /* 24 hours */
+}
+
+.time-label {
+    position: absolute;
+    width: 100%;
+    text-align: center;
+    font-size: 0.8em;
+    color: var(--text-muted);
+    transform: translateY(-50%);
+}
+
+/* Day Column (Timeline) */
+.day-timeline-column {
+    position: relative;
+    border-right: 1px solid var(--background-modifier-border);
+    height: calc(24 * var(--hour-height));
+    background:
+        repeating-linear-gradient(to bottom,
+            transparent,
+            transparent calc(var(--hour-height) - 1px),
+            var(--background-modifier-border) calc(var(--hour-height) - 1px),
+            var(--background-modifier-border) var(--hour-height));
+}
+
+/* Current Time Indicator */
+.current-time-indicator {
+    position: absolute;
+    width: 100%;
+    height: 2px;
+    background-color: var(--interactive-accent);
+    z-index: 15;
+    pointer-events: none;
+}

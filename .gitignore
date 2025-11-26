@@ -3,3 +3,5 @@ node_modules/
 .obsidian/
 dist/
 *.log
+main.js
+styles.css
