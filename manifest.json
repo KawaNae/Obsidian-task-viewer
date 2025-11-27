@@ -6,5 +6,5 @@
   "description": "Calendar and timeline views for tasks with custom date/time syntax",
   "author": "KawaNae",
   "authorUrl": "",
-  "isDesktopOnly": true
+  "isDesktopOnly": false
 }
