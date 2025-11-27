@@ -1,6 +1,5 @@
-/* --- Global Checkbox Layout --- */
-.timeline-grid input.task-list-item-checkbox,
-.task-viewer-global-styles input.task-list-item-checkbox {
+/* --- Timeline Checkbox Styles --- */
+.timeline-grid input.task-list-item-checkbox {
     cursor: pointer;
     position: relative !important;
     top: 0.2em !important;
@@ -9,6 +8,13 @@
 .timeline-grid li>input.task-list-item-checkbox:checked {
     background-color: var(--file-accent, var(--interactive-accent)) !important;
     border-color: transparent !important;
+}
+
+
+/* --- Global Checkbox Styles --- */
+.task-viewer-global-styles input.task-list-item-checkbox {
+    cursor: pointer;
+    position: relative !important;
 }
 
 /* --- Checked State (Backgrounds) --- */

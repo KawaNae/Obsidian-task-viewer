@@ -17,6 +17,11 @@
     scrollbar-gutter: stable;
 }
 
+/* Mobile: Scrollbars are overlays, so don't reserve space */
+.is-mobile .timeline-row {
+    scrollbar-gutter: auto;
+}
+
 /* 1. Header Row */
 .header-row {
     background-color: var(--background-secondary);

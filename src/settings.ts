@@ -31,7 +31,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Apply Global Checkbox Styles')
+            .setName('Apply Custom Checkboxes Styles')
             .setDesc('If enabled, the plugin will apply its checkbox styles to the entire Obsidian editor, replacing the need for a separate CSS snippet.')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.applyGlobalStyles)
