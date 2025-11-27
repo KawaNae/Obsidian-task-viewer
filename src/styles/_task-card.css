@@ -21,8 +21,8 @@
 .task-content-container ul,
 .task-content-container ol,
 .task-content-container li {
-    margin-block-start: 0;
-    margin-block-end: 0;
+    margin-block-start: 0.2em;
+    margin-block-end: 0.2em;
 }
 
 .task-content-container {
@@ -41,7 +41,7 @@
 /* Nested lists: Reduce indentation to save space */
 .task-content-container li>ul,
 .task-content-container li>ol {
-    padding-inline-start: 1em;
+    padding-inline-start: 1.5em;
 }
 
 .task-content-container .task-list-item {
@@ -162,15 +162,6 @@
     flex-direction: column;
 }
 
-/* Reset margins for content inside task card to maximize space */
-.task-content-container p,
-.task-content-container ul,
-.task-content-container ol,
-.task-content-container li {
-    margin-block-start: 0;
-    margin-block-end: 0;
-}
-
 .task-content-container {
     flex: 1;
     overflow-y: auto;
@@ -182,12 +173,6 @@
 .task-content-container>ol {
     padding-inline-start: 1.9em;
     /* Keep user-requested indentation */
-}
-
-/* Nested lists: Reduce indentation to save space */
-.task-content-container li>ul,
-.task-content-container li>ol {
-    padding-inline-start: 1em;
 }
 
 .task-content-container .task-list-item {
