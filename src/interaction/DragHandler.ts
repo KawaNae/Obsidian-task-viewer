@@ -128,7 +128,12 @@ export class DragHandler {
         const rect = el.getBoundingClientRect();
         this.dragOffsetY = e.clientY - rect.top;
 
-        this.currentDayDate = task.date;
+        const dayCol = el.closest('.day-timeline-column') as HTMLElement;
+        if (dayCol && dayCol.dataset.date) {
+            this.currentDayDate = dayCol.dataset.date;
+        } else {
+            this.currentDayDate = task.date;
+        }
         this.isDragging = false;
         this.hasMoved = false;
         this.isOverAllDay = !task.startTime; // Initialize based on current task state
@@ -176,7 +181,8 @@ export class DragHandler {
         // 1. Check All-Day Area
         // DISABLED: User requested to disable implicit conversion from Timed to All-Day via drag
         const allDayCell = elBelow?.closest('.all-day-cell') as HTMLElement;
-        if (allDayCell) {
+        // Check if it's a valid day cell (has date) and NOT the time axis cell
+        if (allDayCell && allDayCell.dataset.date) {
             // ONLY allow if it's ALREADY an all-day task (prevent implicit conversion from timed)
             if (!this.dragTask.startTime) {
                 if (this.dragEl.parentElement !== allDayCell) {
@@ -200,7 +206,17 @@ export class DragHandler {
         }
 
         // 2. Check Timeline Area
-        const dayCol = elBelow?.closest('.day-timeline-column') as HTMLElement;
+        let dayCol = elBelow?.closest('.day-timeline-column') as HTMLElement;
+
+        // Fallback: If not over a column, but we are dragging a timed task, use the current parent column
+        // This handles cases where the mouse moves quickly outside the column (e.g. to the edges)
+        if (!dayCol && this.isDragging && !this.isOverAllDay && this.dragEl && this.dragEl.parentElement) {
+            const parent = this.dragEl.parentElement;
+            if (parent.classList.contains('day-timeline-column')) {
+                dayCol = parent as HTMLElement;
+            }
+        }
+
         if (dayCol) {
             if (this.dragEl.parentElement !== dayCol) {
                 dayCol.appendChild(this.dragEl);
@@ -229,38 +245,53 @@ export class DragHandler {
 
                 // Clamp to day boundaries (0 to 24h)
                 // 24h * 60min = 1440px
-                const maxTop = 1440 - (parseInt(this.dragEl.style.height || '60'));
+                // We need to check against logical height
+                // Visual height is logical height - 3
+                const currentHeight = parseInt(this.dragEl.style.height || '60');
+                const logicalHeight = currentHeight + 3;
+
+                const maxTop = 1440 - logicalHeight;
                 const clampedTop = Math.max(0, Math.min(maxTop, snappedTop));
 
-                this.dragEl.style.top = `${clampedTop}px`;
+                // Apply visual offset: top + 1
+                this.dragEl.style.top = `${clampedTop + 1}px`;
 
                 // Ensure height exists if coming from all-day
                 if (!this.dragEl.style.height || this.dragEl.style.height === 'auto' || this.dragEl.style.height === '') {
-                    this.dragEl.style.height = '60px'; // Default 1 hour
+                    this.dragEl.style.height = `${60 - 3}px`; // Default 1 hour - 3px
                 }
             } else if (this.mode === 'resize-bottom') {
                 const currentTop = parseInt(this.dragEl.style.top || '0');
-                // If coming from all-day, currentTop might be weird, but we handled move first usually.
-                // If resizing from all-day, it's tricky. Let's assume we are in timeline.
-                const newHeight = Math.max(15, snappedMouseY - currentTop);
+                // Logical Top = Visual Top - 1
+                const logicalTop = currentTop - 1;
+
+                const newHeight = Math.max(15, snappedMouseY - logicalTop);
 
                 // Clamp height so it doesn't exceed 24h
-                const maxHeight = 1440 - currentTop;
+                const maxHeight = 1440 - logicalTop;
                 const clampedHeight = Math.min(newHeight, maxHeight);
 
-                this.dragEl.style.height = `${clampedHeight}px`;
+                // Apply visual offset: height - 3
+                this.dragEl.style.height = `${clampedHeight - 3}px`;
             } else if (this.mode === 'resize-top') {
-                const currentBottom = parseInt(this.dragEl.style.top || '0') + parseInt(this.dragEl.style.height || '0');
+                const currentTop = parseInt(this.dragEl.style.top || '0');
+                const currentHeight = parseInt(this.dragEl.style.height || '0');
+
+                // Logical values
+                const logicalTop = currentTop - 1;
+                const logicalHeight = currentHeight + 3;
+
+                const currentBottom = logicalTop + logicalHeight;
                 const newTop = Math.max(0, snappedMouseY);
-                const newHeight = Math.max(15, currentBottom - newTop);
 
                 // Clamp top to 0
                 const clampedTop = Math.max(0, newTop);
                 // Recalculate height based on clamped top
                 const clampedHeight = Math.max(15, currentBottom - clampedTop);
 
-                this.dragEl.style.top = `${clampedTop}px`;
-                this.dragEl.style.height = `${clampedHeight}px`;
+                // Apply visual offsets
+                this.dragEl.style.top = `${clampedTop + 1}px`;
+                this.dragEl.style.height = `${clampedHeight - 3}px`;
             }
         }
 
@@ -390,16 +421,23 @@ export class DragHandler {
             }
         } else {
             // Converted to Timed or Moved/Resized in Timed
+            // Parse raw visual values
             const top = parseInt(this.dragEl.style.top || '0');
             const height = parseInt(this.dragEl.style.height || '60');
+
+            // Reverse visual adjustments to get logical values:
+            // TimelineView adds 1px to top, so we subtract 1px
+            // TimelineView subtracts 3px from height, so we add 3px
+            const logicalTop = top - 1;
+            const logicalHeight = height + 3;
 
             // Calculate time based on startHour
             const startHour = this.plugin.settings.startHour;
             const startHourMinutes = startHour * 60;
 
             // Total minutes from midnight of the VISUAL day
-            const startTotalMinutes = top + startHourMinutes;
-            const endTotalMinutes = startTotalMinutes + height;
+            const startTotalMinutes = logicalTop + startHourMinutes;
+            const endTotalMinutes = startTotalMinutes + logicalHeight;
 
             // Determine actual calendar date and time
             let finalDate = this.currentDayDate;

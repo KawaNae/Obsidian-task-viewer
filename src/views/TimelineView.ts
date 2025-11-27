@@ -2,6 +2,10 @@ import { ItemView, WorkspaceLeaf, MarkdownRenderer, Menu } from 'obsidian';
 import { TaskIndex } from '../services/TaskIndex';
 import { Task, ViewState } from '../types';
 import { DragHandler } from '../interaction/DragHandler';
+import { MenuHandler } from '../interaction/MenuHandler';
+import { TaskLayout } from '../services/TaskLayout';
+import { DateUtils } from '../utils/DateUtils';
+import { ColorUtils } from '../utils/ColorUtils';
 import TaskViewerPlugin from '../main';
 
 export const VIEW_TYPE_TIMELINE = 'timeline-view';
@@ -11,6 +15,7 @@ export class TimelineView extends ItemView {
     private container: HTMLElement;
     private viewState: ViewState;
     private dragHandler: DragHandler;
+    private menuHandler: MenuHandler;
     private selectedTaskId: string | null = null;
     private handleOverlay: HTMLElement | null = null;
     private unsubscribe: (() => void) | null = null;
@@ -24,7 +29,7 @@ export class TimelineView extends ItemView {
         this.taskIndex = taskIndex;
         this.plugin = plugin;
         this.viewState = {
-            startDate: this.getVisualDateOfNow(),
+            startDate: DateUtils.getVisualDateOfNow(this.plugin.settings.startHour),
             daysToShow: 3
         };
     }
@@ -45,6 +50,9 @@ export class TimelineView extends ItemView {
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('task-viewer-container');
+
+        // Initialize MenuHandler
+        this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
 
         // Initialize DragHandler with selection callback and move callback
         this.dragHandler = new DragHandler(this.container, this.taskIndex, this.plugin,
@@ -107,23 +115,6 @@ export class TimelineView extends ItemView {
         this.render();
     }
 
-    private getLocalDateString(date: Date): string {
-        const year = date.getFullYear();
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        const day = date.getDate().toString().padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    }
-
-    private getVisualDateOfNow(): string {
-        const now = new Date();
-        const startHour = this.plugin.settings.startHour;
-        let visualDateOfNow = new Date(now);
-        if (now.getHours() < startHour) {
-            visualDateOfNow.setDate(visualDateOfNow.getDate() - 1);
-        }
-        return this.getLocalDateString(visualDateOfNow);
-    }
-
     private renderCurrentTimeIndicator() {
         // Remove existing indicators
         const existingIndicators = this.container.querySelectorAll('.current-time-indicator');
@@ -142,7 +133,7 @@ export class TimelineView extends ItemView {
         }
 
         // Use local date string to match the column data-date (which assumes local dates)
-        const visualDateString = this.getVisualDateOfNow();
+        const visualDateString = DateUtils.getVisualDateOfNow(startHour);
 
         // Find the column for this visual date
         const dayCol = this.container.querySelector(`.day-timeline-column[data-date="${visualDateString}"]`) as HTMLElement;
@@ -294,7 +285,7 @@ export class TimelineView extends ItemView {
 
         const todayBtn = toolbar.createEl('button', { text: 'Today' });
         todayBtn.onclick = () => {
-            this.viewState.startDate = this.getVisualDateOfNow();
+            this.viewState.startDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
             this.render();
         };
 
@@ -320,6 +311,7 @@ export class TimelineView extends ItemView {
 
             distinctFiles.forEach(file => {
                 const isVisible = this.visibleFiles === null || this.visibleFiles.has(file);
+                const color = this.getFileColor(file);
                 menu.addItem(item => {
                     item.setTitle(file)
                         .setChecked(isVisible)
@@ -342,14 +334,26 @@ export class TimelineView extends ItemView {
 
                             this.render();
                         });
+
+                    // Always set icon to align text
+                    item.setIcon('circle');
+                    const iconEl = (item as any).dom.querySelector('.menu-item-icon');
+
+                    if (iconEl) {
+                        if (color) {
+                            iconEl.style.color = color;
+                            iconEl.style.fill = color;
+                        } else {
+                            // Hide icon but keep space
+                            iconEl.style.visibility = 'hidden';
+                        }
+                    }
                 });
             });
 
             menu.showAtPosition({ x: e.pageX, y: e.pageY });
         };
     }
-
-
 
     private navigateDate(days: number) {
         const date = new Date(this.viewState.startDate);
@@ -412,8 +416,6 @@ export class TimelineView extends ItemView {
 
         // Restore scroll position (must be done AFTER content is added)
         if (this.lastScrollTop > 0) {
-            // Use setTimeout to ensure layout is calculated, though synchronous might work if content is already in DOM
-            // But since we just created divs, they are in DOM.
             scrollArea.scrollTop = this.lastScrollTop;
         }
     }
@@ -461,7 +463,7 @@ export class TimelineView extends ItemView {
             this.applyTaskColor(el, task.file);
 
             this.renderTaskContent(el, task);
-            this.addTaskContextMenu(el, task);
+            this.menuHandler.addTaskContextMenu(el, task);
         });
     }
 
@@ -476,7 +478,7 @@ export class TimelineView extends ItemView {
         }
 
         // Calculate layout for overlapping tasks
-        const layout = this.calculateTaskLayout(tasks, date);
+        const layout = TaskLayout.calculateTaskLayout(tasks, date, startHour);
 
         tasks.forEach(task => {
             if (!task.startTime) return;
@@ -489,7 +491,7 @@ export class TimelineView extends ItemView {
             this.applyTaskColor(el, task.file);
 
             // Calculate position
-            let startMinutes = this.timeToMinutes(task.startTime);
+            let startMinutes = DateUtils.timeToMinutes(task.startTime);
             let endMinutes: number;
 
             if (task.endTime) {
@@ -505,7 +507,7 @@ export class TimelineView extends ItemView {
                     const diffMs = endDate.getTime() - startDate.getTime();
                     endMinutes = Math.floor(diffMs / 60000);
                 } else {
-                    endMinutes = this.timeToMinutes(task.endTime);
+                    endMinutes = DateUtils.timeToMinutes(task.endTime);
                     // Handle wrap around midnight if needed (simple case)
                     if (endMinutes < startMinutes) {
                         endMinutes += 24 * 60;
@@ -519,10 +521,6 @@ export class TimelineView extends ItemView {
             const startHourMinutes = startHour * 60;
 
             // If task is from next day (e.g. 02:00), add 24h
-            // How do we know if it's from next day?
-            // We can check if startMinutes < startHourMinutes.
-            // Since we filtered tasks to be >= startHour (current day) OR < startHour (next day),
-            // if it's < startHour, it MUST be next day.
             if (startMinutes < startHourMinutes) {
                 startMinutes += 24 * 60;
                 endMinutes += 24 * 60;
@@ -537,28 +535,32 @@ export class TimelineView extends ItemView {
             const widthFraction = taskLayout.width / 100;
             const leftFraction = taskLayout.left / 100;
 
-            el.style.top = `${relativeStart}px`;
-            el.style.height = `${duration}px`;
-            el.style.width = `calc((100% - 8px) * ${widthFraction})`;
+            el.style.top = `${relativeStart + 1}px`;
+            el.style.height = `${duration - 3}px`;
+            el.style.width = `calc((100% - 8px) * ${widthFraction} - 2px)`;
             el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
             el.style.setProperty('--initial-height', `${duration}px`);
 
             this.renderTaskContent(el, task);
-            this.addTaskContextMenu(el, task);
+            this.menuHandler.addTaskContextMenu(el, task);
         });
     }
 
-    private applyTaskColor(el: HTMLElement, filePath: string) {
+    private getFileColor(filePath: string): string | null {
         const key = this.plugin.settings.frontmatterColorKey;
-        if (!key) return;
+        if (!key) return null;
 
         const cache = this.app.metadataCache.getCache(filePath);
-        const color = cache?.frontmatter?.[key];
+        return cache?.frontmatter?.[key] || null;
+    }
+
+    private applyTaskColor(el: HTMLElement, filePath: string) {
+        const color = this.getFileColor(filePath);
 
         if (color) {
             el.style.setProperty('border-left', `4px solid ${color}`, 'important');
 
-            const hsl = this.hexToHSL(color);
+            const hsl = ColorUtils.hexToHSL(color);
             if (hsl) {
                 const { h, s, l } = hsl;
                 el.style.setProperty('--accent-h', h.toString());
@@ -576,222 +578,6 @@ export class TimelineView extends ItemView {
         }
     }
 
-    private hexToHSL(hex: string): { h: number, s: number, l: number } | null {
-        if (!hex.startsWith('#')) return null;
-
-        let r = 0, g = 0, b = 0;
-        if (hex.length === 4) {
-            r = parseInt('0x' + hex[1] + hex[1]);
-            g = parseInt('0x' + hex[2] + hex[2]);
-            b = parseInt('0x' + hex[3] + hex[3]);
-        } else if (hex.length === 7) {
-            r = parseInt('0x' + hex[1] + hex[2]);
-            g = parseInt('0x' + hex[3] + hex[4]);
-            b = parseInt('0x' + hex[5] + hex[6]);
-        } else {
-            return null;
-        }
-
-        if (isNaN(r) || isNaN(g) || isNaN(b)) return null;
-
-        r /= 255;
-        g /= 255;
-        b /= 255;
-
-        const cmin = Math.min(r, g, b);
-        const cmax = Math.max(r, g, b);
-        const delta = cmax - cmin;
-        let h = 0, s = 0, l = 0;
-
-        if (delta === 0) h = 0;
-        else if (cmax === r) h = ((g - b) / delta) % 6;
-        else if (cmax === g) h = (b - r) / delta + 2;
-        else h = (r - g) / delta + 4;
-
-        h = Math.round(h * 60);
-        if (h < 0) h += 360;
-
-        l = (cmax + cmin) / 2;
-        s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
-
-        s = +(s * 100).toFixed(1);
-        l = +(l * 100).toFixed(1);
-
-        return { h, s, l };
-    }
-
-    private calculateTaskLayout(tasks: Task[], date: string): Map<string, { width: number, left: number }> {
-        const layout = new Map<string, { width: number, left: number }>();
-        if (tasks.length === 0) return layout;
-
-        const startHour = this.plugin.settings.startHour;
-        const startHourMinutes = startHour * 60;
-
-        // Helper to get adjusted minutes (minutes from visual start)
-        const getAdjustedMinutes = (task: Task, timeStr: string, isEnd: boolean) => {
-            let m: number;
-
-            if (timeStr.includes('T')) {
-                const startDate = new Date(`${date}T00:00:00`);
-                const endDate = new Date(timeStr);
-                const diffMs = endDate.getTime() - startDate.getTime();
-                m = Math.floor(diffMs / 60000);
-            } else {
-                m = this.timeToMinutes(timeStr);
-            }
-
-            // Adjust for visual day
-            // If it's simple time and < startHour, it's next day (add 24h)
-            if (!timeStr.includes('T') && m < startHourMinutes) {
-                m += 24 * 60;
-            }
-
-            return m;
-        };
-
-        // 1. Prepare tasks with calculated start/end for sorting
-        const preparedTasks = tasks.map(task => {
-            const start = getAdjustedMinutes(task, task.startTime!, false);
-            let end = task.endTime ? getAdjustedMinutes(task, task.endTime, true) : start + 60;
-            // Fix simple wrap for end time if needed
-            if (!task.endTime?.includes('T') && end < start) end += 24 * 60;
-
-            return { task, start, end };
-        });
-
-        // 2. Sort by start time, then by duration (longer first)
-        preparedTasks.sort((a, b) => {
-            if (a.start !== b.start) return a.start - b.start;
-            const durA = a.end - a.start;
-            const durB = b.end - b.start;
-            return durB - durA;
-        });
-
-        // 3. Group into clusters of overlapping tasks
-        const clusters: typeof preparedTasks[] = [];
-        let currentCluster: typeof preparedTasks = [];
-        let clusterMaxEnd = -1;
-
-        for (const item of preparedTasks) {
-            if (currentCluster.length === 0) {
-                currentCluster.push(item);
-                clusterMaxEnd = item.end;
-            } else {
-                // If this task starts after the current cluster ends, it's a new cluster
-                if (item.start >= clusterMaxEnd) {
-                    clusters.push(currentCluster);
-                    currentCluster = [item];
-                    clusterMaxEnd = item.end;
-                } else {
-                    currentCluster.push(item);
-                    clusterMaxEnd = Math.max(clusterMaxEnd, item.end);
-                }
-            }
-        }
-        if (currentCluster.length > 0) {
-            clusters.push(currentCluster);
-        }
-
-        // 4. Process each cluster independently
-        for (const cluster of clusters) {
-            const columns: typeof preparedTasks[] = [];
-
-            for (const item of cluster) {
-                let placed = false;
-                for (let i = 0; i < columns.length; i++) {
-                    const column = columns[i];
-                    // Check overlap
-                    const overlaps = column.some(t => {
-                        return item.start < t.end && item.end > t.start;
-                    });
-
-                    if (!overlaps) {
-                        column.push(item);
-                        placed = true;
-                        break;
-                    }
-                }
-
-                if (!placed) {
-                    columns.push([item]);
-                }
-            }
-
-            // Assign width and left position for this cluster
-            const totalColumns = columns.length;
-            const width = 100 / totalColumns;
-
-            columns.forEach((column, colIndex) => {
-                column.forEach(item => {
-                    layout.set(item.task.id, {
-                        width: width,
-                        left: colIndex * width
-                    });
-                });
-            });
-        }
-
-        return layout;
-    }
-
-    private addTaskContextMenu(el: HTMLElement, task: Task) {
-        el.addEventListener('contextmenu', (event) => {
-            event.preventDefault();
-
-            const menu = new Menu();
-
-            // Open File
-            menu.addItem((item) => {
-                item.setTitle('Open File')
-                    .setIcon('document')
-                    .onClick(async () => {
-                        await this.app.workspace.openLinkText(task.file, '', true);
-                    });
-            });
-
-            // Delete
-            menu.addItem((item) => {
-                item.setTitle('Delete')
-                    .setIcon('trash')
-                    .onClick(async () => {
-                        await this.taskIndex.deleteTask(task.id);
-                    });
-            });
-
-            // Convert
-            const isAllDay = !task.startTime;
-            menu.addItem((item) => {
-                item.setTitle(isAllDay ? 'Convert to Timed' : 'Convert to All Day')
-                    .setIcon('calendar-with-checkmark')
-                    .onClick(async () => {
-                        const updates: Partial<Task> = {};
-                        if (isAllDay) {
-                            // Convert to Timed (default to startHour)
-                            const startHour = this.plugin.settings.startHour;
-                            const h = startHour.toString().padStart(2, '0');
-                            updates.startTime = `${h}:00`;
-                            updates.endTime = `${(startHour + 1).toString().padStart(2, '0')}:00`;
-                        } else {
-                            // Convert to All Day
-                            updates.startTime = undefined;
-                            updates.endTime = undefined;
-                        }
-                        await this.taskIndex.updateTask(task.id, updates);
-                    });
-            });
-
-            // Duplicate
-            menu.addItem((item) => {
-                item.setTitle('Duplicate')
-                    .setIcon('copy')
-                    .onClick(async () => {
-                        await this.taskIndex.duplicateTask(task.id);
-                    });
-            });
-
-            menu.showAtPosition({ x: event.pageX, y: event.pageY });
-        });
-    }
     private async renderTaskContent(el: HTMLElement, task: Task) {
         const contentContainer = el.createDiv('task-content-container');
 
@@ -865,10 +651,5 @@ export class TimelineView extends ItemView {
             // Stop propagation so clicking checkbox doesn't drag/select card
             checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
         });
-    }
-
-    private timeToMinutes(time: string): number {
-        const [h, m] = time.split(':').map(Number);
-        return h * 60 + m;
     }
 }

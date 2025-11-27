@@ -9,21 +9,11 @@
     /* Keep the user-requested padding */
     font-size: 0.9em;
 
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-    z-index: 5;
-    width: 90%;
-    left: 5%;
+    scrollbar-width: thin;
 
     /* Flex layout for content scrolling */
     display: flex;
     flex-direction: column;
-}
-
-.task-content-container {
-    flex: 1;
-    overflow-y: auto;
-    /* Hide scrollbar for cleaner look, or keep standard */
-    scrollbar-width: thin;
 }
 
 /* Reset margins for content inside task card to maximize space */
@@ -33,6 +23,12 @@
 .task-content-container li {
     margin-block-start: 0;
     margin-block-end: 0;
+}
+
+.task-content-container {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
 }
 
 /* Top-level list: Ensure enough padding for the main checkbox */
@@ -68,6 +64,152 @@
     width: calc(100% - 4px) !important;
     height: auto !important;
     margin-bottom: 4px;
+    z-index: 25;
+}
+
+/* Dragging State */
+.task-card.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+/* Resize Handles */
+.handle-container {
+    position: absolute;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+}
+
+.top-resize-container {
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.bottom-resize-container {
+    bottom: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.move-handle-container {
+    top: -12px;
+    right: -12px;
+}
+
+.handle-btn {
+    width: 24px;
+    height: 24px;
+    background-color: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-muted);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    font-size: 14px;
+    line-height: 1;
+    font-family: monospace;
+}
+
+.handle-btn:hover {
+    background-color: var(--background-secondary);
+    color: var(--text-normal);
+}
+
+.resize-handle {
+    cursor: ns-resize;
+}
+
+.move-handle {
+    cursor: move;
+}
+
+/* Selected State */
+.task-card.selected {
+    border: 2px solid var(--file-accent, var(--interactive-accent));
+    z-index: 10;
+    /* Higher than normal tasks */
+    box-shadow: 0 0 0 2px var(--background-primary), 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Links */
+.task-content-container a {
+    color: var(--file-accent, var(--link-color));
+    text-decoration: none;
+}
+
+/* Task Item */
+.task-card {
+    position: absolute;
+    background-color: var(--interactive-normal);
+    color: var(--text-normal);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    padding: 4px 2px;
+    /* Keep the user-requested padding */
+    font-size: 0.9em;
+
+    scrollbar-width: thin;
+
+    /* Flex layout for content scrolling */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Reset margins for content inside task card to maximize space */
+.task-content-container p,
+.task-content-container ul,
+.task-content-container ol,
+.task-content-container li {
+    margin-block-start: 0;
+    margin-block-end: 0;
+}
+
+.task-content-container {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+/* Top-level list: Ensure enough padding for the main checkbox */
+.task-content-container>ul,
+.task-content-container>ol {
+    padding-inline-start: 1.9em;
+    /* Keep user-requested indentation */
+}
+
+/* Nested lists: Reduce indentation to save space */
+.task-content-container li>ul,
+.task-content-container li>ol {
+    padding-inline-start: 1em;
+}
+
+.task-content-container .task-list-item {
+    list-style: none;
+    /* Removed display: flex to fix indentation structure */
+}
+
+.task-card:hover {
+    filter: brightness(0.95);
+    z-index: 6;
+    border-color: var(--file-accent, var(--interactive-accent));
+}
+
+/* Robust All-Day Task Styles */
+.task-card.all-day {
+    position: relative !important;
+    /* Force relative to participate in flow */
+    top: auto !important;
+    left: 2px !important;
+    width: calc(100% - 4px) !important;
+    height: auto !important;
+    margin-bottom: 2px;
     z-index: 25;
 }
 

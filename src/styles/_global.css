@@ -15,7 +15,7 @@
 .task-viewer-global-styles .markdown-preview-view input[type="checkbox"] {
     -webkit-appearance: none;
     box-sizing: border-box;
-    border: 1px solid var(--text-normal);
+    border: 1px solid var(--checkbox-border-color);
     position: relative;
     width: 16px;
     height: 16px;
@@ -26,6 +26,10 @@
     cursor: pointer;
     filter: none;
     border-radius: 4px;
+}
+
+.task-viewer-global-styles .HyperMD-list-line input[type="checkbox"]:hover {
+    border-color: var(--checkbox-border-color-hover);
 }
 
 .task-viewer-global-styles .HyperMD-list-line input[type="checkbox"]:checked::before {
@@ -46,6 +50,7 @@
 
 .task-viewer-global-styles .markdown-preview-view input[type="checkbox"]:hover {
     background-color: var(--background-primary-alt);
+    border-color: var(--checkbox-border-color-hover);
 }
 
 .task-viewer-global-styles .markdown-preview-view input[type="checkbox"]:checked::before {
