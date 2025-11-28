@@ -30,8 +30,7 @@ const copyStaticFiles = {
           '_base.css',
           '_timeline.css',
           '_task-card.css',
-          '_checkboxes.css',
-          '_global.css'
+          '_checkboxes.css'
         ];
 
         let cssContent = '';

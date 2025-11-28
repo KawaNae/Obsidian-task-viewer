@@ -46,7 +46,29 @@ export class TimelineView extends ItemView {
         return 'calendar-with-checkmark';
     }
 
+    async setState(state: any, result: any): Promise<void> {
+        if (state) {
+            if (state.daysToShow) {
+                this.viewState.daysToShow = state.daysToShow;
+            }
+            if (state.startDate) {
+                this.viewState.startDate = state.startDate;
+            }
+        }
+        await super.setState(state, result);
+        this.render();
+    }
+
+    getState() {
+        const state = {
+            daysToShow: this.viewState.daysToShow,
+            startDate: this.viewState.startDate
+        };
+        return state;
+    }
+
     async onOpen() {
+        console.log('[TimelineView] onOpen called');
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('task-viewer-container');
@@ -296,8 +318,11 @@ export class TimelineView extends ItemView {
         modeSelect.createEl('option', { value: '7', text: 'Week' });
         modeSelect.value = this.viewState.daysToShow.toString();
         modeSelect.onchange = (e) => {
-            this.viewState.daysToShow = parseInt((e.target as HTMLSelectElement).value);
+            const newValue = parseInt((e.target as HTMLSelectElement).value);
+            this.viewState.daysToShow = newValue;
             this.render();
+            // Force save state
+            this.app.workspace.requestSaveLayout();
         };
 
         // Filter Button
