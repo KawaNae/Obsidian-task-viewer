@@ -5,7 +5,7 @@ import { TaskParser } from './TaskParser';
 export class TaskIndex {
     private app: App;
     private tasks: Map<string, Task> = new Map(); // ID -> Task
-    private listeners: (() => void)[] = [];
+    private listeners: ((taskId?: string, changes?: string[]) => void)[] = [];
 
     constructor(app: App) {
         this.app = app;
@@ -27,6 +27,10 @@ export class TaskIndex {
 
     getTasks(): Task[] {
         return Array.from(this.tasks.values());
+    }
+
+    getTask(taskId: string): Task | undefined {
+        return this.tasks.get(taskId);
     }
 
     getTasksForDate(date: string): Task[] {
@@ -55,15 +59,15 @@ export class TaskIndex {
         return [...currentDayTasks, ...nextDayTasks];
     }
 
-    onChange(callback: () => void): () => void {
+    onChange(callback: (taskId?: string, changes?: string[]) => void): () => void {
         this.listeners.push(callback);
         return () => {
             this.listeners = this.listeners.filter(cb => cb !== callback);
         };
     }
 
-    private notifyListeners() {
-        this.listeners.forEach(cb => cb());
+    private notifyListeners(taskId?: string, changes?: string[]) {
+        this.listeners.forEach(cb => cb(taskId, changes));
     }
 
     private async scanVault() {
@@ -129,7 +133,7 @@ export class TaskIndex {
 
         // Optimistic Update
         Object.assign(task, updates);
-        this.notifyListeners();
+        this.notifyListeners(taskId, Object.keys(updates));
 
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;

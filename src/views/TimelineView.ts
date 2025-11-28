@@ -68,7 +68,7 @@ export class TimelineView extends ItemView {
     }
 
     async onOpen() {
-        console.log('[TimelineView] onOpen called');
+
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('task-viewer-container');
@@ -79,8 +79,7 @@ export class TimelineView extends ItemView {
         // Initialize DragHandler with selection callback and move callback
         this.dragHandler = new DragHandler(this.container, this.taskIndex, this.plugin,
             (taskId) => {
-                this.selectedTaskId = taskId;
-                this.render();
+                this.selectTask(taskId);
             },
             () => {
                 this.updateHandlePositions();
@@ -90,19 +89,42 @@ export class TimelineView extends ItemView {
         // Background click to deselect
         this.container.addEventListener('click', (e) => {
             const target = e.target as HTMLElement;
+
+
             // If clicking handle, do nothing (handled by DragHandler or button click)
             if (target.closest('.handle-btn')) return;
 
             if (!target.closest('.task-card')) {
                 if (this.selectedTaskId) {
-                    this.selectedTaskId = null;
-                    this.render();
+                    this.selectTask(null);
                 }
             }
         });
 
         // Subscribe to data changes
-        this.unsubscribe = this.taskIndex.onChange(() => {
+        this.unsubscribe = this.taskIndex.onChange((taskId, changes) => {
+            if (taskId && changes) {
+                // Check if we can do partial update
+                // Only content/status changes are safe for partial update (no layout change)
+                const safeKeys = ['status', 'statusChar', 'content', 'children'];
+                const isSafe = changes.every(k => safeKeys.includes(k));
+
+                if (isSafe) {
+                    const task = this.taskIndex.getTask(taskId);
+                    if (task) {
+                        const card = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
+                        if (card) {
+                            // Partial Update: Re-render content only
+                            const contentContainer = card.querySelector('.task-content-container');
+                            if (contentContainer) contentContainer.remove();
+
+                            this.renderTaskContent(card, task);
+                            return;
+                        }
+                    }
+                }
+            }
+
             this.render();
         });
 
@@ -167,6 +189,7 @@ export class TimelineView extends ItemView {
     }
 
     private render() {
+
         const scrollArea = this.container.querySelector('.timeline-scroll-area');
         if (scrollArea) {
             this.lastScrollTop = scrollArea.scrollTop;
@@ -199,6 +222,30 @@ export class TimelineView extends ItemView {
     private updateHandlePositions() {
         if (this.selectedTaskId && this.handleOverlay) {
             this.updateHandleGeometry(this.selectedTaskId);
+        }
+    }
+
+    private selectTask(taskId: string | null) {
+
+        this.selectedTaskId = taskId;
+
+        // Update .selected class on all task cards
+        const taskCards = this.container.querySelectorAll('.task-card');
+        taskCards.forEach(el => {
+            if ((el as HTMLElement).dataset.id === taskId) {
+                el.addClass('selected');
+            } else {
+                el.removeClass('selected');
+            }
+        });
+
+        // Update Handles
+        if (taskId) {
+            this.renderHandles(taskId);
+        } else {
+            if (this.handleOverlay) {
+                this.handleOverlay.empty();
+            }
         }
     }
 

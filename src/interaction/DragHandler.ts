@@ -138,16 +138,7 @@ export class DragHandler {
         this.hasMoved = false;
         this.isOverAllDay = !task.startTime; // Initialize based on current task state
 
-        // Lock All-Day Row Height to prevent jumping when dragging out
-        const allDayRows = this.container.getElementsByClassName('all-day-row');
-        if (allDayRows.length > 0) {
-            const allDayRow = allDayRows[0] as HTMLElement;
-            this.lockedAllDayRow = allDayRow;
-            // Set min-height to current computed height to prevent shrinking,
-            // but allow expanding if content grows.
-            const currentHeight = allDayRow.offsetHeight;
-            allDayRow.style.minHeight = `${currentHeight}px`;
-        }
+        this.isOverAllDay = !task.startTime; // Initialize based on current task state
     }
 
     private onPointerMove(e: PointerEvent) {
@@ -164,6 +155,17 @@ export class DragHandler {
             if (this.mode && !this.isDragging) {
                 this.isDragging = true;
                 this.dragEl.addClass('dragging');
+
+                // Lock All-Day Row Height to prevent jumping when dragging out
+                const allDayRows = this.container.getElementsByClassName('all-day-row');
+                if (allDayRows.length > 0) {
+                    const allDayRow = allDayRows[0] as HTMLElement;
+                    this.lockedAllDayRow = allDayRow;
+                    // Set min-height to current computed height to prevent shrinking,
+                    // but allow expanding if content grows.
+                    const currentHeight = allDayRow.offsetHeight;
+                    allDayRow.style.minHeight = `${currentHeight}px`;
+                }
             }
         }
 

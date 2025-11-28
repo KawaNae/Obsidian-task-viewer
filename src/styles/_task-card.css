@@ -14,6 +14,12 @@
     /* Flex layout for content scrolling */
     display: flex;
     flex-direction: column;
+
+    /* Performance optimization */
+    will-change: transform;
+    transform: translateZ(0);
+    /* Create stacking context to avoid z-index thrashing */
+    z-index: 1;
 }
 
 .task-content-container {
@@ -132,10 +138,11 @@
 
 /* Selected State */
 .task-card.selected {
-    border: 2px solid var(--file-accent, var(--interactive-accent));
-    z-index: 10;
-    /* Higher than normal tasks */
-    box-shadow: 0 0 0 2px var(--background-primary), 0 4px 8px rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--file-accent, var(--interactive-accent));
+    /* z-index handled by base class or stacking context */
+
+    /* Use box-shadow to simulate 2px border without changing layout size */
+    box-shadow: 0 0 0 1px var(--file-accent, var(--interactive-accent)), 0 0 0 2px var(--background-primary), 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
 /* Links */
