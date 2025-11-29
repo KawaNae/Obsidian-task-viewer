@@ -656,7 +656,11 @@ export class TimelineView extends ItemView {
         // Construct full markdown
         // Strip time info from parent task line for display
         const statusChar = task.statusChar || (task.status === 'done' ? 'x' : (task.status === 'cancelled' ? '-' : ' '));
-        const cleanParentLine = `- [${statusChar}] ${task.content}`;
+        let cleanParentLine = `- [${statusChar}] ${task.content}`;
+
+        // Append source file link
+        const fileName = task.file.split('/').pop()?.replace('.md', '') || task.file;
+        cleanParentLine += `：[[${fileName}]]`;
 
         const fullText = [cleanParentLine, ...task.children].join('\n');
 

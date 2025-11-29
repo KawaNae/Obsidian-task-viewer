@@ -25,4 +25,5 @@
     border-bottom: 1px solid var(--background-modifier-border);
     display: flex;
     gap: 8px;
+    overflow-x: auto;
 }
