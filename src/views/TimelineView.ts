@@ -654,6 +654,6 @@ export class TimelineView extends ItemView {
     }
 
     private async renderTaskContent(el: HTMLElement, task: Task) {
-        await this.taskRenderer.render(el, task, this);
+        await this.taskRenderer.render(el, task, this, this.plugin.settings);
     }
 }

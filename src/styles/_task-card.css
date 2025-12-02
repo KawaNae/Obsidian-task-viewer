@@ -1,25 +1,36 @@
 /* Task Item */
 .task-card {
-    position: absolute;
     background-color: var(--interactive-normal);
     color: var(--text-normal);
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 4px;
-    padding: 4px 2px;
-    /* Keep the user-requested padding */
     font-size: 0.9em;
-
-    scrollbar-width: thin;
-
-    /* Flex layout for content scrolling */
-    display: flex;
-    flex-direction: column;
-
-    /* Performance optimization */
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px; 
     will-change: transform;
     transform: translateZ(0);
-    /* Create stacking context to avoid z-index thrashing */
     z-index: 1;
+    padding: 0.8em 2px 4px 2px;
+    scrollbar-width: thin;
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    margin-bottom: 2px;
+}
+
+/* Robust All-Day Task Styles */
+.task-card.all-day {
+    position: relative !important;
+    padding: 4px 2px 4px 2px !important;
+    width: calc(100% - 10px);
+    left: 4px;
+
+    height: auto !important;
+    z-index: 25;
+}
+           
+.task-card:hover {
+    filter: brightness(0.95);
+    z-index: 6;
+    border-color: var(--file-accent, var(--interactive-accent));
 }
 
 .task-content-container {
@@ -54,23 +65,6 @@
     /* Removed display: flex to fix indentation structure */
 }
 
-.task-card:hover {
-    filter: brightness(0.95);
-    z-index: 6;
-    border-color: var(--file-accent, var(--interactive-accent));
-}
-
-/* Robust All-Day Task Styles */
-.task-card.all-day {
-    position: relative !important;
-    /* Force relative to participate in flow */
-    top: auto !important;
-    left: 2px !important;
-    width: calc(100% - 4px) !important;
-    height: auto !important;
-    margin-bottom: 2px;
-    z-index: 25;
-}
 
 /* Dragging State */
 .task-card.dragging {
@@ -154,4 +148,18 @@
 .task-content-container a:hover {
     color: var(--file-accent-hover, var(--link-color-hover));
     text-decoration: underline;
+}
+
+/* Time Display */
+.task-time-display {
+    position: absolute;
+    top: 2px;
+    right: 6px;
+    font-size: 0.75em;
+    color: var(--text-muted);
+    opacity: 0.8;
+    pointer-events: none;
+    font-family: var(--font-monospace);
+    z-index: 5;
+    background-color: transparent;
 }

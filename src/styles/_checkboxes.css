@@ -1,11 +1,11 @@
 /* --- Timeline Checkbox Styles --- */
-.timeline-grid input.task-list-item-checkbox {
+.task-card input.task-list-item-checkbox {
     cursor: pointer;
     position: relative !important;
     top: 0.2em !important;
 }
 
-.timeline-grid li>input.task-list-item-checkbox:checked {
+.task-card li>input.task-list-item-checkbox:checked {
     background-color: var(--file-accent, var(--interactive-accent)) !important;
     border-color: transparent !important;
 }

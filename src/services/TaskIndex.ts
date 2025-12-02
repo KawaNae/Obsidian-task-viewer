@@ -23,6 +23,15 @@ export class TaskIndex {
                 this.notifyListeners();
             }
         });
+
+        this.app.metadataCache.on('changed', (file) => {
+            if (file instanceof TFile && file.extension === 'md') {
+                // Metadata changed (e.g. frontmatter), notify listeners to re-render
+                // We don't necessarily need to re-scan the file content if only frontmatter changed,
+                // but re-rendering views is necessary to pick up new colors.
+                this.notifyListeners();
+            }
+        });
     }
 
     getTasks(): Task[] {

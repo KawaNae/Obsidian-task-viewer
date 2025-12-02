@@ -29,6 +29,8 @@ const copyStaticFiles = {
           '_variables.css',
           '_base.css',
           '_timeline.css',
+          '_kanban.css',
+          '_schedule.css',
           '_task-card.css',
           '_checkboxes.css'
         ];

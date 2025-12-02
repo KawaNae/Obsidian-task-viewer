@@ -1,5 +1,5 @@
 import { App, MarkdownRenderer, Component } from 'obsidian';
-import { Task } from '../types';
+import { Task, TaskViewerSettings } from '../types';
 import { TaskIndex } from '../services/TaskIndex';
 
 export class TaskRenderer {
@@ -11,7 +11,64 @@ export class TaskRenderer {
         this.taskIndex = taskIndex;
     }
 
-    async render(container: HTMLElement, task: Task, component: Component) {
+    async render(container: HTMLElement, task: Task, component: Component, settings: TaskViewerSettings) {
+        // Time Display
+        if (task.startTime) {
+            const timeDisplay = container.createDiv('task-time-display');
+            let timeText = task.startTime;
+
+            if (task.endTime) {
+                // Parse dates to compare with visual day boundary
+                const startDate = new Date(`${task.date}T${task.startTime}`);
+                let endDate: Date;
+
+                if (task.endTime.includes('T')) {
+                    // Full ISO format
+                    endDate = new Date(task.endTime);
+                } else {
+                    // Simple HH:mm format
+                    endDate = new Date(`${task.date}T${task.endTime}`);
+                    // Handle overnight times (if end time is earlier than start time, assume next day)
+                    if (endDate < startDate) {
+                        endDate.setDate(endDate.getDate() + 1);
+                    }
+                }
+
+                // Calculate Visual Day Limit
+                // The limit is the next day at startHour
+                const limitDate = new Date(`${task.date}T${settings.startHour.toString().padStart(2, '0')}:00`);
+                limitDate.setDate(limitDate.getDate() + 1);
+
+                if (endDate > limitDate) {
+                    // Exceeds visual day: Show full range
+                    // Format: YYYY-MM-DDTHH:mm>YYYY-MM-DDTHH:mm
+                    const startStr = `${task.date}T${task.startTime}`;
+
+                    const endY = endDate.getFullYear();
+                    const endM = (endDate.getMonth() + 1).toString().padStart(2, '0');
+                    const endD = endDate.getDate().toString().padStart(2, '0');
+                    const endH = endDate.getHours().toString().padStart(2, '0');
+                    const endMin = endDate.getMinutes().toString().padStart(2, '0');
+                    const endStr = `${endY}-${endM}-${endD}T${endH}:${endMin}`;
+
+                    timeText = `${startStr}>${endStr}`;
+                } else {
+                    // Within visual day: Show time only
+                    // If it's next day but within visual day (e.g. 25:00), we still just show the time (01:00)
+                    // The user requested "01:00のように表示します" (Display like 01:00)
+
+                    // We need to extract just HH:mm from endDate
+                    const endH = endDate.getHours().toString().padStart(2, '0');
+                    const endMin = endDate.getMinutes().toString().padStart(2, '0');
+                    const endStr = `${endH}:${endMin}`;
+
+                    timeText = `${task.startTime}>${endStr}`;
+                }
+            }
+
+            timeDisplay.innerText = timeText;
+        }
+
         const contentContainer = container.createDiv('task-content-container');
 
         // Construct full markdown
@@ -68,13 +125,12 @@ export class TaskRenderer {
                     const childLineIndex = index - 1; // 0-based index into children array
                     if (childLineIndex < task.children.length) {
                         let childLine = task.children[childLineIndex];
-                        // Regex to find [ ] or [x]
-                        if (childLine.match(/\[ \]/)) {
-                            childLine = childLine.replace('[ ]', '[x]');
-                        } else if (childLine.match(/\[x\]/i)) {
-                            childLine = childLine.replace(/\[x\]/i, '[ ]');
-                        } else if (childLine.match(/\[-\]/)) {
-                            childLine = childLine.replace(/\[-\]/, '[ ]');
+                        // Regex to find - [?]
+                        const match = childLine.match(/\[(.)\]/);
+                        if (match) {
+                            const currentChar = match[1];
+                            const newChar = currentChar === ' ' ? 'x' : ' ';
+                            childLine = childLine.replace(`[${currentChar}]`, `[${newChar}]`);
                         }
 
                         // Calculate absolute line number

@@ -61,9 +61,9 @@
 
 .all-day-cell {
     border-right: 1px solid var(--background-modifier-border);
-    padding: 2px;
     min-height: var(--all-day-min-height);
     position: relative;
+    padding: 2px 0;
     min-width: 0;
 }
 
