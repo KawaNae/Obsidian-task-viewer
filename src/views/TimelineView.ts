@@ -650,6 +650,8 @@ export class TimelineView extends ItemView {
                 el.style.setProperty('--file-accent', color);
                 el.style.setProperty('--file-accent-hover', color);
             }
+        } else {
+            el.style.setProperty('padding-left', '8px', 'important');
         }
     }
 

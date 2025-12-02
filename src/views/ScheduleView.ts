@@ -290,6 +290,8 @@ export class ScheduleView extends ItemView {
         if (color) {
             el.style.setProperty('border-left', `4px solid ${color}`, 'important');
             el.style.setProperty('--file-accent', color);
+        } else {
+            el.style.setProperty('padding-left', '8px', 'important');
         }
     }
 }
