@@ -12,6 +12,7 @@ export class DragHandler {
     private initialX: number = 0;
     private initialTop: number = 0;
     private initialHeight: number = 0;
+    private initialBottom: number = 0;
     private dragOffsetY: number = 0;
     private isDragging: boolean = false;
     private mode: 'move' | 'resize-top' | 'resize-bottom' | null = null;
@@ -125,6 +126,13 @@ export class DragHandler {
         this.initialTop = parseInt(el.style.top || '0');
         this.initialHeight = parseInt(el.style.height || '0');
 
+        // Calculate logical bottom once at start
+        // Logical Top = Visual Top - 1
+        // Logical Height = Visual Height + 3
+        const logicalTop = this.initialTop - 1;
+        const logicalHeight = this.initialHeight + 3;
+        this.initialBottom = logicalTop + logicalHeight;
+
         const rect = el.getBoundingClientRect();
         this.dragOffsetY = e.clientY - rect.top;
 
@@ -173,8 +181,10 @@ export class DragHandler {
 
         e.preventDefault(); // Prevent scrolling/selection while dragging
 
-        // Snap deltaY to 15 minutes (15px)
-        const snappedDeltaY = Math.round(deltaY / 15) * 15;
+        // Snap deltaY to 15 minutes (15px * zoomLevel)
+        const zoomLevel = this.plugin.settings.zoomLevel;
+        const snapPixels = 15 * zoomLevel;
+        const snappedDeltaY = Math.round(deltaY / snapPixels) * snapPixels;
 
         // --- Cross-Day & All-Day Logic ---
         const doc = this.container.ownerDocument || document;
@@ -238,21 +248,23 @@ export class DragHandler {
             // Calculate new top based on mouse position relative to the column
             const rect = dayCol.getBoundingClientRect();
             const yInContainer = e.clientY - rect.top;
-            const snappedMouseY = Math.round(yInContainer / 15) * 15;
+            const zoomLevel = this.plugin.settings.zoomLevel;
+            const snapPixels = 15 * zoomLevel;
+            const snappedMouseY = Math.round(yInContainer / snapPixels) * snapPixels;
 
             if (this.mode === 'move') {
                 // Use offset to keep mouse relative position constant
                 const rawTop = yInContainer - this.dragOffsetY;
-                const snappedTop = Math.round(rawTop / 15) * 15;
+                const snappedTop = Math.round(rawTop / snapPixels) * snapPixels;
 
                 // Clamp to day boundaries (0 to 24h)
                 // 24h * 60min = 1440px
                 // We need to check against logical height
                 // Visual height is logical height - 3
-                const currentHeight = parseInt(this.dragEl.style.height || '60');
+                const currentHeight = parseInt(this.dragEl.style.height || `${60 * zoomLevel}`);
                 const logicalHeight = currentHeight + 3;
 
-                const maxTop = 1440 - logicalHeight;
+                const maxTop = (1440 * zoomLevel) - logicalHeight;
                 const clampedTop = Math.max(0, Math.min(maxTop, snappedTop));
 
                 // Apply visual offset: top + 1
@@ -260,36 +272,29 @@ export class DragHandler {
 
                 // Ensure height exists if coming from all-day
                 if (!this.dragEl.style.height || this.dragEl.style.height === 'auto' || this.dragEl.style.height === '') {
-                    this.dragEl.style.height = `${60 - 3}px`; // Default 1 hour - 3px
+                    this.dragEl.style.height = `${(60 * zoomLevel) - 3}px`; // Default 1 hour - 3px
                 }
             } else if (this.mode === 'resize-bottom') {
-                const currentTop = parseInt(this.dragEl.style.top || '0');
-                // Logical Top = Visual Top - 1
-                const logicalTop = currentTop - 1;
+                // Use initial logical top (fixed anchor)
+                const logicalTop = this.initialTop - 1;
 
-                const newHeight = Math.max(15, snappedMouseY - logicalTop);
+                const newHeight = Math.max(snapPixels, snappedMouseY - logicalTop);
 
                 // Clamp height so it doesn't exceed 24h
-                const maxHeight = 1440 - logicalTop;
+                const maxHeight = (1440 * zoomLevel) - logicalTop;
                 const clampedHeight = Math.min(newHeight, maxHeight);
 
                 // Apply visual offset: height - 3
                 this.dragEl.style.height = `${clampedHeight - 3}px`;
             } else if (this.mode === 'resize-top') {
-                const currentTop = parseInt(this.dragEl.style.top || '0');
-                const currentHeight = parseInt(this.dragEl.style.height || '0');
-
-                // Logical values
-                const logicalTop = currentTop - 1;
-                const logicalHeight = currentHeight + 3;
-
-                const currentBottom = logicalTop + logicalHeight;
+                // Use initial logical bottom (fixed anchor)
+                const currentBottom = this.initialBottom;
                 const newTop = Math.max(0, snappedMouseY);
 
                 // Clamp top to 0
                 const clampedTop = Math.max(0, newTop);
                 // Recalculate height based on clamped top
-                const clampedHeight = Math.max(15, currentBottom - clampedTop);
+                const clampedHeight = Math.max(snapPixels, currentBottom - clampedTop);
 
                 // Apply visual offsets
                 this.dragEl.style.top = `${clampedTop + 1}px`;
@@ -352,7 +357,8 @@ export class DragHandler {
                     const newTop = currentTop + actualScroll;
 
                     // Clamp to day boundaries (0 to 24h)
-                    const maxTop = 1440 - (parseInt(this.dragEl.style.height || '60'));
+                    const zoomLevel = this.plugin.settings.zoomLevel;
+                    const maxTop = (1440 * zoomLevel) - (parseInt(this.dragEl.style.height || `${60 * zoomLevel}`));
                     const clampedTop = Math.max(0, Math.min(maxTop, newTop));
 
                     this.dragEl.style.top = `${clampedTop}px`;
@@ -409,14 +415,17 @@ export class DragHandler {
 
         const updates: Partial<Task> = {};
 
-        // 1. Date Update
-        if (this.currentDayDate !== this.dragTask.date) {
-            updates.date = this.currentDayDate;
-        }
+        // 1. Date Update - MOVED inside specific blocks
+        // if (this.currentDayDate !== this.dragTask.date) {
+        //     updates.date = this.currentDayDate;
+        // }
 
         // 2. Time Update
         if (this.isOverAllDay) {
             // Converted to All-Day
+            if (this.currentDayDate !== this.dragTask.date) {
+                updates.date = this.currentDayDate;
+            }
             if (this.dragTask.startTime) {
                 updates.startTime = undefined;
                 updates.endTime = undefined;
@@ -425,7 +434,8 @@ export class DragHandler {
             // Converted to Timed or Moved/Resized in Timed
             // Parse raw visual values
             const top = parseInt(this.dragEl.style.top || '0');
-            const height = parseInt(this.dragEl.style.height || '60');
+            const zoomLevel = this.plugin.settings.zoomLevel;
+            const height = parseInt(this.dragEl.style.height || `${60 * zoomLevel}`);
 
             // Reverse visual adjustments to get logical values:
             // TimelineView adds 1px to top, so we subtract 1px
@@ -438,8 +448,9 @@ export class DragHandler {
             const startHourMinutes = startHour * 60;
 
             // Total minutes from midnight of the VISUAL day
-            const startTotalMinutes = logicalTop + startHourMinutes;
-            const endTotalMinutes = startTotalMinutes + logicalHeight;
+            // Convert visual pixels back to minutes: pixels / zoomLevel
+            const startTotalMinutes = (logicalTop / zoomLevel) + startHourMinutes;
+            const endTotalMinutes = startTotalMinutes + (logicalHeight / zoomLevel);
 
             // Determine actual calendar date and time
             let finalDate = this.currentDayDate;
@@ -462,7 +473,7 @@ export class DragHandler {
                 }
             } else {
                 // Current day
-                // Ensure date is set to visual day (if it wasn't already updated above)
+                // Ensure date is set to visual day
                 if (this.currentDayDate !== this.dragTask.date) {
                     updates.date = this.currentDayDate;
                 }

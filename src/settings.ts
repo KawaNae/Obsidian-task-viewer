@@ -51,5 +51,17 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     this.plugin.settings.frontmatterColorKey = value;
                     await this.plugin.saveSettings();
                 }));
+
+        new Setting(containerEl)
+            .setName('Default Zoom Level')
+            .setDesc('The default zoom level for the timeline view (0.25 - 4.0).')
+            .addSlider(slider => slider
+                .setLimits(0.25, 4.0, 0.25)
+                .setValue(this.plugin.settings.zoomLevel)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.zoomLevel = value;
+                    await this.plugin.saveSettings();
+                }));
     }
 }

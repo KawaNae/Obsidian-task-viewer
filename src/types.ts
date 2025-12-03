@@ -27,10 +27,12 @@ export interface TaskViewerSettings {
     startHour: number;      // 0-23
     applyGlobalStyles: boolean; // Whether to apply checkbox styles globally
     frontmatterColorKey: string; // Key to look for in frontmatter for color
+    zoomLevel: number;      // 0.25 - 4.0 (default 1.0)
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
     startHour: 5,
     applyGlobalStyles: false,
-    frontmatterColorKey: 'color'
+    frontmatterColorKey: 'color',
+    zoomLevel: 1.0
 };

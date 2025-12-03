@@ -187,7 +187,8 @@ export class TimelineView extends ItemView {
 
         if (dayCol) {
             const indicator = dayCol.createDiv({ cls: 'current-time-indicator' });
-            indicator.style.top = `${minutesFromStart}px`;
+            const zoomLevel = this.plugin.settings.zoomLevel;
+            indicator.style.top = `${minutesFromStart * zoomLevel}px`;
         }
     }
 
@@ -199,6 +200,10 @@ export class TimelineView extends ItemView {
         }
 
         this.container.empty();
+
+        // Apply Zoom Level
+        const zoomLevel = this.plugin.settings.zoomLevel;
+        this.container.style.setProperty('--hour-height', `${60 * zoomLevel}px`);
 
         this.renderToolbar();
         this.renderGrid();
@@ -375,6 +380,35 @@ export class TimelineView extends ItemView {
             this.app.workspace.requestSaveLayout();
         };
 
+        // Zoom Controls
+        const zoomContainer = toolbar.createDiv('zoom-controls');
+        zoomContainer.style.display = 'flex';
+        zoomContainer.style.alignItems = 'center';
+        zoomContainer.style.gap = '5px';
+        zoomContainer.style.marginLeft = '10px';
+
+        const zoomOutBtn = zoomContainer.createEl('button', { text: '-' });
+        zoomOutBtn.onclick = async () => {
+            let newZoom = this.plugin.settings.zoomLevel - 0.25;
+            if (newZoom < 0.25) newZoom = 0.25;
+            this.plugin.settings.zoomLevel = newZoom;
+            await this.plugin.saveSettings();
+            this.render();
+        };
+
+        const zoomLabel = zoomContainer.createSpan({ text: `${Math.round(this.plugin.settings.zoomLevel * 100)}%` });
+        zoomLabel.style.minWidth = '40px';
+        zoomLabel.style.textAlign = 'center';
+
+        const zoomInBtn = zoomContainer.createEl('button', { text: '+' });
+        zoomInBtn.onclick = async () => {
+            let newZoom = this.plugin.settings.zoomLevel + 0.25;
+            if (newZoom > 4.0) newZoom = 4.0;
+            this.plugin.settings.zoomLevel = newZoom;
+            await this.plugin.saveSettings();
+            this.render();
+        };
+
         // Filter Button
         const filterBtn = toolbar.createEl('button', { text: 'Filter' });
         filterBtn.onclick = (e) => {
@@ -509,9 +543,11 @@ export class TimelineView extends ItemView {
 
     private renderTimeLabels(container: HTMLElement) {
         const startHour = this.plugin.settings.startHour;
+        const zoomLevel = this.plugin.settings.zoomLevel;
+
         for (let i = 0; i < 24; i++) {
             const label = container.createDiv('time-label');
-            label.style.top = `${i * 60}px`;
+            label.style.top = `${i * 60 * zoomLevel}px`;
 
             // Display hour adjusted by startHour
             let displayHour = startHour + i;
@@ -545,6 +581,7 @@ export class TimelineView extends ItemView {
 
     private renderTimedTasks(container: HTMLElement, date: string) {
         const startHour = this.plugin.settings.startHour;
+        const zoomLevel = this.plugin.settings.zoomLevel;
         // Use getTasksForVisualDay
         let tasks = this.taskIndex.getTasksForVisualDay(date, startHour).filter(t => t.startTime);
 
@@ -611,11 +648,11 @@ export class TimelineView extends ItemView {
             const widthFraction = taskLayout.width / 100;
             const leftFraction = taskLayout.left / 100;
 
-            el.style.top = `${relativeStart + 1}px`;
-            el.style.height = `${duration - 3}px`;
+            el.style.top = `${(relativeStart * zoomLevel) + 1}px`;
+            el.style.height = `${(duration * zoomLevel) - 3}px`;
             el.style.width = `calc((100% - 8px) * ${widthFraction} - 2px)`;
             el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
-            el.style.setProperty('--initial-height', `${duration}px`);
+            el.style.setProperty('--initial-height', `${duration * zoomLevel}px`);
 
             this.renderTaskContent(el, task);
             this.menuHandler.addTaskContextMenu(el, task);
