@@ -387,8 +387,9 @@ export class TimelineView extends ItemView {
             distinctFiles.forEach(file => {
                 const isVisible = this.visibleFiles === null || this.visibleFiles.has(file);
                 const color = this.getFileColor(file);
+                const fileName = file.split('/').pop() || file;
                 menu.addItem(item => {
-                    item.setTitle(file)
+                    item.setTitle(fileName)
                         .setChecked(isVisible)
                         .onClick(() => {
                             if (this.visibleFiles === null) {
@@ -633,8 +634,6 @@ export class TimelineView extends ItemView {
         const color = this.getFileColor(filePath);
 
         if (color) {
-            el.style.setProperty('border-left', `4px solid ${color}`, 'important');
-
             const hsl = ColorUtils.hexToHSL(color);
             if (hsl) {
                 const { h, s, l } = hsl;
@@ -650,8 +649,6 @@ export class TimelineView extends ItemView {
                 el.style.setProperty('--file-accent', color);
                 el.style.setProperty('--file-accent-hover', color);
             }
-        } else {
-            el.style.setProperty('padding-left', '8px', 'important');
         }
     }
 

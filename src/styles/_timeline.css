@@ -63,8 +63,12 @@
     border-right: 1px solid var(--background-modifier-border);
     min-height: var(--all-day-min-height);
     position: relative;
-    padding: 2px 0;
+    padding: 3px 0 2px 0;
     min-width: 0;
+
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
 }
 
 /* 3. Timeline Row (Scrollable Area) */

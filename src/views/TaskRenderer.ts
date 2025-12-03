@@ -78,7 +78,13 @@ export class TaskRenderer {
 
         // Append source file link
         const fileName = task.file.split('/').pop()?.replace('.md', '') || task.file;
-        cleanParentLine += `：[[${fileName}]]`;
+        const hasContent = cleanParentLine.replace(/^- \[[xX! -]\]\s*/, '').trim().length > 0;
+
+        if (hasContent) {
+            cleanParentLine += `：[[${fileName}]]`;
+        } else {
+            cleanParentLine += `[[${fileName}]]`;
+        }
 
         const fullText = [cleanParentLine, ...task.children].join('\n');
 

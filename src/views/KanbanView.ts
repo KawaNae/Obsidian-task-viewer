@@ -308,7 +308,6 @@ export class KanbanView extends ItemView {
         const color = this.getFileColor(filePath);
 
         if (color) {
-            el.style.setProperty('border-left', `4px solid ${color}`, 'important');
             el.style.setProperty('--file-accent', color);
         }
     }

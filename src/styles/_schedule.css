@@ -17,7 +17,7 @@
 .schedule-date-section {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 5px;
     padding: 10px;
     border-radius: 6px;
 }
@@ -40,7 +40,7 @@
 .schedule-task-list {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
 }
 
 .schedule-empty-card {
@@ -55,10 +55,14 @@
     position: relative;
     display: flex;
     flex-direction: column;
+    padding: 0;
+    border: none;
+    margin: 0;
 }
 
 /* Task Card Overrides for Schedule View */
-.schedule-task-wrapper .task-card {
+/* Increase specificity to override .task-card.all-day in _task-card.css */
+.schedule-view-container .schedule-task-wrapper .task-card {
     position: relative !important;
     top: auto !important;
     left: auto !important;
@@ -66,5 +70,15 @@
     height: auto !important;
     min-height: auto;
     transform: none !important;
-    margin-bottom: 0;
+
+    /* Rendering Fixes */
+    overflow: visible !important;
+    /* Prevent clipping issues */
+    box-shadow: none;
+    border-radius: 4px;
+}
+
+/* Remove margin from the last card */
+.schedule-task-list>.schedule-task-wrapper:last-child .task-card {
+    margin-bottom: 0 !important;
 }

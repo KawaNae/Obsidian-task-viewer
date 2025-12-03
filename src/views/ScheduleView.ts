@@ -3,6 +3,7 @@ import { TaskIndex } from '../services/TaskIndex';
 import { TaskRenderer } from './TaskRenderer';
 import { Task } from '../types';
 import { DateUtils } from '../utils/DateUtils';
+import { ColorUtils } from '../utils/ColorUtils';
 import TaskViewerPlugin from '../main';
 
 export const VIEW_TYPE_SCHEDULE = 'schedule-view';
@@ -124,8 +125,9 @@ export class ScheduleView extends ItemView {
             distinctFiles.forEach(file => {
                 const isVisible = this.visibleFiles === null || this.visibleFiles.has(file);
                 const color = this.getFileColor(file);
+                const fileName = file.split('/').pop() || file;
                 menu.addItem(item => {
-                    item.setTitle(file)
+                    item.setTitle(fileName)
                         .setChecked(isVisible)
                         .onClick(() => {
                             if (this.visibleFiles === null) {
@@ -182,9 +184,13 @@ export class ScheduleView extends ItemView {
         } else {
             // Sort tasks by time
             tasks.sort((a, b) => {
+                // All-day tasks (no startTime) come first
+                if (!a.startTime && b.startTime) return -1;
+                if (a.startTime && !b.startTime) return 1;
+
+                // If both have time, sort by time
                 if (a.startTime && b.startTime) return a.startTime.localeCompare(b.startTime);
-                if (a.startTime) return -1;
-                if (b.startTime) return 1;
+
                 return 0;
             });
 
@@ -288,10 +294,20 @@ export class ScheduleView extends ItemView {
         const color = this.getFileColor(filePath);
 
         if (color) {
-            el.style.setProperty('border-left', `4px solid ${color}`, 'important');
-            el.style.setProperty('--file-accent', color);
-        } else {
-            el.style.setProperty('padding-left', '8px', 'important');
+            const hsl = ColorUtils.hexToHSL(color);
+            if (hsl) {
+                const { h, s, l } = hsl;
+                el.style.setProperty('--accent-h', h.toString());
+                el.style.setProperty('--accent-s', s + '%');
+                el.style.setProperty('--accent-l', l + '%');
+
+                el.style.setProperty('--color-accent-hsl', `var(--accent-h), var(--accent-s), var(--accent-l)`);
+                el.style.setProperty('--file-accent', `hsl(var(--accent-h), var(--accent-s), var(--accent-l))`);
+                el.style.setProperty('--file-accent-hover', `hsl(calc(var(--accent-h) - 1), calc(var(--accent-s) * 1.01), calc(var(--accent-l) * 1.075))`);
+            } else {
+                el.style.setProperty('--file-accent', color);
+                el.style.setProperty('--file-accent-hover', color);
+            }
         }
     }
 }

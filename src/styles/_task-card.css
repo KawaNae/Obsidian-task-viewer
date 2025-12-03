@@ -3,27 +3,33 @@
     background-color: var(--interactive-normal);
     color: var(--text-normal);
     font-size: 0.9em;
-    border: 1px solid var(--background-modifier-border);
     border-radius: 4px;
-    will-change: transform;
-    transform: translateZ(0);
     z-index: 1;
-    padding: 0.8em 2px 4px 4px;
+    padding: 0.8em 2px 4px 8px;
     scrollbar-width: thin;
     display: flex;
     flex-direction: column;
     position: absolute;
-    margin-bottom: 2px;
+    margin-bottom: 1px;
+}
+
+.task-card::before {
+    content: '';
+    border-radius: 4px 0 0 4px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 4px;
+    background-color: var(--file-accent, transparent);
+    z-index: 2;
 }
 
 /* Robust All-Day Task Styles */
 .task-card.all-day {
     position: relative !important;
-    padding: 4px 2px 4px 2px !important;
     width: calc(100% - 10px);
     left: 4px;
-
-    height: auto !important;
     z-index: 25;
 }
 
