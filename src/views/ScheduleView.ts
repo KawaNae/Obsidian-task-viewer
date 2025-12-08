@@ -2,6 +2,7 @@ import { ItemView, WorkspaceLeaf, Menu } from 'obsidian';
 import { TaskIndex } from '../services/TaskIndex';
 import { TaskRenderer } from './TaskRenderer';
 import { Task } from '../types';
+import { MenuHandler } from '../interaction/MenuHandler';
 import { DateUtils } from '../utils/DateUtils';
 import { ColorUtils } from '../utils/ColorUtils';
 import TaskViewerPlugin from '../main';
@@ -12,6 +13,7 @@ export class ScheduleView extends ItemView {
     private taskIndex: TaskIndex;
     private plugin: TaskViewerPlugin;
     private taskRenderer: TaskRenderer;
+    private menuHandler: MenuHandler;
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private visibleFiles: Set<string> | null = null;
@@ -39,6 +41,9 @@ export class ScheduleView extends ItemView {
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('schedule-view-container');
+
+        // Initialize MenuHandler
+        this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
 
         this.render();
 
@@ -205,6 +210,7 @@ export class ScheduleView extends ItemView {
                 this.applyTaskColor(card, task.file);
 
                 this.taskRenderer.render(card, task, this, this.plugin.settings);
+                this.menuHandler.addTaskContextMenu(card, task);
             });
         }
     }
