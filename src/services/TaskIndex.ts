@@ -1,6 +1,8 @@
 import { App, TFile, Vault } from 'obsidian';
 import { Task } from '../types';
 import { TaskParser } from './TaskParser';
+import { DailyNoteUtils } from '../utils/DailyNoteUtils';
+import { TaskViewerSettings } from '../types';
 
 export class TaskIndex {
     private app: App;
@@ -20,6 +22,13 @@ export class TaskIndex {
         this.app.vault.on('modify', async (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 await this.scanFile(file);
+                this.notifyListeners();
+            }
+        });
+
+        this.app.vault.on('delete', (file) => {
+            if (file instanceof TFile && file.extension === 'md') {
+                this.removeTasksForFile(file.path);
                 this.notifyListeners();
             }
         });
@@ -136,6 +145,14 @@ export class TaskIndex {
         }
     }
 
+    private removeTasksForFile(filePath: string) {
+        for (const [id, task] of this.tasks) {
+            if (task.file === filePath) {
+                this.tasks.delete(id);
+            }
+        }
+    }
+
     async updateTask(taskId: string, updates: Partial<Task>) {
         const task = this.tasks.get(taskId);
         if (!task) return;
@@ -228,6 +245,67 @@ export class TaskIndex {
             const insertIndex = task.line + 1 + task.children.length;
 
             lines.splice(insertIndex, 0, ...linesToInsert);
+
+            return lines.join('\n');
+        });
+    }
+
+    async addTaskToDailyNote(dateStr: string, time: string, content: string, settings: TaskViewerSettings) {
+        const date = new Date(dateStr);
+        // Fix timezone offset issue when creating date from YYYY-MM-DD string
+        // We want the local date corresponding to that string
+        const [y, m, d] = dateStr.split('-').map(Number);
+        date.setFullYear(y, m - 1, d);
+        date.setHours(0, 0, 0, 0);
+
+        let file = DailyNoteUtils.getDailyNote(this.app, date);
+        if (!file) {
+            file = await DailyNoteUtils.createDailyNote(this.app, date);
+        }
+
+        if (!file) return;
+
+        await this.app.vault.process(file, (fileContent) => {
+            const lines = fileContent.split('\n');
+            const header = settings.dailyNoteHeader;
+            const level = settings.dailyNoteHeaderLevel;
+            const headerPrefix = '#'.repeat(level) + ' ';
+            const fullHeader = headerPrefix + header;
+
+            let headerIndex = -1;
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].trim() === fullHeader) {
+                    headerIndex = i;
+                    break;
+                }
+            }
+
+            const taskLine = `- [ ] ${content} @${dateStr}T${time}`;
+
+            if (headerIndex !== -1) {
+                // Header exists, append after it (and any existing content under it)
+                // Find end of section
+                let insertIndex = headerIndex + 1;
+                while (insertIndex < lines.length) {
+                    const line = lines[insertIndex];
+                    // Stop at next header of same or higher level
+                    if (line.startsWith('#')) {
+                        const match = line.match(/^(#+)\s/);
+                        if (match && match[1].length <= level) {
+                            break;
+                        }
+                    }
+                    insertIndex++;
+                }
+                lines.splice(insertIndex, 0, taskLine);
+            } else {
+                // Header doesn't exist, append to end
+                if (lines.length > 0 && lines[lines.length - 1].trim() !== '') {
+                    lines.push('');
+                }
+                lines.push(fullHeader);
+                lines.push(taskLine);
+            }
 
             return lines.join('\n');
         });

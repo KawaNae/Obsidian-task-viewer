@@ -5,12 +5,6 @@
     top: 0.2em !important;
 }
 
-.task-card li>input.task-list-item-checkbox:checked {
-    background-color: var(--file-accent, var(--interactive-accent)) !important;
-    border-color: transparent !important;
-}
-
-
 /* --- Global Checkbox Styles --- */
 .task-viewer-global-styles input.task-list-item-checkbox {
     cursor: pointer;
@@ -23,40 +17,40 @@
 .task-viewer-global-styles input[data-task="?"].task-list-item-checkbox:checked,
 .task-viewer-global-styles li[data-task="?"]>input.task-list-item-checkbox:checked,
 .task-viewer-global-styles li[data-task="?"]>p>input.task-list-item-checkbox:checked {
-    background-color: #A99400 !important;
-    border-color: #A99400 !important;
+    background-color: var(--checkbox-question);
+    border-color: var(--checkbox-question);
 }
 
 /* ! */
 .task-viewer-global-styles input[data-task="!"].task-list-item-checkbox:checked,
 .task-viewer-global-styles li[data-task="!"]>input.task-list-item-checkbox:checked,
 .task-viewer-global-styles li[data-task="!"]>p>input.task-list-item-checkbox:checked {
-    background-color: #e73c4c !important;
-    border-color: #e73c4c !important;
+    background-color: var(--checkbox-important);
+    border-color: var(--checkbox-important);
 }
 
 /* - */
 .task-viewer-global-styles input[data-task="-"].task-list-item-checkbox:checked,
 .task-viewer-global-styles li[data-task="-"]>input.task-list-item-checkbox:checked,
 .task-viewer-global-styles li[data-task="-"]>p>input.task-list-item-checkbox:checked {
-    background-color: var(--checklist-done-color) !important;
-    border-color: transparent !important;
+    background-color: var(--checklist-done-color);
+    border-color: transparent;
 }
 
 /* x */
 .task-viewer-global-styles input[data-task="x"].task-list-item-checkbox:checked,
 .task-viewer-global-styles li[data-task="x"]>input.task-list-item-checkbox:checked,
 .task-viewer-global-styles li[data-task="x"]>p>input.task-list-item-checkbox:checked {
-    background-color: var(--file-accent, var(--interactive-accent)) !important;
-    border-color: transparent !important;
+    background-color: var(--file-accent, var(--interactive-accent));
+    border-color: transparent;
 }
 
 /* > */
 .task-viewer-global-styles input[data-task=">"].task-list-item-checkbox:checked,
 .task-viewer-global-styles li[data-task=">"]>input.task-list-item-checkbox:checked,
 .task-viewer-global-styles li[data-task=">"]>p>input.task-list-item-checkbox:checked {
-    background-color: var(--file-accent, var(--interactive-accent)) !important;
-    border-color: transparent !important;
+    background-color: var(--file-accent, var(--interactive-accent));
+    border-color: transparent;
 }
 
 

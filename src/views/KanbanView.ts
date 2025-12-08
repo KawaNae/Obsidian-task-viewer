@@ -110,27 +110,27 @@ export class KanbanView extends ItemView {
                 cardContainer.addEventListener('dragstart', (e) => {
                     e.dataTransfer?.setData('text/plain', task.id);
                     e.dataTransfer?.setDragImage(card, 0, 0);
-                    cardContainer.addClass('dragging');
+                    cardContainer.addClass('is-dragging');
                 });
 
                 cardContainer.addEventListener('dragend', () => {
-                    cardContainer.removeClass('dragging');
+                    cardContainer.removeClass('is-dragging');
                 });
             });
 
             // Drop Zone Events
             taskList.addEventListener('dragover', (e) => {
                 e.preventDefault(); // Allow drop
-                taskList.addClass('drag-over');
+                taskList.addClass('is-drag-over');
             });
 
             taskList.addEventListener('dragleave', () => {
-                taskList.removeClass('drag-over');
+                taskList.removeClass('is-drag-over');
             });
 
             taskList.addEventListener('drop', async (e) => {
                 e.preventDefault();
-                taskList.removeClass('drag-over');
+                taskList.removeClass('is-drag-over');
                 const taskId = e.dataTransfer?.getData('text/plain');
                 if (taskId) {
                     await this.handleDrop(taskId, col);

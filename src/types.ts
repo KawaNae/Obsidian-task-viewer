@@ -28,11 +28,15 @@ export interface TaskViewerSettings {
     applyGlobalStyles: boolean; // Whether to apply checkbox styles globally
     frontmatterColorKey: string; // Key to look for in frontmatter for color
     zoomLevel: number;      // 0.25 - 4.0 (default 1.0)
+    dailyNoteHeader: string; // Header to add tasks under (default: "Tasks")
+    dailyNoteHeaderLevel: number; // Header level (default: 2)
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
     startHour: 5,
     applyGlobalStyles: false,
     frontmatterColorKey: 'color',
-    zoomLevel: 1.0
+    zoomLevel: 1.0,
+    dailyNoteHeader: 'Tasks',
+    dailyNoteHeaderLevel: 2
 };

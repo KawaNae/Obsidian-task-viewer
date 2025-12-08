@@ -44,32 +44,28 @@
     gap: 8px;
 }
 
-.kanban-task-list.drag-over {
+.kanban-task-list.is-drag-over {
     background-color: var(--background-modifier-hover);
 }
 
 /* Task Card Overrides for Kanban */
 .kanban-task-card-wrapper {
     position: relative;
-    /* Wrapper needs height to contain the absolute card? 
-       No, we want the card to be relative in Kanban.
-    */
 }
 
 .kanban-task-card-wrapper .task-card {
-    position: relative !important;
-    /* Override absolute from _task-card.css */
-    top: auto !important;
-    left: auto !important;
-    width: 100% !important;
-    height: auto !important;
+    /* Inherit relative from base .task-card */
+    top: auto;
+    left: auto;
+    width: 100%;
+    height: auto;
     min-height: 60px;
     /* Minimum height for visibility */
-    transform: none !important;
+    transform: none;
     margin-bottom: 0;
     cursor: grab;
 }
 
-.kanban-task-card-wrapper.dragging {
+.kanban-task-card-wrapper.is-dragging {
     opacity: 0.5;
 }

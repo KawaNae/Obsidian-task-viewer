@@ -63,5 +63,28 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     this.plugin.settings.zoomLevel = value;
                     await this.plugin.saveSettings();
                 }));
+
+        new Setting(containerEl)
+            .setName('Daily Note Header')
+            .setDesc('The header under which new tasks will be added in the Daily Note.')
+            .addText(text => text
+                .setPlaceholder('Tasks')
+                .setValue(this.plugin.settings.dailyNoteHeader)
+                .onChange(async (value) => {
+                    this.plugin.settings.dailyNoteHeader = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Daily Note Header Level')
+            .setDesc('The level of the header (1-6).')
+            .addSlider(slider => slider
+                .setLimits(1, 6, 1)
+                .setValue(this.plugin.settings.dailyNoteHeaderLevel)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.dailyNoteHeaderLevel = value;
+                    await this.plugin.saveSettings();
+                }));
     }
 }

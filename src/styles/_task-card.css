@@ -1,43 +1,89 @@
-/* Task Item */
+/* ==========================================================================
+   Task Card Styles
+   ========================================================================== */
+
+/* ===== Task Card Base ===== */
+
 .task-card {
-    background-color: var(--interactive-normal);
-    color: var(--text-normal);
-    font-size: 0.9em;
-    border-radius: 4px;
-    z-index: 1;
-    padding: 0.8em 2px 4px 8px;
-    scrollbar-width: thin;
+    /* Positioning */
+    position: relative;
+    z-index: var(--z-task-card);
+
+    /* Display & Box Model */
     display: flex;
     flex-direction: column;
-    position: absolute;
-    margin-bottom: 1px;
+    padding: var(--task-card-padding);
+    margin-bottom: var(--task-card-gap);
+
+    /* Typography */
+    font-size: var(--task-card-font-size);
+    color: var(--text-normal);
+
+    /* Visual */
+    background-color: var(--interactive-normal);
+    border-radius: var(--task-card-border-radius);
+
+    /* Misc */
+    scrollbar-width: thin;
 }
 
 .task-card::before {
     content: '';
-    border-radius: 4px 0 0 4px;
     position: absolute;
     top: 0;
     left: 0;
     bottom: 0;
-    width: 4px;
+    width: var(--task-card-accent-width);
     background-color: var(--file-accent, transparent);
+    border-radius: 4px 0 0 4px;
     z-index: 2;
 }
 
-/* Robust All-Day Task Styles */
-.task-card.all-day {
-    position: relative !important;
-    width: calc(100% - 10px);
-    left: 4px;
-    z-index: 25;
+/* Context Variants */
+/* Timeline View: Absolute Positioning */
+.task-viewer-container .task-card {
+    position: absolute;
 }
 
-.task-card:hover {
-    filter: brightness(0.95);
-    z-index: 6;
-    border-color: var(--file-accent, var(--interactive-accent));
+/* Modifiers */
+/* Robust All-Day Task Styles */
+.task-card.all-day {
+    position: relative;
+    left: 4px;
+    width: calc(100% - 10px);
+    padding: 4px 2px 4px 8px !important;
+    z-index: var(--z-all-day);
 }
+
+/* Ensure all-day tasks in timeline stay relative even with the absolute rule above */
+.task-viewer-container .task-card.all-day {
+    position: relative;
+}
+
+/* States */
+.task-card:hover {
+    z-index: var(--z-task-card-hover);
+    border-color: var(--file-accent, var(--interactive-accent));
+    filter: brightness(0.95);
+}
+
+.task-card.is-dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+.task-card.selected {
+    /* Visual */
+    border: 1px solid var(--file-accent, var(--interactive-accent));
+
+    /* Use box-shadow to simulate 2px border without changing layout size */
+    box-shadow: 0 0 0 1px var(--file-accent, var(--interactive-accent)),
+        0 0 0 2px var(--background-primary),
+        0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+
+/* ===== Task Content ===== */
 
 .task-content-container {
     flex: 1;
@@ -68,23 +114,56 @@
 
 .task-content-container .task-list-item {
     list-style: none;
-    /* Removed display: flex to fix indentation structure */
+}
+
+/* Links */
+.task-content-container a {
+    color: var(--file-accent, var(--link-color));
+    text-decoration: none;
+}
+
+.task-content-container a:hover {
+    color: var(--file-accent-hover, var(--link-color-hover));
+    text-decoration: underline;
 }
 
 
-/* Dragging State */
-.task-card.dragging {
-    opacity: 0.5;
-    cursor: grabbing;
-}
+/* ===== Time Display ===== */
 
-/* Resize Handles */
-.handle-container {
+.task-time-display {
+    /* Positioning */
     position: absolute;
-    z-index: 20;
+    top: 2px;
+    right: 6px;
+    z-index: 5;
+
+    /* Typography */
+    font-family: var(--font-monospace);
+    font-size: 0.75em;
+    color: var(--text-muted);
+
+    /* Visual */
+    background-color: transparent;
+    opacity: 0.8;
+
+    /* Misc */
+    pointer-events: none;
+}
+
+
+/* ===== Handles ===== */
+
+.handle-container {
+    /* Positioning */
+    position: absolute;
+    z-index: var(--z-handle);
+
+    /* Display */
     display: flex;
     align-items: center;
     justify-content: center;
+
+    /* Misc */
     pointer-events: auto;
 }
 
@@ -106,26 +185,33 @@
 }
 
 .handle-btn {
-    width: 24px;
-    height: 24px;
-    background-color: var(--background-primary);
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 4px;
+    /* Display & Box Model */
     display: flex;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
-    color: var(--text-muted);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    width: 24px;
+    height: 24px;
+
+    /* Typography */
+    font-family: monospace;
     font-size: 14px;
     line-height: 1;
-    font-family: monospace;
+    color: var(--text-muted);
+
+    /* Visual */
+    background-color: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+
+    /* Misc */
+    cursor: pointer;
     touch-action: none;
 }
 
 .handle-btn:hover {
-    background-color: var(--background-secondary);
     color: var(--text-normal);
+    background-color: var(--background-secondary);
 }
 
 .resize-handle {
@@ -134,38 +220,4 @@
 
 .move-handle {
     cursor: move;
-}
-
-/* Selected State */
-.task-card.selected {
-    border: 1px solid var(--file-accent, var(--interactive-accent));
-    /* z-index handled by base class or stacking context */
-
-    /* Use box-shadow to simulate 2px border without changing layout size */
-    box-shadow: 0 0 0 1px var(--file-accent, var(--interactive-accent)), 0 0 0 2px var(--background-primary), 0 4px 8px rgba(0, 0, 0, 0.3);
-}
-
-/* Links */
-.task-content-container a {
-    color: var(--file-accent, var(--link-color));
-    text-decoration: none;
-}
-
-.task-content-container a:hover {
-    color: var(--file-accent-hover, var(--link-color-hover));
-    text-decoration: underline;
-}
-
-/* Time Display */
-.task-time-display {
-    position: absolute;
-    top: 2px;
-    right: 6px;
-    font-size: 0.75em;
-    color: var(--text-muted);
-    opacity: 0.8;
-    pointer-events: none;
-    font-family: var(--font-monospace);
-    z-index: 5;
-    background-color: transparent;
 }

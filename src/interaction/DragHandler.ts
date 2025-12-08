@@ -162,7 +162,7 @@ export class DragHandler {
             // Only start dragging if we have a mode (handle was clicked)
             if (this.mode && !this.isDragging) {
                 this.isDragging = true;
-                this.dragEl.addClass('dragging');
+                this.dragEl.addClass('is-dragging');
 
                 // Lock All-Day Row Height to prevent jumping when dragging out
                 const allDayRows = this.container.getElementsByClassName('all-day-row');
@@ -396,7 +396,7 @@ export class DragHandler {
         }
 
         // Cleanup
-        this.dragEl.removeClass('dragging');
+        this.dragEl.removeClass('is-dragging');
         this.dragTask = null;
         this.dragEl = null;
         this.isDragging = false;

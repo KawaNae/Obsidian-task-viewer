@@ -32,7 +32,8 @@ const copyStaticFiles = {
           '_kanban.css',
           '_schedule.css',
           '_task-card.css',
-          '_checkboxes.css'
+          '_checkboxes.css',
+          '_timeline-controls.css'
         ];
 
         let cssContent = '';

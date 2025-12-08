@@ -1,7 +1,41 @@
 /* Variables */
 :root {
+    /* Layout */
     --hour-height: 60px;
     --time-axis-width: 30px;
     --header-height: 30px;
     --all-day-min-height: 40px;
+
+    /* Task Card */
+    --task-card-padding: 0.8em 2px 4px 8px;
+    --task-card-border-radius: 4px;
+    --task-card-accent-width: 4px;
+    --task-card-font-size: 0.9em;
+    --task-card-gap: 1px;
+
+    /* Indentation */
+    --list-indent-top: 1.9em;
+    --list-indent-nested: 1.5em;
+
+    /* Checkbox Colors */
+    --checkbox-question: #A99400;
+    --checkbox-important: #e73c4c;
+
+    /* Handles */
+    --handle-size: 24px;
+    --handle-offset: -12px;
+    --handle-border-radius: 4px;
+
+    /* Spacing */
+    --toolbar-padding: 8px;
+    --toolbar-gap: 8px;
+
+    /* Z-Index Layers */
+    --z-task-card: 1;
+    --z-task-card-hover: 6;
+    --z-current-time: 15;
+    --z-handle: 20;
+    --z-all-day: 25;
+    --z-header: 30;
+    --z-overlay: 1000;
 }

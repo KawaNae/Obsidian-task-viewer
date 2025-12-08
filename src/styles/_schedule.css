@@ -63,19 +63,19 @@
 /* Task Card Overrides for Schedule View */
 /* Increase specificity to override .task-card.all-day in _task-card.css */
 .schedule-view-container .schedule-task-wrapper .task-card {
-    position: relative !important;
-    top: auto !important;
-    left: auto !important;
-    width: 100% !important;
-    height: auto !important;
+    /* Inherit relative from base .task-card */
+    top: auto;
+    left: auto;
+    width: 100%;
+    height: auto;
     min-height: auto;
-    transform: none !important;
+    transform: none;
 
     /* Rendering Fixes */
-    overflow: visible !important;
+    overflow: visible;
     /* Prevent clipping issues */
     box-shadow: none;
-    border-radius: 4px;
+    border-radius: var(--task-card-border-radius);
 }
 
 /* Remove margin from the last card */

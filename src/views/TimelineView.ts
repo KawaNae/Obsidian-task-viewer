@@ -8,6 +8,7 @@ import { TaskLayout } from '../services/TaskLayout';
 import { DateUtils } from '../utils/DateUtils';
 import { ColorUtils } from '../utils/ColorUtils';
 import TaskViewerPlugin from '../main';
+import { CreateTaskModal } from '../modals/CreateTaskModal';
 
 export const VIEW_TYPE_TIMELINE = 'timeline-view';
 
@@ -217,14 +218,6 @@ export class TimelineView extends ItemView {
 
     private renderHandleOverlay() {
         this.handleOverlay = this.container.createDiv('handle-overlay');
-        this.handleOverlay.style.position = 'absolute';
-        this.handleOverlay.style.top = '0';
-        this.handleOverlay.style.left = '0';
-        this.handleOverlay.style.width = '100%';
-        this.handleOverlay.style.height = '100%';
-        this.handleOverlay.style.pointerEvents = 'none';
-        this.handleOverlay.style.zIndex = '1000'; // Always on top
-        this.handleOverlay.style.overflow = 'hidden';
     }
 
     private updateHandlePositions() {
@@ -283,8 +276,6 @@ export class TimelineView extends ItemView {
         const wrapper = this.handleOverlay.createDiv('handle-wrapper');
         wrapper.dataset.taskId = taskId;
         wrapper.dataset.isAllDay = isAllDay.toString();
-        wrapper.style.position = 'absolute';
-        wrapper.style.pointerEvents = 'none';
 
         // --- Handles ---
         if (isAllDay) {
@@ -382,10 +373,6 @@ export class TimelineView extends ItemView {
 
         // Zoom Controls
         const zoomContainer = toolbar.createDiv('zoom-controls');
-        zoomContainer.style.display = 'flex';
-        zoomContainer.style.alignItems = 'center';
-        zoomContainer.style.gap = '5px';
-        zoomContainer.style.marginLeft = '10px';
 
         const zoomOutBtn = zoomContainer.createEl('button', { text: '-' });
         zoomOutBtn.onclick = async () => {
@@ -396,9 +383,7 @@ export class TimelineView extends ItemView {
             this.render();
         };
 
-        const zoomLabel = zoomContainer.createSpan({ text: `${Math.round(this.plugin.settings.zoomLevel * 100)}%` });
-        zoomLabel.style.minWidth = '40px';
-        zoomLabel.style.textAlign = 'center';
+        const zoomLabel = zoomContainer.createSpan({ cls: 'zoom-label', text: `${Math.round(this.plugin.settings.zoomLevel * 100)}%` });
 
         const zoomInBtn = zoomContainer.createEl('button', { text: '+' });
         zoomInBtn.onclick = async () => {
@@ -522,6 +507,9 @@ export class TimelineView extends ItemView {
             const col = scrollArea.createDiv('day-timeline-column');
             col.dataset.date = date;
             this.renderTimedTasks(col, date);
+
+            // Add interaction listeners for creating tasks
+            this.addCreateTaskListeners(col, date);
         });
 
         // Restore scroll position (must be done AFTER content is added)
@@ -691,5 +679,87 @@ export class TimelineView extends ItemView {
 
     private async renderTaskContent(el: HTMLElement, task: Task) {
         await this.taskRenderer.render(el, task, this, this.plugin.settings);
+    }
+
+    private addCreateTaskListeners(col: HTMLElement, date: string) {
+        // Context Menu (Right Click)
+        col.addEventListener('contextmenu', (e) => {
+            // Prevent default context menu if clicking on empty space
+            if (e.target === col) {
+                e.preventDefault();
+                this.handleCreateTaskTrigger(e.offsetY, date);
+            }
+        });
+
+        // Long Press (Touch)
+        let touchTimer: NodeJS.Timeout | null = null;
+        col.addEventListener('touchstart', (e) => {
+            if (e.target === col && e.touches.length === 1) {
+                const touch = e.touches[0];
+                // Calculate offsetY relative to col
+                const rect = col.getBoundingClientRect();
+                const offsetY = touch.clientY - rect.top;
+
+                touchTimer = setTimeout(() => {
+                    this.handleCreateTaskTrigger(offsetY, date);
+                }, 500); // 500ms long press
+            }
+        });
+
+        col.addEventListener('touchend', () => {
+            if (touchTimer) {
+                clearTimeout(touchTimer);
+                touchTimer = null;
+            }
+        });
+
+        col.addEventListener('touchmove', () => {
+            if (touchTimer) {
+                clearTimeout(touchTimer);
+                touchTimer = null;
+            }
+        });
+    }
+
+    private handleCreateTaskTrigger(offsetY: number, date: string) {
+        // Calculate time from offsetY
+        const zoomLevel = this.plugin.settings.zoomLevel;
+        const startHour = this.plugin.settings.startHour;
+
+        // offsetY is in pixels. 1 hour = 60 * zoomLevel pixels
+        const minutesFromStart = offsetY / zoomLevel;
+
+        // Add startHour offset
+        let totalMinutes = (startHour * 60) + minutesFromStart;
+
+        // Normalize to 0-23 hours
+        if (totalMinutes >= 24 * 60) {
+            totalMinutes -= 24 * 60;
+        }
+
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = Math.floor(totalMinutes % 60);
+
+        // Round to nearest 5 minutes for cleaner times
+        let roundedMinutes = Math.round(minutes / 5) * 5;
+        let finalHours = hours;
+
+        if (roundedMinutes === 60) {
+            roundedMinutes = 0;
+            finalHours += 1;
+        }
+
+        // Normalize hours again just in case
+        if (finalHours >= 24) {
+            finalHours -= 24;
+        }
+
+        // Format time HH:mm
+        const timeString = `${finalHours.toString().padStart(2, '0')}:${roundedMinutes.toString().padStart(2, '0')}`;
+
+        // Open Modal
+        new CreateTaskModal(this.app, async (result) => {
+            await this.taskIndex.addTaskToDailyNote(date, timeString, result, this.plugin.settings);
+        }).open();
     }
 }
