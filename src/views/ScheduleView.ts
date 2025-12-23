@@ -4,6 +4,7 @@ import { TaskRenderer } from './TaskRenderer';
 import { Task } from '../types';
 import { MenuHandler } from '../interaction/MenuHandler';
 import { DateUtils } from '../utils/DateUtils';
+import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { ColorUtils } from '../utils/ColorUtils';
 import TaskViewerPlugin from '../main';
 
@@ -178,6 +179,24 @@ export class ScheduleView extends ItemView {
 
         const header = dateSection.createEl('h3', { cls: 'schedule-date-header' });
         header.setText(headerText);
+
+        // Add click listener to open daily note
+        header.addEventListener('click', async () => {
+            const dateObj = new Date(date);
+            // Fix timezone offset for daily note creation
+            // date string is YYYY-MM-DD, we want local midnight for that date
+            const [y, m, d] = date.split('-').map(Number);
+            dateObj.setFullYear(y, m - 1, d);
+            dateObj.setHours(0, 0, 0, 0);
+
+            let file = DailyNoteUtils.getDailyNote(this.app, dateObj);
+            if (!file) {
+                file = await DailyNoteUtils.createDailyNote(this.app, dateObj);
+            }
+            if (file) {
+                await this.app.workspace.getLeaf(false).openFile(file);
+            }
+        });
 
         // Task List
         const taskList = dateSection.createDiv('schedule-task-list');

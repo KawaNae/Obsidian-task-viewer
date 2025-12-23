@@ -13,6 +13,7 @@ export interface Task {
 
     // Original text for reconstruction
     originalText: string;
+    recurrence?: string;    // @repeat(...) content
 
     // Child lines (sub-tasks, notes)
     children: string[];

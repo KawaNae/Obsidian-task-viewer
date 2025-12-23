@@ -6,6 +6,7 @@ import { DragHandler } from '../interaction/DragHandler';
 import { MenuHandler } from '../interaction/MenuHandler';
 import { TaskLayout } from '../services/TaskLayout';
 import { DateUtils } from '../utils/DateUtils';
+import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { ColorUtils } from '../utils/ColorUtils';
 import TaskViewerPlugin from '../main';
 import { CreateTaskModal } from '../modals/CreateTaskModal';
@@ -474,6 +475,23 @@ export class TimelineView extends ItemView {
             const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
             cell.setText(`${date} (${dayName})`);
             cell.dataset.date = date;
+
+            // Add click listener to open daily note
+            cell.addEventListener('click', async () => {
+                const dateObj = new Date(date);
+                // Fix timezone offset for daily note creation
+                const [y, m, d] = date.split('-').map(Number);
+                dateObj.setFullYear(y, m - 1, d);
+                dateObj.setHours(0, 0, 0, 0);
+
+                let file = DailyNoteUtils.getDailyNote(this.app, dateObj);
+                if (!file) {
+                    file = await DailyNoteUtils.createDailyNote(this.app, dateObj);
+                }
+                if (file) {
+                    await this.app.workspace.getLeaf(false).openFile(file);
+                }
+            });
         });
 
         // 2. All-Day Row
@@ -730,7 +748,8 @@ export class TimelineView extends ItemView {
         const minutesFromStart = offsetY / zoomLevel;
 
         // Add startHour offset
-        let totalMinutes = (startHour * 60) + minutesFromStart;
+        const rawTotalMinutes = (startHour * 60) + minutesFromStart;
+        let totalMinutes = rawTotalMinutes;
 
         // Normalize to 0-23 hours
         if (totalMinutes >= 24 * 60) {
@@ -757,9 +776,27 @@ export class TimelineView extends ItemView {
         // Format time HH:mm
         const timeString = `${finalHours.toString().padStart(2, '0')}:${roundedMinutes.toString().padStart(2, '0')}`;
 
+        // Determine Task Date
+        // If finalHours + 24 (effectively) was >= 24, it means it's next day
+        // Wait, 'finalHours' is normalized 0-23. 
+        // We can check totalMinutes vs 24*60
+
+        let taskDate = date;
+        if (rawTotalMinutes >= 24 * 60) {
+            // It's the next day
+            const d = new Date(date);
+            // Fix timezone for date calc
+            const [y, m, day] = date.split('-').map(Number);
+            d.setFullYear(y, m - 1, day);
+            d.setDate(d.getDate() + 1);
+            taskDate = d.toISOString().split('T')[0];
+        }
+
         // Open Modal
         new CreateTaskModal(this.app, async (result) => {
-            await this.taskIndex.addTaskToDailyNote(date, timeString, result, this.plugin.settings);
+            // date is the FILE date (visual column date)
+            // taskDate is the actual date for the task (@YYYY-MM-DD)
+            await this.taskIndex.addTaskToDailyNote(date, timeString, result, this.plugin.settings, taskDate);
         }).open();
     }
 }

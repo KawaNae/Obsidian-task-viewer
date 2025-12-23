@@ -1,30 +1,55 @@
 import { Task } from '../types';
 
 export class TaskParser {
-    // Regex to match: - [x] Task Content @YYYY-MM-DDTHH:mm>HH:mm
-    // Supports:
-    // @YYYY-MM-DD
-    // @YYYY-MM-DDTHH:mm
-    // @YYYY-MM-DDTHH:mm>HH:mm
-    // @YYYY-MM-DDTHH:mm>YYYY-MM-DDTHH:mm (Cross-day)
-    private static readonly TASK_REGEX = /^(\s*)-\s*\[(.)\]\s*(.*?)\s*@(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2}))?(?:>(?:(\d{2}:\d{2})|(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})))?.*$/;
+    // Regex to match basic task structure: - [x] ...
+    private static readonly BASIC_TASK_REGEX = /^(\s*)-\s*\[(.)\]\s*(.*)$/;
+
+    // Regex for Date: @YYYY-MM-DD...
+    private static readonly DATE_REGEX = /@(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2}))?(?:>(?:(\d{2}:\d{2})|(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})))?/;
+
+    // Regex for Recurrence: @repeat(...)
+    private static readonly REPEAT_REGEX = /@repeat\((.*?)\)/;
 
     static parse(line: string, filePath: string, lineNumber: number): Task | null {
-        const match = line.match(this.TASK_REGEX);
+        const match = line.match(this.BASIC_TASK_REGEX);
         if (!match) {
             return null;
         }
 
-        const [
-            ,
-            indent,
-            statusChar,
-            content,
-            date,
-            startTime,
-            endTimeSimple,
-            endTimeFull
-        ] = match;
+        const [, indent, statusChar, rawContent] = match;
+
+        // Extraction
+        let content = rawContent;
+        let date = '';
+        let startTime: string | undefined;
+        let endTime: string | undefined;
+        let recurrence: string | undefined;
+
+        // 1. Extract Recurrence
+        const repeatMatch = content.match(this.REPEAT_REGEX);
+        if (repeatMatch) {
+            recurrence = repeatMatch[1];
+            content = content.replace(this.REPEAT_REGEX, '').trim();
+        }
+
+        // 2. Extract Date
+        const dateMatch = content.match(this.DATE_REGEX);
+        if (dateMatch) {
+            date = dateMatch[1];
+            startTime = dateMatch[2];
+            const endTimeSimple = dateMatch[3];
+            const endTimeFull = dateMatch[4];
+            endTime = endTimeFull || endTimeSimple;
+
+            content = content.replace(this.DATE_REGEX, '').trim();
+        }
+
+        // Filter: Must have Date OR Recurrence to be considered a "Task" for this plugin
+        // (Unless we want to show ALL tasks? Existing logic implied only dated tasks)
+        // Spec says: Case B (No date but repeat) is allowed.
+        if (!date && !recurrence) {
+            return null;
+        }
 
         let status: 'todo' | 'done' | 'cancelled' = 'todo';
         if (statusChar === 'x' || statusChar === 'X') status = 'done';
@@ -34,12 +59,13 @@ export class TaskParser {
             id: `${filePath}:${lineNumber}`,
             file: filePath,
             line: lineNumber,
-            content: content.trim(),
+            content: content,
             status,
             statusChar,
-            date,
+            date, // Can be empty string if only recurrence exists
             startTime,
-            endTime: endTimeFull || endTimeSimple,
+            endTime,
+            recurrence,
             originalText: line,
             children: []
         };
@@ -47,15 +73,23 @@ export class TaskParser {
 
     static format(task: Task): string {
         const statusChar = task.statusChar || (task.status === 'done' ? 'x' : (task.status === 'cancelled' ? '-' : ' '));
-        let timeStr = `@${task.date}`;
+        let metaStr = '';
 
-        if (task.startTime) {
-            timeStr += `T${task.startTime}`;
-            if (task.endTime) {
-                timeStr += `>${task.endTime}`;
-            }
+        if (task.recurrence) {
+            metaStr += ` @repeat(${task.recurrence})`;
         }
 
-        return `- [${statusChar}] ${task.content} ${timeStr}`;
+        if (task.date) {
+            let timeStr = `@${task.date}`;
+            if (task.startTime) {
+                timeStr += `T${task.startTime}`;
+                if (task.endTime) {
+                    timeStr += `>${task.endTime}`;
+                }
+            }
+            metaStr += ` ${timeStr}`;
+        }
+
+        return `- [${statusChar}] ${task.content}${metaStr}`;
     }
 }

@@ -46,6 +46,14 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.header-cell:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+    text-decoration: underline;
 }
 
 /* 2. All-Day Row */

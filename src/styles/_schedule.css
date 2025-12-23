@@ -35,6 +35,11 @@
     /* Gray divider */
     color: var(--text-normal);
     font-weight: bold;
+    cursor: pointer;
+}
+
+.schedule-date-header:hover {
+    text-decoration: underline;
 }
 
 .schedule-task-list {
