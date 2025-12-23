@@ -1,18 +1,23 @@
 import { App, TFile, Vault } from 'obsidian';
 import { Task } from '../types';
 import { TaskParser } from './TaskParser';
-import { DailyNoteUtils } from '../utils/DailyNoteUtils';
-import { RecurrenceUtils } from '../utils/RecurrenceUtils';
-import { DateUtils } from '../utils/DateUtils';
 import { TaskViewerSettings } from '../types';
+import { TaskRepository } from './TaskRepository';
+import { RecurrenceManager } from './RecurrenceManager';
 
 export class TaskIndex {
     private app: App;
     private tasks: Map<string, Task> = new Map(); // ID -> Task
     private listeners: ((taskId?: string, changes?: string[]) => void)[] = [];
 
+    // Services
+    private repository: TaskRepository;
+    private recurrenceManager: RecurrenceManager;
+
     constructor(app: App) {
         this.app = app;
+        this.repository = new TaskRepository(app);
+        this.recurrenceManager = new RecurrenceManager(this.repository);
     }
 
     async initialize() {
@@ -38,8 +43,6 @@ export class TaskIndex {
         this.app.metadataCache.on('changed', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 // Metadata changed (e.g. frontmatter), notify listeners to re-render
-                // We don't necessarily need to re-scan the file content if only frontmatter changed,
-                // but re-rendering views is necessary to pick up new colors.
                 this.notifyListeners();
             }
         });
@@ -146,14 +149,7 @@ export class TaskIndex {
 
         for (const newTask of newTasks) {
             // Find existing task
-            // Since we are scanning a file modification, user might have just changed status or text.
-            // ID is "filepath:linenumber". 
-            // If user inserts a line above, all IDs shift. This logic fails in that specific case.
-            // But for in-place editing (checking a box), IDs remain stable.
             const oldTask = this.tasks.get(newTask.id); // Try ID match
-
-            // TODO: Fallback to fuzzy match or content match if ID shifts?
-            // For V1, assume stable lines for completion.
 
             if (oldTask && oldTask.recurrence) {
                 if (oldTask.status !== 'done' && newTask.status === 'done') {
@@ -173,14 +169,8 @@ export class TaskIndex {
 
         // 4. Execute Triggers
         if (tasksToTrigger.length > 0) {
-            // We need to be careful. Calling handleRecurrence writes to file, triggering another scanFile.
-            // But we already updated this.tasks with 'done' status. 
-            // So next scanFile will see 'done' -> 'done', so no trigger. Safe.
-
-            // Execute sequentially to avoid race conditions on file write?
-            // vault.process is atomic, but maybe better to do one by one.
             for (const task of tasksToTrigger) {
-                await this.handleRecurrence(task);
+                await this.recurrenceManager.handleTaskCompletion(task);
             }
         }
     }
@@ -203,136 +193,30 @@ export class TaskIndex {
         Object.assign(task, updates);
         this.notifyListeners(taskId, Object.keys(updates));
 
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return;
+        // Delegate to Repository
+        const updatedTask = { ...task, ...updates };
+        await this.repository.updateTaskInFile(task, updatedTask);
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-            if (lines.length <= task.line) return content;
+        // Handle Recurrence (Optimistic Trigger?)
+        // The repository update will trigger a file change event -> scanFile -> handleRecurrence.
+        // However, if we want immediate feedback or if scanFile happens too late?
+        // UI checkboxes feel better if we trigger recurrence immediately?
+        // But doing it here AND in scanFile might cause duplicates if we are not careful.
+        // Our RecurrenceManager logic is stateless, it just appends.
+        // If we trigger here, the file changes. `scanFile` will read the NEW file which normally has the 'done' task.
+        // But `scanFile` also checks `oldTask.status !== 'done'`.
+        // If we updated `this.tasks` optimistically above, `scanFile` will see `oldTask.status` as `done`!
+        // So `scanFile` diff check (`oldTask.status !== 'done'`) will FAIL (return false).
+        // Therefore, `scanFile` will NOT trigger recurrence.
+        // This effectively means we MUST trigger it manually here if we do optimistic updates.
 
-            // Merge updates
-            const updatedTask = { ...task, ...updates };
-
-            // Re-format line
-            const newLine = TaskParser.format(updatedTask);
-
-            // Preserve indentation if possible
-            const originalIndent = lines[task.line].match(/^(\s*)/)?.[1] || '';
-            lines[task.line] = originalIndent + newLine.trim();
-
-            // Handle Recurrence
-            if (task.recurrence && updates.status === 'done') {
-                // Let's extract the Line Generation logic.
-                const nextLine = this.generateNextRecurrenceLine(task, originalIndent);
-                if (nextLine) {
-                    // Insert after children, but effectively ignoring trailing blank lines to avoid gaps.
-                    let effectiveChildrenCount = task.children ? task.children.length : 0;
-                    if (task.children) {
-                        for (let i = task.children.length - 1; i >= 0; i--) {
-                            if (task.children[i].trim() === '') {
-                                effectiveChildrenCount--;
-                            } else {
-                                break;
-                            }
-                        }
-                    }
-
-                    const insertIndex = task.line + 1 + effectiveChildrenCount;
-                    lines.splice(insertIndex, 0, nextLine);
-                }
-            }
-
-            return lines.join('\n');
-        });
-    }
-
-    private generateNextRecurrenceLine(task: Task, indent: string): string | null {
-        // Base Date Logic
-        let baseDateObj: Date;
-        if (task.date) {
-            const [y, m, d] = task.date.split('-').map(Number);
-            baseDateObj = new Date(y, m - 1, d);
-        } else {
-            baseDateObj = new Date();
-            baseDateObj.setHours(0, 0, 0, 0);
+        if (task.recurrence && updates.status === 'done') {
+            await this.recurrenceManager.handleTaskCompletion(task);
         }
-
-        const nextDateObj = RecurrenceUtils.calculateNextDate(baseDateObj, task.recurrence!);
-        const nextDateStr = DateUtils.getLocalDateString(nextDateObj);
-
-        // Reset status to todo
-        const newTask: Task = {
-            ...task,
-            id: '',
-            status: 'todo',
-            statusChar: ' ',
-            date: nextDateStr,
-            originalText: '',
-            children: []
-        };
-
-        const nextLine = TaskParser.format(newTask);
-        return indent + nextLine.trim();
-    }
-
-    // New helper to perform the write transaction for recurrence (used by file scan)
-    private async handleRecurrence(task: Task) {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return;
-
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-            // We need to find the line again because it might have moved if we are async?
-            // Actually, handleRecurrence is called from scanFile while consistent?
-            // No, scanFile reads content, detects diff. But file on disk is same.
-            // But we have task.line.
-            // Let's trust task.line for now, but verify content?
-            // If the line at task.line doesn't match task.originalText, we might be in trouble.
-            // But strict matching is hard because task.originalText might be 'todo' but now it's 'done'.
-
-            // Just use task.line. 
-            // In scanFile context, task.line comes from the RECENT scan. So it is accurate.
-
-            if (lines.length <= task.line) return content;
-
-            const originalIndent = lines[task.line].match(/^(\s*)/)?.[1] || '';
-            const nextLine = this.generateNextRecurrenceLine(task, originalIndent);
-
-            if (nextLine) {
-                // Insert after children, but effectively ignoring trailing blank lines to avoid gaps.
-                // However, task.children INCLUDES blank lines.
-                // If we want to insert immediately after the visual "block", we should traverse backwards.
-                let effectiveChildrenCount = task.children ? task.children.length : 0;
-                if (task.children) {
-                    for (let i = task.children.length - 1; i >= 0; i--) {
-                        if (task.children[i].trim() === '') {
-                            effectiveChildrenCount--;
-                        } else {
-                            break;
-                        }
-                    }
-                }
-
-                const insertIndex = task.line + 1 + effectiveChildrenCount;
-                lines.splice(insertIndex, 0, nextLine);
-            }
-
-            return lines.join('\n');
-        });
     }
 
     async updateLine(filePath: string, lineNumber: number, newContent: string) {
-        const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (!(file instanceof TFile)) return;
-
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-            if (lines.length <= lineNumber) return content;
-
-            lines[lineNumber] = newContent;
-
-            return lines.join('\n');
-        });
+        await this.repository.updateLine(filePath, lineNumber, newContent);
     }
 
     async deleteTask(taskId: string) {
@@ -343,130 +227,17 @@ export class TaskIndex {
         this.tasks.delete(taskId);
         this.notifyListeners();
 
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return;
-
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-            if (lines.length <= task.line) return content;
-
-            lines.splice(task.line, 1);
-
-            return lines.join('\n');
-        });
+        await this.repository.deleteTaskFromFile(task);
     }
 
     async duplicateTask(taskId: string) {
         const task = this.tasks.get(taskId);
         if (!task) return;
 
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return;
-
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-            if (lines.length <= task.line) return content;
-
-            // 1. Get original lines (task + children)
-            const taskLine = lines[task.line];
-
-            // 2. Prepare new lines
-            // Strip block ID from task line: ^blockid at end of line
-            const blockIdRegex = /\s\^[a-zA-Z0-9-]+$/;
-            const newTaskLine = taskLine.replace(blockIdRegex, '');
-
-            const newChildLines = task.children.map(child => child.replace(blockIdRegex, ''));
-
-            const linesToInsert = [newTaskLine, ...newChildLines];
-
-            // 3. Insert after the original block
-            // The original block ends at task.line + task.children.length
-            const insertIndex = task.line + 1 + task.children.length;
-
-            lines.splice(insertIndex, 0, ...linesToInsert);
-
-            return lines.join('\n');
-        });
+        await this.repository.duplicateTaskInFile(task);
     }
 
     async addTaskToDailyNote(fileDateStr: string, time: string, content: string, settings: TaskViewerSettings, taskDateStr?: string) {
-        const date = new Date(fileDateStr);
-        // Fix timezone offset issue when creating date from YYYY-MM-DD string
-        // We want the local date corresponding to that string
-        const [y, m, d] = fileDateStr.split('-').map(Number);
-        date.setFullYear(y, m - 1, d);
-        date.setHours(0, 0, 0, 0);
-
-        let file = DailyNoteUtils.getDailyNote(this.app, date);
-        if (!file) {
-            file = await DailyNoteUtils.createDailyNote(this.app, date);
-        }
-
-        if (!file) return;
-
-        // Use taskDateStr if provided, otherwise default to fileDateStr
-        const targetDateStr = taskDateStr || fileDateStr;
-
-        await this.app.vault.process(file, (fileContent) => {
-            const lines = fileContent.split('\n');
-            const header = settings.dailyNoteHeader;
-            const level = settings.dailyNoteHeaderLevel;
-            const headerPrefix = '#'.repeat(level) + ' ';
-            const fullHeader = headerPrefix + header;
-
-            let headerIndex = -1;
-            for (let i = 0; i < lines.length; i++) {
-                if (lines[i].trim() === fullHeader) {
-                    headerIndex = i;
-                    break;
-                }
-            }
-
-            const taskLine = `- [ ] ${content} @${targetDateStr}T${time} `;
-
-            if (headerIndex !== -1) {
-                // Header exists, append after it (and any existing content under it)
-                // Find end of section
-                let insertIndex = headerIndex + 1;
-
-                // Advance past content
-                while (insertIndex < lines.length) {
-                    const line = lines[insertIndex];
-                    // Stop at next header of same or higher level
-                    if (line.startsWith('#')) {
-                        const match = line.match(/^(#+)\s/);
-                        if (match && match[1].length <= level) {
-                            break;
-                        }
-                    }
-                    insertIndex++;
-                }
-
-                // If we are at the end of a section, we might be sitting on the start of the next section (the header line)
-                // or end of file.
-                // We want to insert *before* any trailing blank lines that separate this section from the next.
-                // Scan backwards from insertIndex-1
-                let effectiveInsertIndex = insertIndex;
-                while (effectiveInsertIndex > headerIndex + 1) {
-                    const prevLine = lines[effectiveInsertIndex - 1];
-                    if (prevLine.trim() === '') {
-                        effectiveInsertIndex--;
-                    } else {
-                        break;
-                    }
-                }
-
-                lines.splice(effectiveInsertIndex, 0, taskLine);
-            } else {
-                // Header doesn't exist, append to end
-                if (lines.length > 0 && lines[lines.length - 1].trim() !== '') {
-                    lines.push('');
-                }
-                lines.push(fullHeader);
-                lines.push(taskLine);
-            }
-
-            return lines.join('\n');
-        });
+        await this.repository.addTaskToDailyNote(fileDateStr, time, content, settings, taskDateStr);
     }
 }
