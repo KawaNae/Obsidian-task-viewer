@@ -13,22 +13,19 @@ export class TaskIndex {
     // Services
     private repository: TaskRepository;
     private recurrenceManager: RecurrenceManager;
-
-    constructor(app: App) {
-        this.app = app;
-        this.repository = new TaskRepository(app);
-        this.recurrenceManager = new RecurrenceManager(this.repository);
-    }
+    private isInitializing = true;
 
     async initialize() {
+        this.isInitializing = true;
         // Wait for layout to be ready before initial scan
         this.app.workspace.onLayoutReady(async () => {
             await this.scanVault();
+            this.isInitializing = false;
         });
 
         this.app.vault.on('modify', async (file) => {
             if (file instanceof TFile && file.extension === 'md') {
-                await this.scanFile(file);
+                await this.queueScan(file);
                 this.notifyListeners();
             }
         });
@@ -47,6 +44,13 @@ export class TaskIndex {
             }
         });
     }
+
+    constructor(app: App) {
+        this.app = app;
+        this.repository = new TaskRepository(app);
+        this.recurrenceManager = new RecurrenceManager(this.repository, this, this.app);
+    }
+
 
     getTasks(): Task[] {
         return Array.from(this.tasks.values());
@@ -93,16 +97,51 @@ export class TaskIndex {
         this.listeners.forEach(cb => cb(taskId, changes));
     }
 
+    private scanQueue: Map<string, Promise<void>> = new Map();
+    private processedCompletions: Map<string, number> = new Map(); // "file|date|content" -> count
+
+    private getTaskSignature(task: Task): string {
+        return `${task.file}|${task.date || 'no-date'}|${task.content}`;
+    }
+
     private async scanVault() {
         const files = this.app.vault.getMarkdownFiles();
 
         for (const file of files) {
-            await this.scanFile(file);
+            await this.queueScan(file);
         }
         this.notifyListeners();
     }
 
+    public async requestScan(file: TFile): Promise<void> {
+        return this.queueScan(file);
+    }
+
+    private async queueScan(file: TFile): Promise<void> {
+        // Simple queue mechanism: chain promises per file path
+        const previousScan = this.scanQueue.get(file.path) || Promise.resolve();
+
+        const currentScan = previousScan.then(async () => {
+            try {
+                await this.scanFile(file);
+            } catch (error) {
+                console.error(`Error scanning file ${file.path}:`, error);
+            }
+        });
+
+        this.scanQueue.set(file.path, currentScan);
+        return currentScan;
+    }
+
+    private isTriggerableStatus(task: Task): boolean {
+        // Trigger recurrence for: Done (x, X), Cancelled (-), or Important (!)
+        if (task.status === 'done' || task.status === 'cancelled') return true;
+        if (task.statusChar === '!') return true;
+        return false;
+    }
+
     private async scanFile(file: TFile) {
+        // Double check: if layout is not ready, maybe skip? But queue handles ordering.
         const content = await this.app.vault.read(file);
         const lines = content.split('\n');
 
@@ -144,21 +183,56 @@ export class TaskIndex {
             }
         }
 
-        // 2. Diff and Trigger Recurrence
+        // 2. Count Current Completions
+        const currentCounts = new Map<string, number>();
+        const doneTasks: Task[] = [];
+
+        for (const task of newTasks) {
+            // Check extended triggerable status (x, X, -, !)
+            if (this.isTriggerableStatus(task) && task.commands && task.commands.length > 0) {
+                const sig = this.getTaskSignature(task);
+                currentCounts.set(sig, (currentCounts.get(sig) || 0) + 1);
+                doneTasks.push(task);
+            }
+        }
+
+        // 3. Diff and Trigger
         const tasksToTrigger: Task[] = [];
+        const checkedSignatures = new Set<string>();
+        for (const task of doneTasks) {
+            const sig = this.getTaskSignature(task);
+            if (checkedSignatures.has(sig)) continue; // Process each unique signature once per scan
+            checkedSignatures.add(sig);
 
-        for (const newTask of newTasks) {
-            // Find existing task
-            const oldTask = this.tasks.get(newTask.id); // Try ID match
+            const currentCount = currentCounts.get(sig) || 0;
+            const previousCount = this.processedCompletions.get(sig) || 0;
 
-            if (oldTask && oldTask.recurrence) {
-                if (oldTask.status !== 'done' && newTask.status === 'done') {
-                    tasksToTrigger.push(newTask);
+            if (currentCount > previousCount) {
+                // Number of done tasks increased! Trigger recurrence for the *difference*
+                const diff = currentCount - previousCount;
+                if (!this.isInitializing) {
+                    for (let k = 0; k < diff; k++) {
+                        tasksToTrigger.push(task);
+                    }
                 }
             }
         }
 
-        // 3. Update Index
+        // 4. Update Memory
+        // Filter out entries for this file from processedCompletions
+        const prefix = `${file.path}|`;
+        for (const key of this.processedCompletions.keys()) {
+            if (key.startsWith(prefix)) {
+                this.processedCompletions.delete(key);
+            }
+        }
+
+        // Add new counts
+        for (const [sig, count] of currentCounts) {
+            this.processedCompletions.set(sig, count);
+        }
+
+        // 5. Update Index
         // Clear old tasks for this file
         this.removeTasksForFile(file.path);
 
@@ -167,7 +241,7 @@ export class TaskIndex {
             this.tasks.set(task.id, task);
         }
 
-        // 4. Execute Triggers
+        // 6. Execute Triggers
         if (tasksToTrigger.length > 0) {
             for (const task of tasksToTrigger) {
                 await this.recurrenceManager.handleTaskCompletion(task);
@@ -183,13 +257,68 @@ export class TaskIndex {
         }
     }
 
+    async waitForScan(filePath: string): Promise<void> {
+        const promise = this.scanQueue.get(filePath);
+        if (promise) {
+            await promise;
+        }
+    }
+
+    resolveTask(originalTask: Task): Task | undefined {
+        // Try to find the task in the current index
+        // 1. By ID (if stable or lucky)
+        let found = this.tasks.get(originalTask.id);
+        if (found &&
+            found.content === originalTask.content &&
+            found.file === originalTask.file &&
+            found.line === originalTask.line &&
+            found.date === originalTask.date // Strict date check to prevent swapping identical tasks
+        ) {
+            return found;
+        }
+
+        // 2. By Signature (File + Content)
+        for (const t of this.tasks.values()) {
+            if (t.file === originalTask.file && t.content === originalTask.content) {
+                // Heuristic: Status should match the *completed* status?
+                // When we queue, status is 'done'. Index should have 'done' too.
+                // But check date too if possible.
+                if (t.date === originalTask.date) {
+                    return t;
+                }
+            }
+        }
+
+        return undefined;
+    }
+
     async updateTask(taskId: string, updates: Partial<Task>) {
+        console.log(`[TaskIndex] updateTask called for ${taskId}`, updates);
         const task = this.tasks.get(taskId);
         if (!task) {
+            console.warn(`[TaskIndex] Task ${taskId} not found in index`);
             return;
         }
 
         // Optimistic Update
+        // If we are unchecking a task, we must eagerly decrement the processed count.
+        // This handles the race condition where scanFile might miss the 'todo' state 
+        // during a fast uncheck->check toggle, causing it to see 'done' -> 'done' and skip recurrence.
+        // "Unchecking": Transitioning from Triggerable -> Not Triggerable (Todo)
+        const wasTriggerable = this.isTriggerableStatus(task);
+        // Assuming updates.status is 'todo' means uncheck. 
+        // Note: updates might not contain status if we just updated content.
+        const willBeTodo = updates.status === 'todo'; // Simplified check
+
+        if (wasTriggerable && willBeTodo) {
+            const sig = this.getTaskSignature(task);
+            const currentCount = this.processedCompletions.get(sig) || 0;
+            if (currentCount > 0) {
+                this.processedCompletions.set(sig, currentCount - 1);
+                console.log(`[TaskIndex] Optimistic decrement for "${sig}" -> ${currentCount - 1}`);
+            }
+        }
+
         Object.assign(task, updates);
         this.notifyListeners(taskId, Object.keys(updates));
 
@@ -210,10 +339,10 @@ export class TaskIndex {
         // Therefore, `scanFile` will NOT trigger recurrence.
         // This effectively means we MUST trigger it manually here if we do optimistic updates.
 
-        if (task.recurrence && updates.status === 'done') {
-            await this.recurrenceManager.handleTaskCompletion(task);
-        }
+
     }
+
+
 
     async updateLine(filePath: string, lineNumber: number, newContent: string) {
         await this.repository.updateLine(filePath, lineNumber, newContent);

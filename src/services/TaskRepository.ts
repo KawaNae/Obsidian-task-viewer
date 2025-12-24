@@ -17,7 +17,9 @@ export class TaskRepository {
 
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
-            if (lines.length <= task.line) return content;
+            if (lines.length <= task.line) {
+                return content;
+            }
 
             // Re-format line
             const newLine = TaskParser.format(updatedTask);
@@ -221,9 +223,26 @@ export class TaskRepository {
 
             const insertIndex = task.line + 1 + effectiveChildrenCount;
             lines.splice(insertIndex, 0, nextLine);
-            console.log(`[TaskRepository] Inserted recurrence task at line ${insertIndex}`);
 
             return lines.join('\n');
         });
+    }
+
+    async appendTaskToFile(filePath: string, content: string): Promise<void> {
+        let file = this.app.vault.getAbstractFileByPath(filePath);
+
+        if (!file) {
+            // Create file if it doesn't exist
+            await this.app.vault.create(filePath, content);
+            return;
+        }
+
+        if (file instanceof TFile) {
+            await this.app.vault.process(file, (fileContent) => {
+                // Ensure starts with newline if file not empty
+                const prefix = fileContent.length > 0 && !fileContent.endsWith('\n') ? '\n' : '';
+                return fileContent + prefix + content;
+            });
+        }
     }
 }

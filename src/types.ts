@@ -16,7 +16,22 @@ export interface Task {
     recurrence?: string;    // @repeat(...) content
 
     // Child lines (sub-tasks, notes)
+    // Child lines (sub-tasks, notes)
     children: string[];
+
+    // Flow Commands
+    commands?: FlowCommand[];
+}
+
+export interface FlowCommand {
+    name: string;           // e.g. 'next', 'repeat', 'move'
+    args: string[];         // e.g. ['daily'], ['archive.md']
+    modifiers: FlowModifier[];
+}
+
+export interface FlowModifier {
+    name: string;           // e.g. 'as'
+    args: string[];         // e.g. ['New Name']
 }
 
 export interface ViewState {
