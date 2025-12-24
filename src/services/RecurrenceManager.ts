@@ -2,6 +2,7 @@ import { App, TFile } from 'obsidian';
 import { Task } from '../types';
 import { TaskRepository } from './TaskRepository';
 import { TaskIndex } from './TaskIndex';
+import { TaskParser } from './TaskParser';
 import { CommandStrategy } from '../commands/CommandStrategy';
 import { MoveCommand } from '../commands/MoveCommand';
 import { RepeatCommand, NextCommand } from '../commands/GenerationCommands';
@@ -41,8 +42,7 @@ export class RecurrenceManager {
         if (!hasCommands) return;
 
         // Trigger for Done, Cancelled, or Important (!)
-        const isTriggerable = task.status === 'done' || task.status === 'cancelled' || task.statusChar === '!';
-        if (!isTriggerable) return;
+        if (!TaskParser.isTriggerableStatus(task)) return;
 
         this.taskQueue.push(task);
 
@@ -70,15 +70,13 @@ export class RecurrenceManager {
                 }
 
                 if (!currentTask) {
-                    console.warn(`[RecurrenceManager] Task ${originalTask.id} no longer found or resolvable. Skipping.`);
                     this.taskQueue.shift(); // Remove
                     continue;
                 }
 
                 // 3. Execute Strategies
                 // Check if still effectively "done" (triggerable)
-                const isTriggerable = currentTask.status === 'done' || currentTask.status === 'cancelled' || currentTask.statusChar === '!';
-                if (!isTriggerable) {
+                if (!TaskParser.isTriggerableStatus(currentTask)) {
                     // Maybe it was unchecked?
                     this.taskQueue.shift();
                     continue;
@@ -124,7 +122,13 @@ export class RecurrenceManager {
             task: task
         };
 
-        for (const cmd of task.commands) {
+        // Execute commands in Reverse order (Right-to-Left)
+        // because insertion happens at the same index (stack-like),
+        // so the last inserted item ends up at the top.
+        // We want Leftmost command -> Topmost task.
+        // Leftmost runs Last -> Inserts at Top.
+        // So we iterate Reverse: Rightmost first, Leftmost last.
+        for (const cmd of [...task.commands].reverse()) {
             const strategy = this.strategies.get(cmd.name);
             if (strategy) {
                 const result = await strategy.execute(context, cmd);

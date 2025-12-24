@@ -25,7 +25,7 @@ export abstract class GenerationCommand implements CommandStrategy {
         const otherCommands = ctx.task.commands?.filter(c => c.name !== cmd.name) || [];
 
         // Command Persistence Logic
-        this.persistCommands(nextTask, cmd, otherCommands);
+        this.persistCommands(nextTask, cmd, otherCommands, ctx);
 
         const nextContent = TaskParser.format(nextTask);
         await ctx.repository.insertRecurrenceForTask(ctx.task, nextContent.trim());
@@ -34,7 +34,7 @@ export abstract class GenerationCommand implements CommandStrategy {
         return { shouldDeleteOriginal: false };
     }
 
-    protected abstract persistCommands(nextTask: Task, currentCmd: FlowCommand, otherCommands: FlowCommand[]): void;
+    protected abstract persistCommands(nextTask: Task, currentCmd: FlowCommand, otherCommands: FlowCommand[], ctx: CommandContext): void;
 
     private calculateNextTask(task: Task, interval: string): Task {
         let baseDateObj: Date;
@@ -74,16 +74,17 @@ export abstract class GenerationCommand implements CommandStrategy {
 export class RepeatCommand extends GenerationCommand {
     name = 'repeat';
 
-    protected persistCommands(nextTask: Task, currentCmd: FlowCommand, otherCommands: FlowCommand[]): void {
-        // Repeat: Keep this command + ALL other directives (including 'next')
-        nextTask.commands = [currentCmd, ...otherCommands];
+    protected persistCommands(nextTask: Task, currentCmd: FlowCommand, otherCommands: FlowCommand[], ctx: CommandContext): void {
+        // Repeat: Keep exact same commands in exact same order
+        // We clone the original command list
+        nextTask.commands = [...(ctx.task.commands || [])];
     }
 }
 
 export class NextCommand extends GenerationCommand {
     name = 'next';
 
-    protected persistCommands(nextTask: Task, currentCmd: FlowCommand, otherCommands: FlowCommand[]): void {
+    protected persistCommands(nextTask: Task, currentCmd: FlowCommand, otherCommands: FlowCommand[], ctx: CommandContext): void {
         // Next: "Command all erase and copy"
         // We drop 'next' (consumable) AND all other commands (like 'repeat') for the new task.
         nextTask.commands = [];

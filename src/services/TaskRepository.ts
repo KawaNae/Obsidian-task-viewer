@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import { App, TFile, TFolder } from 'obsidian';
 import { Task } from '../types';
 import { TaskParser } from './TaskParser';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
@@ -232,6 +232,9 @@ export class TaskRepository {
         let file = this.app.vault.getAbstractFileByPath(filePath);
 
         if (!file) {
+            // Ensure directory exists
+            await this.ensureDirectoryExists(filePath);
+
             // Create file if it doesn't exist
             await this.app.vault.create(filePath, content);
             return;
@@ -243,6 +246,35 @@ export class TaskRepository {
                 const prefix = fileContent.length > 0 && !fileContent.endsWith('\n') ? '\n' : '';
                 return fileContent + prefix + content;
             });
+        }
+    }
+
+    private async ensureDirectoryExists(filePath: string): Promise<void> {
+        const lastSlashIndex = filePath.lastIndexOf('/');
+        if (lastSlashIndex === -1) return; // Rooy directory
+
+        const folderPath = filePath.substring(0, lastSlashIndex);
+        if (this.app.vault.getAbstractFileByPath(folderPath) instanceof TFolder) {
+            return;
+        }
+
+        // Recursive creation
+        const folders = folderPath.split('/');
+        let currentPath = '';
+        for (const segment of folders) {
+            currentPath = currentPath === '' ? segment : `${currentPath}/${segment}`;
+            const existing = this.app.vault.getAbstractFileByPath(currentPath);
+            if (!existing) {
+                try {
+                    await this.app.vault.createFolder(currentPath);
+                } catch (error) {
+                    // Ignore "Folder already exists" error
+                    if (error.message && error.message.includes('Folder already exists')) {
+                        continue;
+                    }
+                    throw error;
+                }
+            }
         }
     }
 }

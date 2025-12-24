@@ -1,4 +1,4 @@
-import { App, TFile, Vault } from 'obsidian';
+import { App, TFile } from 'obsidian';
 import { Task } from '../types';
 import { TaskParser } from './TaskParser';
 import { TaskViewerSettings } from '../types';
@@ -99,9 +99,11 @@ export class TaskIndex {
 
     private scanQueue: Map<string, Promise<void>> = new Map();
     private processedCompletions: Map<string, number> = new Map(); // "file|date|content" -> count
+    private visitedFiles = new Set<string>();
 
     private getTaskSignature(task: Task): string {
-        return `${task.file}|${task.date || 'no-date'}|${task.content}`;
+        const cmdSig = task.commands ? task.commands.map(c => `${c.name}(${c.args.join(',')})`).join('') : '';
+        return `${task.file}|${task.date || 'no-date'}|${task.content}|${cmdSig}`;
     }
 
     private async scanVault() {
@@ -111,6 +113,9 @@ export class TaskIndex {
             await this.queueScan(file);
         }
         this.notifyListeners();
+        // Fallback: Ensure isInitializing is false after explicit vault scan, 
+        // though onLayoutReady handles it too.
+        this.isInitializing = false;
     }
 
     public async requestScan(file: TFile): Promise<void> {
@@ -131,13 +136,6 @@ export class TaskIndex {
 
         this.scanQueue.set(file.path, currentScan);
         return currentScan;
-    }
-
-    private isTriggerableStatus(task: Task): boolean {
-        // Trigger recurrence for: Done (x, X), Cancelled (-), or Important (!)
-        if (task.status === 'done' || task.status === 'cancelled') return true;
-        if (task.statusChar === '!') return true;
-        return false;
     }
 
     private async scanFile(file: TFile) {
@@ -189,7 +187,7 @@ export class TaskIndex {
 
         for (const task of newTasks) {
             // Check extended triggerable status (x, X, -, !)
-            if (this.isTriggerableStatus(task) && task.commands && task.commands.length > 0) {
+            if (TaskParser.isTriggerableStatus(task) && task.commands && task.commands.length > 0) {
                 const sig = this.getTaskSignature(task);
                 currentCounts.set(sig, (currentCounts.get(sig) || 0) + 1);
                 doneTasks.push(task);
@@ -199,6 +197,13 @@ export class TaskIndex {
         // 3. Diff and Trigger
         const tasksToTrigger: Task[] = [];
         const checkedSignatures = new Set<string>();
+
+        let isFirstScan = false;
+        if (!this.visitedFiles.has(file.path)) {
+            this.visitedFiles.add(file.path);
+            isFirstScan = true;
+        }
+
         for (const task of doneTasks) {
             const sig = this.getTaskSignature(task);
             if (checkedSignatures.has(sig)) continue; // Process each unique signature once per scan
@@ -210,7 +215,9 @@ export class TaskIndex {
             if (currentCount > previousCount) {
                 // Number of done tasks increased! Trigger recurrence for the *difference*
                 const diff = currentCount - previousCount;
-                if (!this.isInitializing) {
+
+                // Only trigger if NOT initializing AND NOT the first scan of this file
+                if (!this.isInitializing && !isFirstScan) {
                     for (let k = 0; k < diff; k++) {
                         tasksToTrigger.push(task);
                     }
@@ -302,13 +309,15 @@ export class TaskIndex {
 
         // Optimistic Update
         // If we are unchecking a task, we must eagerly decrement the processed count.
-        // This handles the race condition where scanFile might miss the 'todo' state 
-        // during a fast uncheck->check toggle, causing it to see 'done' -> 'done' and skip recurrence.
         // "Unchecking": Transitioning from Triggerable -> Not Triggerable (Todo)
-        const wasTriggerable = this.isTriggerableStatus(task);
+
+        // Note: TaskParser.isTriggerableStatus checks the *current* task state (before update is applied to object fully?)
+        // Wait, `task` object is referencing the one in `this.tasks`. `updates` are partial.
+        // We need to check if it *was* triggerable before updates.
+        const wasTriggerable = TaskParser.isTriggerableStatus(task);
+
         // Assuming updates.status is 'todo' means uncheck. 
-        // Note: updates might not contain status if we just updated content.
-        const willBeTodo = updates.status === 'todo'; // Simplified check
+        const willBeTodo = updates.status === 'todo';
 
         if (wasTriggerable && willBeTodo) {
             const sig = this.getTaskSignature(task);
@@ -325,25 +334,7 @@ export class TaskIndex {
         // Delegate to Repository
         const updatedTask = { ...task, ...updates };
         await this.repository.updateTaskInFile(task, updatedTask);
-
-        // Handle Recurrence (Optimistic Trigger?)
-        // The repository update will trigger a file change event -> scanFile -> handleRecurrence.
-        // However, if we want immediate feedback or if scanFile happens too late?
-        // UI checkboxes feel better if we trigger recurrence immediately?
-        // But doing it here AND in scanFile might cause duplicates if we are not careful.
-        // Our RecurrenceManager logic is stateless, it just appends.
-        // If we trigger here, the file changes. `scanFile` will read the NEW file which normally has the 'done' task.
-        // But `scanFile` also checks `oldTask.status !== 'done'`.
-        // If we updated `this.tasks` optimistically above, `scanFile` will see `oldTask.status` as `done`!
-        // So `scanFile` diff check (`oldTask.status !== 'done'`) will FAIL (return false).
-        // Therefore, `scanFile` will NOT trigger recurrence.
-        // This effectively means we MUST trigger it manually here if we do optimistic updates.
-
-
     }
-
-
-
     async updateLine(filePath: string, lineNumber: number, newContent: string) {
         await this.repository.updateLine(filePath, lineNumber, newContent);
     }
