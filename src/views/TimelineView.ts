@@ -32,8 +32,10 @@ export class TimelineView extends ItemView {
         super(leaf);
         this.taskIndex = taskIndex;
         this.plugin = plugin;
+        const initialDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        console.log('[DEBUG] Constructor - setting initial viewState.startDate to:', initialDate);
         this.viewState = {
-            startDate: DateUtils.getVisualDateOfNow(this.plugin.settings.startHour),
+            startDate: initialDate,
             daysToShow: 3
         };
         this.taskRenderer = new TaskRenderer(this.app, this.taskIndex);
@@ -52,11 +54,14 @@ export class TimelineView extends ItemView {
     }
 
     async setState(state: any, result: any): Promise<void> {
+        console.log('[DEBUG] setState called with:', state);
         if (state) {
             if (state.daysToShow) {
+                console.log('[DEBUG] setState - updating daysToShow to:', state.daysToShow);
                 this.viewState.daysToShow = state.daysToShow;
             }
             if (state.startDate) {
+                console.log('[DEBUG] setState - updating startDate from:', this.viewState.startDate, 'to:', state.startDate);
                 this.viewState.startDate = state.startDate;
             }
         }
@@ -256,6 +261,14 @@ export class TimelineView extends ItemView {
 
         const taskEl = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
         if (!taskEl) return;
+
+        const task = this.taskIndex.getTask(taskId);
+        if (!task) return;
+
+        // Check if this is a Future (unassigned) task - no handles should be shown
+        if (task.isFuture) {
+            return;
+        }
 
         const isAllDay = taskEl.classList.contains('all-day');
 
@@ -473,7 +486,9 @@ export class TimelineView extends ItemView {
     private navigateDate(days: number) {
         const date = new Date(this.viewState.startDate);
         date.setDate(date.getDate() + days);
-        this.viewState.startDate = date.toISOString().split('T')[0];
+        // Use DateUtils.getLocalDateString instead of toISOString() to avoid timezone issues
+        this.viewState.startDate = DateUtils.getLocalDateString(date);
+        console.log('[DEBUG] navigateDate - updated startDate to:', this.viewState.startDate);
         this.render();
     }
 
@@ -482,6 +497,9 @@ export class TimelineView extends ItemView {
         const grid = this.container.createDiv('timeline-grid');
         const dates = this.getDatesToShow();
         const colTemplate = `30px repeat(${this.viewState.daysToShow}, minmax(0, 1fr))`;
+
+        // Set view start date for MenuHandler (for E, ED, D type implicit start display)
+        this.menuHandler.setViewStartDate(dates[0]);
 
         // 0. Future Section (Header Grid)
         this.renderFutureSection(grid);
@@ -571,23 +589,28 @@ export class TimelineView extends ItemView {
     private renderLongTermTasks(container: HTMLElement, dates: string[]) {
         const viewStart = dates[0];
         const viewEnd = dates[dates.length - 1];
-        const today = DateUtils.getToday();
+        const startHour = this.plugin.settings.startHour;
+        console.log('[DEBUG] renderLongTermTasks - viewStart:', viewStart);
+        console.log('[DEBUG] renderLongTermTasks - viewEnd:', viewEnd);
+        console.log('[DEBUG] renderLongTermTasks - startHour setting:', startHour);
 
-        // Fetch tasks that overlap with the view range AND have NO startTime
+        // Fetch tasks that overlap with the view range AND are long-term (>= 24 hours)
+        // README spec: tasks with duration >= 24 hours go to long-term section
         let tasks = this.taskIndex.getTasks().filter(t => {
-            if (t.startTime) return false;
-            // Check overlap
-            // Task Range: [tStart, tEnd]
-            // View Range: [vStart, vEnd]
-            // Overlap if: tStart <= vEnd && tEnd >= vStart
-            // Default tEnd to tStart if missing
-
             if (t.isFuture) return false; // Handled in future section
 
-            const tStart = t.startDate || today;
+            // Use view's left edge date for undefined startDate (E, ED, D types) per readme spec
+            const tStart = t.startDate || viewStart;
             const tEnd = t.endDate || tStart;
 
-            return tStart <= viewEnd && tEnd >= viewStart;
+            // Check if task overlaps with view range
+            if (!(tStart <= viewEnd && tEnd >= viewStart)) return false;
+
+            // Use DateUtils.isLongTermTask to check duration
+            // For tasks without startDate (E, ED, D types), use viewStart as start
+            const isLongTerm = DateUtils.isLongTermTask(tStart, t.startTime, t.endDate, t.endTime, startHour);
+
+            return isLongTerm;
         });
 
         // Filter by visible files
@@ -597,8 +620,9 @@ export class TimelineView extends ItemView {
 
         // Sort by Start Date, then Duration (descending)
         tasks.sort((a, b) => {
-            const startA = a.startDate || today;
-            const startB = b.startDate || today;
+            // Use view's left edge date for undefined startDate (E, ED, D types)
+            const startA = a.startDate || viewStart;
+            const startB = b.startDate || viewStart;
 
             if (startA !== startB) {
                 return startA.localeCompare(startB);
@@ -616,7 +640,8 @@ export class TimelineView extends ItemView {
         const tracks: string[] = []; // Stores the 'endDate' of the last task in this track
 
         tasks.forEach(task => {
-            const tStart = task.startDate || today;
+            // Use view's left edge date for undefined startDate (E, ED, D types)
+            const tStart = task.startDate || viewStart;
             const tEnd = task.endDate || tStart;
 
             // Calculate deadline line for arrow
@@ -772,24 +797,23 @@ export class TimelineView extends ItemView {
             this.applyTaskColor(el, task.file);
             this.renderTaskContent(el, task);
             this.menuHandler.addTaskContextMenu(el, task);
-
-            // Add Move Handle
-            const handleContainer = el.createDiv('handle-container move-handle-container');
-            handleContainer.style.pointerEvents = 'auto'; // Ensure clickable
-            const moveHandle = handleContainer.createDiv('handle-btn move-handle');
-            moveHandle.setText('::');
-            moveHandle.dataset.taskId = task.id;
         });
     }
 
     private getDatesToShow(): string[] {
         const dates = [];
         const start = new Date(this.viewState.startDate);
+        console.log('[DEBUG] getDatesToShow - viewState.startDate:', this.viewState.startDate);
+        console.log('[DEBUG] getDatesToShow - startHour setting:', this.plugin.settings.startHour);
+        console.log('[DEBUG] getDatesToShow - current visual date:', DateUtils.getVisualDateOfNow(this.plugin.settings.startHour));
+        console.log('[DEBUG] getDatesToShow - actual today:', DateUtils.getToday());
+
         for (let i = 0; i < this.viewState.daysToShow; i++) {
             const d = new Date(start);
             d.setDate(start.getDate() + i);
-            dates.push(d.toISOString().split('T')[0]);
+            dates.push(DateUtils.getLocalDateString(d));
         }
+        console.log('[DEBUG] getDatesToShow - generated dates:', dates);
         return dates;
     }
 
@@ -814,8 +838,14 @@ export class TimelineView extends ItemView {
     private renderTimedTasks(container: HTMLElement, date: string) {
         const startHour = this.plugin.settings.startHour;
         const zoomLevel = this.plugin.settings.zoomLevel;
-        // Use getTasksForVisualDay
-        let tasks = this.taskIndex.getTasksForVisualDay(date, startHour).filter(t => t.startTime);
+        // Use getTasksForVisualDay, filter for timed tasks with duration < 24 hours
+        let tasks = this.taskIndex.getTasksForVisualDay(date, startHour).filter(t => {
+            if (!t.startTime) return false;
+            // Only include tasks with duration < 24 hours
+            const tStart = t.startDate || date;
+            const isLongTerm = DateUtils.isLongTermTask(tStart, t.startTime, t.endDate, t.endTime, startHour);
+            return !isLongTerm;
+        });
 
         // Filter
         if (this.visibleFiles) {
@@ -1015,7 +1045,7 @@ export class TimelineView extends ItemView {
             const [y, m, day] = date.split('-').map(Number);
             d.setFullYear(y, m - 1, day);
             d.setDate(d.getDate() + 1);
-            taskDate = d.toISOString().split('T')[0];
+            taskDate = DateUtils.getLocalDateString(d);
         }
 
         // Open Modal

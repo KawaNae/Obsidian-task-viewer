@@ -105,10 +105,11 @@ export class TaskParser {
             }
         }
 
-        // Filter: Must have Date OR Commands to be considered a "Task"
-        if (!date && !isFuture && commands.length === 0) {
+        // Filter: Must have Date OR EndDate OR Deadline OR Future OR Commands to be considered a "Task"
+        if (!date && !endDate && !deadline && !isFuture && commands.length === 0) {
             return null;
         }
+
 
         if (date) isFuture = false;
 

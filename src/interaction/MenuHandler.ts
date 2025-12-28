@@ -9,11 +9,19 @@ export class MenuHandler {
     private app: App;
     private taskIndex: TaskIndex;
     private plugin: TaskViewerPlugin;
+    private viewStartDate: string | null = null;
 
     constructor(app: App, taskIndex: TaskIndex, plugin: TaskViewerPlugin) {
         this.app = app;
         this.taskIndex = taskIndex;
         this.plugin = plugin;
+    }
+
+    /**
+     * Set the view's left edge date for implicit start date calculation (E, ED, D types)
+     */
+    setViewStartDate(date: string | null) {
+        this.viewStartDate = date;
     }
 
     addTaskContextMenu(el: HTMLElement, task: Task) {
@@ -245,14 +253,33 @@ export class MenuHandler {
     private addParameterDisplay(menu: Menu, task: Task) {
         // Display start, end, deadline with appropriate icons
         // Auto-derived values are shown in parentheses based on README spec:
-        // 
-        // Start is auto-derived (today) if:
-        //   - startDate is undefined (E, ED, D types: @>end or @>>deadline)
         //
-        // End is auto-derived if:
-        //   - endDate is undefined AND no endTime (SD, S-All, D types: end = start)
-        //   - endDate === startDate AND no endTime (equivalent to omitted)
-        //   - For S-Timed: endTime is undefined (end = start + 1hour)
+        // README Period Calculation Rules (lines 40-46):
+        // 1. SED, SE: actual time from start to end
+        // 2. SD, S-All: start day's startHour to startHour+23:59 (1 day = 24h)
+        // 3. S-Timed: start time to +1 hour
+        // 4. E, ED: view's left edge date's startHour as start
+        // 5. D: view's left edge date's startHour as start, start+23:59 as end
+
+        const startHour = this.plugin.settings.startHour;
+        const startHourStr = startHour.toString().padStart(2, '0') + ':00';
+
+        // End time calculation: startHour + 23:59 = next day's (startHour-1):59
+        // e.g., if startHour is 5, end time is 04:59 (next day)
+        let endHour = startHour - 1;
+        if (endHour < 0) endHour = 23;
+        const endHourStr = endHour.toString().padStart(2, '0') + ':59';
+
+        // Calculate implicit start date (for E, ED, D types)
+        // Use viewStartDate if set, otherwise fall back to today
+        const implicitStartDate = this.viewStartDate || DateUtils.getVisualDateOfNow(startHour);
+
+        // Determine task type for period calculation
+        const hasExplicitStart = !!task.startDate;
+        const hasExplicitEnd = !!task.endDate;
+        const hasStartTime = !!task.startTime;
+        const hasEndTime = !!task.endTime;
+        const hasDeadline = !!task.deadline;
 
         // --- Start ---
         const startIcon = 'play';
@@ -260,15 +287,24 @@ export class MenuHandler {
 
         if (task.isFuture) {
             startText = 'Start: Future';
-        } else if (task.startDate) {
+        } else if (hasExplicitStart) {
             // Explicit startDate
-            startText = `Start: ${task.startDate}`;
-            if (task.startTime) startText += `T${task.startTime}`;
+            if (hasStartTime) {
+                // SED-Timed, SE-Timed, S-Timed: explicit start date and time
+                startText = `Start: ${task.startDate}T${task.startTime}`;
+            } else {
+                // SD, S-All, SE, SED (Long-term): explicit date, implicit time = startHour
+                startText = `Start: ${task.startDate}T(${startHourStr})`;
+            }
         } else {
-            // Auto-derived: startDate undefined → today (E, ED, D types)
-            const implicitDate = DateUtils.getToday();
-            startText = `Start: (${implicitDate})`;
-            if (task.startTime) startText += `T${task.startTime}`;
+            // Auto-derived: startDate undefined → view's left edge (E, ED, D types)
+            if (hasStartTime) {
+                // Edge case: startTime without startDate (shouldn't normally happen)
+                startText = `Start: (${implicitStartDate})T${task.startTime}`;
+            } else {
+                // E, ED, D types: implicit date and implicit time
+                startText = `Start: (${implicitStartDate}T${startHourStr})`;
+            }
         }
 
         // --- End ---
@@ -278,26 +314,44 @@ export class MenuHandler {
         if (task.isFuture) {
             endText = 'End: -';
         } else {
-            const effectiveStart = task.startDate || DateUtils.getToday();
+            const effectiveStartDate = task.startDate || implicitStartDate;
 
-            if (task.endDate && task.endDate !== effectiveStart) {
+            if (hasExplicitEnd && task.endDate !== effectiveStartDate) {
                 // Explicit endDate different from start
-                endText = `End: ${task.endDate}`;
-                if (task.endTime) endText += `T${task.endTime}`;
-            } else if (task.endTime) {
-                // Has endTime but endDate is same as start (or undefined)
-                // For Timed tasks with endTime: show the date (derived) + time (explicit)
-                const effectiveEnd = task.endDate || effectiveStart;
-                if (!task.endDate) {
-                    endText = `End: (${effectiveEnd})T${task.endTime}`;
+                if (hasEndTime) {
+                    endText = `End: ${task.endDate}T${task.endTime}`;
                 } else {
-                    // endDate === effectiveStart with endTime
-                    endText = `End: (${effectiveEnd})T${task.endTime}`;
+                    // SE, SED (Long-term) with different end date: implicit time
+                    // End date is explicit, end time is (startHour-1):59
+                    endText = `End: ${task.endDate}T(${endHourStr})`;
                 }
+            } else if (hasEndTime) {
+                // Has endTime but endDate is same as start (or undefined)
+                const effectiveEndDate = task.endDate || effectiveStartDate;
+                if (!task.endDate || task.endDate === effectiveStartDate) {
+                    // Timed task same-day: show derived date + explicit time
+                    endText = `End: (${effectiveEndDate})T${task.endTime}`;
+                } else {
+                    endText = `End: ${effectiveEndDate}T${task.endTime}`;
+                }
+            } else if (hasStartTime && !hasEndTime) {
+                // S-Timed type: implicit end = start + 1 hour
+                const [h, m] = task.startTime!.split(':').map(Number);
+                let endH = h + 1;
+                let endM = m;
+                let endDateStr = effectiveStartDate;
+                if (endH >= 24) {
+                    endH -= 24;
+                    // Next day
+                    endDateStr = DateUtils.addDays(effectiveStartDate, 1);
+                }
+                const implicitEndTime = `${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
+                endText = `End: (${endDateStr}T${implicitEndTime})`;
             } else {
                 // No endDate (or same as start) and no endTime
-                // Auto-derived: end = start (SD, S-All, D types)
-                endText = `End: (${effectiveStart})`;
+                // SD, S-All, D types: end = start day's startHour+23:59 (next day)
+                const nextDay = DateUtils.addDays(effectiveStartDate, 1);
+                endText = `End: (${nextDay}T${endHourStr})`;
             }
         }
 

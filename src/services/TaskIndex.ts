@@ -61,8 +61,11 @@ export class TaskIndex {
         return this.tasks.get(taskId);
     }
 
-    getTasksForDate(date: string): Task[] {
-        const today = DateUtils.getToday();
+    getTasksForDate(date: string, startHour?: number): Task[] {
+        // Use visual date if startHour is provided, otherwise use actual today
+        const today = startHour !== undefined ? 
+            DateUtils.getVisualDateOfNow(startHour) : 
+            DateUtils.getToday();
         return this.getTasks().filter(t => {
             if (t.isFuture) return false;
             const effectiveStart = t.startDate || today;
@@ -72,7 +75,7 @@ export class TaskIndex {
 
     getTasksForVisualDay(visualDate: string, startHour: number): Task[] {
         // 1. Tasks from visualDate (startHour to 23:59)
-        const currentDayTasks = this.getTasksForDate(visualDate).filter(t => {
+        const currentDayTasks = this.getTasksForDate(visualDate, startHour).filter(t => {
             if (!t.startTime) return true; // All-day tasks belong to the date
             const [h] = t.startTime.split(':').map(Number);
             return h >= startHour;
@@ -83,7 +86,7 @@ export class TaskIndex {
         nextDate.setDate(nextDate.getDate() + 1);
         const nextDateStr = nextDate.toISOString().split('T')[0];
 
-        const nextDayTasks = this.getTasksForDate(nextDateStr).filter(t => {
+        const nextDayTasks = this.getTasksForDate(nextDateStr, startHour).filter(t => {
             if (!t.startTime) return false; // All-day tasks of next day don't belong here
             const [h] = t.startTime.split(':').map(Number);
             return h < startHour;

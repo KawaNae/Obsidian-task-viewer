@@ -69,6 +69,11 @@ export class ScheduleView extends ItemView {
 
         const { pastDates, futureDates, tasksByDate } = this.getTasksForSchedule();
 
+        // Set view start date for MenuHandler (use today for ScheduleView)
+        // For E, ED, D types in ScheduleView, use today as implicit start
+        const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        this.menuHandler.setViewStartDate(today);
+
         // Render Past Dates (only if they have tasks)
         pastDates.forEach(date => {
             this.renderDateSection(scheduleContainer, date, tasksByDate[date], true);

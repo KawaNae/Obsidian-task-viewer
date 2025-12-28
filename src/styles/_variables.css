@@ -11,7 +11,7 @@
     --task-card-border-radius: 4px;
     --task-card-accent-width: 4px;
     --task-card-font-size: 0.9em;
-    --task-card-gap: 1px;
+    --task-card-gap: 3px;
 
     /* Indentation */
     --list-indent-top: 1.9em;
