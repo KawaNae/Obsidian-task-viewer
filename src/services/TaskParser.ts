@@ -67,8 +67,11 @@ export class TaskParser {
             content: content.trim(),
             status,
             statusChar,
-            date,
+            startDate: date, // Map parsed date to startDate
             startTime,
+            // endDate: undefined for now
+            // endTime: undefined for now
+            isFuture: !date, // If no date, it's a future task (unassigned)
             endTime,
             commands,
             originalText: line,
@@ -94,7 +97,7 @@ export class TaskParser {
             if (modifiersStr) {
                 let modMatch;
                 // Reset modifier regex
-                this.MODIFIER_REGEX.lastIndex = 0;
+                this.MODIFIER_REGEX.lastIndex = 0; // Fix typo: this
                 while ((modMatch = this.MODIFIER_REGEX.exec(modifiersStr)) !== null) {
                     modifiers.push({
                         name: modMatch[1],
@@ -113,8 +116,8 @@ export class TaskParser {
         const statusChar = task.statusChar || (task.status === 'done' ? 'x' : (task.status === 'cancelled' ? '-' : ' '));
         let metaStr = '';
 
-        if (task.date) {
-            let timeStr = `@${task.date}`;
+        if (task.startDate) {
+            let timeStr = `@${task.startDate}`; // Use startDate
             if (task.startTime) {
                 timeStr += `T${task.startTime}`;
                 if (task.endTime) {

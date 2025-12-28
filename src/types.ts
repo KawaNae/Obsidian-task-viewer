@@ -7,15 +7,16 @@ export interface Task {
     statusChar: string;     // The actual character inside [ ]
 
     // Date/Time info
-    date: string;           // YYYY-MM-DD
+    startDate: string;      // Renamed from date, YYYY-MM-DD
     startTime?: string;     // HH:mm
+    endDate?: string;       // Added, YYYY-MM-DD
     endTime?: string;       // HH:mm
+    isFuture: boolean;      // Added, true if startDate is empty
 
     // Original text for reconstruction
     originalText: string;
     recurrence?: string;    // @repeat(...) content
 
-    // Child lines (sub-tasks, notes)
     // Child lines (sub-tasks, notes)
     children: string[];
 

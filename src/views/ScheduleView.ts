@@ -101,8 +101,9 @@ export class ScheduleView extends ItemView {
             const relevantFiles = new Set<string>();
 
             allTasks.forEach(task => {
-                const taskDate = task.date;
+                const taskDate = task.startDate;
                 if (!taskDate) return;
+
 
                 // Check completion status
                 const isLineCompleted = (char: string) => ['x', 'X', '!', '-'].includes(char);
@@ -255,7 +256,7 @@ export class ScheduleView extends ItemView {
         };
 
         allTasks.forEach(task => {
-            const taskDate = task.date;
+            const taskDate = task.startDate;
             if (!taskDate) return;
 
             // Filter by visible files

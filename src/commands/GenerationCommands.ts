@@ -41,14 +41,15 @@ export abstract class GenerationCommand implements CommandStrategy {
         let cleanInterval = interval;
 
         // Check for 'when done' logic
+        // Check for 'when done' logic
         const isWhenDone = interval.toLowerCase().includes('when done');
         if (isWhenDone) {
             baseDateObj = new Date(); // Today
             baseDateObj.setHours(0, 0, 0, 0);
             cleanInterval = interval.replace(/when done/i, '').trim();
         } else {
-            if (task.date) {
-                const [y, m, d] = task.date.split('-').map(Number);
+            if (task.startDate) {
+                const [y, m, d] = task.startDate.split('-').map(Number);
                 baseDateObj = new Date(y, m - 1, d);
             } else {
                 baseDateObj = new Date();
@@ -64,7 +65,7 @@ export abstract class GenerationCommand implements CommandStrategy {
             id: '',
             status: 'todo',
             statusChar: ' ',
-            date: nextDateStr,
+            startDate: nextDateStr,
             originalText: '',
             children: []
         };
