@@ -21,6 +21,7 @@ export class LongTermDragStrategy implements DragStrategy {
     private currentStartOffset: number = 0;
     private hasMoved: boolean = false;
     private initialWidth: number = 0;
+    private container: HTMLElement | null = null;
 
     // We rely on grid columns for snapping.
     // 1 col = 1 day.
@@ -29,6 +30,7 @@ export class LongTermDragStrategy implements DragStrategy {
         this.dragTask = task;
         this.dragEl = el;
         this.initialX = e.clientX;
+        this.container = context.container;
 
         // Determine Mode
         const target = e.target as HTMLElement;
@@ -83,6 +85,16 @@ export class LongTermDragStrategy implements DragStrategy {
         const diffDays = DateUtils.getDiffDays(this.initialDate, this.initialEndDate);
         this.initialSpan = diffDays + 1;
 
+        // Parse startCol from gridColumn style (e.g., "3 / span 2" → startCol = 3)
+        const gridCol = el.style.gridColumn;
+        const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
+        if (colMatch) {
+            this.startCol = parseInt(colMatch[1]);
+        } else {
+            // Fallback: calculate from date
+            this.startCol = 2; // Default
+        }
+
         // Visual setup
         el.addClass('is-dragging');
         el.style.zIndex = '1000';
@@ -111,11 +123,18 @@ export class LongTermDragStrategy implements DragStrategy {
         // Visual feedback based on mode
         if (this.mode === 'move') {
             this.dragEl.style.transform = `translateX(${snappedDeltaX}px)`;
+            // Update arrow: keep deadline end fixed, stretch arrow start
+            const newTaskEndLine = this.startCol + this.initialSpan + dayDelta;
+            this.updateArrowPosition(newTaskEndLine);
         } else if (this.mode === 'resize-right') {
             // Adjust width - minimum 1 day
             const rawWidth = this.initialWidth + snappedDeltaX;
             const clampedWidth = Math.max(rawWidth, this.colWidth);
             this.dragEl.style.width = `${clampedWidth}px`;
+            // Update deadline arrow position
+            const newSpan = Math.max(1, Math.round(clampedWidth / this.colWidth));
+            const taskEndLine = this.startCol + newSpan;
+            this.updateArrowPosition(taskEndLine);
         } else if (this.mode === 'resize-left') {
             // Adjust width and x-position - minimum 1 day
             const rawWidth = this.initialWidth - snappedDeltaX;
@@ -205,5 +224,33 @@ export class LongTermDragStrategy implements DragStrategy {
 
         this.dragEl = null;
         this.dragTask = null;
+        this.container = null;
+    }
+
+    private updateArrowPosition(taskEndGridLine: number) {
+        if (!this.dragEl || !this.dragEl.dataset.id || !this.container) return;
+
+        const taskId = this.dragEl.dataset.id;
+        const arrow = this.container.querySelector(`.deadline-arrow[data-task-id="${taskId}"]`) as HTMLElement;
+        if (arrow) {
+            arrow.style.gridColumnStart = taskEndGridLine.toString();
+            const arrowEnd = parseInt(arrow.style.gridColumnEnd) || 0;
+            if (taskEndGridLine >= arrowEnd) {
+                arrow.style.display = 'none';
+            } else {
+                arrow.style.display = '';
+            }
+        }
+    }
+
+    private moveArrowWithTask(translateX: number) {
+        if (!this.dragEl || !this.dragEl.dataset.id || !this.container) return;
+
+        const taskId = this.dragEl.dataset.id;
+        const arrow = this.container.querySelector(`.deadline-arrow[data-task-id="${taskId}"]`) as HTMLElement;
+        if (arrow) {
+            arrow.style.transform = `translateX(${translateX}px)`;
+        }
     }
 }
+

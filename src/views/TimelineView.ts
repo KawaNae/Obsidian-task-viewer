@@ -619,6 +619,36 @@ export class TimelineView extends ItemView {
             const tStart = task.startDate || today;
             const tEnd = task.endDate || tStart;
 
+            // Calculate deadline line for arrow
+            let deadlineLine: number | null = null;
+            let isDeadlineClipped = false;
+            if (task.deadline && task.deadline.match(/^\d{4}-\d{2}-\d{2}/)) {
+                const deadlineDateStr = task.deadline.split('T')[0];
+                const deadlineDiff = DateUtils.getDiffDays(viewStart, deadlineDateStr);
+                const dlLine = deadlineDiff + 3; // +2 for axis offset, +1 for grid line after day
+                const gridMax = this.viewState.daysToShow + 2;
+
+                // Check if deadline is beyond view
+                if (dlLine > gridMax) {
+                    isDeadlineClipped = true;
+                }
+                deadlineLine = Math.min(dlLine, gridMax);
+
+                // Calculate task end line
+                const taskEndDiff = DateUtils.getDiffDays(viewStart, tEnd);
+                const taskEndLine = taskEndDiff + 3;
+
+                // Only show arrow if deadline is after task end
+                if (deadlineLine <= taskEndLine) {
+                    deadlineLine = null;
+                }
+            }
+
+            // Calculate collision end (for stacking - includes arrow space)
+            const tEndForCollision = deadlineLine
+                ? DateUtils.addDays(viewStart, deadlineLine - 3)
+                : tEnd;
+
             // Find first track where task.startDate > track.lastEndDate
             let trackIndex = -1;
 
@@ -634,13 +664,13 @@ export class TimelineView extends ItemView {
             if (trackIndex === -1) {
                 // New track
                 trackIndex = tracks.length;
-                tracks.push(tEnd);
+                tracks.push(tEndForCollision);
             } else {
-                // Update track
-                tracks[trackIndex] = tEnd;
+                // Update track with collision end
+                tracks[trackIndex] = tEndForCollision;
             }
 
-            // Render
+            // Render Task Card
             const el = container.createDiv('task-card all-day');
             if (task.endDate && task.endDate !== tStart) {
                 el.addClass('long-term-task');
@@ -653,41 +683,57 @@ export class TimelineView extends ItemView {
             this.menuHandler.addTaskContextMenu(el, task);
 
             // Positioning
-            // logic:
-            // colStart = 2 + (taskStart - viewStart)
-            // span = (taskEnd - taskStart) + 1
-            // clamp
-
             const diffStart = DateUtils.getDiffDays(viewStart, tStart);
             let colStart = 2 + diffStart;
 
-            const durationArr = DateUtils.getDiffDays(tStart, tEnd) + 1; // logical duration
+            const durationArr = DateUtils.getDiffDays(tStart, tEnd) + 1;
 
             let span = durationArr;
 
             // Handle Out of Bounds (Left)
             if (colStart < 2) {
-                // Task starts before view
-                // Reduce span by (2 - colStart)
                 span -= (2 - colStart);
                 colStart = 2;
             }
 
             // Handle Out of Bounds (Right)
-            // Max Col Index allowed: 2 + daysToShow
-            // Actual Grid Template has 1 (axis) + daysToShow cols.
-            // If colStart + span > (2 + daysToShow), clamp span
             const maxCol = 2 + this.viewState.daysToShow;
             if (colStart + span > maxCol) {
                 span = maxCol - colStart;
             }
 
-            if (span < 1) return; // Should not happen if overlap check was correct
+            if (span < 1) return;
 
             el.style.gridColumn = `${colStart} / span ${span}`;
             el.style.gridRow = `${trackIndex + 1}`;
             el.style.zIndex = '10';
+
+            // Render Deadline Arrow if applicable
+            if (deadlineLine) {
+                const taskEndLine = colStart + span;
+                this.renderDeadlineArrow(container, task, trackIndex, taskEndLine, deadlineLine, isDeadlineClipped);
+            }
         });
+    }
+
+    private renderDeadlineArrow(
+        container: HTMLElement,
+        task: Task,
+        rowIndex: number,
+        taskEndLine: number,
+        deadlineLine: number,
+        isClipped: boolean = false
+    ) {
+        const arrowEl = container.createDiv('deadline-arrow');
+        arrowEl.dataset.taskId = task.id;
+        arrowEl.style.gridRow = (rowIndex + 1).toString();
+        arrowEl.style.gridColumnStart = taskEndLine.toString();
+        arrowEl.style.gridColumnEnd = deadlineLine.toString();
+        arrowEl.title = `Deadline: ${task.deadline}`;
+
+        if (isClipped) {
+            arrowEl.addClass('deadline-clipped');
+        }
     }
 
     private renderFutureSection(container: HTMLElement) {
