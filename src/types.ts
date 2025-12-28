@@ -7,11 +7,14 @@ export interface Task {
     statusChar: string;     // The actual character inside [ ]
 
     // Date/Time info
-    startDate: string;      // Renamed from date, YYYY-MM-DD
+    // Date/Time info
+    startDate?: string;      // Renamed from date, YYYY-MM-DD (Optional for D/E types)
     startTime?: string;     // HH:mm
     endDate?: string;       // Added, YYYY-MM-DD
     endTime?: string;       // HH:mm
-    isFuture: boolean;      // Added, true if startDate is empty
+    deadline?: string;      // Added, YYYY-MM-DD or ISO
+    isFuture: boolean;      // Added, true if startDate is empty or "future"
+
 
     // Original text for reconstruction
     originalText: string;

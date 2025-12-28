@@ -129,3 +129,124 @@
     z-index: 15;
     pointer-events: none;
 }
+
+/* --- Timeline Header Container --- */
+.header-toolbar-container {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    background-color: var(--background-primary);
+    display: flex;
+    overflow-x: auto;
+}
+
+/* --- Timeline Header Grid (2x2) --- */
+.timeline-header-grid {
+    display: grid;
+    /* Left Column fixed 30px to match timeline time axis */
+    grid-template-columns: 30px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    /* Header Row, Toggle/Content Row */
+    width: 100%;
+    z-index: 50;
+    border-bottom: 1px solid var(--background-modifier-border);
+    margin-bottom: 0;
+    background-color: var(--background-primary);
+}
+
+.header-grid-cell {
+    border-right: 1px solid var(--background-modifier-border);
+}
+
+/* --- 1. Top Left: Empty Spacer (Matches Time Axis Header) --- */
+.header-top-left {
+    grid-column: 1 / 2;
+    grid-row: 1 / 2;
+    background-color: var(--background-secondary);
+    border-bottom: 1px solid var(--background-modifier-border);
+    height: 30px;
+    /* Match day header height if possible, or auto */
+}
+
+/* --- 2. Top Right: Future Label (Matches Day Headers) --- */
+.header-top-right {
+    grid-column: 2 / 3;
+    grid-row: 1 / 2;
+    background-color: var(--background-secondary);
+    border-bottom: 1px solid var(--background-modifier-border);
+    padding: 2px 10px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    border-right: none;
+    justify-content: center;
+    /* Last col */
+}
+
+/* --- 3. Bottom Left: Toggle (Matches Time Axis) --- */
+.header-bottom-left {
+    grid-column: 1 / 2;
+    grid-row: 2 / 3;
+    background-color: var(--background-primary);
+    padding: 2px 0;
+    /* Minimal padding */
+    display: flex;
+    align-items: flex-start;
+    /* Align top */
+    justify-content: center;
+    /* Separator from timeline */
+}
+
+/* --- 4. Bottom Right: Future Task List (Matches Content Area) --- */
+.header-bottom-right {
+    grid-column: 2 / 3;
+    grid-row: 2 / 3;
+    background-color: var(--background-primary);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    padding: 5px;
+    border-right: none;
+}
+
+/* Collapsed State */
+.header-bottom-right.collapsed {
+    padding: 0;
+    min-height: 0;
+    display: none;
+    /* Hide content */
+}
+
+.unassigned-task-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+/* --- Long Term Row Styles --- */
+.long-term-row {
+    background-color: var(--background-primary);
+    border-bottom: 2px solid var(--background-modifier-border);
+    z-index: 20;
+    flex-shrink: 0;
+    overflow-y: hidden;
+}
+
+.long-term-row.drag-over {
+    background-color: var(--background-modifier-hover);
+}
+
+.long-term-cell {
+    border-right: 1px solid var(--background-modifier-border);
+    min-height: var(--all-day-min-height);
+    position: relative;
+    padding: 3px 0 2px 0;
+    min-width: 0;
+    height: 100%;
+    /* Ensure full height span */
+
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}

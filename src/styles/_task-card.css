@@ -179,6 +179,18 @@
     transform: translateX(-50%);
 }
 
+.left-resize-container {
+    left: -12px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.right-resize-container {
+    right: -12px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
 .move-handle-container {
     top: -12px;
     right: -12px;
@@ -215,9 +227,37 @@
 }
 
 .resize-handle {
+    cursor: pointer;
+}
+
+.top-resize-handle,
+.bottom-resize-handle {
     cursor: ns-resize;
 }
 
+.left-resize-handle,
+.right-resize-handle {
+    cursor: ew-resize;
+}
+
+
 .move-handle {
     cursor: move;
+}
+
+.future-task-card {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    width: 200px !important;
+    height: auto !important;
+    margin-bottom: 0 !important;
+    transform: none !important;
+    min-height: auto;
+    flex-shrink: 0;
+}
+
+.long-term-task {
+    /* Height auto is needed to adapt to content */
+    height: auto !important;
 }

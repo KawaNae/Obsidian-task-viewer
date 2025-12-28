@@ -4,6 +4,7 @@ import { TaskParser } from './TaskParser';
 import { TaskViewerSettings } from '../types';
 import { TaskRepository } from './TaskRepository';
 import { RecurrenceManager } from './RecurrenceManager';
+import { DateUtils } from '../utils/DateUtils';
 
 export class TaskIndex {
     private app: App;
@@ -61,7 +62,12 @@ export class TaskIndex {
     }
 
     getTasksForDate(date: string): Task[] {
-        return this.getTasks().filter(t => t.startDate === date);
+        const today = DateUtils.getToday();
+        return this.getTasks().filter(t => {
+            if (t.isFuture) return false;
+            const effectiveStart = t.startDate || today;
+            return effectiveStart === date;
+        });
     }
 
     getTasksForVisualDay(visualDate: string, startHour: number): Task[] {

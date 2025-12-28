@@ -280,6 +280,20 @@ export class TimelineView extends ItemView {
 
         // --- Handles ---
         if (isAllDay) {
+            // Left Resize Handle
+            const leftContainer = wrapper.createDiv('handle-container left-resize-container');
+            leftContainer.style.pointerEvents = 'auto';
+            const resizeLeft = leftContainer.createDiv('handle-btn resize-handle left-resize-handle');
+            resizeLeft.setText('↔');
+            resizeLeft.dataset.taskId = taskId;
+
+            // Right Resize Handle
+            const rightContainer = wrapper.createDiv('handle-container right-resize-container');
+            rightContainer.style.pointerEvents = 'auto';
+            const resizeRight = rightContainer.createDiv('handle-btn resize-handle right-resize-handle');
+            resizeRight.setText('↔');
+            resizeRight.dataset.taskId = taskId;
+
             // Move Handle (Right Edge)
             const moveContainer = wrapper.createDiv('handle-container move-handle-container');
             moveContainer.style.pointerEvents = 'auto';
@@ -323,7 +337,10 @@ export class TimelineView extends ItemView {
         const wrapper = this.handleOverlay.querySelector(`.handle-wrapper[data-task-id="${taskId}"]`) as HTMLElement;
         const taskEl = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
 
-        if (!wrapper || !taskEl) return;
+        if (!wrapper || !taskEl) {
+            console.log(`[updateHandleGeometry] wrapper or taskEl not found for ${taskId}`, { wrapper: !!wrapper, taskEl: !!taskEl });
+            return;
+        }
 
         const containerRect = this.container.getBoundingClientRect();
         const taskRect = taskEl.getBoundingClientRect();
@@ -333,6 +350,8 @@ export class TimelineView extends ItemView {
         const left = taskRect.left - containerRect.left;
         const width = taskRect.width;
         const height = taskRect.height;
+
+        console.log(`[updateHandleGeometry] ${taskId}: top=${top}, left=${left}, width=${width}, height=${height}`);
 
         wrapper.style.top = `${top}px`;
         wrapper.style.left = `${left}px`;
@@ -458,10 +477,14 @@ export class TimelineView extends ItemView {
         this.render();
     }
 
+
     private renderGrid() {
         const grid = this.container.createDiv('timeline-grid');
         const dates = this.getDatesToShow();
         const colTemplate = `30px repeat(${this.viewState.daysToShow}, minmax(0, 1fr))`;
+
+        // 0. Future Section (Header Grid)
+        this.renderFutureSection(grid);
 
         // 1. Header Row
         const headerRow = grid.createDiv('timeline-row header-row');
@@ -494,18 +517,27 @@ export class TimelineView extends ItemView {
             });
         });
 
-        // 2. All-Day Row
+        // 2. All-Day Row (Merged All-Day & Long-Term)
         const allDayRow = grid.createDiv('timeline-row all-day-row');
         allDayRow.style.gridTemplateColumns = colTemplate;
 
         // Time Axis All-Day
-        allDayRow.createDiv('all-day-cell').setText(' ');
-        // Day All-Day Cells
-        dates.forEach(date => {
+        const axisCell = allDayRow.createDiv('all-day-cell');
+        axisCell.setText('All Day');
+        axisCell.style.gridColumn = '1';
+        axisCell.style.gridRow = '1 / span 50'; // Span all implicit rows
+
+        // Background Cells (Grid Lines)
+        dates.forEach((date, i) => {
             const cell = allDayRow.createDiv('all-day-cell');
             cell.dataset.date = date;
-            this.renderAllDayTasks(cell, date);
+            cell.style.gridColumn = `${i + 2}`; // +2 because 1 is axis
+            cell.style.gridRow = '1 / span 50'; // Span implicit rows (large enough number)
+            cell.style.zIndex = '0';
         });
+
+        // Render Tasks (Overlaid)
+        this.renderLongTermTasks(allDayRow, dates);
 
         // 3. Timeline Row (Scrollable)
         const scrollArea = grid.createDiv('timeline-row timeline-scroll-area');
@@ -536,6 +568,174 @@ export class TimelineView extends ItemView {
         }
     }
 
+    private renderLongTermTasks(container: HTMLElement, dates: string[]) {
+        const viewStart = dates[0];
+        const viewEnd = dates[dates.length - 1];
+        const today = DateUtils.getToday();
+
+        // Fetch tasks that overlap with the view range AND have NO startTime
+        let tasks = this.taskIndex.getTasks().filter(t => {
+            if (t.startTime) return false;
+            // Check overlap
+            // Task Range: [tStart, tEnd]
+            // View Range: [vStart, vEnd]
+            // Overlap if: tStart <= vEnd && tEnd >= vStart
+            // Default tEnd to tStart if missing
+
+            if (t.isFuture) return false; // Handled in future section
+
+            const tStart = t.startDate || today;
+            const tEnd = t.endDate || tStart;
+
+            return tStart <= viewEnd && tEnd >= viewStart;
+        });
+
+        // Filter by visible files
+        if (this.visibleFiles) {
+            tasks = tasks.filter(t => this.visibleFiles!.has(t.file));
+        }
+
+        // Sort by Start Date, then Duration (descending)
+        tasks.sort((a, b) => {
+            const startA = a.startDate || today;
+            const startB = b.startDate || today;
+
+            if (startA !== startB) {
+                return startA.localeCompare(startB);
+            }
+            const endA = a.endDate || startA;
+            const endB = b.endDate || startB;
+
+            const durA = DateUtils.getDiffDays(startA, endA);
+            const durB = DateUtils.getDiffDays(startB, endB);
+            return durB - durA;
+        });
+
+        // Pack tasks (Vertical Stacking)
+        // Track availability: track[trackIndex] = lastOccupiedDateStr
+        const tracks: string[] = []; // Stores the 'endDate' of the last task in this track
+
+        tasks.forEach(task => {
+            const tStart = task.startDate || today;
+            const tEnd = task.endDate || tStart;
+
+            // Find first track where task.startDate > track.lastEndDate
+            let trackIndex = -1;
+
+            for (let i = 0; i < tracks.length; i++) {
+                // Check if space is available
+                // Space available if task.startDate > tracks[i]
+                if (tStart > tracks[i]) {
+                    trackIndex = i;
+                    break;
+                }
+            }
+
+            if (trackIndex === -1) {
+                // New track
+                trackIndex = tracks.length;
+                tracks.push(tEnd);
+            } else {
+                // Update track
+                tracks[trackIndex] = tEnd;
+            }
+
+            // Render
+            const el = container.createDiv('task-card all-day');
+            if (task.endDate && task.endDate !== tStart) {
+                el.addClass('long-term-task');
+            }
+            if (task.id === this.selectedTaskId) el.addClass('selected');
+            el.dataset.id = task.id;
+
+            this.applyTaskColor(el, task.file);
+            this.renderTaskContent(el, task);
+            this.menuHandler.addTaskContextMenu(el, task);
+
+            // Positioning
+            // logic:
+            // colStart = 2 + (taskStart - viewStart)
+            // span = (taskEnd - taskStart) + 1
+            // clamp
+
+            const diffStart = DateUtils.getDiffDays(viewStart, tStart);
+            let colStart = 2 + diffStart;
+
+            const durationArr = DateUtils.getDiffDays(tStart, tEnd) + 1; // logical duration
+
+            let span = durationArr;
+
+            // Handle Out of Bounds (Left)
+            if (colStart < 2) {
+                // Task starts before view
+                // Reduce span by (2 - colStart)
+                span -= (2 - colStart);
+                colStart = 2;
+            }
+
+            // Handle Out of Bounds (Right)
+            // Max Col Index allowed: 2 + daysToShow
+            // Actual Grid Template has 1 (axis) + daysToShow cols.
+            // If colStart + span > (2 + daysToShow), clamp span
+            const maxCol = 2 + this.viewState.daysToShow;
+            if (colStart + span > maxCol) {
+                span = maxCol - colStart;
+            }
+
+            if (span < 1) return; // Should not happen if overlap check was correct
+
+            el.style.gridColumn = `${colStart} / span ${span}`;
+            el.style.gridRow = `${trackIndex + 1}`;
+            el.style.zIndex = '10';
+        });
+    }
+
+    private renderFutureSection(container: HTMLElement) {
+        const headerGrid = container.createDiv('timeline-header-grid');
+
+        // 1. Top Left: Spacer
+        headerGrid.createDiv('header-grid-cell header-top-left');
+
+        // 2. Top Right: Label
+        const label = headerGrid.createDiv('header-grid-cell header-top-right');
+        label.setText('Future / Unassigned');
+
+        // 3. Bottom Left: Toggle
+        const toggleCell = headerGrid.createDiv('header-grid-cell header-bottom-left');
+        // const toggleBtn = toggleCell.createEl('button', { text: '-' }); // TODO: Implement toggle
+
+        // 4. Bottom Right: Content
+        const contentCell = headerGrid.createDiv('header-grid-cell header-bottom-right');
+        const list = contentCell.createDiv('unassigned-task-list');
+
+        // Get Future Tasks
+        const futureTasks = this.taskIndex.getTasks().filter(t => t.isFuture);
+
+        // Filter by visible files logic if active
+        // if (this.visibleFiles) ... (Future tasks might belong to files not in view? Global filter?)
+        // Applying file filter to future tasks as well for consistency
+        const filteredFutureTasks = this.visibleFiles
+            ? futureTasks.filter(t => this.visibleFiles!.has(t.file))
+            : futureTasks;
+
+        filteredFutureTasks.forEach(task => {
+            const el = list.createDiv('task-card future-task-card');
+            if (task.id === this.selectedTaskId) el.addClass('selected');
+            el.dataset.id = task.id;
+
+            this.applyTaskColor(el, task.file);
+            this.renderTaskContent(el, task);
+            this.menuHandler.addTaskContextMenu(el, task);
+
+            // Add Move Handle
+            const handleContainer = el.createDiv('handle-container move-handle-container');
+            handleContainer.style.pointerEvents = 'auto'; // Ensure clickable
+            const moveHandle = handleContainer.createDiv('handle-btn move-handle');
+            moveHandle.setText('::');
+            moveHandle.dataset.taskId = task.id;
+        });
+    }
+
     private getDatesToShow(): string[] {
         const dates = [];
         const start = new Date(this.viewState.startDate);
@@ -563,27 +763,7 @@ export class TimelineView extends ItemView {
         }
     }
 
-    private renderAllDayTasks(container: HTMLElement, date: string) {
-        // All-day tasks are still just based on the date, they don't have time
-        let tasks = this.taskIndex.getTasksForDate(date).filter(t => !t.startTime);
 
-        // Filter
-        if (this.visibleFiles) {
-            tasks = tasks.filter(t => this.visibleFiles!.has(t.file));
-        }
-
-        tasks.forEach(task => {
-            const el = container.createDiv('task-card all-day');
-            if (task.id === this.selectedTaskId) el.addClass('selected');
-            el.dataset.id = task.id;
-
-            // Apply Color
-            this.applyTaskColor(el, task.file);
-
-            this.renderTaskContent(el, task);
-            this.menuHandler.addTaskContextMenu(el, task);
-        });
-    }
 
     private renderTimedTasks(container: HTMLElement, date: string) {
         const startHour = this.plugin.settings.startHour;
