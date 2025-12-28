@@ -644,7 +644,7 @@ export class TimelineView extends ItemView {
                 return range && DateUtils.isSameDay(new Date(range.start || range.end), new Date(date));
             });
 
-            this.renderTimedTasksForDate(col, date, timedTasksForDate);
+            this.renderTimedTasks(col, date, timedTasksForDate);
 
             // Add interaction listeners for creating tasks
             this.addCreateTaskListeners(col, date);
@@ -745,9 +745,7 @@ export class TimelineView extends ItemView {
         });
     }
 
-    private renderTimedTasksForDate(container: HTMLElement, date: string, tasks: Task[]) {
-        this.renderTimedTasks(container, date);
-    }
+
 
     private getDatesToShow(): string[] {
         const dates = [];
@@ -798,13 +796,11 @@ export class TimelineView extends ItemView {
         });
     }
 
-    private renderTimedTasks(container: HTMLElement, date: string) {
+    private renderTimedTasks(container: HTMLElement, date: string, tasks: Task[]) {
         const startHour = this.plugin.settings.startHour;
         const zoomLevel = this.plugin.settings.zoomLevel;
-        // Use getTasksForVisualDay
-        let tasks = this.taskIndex.getTasksForVisualDay(date, startHour).filter(t => t.startTime);
 
-        // Filter
+        // Filter provided tasks
         if (this.visibleFiles) {
             tasks = tasks.filter(t => this.visibleFiles!.has(t.file));
         }
