@@ -1,0 +1,13 @@
+{
+  "startHour": 5,
+  "applyGlobalStyles": true,
+  "frontmatterColorKey": "timeline-color",
+  "zoomLevel": 1.75,
+  "dailyNoteHeader": "Tasks",
+  "dailyNoteHeaderLevel": 2,
+  "startOfWeek": "sunday",
+  "fileColors": {
+    "testTask-2": "#6bb75c",
+    "無題のファイル": "#a25353"
+  }
+}

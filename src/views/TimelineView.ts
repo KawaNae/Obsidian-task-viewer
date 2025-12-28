@@ -194,6 +194,8 @@ export class TimelineView extends ItemView {
         }
     }
 
+    private isUnassignedCollapsed = true;
+
     private render() {
 
         const scrollArea = this.container.querySelector('.timeline-scroll-area');
@@ -202,12 +204,14 @@ export class TimelineView extends ItemView {
         }
 
         this.container.empty();
+        this.container.removeClass('timeline-flex-container');
+        this.container.addClass('timeline-view-container');
 
         // Apply Zoom Level
         const zoomLevel = this.plugin.settings.zoomLevel;
         this.container.style.setProperty('--hour-height', `${60 * zoomLevel}px`);
 
-        this.renderToolbar();
+        this.renderHeaderSection();
         this.renderGrid();
         this.renderHandleOverlay();
         this.renderCurrentTimeIndicator();
@@ -215,6 +219,93 @@ export class TimelineView extends ItemView {
         if (this.selectedTaskId) {
             this.renderHandles(this.selectedTaskId);
         }
+    }
+
+    private renderHeaderSection() {
+        const toolbarContainer = this.container.createDiv('header-toolbar-container');
+        this.renderToolbarInner(toolbarContainer);
+
+        const headerGrid = this.container.createDiv('timeline-header-grid');
+        headerGrid.createDiv('header-grid-cell header-top-left');
+
+        const topRight = headerGrid.createDiv('header-grid-cell header-top-right');
+
+        const bottomLeft = headerGrid.createDiv('header-grid-cell header-bottom-left row-header-cell');
+        bottomLeft.setText(this.isUnassignedCollapsed ? '▶' : '▼');
+        bottomLeft.title = 'Toggle Unassigned Tasks';
+        bottomLeft.onclick = () => {
+            this.isUnassignedCollapsed = !this.isUnassignedCollapsed;
+            this.render();
+        };
+
+        const bottomRight = headerGrid.createDiv('header-grid-cell header-bottom-right unassigned-section');
+
+        // Get Future tasks
+        const allTasks = this.taskIndex.getTasks();
+        const futureTasks = allTasks.filter(task => {
+            return this.getTaskCategory(task) === 'unassigned';
+        });
+
+        topRight.setText(`Future (${futureTasks.length})`);
+
+        if (!this.isUnassignedCollapsed) {
+            const taskList = bottomRight.createDiv('unassigned-task-list');
+            futureTasks.forEach(task => {
+                const card = taskList.createDiv('task-card future-task-card');
+                card.dataset.id = task.id;
+                if (task.id === this.selectedTaskId) card.addClass('selected');
+                this.applyTaskColor(card, task.file);
+                this.renderTaskContent(card, task);
+                this.menuHandler.addTaskContextMenu(card, task);
+            });
+        } else {
+            bottomRight.addClass('collapsed');
+        }
+    }
+
+    private getTaskCategory(task: Task): 'unassigned' | 'long-term' | 'timed' {
+        // F型 (isFuture = true)
+        if (task.isFuture) {
+            return 'unassigned';
+        }
+
+        const hasDate = !!task.startDate;
+        const hasEnd = !!task.endDate || !!task.endTime;
+        const hasDeadline = !!task.deadline;
+
+        // No date info at all -> unassigned
+        if (!hasDate && !hasEnd && !hasDeadline) {
+            return 'unassigned';
+        }
+
+        // E, ED, D types (no startDate but has end or deadline)
+        if (!hasDate && (hasEnd || hasDeadline)) {
+            return 'long-term';
+        }
+
+        // Check for multi-day range
+        const range = DateUtils.getTaskDateRange(task);
+        if (range && range.start && range.end) {
+            const start = new Date(range.start);
+            const end = new Date(range.end);
+            start.setHours(0, 0, 0, 0);
+            end.setHours(0, 0, 0, 0);
+            if (end.getTime() > start.getTime()) {
+                return 'long-term';
+            }
+        }
+
+        // S-All type (has date but no start time)
+        if (hasDate && !task.startTime) {
+            return 'long-term';
+        }
+
+        // S-Timed type (has date and start time)
+        if (hasDate && task.startTime) {
+            return 'timed';
+        }
+
+        return 'unassigned';
     }
 
     private renderHandleOverlay() {
@@ -342,8 +433,8 @@ export class TimelineView extends ItemView {
 
     private visibleFiles: Set<string> | null = null; // null means all visible
 
-    private renderToolbar() {
-        const toolbar = this.container.createDiv('task-viewer-toolbar');
+    private renderToolbarInner(container: HTMLElement) {
+        const toolbar = container.createDiv('task-viewer-toolbar');
 
         // Date Navigation
         const prevBtn = toolbar.createEl('button', { text: '<' });
@@ -463,6 +554,19 @@ export class TimelineView extends ItemView {
         const dates = this.getDatesToShow();
         const colTemplate = `30px repeat(${this.viewState.daysToShow}, minmax(0, 1fr))`;
 
+        // Categorize all tasks
+        const allTasks = this.taskIndex.getTasks();
+        const categorizedTasks: { 'unassigned': Task[], 'long-term': Task[], 'timed': Task[] } = {
+            'unassigned': [],
+            'long-term': [],
+            'timed': []
+        };
+
+        allTasks.forEach(task => {
+            const category = this.getTaskCategory(task);
+            categorizedTasks[category].push(task);
+        });
+
         // 1. Header Row
         const headerRow = grid.createDiv('timeline-row header-row');
         headerRow.style.gridTemplateColumns = colTemplate;
@@ -494,18 +598,26 @@ export class TimelineView extends ItemView {
             });
         });
 
-        // 2. All-Day Row
-        const allDayRow = grid.createDiv('timeline-row all-day-row');
-        allDayRow.style.gridTemplateColumns = colTemplate;
+        // 2. Long-Term Row (replaces All-Day Row)
+        const longTermRow = grid.createDiv('timeline-row long-term-row');
+        if (this.viewState.isLongTermCollapsed) longTermRow.addClass('collapsed');
+        longTermRow.style.gridTemplateColumns = colTemplate;
 
-        // Time Axis All-Day
-        allDayRow.createDiv('all-day-cell').setText(' ');
-        // Day All-Day Cells
-        dates.forEach(date => {
-            const cell = allDayRow.createDiv('all-day-cell');
-            cell.dataset.date = date;
-            this.renderAllDayTasks(cell, date);
-        });
+        // Toggle header for Long-Term
+        const longTermToggle = longTermRow.createDiv('row-header-cell');
+        longTermToggle.innerHTML = this.viewState.isLongTermCollapsed ? '▶' : '▼';
+        longTermToggle.title = 'Toggle Long-Term Tasks';
+        longTermToggle.style.gridRow = '1 / -1';
+        longTermToggle.onclick = () => {
+            this.viewState.isLongTermCollapsed = !this.viewState.isLongTermCollapsed;
+            this.render();
+            this.app.workspace.requestSaveLayout();
+        };
+
+        // Render long-term tasks if not collapsed
+        if (!this.viewState.isLongTermCollapsed) {
+            this.renderPackedTasks(longTermRow, categorizedTasks['long-term'], 'long-term-cell', 'long-term-task');
+        }
 
         // 3. Timeline Row (Scrollable)
         const scrollArea = grid.createDiv('timeline-row timeline-scroll-area');
@@ -524,7 +636,15 @@ export class TimelineView extends ItemView {
         dates.forEach(date => {
             const col = scrollArea.createDiv('day-timeline-column');
             col.dataset.date = date;
-            this.renderTimedTasks(col, date);
+            col.dataset.startDate = date; // For drag strategies
+
+            // Filter timed tasks for this date
+            const timedTasksForDate = categorizedTasks['timed'].filter(t => {
+                const range = DateUtils.getTaskDateRange(t);
+                return range && DateUtils.isSameDay(new Date(range.start || range.end), new Date(date));
+            });
+
+            this.renderTimedTasksForDate(col, date, timedTasksForDate);
 
             // Add interaction listeners for creating tasks
             this.addCreateTaskListeners(col, date);
@@ -534,6 +654,99 @@ export class TimelineView extends ItemView {
         if (this.lastScrollTop > 0) {
             scrollArea.scrollTop = this.lastScrollTop;
         }
+    }
+
+    private renderPackedTasks(container: HTMLElement, tasks: Task[], cellClass: string, taskClass: string) {
+        const dates = this.getDatesToShow();
+
+        // Create cells for each date column
+        dates.forEach((date, index) => {
+            const cell = container.createDiv(cellClass);
+            cell.dataset.date = date;
+            cell.style.gridRow = '1 / -1';
+            cell.style.gridColumn = (index + 2).toString();
+        });
+
+        const viewStart = new Date(this.viewState.startDate);
+        viewStart.setHours(0, 0, 0, 0);
+
+        // Position tasks
+        const positionedTasks = tasks.map(task => {
+            let startLine = 2;
+            let endLine = 3;
+            let deadlineLine: number | null = null;
+
+            const range = DateUtils.getTaskDateRange(task);
+            if (range) {
+                const taskStart = new Date(range.start);
+                const taskEnd = new Date(range.end);
+                taskStart.setHours(0, 0, 0, 0);
+                taskEnd.setHours(0, 0, 0, 0);
+
+                const startOffset = Math.floor((taskStart.getTime() - viewStart.getTime()) / (1000 * 60 * 60 * 24));
+                const endOffset = Math.floor((taskEnd.getTime() - viewStart.getTime()) / (1000 * 60 * 60 * 24));
+
+                startLine = startOffset + 2;
+                endLine = endOffset + 3;
+
+                if (startLine < 2) startLine = 2;
+                if (endLine > this.viewState.daysToShow + 2) endLine = this.viewState.daysToShow + 2;
+            }
+
+            // Handle deadline arrow
+            if (task.deadline && task.deadline.match(/^\d{4}-\d{2}-\d{2}/)) {
+                const deadlineDateStr = task.deadline.split('T')[0];
+                const deadlineDate = new Date(deadlineDateStr);
+                deadlineDate.setHours(0, 0, 0, 0);
+                const diffDays = Math.floor((deadlineDate.getTime() - viewStart.getTime()) / (1000 * 60 * 60 * 24));
+                const dlLine = diffDays + 3;
+                const gridMax = this.viewState.daysToShow + 2;
+                deadlineLine = dlLine;
+                if (deadlineLine > gridMax) deadlineLine = gridMax;
+                if (deadlineLine <= endLine) deadlineLine = null;
+            }
+
+            return { task, startLine, endLine, deadlineLine };
+        });
+
+        // Simple row assignment (collision detection)
+        const rows: { startLine: number, endLine: number }[][] = [];
+        positionedTasks.forEach(pt => {
+            const collisionEnd = pt.deadlineLine ?? pt.endLine;
+            let rowIndex = rows.findIndex(row => {
+                return !row.some(item => !(collisionEnd <= item.startLine || pt.startLine >= item.endLine));
+            });
+            if (rowIndex === -1) {
+                rowIndex = rows.length;
+                rows.push([]);
+            }
+            rows[rowIndex].push({ startLine: pt.startLine, endLine: collisionEnd });
+
+            // Render task card
+            if (pt.startLine >= 2 && pt.startLine <= this.viewState.daysToShow + 2) {
+                const card = container.createDiv(`task-card ${taskClass}`);
+                card.dataset.id = pt.task.id;
+                card.style.gridColumn = `${pt.startLine} / ${pt.endLine}`;
+                card.style.gridRow = (rowIndex + 1).toString();
+
+                if (pt.task.id === this.selectedTaskId) card.addClass('selected');
+                this.applyTaskColor(card, pt.task.file);
+                this.renderTaskContent(card, pt.task);
+                this.menuHandler.addTaskContextMenu(card, pt.task);
+
+                // Deadline arrow
+                if (pt.deadlineLine !== null && pt.deadlineLine > pt.endLine) {
+                    const arrow = container.createDiv('deadline-arrow');
+                    arrow.style.gridColumn = `${pt.endLine} / ${pt.deadlineLine}`;
+                    arrow.style.gridRow = (rowIndex + 1).toString();
+                    arrow.innerHTML = '→';
+                }
+            }
+        });
+    }
+
+    private renderTimedTasksForDate(container: HTMLElement, date: string, tasks: Task[]) {
+        this.renderTimedTasks(container, date);
     }
 
     private getDatesToShow(): string[] {

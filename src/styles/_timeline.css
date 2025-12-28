@@ -57,7 +57,9 @@
 }
 
 /* 2. All-Day Row */
-.all-day-row {
+.all-day-row,
+.long-term-row,
+.unassigned-row {
     background-color: var(--background-primary);
     border-bottom: 2px solid var(--background-modifier-border);
     z-index: 20;
@@ -67,16 +69,52 @@
     /* No scrollbar, but gutter reserves space */
 }
 
-.all-day-cell {
+.long-term-row.drag-over {
+    background-color: var(--background-modifier-hover);
+}
+
+.long-term-task {
+    /* Height auto is needed to adapt to content */
+    height: auto !important;
+}
+
+.all-day-cell,
+.long-term-cell,
+.unassigned-cell {
     border-right: 1px solid var(--background-modifier-border);
     min-height: var(--all-day-min-height);
     position: relative;
     padding: 3px 0 2px 0;
     min-width: 0;
+    height: 100%;
+    /* Ensure full height span */
 
     display: flex;
     flex-direction: column;
     gap: 1px;
+}
+
+/* Row Header (Toggle) */
+.row-header-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-right: 1px solid var(--background-modifier-border);
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 12px;
+    user-select: none;
+    transition: background-color 0.2s;
+}
+
+.row-header-cell:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.timeline-row.collapsed {
+    /* If collapsed, row naturally shrinks because children are not rendered (except toggle) */
+    min-height: 24px;
 }
 
 /* 3. Timeline Row (Scrollable Area) */
@@ -128,4 +166,127 @@
     background-color: var(--interactive-accent);
     z-index: 15;
     pointer-events: none;
+}
+
+/* Timeline Header Container */
+.header-toolbar-container {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    background-color: var(--background-primary);
+    display: flex;
+    overflow-x: auto;
+}
+
+/* Timeline Header Grid (2x2) */
+.timeline-header-grid {
+    display: grid;
+    /* Left Column fixed 30px to match timeline time axis */
+    grid-template-columns: 30px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    /* Header Row, Toggle/Content Row */
+    width: 100%;
+    z-index: 50;
+    border-bottom: 1px solid var(--background-modifier-border);
+    margin-bottom: 0;
+    background-color: var(--background-primary);
+}
+
+.header-grid-cell {
+    border-right: 1px solid var(--background-modifier-border);
+}
+
+/* --- 1. Top Left: Empty Spacer (Matches Time Axis Header) --- */
+.header-top-left {
+    grid-column: 1 / 2;
+    grid-row: 1 / 2;
+    background-color: var(--background-secondary);
+    border-bottom: 1px solid var(--background-modifier-border);
+    height: 30px;
+    /* Match day header height if possible, or auto */
+}
+
+/* --- 2. Top Right: Unassigned Label (Matches Day Headers) --- */
+.header-top-right {
+    grid-column: 2 / 3;
+    grid-row: 1 / 2;
+    background-color: var(--background-secondary);
+    border-bottom: 1px solid var(--background-modifier-border);
+    padding: 2px 10px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    border-right: none;
+    justify-content: center;
+    /* Last col */
+}
+
+/* --- 3. Bottom Left: Toggle (Matches Time Axis) --- */
+.header-bottom-left {
+    grid-column: 1 / 2;
+    grid-row: 2 / 3;
+    background-color: var(--background-primary);
+    padding: 2px 0;
+    /* Minimal padding */
+    display: flex;
+    align-items: flex-start;
+    /* Align top */
+    justify-content: center;
+    /* Separator from timeline */
+}
+
+/* --- 4. Bottom Right: Unassigned Task List (Matches Content Area) --- */
+.header-bottom-right {
+    grid-column: 2 / 3;
+    grid-row: 2 / 3;
+    background-color: var(--background-primary);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    padding: 5px;
+    border-right: none;
+}
+
+
+
+/* Collapsed State */
+.header-bottom-right.collapsed {
+    padding: 0;
+    min-height: 0;
+    display: none;
+    /* Hide content */
+}
+
+/* If collapsed, we might want to hide the whole row?
+   No, user implies toggle remains visible.
+*/
+
+.unassigned-task-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+
+.unassigned-task-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    max-height: 200px;
+    /* Scrollable if too many */
+    overflow-y: auto;
+}
+
+
+.future-task-card {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    width: 200px !important;
+    height: auto !important;
+    margin-bottom: 0 !important;
+    transform: none !important;
+    min-height: auto;
+    flex-shrink: 0;
 }

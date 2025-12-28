@@ -61,7 +61,7 @@ export class TaskIndex {
     }
 
     getTasksForDate(date: string): Task[] {
-        return this.getTasks().filter(t => t.date === date);
+        return this.getTasks().filter(t => t.startDate === date);
     }
 
     getTasksForVisualDay(visualDate: string, startHour: number): Task[] {
@@ -103,7 +103,7 @@ export class TaskIndex {
 
     private getTaskSignature(task: Task): string {
         const cmdSig = task.commands ? task.commands.map(c => `${c.name}(${c.args.join(',')})`).join('') : '';
-        return `${task.file}|${task.date || 'no-date'}|${task.content}|${cmdSig}`;
+        return `${task.file}|${task.startDate || 'no-date'}|${task.content}|${cmdSig}`;
     }
 
     private async scanVault() {
@@ -279,7 +279,7 @@ export class TaskIndex {
             found.content === originalTask.content &&
             found.file === originalTask.file &&
             found.line === originalTask.line &&
-            found.date === originalTask.date // Strict date check to prevent swapping identical tasks
+            found.startDate === originalTask.startDate // Strict date check to prevent swapping identical tasks
         ) {
             return found;
         }
@@ -290,7 +290,7 @@ export class TaskIndex {
                 // Heuristic: Status should match the *completed* status?
                 // When we queue, status is 'done'. Index should have 'done' too.
                 // But check date too if possible.
-                if (t.date === originalTask.date) {
+                if (t.startDate === originalTask.startDate) {
                     return t;
                 }
             }

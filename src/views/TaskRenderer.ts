@@ -19,7 +19,7 @@ export class TaskRenderer {
 
             if (task.endTime) {
                 // Parse dates to compare with visual day boundary
-                const startDate = new Date(`${task.date}T${task.startTime}`);
+                const startDate = new Date(`${task.startDate}T${task.startTime}`);
                 let endDate: Date;
 
                 if (task.endTime.includes('T')) {
@@ -27,7 +27,7 @@ export class TaskRenderer {
                     endDate = new Date(task.endTime);
                 } else {
                     // Simple HH:mm format
-                    endDate = new Date(`${task.date}T${task.endTime}`);
+                    endDate = new Date(`${task.startDate}T${task.endTime}`);
                     // Handle overnight times (if end time is earlier than start time, assume next day)
                     if (endDate < startDate) {
                         endDate.setDate(endDate.getDate() + 1);
@@ -36,13 +36,13 @@ export class TaskRenderer {
 
                 // Calculate Visual Day Limit
                 // The limit is the next day at startHour
-                const limitDate = new Date(`${task.date}T${settings.startHour.toString().padStart(2, '0')}:00`);
+                const limitDate = new Date(`${task.startDate}T${settings.startHour.toString().padStart(2, '0')}:00`);
                 limitDate.setDate(limitDate.getDate() + 1);
 
                 if (endDate > limitDate) {
                     // Exceeds visual day: Show full range
                     // Format: YYYY-MM-DDTHH:mm>YYYY-MM-DDTHH:mm
-                    const startStr = `${task.date}T${task.startTime}`;
+                    const startStr = `${task.startDate}T${task.startTime}`;
 
                     const endY = endDate.getFullYear();
                     const endM = (endDate.getMonth() + 1).toString().padStart(2, '0');

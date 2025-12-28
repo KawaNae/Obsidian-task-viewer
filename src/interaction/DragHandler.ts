@@ -140,7 +140,7 @@ export class DragHandler {
         if (dayCol && dayCol.dataset.date) {
             this.currentDayDate = dayCol.dataset.date;
         } else {
-            this.currentDayDate = task.date;
+            this.currentDayDate = task.startDate || '';
         }
         this.isDragging = false;
         this.hasMoved = false;
@@ -423,8 +423,8 @@ export class DragHandler {
         // 2. Time Update
         if (this.isOverAllDay) {
             // Converted to All-Day
-            if (this.currentDayDate !== this.dragTask.date) {
-                updates.date = this.currentDayDate;
+            if (this.currentDayDate !== this.dragTask.startDate) {
+                updates.startDate = this.currentDayDate;
             }
             if (this.dragTask.startTime) {
                 updates.startTime = undefined;
@@ -468,14 +468,14 @@ export class DragHandler {
                 finalEndMinutes = endTotalMinutes - 24 * 60;
 
                 // If date changed, update it
-                if (finalDate !== this.dragTask.date) {
-                    updates.date = finalDate;
+                if (finalDate !== this.dragTask.startDate) {
+                    updates.startDate = finalDate;
                 }
             } else {
                 // Current day
                 // Ensure date is set to visual day
-                if (this.currentDayDate !== this.dragTask.date) {
-                    updates.date = this.currentDayDate;
+                if (this.currentDayDate !== this.dragTask.startDate) {
+                    updates.startDate = this.currentDayDate;
                 }
             }
 

@@ -6,16 +6,18 @@ export interface Task {
     status: 'todo' | 'done' | 'cancelled';
     statusChar: string;     // The actual character inside [ ]
 
-    // Date/Time info
-    date: string;           // YYYY-MM-DD
+    // Date & Time (symmetric naming)
+    startDate?: string;     // YYYY-MM-DD (Start Date)
+    endDate?: string;       // YYYY-MM-DD (End Date)
+    deadline?: string;      // YYYY-MM-DD or YYYY-MM-DDTHH:mm (Hard deadline)
     startTime?: string;     // HH:mm
     endTime?: string;       // HH:mm
+    isFuture?: boolean;     // true = @future (F型)
 
     // Original text for reconstruction
     originalText: string;
     recurrence?: string;    // @repeat(...) content
 
-    // Child lines (sub-tasks, notes)
     // Child lines (sub-tasks, notes)
     children: string[];
 
@@ -37,6 +39,8 @@ export interface FlowModifier {
 export interface ViewState {
     startDate: string;      // YYYY-MM-DD
     daysToShow: number;     // 1, 3, 7, etc.
+    isUnassignedCollapsed?: boolean;
+    isLongTermCollapsed?: boolean;
 }
 
 export interface TaskViewerSettings {
