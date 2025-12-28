@@ -138,4 +138,10 @@ export class TaskParser {
 
         return `- [${statusChar}] ${task.content}${metaStr}${flowStr}`;
     }
+
+    static isTriggerableStatus(task: Task): boolean {
+        // Trigger for any status that is not todo (space)
+        // e.g. x, X, -, !, etc.
+        return task.statusChar !== ' ';
+    }
 }
