@@ -1,6 +1,7 @@
 import { DragStrategy, DragContext } from '../DragStrategy';
 import { Task } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
+import { createGhostElement, removeGhostElement } from '../GhostFactory';
 
 export class TimelineDragStrategy implements DragStrategy {
     name = 'Timeline';
@@ -56,39 +57,7 @@ export class TimelineDragStrategy implements DragStrategy {
         // Create ghost element for cross-section dragging (move mode only)
         if (this.mode === 'move') {
             const doc = context.container.ownerDocument || document;
-            this.ghostEl = el.cloneNode(true) as HTMLElement;
-            this.ghostEl.addClass('drag-ghost');
-
-            // Apply visual styles with fallback
-            const computedStyle = el.ownerDocument.defaultView?.getComputedStyle(el);
-            const bg = computedStyle?.backgroundColor;
-
-            if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent' && bg !== '') {
-                this.ghostEl.style.backgroundColor = bg;
-                this.ghostEl.style.color = computedStyle?.color || '';
-                this.ghostEl.style.border = computedStyle?.border || '';
-                this.ghostEl.style.borderRadius = computedStyle?.borderRadius || '4px';
-                this.ghostEl.style.padding = computedStyle?.padding || '';
-                this.ghostEl.style.fontSize = computedStyle?.fontSize || '';
-                this.ghostEl.style.fontFamily = computedStyle?.fontFamily || '';
-            } else {
-                // Fallback for transparent elements
-                this.ghostEl.style.backgroundColor = 'var(--background-secondary, #333)';
-                this.ghostEl.style.border = '1px solid var(--interactive-accent, #7c3aed)';
-                this.ghostEl.style.color = 'var(--text-normal, #eee)';
-            }
-
-            this.ghostEl.style.position = 'fixed';
-            this.ghostEl.style.zIndex = '2147483647';
-            this.ghostEl.style.pointerEvents = 'none';
-            this.ghostEl.style.opacity = '0';
-            this.ghostEl.style.width = `${el.offsetWidth}px`;
-            this.ghostEl.style.height = `${el.offsetHeight}px`;
-            this.ghostEl.style.boxSizing = 'border-box';
-            this.ghostEl.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.5)';
-            this.ghostEl.style.margin = '0';
-            this.ghostEl.style.left = '-9999px';
-            doc.body.appendChild(this.ghostEl);
+            this.ghostEl = createGhostElement(el, doc, { useCloneNode: true });
         }
     }
 
@@ -166,7 +135,7 @@ export class TimelineDragStrategy implements DragStrategy {
             const wasOutside = this.isOutsideSection;
             this.isOutsideSection = !!futureSection;
 
-            console.log('[TimelineDrag] isOutsideSection:', this.isOutsideSection, 'futureSection:', !!futureSection);
+
 
             // Update ghost and card visibility based on section
             if (this.isOutsideSection && this.ghostEl) {
@@ -196,10 +165,8 @@ export class TimelineDragStrategy implements DragStrategy {
         }
 
         // Clean up ghost element
-        if (this.ghostEl) {
-            this.ghostEl.remove();
-            this.ghostEl = null;
-        }
+        removeGhostElement(this.ghostEl);
+        this.ghostEl = null;
 
         this.dragEl.removeClass('is-dragging');
         this.dragEl.style.zIndex = '';
@@ -218,7 +185,7 @@ export class TimelineDragStrategy implements DragStrategy {
 
         if (elBelow) {
             // Check for drop on Future section (TL→FU) - only if no deadline
-            const futureSection = elBelow.closest('.unassigned-section') || elBelow.closest('.future-section');
+            const futureSection = elBelow.closest('.unassigned-section') || elBelow.closest('.future-section') || elBelow.closest('.header-bottom-right');
             if (futureSection && !this.dragTask.deadline) {
                 const updates: Partial<Task> = {
                     isFuture: true,

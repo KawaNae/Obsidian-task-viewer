@@ -265,11 +265,7 @@ export class TimelineView extends ItemView {
         const task = this.taskIndex.getTask(taskId);
         if (!task) return;
 
-        // Check if this is a Future (unassigned) task - no handles should be shown
-        if (task.isFuture) {
-            return;
-        }
-
+        const isFuture = task.isFuture;
         const isAllDay = taskEl.classList.contains('all-day');
 
         // If handles for this task already exist, check if type matches
@@ -292,7 +288,15 @@ export class TimelineView extends ItemView {
         wrapper.dataset.isAllDay = isAllDay.toString();
 
         // --- Handles ---
-        if (isAllDay) {
+        if (isFuture) {
+            // Future tasks only get move handle
+            const moveContainer = wrapper.createDiv('handle-container move-handle-container');
+            moveContainer.style.pointerEvents = 'auto';
+
+            const moveHandle = moveContainer.createDiv('handle-btn move-handle');
+            moveHandle.setText('::');
+            moveHandle.dataset.taskId = taskId;
+        } else if (isAllDay) {
             // Left Resize Handle
             const leftContainer = wrapper.createDiv('handle-container left-resize-container');
             leftContainer.style.pointerEvents = 'auto';

@@ -66,8 +66,10 @@ export class DragHandler implements DragContext {
         const handle = target.closest('.handle-btn') as HTMLElement;
         let taskEl: HTMLElement | null = null;
         let taskId: string | null = null;
+        let isFromHandle = false;
 
         if (handle) {
+            isFromHandle = true;
             taskId = handle.dataset.taskId || null;
             if (taskId) {
                 taskEl = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
@@ -84,20 +86,32 @@ export class DragHandler implements DragContext {
 
         // Select Strategy
         if (task.isFuture) {
+            // Future tasks also require handle to drag
+            if (!isFromHandle) {
+                this.onTaskClick(taskId);
+                return;
+            }
             this.currentStrategy = new UnassignedDragStrategy();
         } else if (!task.startTime) {
+            // LongTerm tasks require handle to drag
+            if (!isFromHandle) {
+                // Not from handle: just select the task, don't start drag
+                this.onTaskClick(taskId);
+                return;
+            }
             this.currentStrategy = new LongTermDragStrategy();
         } else {
+            // Timeline tasks require handle to drag
+            if (!isFromHandle) {
+                // Not from handle: just select the task, don't start drag
+                this.onTaskClick(taskId);
+                return;
+            }
             this.currentStrategy = new TimelineDragStrategy();
         }
 
         if (this.currentStrategy) {
             this.currentStrategy.onDown(e, task, taskEl, this);
-            // We do NOT prevent default here generally, unless strategy wants to?
-            // Usually we prevent default in onMove to stop scrolling.
-            // But we might want to stop text selection?
-            // e.preventDefault(); // Let strategy decide?
-            // Existing logic prevented default on handle click?
         }
     }
 
