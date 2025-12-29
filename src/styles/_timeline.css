@@ -249,4 +249,38 @@
     display: flex;
     flex-direction: column;
     gap: 1px;
+    transition: background-color 0.2s ease;
+}
+
+.long-term-cell.drag-over {
+    background-color: var(--background-modifier-hover);
+    border: 2px dashed var(--interactive-accent);
+}
+
+.all-day-cell.drag-over {
+    background-color: var(--background-modifier-hover);
+    border: 2px dashed var(--interactive-accent);
+}
+
+.day-timeline-column.drag-over {
+    background-color: rgba(var(--interactive-accent-rgb), 0.1);
+    border: 2px dashed var(--interactive-accent);
+}
+
+.unassigned-section.drag-over,
+.future-section.drag-over,
+.header-bottom-right.drag-over {
+    background-color: var(--background-modifier-hover);
+    border: 2px dashed var(--interactive-accent);
+}
+
+/* Drag Ghost Element */
+.drag-ghost {
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0.8;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-s);
+    transition: opacity 0.15s ease;
 }

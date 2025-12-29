@@ -7,6 +7,7 @@ export class TimelineDragStrategy implements DragStrategy {
 
     private dragTask: Task | null = null;
     private dragEl: HTMLElement | null = null;
+    private ghostEl: HTMLElement | null = null;
     private initialY: number = 0;
     private initialTop: number = 0;
     private initialHeight: number = 0;
@@ -15,6 +16,8 @@ export class TimelineDragStrategy implements DragStrategy {
     private mode: 'move' | 'resize-top' | 'resize-bottom' = 'move';
     private currentDayDate: string | null = null;
     private hasKeyMoved: boolean = false;
+    private lastHighlighted: HTMLElement | null = null;
+    private isOutsideSection: boolean = false;
 
     onDown(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
         this.dragTask = task;
@@ -44,10 +47,49 @@ export class TimelineDragStrategy implements DragStrategy {
         this.currentDayDate = dayCol ? dayCol.dataset.date || null : (task.startDate || null);
 
         this.hasKeyMoved = false;
+        this.isOutsideSection = false;
 
         // Visual feedback
         el.addClass('is-dragging');
         el.style.zIndex = '1000';
+
+        // Create ghost element for cross-section dragging (move mode only)
+        if (this.mode === 'move') {
+            const doc = context.container.ownerDocument || document;
+            this.ghostEl = el.cloneNode(true) as HTMLElement;
+            this.ghostEl.addClass('drag-ghost');
+
+            // Apply visual styles with fallback
+            const computedStyle = el.ownerDocument.defaultView?.getComputedStyle(el);
+            const bg = computedStyle?.backgroundColor;
+
+            if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent' && bg !== '') {
+                this.ghostEl.style.backgroundColor = bg;
+                this.ghostEl.style.color = computedStyle?.color || '';
+                this.ghostEl.style.border = computedStyle?.border || '';
+                this.ghostEl.style.borderRadius = computedStyle?.borderRadius || '4px';
+                this.ghostEl.style.padding = computedStyle?.padding || '';
+                this.ghostEl.style.fontSize = computedStyle?.fontSize || '';
+                this.ghostEl.style.fontFamily = computedStyle?.fontFamily || '';
+            } else {
+                // Fallback for transparent elements
+                this.ghostEl.style.backgroundColor = 'var(--background-secondary, #333)';
+                this.ghostEl.style.border = '1px solid var(--interactive-accent, #7c3aed)';
+                this.ghostEl.style.color = 'var(--text-normal, #eee)';
+            }
+
+            this.ghostEl.style.position = 'fixed';
+            this.ghostEl.style.zIndex = '2147483647';
+            this.ghostEl.style.pointerEvents = 'none';
+            this.ghostEl.style.opacity = '0';
+            this.ghostEl.style.width = `${el.offsetWidth}px`;
+            this.ghostEl.style.height = `${el.offsetHeight}px`;
+            this.ghostEl.style.boxSizing = 'border-box';
+            this.ghostEl.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.5)';
+            this.ghostEl.style.margin = '0';
+            this.ghostEl.style.left = '-9999px';
+            doc.body.appendChild(this.ghostEl);
+        }
     }
 
     onMove(e: PointerEvent, context: DragContext) {
@@ -116,13 +158,52 @@ export class TimelineDragStrategy implements DragStrategy {
                 this.dragEl.style.height = `${clampedHeight - 3}px`;
             }
         }
+
+        // Update cross-section drop zone highlighting only during move
+        if (this.mode === 'move') {
+            // Check if cursor is outside the timeline section (over Future area)
+            const futureSection = elBelow?.closest('.unassigned-section') || elBelow?.closest('.future-section') || elBelow?.closest('.header-bottom-right');
+            const wasOutside = this.isOutsideSection;
+            this.isOutsideSection = !!futureSection;
+
+            console.log('[TimelineDrag] isOutsideSection:', this.isOutsideSection, 'futureSection:', !!futureSection);
+
+            // Update ghost and card visibility based on section
+            if (this.isOutsideSection && this.ghostEl) {
+                // Outside TL section: show ghost, hide original visually
+                this.ghostEl.style.opacity = '0.8';
+                this.ghostEl.style.left = `${e.clientX + 10}px`;
+                this.ghostEl.style.top = `${e.clientY + 10}px`;
+                this.dragEl.style.opacity = '0.3';
+            } else if (this.ghostEl) {
+                // Inside TL section: hide ghost
+                this.ghostEl.style.opacity = '0';
+                this.ghostEl.style.left = '-9999px';
+                this.dragEl.style.opacity = '';
+            }
+
+            this.updateDropZoneHighlight(e, context);
+        }
     }
 
     async onUp(e: PointerEvent, context: DragContext) {
         if (!this.dragTask || !this.dragEl || !this.currentDayDate) return;
 
+        // Clear any remaining highlights
+        if (this.lastHighlighted) {
+            this.lastHighlighted.removeClass('drag-over');
+            this.lastHighlighted = null;
+        }
+
+        // Clean up ghost element
+        if (this.ghostEl) {
+            this.ghostEl.remove();
+            this.ghostEl = null;
+        }
+
         this.dragEl.removeClass('is-dragging');
         this.dragEl.style.zIndex = '';
+        this.dragEl.style.opacity = '';
 
         if (!this.hasKeyMoved) {
             context.onTaskClick(this.dragTask.id);
@@ -131,6 +212,29 @@ export class TimelineDragStrategy implements DragStrategy {
             return;
         }
 
+        // Check for cross-section drops first
+        const doc = context.container.ownerDocument || document;
+        const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
+
+        if (elBelow) {
+            // Check for drop on Future section (TL→FU) - only if no deadline
+            const futureSection = elBelow.closest('.unassigned-section') || elBelow.closest('.future-section');
+            if (futureSection && !this.dragTask.deadline) {
+                const updates: Partial<Task> = {
+                    isFuture: true,
+                    startDate: undefined,
+                    startTime: undefined,
+                    endDate: undefined,
+                    endTime: undefined
+                };
+                await context.taskIndex.updateTask(this.dragTask.id, updates);
+                this.dragTask = null;
+                this.dragEl = null;
+                return;
+            }
+        }
+
+        // Regular timeline movement/resize within timeline section
         // Calculate Final Time
         const top = parseInt(this.dragEl.style.top || '0');
         const zoomLevel = context.plugin.settings.zoomLevel;
@@ -186,5 +290,27 @@ export class TimelineDragStrategy implements DragStrategy {
 
         this.dragTask = null;
         this.dragEl = null;
+    }
+
+    private updateDropZoneHighlight(e: PointerEvent, context: DragContext) {
+        const doc = context.container.ownerDocument || document;
+        const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
+
+        // Clear previous highlight
+        if (this.lastHighlighted) {
+            this.lastHighlighted.removeClass('drag-over');
+            this.lastHighlighted = null;
+        }
+
+        if (!elBelow) return;
+
+        // Check for valid drop targets (only Future for timeline tasks)
+        const futureSection = elBelow.closest('.unassigned-section') || elBelow.closest('.future-section') || elBelow.closest('.header-bottom-right');
+
+        if (futureSection && !this.dragTask?.deadline) {
+            // Only allow Future drop if no deadline
+            futureSection.addClass('drag-over');
+            this.lastHighlighted = futureSection as HTMLElement;
+        }
     }
 }

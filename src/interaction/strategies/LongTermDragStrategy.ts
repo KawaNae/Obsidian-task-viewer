@@ -7,6 +7,7 @@ export class LongTermDragStrategy implements DragStrategy {
 
     private dragTask: Task | null = null;
     private dragEl: HTMLElement | null = null;
+    private ghostEl: HTMLElement | null = null;
     private mode: 'move' | 'resize-left' | 'resize-right' = 'move';
     private initialX: number = 0;
 
@@ -22,6 +23,8 @@ export class LongTermDragStrategy implements DragStrategy {
     private hasMoved: boolean = false;
     private initialWidth: number = 0;
     private container: HTMLElement | null = null;
+    private lastHighlighted: HTMLElement | null = null;
+    private isOutsideSection: boolean = false;
 
     // We rely on grid columns for snapping.
     // 1 col = 1 day.
@@ -99,6 +102,45 @@ export class LongTermDragStrategy implements DragStrategy {
         el.addClass('is-dragging');
         el.style.zIndex = '1000';
         this.hasMoved = false;
+        this.isOutsideSection = false;
+
+        // Create ghost element for cross-section dragging (move mode only)
+        if (this.mode === 'move') {
+            const doc = context.container.ownerDocument || document;
+            this.ghostEl = el.cloneNode(true) as HTMLElement;
+            this.ghostEl.addClass('drag-ghost');
+
+            // Apply visual styles with fallback
+            const computedStyle = el.ownerDocument.defaultView?.getComputedStyle(el);
+            const bg = computedStyle?.backgroundColor;
+
+            if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent' && bg !== '') {
+                this.ghostEl.style.backgroundColor = bg;
+                this.ghostEl.style.color = computedStyle?.color || '';
+                this.ghostEl.style.border = computedStyle?.border || '';
+                this.ghostEl.style.borderRadius = computedStyle?.borderRadius || '4px';
+                this.ghostEl.style.padding = computedStyle?.padding || '';
+                this.ghostEl.style.fontSize = computedStyle?.fontSize || '';
+                this.ghostEl.style.fontFamily = computedStyle?.fontFamily || '';
+            } else {
+                // Fallback for transparent elements
+                this.ghostEl.style.backgroundColor = 'var(--background-secondary, #333)';
+                this.ghostEl.style.border = '1px solid var(--interactive-accent, #7c3aed)';
+                this.ghostEl.style.color = 'var(--text-normal, #eee)';
+            }
+
+            this.ghostEl.style.position = 'fixed';
+            this.ghostEl.style.zIndex = '2147483647';
+            this.ghostEl.style.pointerEvents = 'none';
+            this.ghostEl.style.opacity = '0';
+            this.ghostEl.style.width = `${el.offsetWidth}px`;
+            this.ghostEl.style.height = `${el.offsetHeight}px`;
+            this.ghostEl.style.boxSizing = 'border-box';
+            this.ghostEl.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.5)';
+            this.ghostEl.style.margin = '0';
+            this.ghostEl.style.left = '-9999px';
+            doc.body.appendChild(this.ghostEl);
+        }
 
         // Note: Unlike TimelineDragStrategy, we use transform for visual feedback
         // because LongTerm tasks are positioned via CSS grid-column.
@@ -122,10 +164,37 @@ export class LongTermDragStrategy implements DragStrategy {
 
         // Visual feedback based on mode
         if (this.mode === 'move') {
-            this.dragEl.style.transform = `translateX(${snappedDeltaX}px)`;
+            // Check if cursor is outside the long-term section
+            const doc = context.container.ownerDocument || document;
+            const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
+            const futureSection = elBelow?.closest('.unassigned-section') || elBelow?.closest('.future-section') || elBelow?.closest('.header-bottom-right');
+            const timelineSection = elBelow?.closest('.day-timeline-column');
+            const wasOutside = this.isOutsideSection;
+            this.isOutsideSection = !!(futureSection || timelineSection);
+
+            console.log('[LongTermDrag] isOutsideSection:', this.isOutsideSection, 'futureSection:', !!futureSection, 'timelineSection:', !!timelineSection);
+
+            // Update ghost and card visibility based on section
+            if (this.isOutsideSection && this.ghostEl) {
+                // Outside LT section: show ghost, hide original visually
+                this.ghostEl.style.opacity = '0.8';
+                this.ghostEl.style.left = `${e.clientX + 10}px`;
+                this.ghostEl.style.top = `${e.clientY + 10}px`;
+                this.dragEl.style.opacity = '0.3';
+            } else if (this.ghostEl) {
+                // Inside LT section: hide ghost, move original
+                this.ghostEl.style.opacity = '0';
+                this.ghostEl.style.left = '-9999px';
+                this.dragEl.style.opacity = '';
+                this.dragEl.style.transform = `translateX(${snappedDeltaX}px)`;
+            }
+
             // Update arrow: keep deadline end fixed, stretch arrow start
             const newTaskEndLine = this.startCol + this.initialSpan + dayDelta;
             this.updateArrowPosition(newTaskEndLine);
+
+            // Update cross-section drop zone highlighting
+            this.updateDropZoneHighlight(e, context);
         } else if (this.mode === 'resize-right') {
             // Adjust width - minimum 1 day
             const rawWidth = this.initialWidth + snappedDeltaX;
@@ -149,10 +218,23 @@ export class LongTermDragStrategy implements DragStrategy {
     async onUp(e: PointerEvent, context: DragContext) {
         if (!this.dragTask || !this.dragEl) return;
 
+        // Clear any remaining highlights
+        if (this.lastHighlighted) {
+            this.lastHighlighted.removeClass('drag-over');
+            this.lastHighlighted = null;
+        }
+
+        // Clean up ghost element
+        if (this.ghostEl) {
+            this.ghostEl.remove();
+            this.ghostEl = null;
+        }
+
         this.dragEl.removeClass('is-dragging');
         this.dragEl.style.transform = '';
         this.dragEl.style.width = '';
         this.dragEl.style.zIndex = '';
+        this.dragEl.style.opacity = '';
 
         if (!this.hasMoved) {
             context.onTaskClick(this.dragTask.id);
@@ -161,6 +243,70 @@ export class LongTermDragStrategy implements DragStrategy {
             return;
         }
 
+        // Check for cross-section drops first
+        const doc = context.container.ownerDocument || document;
+        const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
+
+        if (elBelow) {
+            // Check for drop on Future section (LT→FU)
+            const futureSection = elBelow.closest('.unassigned-section') || elBelow.closest('.future-section');
+            if (futureSection && this.mode === 'move' && !this.dragTask.deadline) {
+                // Convert to Future type: Remove start/end dates, set isFuture=true
+                const updates: Partial<Task> = {
+                    isFuture: true,
+                    startDate: undefined,
+                    startTime: undefined,
+                    endDate: undefined,
+                    endTime: undefined
+                };
+                await context.taskIndex.updateTask(this.dragTask.id, updates);
+                this.dragEl = null;
+                this.dragTask = null;
+                this.container = null;
+                return;
+            }
+
+            // Check for drop on Timeline section (LT→TL)
+            const timelineSection = elBelow.closest('.day-timeline-column') as HTMLElement;
+            if (timelineSection && this.mode === 'move') {
+                const targetDate = timelineSection.dataset.date;
+                if (targetDate) {
+                    // Calculate drop position for time
+                    const rect = timelineSection.getBoundingClientRect();
+                    const yInContainer = e.clientY - rect.top;
+
+                    const zoomLevel = context.plugin.settings.zoomLevel;
+                    const snapPixels = 15 * zoomLevel;
+                    const snappedTop = Math.round(yInContainer / snapPixels) * snapPixels;
+
+                    const startHour = context.plugin.settings.startHour;
+                    const startHourMinutes = startHour * 60;
+                    const minutesFromStart = snappedTop / zoomLevel;
+                    const totalMinutes = startHourMinutes + minutesFromStart;
+
+                    const updates: Partial<Task> = {
+                        startDate: targetDate,
+                        startTime: DateUtils.minutesToTime(totalMinutes),
+                        endTime: DateUtils.minutesToTime(totalMinutes + 60), // 1h default
+                        endDate: targetDate
+                    };
+
+                    // If task has deadline, preserve it but convert to timed format
+                    if (this.dragTask.deadline) {
+                        // Keep deadline as SD type (start+end times, deadline date)
+                        updates.endDate = undefined; // Remove explicit end date for SD type
+                    }
+
+                    await context.taskIndex.updateTask(this.dragTask.id, updates);
+                    this.dragEl = null;
+                    this.dragTask = null;
+                    this.container = null;
+                    return;
+                }
+            }
+        }
+
+        // Regular long-term movement/resize within same section
         const deltaX = e.clientX - this.initialX;
         const dayDelta = Math.round(deltaX / this.colWidth);
 
@@ -250,6 +396,35 @@ export class LongTermDragStrategy implements DragStrategy {
         const arrow = this.container.querySelector(`.deadline-arrow[data-task-id="${taskId}"]`) as HTMLElement;
         if (arrow) {
             arrow.style.transform = `translateX(${translateX}px)`;
+        }
+    }
+
+    private updateDropZoneHighlight(e: PointerEvent, context: DragContext) {
+        // Only highlight drop zones during move operations
+        if (this.mode !== 'move') return;
+
+        const doc = context.container.ownerDocument || document;
+        const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
+
+        // Clear previous highlight
+        if (this.lastHighlighted) {
+            this.lastHighlighted.removeClass('drag-over');
+            this.lastHighlighted = null;
+        }
+
+        if (!elBelow) return;
+
+        // Check for valid drop targets
+        const futureSection = elBelow.closest('.unassigned-section') || elBelow.closest('.future-section') || elBelow.closest('.header-bottom-right');
+        const timelineCol = elBelow.closest('.day-timeline-column') as HTMLElement;
+
+        if (futureSection && !this.dragTask?.deadline) {
+            // Only allow Future drop if no deadline
+            futureSection.addClass('drag-over');
+            this.lastHighlighted = futureSection as HTMLElement;
+        } else if (timelineCol) {
+            timelineCol.addClass('drag-over');
+            this.lastHighlighted = timelineCol;
         }
     }
 }
