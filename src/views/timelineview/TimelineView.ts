@@ -7,7 +7,6 @@ import { MenuHandler } from '../../interaction/MenuHandler';
 import { TaskLayout } from '../../services/TaskLayout';
 import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
-import { ColorUtils } from '../../utils/ColorUtils';
 import TaskViewerPlugin from '../../main';
 import { CreateTaskModal } from '../../modals/CreateTaskModal';
 import { HandleManager } from './HandleManager';

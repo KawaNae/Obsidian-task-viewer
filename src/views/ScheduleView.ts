@@ -5,7 +5,6 @@ import { Task } from '../types';
 import { MenuHandler } from '../interaction/MenuHandler';
 import { DateUtils } from '../utils/DateUtils';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
-import { ColorUtils } from '../utils/ColorUtils';
 import TaskViewerPlugin from '../main';
 import { ViewUtils } from './ViewUtils';
 
