@@ -15,29 +15,42 @@ import { TimelineToolbar } from './TimelineToolbar';
 
 export const VIEW_TYPE_TIMELINE = 'timeline-view';
 
+/**
+ * Timeline View - Displays tasks on a time-based grid layout.
+ * 
+ * Structure:
+ * - Lifecycle: constructor, onOpen, onClose, refresh
+ * - Core Rendering: render, renderCurrentTimeIndicator
+ * - Grid & Layout: renderGrid, getDatesToShow, renderTimeLabels
+ * - Section Renderers: renderFutureSection, renderLongTermTasks, renderTimedTasks
+ * - Color & Styling: getFileColor, applyTaskColor
+ * - Task Creation: addCreateTaskListeners, handleCreateTaskTrigger
+ */
 export class TimelineView extends ItemView {
+    // ==================== Services & Handlers ====================
     private taskIndex: TaskIndex;
-    private container: HTMLElement;
-    private viewState: ViewState;
+    private plugin: TaskViewerPlugin;
+    private taskRenderer: TaskRenderer;
     private dragHandler: DragHandler;
     private menuHandler: MenuHandler;
     private handleManager: HandleManager;
     private toolbar: TimelineToolbar;
-    private unsubscribe: (() => void) | null = null;
-    private plugin: TaskViewerPlugin;
-    private taskRenderer: TaskRenderer;
 
+    // ==================== State ====================
+    private container: HTMLElement;
+    private viewState: ViewState;
+    private unsubscribe: (() => void) | null = null;
     private currentTimeInterval: number | null = null;
     private lastScrollTop: number = 0;
+
+    // ==================== Lifecycle ====================
 
     constructor(leaf: WorkspaceLeaf, taskIndex: TaskIndex, plugin: TaskViewerPlugin) {
         super(leaf);
         this.taskIndex = taskIndex;
         this.plugin = plugin;
-        const initialDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-        console.log('[DEBUG] Constructor - setting initial viewState.startDate to:', initialDate);
         this.viewState = {
-            startDate: initialDate,
+            startDate: DateUtils.getVisualDateOfNow(this.plugin.settings.startHour),
             daysToShow: 3
         };
         this.taskRenderer = new TaskRenderer(this.app, this.taskIndex);
@@ -188,6 +201,9 @@ export class TimelineView extends ItemView {
         this.render();
     }
 
+    // ==================== Core Rendering ====================
+
+    /** Renders the "now" indicator line on today's column. */
     private renderCurrentTimeIndicator() {
         // Remove existing indicators
         const existingIndicators = this.container.querySelectorAll('.current-time-indicator');
@@ -242,7 +258,9 @@ export class TimelineView extends ItemView {
         }
     }
 
+    // ==================== Grid & Layout ====================
 
+    /** Renders the main grid structure with header, all-day row, and timeline. */
     private renderGrid() {
         const grid = this.container.createDiv('timeline-grid');
         const dates = this.getDatesToShow();
@@ -336,6 +354,9 @@ export class TimelineView extends ItemView {
         }
     }
 
+    // ==================== Section Renderers ====================
+
+    /** Renders long-term tasks (spanning multiple days) in the all-day row. */
     private renderLongTermTasks(container: HTMLElement, dates: string[]) {
         const viewStart = dates[0];
         const viewEnd = dates[dates.length - 1];
@@ -673,6 +694,9 @@ export class TimelineView extends ItemView {
         });
     }
 
+    // ==================== Color & Styling ====================
+
+    /** Gets the custom color for a file from its frontmatter. */
     private getFileColor(filePath: string): string | null {
         const key = this.plugin.settings.frontmatterColorKey;
         if (!key) return null;
@@ -703,10 +727,14 @@ export class TimelineView extends ItemView {
         }
     }
 
+    /** Renders task content using TaskRenderer. */
     private async renderTaskContent(el: HTMLElement, task: Task) {
         await this.taskRenderer.render(el, task, this, this.plugin.settings);
     }
 
+    // ==================== Task Creation ====================
+
+    /** Adds click/context listeners for creating new tasks. */
     private addCreateTaskListeners(col: HTMLElement, date: string) {
         // Context Menu (Right Click)
         col.addEventListener('contextmenu', (e) => {
