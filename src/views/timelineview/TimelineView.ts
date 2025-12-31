@@ -1,15 +1,17 @@
 import { ItemView, WorkspaceLeaf, Menu } from 'obsidian';
-import { TaskRenderer } from './TaskRenderer';
-import { TaskIndex } from '../services/TaskIndex';
-import { Task, ViewState } from '../types';
-import { DragHandler } from '../interaction/DragHandler';
-import { MenuHandler } from '../interaction/MenuHandler';
-import { TaskLayout } from '../services/TaskLayout';
-import { DateUtils } from '../utils/DateUtils';
-import { DailyNoteUtils } from '../utils/DailyNoteUtils';
-import { ColorUtils } from '../utils/ColorUtils';
-import TaskViewerPlugin from '../main';
-import { CreateTaskModal } from '../modals/CreateTaskModal';
+import { TaskRenderer } from '../TaskRenderer';
+import { TaskIndex } from '../../services/TaskIndex';
+import { Task, ViewState } from '../../types';
+import { DragHandler } from '../../interaction/DragHandler';
+import { MenuHandler } from '../../interaction/MenuHandler';
+import { TaskLayout } from '../../services/TaskLayout';
+import { DateUtils } from '../../utils/DateUtils';
+import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import { ColorUtils } from '../../utils/ColorUtils';
+import TaskViewerPlugin from '../../main';
+import { CreateTaskModal } from '../../modals/CreateTaskModal';
+import { HandleManager } from './HandleManager';
+import { TimelineToolbar } from './TimelineToolbar';
 
 export const VIEW_TYPE_TIMELINE = 'timeline-view';
 
@@ -19,8 +21,8 @@ export class TimelineView extends ItemView {
     private viewState: ViewState;
     private dragHandler: DragHandler;
     private menuHandler: MenuHandler;
-    private selectedTaskId: string | null = null;
-    private handleOverlay: HTMLElement | null = null;
+    private handleManager: HandleManager;
+    private toolbar: TimelineToolbar;
     private unsubscribe: (() => void) | null = null;
     private plugin: TaskViewerPlugin;
     private taskRenderer: TaskRenderer;
@@ -86,13 +88,31 @@ export class TimelineView extends ItemView {
         // Initialize MenuHandler
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
 
+        // Initialize HandleManager
+        this.handleManager = new HandleManager(this.container, this.taskIndex);
+
+        // Initialize Toolbar
+        this.toolbar = new TimelineToolbar(
+            this.container,
+            this.app,
+            this.viewState,
+            this.plugin,
+            this.taskIndex,
+            {
+                onRender: () => this.render(),
+                onStateChange: () => { },
+                getFileColor: (filePath) => this.getFileColor(filePath),
+                getDatesToShow: () => this.getDatesToShow()
+            }
+        );
+
         // Initialize DragHandler with selection callback and move callback
         this.dragHandler = new DragHandler(this.container, this.taskIndex, this.plugin,
             (taskId) => {
-                this.selectTask(taskId);
+                this.handleManager.selectTask(taskId);
             },
             () => {
-                this.updateHandlePositions();
+                this.handleManager.updatePositions();
             }
         );
 
@@ -100,13 +120,12 @@ export class TimelineView extends ItemView {
         this.container.addEventListener('click', (e) => {
             const target = e.target as HTMLElement;
 
-
             // If clicking handle, do nothing (handled by DragHandler or button click)
             if (target.closest('.handle-btn')) return;
 
             if (!target.closest('.task-card')) {
-                if (this.selectedTaskId) {
-                    this.selectTask(null);
+                if (this.handleManager.getSelectedTaskId()) {
+                    this.handleManager.selectTask(null);
                 }
             }
         });
@@ -142,7 +161,7 @@ export class TimelineView extends ItemView {
         // Use the window of the container (handles popout windows)
         const win = this.container.ownerDocument.defaultView || window;
         this.registerDomEvent(win, 'resize', () => {
-            this.updateHandlePositions();
+            this.handleManager.updatePositions();
         });
 
         // Start Current Time Interval
@@ -212,288 +231,15 @@ export class TimelineView extends ItemView {
         const zoomLevel = this.plugin.settings.zoomLevel;
         this.container.style.setProperty('--hour-height', `${60 * zoomLevel}px`);
 
-        this.renderToolbar();
+        this.toolbar.render();
         this.renderGrid();
-        this.renderHandleOverlay();
+        this.handleManager.createOverlay();
         this.renderCurrentTimeIndicator();
 
-        if (this.selectedTaskId) {
-            this.renderHandles(this.selectedTaskId);
+        const selectedTaskId = this.handleManager.getSelectedTaskId();
+        if (selectedTaskId) {
+            this.handleManager.selectTask(selectedTaskId);
         }
-    }
-
-    private renderHandleOverlay() {
-        this.handleOverlay = this.container.createDiv('handle-overlay');
-    }
-
-    private updateHandlePositions() {
-        if (this.selectedTaskId && this.handleOverlay) {
-            this.updateHandleGeometry(this.selectedTaskId);
-        }
-    }
-
-    private selectTask(taskId: string | null) {
-
-        this.selectedTaskId = taskId;
-
-        // Update .selected class on all task cards
-        const taskCards = this.container.querySelectorAll('.task-card');
-        taskCards.forEach(el => {
-            if ((el as HTMLElement).dataset.id === taskId) {
-                el.addClass('selected');
-            } else {
-                el.removeClass('selected');
-            }
-        });
-
-        // Update Handles
-        if (taskId) {
-            this.renderHandles(taskId);
-        } else {
-            if (this.handleOverlay) {
-                this.handleOverlay.empty();
-            }
-        }
-    }
-
-    private renderHandles(taskId: string) {
-        if (!this.handleOverlay) return;
-
-        const taskEl = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
-        if (!taskEl) return;
-
-        const task = this.taskIndex.getTask(taskId);
-        if (!task) return;
-
-        const isFuture = task.isFuture;
-        const isAllDay = taskEl.classList.contains('all-day');
-
-        // If handles for this task already exist, check if type matches
-        const existingWrapper = this.handleOverlay.querySelector(`.handle-wrapper[data-task-id="${taskId}"]`) as HTMLElement;
-        if (existingWrapper) {
-            const wrapperIsAllDay = existingWrapper.dataset.isAllDay === 'true';
-            if (wrapperIsAllDay === isAllDay) {
-                this.updateHandleGeometry(taskId);
-                return;
-            }
-            // Type changed, remove and re-create
-            existingWrapper.remove();
-        }
-
-        this.handleOverlay.empty(); // Clear other handles (only 1 selected at a time)
-
-        // Create wrapper
-        const wrapper = this.handleOverlay.createDiv('handle-wrapper');
-        wrapper.dataset.taskId = taskId;
-        wrapper.dataset.isAllDay = isAllDay.toString();
-
-        // --- Handles ---
-        if (isFuture) {
-            // Future tasks only get move handle
-            const moveContainer = wrapper.createDiv('handle-container move-handle-container');
-            moveContainer.style.pointerEvents = 'auto';
-
-            const moveHandle = moveContainer.createDiv('handle-btn move-handle');
-            moveHandle.setText('::');
-            moveHandle.dataset.taskId = taskId;
-        } else if (isAllDay) {
-            // Left Resize Handle
-            const leftContainer = wrapper.createDiv('handle-container left-resize-container');
-            leftContainer.style.pointerEvents = 'auto';
-            const resizeLeft = leftContainer.createDiv('handle-btn resize-handle left-resize-handle');
-            resizeLeft.setText('↔');
-            resizeLeft.dataset.taskId = taskId;
-
-            // Right Resize Handle
-            const rightContainer = wrapper.createDiv('handle-container right-resize-container');
-            rightContainer.style.pointerEvents = 'auto';
-            const resizeRight = rightContainer.createDiv('handle-btn resize-handle right-resize-handle');
-            resizeRight.setText('↔');
-            resizeRight.dataset.taskId = taskId;
-
-            // Move Handle (Right Edge)
-            const moveContainer = wrapper.createDiv('handle-container move-handle-container');
-            moveContainer.style.pointerEvents = 'auto';
-
-            const moveHandle = moveContainer.createDiv('handle-btn move-handle');
-            moveHandle.setText('::');
-            moveHandle.dataset.taskId = taskId;
-        } else {
-            // Top Resize Handle (Top Center)
-            const topContainer = wrapper.createDiv('handle-container top-resize-container');
-            topContainer.style.pointerEvents = 'auto';
-
-            const resizeTop = topContainer.createDiv('handle-btn resize-handle top-resize-handle');
-            resizeTop.setText('↕');
-            resizeTop.dataset.taskId = taskId;
-
-            // Bottom Resize Handle (Bottom Center)
-            const bottomContainer = wrapper.createDiv('handle-container bottom-resize-container');
-            bottomContainer.style.pointerEvents = 'auto';
-
-            const resizeBottom = bottomContainer.createDiv('handle-btn resize-handle bottom-resize-handle');
-            resizeBottom.setText('↕');
-            resizeBottom.dataset.taskId = taskId;
-
-            // Move Handle (Right Edge)
-            const moveContainer = wrapper.createDiv('handle-container move-handle-container');
-            moveContainer.style.pointerEvents = 'auto';
-
-            const moveHandle = moveContainer.createDiv('handle-btn move-handle');
-            moveHandle.setText('::');
-            moveHandle.dataset.taskId = taskId;
-        }
-
-        // Initial positioning
-        this.updateHandleGeometry(taskId);
-    }
-
-    private updateHandleGeometry(taskId: string) {
-        if (!this.handleOverlay) return;
-
-        const wrapper = this.handleOverlay.querySelector(`.handle-wrapper[data-task-id="${taskId}"]`) as HTMLElement;
-        const taskEl = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
-
-        if (!wrapper || !taskEl) {
-            console.log(`[updateHandleGeometry] wrapper or taskEl not found for ${taskId}`, { wrapper: !!wrapper, taskEl: !!taskEl });
-            return;
-        }
-
-        const containerRect = this.container.getBoundingClientRect();
-        const taskRect = taskEl.getBoundingClientRect();
-
-        // Calculate position relative to container
-        const top = taskRect.top - containerRect.top;
-        const left = taskRect.left - containerRect.left;
-        const width = taskRect.width;
-        const height = taskRect.height;
-
-        console.log(`[updateHandleGeometry] ${taskId}: top=${top}, left=${left}, width=${width}, height=${height}`);
-
-        wrapper.style.top = `${top}px`;
-        wrapper.style.left = `${left}px`;
-        wrapper.style.width = `${width}px`;
-        wrapper.style.height = `${height}px`;
-    }
-
-    private visibleFiles: Set<string> | null = null; // null means all visible
-
-    private renderToolbar() {
-        const toolbar = this.container.createDiv('task-viewer-toolbar');
-
-        // Date Navigation
-        const prevBtn = toolbar.createEl('button', { text: '<' });
-        prevBtn.onclick = () => this.navigateDate(-1);
-
-        const nextBtn = toolbar.createEl('button', { text: '>' });
-        nextBtn.onclick = () => this.navigateDate(1);
-
-        const todayBtn = toolbar.createEl('button', { text: 'Today' });
-        todayBtn.onclick = () => {
-            this.viewState.startDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-            this.render();
-        };
-
-        // View Mode Switch
-        const modeSelect = toolbar.createEl('select');
-        modeSelect.createEl('option', { value: '1', text: '1 Day' });
-        modeSelect.createEl('option', { value: '3', text: '3 Days' });
-        modeSelect.createEl('option', { value: '7', text: 'Week' });
-        modeSelect.value = this.viewState.daysToShow.toString();
-        modeSelect.onchange = (e) => {
-            const newValue = parseInt((e.target as HTMLSelectElement).value);
-            this.viewState.daysToShow = newValue;
-            this.render();
-            // Force save state
-            this.app.workspace.requestSaveLayout();
-        };
-
-        // Zoom Controls
-        const zoomContainer = toolbar.createDiv('zoom-controls');
-
-        const zoomOutBtn = zoomContainer.createEl('button', { text: '-' });
-        zoomOutBtn.onclick = async () => {
-            let newZoom = this.plugin.settings.zoomLevel - 0.25;
-            if (newZoom < 0.25) newZoom = 0.25;
-            this.plugin.settings.zoomLevel = newZoom;
-            await this.plugin.saveSettings();
-            this.render();
-        };
-
-        const zoomLabel = zoomContainer.createSpan({ cls: 'zoom-label', text: `${Math.round(this.plugin.settings.zoomLevel * 100)}%` });
-
-        const zoomInBtn = zoomContainer.createEl('button', { text: '+' });
-        zoomInBtn.onclick = async () => {
-            let newZoom = this.plugin.settings.zoomLevel + 0.25;
-            if (newZoom > 4.0) newZoom = 4.0;
-            this.plugin.settings.zoomLevel = newZoom;
-            await this.plugin.saveSettings();
-            this.render();
-        };
-
-        // Filter Button
-        const filterBtn = toolbar.createEl('button', { text: 'Filter' });
-        filterBtn.onclick = (e) => {
-            const menu = new Menu();
-
-            const dates = this.getDatesToShow();
-            const allTasksInView = dates.flatMap(date => this.taskIndex.getTasksForVisualDay(date, this.plugin.settings.startHour));
-            const distinctFiles = Array.from(new Set(allTasksInView.map(t => t.file))).sort();
-
-            distinctFiles.forEach(file => {
-                const isVisible = this.visibleFiles === null || this.visibleFiles.has(file);
-                const color = this.getFileColor(file);
-                const fileName = file.split('/').pop() || file;
-                menu.addItem(item => {
-                    item.setTitle(fileName)
-                        .setChecked(isVisible)
-                        .onClick(() => {
-                            if (this.visibleFiles === null) {
-                                // Initialize with all currently visible files
-                                this.visibleFiles = new Set(distinctFiles);
-                            }
-
-                            if (isVisible) {
-                                this.visibleFiles.delete(file);
-                            } else {
-                                this.visibleFiles.add(file);
-                            }
-
-                            // If all checked, set to null
-                            if (this.visibleFiles.size === distinctFiles.length) {
-                                this.visibleFiles = null;
-                            }
-
-                            this.render();
-                        });
-
-                    // Always set icon to align text
-                    item.setIcon('circle');
-                    const iconEl = (item as any).dom.querySelector('.menu-item-icon');
-
-                    if (iconEl) {
-                        if (color) {
-                            iconEl.style.color = color;
-                            iconEl.style.fill = color;
-                        } else {
-                            // Hide icon but keep space
-                            iconEl.style.visibility = 'hidden';
-                        }
-                    }
-                });
-            });
-
-            menu.showAtPosition({ x: e.pageX, y: e.pageY });
-        };
-    }
-
-    private navigateDate(days: number) {
-        const date = new Date(this.viewState.startDate);
-        date.setDate(date.getDate() + days);
-        // Use DateUtils.getLocalDateString instead of toISOString() to avoid timezone issues
-        this.viewState.startDate = DateUtils.getLocalDateString(date);
-        console.log('[DEBUG] navigateDate - updated startDate to:', this.viewState.startDate);
-        this.render();
     }
 
 
@@ -567,7 +313,7 @@ export class TimelineView extends ItemView {
 
         // Add scroll listener to update handles
         scrollArea.addEventListener('scroll', () => {
-            this.updateHandlePositions();
+            this.handleManager.updatePositions();
         });
 
         // Time Axis Column
@@ -618,8 +364,9 @@ export class TimelineView extends ItemView {
         });
 
         // Filter by visible files
-        if (this.visibleFiles) {
-            tasks = tasks.filter(t => this.visibleFiles!.has(t.file));
+        const visibleFiles = this.toolbar.getVisibleFiles();
+        if (visibleFiles) {
+            tasks = tasks.filter(t => visibleFiles.has(t.file));
         }
 
         // Sort by Start Date, then Duration (descending)
@@ -704,7 +451,7 @@ export class TimelineView extends ItemView {
             if (task.endDate && task.endDate !== tStart) {
                 el.addClass('long-term-task');
             }
-            if (task.id === this.selectedTaskId) el.addClass('selected');
+            if (task.id === this.handleManager.getSelectedTaskId()) el.addClass('selected');
             el.dataset.id = task.id;
 
             this.applyTaskColor(el, task.file);
@@ -787,15 +534,15 @@ export class TimelineView extends ItemView {
         const futureTasks = this.taskIndex.getTasks().filter(t => t.isFuture);
 
         // Filter by visible files logic if active
-        // if (this.visibleFiles) ... (Future tasks might belong to files not in view? Global filter?)
         // Applying file filter to future tasks as well for consistency
-        const filteredFutureTasks = this.visibleFiles
-            ? futureTasks.filter(t => this.visibleFiles!.has(t.file))
+        const visibleFiles = this.toolbar.getVisibleFiles();
+        const filteredFutureTasks = visibleFiles
+            ? futureTasks.filter(t => visibleFiles.has(t.file))
             : futureTasks;
 
         filteredFutureTasks.forEach(task => {
             const el = list.createDiv('task-card future-task-card');
-            if (task.id === this.selectedTaskId) el.addClass('selected');
+            if (task.id === this.handleManager.getSelectedTaskId()) el.addClass('selected');
             el.dataset.id = task.id;
 
             this.applyTaskColor(el, task.file);
@@ -852,8 +599,9 @@ export class TimelineView extends ItemView {
         });
 
         // Filter
-        if (this.visibleFiles) {
-            tasks = tasks.filter(t => this.visibleFiles!.has(t.file));
+        const visibleFiles = this.toolbar.getVisibleFiles();
+        if (visibleFiles) {
+            tasks = tasks.filter(t => visibleFiles.has(t.file));
         }
 
         // Calculate layout for overlapping tasks
@@ -863,7 +611,7 @@ export class TimelineView extends ItemView {
             if (!task.startTime) return;
 
             const el = container.createDiv('task-card timed');
-            if (task.id === this.selectedTaskId) el.addClass('selected');
+            if (task.id === this.handleManager.getSelectedTaskId()) el.addClass('selected');
             el.dataset.id = task.id;
 
             // Apply Color
