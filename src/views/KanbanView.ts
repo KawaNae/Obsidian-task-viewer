@@ -4,6 +4,7 @@ import { TaskRenderer } from './TaskRenderer';
 import { Task, ViewState } from '../types';
 import { DateUtils } from '../utils/DateUtils';
 import TaskViewerPlugin from '../main';
+import { ViewUtils } from './ViewUtils';
 
 export const VIEW_TYPE_KANBAN = 'kanban-view';
 
@@ -297,18 +298,10 @@ export class KanbanView extends ItemView {
     }
 
     private getFileColor(filePath: string): string | null {
-        const key = this.plugin.settings.frontmatterColorKey;
-        if (!key) return null;
-
-        const cache = this.app.metadataCache.getCache(filePath);
-        return cache?.frontmatter?.[key] || null;
+        return ViewUtils.getFileColor(this.app, filePath, this.plugin.settings.frontmatterColorKey);
     }
 
     private applyTaskColor(el: HTMLElement, filePath: string) {
-        const color = this.getFileColor(filePath);
-
-        if (color) {
-            el.style.setProperty('--file-accent', color);
-        }
+        ViewUtils.applyFileColor(this.app, el, filePath, this.plugin.settings.frontmatterColorKey);
     }
 }

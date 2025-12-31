@@ -12,6 +12,7 @@ import TaskViewerPlugin from '../../main';
 import { CreateTaskModal } from '../../modals/CreateTaskModal';
 import { HandleManager } from './HandleManager';
 import { TimelineToolbar } from './TimelineToolbar';
+import { ViewUtils } from '../ViewUtils';
 
 export const VIEW_TYPE_TIMELINE = 'timeline-view';
 
@@ -698,33 +699,12 @@ export class TimelineView extends ItemView {
 
     /** Gets the custom color for a file from its frontmatter. */
     private getFileColor(filePath: string): string | null {
-        const key = this.plugin.settings.frontmatterColorKey;
-        if (!key) return null;
-
-        const cache = this.app.metadataCache.getCache(filePath);
-        return cache?.frontmatter?.[key] || null;
+        return ViewUtils.getFileColor(this.app, filePath, this.plugin.settings.frontmatterColorKey);
     }
 
+    /** Applies file-based accent color to a task element. */
     private applyTaskColor(el: HTMLElement, filePath: string) {
-        const color = this.getFileColor(filePath);
-
-        if (color) {
-            const hsl = ColorUtils.hexToHSL(color);
-            if (hsl) {
-                const { h, s, l } = hsl;
-                el.style.setProperty('--accent-h', h.toString());
-                el.style.setProperty('--accent-s', s + '%');
-                el.style.setProperty('--accent-l', l + '%');
-
-                el.style.setProperty('--color-accent-hsl', `var(--accent-h), var(--accent-s), var(--accent-l)`);
-                el.style.setProperty('--file-accent', `hsl(var(--accent-h), var(--accent-s), var(--accent-l))`);
-                el.style.setProperty('--file-accent-hover', `hsl(calc(var(--accent-h) - 1), calc(var(--accent-s) * 1.01), calc(var(--accent-l) * 1.075))`);
-            } else {
-                // Fallback for named colors or invalid hex
-                el.style.setProperty('--file-accent', color);
-                el.style.setProperty('--file-accent-hover', color);
-            }
-        }
+        ViewUtils.applyFileColor(this.app, el, filePath, this.plugin.settings.frontmatterColorKey);
     }
 
     /** Renders task content using TaskRenderer. */
