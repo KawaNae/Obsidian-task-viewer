@@ -140,3 +140,94 @@ export class FileFilterMenu {
         menu.showAtPosition({ x: e.pageX, y: e.pageY });
     }
 }
+
+/**
+ * Date navigation component with prev/next/today buttons.
+ */
+export class DateNavigator {
+    /**
+     * Renders date navigation buttons.
+     * @param toolbar - Parent element to render into
+     * @param onNavigate - Callback when navigating by days (e.g., -1 or +1)
+     * @param onToday - Callback when clicking Today button
+     */
+    static render(
+        toolbar: HTMLElement,
+        onNavigate: (days: number) => void,
+        onToday: () => void
+    ): void {
+        const prevBtn = toolbar.createEl('button', { text: '<' });
+        prevBtn.onclick = () => onNavigate(-1);
+
+        const nextBtn = toolbar.createEl('button', { text: '>' });
+        nextBtn.onclick = () => onNavigate(1);
+
+        const todayBtn = toolbar.createEl('button', { text: 'Today' });
+        todayBtn.onclick = () => onToday();
+    }
+}
+
+/**
+ * View mode selector (1 Day / 3 Days / Week).
+ */
+export class ViewModeSelector {
+    /**
+     * Renders a view mode dropdown.
+     * @param toolbar - Parent element to render into
+     * @param currentValue - Current selected value (1, 3, or 7)
+     * @param onChange - Callback when selection changes
+     */
+    static render(
+        toolbar: HTMLElement,
+        currentValue: number,
+        onChange: (newValue: number) => void
+    ): void {
+        const modeSelect = toolbar.createEl('select');
+        modeSelect.createEl('option', { value: '1', text: '1 Day' });
+        modeSelect.createEl('option', { value: '3', text: '3 Days' });
+        modeSelect.createEl('option', { value: '7', text: 'Week' });
+        modeSelect.value = currentValue.toString();
+        modeSelect.onchange = (e) => {
+            const newValue = parseInt((e.target as HTMLSelectElement).value);
+            onChange(newValue);
+        };
+    }
+}
+
+/**
+ * Zoom controls for timeline scaling.
+ */
+export class ZoomControls {
+    /**
+     * Renders zoom in/out buttons with percentage display.
+     * @param toolbar - Parent element to render into
+     * @param currentZoom - Current zoom level (e.g., 1.0 = 100%)
+     * @param onZoomChange - Callback when zoom changes
+     */
+    static render(
+        toolbar: HTMLElement,
+        currentZoom: number,
+        onZoomChange: (newZoom: number) => Promise<void>
+    ): void {
+        const zoomContainer = toolbar.createDiv('zoom-controls');
+
+        const zoomOutBtn = zoomContainer.createEl('button', { text: '-' });
+        zoomOutBtn.onclick = async () => {
+            let newZoom = currentZoom - 0.25;
+            if (newZoom < 0.25) newZoom = 0.25;
+            await onZoomChange(newZoom);
+        };
+
+        zoomContainer.createSpan({
+            cls: 'zoom-label',
+            text: `${Math.round(currentZoom * 100)}%`
+        });
+
+        const zoomInBtn = zoomContainer.createEl('button', { text: '+' });
+        zoomInBtn.onclick = async () => {
+            let newZoom = currentZoom + 0.25;
+            if (newZoom > 4.0) newZoom = 4.0;
+            await onZoomChange(newZoom);
+        };
+    }
+}

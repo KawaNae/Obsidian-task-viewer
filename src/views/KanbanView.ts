@@ -4,7 +4,7 @@ import { TaskRenderer } from './TaskRenderer';
 import { Task, ViewState } from '../types';
 import { DateUtils } from '../utils/DateUtils';
 import TaskViewerPlugin from '../main';
-import { ViewUtils, FileFilterMenu } from './ViewUtils';
+import { ViewUtils, FileFilterMenu, DateNavigator, ViewModeSelector } from './ViewUtils';
 
 export const VIEW_TYPE_KANBAN = 'kanban-view';
 
@@ -144,17 +144,14 @@ export class KanbanView extends ItemView {
         const toolbar = this.container.createDiv('task-viewer-toolbar');
 
         // Date Navigation
-        const prevBtn = toolbar.createEl('button', { text: '<' });
-        prevBtn.onclick = () => this.navigateDate(-1);
-
-        const nextBtn = toolbar.createEl('button', { text: '>' });
-        nextBtn.onclick = () => this.navigateDate(1);
-
-        const todayBtn = toolbar.createEl('button', { text: 'Today' });
-        todayBtn.onclick = () => {
-            this.viewState.startDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-            this.render();
-        };
+        DateNavigator.render(
+            toolbar,
+            (days) => this.navigateDate(days),
+            () => {
+                this.viewState.startDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+                this.render();
+            }
+        );
 
         // Date Range Display
         const dateDisplay = toolbar.createEl('span', { cls: 'kanban-date-display' });
@@ -164,21 +161,18 @@ export class KanbanView extends ItemView {
         dateDisplay.setText(this.getDateRangeString());
 
         // View Mode Switch
-        const modeSelect = toolbar.createEl('select');
-        modeSelect.createEl('option', { value: '1', text: '1 Day' });
-        modeSelect.createEl('option', { value: '3', text: '3 Days' });
-        modeSelect.createEl('option', { value: '7', text: 'Week' });
-        modeSelect.value = this.viewState.daysToShow.toString();
-        modeSelect.onchange = (e) => {
-            const newValue = parseInt((e.target as HTMLSelectElement).value);
-            this.viewState.daysToShow = newValue;
-            this.render();
-        };
+        ViewModeSelector.render(
+            toolbar,
+            this.viewState.daysToShow,
+            (newValue) => {
+                this.viewState.daysToShow = newValue;
+                this.render();
+            }
+        );
 
         // Filter Button
         const filterBtn = toolbar.createEl('button', { text: 'Filter' });
         filterBtn.onclick = (e) => {
-            // Get all tasks in current view range to determine available files
             const dates = this.getDatesToShow();
             const allTasksInView = dates.flatMap(date => this.taskIndex.getTasksForVisualDay(date, this.plugin.settings.startHour));
             const distinctFiles = Array.from(new Set(allTasksInView.map(t => t.file))).sort();

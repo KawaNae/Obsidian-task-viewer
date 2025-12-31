@@ -1,9 +1,9 @@
-import { Menu, App } from 'obsidian';
+import { App } from 'obsidian';
 import { ViewState } from '../../types';
 import { TaskIndex } from '../../services/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
 import TaskViewerPlugin from '../../main';
-import { FileFilterMenu } from '../ViewUtils';
+import { FileFilterMenu, DateNavigator, ViewModeSelector, ZoomControls } from '../ViewUtils';
 
 export interface ToolbarCallbacks {
     onRender: () => void;
@@ -55,58 +55,38 @@ export class TimelineToolbar {
     }
 
     private renderDateNavigation(toolbar: HTMLElement): void {
-        const prevBtn = toolbar.createEl('button', { text: '<' });
-        prevBtn.onclick = () => this.navigateDate(-1);
-
-        const nextBtn = toolbar.createEl('button', { text: '>' });
-        nextBtn.onclick = () => this.navigateDate(1);
-
-        const todayBtn = toolbar.createEl('button', { text: 'Today' });
-        todayBtn.onclick = () => {
-            this.viewState.startDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-            this.callbacks.onRender();
-        };
+        DateNavigator.render(
+            toolbar,
+            (days) => this.navigateDate(days),
+            () => {
+                this.viewState.startDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+                this.callbacks.onRender();
+            }
+        );
     }
 
     private renderViewModeSwitch(toolbar: HTMLElement): void {
-        const modeSelect = toolbar.createEl('select');
-        modeSelect.createEl('option', { value: '1', text: '1 Day' });
-        modeSelect.createEl('option', { value: '3', text: '3 Days' });
-        modeSelect.createEl('option', { value: '7', text: 'Week' });
-        modeSelect.value = this.viewState.daysToShow.toString();
-        modeSelect.onchange = (e) => {
-            const newValue = parseInt((e.target as HTMLSelectElement).value);
-            this.viewState.daysToShow = newValue;
-            this.callbacks.onRender();
-            this.app.workspace.requestSaveLayout();
-        };
+        ViewModeSelector.render(
+            toolbar,
+            this.viewState.daysToShow,
+            (newValue) => {
+                this.viewState.daysToShow = newValue;
+                this.callbacks.onRender();
+                this.app.workspace.requestSaveLayout();
+            }
+        );
     }
 
     private renderZoomControls(toolbar: HTMLElement): void {
-        const zoomContainer = toolbar.createDiv('zoom-controls');
-
-        const zoomOutBtn = zoomContainer.createEl('button', { text: '-' });
-        zoomOutBtn.onclick = async () => {
-            let newZoom = this.plugin.settings.zoomLevel - 0.25;
-            if (newZoom < 0.25) newZoom = 0.25;
-            this.plugin.settings.zoomLevel = newZoom;
-            await this.plugin.saveSettings();
-            this.callbacks.onRender();
-        };
-
-        zoomContainer.createSpan({
-            cls: 'zoom-label',
-            text: `${Math.round(this.plugin.settings.zoomLevel * 100)}%`
-        });
-
-        const zoomInBtn = zoomContainer.createEl('button', { text: '+' });
-        zoomInBtn.onclick = async () => {
-            let newZoom = this.plugin.settings.zoomLevel + 0.25;
-            if (newZoom > 4.0) newZoom = 4.0;
-            this.plugin.settings.zoomLevel = newZoom;
-            await this.plugin.saveSettings();
-            this.callbacks.onRender();
-        };
+        ZoomControls.render(
+            toolbar,
+            this.plugin.settings.zoomLevel,
+            async (newZoom) => {
+                this.plugin.settings.zoomLevel = newZoom;
+                await this.plugin.saveSettings();
+                this.callbacks.onRender();
+            }
+        );
     }
 
     private renderFilterButton(toolbar: HTMLElement): void {
