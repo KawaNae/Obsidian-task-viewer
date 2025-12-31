@@ -8,6 +8,8 @@ export interface DragContext {
     onTaskClick: (taskId: string) => void;
     // Helper to get visual date from column element
     getDateFromCol: (el: HTMLElement) => string | null;
+    // Helper to get the view start date
+    getViewStartDate: () => string;
 }
 
 export interface DragStrategy {

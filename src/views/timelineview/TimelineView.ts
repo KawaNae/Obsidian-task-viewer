@@ -119,14 +119,15 @@ export class TimelineView extends ItemView {
             }
         );
 
-        // Initialize DragHandler with selection callback and move callback
+        // Initialize DragHandler with selection callback, move callback, and view start date provider
         this.dragHandler = new DragHandler(this.container, this.taskIndex, this.plugin,
             (taskId) => {
                 this.handleManager.selectTask(taskId);
             },
             () => {
                 this.handleManager.updatePositions();
-            }
+            },
+            () => this.viewState.startDate
         );
 
         // Background click to deselect

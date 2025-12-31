@@ -27,6 +27,7 @@ export class LongTermDragStrategy implements DragStrategy {
     private container: HTMLElement | null = null;
     private lastHighlighted: HTMLElement | null = null;
     private isOutsideSection: boolean = false;
+    private refHeaderCell: HTMLElement | null = null;
 
     // We rely on grid columns for snapping.
     // 1 col = 1 day.
@@ -76,7 +77,9 @@ export class LongTermDragStrategy implements DragStrategy {
         // Initialize Geometry
         // We can get column width from the grid
         const grid = el.closest('.timeline-grid');
-        const headerCell = grid?.querySelector('.header-cell:nth-child(2)'); // First day cell
+        const headerCell = grid?.querySelector('.header-cell:nth-child(2)') as HTMLElement; // First day cell
+        this.refHeaderCell = headerCell;
+
         if (headerCell) {
             this.colWidth = headerCell.getBoundingClientRect().width;
         } else {
@@ -85,10 +88,9 @@ export class LongTermDragStrategy implements DragStrategy {
 
         this.initialWidth = el.getBoundingClientRect().width;
 
-        // Get view start date from DOM header to handle E/ED/D types correctly (spec: use view start date)
-        // Use existing 'grid' variable from line 78
-        const firstHeader = grid?.querySelector('.header-cell[data-date]');
-        const viewStartDate = firstHeader instanceof HTMLElement ? firstHeader.dataset.date : DateUtils.getToday();
+        // Get view start date from context (spec: use view start date for E/ED/D types)
+        // This is safe because TimelineView provides the start date via context
+        const viewStartDate = context.getViewStartDate();
 
         this.initialDate = task.startDate || viewStartDate || DateUtils.getToday();
         this.initialEndDate = task.endDate || this.initialDate;
@@ -171,22 +173,39 @@ export class LongTermDragStrategy implements DragStrategy {
             // Update cross-section drop zone highlighting
             this.updateDropZoneHighlight(e, context);
         } else if (this.mode === 'resize-right') {
-            // Adjust width - minimum 1 day
-            const rawWidth = this.initialWidth + snappedDeltaX;
-            const clampedWidth = Math.max(rawWidth, this.colWidth);
-            this.dragEl.style.width = `${clampedWidth}px`;
-            // Update deadline arrow position
-            const newSpan = Math.max(1, Math.round(clampedWidth / this.colWidth));
+            if (!this.refHeaderCell) return;
+            const baseX = this.refHeaderCell.getBoundingClientRect().left;
+
+            // Use relative width for intuitive snapping
+            const taskLeft = baseX + (this.startCol - 2) * this.colWidth;
+            const widthPx = e.clientX - taskLeft;
+
+            // Snap to cell right edge (Ceil)
+            const newSpan = Math.max(1, Math.ceil(widthPx / this.colWidth));
+
+            // Use gridColumn instead of width for proper Grid alignment
+            // This ensures End aligns to cell boundary (left of divider line)
+            this.dragEl.style.gridColumn = `${this.startCol} / span ${newSpan}`;
+
             const taskEndLine = this.startCol + newSpan;
             this.updateArrowPosition(taskEndLine);
         } else if (this.mode === 'resize-left') {
-            // Adjust width and x-position - minimum 1 day
-            const rawWidth = this.initialWidth - snappedDeltaX;
-            const clampedWidth = Math.max(rawWidth, this.colWidth);
-            // Only apply transform if width is valid
-            const validDelta = this.initialWidth - clampedWidth;
-            this.dragEl.style.width = `${clampedWidth}px`;
-            this.dragEl.style.transform = `translateX(${validDelta}px)`;
+            if (!this.refHeaderCell) return;
+            const baseX = this.refHeaderCell.getBoundingClientRect().left;
+            const colIndex = Math.floor((e.clientX - baseX) / this.colWidth);
+
+            // New Start Col = colIndex + 2.
+            let targetStartCol = colIndex + 2;
+
+            // Limit: Start <= End. End Col is fixed based on initial state.
+            const currentEndCol = this.startCol + this.initialSpan - 1;
+            targetStartCol = Math.min(targetStartCol, currentEndCol);
+
+            // New Span
+            const newSpan = Math.max(1, currentEndCol - targetStartCol + 1);
+
+            // Use gridColumn instead of width/transform for proper Grid alignment
+            this.dragEl.style.gridColumn = `${targetStartCol} / span ${newSpan}`;
         }
     }
 

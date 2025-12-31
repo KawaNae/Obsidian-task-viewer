@@ -15,17 +15,19 @@ export class DragHandler implements DragContext {
 
     private currentStrategy: DragStrategy | null = null;
     private currentDoc: Document;
+    private getViewStartDateProvider: () => string;
 
     private boundPointerDown: (e: PointerEvent) => void;
     private boundPointerMove: (e: PointerEvent) => void;
     private boundPointerUp: (e: PointerEvent) => void;
 
-    constructor(container: HTMLElement, taskIndex: TaskIndex, plugin: TaskViewerPlugin, onTaskClick: (taskId: string) => void, onTaskMove: () => void) {
+    constructor(container: HTMLElement, taskIndex: TaskIndex, plugin: TaskViewerPlugin, onTaskClick: (taskId: string) => void, onTaskMove: () => void, getViewStartDate: () => string) {
         this.container = container;
         this.taskIndex = taskIndex;
         this.plugin = plugin;
         this.onTaskClick = onTaskClick;
         this.onTaskMove = onTaskMove;
+        this.getViewStartDateProvider = getViewStartDate;
 
         this.boundPointerDown = this.onPointerDown.bind(this);
         this.boundPointerMove = this.onPointerMove.bind(this);
@@ -49,6 +51,10 @@ export class DragHandler implements DragContext {
     // --- Context Implementation ---
     getDateFromCol(el: HTMLElement): string | null {
         return el.dataset.date || null;
+    }
+
+    getViewStartDate(): string {
+        return this.getViewStartDateProvider();
     }
 
     private onPointerDown(e: PointerEvent) {
