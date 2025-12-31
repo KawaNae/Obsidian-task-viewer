@@ -20,9 +20,17 @@ export class TimelineDragStrategy implements DragStrategy {
     private lastHighlighted: HTMLElement | null = null;
     private isOutsideSection: boolean = false;
 
+    // Auto-scroll properties
+    private autoScrollTimer: number | null = null;
+    private scrollContainer: HTMLElement | null = null;
+    private lastClientX: number = 0;
+    private lastClientY: number = 0;
+    private currentContext: DragContext | null = null;
+
     onDown(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
         this.dragTask = task;
         this.dragEl = el;
+        this.currentContext = context;
         this.initialY = e.clientY;
         this.initialTop = parseInt(el.style.top || '0');
         this.initialHeight = parseInt(el.style.height || '0');
@@ -50,6 +58,9 @@ export class TimelineDragStrategy implements DragStrategy {
         this.hasKeyMoved = false;
         this.isOutsideSection = false;
 
+        // Get scroll container reference for auto-scroll
+        this.scrollContainer = context.container.querySelector('.timeline-scroll-area') as HTMLElement;
+
         // Visual feedback
         el.addClass('is-dragging');
         el.style.zIndex = '1000';
@@ -63,6 +74,9 @@ export class TimelineDragStrategy implements DragStrategy {
 
     onMove(e: PointerEvent, context: DragContext) {
         if (!this.dragTask || !this.dragEl) return;
+        this.currentContext = context;
+        this.lastClientX = e.clientX;
+        this.lastClientY = e.clientY;
 
         const deltaY = e.clientY - this.initialY;
 
@@ -70,13 +84,23 @@ export class TimelineDragStrategy implements DragStrategy {
         if (!this.hasKeyMoved && Math.abs(deltaY) < 5) return;
         this.hasKeyMoved = true;
 
+        this.processDragMove(e.clientX, e.clientY);
+
+        // Check for auto-scroll when dragging/resizing in timeline
+        this.checkAutoScroll(e.clientY);
+    }
+
+    private processDragMove(clientX: number, clientY: number) {
+        if (!this.dragTask || !this.dragEl || !this.currentContext) return;
+        const context = this.currentContext;
+
         // Snap logic
         const zoomLevel = context.plugin.settings.zoomLevel;
         const snapPixels = 15 * zoomLevel;
 
         // Find current column
         const doc = context.container.ownerDocument || document;
-        const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
+        const elBelow = doc.elementFromPoint(clientX, clientY);
         let dayCol = elBelow?.closest('.day-timeline-column') as HTMLElement;
 
         // Fallback to parent if slightly out
@@ -97,7 +121,13 @@ export class TimelineDragStrategy implements DragStrategy {
 
             // Calculations
             const rect = dayCol.getBoundingClientRect();
-            const yInContainer = e.clientY - rect.top;
+
+            // Note: We do NOT need manual scroll compensation here because getBoundingClientRect()
+            // is relative to the viewport. If the container scrolls, rect.top changes, and 
+            // yInContainer (clientY - rect.top) automatically reflects the new relative position
+            // correctly. Adding scroll compensation would double-count the movement.
+
+            const yInContainer = clientY - rect.top;
             const snappedMouseY = Math.round(yInContainer / snapPixels) * snapPixels;
 
             if (this.mode === 'move') {
@@ -132,17 +162,14 @@ export class TimelineDragStrategy implements DragStrategy {
         if (this.mode === 'move') {
             // Check if cursor is outside the timeline section (over Future area)
             const futureSection = elBelow?.closest('.unassigned-section') || elBelow?.closest('.future-section') || elBelow?.closest('.header-bottom-right');
-            const wasOutside = this.isOutsideSection;
             this.isOutsideSection = !!futureSection;
-
-
 
             // Update ghost and card visibility based on section
             if (this.isOutsideSection && this.ghostEl) {
                 // Outside TL section: show ghost, hide original visually
                 this.ghostEl.style.opacity = '0.8';
-                this.ghostEl.style.left = `${e.clientX + 10}px`;
-                this.ghostEl.style.top = `${e.clientY + 10}px`;
+                this.ghostEl.style.left = `${clientX + 10}px`;
+                this.ghostEl.style.top = `${clientY + 10}px`;
                 this.dragEl.style.opacity = '0.3';
             } else if (this.ghostEl) {
                 // Inside TL section: hide ghost
@@ -151,7 +178,7 @@ export class TimelineDragStrategy implements DragStrategy {
                 this.dragEl.style.opacity = '';
             }
 
-            this.updateDropZoneHighlight(e, context);
+            this.updateDropZoneHighlight(clientX, clientY, context);
         }
     }
 
@@ -168,9 +195,13 @@ export class TimelineDragStrategy implements DragStrategy {
         removeGhostElement(this.ghostEl);
         this.ghostEl = null;
 
+        // Stop auto-scroll
+        this.stopAutoScroll();
+
         this.dragEl.removeClass('is-dragging');
         this.dragEl.style.zIndex = '';
         this.dragEl.style.opacity = '';
+        this.currentContext = null;
 
         if (!this.hasKeyMoved) {
             context.onTaskClick(this.dragTask.id);
@@ -259,9 +290,9 @@ export class TimelineDragStrategy implements DragStrategy {
         this.dragEl = null;
     }
 
-    private updateDropZoneHighlight(e: PointerEvent, context: DragContext) {
+    private updateDropZoneHighlight(clientX: number, clientY: number, context: DragContext) {
         const doc = context.container.ownerDocument || document;
-        const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
+        const elBelow = doc.elementFromPoint(clientX, clientY);
 
         // Clear previous highlight
         if (this.lastHighlighted) {
@@ -278,6 +309,61 @@ export class TimelineDragStrategy implements DragStrategy {
             // Only allow Future drop if no deadline
             futureSection.addClass('drag-over');
             this.lastHighlighted = futureSection as HTMLElement;
+        }
+    }
+
+    private checkAutoScroll(mouseY: number): void {
+        if (!this.scrollContainer) return;
+
+        const rect = this.scrollContainer.getBoundingClientRect();
+        const scrollThreshold = 50; // Pixels from edge to trigger scroll
+        const scrollSpeed = 10; // Pixels per scroll step
+
+        let shouldScrollUp = false;
+        let shouldScrollDown = false;
+
+        // Check if mouse is near the top or bottom edges of the timeline area
+        if (mouseY < rect.top + scrollThreshold) {
+            shouldScrollUp = true;
+        } else if (mouseY > rect.bottom - scrollThreshold) {
+            shouldScrollDown = true;
+        }
+
+        if (shouldScrollUp || shouldScrollDown) {
+            this.startAutoScroll(shouldScrollUp ? -scrollSpeed : scrollSpeed);
+        } else {
+            this.stopAutoScroll();
+        }
+    }
+
+    private startAutoScroll(direction: number): void {
+        // Don't start if already running in the same direction
+        if (this.autoScrollTimer !== null) return;
+
+        this.autoScrollTimer = window.setInterval(() => {
+            if (!this.scrollContainer) return;
+
+            this.scrollContainer.scrollTop += direction;
+
+            // Trigger drag update to keep task synced with scroll
+            // Use last known clientX/Y which are relative to viewport
+            this.processDragMove(this.lastClientX, this.lastClientY);
+
+            // Stop scrolling if we've reached the boundaries or if direction flipped (not handled here but implicitly safe)
+            if (direction < 0 && this.scrollContainer.scrollTop <= 0) {
+                this.stopAutoScroll();
+            } else if (direction > 0 &&
+                this.scrollContainer.scrollTop >=
+                this.scrollContainer.scrollHeight - this.scrollContainer.clientHeight) {
+                this.stopAutoScroll();
+            }
+        }, 16); // ~60fps for smooth scrolling
+    }
+
+    private stopAutoScroll(): void {
+        if (this.autoScrollTimer !== null) {
+            clearInterval(this.autoScrollTimer);
+            this.autoScrollTimer = null;
         }
     }
 }
