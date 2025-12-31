@@ -85,8 +85,13 @@ export class LongTermDragStrategy implements DragStrategy {
 
         this.initialWidth = el.getBoundingClientRect().width;
 
-        this.initialDate = task.startDate || DateUtils.getToday();
-        this.initialEndDate = task.endDate || task.startDate || DateUtils.getToday();
+        // Get view start date from DOM header to handle E/ED/D types correctly (spec: use view start date)
+        // Use existing 'grid' variable from line 78
+        const firstHeader = grid?.querySelector('.header-cell[data-date]');
+        const viewStartDate = firstHeader instanceof HTMLElement ? firstHeader.dataset.date : DateUtils.getToday();
+
+        this.initialDate = task.startDate || viewStartDate || DateUtils.getToday();
+        this.initialEndDate = task.endDate || this.initialDate;
         const diffDays = DateUtils.getDiffDays(this.initialDate, this.initialEndDate);
         this.initialSpan = diffDays + 1;
 
