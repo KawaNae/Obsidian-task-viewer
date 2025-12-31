@@ -316,24 +316,18 @@ export class MenuHandler {
         } else {
             const effectiveStartDate = task.startDate || implicitStartDate;
 
-            if (hasExplicitEnd && task.endDate !== effectiveStartDate) {
-                // Explicit endDate different from start
+            if (hasExplicitEnd) {
+                // Explicit endDate exists - always show it as explicit
                 if (hasEndTime) {
                     endText = `End: ${task.endDate}T${task.endTime}`;
                 } else {
-                    // SE, SED (Long-term) with different end date: implicit time
-                    // End date is explicit, end time is (startHour-1):59
+                    // SE, SED (Long-term): explicit date, implicit time
                     endText = `End: ${task.endDate}T(${endHourStr})`;
                 }
             } else if (hasEndTime) {
-                // Has endTime but endDate is same as start (or undefined)
-                const effectiveEndDate = task.endDate || effectiveStartDate;
-                if (!task.endDate || task.endDate === effectiveStartDate) {
-                    // Timed task same-day: show derived date + explicit time
-                    endText = `End: (${effectiveEndDate})T${task.endTime}`;
-                } else {
-                    endText = `End: ${effectiveEndDate}T${task.endTime}`;
-                }
+                // Has endTime but no endDate: derive date from start
+                const effectiveEndDate = effectiveStartDate;
+                endText = `End: (${effectiveEndDate})T${task.endTime}`;
             } else if (hasStartTime && !hasEndTime) {
                 // S-Timed type: implicit end = start + 1 hour
                 const [h, m] = task.startTime!.split(':').map(Number);
@@ -348,7 +342,7 @@ export class MenuHandler {
                 const implicitEndTime = `${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
                 endText = `End: (${endDateStr}T${implicitEndTime})`;
             } else {
-                // No endDate (or same as start) and no endTime
+                // No endDate and no endTime
                 // SD, S-All, D types: end = start day's startHour+23:59 (next day)
                 const nextDay = DateUtils.addDays(effectiveStartDate, 1);
                 endText = `End: (${nextDay}T${endHourStr})`;
