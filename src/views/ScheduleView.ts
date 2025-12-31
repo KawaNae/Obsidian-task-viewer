@@ -6,7 +6,7 @@ import { MenuHandler } from '../interaction/MenuHandler';
 import { DateUtils } from '../utils/DateUtils';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import TaskViewerPlugin from '../main';
-import { ViewUtils } from './ViewUtils';
+import { ViewUtils, FileFilterMenu } from './ViewUtils';
 
 export const VIEW_TYPE_SCHEDULE = 'schedule-view';
 
@@ -17,7 +17,7 @@ export class ScheduleView extends ItemView {
     private menuHandler: MenuHandler;
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
-    private visibleFiles: Set<string> | null = null;
+    private filterMenu = new FileFilterMenu();
 
     constructor(leaf: WorkspaceLeaf, taskIndex: TaskIndex, plugin: TaskViewerPlugin) {
         super(leaf);
@@ -91,8 +91,6 @@ export class ScheduleView extends ItemView {
         // Filter Button
         const filterBtn = toolbar.createEl('button', { text: 'Filter' });
         filterBtn.onclick = (e) => {
-            const menu = new Menu();
-
             // Calculate relevant files (Past Incomplete + Future Any)
             const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
             const futureDates = new Set<string>();
@@ -109,8 +107,6 @@ export class ScheduleView extends ItemView {
                 const taskDate = task.startDate;
                 if (!taskDate) return;
 
-
-                // Check completion status
                 const isLineCompleted = (char: string) => ['x', 'X', '!', '-'].includes(char);
                 const selfStatusChar = task.statusChar || ' ';
                 let isCompleted = isLineCompleted(selfStatusChar);
@@ -134,41 +130,12 @@ export class ScheduleView extends ItemView {
 
             const distinctFiles = Array.from(relevantFiles).sort();
 
-            distinctFiles.forEach(file => {
-                const isVisible = this.visibleFiles === null || this.visibleFiles.has(file);
-                const color = this.getFileColor(file);
-                const fileName = file.split('/').pop() || file;
-                menu.addItem(item => {
-                    item.setTitle(fileName)
-                        .setChecked(isVisible)
-                        .onClick(() => {
-                            if (this.visibleFiles === null) {
-                                this.visibleFiles = new Set(distinctFiles);
-                            }
-
-                            if (isVisible) {
-                                this.visibleFiles.delete(file);
-                            } else {
-                                this.visibleFiles.add(file);
-                            }
-
-                            if (this.visibleFiles.size === distinctFiles.length) {
-                                this.visibleFiles = null;
-                            }
-
-                            this.render();
-                        });
-
-                    item.setIcon('circle');
-                    const iconEl = (item as any).dom.querySelector('.menu-item-icon');
-                    if (iconEl && color) {
-                        iconEl.style.color = color;
-                        iconEl.style.fill = color;
-                    }
-                });
-            });
-
-            menu.showAtPosition({ x: e.pageX, y: e.pageY });
+            this.filterMenu.showMenu(
+                e,
+                distinctFiles,
+                (file) => this.getFileColor(file),
+                () => this.render()
+            );
         };
     }
 
@@ -265,7 +232,7 @@ export class ScheduleView extends ItemView {
             if (!taskDate) return;
 
             // Filter by visible files
-            if (this.visibleFiles && !this.visibleFiles.has(task.file)) {
+            if (!this.filterMenu.isFileVisible(task.file)) {
                 return;
             }
 

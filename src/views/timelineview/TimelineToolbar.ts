@@ -3,6 +3,7 @@ import { ViewState } from '../../types';
 import { TaskIndex } from '../../services/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
 import TaskViewerPlugin from '../../main';
+import { FileFilterMenu } from '../ViewUtils';
 
 export interface ToolbarCallbacks {
     onRender: () => void;
@@ -11,16 +12,12 @@ export interface ToolbarCallbacks {
     getDatesToShow: () => string[];
 }
 
-export interface FileFilterState {
-    visibleFiles: Set<string> | null;
-}
-
 /**
  * Manages the toolbar UI for TimelineView.
  * Handles date navigation, view mode switching, zoom controls, and file filtering.
  */
 export class TimelineToolbar {
-    private filterState: FileFilterState = { visibleFiles: null };
+    private filterMenu = new FileFilterMenu();
 
     constructor(
         private container: HTMLElement,
@@ -35,7 +32,7 @@ export class TimelineToolbar {
      * Gets the current visible files filter state.
      */
     getVisibleFiles(): Set<string> | null {
-        return this.filterState.visibleFiles;
+        return this.filterMenu.getVisibleFiles();
     }
 
     /**
@@ -115,56 +112,18 @@ export class TimelineToolbar {
     private renderFilterButton(toolbar: HTMLElement): void {
         const filterBtn = toolbar.createEl('button', { text: 'Filter' });
         filterBtn.onclick = (e) => {
-            const menu = new Menu();
-
             const dates = this.callbacks.getDatesToShow();
             const allTasksInView = dates.flatMap(date =>
                 this.taskIndex.getTasksForVisualDay(date, this.plugin.settings.startHour)
             );
             const distinctFiles = Array.from(new Set(allTasksInView.map(t => t.file))).sort();
 
-            distinctFiles.forEach(file => {
-                const isVisible = this.filterState.visibleFiles === null ||
-                    this.filterState.visibleFiles.has(file);
-                const color = this.callbacks.getFileColor(file);
-                const fileName = file.split('/').pop() || file;
-
-                menu.addItem(item => {
-                    item.setTitle(fileName)
-                        .setChecked(isVisible)
-                        .onClick(() => {
-                            if (this.filterState.visibleFiles === null) {
-                                this.filterState.visibleFiles = new Set(distinctFiles);
-                            }
-
-                            if (isVisible) {
-                                this.filterState.visibleFiles.delete(file);
-                            } else {
-                                this.filterState.visibleFiles.add(file);
-                            }
-
-                            if (this.filterState.visibleFiles.size === distinctFiles.length) {
-                                this.filterState.visibleFiles = null;
-                            }
-
-                            this.callbacks.onRender();
-                        });
-
-                    item.setIcon('circle');
-                    const iconEl = (item as any).dom.querySelector('.menu-item-icon');
-
-                    if (iconEl) {
-                        if (color) {
-                            iconEl.style.color = color;
-                            iconEl.style.fill = color;
-                        } else {
-                            iconEl.style.visibility = 'hidden';
-                        }
-                    }
-                });
-            });
-
-            menu.showAtPosition({ x: e.pageX, y: e.pageY });
+            this.filterMenu.showMenu(
+                e,
+                distinctFiles,
+                (file) => this.callbacks.getFileColor(file),
+                () => this.callbacks.onRender()
+            );
         };
     }
 

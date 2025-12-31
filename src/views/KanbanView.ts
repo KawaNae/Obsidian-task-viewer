@@ -4,7 +4,7 @@ import { TaskRenderer } from './TaskRenderer';
 import { Task, ViewState } from '../types';
 import { DateUtils } from '../utils/DateUtils';
 import TaskViewerPlugin from '../main';
-import { ViewUtils } from './ViewUtils';
+import { ViewUtils, FileFilterMenu } from './ViewUtils';
 
 export const VIEW_TYPE_KANBAN = 'kanban-view';
 
@@ -22,7 +22,7 @@ export class KanbanView extends ItemView {
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private viewState: ViewState;
-    private visibleFiles: Set<string> | null = null;
+    private filterMenu = new FileFilterMenu();
 
     private columns: KanbanColumn[] = [
         { id: 'todo', title: 'Todo', statusChar: ' ', status: 'todo' },
@@ -178,56 +178,17 @@ export class KanbanView extends ItemView {
         // Filter Button
         const filterBtn = toolbar.createEl('button', { text: 'Filter' });
         filterBtn.onclick = (e) => {
-            const menu = new Menu();
-
             // Get all tasks in current view range to determine available files
             const dates = this.getDatesToShow();
             const allTasksInView = dates.flatMap(date => this.taskIndex.getTasksForVisualDay(date, this.plugin.settings.startHour));
             const distinctFiles = Array.from(new Set(allTasksInView.map(t => t.file))).sort();
 
-            distinctFiles.forEach(file => {
-                const isVisible = this.visibleFiles === null || this.visibleFiles.has(file);
-                const color = this.getFileColor(file);
-                menu.addItem(item => {
-                    item.setTitle(file)
-                        .setChecked(isVisible)
-                        .onClick(() => {
-                            if (this.visibleFiles === null) {
-                                // Initialize with all currently visible files
-                                this.visibleFiles = new Set(distinctFiles);
-                            }
-
-                            if (isVisible) {
-                                this.visibleFiles.delete(file);
-                            } else {
-                                this.visibleFiles.add(file);
-                            }
-
-                            // If all checked, set to null
-                            if (this.visibleFiles.size === distinctFiles.length) {
-                                this.visibleFiles = null;
-                            }
-
-                            this.render();
-                        });
-
-                    // Always set icon to align text
-                    item.setIcon('circle');
-                    const iconEl = (item as any).dom.querySelector('.menu-item-icon');
-
-                    if (iconEl) {
-                        if (color) {
-                            iconEl.style.color = color;
-                            iconEl.style.fill = color;
-                        } else {
-                            // Hide icon but keep space
-                            iconEl.style.visibility = 'hidden';
-                        }
-                    }
-                });
-            });
-
-            menu.showAtPosition({ x: e.pageX, y: e.pageY });
+            this.filterMenu.showMenu(
+                e,
+                distinctFiles,
+                (file) => this.getFileColor(file),
+                () => this.render()
+            );
         };
     }
 
@@ -270,8 +231,9 @@ export class KanbanView extends ItemView {
         let tasks = dates.flatMap(date => this.taskIndex.getTasksForVisualDay(date, startHour));
 
         // Filter by File
-        if (this.visibleFiles) {
-            tasks = tasks.filter(t => this.visibleFiles!.has(t.file));
+        const visibleFiles = this.filterMenu.getVisibleFiles();
+        if (visibleFiles) {
+            tasks = tasks.filter(t => visibleFiles.has(t.file));
         }
 
         // Filter by Column Status
