@@ -1,4 +1,5 @@
 import { DragStrategy, DragContext } from '../DragStrategy';
+import { Notice } from 'obsidian';
 import { Task } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { createGhostElement, removeGhostElement } from '../GhostFactory';
@@ -193,6 +194,9 @@ export class LongTermDragStrategy implements DragStrategy {
             this.lastHighlighted = null;
         }
 
+        // Reset cursor immediately
+        document.body.style.cursor = '';
+
         // Clean up ghost element
         removeGhostElement(this.ghostEl);
         this.ghostEl = null;
@@ -217,20 +221,30 @@ export class LongTermDragStrategy implements DragStrategy {
         if (elBelow) {
             // Check for drop on Future section (LT→FU)
             const futureSection = elBelow.closest('.unassigned-section') || elBelow.closest('.future-section') || elBelow.closest('.header-bottom-right');
-            if (futureSection && this.mode === 'move' && !this.dragTask.deadline) {
-                // Convert to Future type: Remove start/end dates, set isFuture=true
-                const updates: Partial<Task> = {
-                    isFuture: true,
-                    startDate: undefined,
-                    startTime: undefined,
-                    endDate: undefined,
-                    endTime: undefined
-                };
-                await context.taskIndex.updateTask(this.dragTask.id, updates);
-                this.dragEl = null;
-                this.dragTask = null;
-                this.container = null;
-                return;
+            if (futureSection && this.mode === 'move') {
+                if (this.dragTask.deadline) {
+                    new Notice('DeadlineがあるタスクはFutureに移動できません');
+                    this.dragTask = null;
+                    this.dragEl = null;
+                    this.container = null;
+                    return;
+                }
+
+                if (!this.dragTask.deadline) {
+                    // Convert to Future type: Remove start/end dates, set isFuture=true
+                    const updates: Partial<Task> = {
+                        isFuture: true,
+                        startDate: undefined,
+                        startTime: undefined,
+                        endDate: undefined,
+                        endTime: undefined
+                    };
+                    await context.taskIndex.updateTask(this.dragTask.id, updates);
+                    this.dragEl = null;
+                    this.dragTask = null;
+                    this.container = null;
+                    return;
+                }
             }
 
             // Check for drop on Timeline section (LT→TL)
@@ -373,6 +387,10 @@ export class LongTermDragStrategy implements DragStrategy {
         const doc = context.container.ownerDocument || document;
         const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
 
+        // Reset cursor by default
+        document.body.style.cursor = '';
+        if (this.ghostEl) this.ghostEl.removeClass('is-invalid');
+
         // Clear previous highlight
         if (this.lastHighlighted) {
             this.lastHighlighted.removeClass('drag-over');
@@ -385,10 +403,15 @@ export class LongTermDragStrategy implements DragStrategy {
         const futureSection = elBelow.closest('.unassigned-section') || elBelow.closest('.future-section') || elBelow.closest('.header-bottom-right');
         const timelineCol = elBelow.closest('.day-timeline-column') as HTMLElement;
 
-        if (futureSection && !this.dragTask?.deadline) {
-            // Only allow Future drop if no deadline
-            futureSection.addClass('drag-over');
-            this.lastHighlighted = futureSection as HTMLElement;
+        if (futureSection) {
+            if (this.dragTask?.deadline) {
+                // Invalid drop: no highlight, just cursor
+                document.body.style.cursor = 'not-allowed';
+            } else {
+                // Valid drop
+                futureSection.addClass('drag-over');
+                this.lastHighlighted = futureSection as HTMLElement;
+            }
         } else if (timelineCol) {
             timelineCol.addClass('drag-over');
             this.lastHighlighted = timelineCol;

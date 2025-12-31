@@ -1,4 +1,5 @@
 import { DragStrategy, DragContext } from '../DragStrategy';
+import { Notice } from 'obsidian';
 import { Task } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { createGhostElement, removeGhostElement } from '../GhostFactory';
@@ -183,6 +184,9 @@ export class TimelineDragStrategy implements DragStrategy {
     }
 
     async onUp(e: PointerEvent, context: DragContext) {
+        // Reset cursor immediately
+        document.body.style.cursor = '';
+
         if (!this.dragTask || !this.dragEl || !this.currentDayDate) return;
 
         // Clear any remaining highlights
@@ -217,7 +221,14 @@ export class TimelineDragStrategy implements DragStrategy {
         if (elBelow) {
             // Check for drop on Future section (TL→FU) - only if no deadline
             const futureSection = elBelow.closest('.unassigned-section') || elBelow.closest('.future-section') || elBelow.closest('.header-bottom-right');
-            if (futureSection && !this.dragTask.deadline) {
+            if (futureSection) {
+                if (this.dragTask.deadline) {
+                    new Notice('DeadlineがあるタスクはFutureに移動できません');
+                    this.dragTask = null;
+                    this.dragEl = null;
+                    return;
+                }
+
                 const updates: Partial<Task> = {
                     isFuture: true,
                     startDate: undefined,
@@ -294,6 +305,9 @@ export class TimelineDragStrategy implements DragStrategy {
         const doc = context.container.ownerDocument || document;
         const elBelow = doc.elementFromPoint(clientX, clientY);
 
+        // Reset cursor by default
+        document.body.style.cursor = '';
+
         // Clear previous highlight
         if (this.lastHighlighted) {
             this.lastHighlighted.removeClass('drag-over');
@@ -305,10 +319,15 @@ export class TimelineDragStrategy implements DragStrategy {
         // Check for valid drop targets (only Future for timeline tasks)
         const futureSection = elBelow.closest('.unassigned-section') || elBelow.closest('.future-section') || elBelow.closest('.header-bottom-right');
 
-        if (futureSection && !this.dragTask?.deadline) {
-            // Only allow Future drop if no deadline
-            futureSection.addClass('drag-over');
-            this.lastHighlighted = futureSection as HTMLElement;
+        if (futureSection) {
+            if (this.dragTask?.deadline) {
+                // Invalid drop: no highlight, just cursor
+                document.body.style.cursor = 'not-allowed';
+            } else {
+                // Valid drop
+                futureSection.addClass('drag-over');
+                this.lastHighlighted = futureSection as HTMLElement;
+            }
         }
     }
 
