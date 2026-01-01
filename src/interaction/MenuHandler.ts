@@ -178,7 +178,7 @@ export class MenuHandler {
                 // But generally converting to D type (Deadline only) might be useful.
                 if (task.deadline) {
                     menu.addItem((item) => {
-                        item.setTitle('Move to Long Term (Convert to D-Type)')
+                        item.setTitle('Move to All Day (Deadline only)')
                             .setIcon('calendar-clock') // Icon for long term?
                             .onClick(async () => {
                                 await this.taskIndex.updateTask(task.id, {
