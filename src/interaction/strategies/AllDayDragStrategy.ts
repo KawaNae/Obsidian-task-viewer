@@ -155,7 +155,7 @@ export class AllDayDragStrategy implements DragStrategy {
             // Check if cursor is outside the long-term section
             const doc = context.container.ownerDocument || document;
             const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
-            const futureSection = elBelow?.closest('.unassigned-section') || elBelow?.closest('.future-section') || elBelow?.closest('.header-bottom-right');
+            const futureSection = elBelow?.closest('.future-section-grid') || elBelow?.closest('.future-content') || elBelow?.closest('.unassigned-task-list') || elBelow?.closest('.header-bottom-right');
             const timelineSection = elBelow?.closest('.day-timeline-column');
             const wasOutside = this.isOutsideSection;
             this.isOutsideSection = !!(futureSection || timelineSection);
@@ -263,7 +263,7 @@ export class AllDayDragStrategy implements DragStrategy {
 
         if (elBelow) {
             // Check for drop on Future section (LT→FU)
-            const futureSection = elBelow.closest('.unassigned-section') || elBelow.closest('.future-section') || elBelow.closest('.header-bottom-right');
+            const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-content') || elBelow.closest('.unassigned-task-list') || elBelow.closest('.header-bottom-right');
             if (futureSection && this.mode === 'move') {
                 if (this.dragTask.deadline) {
                     new Notice('DeadlineがあるタスクはFutureに移動できません');
@@ -468,7 +468,7 @@ export class AllDayDragStrategy implements DragStrategy {
         if (!elBelow) return;
 
         // Check for valid drop targets
-        const futureSection = elBelow.closest('.unassigned-section') || elBelow.closest('.future-section') || elBelow.closest('.header-bottom-right');
+        const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-content') || elBelow.closest('.unassigned-task-list') || elBelow.closest('.header-bottom-right');
         const timelineCol = elBelow.closest('.day-timeline-column') as HTMLElement;
 
         if (futureSection) {
@@ -477,8 +477,20 @@ export class AllDayDragStrategy implements DragStrategy {
                 document.body.style.cursor = 'not-allowed';
             } else {
                 // Valid drop
-                futureSection.addClass('drag-over');
-                this.lastHighlighted = futureSection as HTMLElement;
+                const futureGrid = futureSection.closest('.future-section-grid') || futureSection.querySelector('.future-section-grid') || (futureSection.hasClass('future-section-grid') ? futureSection : null);
+                let targetEl = futureSection;
+
+                if (futureGrid) {
+                    const content = futureGrid.querySelector('.future-content');
+                    if (content) targetEl = content as HTMLElement;
+                } else if (futureSection.hasClass('future-content')) {
+                    targetEl = futureSection;
+                } else if (futureSection.closest('.future-content')) {
+                    targetEl = futureSection.closest('.future-content') as HTMLElement;
+                }
+
+                targetEl.addClass('drag-over');
+                this.lastHighlighted = targetEl as HTMLElement;
             }
         } else if (timelineCol) {
             timelineCol.addClass('drag-over');

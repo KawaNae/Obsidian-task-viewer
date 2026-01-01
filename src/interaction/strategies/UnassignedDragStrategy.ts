@@ -69,27 +69,40 @@ export class UnassignedDragStrategy implements DragStrategy {
 
         // Determine Drop Target
         const doc = context.container.ownerDocument || document;
-        const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
+        const elements = doc.elementsFromPoint(e.clientX, e.clientY);
 
-        if (!elBelow) return;
+        if (elements.length === 0) return;
 
         const updates: Partial<Task> = {
             isFuture: false
         };
 
+        // Find targets in the stack
+        let allDayCell: HTMLElement | null = null;
+        let dayCol: HTMLElement | null = null;
+
+        for (const el of elements) {
+            const cell = el.closest('.all-day-cell') as HTMLElement;
+            if (cell && !cell.hasClass('all-day-axis')) {
+                allDayCell = cell;
+                break;
+            }
+            if (!dayCol) {
+                dayCol = el.closest('.day-timeline-column') as HTMLElement;
+            }
+        }
+
         // 1. All-Day Row Target
-        const allDayCell = elBelow.closest('.all-day-cell') as HTMLElement;
         if (allDayCell && allDayCell.dataset.date) {
             updates.startDate = allDayCell.dataset.date;
             updates.startTime = undefined;
             updates.endTime = undefined;
-            updates.endDate = undefined;
+            updates.endDate = undefined; // S-All tasks are single day (implied)
             await context.taskIndex.updateTask(this.dragTask.id, updates);
             return;
         }
 
         // 2. Timeline Column Target
-        const dayCol = elBelow.closest('.day-timeline-column') as HTMLElement;
         if (dayCol && dayCol.dataset.date) {
             updates.startDate = dayCol.dataset.date;
 
@@ -115,17 +128,30 @@ export class UnassignedDragStrategy implements DragStrategy {
 
     private updateDropZoneHighlight(e: PointerEvent, context: DragContext) {
         const doc = context.container.ownerDocument || document;
-        const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
+        // Use elementsFromPoint to handle overlapping elements (like other task cards)
+        const elements = doc.elementsFromPoint(e.clientX, e.clientY);
 
         if (this.lastHighlighted) {
             this.lastHighlighted.removeClass('drag-over');
             this.lastHighlighted = null;
         }
 
-        if (!elBelow) return;
+        if (elements.length === 0) return;
 
-        const allDayCell = elBelow.closest('.all-day-cell') as HTMLElement;
-        const timelineCol = elBelow.closest('.day-timeline-column') as HTMLElement;
+        // Find targets in the stack of elements
+        let allDayCell: HTMLElement | null = null;
+        let timelineCol: HTMLElement | null = null;
+
+        for (const el of elements) {
+            const cell = el.closest('.all-day-cell') as HTMLElement;
+            if (cell && !cell.hasClass('all-day-axis')) {
+                allDayCell = cell;
+                break; // Prioritize all-day cell if found
+            }
+            if (!timelineCol) {
+                timelineCol = el.closest('.day-timeline-column') as HTMLElement;
+            }
+        }
 
         if (allDayCell) {
             allDayCell.addClass('drag-over');
