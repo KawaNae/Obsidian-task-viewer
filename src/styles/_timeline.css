@@ -216,12 +216,67 @@
     /* Hide content */
 }
 
+/* All Day Row Collapsed State */
+.all-day-row.collapsed .all-day-cell:not(.all-day-axis) {
+    display: none;
+}
+
+.all-day-row.collapsed .all-day-axis {
+    grid-row: 1 / span 1 !important;
+}
+
+/* Hide all tasks and arrows when collapsed */
+.all-day-row.collapsed .task-card,
+.all-day-row.collapsed .all-day-task,
+.all-day-row.collapsed .deadline-arrow {
+    display: none !important;
+}
+
+/* Toggle Button Styles */
+.section-toggle-btn {
+    background: transparent;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-s);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 12px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin: 2px;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.section-toggle-btn:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+/* All Day Axis Cell Layout */
+.all-day-axis {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px;
+    padding-top: 4px;
+}
+
+.all-day-label {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-size: 0.8em;
+    color: var(--text-muted);
+}
+
 .unassigned-task-list {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    max-height: 200px;
-    overflow-y: auto;
+    /* No max-height - expand to fit all tasks */
 }
 
 /* --- Long Term Row Styles --- */

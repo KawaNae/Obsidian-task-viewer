@@ -28,10 +28,25 @@ export class FutureSectionRenderer {
 
         // 3. Bottom Left: Toggle
         const toggleCell = headerGrid.createDiv('header-grid-cell header-bottom-left');
-        // const toggleBtn = toggleCell.createEl('button', { text: '-' }); // TODO: Implement toggle
+        const toggleBtn = toggleCell.createEl('button', { cls: 'section-toggle-btn' });
+        toggleBtn.setText('−');
+        toggleBtn.setAttribute('aria-label', 'Toggle Future section');
 
         // 4. Bottom Right: Content
         const contentCell = headerGrid.createDiv('header-grid-cell header-bottom-right');
+
+        // Toggle functionality
+        toggleBtn.addEventListener('click', () => {
+            const isCollapsed = contentCell.hasClass('collapsed');
+            if (isCollapsed) {
+                contentCell.removeClass('collapsed');
+                toggleBtn.setText('−');
+            } else {
+                contentCell.addClass('collapsed');
+                toggleBtn.setText('+');
+            }
+        });
+
         const list = contentCell.createDiv('unassigned-task-list');
 
         // Get Future Tasks

@@ -71,11 +71,32 @@ export class GridRenderer {
         const allDayRow = grid.createDiv('timeline-row all-day-row');
         allDayRow.style.gridTemplateColumns = colTemplate;
 
-        // Time Axis All-Day
-        const axisCell = allDayRow.createDiv('all-day-cell');
-        axisCell.setText('All Day');
+        // Time Axis All-Day (with toggle button)
+        const axisCell = allDayRow.createDiv('all-day-cell all-day-axis');
+
+        // Toggle button
+        const toggleBtn = axisCell.createEl('button', { cls: 'section-toggle-btn' });
+        toggleBtn.setText('−');
+        toggleBtn.setAttribute('aria-label', 'Toggle All Day section');
+
+        // Label
+        const axisLabel = axisCell.createEl('span', { cls: 'all-day-label' });
+        axisLabel.setText('All Day');
+
         axisCell.style.gridColumn = '1';
         axisCell.style.gridRow = '1 / span 50'; // Span all implicit rows
+
+        // Toggle functionality
+        toggleBtn.addEventListener('click', () => {
+            const isCollapsed = allDayRow.hasClass('collapsed');
+            if (isCollapsed) {
+                allDayRow.removeClass('collapsed');
+                toggleBtn.setText('−');
+            } else {
+                allDayRow.addClass('collapsed');
+                toggleBtn.setText('+');
+            }
+        });
 
         // Background Cells (Grid Lines)
         dates.forEach((date, i) => {

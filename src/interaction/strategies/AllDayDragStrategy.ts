@@ -140,7 +140,14 @@ export class AllDayDragStrategy implements DragStrategy {
         // Convert pixels to days
         const snapPixels = this.colWidth;
         const rawDeltaX = deltaX;
-        const dayDelta = Math.round(rawDeltaX / snapPixels);
+        let dayDelta = Math.round(rawDeltaX / snapPixels);
+
+        // Clamp to prevent dragging before column 2 (axis cell is column 1)
+        const minColOffset = 2 - this.startCol; // How far left we can go before hitting axis
+        if (dayDelta < minColOffset) {
+            dayDelta = minColOffset;
+        }
+
         const snappedDeltaX = dayDelta * snapPixels;
 
         // Visual feedback based on mode
