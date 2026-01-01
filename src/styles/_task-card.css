@@ -257,7 +257,7 @@
     flex-shrink: 0;
 }
 
-.long-term-task {
+.all-day-task {
     /* Height auto is needed to adapt to content */
     height: auto !important;
 }

@@ -225,7 +225,7 @@
 }
 
 /* --- Long Term Row Styles --- */
-.long-term-row {
+.all-day-row {
     background-color: var(--background-primary);
     border-bottom: 2px solid var(--background-modifier-border);
     z-index: 20;
@@ -233,11 +233,11 @@
     overflow-y: hidden;
 }
 
-.long-term-row.drag-over {
+.all-day-row.drag-over {
     background-color: var(--background-modifier-hover);
 }
 
-.long-term-cell {
+.all-day-cell {
     border-right: 1px solid var(--background-modifier-border);
     min-height: var(--all-day-min-height);
     position: relative;
@@ -252,7 +252,7 @@
     transition: background-color 0.2s ease;
 }
 
-.long-term-cell.drag-over {
+.all-day-cell.drag-over {
     background-color: var(--background-modifier-hover);
     outline: 2px dashed var(--interactive-accent);
     outline-offset: -2px;

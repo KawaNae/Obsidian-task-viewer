@@ -6,7 +6,7 @@ import { DateUtils } from '../../../utils/DateUtils';
 import { HandleManager } from '../HandleManager';
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { FutureSectionRenderer } from './FutureSectionRenderer';
-import { LongTermSectionRenderer } from './LongTermSectionRenderer';
+import { AllDaySectionRenderer } from './AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './TimelineSectionRenderer';
 
 export class GridRenderer {
@@ -19,7 +19,7 @@ export class GridRenderer {
 
     public render(
         futureRenderer: FutureSectionRenderer,
-        longTermRenderer: LongTermSectionRenderer,
+        allDayRenderer: AllDaySectionRenderer,
         timelineRenderer: TimelineSectionRenderer,
         handleManager: HandleManager,
         getDatesToShow: () => string[],
@@ -87,7 +87,7 @@ export class GridRenderer {
         });
 
         // Render Tasks (Overlaid)
-        longTermRenderer.render(allDayRow, dates, owner, visibleFiles);
+        allDayRenderer.render(allDayRow, dates, owner, visibleFiles);
 
         // 3. Timeline Row (Scrollable)
         const scrollArea = grid.createDiv('timeline-row timeline-scroll-area');

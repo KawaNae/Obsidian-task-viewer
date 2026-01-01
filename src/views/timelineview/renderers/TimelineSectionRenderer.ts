@@ -27,8 +27,8 @@ export class TimelineSectionRenderer {
             if (!t.startTime) return false;
             // Only include tasks with duration < 24 hours
             const tStart = t.startDate || date;
-            const isLongTerm = DateUtils.isLongTermTask(tStart, t.startTime, t.endDate, t.endTime, startHour);
-            return !isLongTerm;
+            const isAllDay = DateUtils.isAllDayTask(tStart, t.startTime, t.endDate, t.endTime, startHour);
+            return !isAllDay;
         });
 
         // Filter

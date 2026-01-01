@@ -13,7 +13,7 @@ import { HandleManager } from './HandleManager';
 import { TimelineToolbar } from './TimelineToolbar';
 import { ViewUtils } from '../ViewUtils';
 import { GridRenderer } from './renderers/GridRenderer';
-import { LongTermSectionRenderer } from './renderers/LongTermSectionRenderer';
+import { AllDaySectionRenderer } from './renderers/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
 import { FutureSectionRenderer } from './renderers/FutureSectionRenderer';
 
@@ -42,7 +42,7 @@ export class TimelineView extends ItemView {
 
     // ==================== Renderers ====================
     private gridRenderer: GridRenderer;
-    private longTermRenderer: LongTermSectionRenderer;
+    private allDayRenderer: AllDaySectionRenderer;
     private timelineRenderer: TimelineSectionRenderer;
     private futureRenderer: FutureSectionRenderer;
 
@@ -131,7 +131,7 @@ export class TimelineView extends ItemView {
 
         // Initialize Renderers
         this.futureRenderer = new FutureSectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer);
-        this.longTermRenderer = new LongTermSectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow);
+        this.allDayRenderer = new AllDaySectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow);
         this.timelineRenderer = new TimelineSectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer);
         this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler);
 
@@ -244,7 +244,7 @@ export class TimelineView extends ItemView {
         // Use GridRenderer
         this.gridRenderer.render(
             this.futureRenderer,
-            this.longTermRenderer,
+            this.allDayRenderer,
             this.timelineRenderer,
             this.handleManager,
             () => this.getDatesToShow(),

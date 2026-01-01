@@ -122,14 +122,14 @@ export class DateUtils {
     /**
      * Check if a task duration is 24 hours or more
      */
-    static isLongTermTask(
+    static isAllDayTask(
         startDate: string,
         startTime: string | undefined,
         endDate: string | undefined,
         endTime: string | undefined,
         startHour: number
     ): boolean {
-        // Tasks without start time are always considered long-term (All Day)
+        // Tasks without start time are always considered All Day
         // This covers S-All, SD, ED, E, D types per README spec
         if (!startTime) return true;
 

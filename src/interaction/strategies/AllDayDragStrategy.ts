@@ -4,8 +4,8 @@ import { Task } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { createGhostElement, removeGhostElement } from '../GhostFactory';
 
-export class LongTermDragStrategy implements DragStrategy {
-    name = 'LongTerm';
+export class AllDayDragStrategy implements DragStrategy {
+    name = 'AllDay';
 
     private dragTask: Task | null = null;
     private dragEl: HTMLElement | null = null;

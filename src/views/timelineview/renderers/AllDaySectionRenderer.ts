@@ -9,7 +9,7 @@ import { TaskRenderer } from '../../TaskRenderer';
 import { HandleManager } from '../HandleManager';
 import { Task } from '../../../types';
 
-export class LongTermSectionRenderer {
+export class AllDaySectionRenderer {
     constructor(
         private taskIndex: TaskIndex,
         private plugin: TaskViewerPlugin,
@@ -29,7 +29,7 @@ export class LongTermSectionRenderer {
             const tStart = t.startDate || viewStart;
             const tEnd = t.endDate || tStart;
             if (!(tStart <= viewEnd && tEnd >= viewStart)) return false;
-            return DateUtils.isLongTermTask(tStart, t.startTime, t.endDate, t.endTime, startHour);
+            return DateUtils.isAllDayTask(tStart, t.startTime, t.endDate, t.endTime, startHour);
         });
 
         if (visibleFiles) {
@@ -97,7 +97,7 @@ export class LongTermSectionRenderer {
             // Render Task Card
             const el = container.createDiv('task-card all-day');
             if (task.endDate && task.endDate !== tStart) {
-                el.addClass('long-term-task');
+                el.addClass('all-day-task');
             }
             if (task.id === this.handleManager.getSelectedTaskId()) el.addClass('selected');
             el.dataset.id = task.id;

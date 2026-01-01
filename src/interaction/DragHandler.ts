@@ -3,7 +3,7 @@ import { Task } from '../types';
 import TaskViewerPlugin from '../main';
 import { DragStrategy, DragContext } from './DragStrategy';
 import { TimelineDragStrategy } from './strategies/TimelineDragStrategy';
-import { LongTermDragStrategy } from './strategies/LongTermDragStrategy';
+import { AllDayDragStrategy } from './strategies/AllDayDragStrategy';
 import { UnassignedDragStrategy } from './strategies/UnassignedDragStrategy';
 
 export class DragHandler implements DragContext {
@@ -105,7 +105,7 @@ export class DragHandler implements DragContext {
                 this.onTaskClick(taskId);
                 return;
             }
-            this.currentStrategy = new LongTermDragStrategy();
+            this.currentStrategy = new AllDayDragStrategy();
         } else {
             // Timeline tasks require handle to drag
             if (!isFromHandle) {
