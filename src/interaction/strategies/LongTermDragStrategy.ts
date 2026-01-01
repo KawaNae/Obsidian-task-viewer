@@ -28,6 +28,7 @@ export class LongTermDragStrategy implements DragStrategy {
     private lastHighlighted: HTMLElement | null = null;
     private isOutsideSection: boolean = false;
     private refHeaderCell: HTMLElement | null = null;
+    private initialGridColumn: string = '';
 
     // We rely on grid columns for snapping.
     // 1 col = 1 day.
@@ -107,6 +108,9 @@ export class LongTermDragStrategy implements DragStrategy {
             this.startCol = 2; // Default
         }
 
+        // Save initial gridColumn for potential reset on cancel
+        this.initialGridColumn = el.style.gridColumn;
+
         // Visual setup
         el.addClass('is-dragging');
         el.style.zIndex = '1000';
@@ -153,22 +157,30 @@ export class LongTermDragStrategy implements DragStrategy {
 
             // Update ghost and card visibility based on section
             if (this.isOutsideSection && this.ghostEl) {
-                // Outside LT section: show ghost, hide original visually
+                // Outside LT section: show ghost, reset original to initial position
                 this.ghostEl.style.opacity = '0.8';
                 this.ghostEl.style.left = `${e.clientX + 10}px`;
                 this.ghostEl.style.top = `${e.clientY + 10}px`;
                 this.dragEl.style.opacity = '0.3';
+
+                // Keep task card at initial position (no transform, original gridColumn)
+                this.dragEl.style.transform = '';
+                this.dragEl.style.gridColumn = this.initialGridColumn;
+
+                // Reset arrow to initial position
+                const originalEndLine = this.startCol + this.initialSpan;
+                this.updateArrowPosition(originalEndLine);
             } else if (this.ghostEl) {
                 // Inside LT section: hide ghost, move original
                 this.ghostEl.style.opacity = '0';
                 this.ghostEl.style.left = '-9999px';
                 this.dragEl.style.opacity = '';
                 this.dragEl.style.transform = `translateX(${snappedDeltaX}px)`;
-            }
 
-            // Update arrow: keep deadline end fixed, stretch arrow start
-            const newTaskEndLine = this.startCol + this.initialSpan + dayDelta;
-            this.updateArrowPosition(newTaskEndLine);
+                // Update arrow: keep deadline end fixed, stretch arrow start
+                const newTaskEndLine = this.startCol + this.initialSpan + dayDelta;
+                this.updateArrowPosition(newTaskEndLine);
+            }
 
             // Update cross-section drop zone highlighting
             this.updateDropZoneHighlight(e, context);
@@ -248,6 +260,8 @@ export class LongTermDragStrategy implements DragStrategy {
             if (futureSection && this.mode === 'move') {
                 if (this.dragTask.deadline) {
                     new Notice('DeadlineがあるタスクはFutureに移動できません');
+                    // Reset visual state before returning
+                    this.resetVisualState();
                     this.dragTask = null;
                     this.dragEl = null;
                     this.container = null;
@@ -330,17 +344,40 @@ export class LongTermDragStrategy implements DragStrategy {
             const duration = DateUtils.getDiffDays(oldStart, oldEnd);
             const newEnd = DateUtils.addDays(newStart, duration);
 
-            updates.startDate = newStart;
-            // If we move, it's no longer a floating start (implicit becomes explicit)
+            // Determine task type for proper conversion
+            const hasExplicitStart = !!this.dragTask.startDate;
+            const hasExplicitEnd = !!this.dragTask.endDate;
+            const hasDeadline = !!this.dragTask.deadline;
 
-            // Only set endDate if it was different or if we want to persist it
-            // If it was single day, duration 0. newEnd == newStart.
-            // If original had endDate, update it.
-            if (this.dragTask.endDate) {
+            if (hasExplicitStart && hasExplicitEnd) {
+                // SED/SE型: 両方の日付を更新
+                updates.startDate = newStart;
                 updates.endDate = newEnd;
+            } else if (hasExplicitStart && !hasExplicitEnd && hasDeadline) {
+                // SD型: startとendを設定してSED型に変換、deadlineはそのまま
+                updates.startDate = newStart;
+                updates.endDate = newEnd;
+            } else if (!hasExplicitStart && hasExplicitEnd && hasDeadline) {
+                // ED型: startとendを設定してSED型に変換、deadlineはそのまま
+                updates.startDate = newStart;
+                updates.endDate = newEnd;
+            } else if (!hasExplicitStart && hasExplicitEnd && !hasDeadline) {
+                // E型: startとendを設定してSE型に変換
+                updates.startDate = newStart;
+                updates.endDate = newEnd;
+            } else if (!hasExplicitStart && !hasExplicitEnd && hasDeadline) {
+                // D型: startを設定してS-All型に変換、deadlineはそのまま
+                updates.startDate = newStart;
+                // endDateは設定しない（S-All型は1日タスク）
+            } else if (hasExplicitStart && !hasExplicitEnd && !hasDeadline) {
+                // S-All型: startのみ更新
+                updates.startDate = newStart;
             } else {
-                // If implicit single day, we might keep implicit?
-                // But changing date might be fine.
+                // その他: startとendを更新
+                updates.startDate = newStart;
+                if (this.dragTask.endDate) {
+                    updates.endDate = newEnd;
+                }
             }
         } else if (this.mode === 'resize-right') {
             // Change End Date
@@ -439,6 +476,33 @@ export class LongTermDragStrategy implements DragStrategy {
         } else if (timelineCol) {
             timelineCol.addClass('drag-over');
             this.lastHighlighted = timelineCol;
+        }
+    }
+
+    /**
+     * Reset visual state when drag operation is cancelled.
+     * Restores gridColumn and arrow position to initial state.
+     */
+    private resetVisualState() {
+        if (!this.dragEl) return;
+
+        // Reset task card gridColumn
+        this.dragEl.style.gridColumn = this.initialGridColumn;
+        this.dragEl.style.transform = '';
+        this.dragEl.style.opacity = '';
+        this.dragEl.removeClass('is-dragging');
+
+        // Reset arrow position
+        if (this.container && this.dragEl.dataset.id) {
+            const taskId = this.dragEl.dataset.id;
+            const arrow = this.container.querySelector(`.deadline-arrow[data-task-id="${taskId}"]`) as HTMLElement;
+            if (arrow) {
+                // Reset arrow to original position based on initial span
+                const originalEndLine = this.startCol + this.initialSpan;
+                arrow.style.gridColumnStart = originalEndLine.toString();
+                arrow.style.transform = '';
+                arrow.style.display = '';
+            }
         }
     }
 }
