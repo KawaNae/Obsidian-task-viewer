@@ -1,0 +1,165 @@
+import { Component } from 'obsidian';
+import { ViewState } from '../../../types';
+import TaskViewerPlugin from '../../../main';
+import { MenuHandler } from '../../../interaction/MenuHandler';
+import { DateUtils } from '../../../utils/DateUtils';
+import { HandleManager } from '../HandleManager';
+import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
+import { FutureSectionRenderer } from './FutureSectionRenderer';
+import { LongTermSectionRenderer } from './LongTermSectionRenderer';
+import { TimelineSectionRenderer } from './TimelineSectionRenderer';
+
+export class GridRenderer {
+    constructor(
+        private container: HTMLElement,
+        private viewState: ViewState,
+        private plugin: TaskViewerPlugin,
+        private menuHandler: MenuHandler
+    ) { }
+
+    public render(
+        futureRenderer: FutureSectionRenderer,
+        longTermRenderer: LongTermSectionRenderer,
+        timelineRenderer: TimelineSectionRenderer,
+        handleManager: HandleManager,
+        getDatesToShow: () => string[],
+        owner: Component,
+        visibleFiles: Set<string> | null
+    ) {
+        const grid = this.container.createDiv('timeline-grid');
+        const dates = getDatesToShow();
+        const colTemplate = `30px repeat(${this.viewState.daysToShow}, minmax(0, 1fr))`;
+
+        // Set view start date for MenuHandler (for E, ED, D type implicit start display)
+        this.menuHandler.setViewStartDate(dates[0]);
+
+        // 0. Future Section (Header Grid)
+        futureRenderer.render(grid, owner, visibleFiles);
+
+        // 1. Header Row
+        const headerRow = grid.createDiv('timeline-row header-row');
+        headerRow.style.gridTemplateColumns = colTemplate;
+
+        // Time Axis Header
+        headerRow.createDiv('header-cell').setText(' ');
+        // Day Headers
+        dates.forEach(date => {
+            const cell = headerRow.createDiv('header-cell');
+            const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+            cell.setText(`${date} (${dayName})`);
+            cell.dataset.date = date;
+
+            // Add click listener to open daily note
+            cell.addEventListener('click', async () => {
+                const dateObj = new Date(date);
+                // Fix timezone offset for daily note creation
+                const [y, m, d] = date.split('-').map(Number);
+                dateObj.setFullYear(y, m - 1, d);
+                dateObj.setHours(0, 0, 0, 0);
+
+                let file = DailyNoteUtils.getDailyNote(this.plugin.app, dateObj);
+                if (!file) {
+                    file = await DailyNoteUtils.createDailyNote(this.plugin.app, dateObj);
+                }
+                if (file) {
+                    await this.plugin.app.workspace.getLeaf(false).openFile(file);
+                }
+            });
+        });
+
+        // 2. All-Day Row (Merged All-Day & Long-Term)
+        const allDayRow = grid.createDiv('timeline-row all-day-row');
+        allDayRow.style.gridTemplateColumns = colTemplate;
+
+        // Time Axis All-Day
+        const axisCell = allDayRow.createDiv('all-day-cell');
+        axisCell.setText('All Day');
+        axisCell.style.gridColumn = '1';
+        axisCell.style.gridRow = '1 / span 50'; // Span all implicit rows
+
+        // Background Cells (Grid Lines)
+        dates.forEach((date, i) => {
+            const cell = allDayRow.createDiv('all-day-cell');
+            cell.dataset.date = date;
+            cell.style.gridColumn = `${i + 2}`; // +2 because 1 is axis
+            cell.style.gridRow = '1 / span 50'; // Span implicit rows (large enough number)
+            cell.style.zIndex = '0';
+        });
+
+        // Render Tasks (Overlaid)
+        longTermRenderer.render(allDayRow, dates, owner, visibleFiles);
+
+        // 3. Timeline Row (Scrollable)
+        const scrollArea = grid.createDiv('timeline-row timeline-scroll-area');
+        scrollArea.style.gridTemplateColumns = colTemplate;
+
+        // Add scroll listener to update handles
+        scrollArea.addEventListener('scroll', () => {
+            handleManager.updatePositions();
+        });
+
+        // Time Axis Column
+        const timeCol = scrollArea.createDiv('time-axis-column');
+        this.renderTimeLabels(timeCol);
+
+        // Day Columns
+        dates.forEach(date => {
+            const col = scrollArea.createDiv('day-timeline-column');
+            col.dataset.date = date;
+            timelineRenderer.render(col, date, owner, visibleFiles);
+
+            // Add interaction listeners for creating tasks
+            timelineRenderer.addCreateTaskListeners(col, date);
+        });
+
+        // Restore scroll position (To be handled by caller or via specific method if passed)
+        // For now, TimelineView handles restoring scroll position via its lastScrollTop property logic, 
+        // which might need to happen after this render returns.
+    }
+
+    private renderTimeLabels(container: HTMLElement) {
+        const startHour = this.plugin.settings.startHour;
+        const zoomLevel = this.plugin.settings.zoomLevel;
+
+        for (let i = 0; i < 24; i++) {
+            const label = container.createDiv('time-label');
+            label.style.top = `${i * 60 * zoomLevel}px`;
+
+            // Display hour adjusted by startHour
+            let displayHour = startHour + i;
+            if (displayHour >= 24) displayHour -= 24;
+
+            label.setText(`${displayHour}`);
+        }
+    }
+
+    public renderCurrentTimeIndicator() {
+        // Remove existing indicators
+        const existingIndicators = this.container.querySelectorAll('.current-time-indicator');
+        existingIndicators.forEach(el => el.remove());
+
+        const now = new Date();
+        const startHour = this.plugin.settings.startHour;
+
+        // Calculate current time in minutes from midnight
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+        // Calculate minutes relative to the visual day start
+        let minutesFromStart = currentMinutes - (startHour * 60);
+        if (minutesFromStart < 0) {
+            minutesFromStart += 24 * 60;
+        }
+
+        // Use local date string to match the column data-date (which assumes local dates)
+        const visualDateString = DateUtils.getVisualDateOfNow(startHour);
+
+        // Find the column for this visual date
+        const dayCol = this.container.querySelector(`.day-timeline-column[data-date="${visualDateString}"]`) as HTMLElement;
+
+        if (dayCol) {
+            const indicator = dayCol.createDiv({ cls: 'current-time-indicator' });
+            const zoomLevel = this.plugin.settings.zoomLevel;
+            indicator.style.top = `${minutesFromStart * zoomLevel}px`;
+        }
+    }
+}
