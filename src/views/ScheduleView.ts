@@ -195,7 +195,7 @@ export class ScheduleView extends ItemView {
                 const cardWrapper = taskList.createDiv('schedule-task-wrapper');
                 const card = cardWrapper.createDiv('task-card');
                 if (!task.startTime) {
-                    card.addClass('all-day');
+                    card.addClass('all-day-task');
                 }
 
                 // Apply color

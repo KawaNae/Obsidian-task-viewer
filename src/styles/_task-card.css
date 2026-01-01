@@ -47,7 +47,7 @@
 
 /* Modifiers */
 /* Robust All-Day Task Styles */
-.task-card.all-day {
+.task-card.all-day-task {
     position: relative;
     left: 4px;
     width: calc(100% - 10px);
@@ -56,7 +56,7 @@
 }
 
 /* Ensure all-day tasks in timeline stay relative even with the absolute rule above */
-.task-viewer-container .task-card.all-day {
+.task-viewer-container .task-card.all-day-task {
     position: relative;
 }
 
@@ -257,7 +257,7 @@
     flex-shrink: 0;
 }
 
-.all-day-task {
+.all-day-task.multi-day {
     /* Height auto is needed to adapt to content */
     height: auto !important;
 }
