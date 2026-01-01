@@ -17,32 +17,29 @@ export class FutureSectionRenderer {
     ) { }
 
     public render(container: HTMLElement, owner: Component, visibleFiles: Set<string> | null) {
-        const headerGrid = container.createDiv('timeline-header-grid');
+        const headerGrid = container.createDiv('future-section-grid');
 
-        // 1. Top Left: Spacer
-        headerGrid.createDiv('header-grid-cell header-top-left');
+        // Left: Toggle + Label
+        const axisCell = headerGrid.createDiv('future-axis');
 
-        // 2. Top Right: Label
-        const label = headerGrid.createDiv('header-grid-cell header-top-right');
-        label.setText('Future / Unassigned');
-
-        // 3. Bottom Left: Toggle
-        const toggleCell = headerGrid.createDiv('header-grid-cell header-bottom-left');
-        const toggleBtn = toggleCell.createEl('button', { cls: 'section-toggle-btn' });
+        const toggleBtn = axisCell.createEl('button', { cls: 'section-toggle-btn' });
         toggleBtn.setText('−');
         toggleBtn.setAttribute('aria-label', 'Toggle Future section');
 
-        // 4. Bottom Right: Content
-        const contentCell = headerGrid.createDiv('header-grid-cell header-bottom-right');
+        const axisLabel = axisCell.createEl('span', { cls: 'future-label' });
+        axisLabel.setText('Future');
+
+        // Right: Content
+        const contentCell = headerGrid.createDiv('future-content');
 
         // Toggle functionality
         toggleBtn.addEventListener('click', () => {
-            const isCollapsed = contentCell.hasClass('collapsed');
+            const isCollapsed = headerGrid.hasClass('collapsed');
             if (isCollapsed) {
-                contentCell.removeClass('collapsed');
+                headerGrid.removeClass('collapsed');
                 toggleBtn.setText('−');
             } else {
-                contentCell.addClass('collapsed');
+                headerGrid.addClass('collapsed');
                 toggleBtn.setText('+');
             }
         });

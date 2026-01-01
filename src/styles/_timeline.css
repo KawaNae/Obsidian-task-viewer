@@ -65,6 +65,20 @@
     /* Don't shrink */
     overflow-y: hidden;
     /* No scrollbar, but gutter reserves space */
+    position: relative;
+}
+
+/* Spacer for Row 1 (Padding Top) */
+.all-day-row::before {
+    content: '';
+    grid-column: 1 / -1;
+    grid-row: 1;
+    height: 3px;
+    z-index: -1;
+}
+
+.all-day-row.collapsed::before {
+    display: none;
 }
 
 .all-day-cell {
@@ -139,18 +153,64 @@
     overflow-x: auto;
 }
 
-/* --- Timeline Header Grid (2x2) --- */
-.timeline-header-grid {
+/* --- Future Section Grid --- */
+.future-section-grid {
     display: grid;
-    /* Left Column fixed 30px to match timeline time axis */
     grid-template-columns: 30px minmax(0, 1fr);
-    grid-template-rows: auto auto;
-    /* Header Row, Toggle/Content Row */
     width: 100%;
     z-index: 50;
     border-bottom: 1px solid var(--background-modifier-border);
-    margin-bottom: 0;
     background-color: var(--background-primary);
+}
+
+.future-axis {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px;
+    padding-top: 4px;
+    border-right: 1px solid var(--background-modifier-border);
+    background-color: var(--background-secondary);
+}
+
+.future-label {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-size: 0.8em;
+    color: var(--text-muted);
+    padding-bottom: 6px;
+}
+
+.future-content {
+    padding: 5px;
+    background-color: var(--background-primary);
+}
+
+/* Future collapsed state */
+.future-section-grid.collapsed .future-content {
+    display: none;
+}
+
+.future-section-grid.collapsed .future-label {
+    display: none;
+}
+
+.future-section-grid.collapsed .future-axis {
+    min-height: 36px;
+}
+
+/* Show horizontal label when collapsed */
+.future-section-grid.collapsed::after {
+    content: 'Future';
+    grid-column: 2;
+    padding: 6px 12px;
+    color: var(--text-muted);
+    font-size: 0.85em;
+    opacity: 0.6;
+    display: flex;
+    align-items: center;
+    min-height: 24px;
 }
 
 .header-grid-cell {
@@ -232,6 +292,27 @@
     display: none !important;
 }
 
+.all-day-row.collapsed .all-day-label {
+    display: none;
+}
+
+.all-day-row.collapsed .all-day-axis {
+    min-height: 36px;
+}
+
+/* Show horizontal label when collapsed */
+.all-day-row.collapsed::after {
+    content: 'All Day';
+    grid-column: 2;
+    padding: 6px 12px;
+    color: var(--text-muted);
+    font-size: 0.85em;
+    opacity: 0.6;
+    display: flex;
+    align-items: center;
+    min-height: 24px;
+}
+
 /* Toggle Button Styles */
 .section-toggle-btn {
     background: transparent;
@@ -263,6 +344,7 @@
     justify-content: flex-start;
     gap: 2px;
     padding-top: 4px;
+    background-color: var(--background-secondary);
 }
 
 .all-day-label {
@@ -270,6 +352,7 @@
     text-orientation: mixed;
     font-size: 0.8em;
     color: var(--text-muted);
+    padding-bottom: 6px;
 }
 
 .unassigned-task-list {

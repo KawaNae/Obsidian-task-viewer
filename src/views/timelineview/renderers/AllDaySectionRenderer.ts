@@ -129,7 +129,7 @@ export class AllDaySectionRenderer {
             if (span < 1) return;
 
             el.style.gridColumn = `${colStart} / span ${span}`;
-            el.style.gridRow = `${trackIndex + 1}`;
+            el.style.gridRow = `${trackIndex + 2}`; // +2 to leave padding row at top
             el.style.zIndex = '10';
 
             if (deadlineLine) {
@@ -149,7 +149,7 @@ export class AllDaySectionRenderer {
     ) {
         const arrowEl = container.createDiv('deadline-arrow');
         arrowEl.dataset.taskId = task.id;
-        arrowEl.style.gridRow = (rowIndex + 1).toString();
+        arrowEl.style.gridRow = (rowIndex + 2).toString(); // +2 to match task offset
         arrowEl.style.gridColumnStart = taskEndLine.toString();
         arrowEl.style.gridColumnEnd = deadlineLine.toString();
         arrowEl.title = `Deadline: ${task.deadline}`;
