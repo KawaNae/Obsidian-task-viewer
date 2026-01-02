@@ -262,11 +262,6 @@ export class TimelineView extends ItemView {
         this.handleManager.createOverlay();
         this.renderCurrentTimeIndicator();
 
-        const selectedTaskId = this.handleManager.getSelectedTaskId();
-        if (selectedTaskId) {
-            this.handleManager.selectTask(selectedTaskId);
-        }
-
         // Restore scroll position
         const newScrollArea = this.container.querySelector('.timeline-scroll-area');
         if (newScrollArea && this.lastScrollTop > 0) {
@@ -287,6 +282,15 @@ export class TimelineView extends ItemView {
             newAllDayRow.addClass('collapsed');
             const toggleBtn = newAllDayRow.querySelector('.section-toggle-btn');
             if (toggleBtn) toggleBtn.setText('+');
+        }
+
+        // Restore selected task handles AFTER scroll/toggle restoration
+        // Use requestAnimationFrame to ensure layout is complete
+        const selectedTaskId = this.handleManager.getSelectedTaskId();
+        if (selectedTaskId) {
+            requestAnimationFrame(() => {
+                this.handleManager.selectTask(selectedTaskId);
+            });
         }
     }
 

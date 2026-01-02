@@ -249,12 +249,13 @@
     position: relative !important;
     top: auto !important;
     left: auto !important;
-    width: 200px !important;
+    width: 100% !important;
     height: auto !important;
     margin-bottom: 0 !important;
     transform: none !important;
     min-height: auto;
-    flex-shrink: 0;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .all-day-task.multi-day {

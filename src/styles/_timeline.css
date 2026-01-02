@@ -56,6 +56,29 @@
     text-decoration: underline;
 }
 
+/* Today's date highlight - using pseudo-element for theme compatibility */
+.header-cell.is-today {
+    position: relative;
+    z-index: 1;
+}
+
+.header-cell.is-today::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--interactive-accent);
+    opacity: 0.9;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.header-cell.is-today:hover::after {
+    opacity: 1;
+}
+
 /* 2. All-Day Row */
 .all-day-row {
     background-color: var(--background-primary);
@@ -356,8 +379,8 @@
 }
 
 .unassigned-task-list {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 8px;
     /* No max-height - expand to fit all tasks */
 }

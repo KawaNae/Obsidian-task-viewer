@@ -42,11 +42,19 @@ export class GridRenderer {
 
         // Time Axis Header
         headerRow.createDiv('header-cell').setText(' ');
+        // Get today's visual date for highlighting
+        const todayVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+
         // Day Headers
         dates.forEach(date => {
             const cell = headerRow.createDiv('header-cell');
             const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
             cell.setText(`${date} (${dayName})`);
+            
+            // Highlight today's date
+            if (date === todayVisualDate) {
+                cell.addClass('is-today');
+            }
             cell.dataset.date = date;
 
             // Add click listener to open daily note
