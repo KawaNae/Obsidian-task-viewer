@@ -228,10 +228,17 @@ export class TimelineView extends ItemView {
 
     private render() {
 
+        // Save scroll position
         const scrollArea = this.container.querySelector('.timeline-scroll-area');
         if (scrollArea) {
             this.lastScrollTop = scrollArea.scrollTop;
         }
+
+        // Save toggle states
+        const futureSection = this.container.querySelector('.future-section-grid');
+        const allDayRow = this.container.querySelector('.all-day-row');
+        const wasFutureCollapsed = futureSection?.hasClass('collapsed') || false;
+        const wasAllDayCollapsed = allDayRow?.hasClass('collapsed') || false;
 
         this.container.empty();
 
@@ -258,6 +265,28 @@ export class TimelineView extends ItemView {
         const selectedTaskId = this.handleManager.getSelectedTaskId();
         if (selectedTaskId) {
             this.handleManager.selectTask(selectedTaskId);
+        }
+
+        // Restore scroll position
+        const newScrollArea = this.container.querySelector('.timeline-scroll-area');
+        if (newScrollArea && this.lastScrollTop > 0) {
+            newScrollArea.scrollTop = this.lastScrollTop;
+        }
+
+        // Restore toggle states
+        const newFutureSection = this.container.querySelector('.future-section-grid');
+        const newAllDayRow = this.container.querySelector('.all-day-row');
+
+        if (wasFutureCollapsed && newFutureSection) {
+            newFutureSection.addClass('collapsed');
+            const toggleBtn = newFutureSection.querySelector('.section-toggle-btn');
+            if (toggleBtn) toggleBtn.setText('+');
+        }
+
+        if (wasAllDayCollapsed && newAllDayRow) {
+            newAllDayRow.addClass('collapsed');
+            const toggleBtn = newAllDayRow.querySelector('.section-toggle-btn');
+            if (toggleBtn) toggleBtn.setText('+');
         }
     }
 

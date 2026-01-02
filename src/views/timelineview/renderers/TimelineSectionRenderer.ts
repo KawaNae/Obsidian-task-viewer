@@ -96,7 +96,7 @@ export class TimelineSectionRenderer {
 
             el.style.top = `${(relativeStart * zoomLevel) + 1}px`;
             el.style.height = `${(duration * zoomLevel) - 3}px`;
-            el.style.width = `calc((100% - 8px) * ${widthFraction} - 2px)`;
+            el.style.width = `calc((100% - 8px) * ${widthFraction})`;
             el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
             el.style.setProperty('--initial-height', `${duration * zoomLevel}px`);
 
