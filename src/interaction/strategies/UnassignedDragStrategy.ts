@@ -82,8 +82,8 @@ export class UnassignedDragStrategy implements DragStrategy {
         let dayCol: HTMLElement | null = null;
 
         for (const el of elements) {
-            const cell = el.closest('.all-day-cell') as HTMLElement;
-            if (cell && !cell.hasClass('all-day-axis')) {
+            const cell = el.closest('.allday-section__cell') as HTMLElement;
+            if (cell && !cell.hasClass('allday-section__axis')) {
                 allDayCell = cell;
                 break;
             }
@@ -143,8 +143,8 @@ export class UnassignedDragStrategy implements DragStrategy {
         let timelineCol: HTMLElement | null = null;
 
         for (const el of elements) {
-            const cell = el.closest('.all-day-cell') as HTMLElement;
-            if (cell && !cell.hasClass('all-day-axis')) {
+            const cell = el.closest('.allday-section__cell') as HTMLElement;
+            if (cell && !cell.hasClass('allday-section__axis')) {
                 allDayCell = cell;
                 break; // Prioritize all-day cell if found
             }

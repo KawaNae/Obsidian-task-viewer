@@ -236,7 +236,7 @@ export class TimelineView extends ItemView {
 
         // Save toggle states
         const futureSection = this.container.querySelector('.future-section-grid');
-        const allDayRow = this.container.querySelector('.all-day-row');
+        const allDayRow = this.container.querySelector('.allday-section');
         const wasFutureCollapsed = futureSection?.hasClass('collapsed') || false;
         const wasAllDayCollapsed = allDayRow?.hasClass('collapsed') || false;
 
@@ -270,7 +270,7 @@ export class TimelineView extends ItemView {
 
         // Restore toggle states
         const newFutureSection = this.container.querySelector('.future-section-grid');
-        const newAllDayRow = this.container.querySelector('.all-day-row');
+        const newAllDayRow = this.container.querySelector('.allday-section');
 
         if (wasFutureCollapsed && newFutureSection) {
             newFutureSection.addClass('collapsed');

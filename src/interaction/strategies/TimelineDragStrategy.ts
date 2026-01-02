@@ -162,7 +162,7 @@ export class TimelineDragStrategy implements DragStrategy {
         // Update cross-section drop zone highlighting only during move
         if (this.mode === 'move') {
             // Check if cursor is outside the timeline section (over Future area)
-            const futureSection = elBelow?.closest('.future-section-grid') || elBelow?.closest('.future-content') || elBelow?.closest('.unassigned-task-list') || elBelow?.closest('.header-bottom-right');
+            const futureSection = elBelow?.closest('.future-section-grid') || elBelow?.closest('.future-section__content') || elBelow?.closest('.future-section__list');
             this.isOutsideSection = !!futureSection;
 
             // Update ghost and card visibility based on section
@@ -220,7 +220,7 @@ export class TimelineDragStrategy implements DragStrategy {
 
         if (elBelow) {
             // Check for drop on Future section (TL→FU) - only if no deadline
-            const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-content') || elBelow.closest('.unassigned-task-list') || elBelow.closest('.header-bottom-right');
+            const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-section__content') || elBelow.closest('.future-section__list');
             if (futureSection) {
                 if (this.dragTask.deadline) {
                     new Notice('DeadlineがあるタスクはFutureに移動できません');
@@ -317,24 +317,24 @@ export class TimelineDragStrategy implements DragStrategy {
         if (!elBelow) return;
 
         // Check for valid drop targets (only Future for timeline tasks)
-        const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-content') || elBelow.closest('.unassigned-task-list') || elBelow.closest('.header-bottom-right');
+        const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-section__content') || elBelow.closest('.future-section__list');
 
         if (futureSection) {
             if (this.dragTask?.deadline) {
                 // Invalid drop: no highlight, just cursor
                 document.body.style.cursor = 'not-allowed';
             } else {
-                // Valid drop - Target .future-content for highlight if possible
+                // Valid drop - Target .future-section__content for highlight if possible
                 let targetEl = futureSection;
                 const futureGrid = futureSection.closest('.future-section-grid') || futureSection.querySelector('.future-section-grid') || (futureSection.hasClass('future-section-grid') ? futureSection : null);
 
                 if (futureGrid) {
-                    const content = futureGrid.querySelector('.future-content');
+                    const content = futureGrid.querySelector('.future-section__content');
                     if (content) targetEl = content as HTMLElement;
-                } else if (futureSection.hasClass('future-content')) {
+                } else if (futureSection.hasClass('future-section__content')) {
                     targetEl = futureSection;
-                } else if (futureSection.closest('.future-content')) {
-                    targetEl = futureSection.closest('.future-content') as HTMLElement;
+                } else if (futureSection.closest('.future-section__content')) {
+                    targetEl = futureSection.closest('.future-section__content') as HTMLElement;
                 }
 
                 targetEl.addClass('drag-over');

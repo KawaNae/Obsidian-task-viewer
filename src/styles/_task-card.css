@@ -47,16 +47,16 @@
 
 /* Modifiers */
 /* Robust All-Day Task Styles */
-.task-card.all-day-task {
+.task-card.task-card--allday {
     position: relative;
     left: 4px;
     width: calc(100% - 10px);
     padding: 4px 2px 4px 8px !important;
-    z-index: var(--z-all-day);
+    z-index: var(--z-allday);
 }
 
 /* Ensure all-day tasks in timeline stay relative even with the absolute rule above */
-.task-viewer-container .task-card.all-day-task {
+.task-viewer-container .task-card.task-card--allday {
     position: relative;
 }
 
@@ -245,7 +245,7 @@
     cursor: move;
 }
 
-.future-task-card {
+.task-card--future {
     position: relative !important;
     top: auto !important;
     left: auto !important;
@@ -258,7 +258,7 @@
     overflow: hidden;
 }
 
-.all-day-task.multi-day {
+.task-card--allday.multi-day {
     /* Height auto is needed to adapt to content */
     height: auto !important;
 }

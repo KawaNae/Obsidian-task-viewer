@@ -36,21 +36,21 @@ export class GridRenderer {
         // 0. Future Section (Header Grid)
         futureRenderer.render(grid, owner, visibleFiles);
 
-        // 1. Header Row
-        const headerRow = grid.createDiv('timeline-row header-row');
+        // 1. Date Header Row
+        const headerRow = grid.createDiv('timeline-row date-header');
         headerRow.style.gridTemplateColumns = colTemplate;
 
         // Time Axis Header
-        headerRow.createDiv('header-cell').setText(' ');
+        headerRow.createDiv('date-header__cell').setText(' ');
         // Get today's visual date for highlighting
         const todayVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
 
         // Day Headers
         dates.forEach(date => {
-            const cell = headerRow.createDiv('header-cell');
+            const cell = headerRow.createDiv('date-header__cell');
             const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
             cell.setText(`${date} (${dayName})`);
-            
+
             // Highlight today's date
             if (date === todayVisualDate) {
                 cell.addClass('is-today');
@@ -76,11 +76,11 @@ export class GridRenderer {
         });
 
         // 2. All-Day Row (Merged All-Day & Long-Term)
-        const allDayRow = grid.createDiv('timeline-row all-day-row');
+        const allDayRow = grid.createDiv('timeline-row allday-section');
         allDayRow.style.gridTemplateColumns = colTemplate;
 
         // Time Axis All-Day (with toggle button)
-        const axisCell = allDayRow.createDiv('all-day-cell all-day-axis');
+        const axisCell = allDayRow.createDiv('allday-section__cell allday-section__axis');
 
         // Toggle button
         const toggleBtn = axisCell.createEl('button', { cls: 'section-toggle-btn' });
@@ -88,7 +88,7 @@ export class GridRenderer {
         toggleBtn.setAttribute('aria-label', 'Toggle All Day section');
 
         // Label
-        const axisLabel = axisCell.createEl('span', { cls: 'all-day-label' });
+        const axisLabel = axisCell.createEl('span', { cls: 'allday-section__label' });
         axisLabel.setText('All Day');
 
         axisCell.style.gridColumn = '1';
@@ -108,7 +108,7 @@ export class GridRenderer {
 
         // Background Cells (Grid Lines)
         dates.forEach((date, i) => {
-            const cell = allDayRow.createDiv('all-day-cell');
+            const cell = allDayRow.createDiv('allday-section__cell');
             cell.dataset.date = date;
             cell.style.gridColumn = `${i + 2}`; // +2 because 1 is axis
             cell.style.gridRow = '1 / span 50'; // Span implicit rows (large enough number)

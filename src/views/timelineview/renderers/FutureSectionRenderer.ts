@@ -20,17 +20,17 @@ export class FutureSectionRenderer {
         const headerGrid = container.createDiv('future-section-grid');
 
         // Left: Toggle + Label
-        const axisCell = headerGrid.createDiv('future-axis');
+        const axisCell = headerGrid.createDiv('future-section__axis');
 
         const toggleBtn = axisCell.createEl('button', { cls: 'section-toggle-btn' });
         toggleBtn.setText('−');
         toggleBtn.setAttribute('aria-label', 'Toggle Future section');
 
-        const axisLabel = axisCell.createEl('span', { cls: 'future-label' });
+        const axisLabel = axisCell.createEl('span', { cls: 'future-section__label' });
         axisLabel.setText('Future');
 
         // Right: Content
-        const contentCell = headerGrid.createDiv('future-content');
+        const contentCell = headerGrid.createDiv('future-section__content');
 
         // Toggle functionality
         toggleBtn.addEventListener('click', () => {
@@ -44,7 +44,7 @@ export class FutureSectionRenderer {
             }
         });
 
-        const list = contentCell.createDiv('unassigned-task-list');
+        const list = contentCell.createDiv('future-section__list');
 
         // Get Future Tasks
         const futureTasks = this.taskIndex.getTasks().filter(t => t.isFuture);
@@ -56,7 +56,7 @@ export class FutureSectionRenderer {
             : futureTasks;
 
         filteredFutureTasks.forEach(task => {
-            const el = list.createDiv('task-card future-task-card');
+            const el = list.createDiv('task-card task-card--future');
             if (task.id === this.handleManager.getSelectedTaskId()) el.addClass('selected');
             el.dataset.id = task.id;
 

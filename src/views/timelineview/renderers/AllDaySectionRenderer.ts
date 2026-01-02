@@ -95,7 +95,7 @@ export class AllDaySectionRenderer {
             }
 
             // Render Task Card
-            const el = container.createDiv('task-card all-day-task');
+            const el = container.createDiv('task-card task-card--allday');
             if (task.endDate && task.endDate !== tStart) {
                 el.addClass('multi-day'); // Multi-day task marker
             }

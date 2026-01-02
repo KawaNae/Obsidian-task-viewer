@@ -4,7 +4,7 @@
     --hour-height: 60px;
     --time-axis-width: 30px;
     --header-height: 30px;
-    --all-day-min-height: 40px;
+    --allday-min-height: 40px;
 
     /* Task Card */
     --task-card-padding: 0.8em 2px 4px 8px;
@@ -35,7 +35,7 @@
     --z-task-card-hover: 6;
     --z-current-time: 15;
     --z-handle: 20;
-    --z-all-day: 25;
+    --z-allday: 25;
     --z-header: 30;
     --z-overlay: 1000;
 }

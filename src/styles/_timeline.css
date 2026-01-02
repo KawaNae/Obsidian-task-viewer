@@ -22,8 +22,8 @@
     scrollbar-gutter: auto;
 }
 
-/* 1. Header Row */
-.header-row {
+/* 1. Date Header Row */
+.date-header {
     background-color: var(--background-secondary);
     border-bottom: 1px solid var(--background-modifier-border);
     z-index: 30;
@@ -33,7 +33,7 @@
     /* No scrollbar, but gutter reserves space */
 }
 
-.header-cell {
+.date-header__cell {
     border-right: 1px solid var(--background-modifier-border);
     padding: 2px;
     text-align: center;
@@ -50,19 +50,19 @@
     transition: background-color 0.2s ease;
 }
 
-.header-cell:hover {
+.date-header__cell:hover {
     background-color: var(--background-modifier-hover);
     color: var(--text-normal);
     text-decoration: underline;
 }
 
 /* Today's date highlight - using pseudo-element for theme compatibility */
-.header-cell.is-today {
+.date-header__cell.is-today {
     position: relative;
     z-index: 1;
 }
 
-.header-cell.is-today::after {
+.date-header__cell.is-today::after {
     content: '';
     position: absolute;
     top: 0;
@@ -75,12 +75,12 @@
     pointer-events: none;
 }
 
-.header-cell.is-today:hover::after {
+.date-header__cell.is-today:hover::after {
     opacity: 1;
 }
 
 /* 2. All-Day Row */
-.all-day-row {
+.allday-section {
     background-color: var(--background-primary);
     border-bottom: 2px solid var(--background-modifier-border);
     z-index: 20;
@@ -92,7 +92,7 @@
 }
 
 /* Spacer for Row 1 (Padding Top) */
-.all-day-row::before {
+.allday-section::before {
     content: '';
     grid-column: 1 / -1;
     grid-row: 1;
@@ -100,13 +100,13 @@
     z-index: -1;
 }
 
-.all-day-row.collapsed::before {
+.allday-section.collapsed::before {
     display: none;
 }
 
-.all-day-cell {
+.allday-section__cell {
     border-right: 1px solid var(--background-modifier-border);
-    min-height: var(--all-day-min-height);
+    min-height: var(--allday-min-height);
     position: relative;
     padding: 3px 0 2px 0;
     min-width: 0;
@@ -186,7 +186,7 @@
     background-color: var(--background-primary);
 }
 
-.future-axis {
+.future-section__axis {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -197,7 +197,7 @@
     background-color: var(--background-secondary);
 }
 
-.future-label {
+.future-section__label {
     writing-mode: vertical-rl;
     text-orientation: mixed;
     font-size: 0.8em;
@@ -205,21 +205,21 @@
     padding-bottom: 6px;
 }
 
-.future-content {
+.future-section__content {
     padding: 5px;
     background-color: var(--background-primary);
 }
 
 /* Future collapsed state */
-.future-section-grid.collapsed .future-content {
+.future-section-grid.collapsed .future-section__content {
     display: none;
 }
 
-.future-section-grid.collapsed .future-label {
+.future-section-grid.collapsed .future-section__label {
     display: none;
 }
 
-.future-section-grid.collapsed .future-axis {
+.future-section-grid.collapsed .future-section__axis {
     min-height: 36px;
 }
 
@@ -300,31 +300,31 @@
 }
 
 /* All Day Row Collapsed State */
-.all-day-row.collapsed .all-day-cell:not(.all-day-axis) {
+.allday-section.collapsed .allday-section__cell:not(.allday-section__axis) {
     display: none;
 }
 
-.all-day-row.collapsed .all-day-axis {
+.allday-section.collapsed .allday-section__axis {
     grid-row: 1 / span 1 !important;
 }
 
 /* Hide all tasks and arrows when collapsed */
-.all-day-row.collapsed .task-card,
-.all-day-row.collapsed .all-day-task,
-.all-day-row.collapsed .deadline-arrow {
+.allday-section.collapsed .task-card,
+.allday-section.collapsed .task-card--allday,
+.allday-section.collapsed .deadline-arrow {
     display: none !important;
 }
 
-.all-day-row.collapsed .all-day-label {
+.allday-section.collapsed .allday-section__label {
     display: none;
 }
 
-.all-day-row.collapsed .all-day-axis {
+.allday-section.collapsed .allday-section__axis {
     min-height: 36px;
 }
 
 /* Show horizontal label when collapsed */
-.all-day-row.collapsed::after {
+.allday-section.collapsed::after {
     content: 'All Day';
     grid-column: 2;
     padding: 6px 12px;
@@ -360,7 +360,7 @@
 }
 
 /* All Day Axis Cell Layout */
-.all-day-axis {
+.allday-section__axis {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -370,7 +370,7 @@
     background-color: var(--background-secondary);
 }
 
-.all-day-label {
+.allday-section__label {
     writing-mode: vertical-rl;
     text-orientation: mixed;
     font-size: 0.8em;
@@ -378,42 +378,19 @@
     padding-bottom: 6px;
 }
 
-.unassigned-task-list {
+.future-section__list {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 8px;
     /* No max-height - expand to fit all tasks */
 }
 
-/* --- Long Term Row Styles --- */
-.all-day-row {
-    background-color: var(--background-primary);
-    border-bottom: 2px solid var(--background-modifier-border);
-    z-index: 20;
-    flex-shrink: 0;
-    overflow-y: hidden;
-}
-
-.all-day-row.drag-over {
+/* AllDay Section Drag Over States */
+.allday-section.drag-over {
     background-color: var(--background-modifier-hover);
 }
 
-.all-day-cell {
-    border-right: 1px solid var(--background-modifier-border);
-    min-height: var(--all-day-min-height);
-    position: relative;
-    padding: 3px 0 2px 0;
-    min-width: 0;
-    height: 100%;
-    /* Ensure full height span */
-
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    transition: background-color 0.2s ease;
-}
-
-.all-day-cell.drag-over {
+.allday-section__cell.drag-over {
     outline: 2px dashed var(--interactive-accent);
     outline-offset: -2px;
     box-shadow: inset 0 0 10px rgba(var(--interactive-accent-rgb), 0.3);
@@ -428,11 +405,9 @@
     box-shadow: inset 0 0 10px rgba(var(--interactive-accent-rgb), 0.2);
 }
 
-.unassigned-section.drag-over,
 .future-section.drag-over,
-.header-bottom-right.drag-over,
-.future-content.drag-over,
-.unassigned-task-list.drag-over {
+.future-section__content.drag-over,
+.future-section__list.drag-over {
     outline: 2px dashed var(--interactive-accent);
     outline-offset: -2px;
     box-shadow: inset 0 0 10px rgba(var(--interactive-accent-rgb), 0.2);

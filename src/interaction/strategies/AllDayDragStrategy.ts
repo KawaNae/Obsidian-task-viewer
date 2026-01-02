@@ -78,7 +78,7 @@ export class AllDayDragStrategy implements DragStrategy {
         // Initialize Geometry
         // We can get column width from the grid
         const grid = el.closest('.timeline-grid');
-        const headerCell = grid?.querySelector('.header-cell:nth-child(2)') as HTMLElement; // First day cell
+        const headerCell = grid?.querySelector('.date-header__cell:nth-child(2)') as HTMLElement; // First day cell
         this.refHeaderCell = headerCell;
 
         if (headerCell) {
@@ -155,7 +155,7 @@ export class AllDayDragStrategy implements DragStrategy {
             // Check if cursor is outside the long-term section
             const doc = context.container.ownerDocument || document;
             const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
-            const futureSection = elBelow?.closest('.future-section-grid') || elBelow?.closest('.future-content') || elBelow?.closest('.unassigned-task-list') || elBelow?.closest('.header-bottom-right');
+            const futureSection = elBelow?.closest('.future-section-grid') || elBelow?.closest('.future-section__content') || elBelow?.closest('.future-section__list');
             const timelineSection = elBelow?.closest('.day-timeline-column');
             const wasOutside = this.isOutsideSection;
             this.isOutsideSection = !!(futureSection || timelineSection);
@@ -263,7 +263,7 @@ export class AllDayDragStrategy implements DragStrategy {
 
         if (elBelow) {
             // Check for drop on Future section (LT→FU)
-            const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-content') || elBelow.closest('.unassigned-task-list') || elBelow.closest('.header-bottom-right');
+            const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-section__content') || elBelow.closest('.future-section__list');
             if (futureSection && this.mode === 'move') {
                 if (this.dragTask.deadline) {
                     new Notice('DeadlineがあるタスクはFutureに移動できません');
@@ -468,7 +468,7 @@ export class AllDayDragStrategy implements DragStrategy {
         if (!elBelow) return;
 
         // Check for valid drop targets
-        const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-content') || elBelow.closest('.unassigned-task-list') || elBelow.closest('.header-bottom-right');
+        const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-section__content') || elBelow.closest('.future-section__list');
         const timelineCol = elBelow.closest('.day-timeline-column') as HTMLElement;
 
         if (futureSection) {
@@ -481,12 +481,12 @@ export class AllDayDragStrategy implements DragStrategy {
                 let targetEl = futureSection;
 
                 if (futureGrid) {
-                    const content = futureGrid.querySelector('.future-content');
+                    const content = futureGrid.querySelector('.future-section__content');
                     if (content) targetEl = content as HTMLElement;
-                } else if (futureSection.hasClass('future-content')) {
+                } else if (futureSection.hasClass('future-section__content')) {
                     targetEl = futureSection;
-                } else if (futureSection.closest('.future-content')) {
-                    targetEl = futureSection.closest('.future-content') as HTMLElement;
+                } else if (futureSection.closest('.future-section__content')) {
+                    targetEl = futureSection.closest('.future-section__content') as HTMLElement;
                 }
 
                 targetEl.addClass('drag-over');

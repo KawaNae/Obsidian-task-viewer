@@ -77,7 +77,7 @@ export class HandleManager {
         if (!task) return;
 
         const isFuture = task.isFuture;
-        const isAllDay = taskEl.classList.contains('all-day-task');
+        const isAllDay = taskEl.classList.contains('task-card--allday');
 
         // If handles for this task already exist, check if type matches
         const existingWrapper = this.overlay.querySelector(`.handle-wrapper[data-task-id="${taskId}"]`) as HTMLElement;
