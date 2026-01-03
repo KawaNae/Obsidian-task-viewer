@@ -1,4 +1,4 @@
-import { Component } from 'obsidian';
+import { Component, setIcon } from 'obsidian';
 import { ViewState } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/MenuHandler';
@@ -83,8 +83,9 @@ export class GridRenderer {
         const axisCell = allDayRow.createDiv('allday-section__cell allday-section__axis');
 
         // Toggle button
+        // Toggle button
         const toggleBtn = axisCell.createEl('button', { cls: 'section-toggle-btn' });
-        toggleBtn.setText('−');
+        setIcon(toggleBtn, 'minus');
         toggleBtn.setAttribute('aria-label', 'Toggle All Day section');
 
         // Label
@@ -99,10 +100,10 @@ export class GridRenderer {
             const isCollapsed = allDayRow.hasClass('collapsed');
             if (isCollapsed) {
                 allDayRow.removeClass('collapsed');
-                toggleBtn.setText('−');
+                setIcon(toggleBtn, 'minus');
             } else {
                 allDayRow.addClass('collapsed');
-                toggleBtn.setText('+');
+                setIcon(toggleBtn, 'plus');
             }
         });
 

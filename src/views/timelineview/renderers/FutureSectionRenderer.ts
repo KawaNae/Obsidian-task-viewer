@@ -1,4 +1,4 @@
-import { Component } from 'obsidian';
+import { Component, setIcon } from 'obsidian';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/MenuHandler';
 import { ViewUtils } from '../../ViewUtils';
@@ -23,7 +23,7 @@ export class FutureSectionRenderer {
         const axisCell = headerGrid.createDiv('future-section__axis');
 
         const toggleBtn = axisCell.createEl('button', { cls: 'section-toggle-btn' });
-        toggleBtn.setText('−');
+        setIcon(toggleBtn, 'minus');
         toggleBtn.setAttribute('aria-label', 'Toggle Future section');
 
         const axisLabel = axisCell.createEl('span', { cls: 'future-section__label' });
@@ -37,10 +37,10 @@ export class FutureSectionRenderer {
             const isCollapsed = headerGrid.hasClass('collapsed');
             if (isCollapsed) {
                 headerGrid.removeClass('collapsed');
-                toggleBtn.setText('−');
+                setIcon(toggleBtn, 'minus');
             } else {
                 headerGrid.addClass('collapsed');
-                toggleBtn.setText('+');
+                setIcon(toggleBtn, 'plus');
             }
         });
 

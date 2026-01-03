@@ -85,14 +85,14 @@
     pointer-events: none;
 }
 
-/* Section Toggle Button (All day/Future) */
+/* Section Toggle Button (Shared) */
 .section-toggle-btn {
     background: transparent;
     border: 1px solid var(--background-modifier-border);
     border-radius: var(--radius-s);
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 12px;
+    /* font-size: 12px; removed for icon */
     width: 20px;
     height: 20px;
     display: flex;
@@ -101,6 +101,11 @@
     padding: 0;
     margin: 2px;
     transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.section-toggle-btn svg {
+    width: 12px;
+    height: 12px;
 }
 
 .section-toggle-btn:hover {
