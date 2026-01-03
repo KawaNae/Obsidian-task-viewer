@@ -90,26 +90,3 @@
     align-items: center;
     min-height: 24px;
 }
-
-/* --- Toggle Button (shared with Future) --- */
-.section-toggle-btn {
-    background: transparent;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: var(--radius-s);
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 12px;
-    width: 20px;
-    height: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    margin: 2px;
-    transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.section-toggle-btn:hover {
-    background-color: var(--background-modifier-hover);
-    color: var(--text-normal);
-}

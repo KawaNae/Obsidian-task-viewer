@@ -5,6 +5,17 @@
              toolbar, handle-overlay, zoom-controls
 ============================================================================= */
 
+/* Timeline View Container */
+.timeline-view {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--background-primary);
+    position: relative;
+    /* Fix for handle alignment */
+}
+
 /* Timeline Grid Container (Flex Column of Rows) */
 .timeline-grid {
     display: flex;
@@ -72,4 +83,27 @@
     background-color: var(--interactive-accent);
     z-index: 15;
     pointer-events: none;
+}
+
+/* Section Toggle Button (All day/Future) */
+.section-toggle-btn {
+    background: transparent;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-s);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 12px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin: 2px;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.section-toggle-btn:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
 }
