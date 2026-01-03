@@ -1,0 +1,115 @@
+/* =============================================================================
+   Timeline AllDay Section
+   Contains: allday-section, allday-section__cell, allday-section__axis, 
+             allday-section__label, collapsed states, toggle button
+============================================================================= */
+
+/* AllDay Section Container */
+.allday-section {
+    background-color: var(--background-primary);
+    border-bottom: 2px solid var(--background-modifier-border);
+    z-index: 20;
+    flex-shrink: 0;
+    overflow-y: hidden;
+    position: relative;
+}
+
+/* Spacer for Row 1 (Padding Top) */
+.allday-section::before {
+    content: '';
+    grid-column: 1 / -1;
+    grid-row: 1;
+    height: 3px;
+    z-index: -1;
+}
+
+.allday-section.collapsed::before {
+    display: none;
+}
+
+/* AllDay Cell */
+.allday-section__cell {
+    border-right: 1px solid var(--background-modifier-border);
+    min-height: var(--allday-min-height);
+    position: relative;
+    padding: 3px 0 2px 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+/* AllDay Axis Cell Layout */
+.allday-section__axis {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px;
+    padding-top: 4px;
+    background-color: var(--background-secondary);
+}
+
+.allday-section__label {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-size: 0.8em;
+    color: var(--text-muted);
+    padding-bottom: 6px;
+}
+
+/* --- Collapsed State --- */
+.allday-section.collapsed .allday-section__cell:not(.allday-section__axis) {
+    display: none;
+}
+
+.allday-section.collapsed .allday-section__axis {
+    grid-row: 1 / span 1 !important;
+    min-height: 36px;
+}
+
+.allday-section.collapsed .task-card,
+.allday-section.collapsed .task-card--allday,
+.allday-section.collapsed .deadline-arrow {
+    display: none !important;
+}
+
+.allday-section.collapsed .allday-section__label {
+    display: none;
+}
+
+/* Show horizontal label when collapsed */
+.allday-section.collapsed::after {
+    content: 'All Day';
+    grid-column: 2;
+    padding: 6px 12px;
+    color: var(--text-muted);
+    font-size: 0.85em;
+    opacity: 0.6;
+    display: flex;
+    align-items: center;
+    min-height: 24px;
+}
+
+/* --- Toggle Button (shared with Future) --- */
+.section-toggle-btn {
+    background: transparent;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-s);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 12px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin: 2px;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.section-toggle-btn:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}

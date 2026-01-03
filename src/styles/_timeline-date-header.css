@@ -1,0 +1,59 @@
+/* =============================================================================
+   Timeline Date Header
+   Contains: date-header, date-header__cell, is-today highlight
+============================================================================= */
+
+/* Date Header Row */
+.date-header {
+    background-color: var(--background-secondary);
+    border-bottom: 1px solid var(--background-modifier-border);
+    z-index: 30;
+    flex-shrink: 0;
+    overflow-y: hidden;
+}
+
+.date-header__cell {
+    border-right: 1px solid var(--background-modifier-border);
+    padding: 2px;
+    text-align: center;
+    font-weight: bold;
+    height: var(--header-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.date-header__cell:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+    text-decoration: underline;
+}
+
+/* Today's date highlight - using pseudo-element for theme compatibility */
+.date-header__cell.is-today {
+    position: relative;
+    z-index: 1;
+}
+
+.date-header__cell.is-today::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--interactive-accent);
+    opacity: 0.9;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.date-header__cell.is-today:hover::after {
+    opacity: 1;
+}

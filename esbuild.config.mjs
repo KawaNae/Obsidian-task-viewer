@@ -28,12 +28,16 @@ const copyStaticFiles = {
         const cssFiles = [
           '_variables.css',
           '_base.css',
-          '_timeline.css',
+          '_timeline-grid.css',
+          '_timeline-date-header.css',
+          '_timeline-allday.css',
+          '_timeline-future.css',
+          '_timeline-drag.css',
           '_kanban.css',
           '_schedule.css',
           '_task-card.css',
           '_checkboxes.css',
-          '_timeline-controls.css'
+          '_deprecated.css'
         ];
 
         let cssContent = '';

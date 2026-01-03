@@ -1,0 +1,115 @@
+/* =============================================================================
+   Timeline Grid Core
+   Contains: timeline-grid, timeline-row, timeline-scroll-area, 
+             time-axis, day-timeline-column, current-time-indicator,
+             toolbar, handle-overlay, zoom-controls
+============================================================================= */
+
+/* Timeline Grid Container (Flex Column of Rows) */
+.timeline-grid {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Common Row Style */
+.timeline-row {
+    display: grid;
+    width: 100%;
+    scrollbar-gutter: stable;
+}
+
+/* Mobile: Scrollbars are overlays, so don't reserve space */
+.is-mobile .timeline-row {
+    scrollbar-gutter: auto;
+}
+
+/* Timeline Scroll Area */
+.timeline-scroll-area {
+    flex: 1;
+    overflow-y: scroll;
+    position: relative;
+}
+
+/* Time Axis Column */
+.time-axis-column {
+    background-color: var(--background-secondary);
+    border-right: 1px solid var(--background-modifier-border);
+    position: relative;
+    height: calc(24 * var(--hour-height));
+}
+
+.time-label {
+    position: absolute;
+    width: 100%;
+    text-align: center;
+    font-size: 0.8em;
+    color: var(--text-muted);
+    transform: translateY(0);
+    margin-top: 2px;
+}
+
+/* Day Column (Timeline) */
+.day-timeline-column {
+    position: relative;
+    border-right: 1px solid var(--background-modifier-border);
+    height: calc(24 * var(--hour-height));
+    background:
+        repeating-linear-gradient(to bottom,
+            transparent,
+            transparent calc(var(--hour-height) - 1px),
+            var(--background-modifier-border) calc(var(--hour-height) - 1px),
+            var(--background-modifier-border) var(--hour-height));
+}
+
+/* Current Time Indicator */
+.current-time-indicator {
+    position: absolute;
+    width: 100%;
+    height: 2px;
+    background-color: var(--interactive-accent);
+    z-index: 15;
+    pointer-events: none;
+}
+
+/* --- Toolbar --- */
+.header-toolbar-container {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    background-color: var(--background-primary);
+    display: flex;
+    overflow-x: auto;
+}
+
+/* Handle Overlay */
+.handle-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: var(--z-overlay);
+    overflow: hidden;
+}
+
+/* Handle Wrapper */
+.handle-wrapper {
+    position: absolute;
+    pointer-events: none;
+}
+
+/* Zoom Controls */
+.zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-left: 10px;
+}
+
+.zoom-label {
+    min-width: 40px;
+    text-align: center;
+}
