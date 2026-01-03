@@ -18,12 +18,3 @@
     position: relative;
     /* Fix for handle alignment */
 }
-
-/* Toolbar */
-.task-viewer-toolbar {
-    padding: 8px;
-    border-bottom: 1px solid var(--background-modifier-border);
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-}

@@ -86,7 +86,7 @@ export class ScheduleView extends ItemView {
     }
 
     private renderToolbar() {
-        const toolbar = this.container.createDiv('task-viewer-toolbar');
+        const toolbar = this.container.createDiv('view-toolbar');
 
         // Filter Button
         const filterBtn = toolbar.createEl('button', { text: 'Filter' });

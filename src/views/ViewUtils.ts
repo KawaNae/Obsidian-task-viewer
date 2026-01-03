@@ -209,7 +209,7 @@ export class ZoomControls {
         currentZoom: number,
         onZoomChange: (newZoom: number) => Promise<void>
     ): void {
-        const zoomContainer = toolbar.createDiv('zoom-controls');
+        const zoomContainer = toolbar.createDiv('view-toolbar__zoom-controls');
 
         const zoomOutBtn = zoomContainer.createEl('button', { text: '-' });
         zoomOutBtn.onclick = async () => {
@@ -219,7 +219,7 @@ export class ZoomControls {
         };
 
         zoomContainer.createSpan({
-            cls: 'zoom-label',
+            cls: 'view-toolbar__zoom-label',
             text: `${Math.round(currentZoom * 100)}%`
         });
 

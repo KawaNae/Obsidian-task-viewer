@@ -39,7 +39,7 @@ export class TimelineToolbar {
      * Renders the toolbar into the container.
      */
     render(): void {
-        const toolbar = this.container.createDiv('task-viewer-toolbar');
+        const toolbar = this.container.createDiv('view-toolbar');
 
         // Date Navigation
         this.renderDateNavigation(toolbar);
