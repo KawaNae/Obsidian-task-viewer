@@ -90,7 +90,7 @@ export class TimelineToolbar {
     }
 
     private renderFilterButton(toolbar: HTMLElement): void {
-        const filterBtn = toolbar.createEl('button', { text: 'Filter', cls: 'view-toolbar__filter-btn' });
+        const filterBtn = toolbar.createEl('button', { text: 'Filter', cls: 'view-toolbar__filter-btn view-toolbar__btn--text' });
         filterBtn.onclick = (e) => {
             const dates = this.callbacks.getDatesToShow();
             const allTasksInView = dates.flatMap(date =>

@@ -156,13 +156,13 @@ export class DateNavigator {
         onNavigate: (days: number) => void,
         onToday: () => void
     ): void {
-        const prevBtn = toolbar.createEl('button', { text: '<', cls: 'view-toolbar__nav-btn' });
+        const prevBtn = toolbar.createEl('button', { text: '<', cls: 'view-toolbar__nav-btn view-toolbar__btn--icon' });
         prevBtn.onclick = () => onNavigate(-1);
 
-        const nextBtn = toolbar.createEl('button', { text: '>', cls: 'view-toolbar__nav-btn' });
+        const nextBtn = toolbar.createEl('button', { text: '>', cls: 'view-toolbar__nav-btn view-toolbar__btn--icon' });
         nextBtn.onclick = () => onNavigate(1);
 
-        const todayBtn = toolbar.createEl('button', { text: 'Today', cls: 'view-toolbar__nav-btn' });
+        const todayBtn = toolbar.createEl('button', { text: 'Today', cls: 'view-toolbar__nav-btn view-toolbar__btn--text' });
         todayBtn.onclick = () => onToday();
     }
 }
@@ -184,7 +184,7 @@ export class ViewModeSelector {
 
         const button = toolbar.createEl('button', {
             text: getLabel(currentValue),
-            cls: 'view-toolbar__mode-select-btn'
+            cls: 'view-toolbar__mode-select-btn view-toolbar__btn--text'
         });
 
         button.onclick = (e) => {
@@ -240,7 +240,7 @@ export class ZoomControls {
     ): void {
         const zoomContainer = toolbar.createDiv('view-toolbar__zoom-controls');
 
-        const zoomOutBtn = zoomContainer.createEl('button', { text: '-', cls: 'view-toolbar__zoom-btn' });
+        const zoomOutBtn = zoomContainer.createEl('button', { text: '-', cls: 'view-toolbar__zoom-btn view-toolbar__btn--icon' });
         zoomOutBtn.onclick = async () => {
             let newZoom = currentZoom - 0.25;
             if (newZoom < 0.25) newZoom = 0.25;
@@ -252,7 +252,7 @@ export class ZoomControls {
             text: `${Math.round(currentZoom * 100)}%`
         });
 
-        const zoomInBtn = zoomContainer.createEl('button', { text: '+', cls: 'view-toolbar__zoom-btn' });
+        const zoomInBtn = zoomContainer.createEl('button', { text: '+', cls: 'view-toolbar__zoom-btn view-toolbar__btn--icon' });
         zoomInBtn.onclick = async () => {
             let newZoom = currentZoom + 0.25;
             if (newZoom > 4.0) newZoom = 4.0;

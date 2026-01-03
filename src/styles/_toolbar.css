@@ -28,10 +28,21 @@
     text-align: center;
 }
 
-/* Toolbar Buttons (iPad Fix) */
-.view-toolbar__nav-btn,
-.view-toolbar__zoom-btn,
-.view-toolbar__mode-select-btn,
-.view-toolbar__filter-btn {
+
+/* Toolbar Buttons (iPad Fix & Sizing) */
+.view-toolbar__btn--icon {
+    width: 28px;
+    height: 28px;
     padding: 0 !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.view-toolbar__btn--text {
+    height: 28px;
+    padding: 0 12px !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
