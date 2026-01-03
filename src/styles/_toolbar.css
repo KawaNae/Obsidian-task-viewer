@@ -27,3 +27,11 @@
     min-width: 40px;
     text-align: center;
 }
+
+/* Toolbar Buttons (iPad Fix) */
+.view-toolbar__nav-btn,
+.view-toolbar__zoom-btn,
+.view-toolbar__mode-select-btn,
+.view-toolbar__filter-btn {
+    padding: 0 !important;
+}

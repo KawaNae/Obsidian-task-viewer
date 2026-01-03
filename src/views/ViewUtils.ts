@@ -156,13 +156,13 @@ export class DateNavigator {
         onNavigate: (days: number) => void,
         onToday: () => void
     ): void {
-        const prevBtn = toolbar.createEl('button', { text: '<' });
+        const prevBtn = toolbar.createEl('button', { text: '<', cls: 'view-toolbar__nav-btn' });
         prevBtn.onclick = () => onNavigate(-1);
 
-        const nextBtn = toolbar.createEl('button', { text: '>' });
+        const nextBtn = toolbar.createEl('button', { text: '>', cls: 'view-toolbar__nav-btn' });
         nextBtn.onclick = () => onNavigate(1);
 
-        const todayBtn = toolbar.createEl('button', { text: 'Today' });
+        const todayBtn = toolbar.createEl('button', { text: 'Today', cls: 'view-toolbar__nav-btn' });
         todayBtn.onclick = () => onToday();
     }
 }
@@ -240,7 +240,7 @@ export class ZoomControls {
     ): void {
         const zoomContainer = toolbar.createDiv('view-toolbar__zoom-controls');
 
-        const zoomOutBtn = zoomContainer.createEl('button', { text: '-' });
+        const zoomOutBtn = zoomContainer.createEl('button', { text: '-', cls: 'view-toolbar__zoom-btn' });
         zoomOutBtn.onclick = async () => {
             let newZoom = currentZoom - 0.25;
             if (newZoom < 0.25) newZoom = 0.25;
@@ -252,7 +252,7 @@ export class ZoomControls {
             text: `${Math.round(currentZoom * 100)}%`
         });
 
-        const zoomInBtn = zoomContainer.createEl('button', { text: '+' });
+        const zoomInBtn = zoomContainer.createEl('button', { text: '+', cls: 'view-toolbar__zoom-btn' });
         zoomInBtn.onclick = async () => {
             let newZoom = currentZoom + 0.25;
             if (newZoom > 4.0) newZoom = 4.0;

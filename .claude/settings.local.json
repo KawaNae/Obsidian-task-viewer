@@ -6,7 +6,8 @@
       "Bash(node:*)",
       "Bash(del test_parser.js)",
       "Bash(git checkout:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []
