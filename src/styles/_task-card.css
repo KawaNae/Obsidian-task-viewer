@@ -170,7 +170,7 @@
    6. HANDLES (Resize/Move Controls)
    ========================================================================== */
 
-.handle-container {
+.task-card__handle {
     position: absolute;
     z-index: var(--z-handle);
     display: flex;
@@ -179,36 +179,36 @@
     pointer-events: auto;
 }
 
-.top-resize-container {
+.task-card__handle--resize-top {
     top: -12px;
     left: 50%;
     transform: translateX(-50%);
 }
 
-.bottom-resize-container {
+.task-card__handle--resize-bottom {
     bottom: -12px;
     left: 50%;
     transform: translateX(-50%);
 }
 
-.left-resize-container {
+.task-card__handle--resize-left {
     left: -12px;
     top: 50%;
     transform: translateY(-50%);
 }
 
-.right-resize-container {
+.task-card__handle--resize-right {
     right: -12px;
     top: 50%;
     transform: translateY(-50%);
 }
 
-.move-handle-container {
+.task-card__handle--move {
     top: -12px;
     right: -12px;
 }
 
-.handle-btn {
+.task-card__handle-btn {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -226,26 +226,26 @@
     touch-action: none;
 }
 
-.handle-btn:hover {
+.task-card__handle-btn:hover {
     color: var(--text-normal);
     background-color: var(--background-secondary);
 }
 
-.resize-handle {
+.task-card__handle-btn--resize {
     cursor: pointer;
 }
 
-.top-resize-handle,
-.bottom-resize-handle {
+.task-card__handle--resize-top .task-card__handle-btn,
+.task-card__handle--resize-bottom .task-card__handle-btn {
     cursor: ns-resize;
 }
 
-.left-resize-handle,
-.right-resize-handle {
+.task-card__handle--resize-left .task-card__handle-btn,
+.task-card__handle--resize-right .task-card__handle-btn {
     cursor: ew-resize;
 }
 
-.move-handle {
+.task-card__handle--move .task-card__handle-btn {
     cursor: move;
 }
 

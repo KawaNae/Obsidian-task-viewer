@@ -69,7 +69,7 @@ export class DragHandler implements DragContext {
         }
 
         const target = e.target as HTMLElement;
-        const handle = target.closest('.handle-btn') as HTMLElement;
+        const handle = target.closest('.task-card__handle-btn') as HTMLElement;
         let taskEl: HTMLElement | null = null;
         let taskId: string | null = null;
         let isFromHandle = false;

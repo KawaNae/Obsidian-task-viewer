@@ -151,7 +151,7 @@ export class TimelineView extends ItemView {
             const target = e.target as HTMLElement;
 
             // If clicking handle, do nothing (handled by DragHandler or button click)
-            if (target.closest('.handle-btn')) return;
+            if (target.closest('.task-card__handle-btn')) return;
 
             if (!target.closest('.task-card')) {
                 if (this.handleManager.getSelectedTaskId()) {

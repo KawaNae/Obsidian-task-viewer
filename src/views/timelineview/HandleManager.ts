@@ -123,17 +123,17 @@ export class HandleManager {
     }
 
     private createResizeHandle(wrapper: HTMLElement, taskId: string, position: 'left' | 'right' | 'top' | 'bottom', icon: string): void {
-        const container = wrapper.createDiv(`handle-container ${position}-resize-container`);
+        const container = wrapper.createDiv(`task-card__handle task-card__handle--resize-${position}`);
         container.style.pointerEvents = 'auto';
-        const handle = container.createDiv(`handle-btn resize-handle ${position}-resize-handle`);
+        const handle = container.createDiv('task-card__handle-btn');
         handle.setText(icon);
         handle.dataset.taskId = taskId;
     }
 
     private createMoveHandle(wrapper: HTMLElement, taskId: string): void {
-        const container = wrapper.createDiv('handle-container move-handle-container');
+        const container = wrapper.createDiv('task-card__handle task-card__handle--move');
         container.style.pointerEvents = 'auto';
-        const handle = container.createDiv('handle-btn move-handle');
+        const handle = container.createDiv('task-card__handle-btn');
         handle.setText('::');
         handle.dataset.taskId = taskId;
     }

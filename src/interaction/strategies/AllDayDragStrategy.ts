@@ -41,35 +41,13 @@ export class AllDayDragStrategy implements DragStrategy {
 
         // Determine Mode
         const target = e.target as HTMLElement;
-        if (target.closest('.resize-handle')) { // Left/Right handles for long-term?
-            // Actually, existing handles for LongTerm were:
-            // SD: Left handle
-            // ED: Right handle
-            // SED: Both
-            // But we need to distinguish left vs right handle
-            // Currently TimelineView renders 'resize-handle' without specific left/right classes?
-            // Wait, renderHandles in TimelineView for AllDay used 'move-handle' only?
-            // Checking TimelineView renderHandles...
-            // It seems only move-handle was implemented for AllDay in the last large edit.
-            // "if (isAllDay) { ... moveHandle ... }"
-            // So we need to FIX TimelineView to render resize handles for LongTerm first?
-            // OR we assume they exist.
-            // The previous user requirement (Conversation 1d73a...) said:
-            // "Ensure "Long-Term" tasks display left/right resize handles... SD: Left... ED: Right..."
-            // But in my last edit of TimelineView (Step 1230), I might have missed that or it was in `renderHandles`.
-            // Let's check `renderHandles` logic in `TimelineView.ts` again via memory or assumption.
-            // Step 1234 content shows:
-            // Lines 282-290: if (isAllDay) { ... moveContainer ... moveHandle ... }
-            // It seems I ONLY implemented move handle for AllDay in the recent view.
-
-            // CRITICAL: We need to update TimelineView to show resize handles for AllDay/LongTerm tasks!
-            // But I'm in the middle of writing strategy.
-            // I will implement this strategy ASSUMING handles will exist (class `left-resize-handle`, `right-resize-handle`).
+        if (target.closest('.task-card__handle--resize-left, .task-card__handle--resize-right')) {
+            // AllDay/LongTerm resize handles detected
         }
 
-        if (target.closest('.left-resize-handle')) {
+        if (target.closest('.task-card__handle--resize-left')) {
             this.mode = 'resize-left';
-        } else if (target.closest('.right-resize-handle')) {
+        } else if (target.closest('.task-card__handle--resize-right')) {
             this.mode = 'resize-right';
         } else {
             this.mode = 'move';

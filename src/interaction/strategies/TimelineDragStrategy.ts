@@ -45,9 +45,9 @@ export class TimelineDragStrategy implements DragStrategy {
 
         // Determine Mode
         const target = e.target as HTMLElement;
-        if (target.closest('.top-resize-handle')) {
+        if (target.closest('.task-card__handle--resize-top')) {
             this.mode = 'resize-top';
-        } else if (target.closest('.bottom-resize-handle')) {
+        } else if (target.closest('.task-card__handle--resize-bottom')) {
             this.mode = 'resize-bottom';
         } else {
             this.mode = 'move';
