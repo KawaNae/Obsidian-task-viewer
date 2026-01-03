@@ -23,11 +23,10 @@
     margin-left: 10px;
 }
 
-.view-toolbar__zoom-label {
+.view-toolbar__label {
     min-width: 40px;
     text-align: center;
 }
-
 
 /* Toolbar Buttons (iPad Fix & Sizing) */
 .view-toolbar__btn--icon {
@@ -37,6 +36,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    cursor: pointer;
 }
 
 .view-toolbar__btn--text {
@@ -45,4 +45,5 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    cursor: pointer;
 }
