@@ -41,7 +41,7 @@
 
 /* Context Variants */
 /* Timeline View: Absolute Positioning */
-.task-viewer-container .task-card {
+.timeline-view .task-card {
     position: absolute;
 }
 
@@ -56,7 +56,7 @@
 }
 
 /* Ensure all-day tasks in timeline stay relative even with the absolute rule above */
-.task-viewer-container .task-card.task-card--allday {
+.timeline-view .task-card.task-card--allday {
     position: relative;
 }
 
@@ -85,44 +85,44 @@
 
 /* ===== Task Content ===== */
 
-.task-content-container {
+.task-card__content {
     flex: 1;
     overflow-y: auto;
     scrollbar-width: thin;
 }
 
 /* Top-level list: Ensure enough padding for the main checkbox */
-.task-content-container>ul,
-.task-content-container>ol {
+.task-card__content>ul,
+.task-card__content>ol {
     padding-inline-start: 1.9em;
     /* Keep user-requested indentation */
 }
 
 /* Nested lists: Reduce indentation to save space */
-.task-content-container li>ul,
-.task-content-container li>ol {
+.task-card__content li>ul,
+.task-card__content li>ol {
     padding-inline-start: 1.5em;
 }
 
-.task-content-container p,
-.task-content-container ul,
-.task-content-container ol,
-.task-content-container li {
+.task-card__content p,
+.task-card__content ul,
+.task-card__content ol,
+.task-card__content li {
     margin-block-start: 0.2em;
     margin-block-end: 0.2em;
 }
 
-.task-content-container .task-list-item {
+.task-card__content .task-list-item {
     list-style: none;
 }
 
 /* Links */
-.task-content-container a {
+.task-card__content a {
     color: var(--file-accent, var(--link-color));
     text-decoration: none;
 }
 
-.task-content-container a:hover {
+.task-card__content a:hover {
     color: var(--file-accent-hover, var(--link-color-hover));
     text-decoration: underline;
 }
@@ -130,7 +130,7 @@
 
 /* ===== Time Display ===== */
 
-.task-time-display {
+.task-card__time {
     /* Positioning */
     position: absolute;
     top: 2px;

@@ -106,7 +106,7 @@ export class TimelineView extends ItemView {
 
         this.container = this.contentEl;
         this.container.empty();
-        this.container.addClass('task-viewer-container');
+        this.container.addClass('timeline-view');
 
         // Initialize MenuHandler
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
@@ -174,7 +174,7 @@ export class TimelineView extends ItemView {
                         const card = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
                         if (card) {
                             // Partial Update: Re-render content only
-                            const contentContainer = card.querySelector('.task-content-container');
+                            const contentContainer = card.querySelector('.task-card__content');
                             if (contentContainer) contentContainer.remove();
 
                             this.taskRenderer.render(card, task, this, this.plugin.settings);
