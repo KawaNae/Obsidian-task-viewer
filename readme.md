@@ -38,7 +38,7 @@ startについては、開始日が未定であることの表現として`futur
 
 ### テスト用
 ```markdown
-- [ ] SED型タスク い@2026-01-01>2026-01-03>2026-01-05
+- [ ] SED型タスク @2026-01-01>2026-01-03>2026-01-05
 - [ ] SE型タスク @2026-01-01>2026-01-03
 - [ ] SD型タスク @2026-01-01>>2026-01-05
 - [ ] ED型タスク @>2026-01-03>2026-01-05
@@ -244,3 +244,46 @@ F型は以下の操作を受け付ける
 
 ## 自動スクロール
 タイムライン欄の移動ハンドル、伸縮ハンドルでの動作に置いて、移動、伸縮中にマウスがタイムラインの表示領域の外に出た場合は自動的にスクロールする。タスクカードは自動スクロールに従ってマウスに追従する
+
+## CSS命名規則
+
+本プロジェクトでは[BEM（Block Element Modifier）](https://getbem.com/)命名規則に従ってCSSクラス名を命名している。
+
+### 基本構造
+```
+.block                  /* ブロック: 独立したコンポーネント */
+.block__element         /* 要素: ブロックの一部 */
+.block--modifier        /* 修飾子: バリエーション・状態 */
+.block__element--modifier
+```
+
+### 例
+```css
+.task-card              /* ブロック: タスクカード */
+.task-card__content     /* 要素: タスクカードのコンテンツ部分 */
+.task-card__time        /* 要素: 時刻表示部分 */
+.task-card__handle      /* 要素: ハンドルコンテナ */
+.task-card__handle-btn  /* 要素: ハンドルボタン */
+.task-card--allday      /* 修飾子: 終日タスク */
+.task-card--future      /* 修飾子: 未割当タスク */
+.task-card--multi-day   /* 修飾子: 複数日タスク */
+.task-card__handle--move        /* 要素+修飾子: 移動ハンドル */
+.task-card__handle--resize-top  /* 要素+修飾子: 上端リサイズハンドル */
+```
+
+### CSSファイル構造
+```
+src/styles/
+├── _variables.css          # CSS変数定義
+├── _base.css               # グローバルスタイル
+├── _task-card.css          # タスクカードコンポーネント
+├── _checkboxes.css         # チェックボックスアイコン
+├── _timeline-grid.css      # タイムライングリッド
+├── _timeline-date-header.css # 日付ヘッダー
+├── _timeline-allday.css    # 終日タスク欄
+├── _timeline-future.css    # 未割当タスク欄
+├── _timeline-drag.css      # ドラッグ関連スタイル
+├── _kanban.css             # カンバンビュー
+├── _schedule.css           # スケジュールビュー
+└── _deprecated.css         # 非推奨・未使用スタイル（検証用）
+```
