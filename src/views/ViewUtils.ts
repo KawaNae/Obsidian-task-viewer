@@ -171,25 +171,54 @@ export class DateNavigator {
  * View mode selector (1 Day / 3 Days / Week).
  */
 export class ViewModeSelector {
-    /**
-     * Renders a view mode dropdown.
-     * @param toolbar - Parent element to render into
-     * @param currentValue - Current selected value (1, 3, or 7)
-     * @param onChange - Callback when selection changes
-     */
     static render(
         toolbar: HTMLElement,
         currentValue: number,
         onChange: (newValue: number) => void
     ): void {
-        const modeSelect = toolbar.createEl('select', { cls: 'view-toolbar__mode-select' });
-        modeSelect.createEl('option', { value: '1', text: '1 Day' });
-        modeSelect.createEl('option', { value: '3', text: '3 Days' });
-        modeSelect.createEl('option', { value: '7', text: 'Week' });
-        modeSelect.value = currentValue.toString();
-        modeSelect.onchange = (e) => {
-            const newValue = parseInt((e.target as HTMLSelectElement).value);
-            onChange(newValue);
+        const getLabel = (val: number) => {
+            if (val === 1) return '1 Day';
+            if (val === 3) return '3 Days';
+            return 'Week';
+        };
+
+        const button = toolbar.createEl('button', {
+            text: getLabel(currentValue),
+            cls: 'view-toolbar__mode-select-btn'
+        });
+
+        button.onclick = (e) => {
+            const { Menu } = require('obsidian');
+            const menu = new Menu();
+
+            menu.addItem((item: any) => {
+                item.setTitle('1 Day')
+                    .setChecked(currentValue === 1)
+                    .onClick(() => {
+                        onChange(1);
+                        button.setText('1 Day');
+                    });
+            });
+
+            menu.addItem((item: any) => {
+                item.setTitle('3 Days')
+                    .setChecked(currentValue === 3)
+                    .onClick(() => {
+                        onChange(3);
+                        button.setText('3 Days');
+                    });
+            });
+
+            menu.addItem((item: any) => {
+                item.setTitle('Week')
+                    .setChecked(currentValue === 7)
+                    .onClick(() => {
+                        onChange(7);
+                        button.setText('Week');
+                    });
+            });
+
+            menu.showAtPosition({ x: e.pageX, y: e.pageY });
         };
     }
 }
