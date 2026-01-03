@@ -2,7 +2,9 @@
    Task Card Styles
    ========================================================================== */
 
-/* ===== Task Card Base ===== */
+/* ==========================================================================
+   1. BASE STYLES
+   ========================================================================== */
 
 .task-card {
     /* Positioning */
@@ -27,6 +29,7 @@
     scrollbar-width: thin;
 }
 
+/* Accent Border */
 .task-card::before {
     content: '';
     position: absolute;
@@ -39,14 +42,25 @@
     z-index: 2;
 }
 
-/* Context Variants */
-/* Timeline View: Absolute Positioning */
+/* ==========================================================================
+   2. CONTEXT VARIANTS (View-specific overrides)
+   ========================================================================== */
+
+/* Timeline View: Absolute Positioning for time-based placement */
 .timeline-view .task-card {
     position: absolute;
 }
 
-/* Modifiers */
-/* Robust All-Day Task Styles */
+/* Timeline View: AllDay needs relative (Grid-based) */
+.timeline-view .task-card.task-card--allday {
+    position: relative;
+}
+
+/* ==========================================================================
+   3. MODIFIERS (--variant)
+   ========================================================================== */
+
+/* AllDay Task Card */
 .task-card.task-card--allday {
     position: relative;
     left: 4px;
@@ -55,12 +69,28 @@
     z-index: var(--z-allday);
 }
 
-/* Ensure all-day tasks in timeline stay relative even with the absolute rule above */
-.timeline-view .task-card.task-card--allday {
-    position: relative;
+.task-card--allday.task-card--multi-day {
+    height: auto !important;
 }
 
-/* States */
+/* Future Task Card */
+.task-card--future {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    margin-bottom: 0 !important;
+    transform: none !important;
+    min-height: auto;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* ==========================================================================
+   4. STATES (:hover, .selected, .is-dragging)
+   ========================================================================== */
+
 .task-card:hover {
     z-index: var(--z-task-card-hover);
     border-color: var(--file-accent, var(--interactive-accent));
@@ -73,32 +103,28 @@
 }
 
 .task-card.selected {
-    /* Visual */
     border: 1px solid var(--file-accent, var(--interactive-accent));
-
-    /* Use box-shadow to simulate 2px border without changing layout size */
     box-shadow: 0 0 0 1px var(--file-accent, var(--interactive-accent)),
         0 0 0 2px var(--background-primary),
         0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
+/* ==========================================================================
+   5. ELEMENTS (__element)
+   ========================================================================== */
 
-/* ===== Task Content ===== */
-
+/* --- Content Container --- */
 .task-card__content {
     flex: 1;
     overflow-y: auto;
     scrollbar-width: thin;
 }
 
-/* Top-level list: Ensure enough padding for the main checkbox */
 .task-card__content>ul,
 .task-card__content>ol {
     padding-inline-start: 1.9em;
-    /* Keep user-requested indentation */
 }
 
-/* Nested lists: Reduce indentation to save space */
 .task-card__content li>ul,
 .task-card__content li>ol {
     padding-inline-start: 1.5em;
@@ -116,7 +142,6 @@
     list-style: none;
 }
 
-/* Links */
 .task-card__content a {
     color: var(--file-accent, var(--link-color));
     text-decoration: none;
@@ -127,43 +152,30 @@
     text-decoration: underline;
 }
 
-
-/* ===== Time Display ===== */
-
+/* --- Time Display --- */
 .task-card__time {
-    /* Positioning */
     position: absolute;
     top: 2px;
     right: 6px;
     z-index: 5;
-
-    /* Typography */
     font-family: var(--font-monospace);
     font-size: 0.75em;
     color: var(--text-muted);
-
-    /* Visual */
     background-color: transparent;
     opacity: 0.8;
-
-    /* Misc */
     pointer-events: none;
 }
 
-
-/* ===== Handles ===== */
+/* ==========================================================================
+   6. HANDLES (Resize/Move Controls)
+   ========================================================================== */
 
 .handle-container {
-    /* Positioning */
     position: absolute;
     z-index: var(--z-handle);
-
-    /* Display */
     display: flex;
     align-items: center;
     justify-content: center;
-
-    /* Misc */
     pointer-events: auto;
 }
 
@@ -197,26 +209,19 @@
 }
 
 .handle-btn {
-    /* Display & Box Model */
     display: flex;
     align-items: center;
     justify-content: center;
     width: 24px;
     height: 24px;
-
-    /* Typography */
     font-family: monospace;
     font-size: 14px;
     line-height: 1;
     color: var(--text-muted);
-
-    /* Visual */
     background-color: var(--background-primary);
     border: 1px solid var(--background-modifier-border);
     border-radius: 4px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-
-    /* Misc */
     cursor: pointer;
     touch-action: none;
 }
@@ -240,41 +245,21 @@
     cursor: ew-resize;
 }
 
-
 .move-handle {
     cursor: move;
 }
 
-.task-card--future {
-    position: relative !important;
-    top: auto !important;
-    left: auto !important;
-    width: 100% !important;
-    height: auto !important;
-    margin-bottom: 0 !important;
-    transform: none !important;
-    min-height: auto;
-    min-width: 0;
-    overflow: hidden;
-}
-
-.task-card--allday.multi-day {
-    /* Height auto is needed to adapt to content */
-    height: auto !important;
-}
-
-/* ===== Deadline Visualization ===== */
+/* ==========================================================================
+   7. DEADLINE VISUALIZATION
+   ========================================================================== */
 
 .deadline-arrow {
     position: relative;
     z-index: 1;
-    /* Behind task card */
     pointer-events: none;
     height: 100%;
     margin-left: -6px;
-    /* Pull left to connect with task card */
     margin-right: 6px;
-    /* Align with task width (100% - 10px + 4px left ~ 6px margin) */
 }
 
 .deadline-arrow::after {
@@ -301,7 +286,6 @@
     transform: translateY(-50%);
 }
 
-/* Hide arrowhead when deadline is outside view range */
 .deadline-arrow.deadline-clipped::before {
     display: none;
 }
