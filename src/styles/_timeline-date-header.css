@@ -7,9 +7,27 @@
 .date-header {
     background-color: var(--background-secondary);
     border-bottom: 1px solid var(--background-modifier-border);
-    z-index: 30;
+    z-index: var(--z-header);
     flex-shrink: 0;
+    /* Match timeline-scroll-area scrollbar space without showing scrollbar */
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+}
+
+/* Hide the scrollbar visually but keep the space */
+.date-header::-webkit-scrollbar {
+    width: var(--scrollbar-width-actual, 15px);
+    background: transparent;
+}
+
+.date-header::-webkit-scrollbar-thumb {
+    background: transparent;
+}
+
+/* Mobile: Overlay scrollbars don't need special handling */
+.is-mobile .date-header {
     overflow-y: hidden;
+    scrollbar-gutter: auto;
 }
 
 .date-header__cell {
@@ -38,7 +56,7 @@
 /* Today's date highlight - using pseudo-element for theme compatibility */
 .date-header__cell.is-today {
     position: relative;
-    z-index: 1;
+    z-index: var(--z-task-card);
 }
 
 .date-header__cell.is-today::after {
@@ -50,7 +68,7 @@
     bottom: 0;
     background-color: var(--interactive-accent);
     opacity: 0.9;
-    z-index: -1;
+    z-index: var(--z-negative);
     pointer-events: none;
 }
 

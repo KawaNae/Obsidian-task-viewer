@@ -8,10 +8,17 @@
 .allday-section {
     background-color: var(--background-primary);
     border-bottom: 2px solid var(--background-modifier-border);
-    z-index: 20;
+    z-index: var(--z-allday-section);
     flex-shrink: 0;
-    overflow-y: hidden;
+    overflow-y: visible;
+    /* Use dynamically measured scrollbar width for grid alignment */
+    padding-right: var(--scrollbar-width-actual, 15px);
     position: relative;
+}
+
+/* Mobile: Overlay scrollbars don't need padding compensation */
+.is-mobile .allday-section {
+    padding-right: 0;
 }
 
 /* Spacer for Row 1 (Padding Top) */
@@ -20,7 +27,7 @@
     grid-column: 1 / -1;
     grid-row: 1;
     height: 3px;
-    z-index: -1;
+    z-index: var(--z-negative);
 }
 
 .allday-section.collapsed::before {

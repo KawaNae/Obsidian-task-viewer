@@ -246,6 +246,10 @@ export class TimelineView extends ItemView {
         const zoomLevel = this.plugin.settings.zoomLevel;
         this.container.style.setProperty('--hour-height', `${60 * zoomLevel}px`);
 
+        // Measure and set actual scrollbar width for grid alignment
+        const scrollbarWidth = this.measureScrollbarWidth();
+        this.container.style.setProperty('--scrollbar-width-actual', `${scrollbarWidth}px`);
+
         this.toolbar.render();
 
         // Use GridRenderer
@@ -292,6 +296,30 @@ export class TimelineView extends ItemView {
                 this.handleManager.selectTask(selectedTaskId);
             });
         }
+    }
+
+    /**
+     * Measures the actual scrollbar width for the current environment.
+     * Returns 0 for overlay scrollbars (iOS/macOS), ~15px for classic scrollbars (Windows).
+     */
+    private measureScrollbarWidth(): number {
+        const outer = document.createElement('div');
+        outer.style.visibility = 'hidden';
+        outer.style.overflow = 'scroll';
+        outer.style.width = '100px';
+        outer.style.height = '100px';
+        outer.style.position = 'absolute';
+        outer.style.top = '-9999px';
+        document.body.appendChild(outer);
+
+        const inner = document.createElement('div');
+        inner.style.width = '100%';
+        outer.appendChild(inner);
+
+        const scrollbarWidth = outer.offsetWidth - inner.offsetWidth;
+        document.body.removeChild(outer);
+
+        return scrollbarWidth;
     }
 
     // ==================== Grid & Layout ====================
