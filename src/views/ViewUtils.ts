@@ -182,7 +182,7 @@ export class ViewModeSelector {
         currentValue: number,
         onChange: (newValue: number) => void
     ): void {
-        const modeSelect = toolbar.createEl('select');
+        const modeSelect = toolbar.createEl('select', { cls: 'view-toolbar__mode-select' });
         modeSelect.createEl('option', { value: '1', text: '1 Day' });
         modeSelect.createEl('option', { value: '3', text: '3 Days' });
         modeSelect.createEl('option', { value: '7', text: 'Week' });
