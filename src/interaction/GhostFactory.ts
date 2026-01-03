@@ -28,6 +28,8 @@ export function createGhostElement(
     let ghost: HTMLElement;
     if (useCloneNode) {
         ghost = el.cloneNode(true) as HTMLElement;
+        // Remove handles from cloned ghost (they shouldn't appear on ghost)
+        ghost.querySelectorAll('.task-card__handle').forEach(h => h.remove());
     } else {
         ghost = doc.createElement('div');
         ghost.innerHTML = el.innerHTML;

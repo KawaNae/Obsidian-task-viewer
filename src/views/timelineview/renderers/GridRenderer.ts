@@ -122,10 +122,8 @@ export class GridRenderer {
         const scrollArea = grid.createDiv('timeline-row timeline-scroll-area');
         scrollArea.style.gridTemplateColumns = colTemplate;
 
-        // Add scroll listener to update handles
-        scrollArea.addEventListener('scroll', () => {
-            handleManager.updatePositions();
-        });
+        // Note: scroll/wheel listeners for handle position updates are no longer needed
+        // since handles are now inside task cards and scroll with them naturally.
 
         // Time Axis Column
         const timeCol = scrollArea.createDiv('time-axis-column');

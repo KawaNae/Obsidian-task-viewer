@@ -3,10 +3,9 @@ import { Task } from '../../types';
 
 /**
  * Manages drag handles for selected tasks in TimelineView.
- * Handles rendering and positioning of resize/move handles.
+ * Handles are rendered directly inside task card elements for native scroll sync.
  */
 export class HandleManager {
-    private overlay: HTMLElement | null = null;
     private selectedTaskId: string | null = null;
 
     constructor(
@@ -16,10 +15,11 @@ export class HandleManager {
 
     /**
      * Creates the handle overlay element.
+     * @deprecated Kept for backwards compatibility, no longer needed.
      */
     createOverlay(): HTMLElement {
-        this.overlay = this.container.createDiv('handle-overlay');
-        return this.overlay;
+        // No-op: handles are now inside task cards
+        return this.container;
     }
 
     /**
@@ -33,6 +33,11 @@ export class HandleManager {
      * Selects a task and renders its handles.
      */
     selectTask(taskId: string | null): void {
+        // Remove handles from previously selected task
+        if (this.selectedTaskId) {
+            this.removeHandles(this.selectedTaskId);
+        }
+
         this.selectedTaskId = taskId;
 
         // Update .selected class on all task cards
@@ -45,124 +50,77 @@ export class HandleManager {
             }
         });
 
-        // Update Handles
+        // Add handles to newly selected task
         if (taskId) {
             this.renderHandles(taskId);
-        } else {
-            if (this.overlay) {
-                this.overlay.empty();
-            }
         }
     }
 
     /**
      * Updates handle positions (call on scroll/resize).
+     * @deprecated No longer needed - handles are inside task cards and scroll with them.
      */
     updatePositions(): void {
-        if (this.selectedTaskId && this.overlay) {
-            this.updateHandleGeometry(this.selectedTaskId);
-        }
+        // No-op: handles are inside task cards, CSS handles positioning
     }
 
     /**
-     * Renders handles for a specific task.
+     * Removes handles from a task card.
+     */
+    private removeHandles(taskId: string): void {
+        const taskEl = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
+        if (!taskEl) return;
+
+        const handles = taskEl.querySelectorAll('.task-card__handle');
+        handles.forEach(h => h.remove());
+    }
+
+    /**
+     * Renders handles directly inside the task card element.
      */
     private renderHandles(taskId: string): void {
-        if (!this.overlay) return;
-
         const taskEl = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
         if (!taskEl) return;
 
         const task = this.taskIndex.getTask(taskId);
         if (!task) return;
 
+        // Remove existing handles first
+        this.removeHandles(taskId);
+
         const isFuture = task.isFuture;
         const isAllDay = taskEl.classList.contains('task-card--allday');
 
-        // If handles for this task already exist, check if type matches
-        const existingWrapper = this.overlay.querySelector(`.handle-wrapper[data-task-id="${taskId}"]`) as HTMLElement;
-        if (existingWrapper) {
-            const wrapperIsAllDay = existingWrapper.dataset.isAllDay === 'true';
-            if (wrapperIsAllDay === isAllDay) {
-                this.updateHandleGeometry(taskId);
-                return;
-            }
-            // Type changed, remove and re-create
-            existingWrapper.remove();
-        }
-
-        this.overlay.empty(); // Clear other handles (only 1 selected at a time)
-
-        // Create wrapper
-        const wrapper = this.overlay.createDiv('handle-wrapper');
-        wrapper.dataset.taskId = taskId;
-        wrapper.dataset.isAllDay = isAllDay.toString();
-
-        // --- Handles ---
+        // --- Render Handles ---
         if (isFuture) {
             // Future tasks only get move handle
-            this.createMoveHandle(wrapper, taskId);
+            this.createMoveHandle(taskEl, taskId);
         } else if (isAllDay) {
             // Left Resize Handle
-            this.createResizeHandle(wrapper, taskId, 'left', '↔');
+            this.createResizeHandle(taskEl, taskId, 'left', '↔');
             // Right Resize Handle
-            this.createResizeHandle(wrapper, taskId, 'right', '↔');
+            this.createResizeHandle(taskEl, taskId, 'right', '↔');
             // Move Handle
-            this.createMoveHandle(wrapper, taskId);
+            this.createMoveHandle(taskEl, taskId);
         } else {
-            // Top Resize Handle
-            this.createResizeHandle(wrapper, taskId, 'top', '↕');
-            // Bottom Resize Handle
-            this.createResizeHandle(wrapper, taskId, 'bottom', '↕');
-            // Move Handle
-            this.createMoveHandle(wrapper, taskId);
+            // Timed tasks: Top/Bottom resize + Move
+            this.createResizeHandle(taskEl, taskId, 'top', '↕');
+            this.createResizeHandle(taskEl, taskId, 'bottom', '↕');
+            this.createMoveHandle(taskEl, taskId);
         }
-
-        // Initial positioning
-        this.updateHandleGeometry(taskId);
     }
 
-    private createResizeHandle(wrapper: HTMLElement, taskId: string, position: 'left' | 'right' | 'top' | 'bottom', icon: string): void {
-        const container = wrapper.createDiv(`task-card__handle task-card__handle--resize-${position}`);
-        container.style.pointerEvents = 'auto';
+    private createResizeHandle(taskEl: HTMLElement, taskId: string, position: 'left' | 'right' | 'top' | 'bottom', icon: string): void {
+        const container = taskEl.createDiv(`task-card__handle task-card__handle--resize-${position}`);
         const handle = container.createDiv('task-card__handle-btn');
         handle.setText(icon);
         handle.dataset.taskId = taskId;
     }
 
-    private createMoveHandle(wrapper: HTMLElement, taskId: string): void {
-        const container = wrapper.createDiv('task-card__handle task-card__handle--move');
-        container.style.pointerEvents = 'auto';
+    private createMoveHandle(taskEl: HTMLElement, taskId: string): void {
+        const container = taskEl.createDiv('task-card__handle task-card__handle--move');
         const handle = container.createDiv('task-card__handle-btn');
         handle.setText('::');
         handle.dataset.taskId = taskId;
-    }
-
-    /**
-     * Updates handle wrapper position to match task element.
-     */
-    private updateHandleGeometry(taskId: string): void {
-        if (!this.overlay) return;
-
-        const wrapper = this.overlay.querySelector(`.handle-wrapper[data-task-id="${taskId}"]`) as HTMLElement;
-        const taskEl = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
-
-        if (!wrapper || !taskEl) {
-            return;
-        }
-
-        const containerRect = this.container.getBoundingClientRect();
-        const taskRect = taskEl.getBoundingClientRect();
-
-        // Calculate position relative to container
-        const top = taskRect.top - containerRect.top;
-        const left = taskRect.left - containerRect.left;
-        const width = taskRect.width;
-        const height = taskRect.height;
-
-        wrapper.style.top = `${top}px`;
-        wrapper.style.left = `${left}px`;
-        wrapper.style.width = `${width}px`;
-        wrapper.style.height = `${height}px`;
     }
 }

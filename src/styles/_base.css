@@ -9,7 +9,7 @@
 }
 
 /* Main Container */
-.task-viewer-container {
+.timeline-view {
     height: 100%;
     display: flex;
     flex-direction: column;
