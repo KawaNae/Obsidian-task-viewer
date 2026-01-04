@@ -35,7 +35,7 @@ export class GridRenderer {
         this.menuHandler.setViewStartDate(dates[0]);
 
         // 0. Future Section (Header Grid)
-        futureRenderer.render(grid, owner, visibleFiles);
+        futureRenderer.render(grid, owner, visibleFiles, colTemplate, dates);
 
         // 1. Date Header Row
         const headerRow = grid.createDiv('timeline-row date-header');
@@ -111,6 +111,12 @@ export class GridRenderer {
         // Background Cells (Grid Lines)
         dates.forEach((date, i) => {
             const cell = allDayRow.createDiv('allday-section__cell');
+            if (i === 0) {
+                cell.addClass('is-first-cell');
+            }
+            if (i === dates.length - 1) {
+                cell.addClass('is-last-cell');
+            }
             cell.dataset.date = date;
             cell.style.gridColumn = `${i + 2}`; // +2 because 1 is axis
             cell.style.gridRow = '1 / span 50'; // Span implicit rows (large enough number)

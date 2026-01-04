@@ -16,11 +16,30 @@ export class FutureSectionRenderer {
         private taskRenderer: TaskRenderer
     ) { }
 
-    public render(container: HTMLElement, owner: Component, visibleFiles: Set<string> | null) {
+    public render(container: HTMLElement, owner: Component, visibleFiles: Set<string> | null, colTemplate: string, dates: string[]) {
         const headerGrid = container.createDiv('future-section-grid');
+        // Use the same grid template as timeline/allday to align borders
+        headerGrid.style.gridTemplateColumns = colTemplate;
+
+        // Background Cells (Grid Lines)
+        // Similar logic to AllDay section to ensure alignment
+        dates.forEach((date, i) => {
+            const cell = headerGrid.createDiv('future-section__cell');
+            if (i === 0) {
+                cell.addClass('is-first-cell');
+            }
+            if (i === dates.length - 1) {
+                cell.addClass('is-last-cell');
+            }
+            // cell.dataset.date = date; // Removed as requested
+            cell.style.gridColumn = `${i + 2}`; // +2 because 1 is axis
+            cell.style.gridRow = '1';
+            cell.style.zIndex = '0'; // Behind content
+        });
 
         // Left: Toggle + Label
         const axisCell = headerGrid.createDiv('future-section__axis');
+        // Axis is implicitly grid-column: 1
 
         const toggleBtn = axisCell.createEl('button', { cls: 'section-toggle-btn' });
         setIcon(toggleBtn, 'minus');
@@ -31,6 +50,9 @@ export class FutureSectionRenderer {
 
         // Right: Content
         const contentCell = headerGrid.createDiv('future-section__content');
+        // Span across all date columns
+        contentCell.style.gridColumn = '2 / -1';
+        contentCell.style.zIndex = '1'; // Above cells
 
         // Toggle functionality
         toggleBtn.addEventListener('click', () => {

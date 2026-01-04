@@ -70,6 +70,7 @@
 /* Day Column (Timeline) */
 .day-timeline-column {
     position: relative;
+    border-top: 1px solid var(--background-modifier-border);
     border-right: 1px solid var(--background-modifier-border);
     height: calc(24 * var(--hour-height));
     background:
