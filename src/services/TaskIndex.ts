@@ -3,7 +3,7 @@ import { Task } from '../types';
 import { TaskParser } from './TaskParser';
 import { TaskViewerSettings } from '../types';
 import { TaskRepository } from './TaskRepository';
-import { RecurrenceManager } from './RecurrenceManager';
+import { TaskCommandExecutor } from './TaskCommandExecutor';
 import { DateUtils } from '../utils/DateUtils';
 
 export class TaskIndex {
@@ -13,7 +13,7 @@ export class TaskIndex {
 
     // Services
     private repository: TaskRepository;
-    private recurrenceManager: RecurrenceManager;
+    private commandExecutor: TaskCommandExecutor;
     private isInitializing = true;
 
     // Sync detection: track editor-change timestamps to distinguish local vs sync changes
@@ -63,7 +63,7 @@ export class TaskIndex {
     constructor(app: App) {
         this.app = app;
         this.repository = new TaskRepository(app);
-        this.recurrenceManager = new RecurrenceManager(this.repository, this, this.app);
+        this.commandExecutor = new TaskCommandExecutor(this.repository, this, this.app);
     }
 
 
@@ -293,7 +293,7 @@ export class TaskIndex {
         // 6. Execute Triggers
         if (tasksToTrigger.length > 0) {
             for (const task of tasksToTrigger) {
-                await this.recurrenceManager.handleTaskCompletion(task);
+                await this.commandExecutor.handleTaskCompletion(task);
             }
         }
     }

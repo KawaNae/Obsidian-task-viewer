@@ -7,7 +7,10 @@ import { CommandStrategy } from '../commands/CommandStrategy';
 import { MoveCommand } from '../commands/MoveCommand';
 import { RepeatCommand, NextCommand } from '../commands/GenerationCommands';
 
-export class RecurrenceManager {
+/**
+ * Executes flow commands (==> next, repeat, move) when tasks are completed.
+ */
+export class TaskCommandExecutor {
     private repository: TaskRepository;
     private strategies: Map<string, CommandStrategy> = new Map();
     private taskQueue: Task[] = [];
@@ -85,7 +88,7 @@ export class RecurrenceManager {
                 try {
                     await this.executeTaskCommands(currentTask);
                 } catch (err) {
-                    console.error(`[RecurrenceManager] Error processing task ${currentTask.id}:`, err);
+                    console.error(`[TaskCommandExecutor] Error processing task ${currentTask.id}:`, err);
                 }
 
                 // 4. Remove from queue AFTER processing
@@ -136,7 +139,7 @@ export class RecurrenceManager {
                     shouldDeleteOriginal = true;
                 }
             } else {
-                console.warn(`[RecurrenceManager] Unknown command: ${cmd.name}`);
+                console.warn(`[TaskCommandExecutor] Unknown command: ${cmd.name}`);
             }
         }
 
