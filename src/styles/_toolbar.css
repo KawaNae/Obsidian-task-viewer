@@ -7,7 +7,6 @@
 /* Toolbar Container */
 .view-toolbar {
     padding: var(--toolbar-padding, 8px);
-    border-bottom: 1px solid var(--background-modifier-border);
     display: flex;
     gap: var(--toolbar-gap, 8px);
     overflow-x: auto;

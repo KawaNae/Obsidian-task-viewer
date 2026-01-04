@@ -10,7 +10,6 @@
     /* grid-template-columns set via inline style */
     width: 100%;
     z-index: var(--z-future-section);
-    border-bottom: 1px solid var(--background-modifier-border);
     background-color: var(--background-primary);
     overflow: visible;
     position: relative;
@@ -25,8 +24,10 @@
     justify-content: flex-start;
     gap: 2px;
     padding-top: 4px;
+    border-top: 1px solid var(--background-modifier-border);
     border-left: 1px solid var(--background-modifier-border);
     border-right: 1px solid var(--background-modifier-border);
+    border-bottom: 1px solid var(--background-modifier-border);
     background-color: var(--background-secondary);
     z-index: 2;
     /* Above cells */
@@ -45,6 +46,8 @@
 /* Future Background Cells */
 .future-section__cell {
     /* No border by default */
+    border-top: 1px solid var(--background-modifier-border);
+    border-bottom: 1px solid var(--background-modifier-border);
     min-height: 100%;
     position: relative;
     grid-row: 1;

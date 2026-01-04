@@ -6,7 +6,6 @@
 /* Date Header Row */
 .date-header {
     background-color: var(--background-secondary);
-    border-bottom: 1px solid var(--background-modifier-border);
     z-index: var(--z-header);
     flex-shrink: 0;
     overflow-y: hidden;
@@ -14,6 +13,7 @@
 
 .date-header__cell {
     border-right: 1px solid var(--background-modifier-border);
+    border-bottom: 1px solid var(--background-modifier-border);
     padding: 2px;
     text-align: center;
     font-weight: bold;
