@@ -11,14 +11,7 @@
     z-index: var(--z-allday-section);
     flex-shrink: 0;
     overflow-y: visible;
-    /* Use dynamically measured scrollbar width for grid alignment */
-    padding-right: var(--scrollbar-width-actual, 15px);
     position: relative;
-}
-
-/* Mobile: Overlay scrollbars don't need padding compensation */
-.is-mobile .allday-section {
-    padding-right: 0;
 }
 
 /* Spacer for Row 1 (Padding Top) */
@@ -54,6 +47,8 @@
     justify-content: flex-start;
     gap: 2px;
     padding-top: 4px;
+    border-left: 1px solid var(--background-modifier-border);
+    border-right: 1px solid var(--background-modifier-border);
     background-color: var(--background-secondary);
 }
 

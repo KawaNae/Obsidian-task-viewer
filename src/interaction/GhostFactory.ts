@@ -35,7 +35,7 @@ export function createGhostElement(
         ghost.innerHTML = el.innerHTML;
     }
 
-    ghost.addClass('drag-ghost');
+    ghost.addClass('task-card--drag-ghost');
 
     // サイズ取得
     const rect = el.getBoundingClientRect();

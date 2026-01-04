@@ -9,25 +9,7 @@
     border-bottom: 1px solid var(--background-modifier-border);
     z-index: var(--z-header);
     flex-shrink: 0;
-    /* Match timeline-scroll-area scrollbar space without showing scrollbar */
-    overflow-y: scroll;
-    scrollbar-gutter: stable;
-}
-
-/* Hide the scrollbar visually but keep the space */
-.date-header::-webkit-scrollbar {
-    width: var(--scrollbar-width-actual, 15px);
-    background: transparent;
-}
-
-.date-header::-webkit-scrollbar-thumb {
-    background: transparent;
-}
-
-/* Mobile: Overlay scrollbars don't need special handling */
-.is-mobile .date-header {
     overflow-y: hidden;
-    scrollbar-gutter: auto;
 }
 
 .date-header__cell {
@@ -45,6 +27,11 @@
     text-overflow: ellipsis;
     cursor: pointer;
     transition: background-color 0.2s ease;
+}
+
+/* First cell (axis) - add left border */
+.date-header__cell:first-child {
+    border-left: 1px solid var(--background-modifier-border);
 }
 
 .date-header__cell:hover {

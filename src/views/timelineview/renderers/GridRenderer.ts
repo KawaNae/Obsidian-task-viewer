@@ -28,6 +28,7 @@ export class GridRenderer {
     ) {
         const grid = this.container.createDiv('timeline-grid');
         const dates = getDatesToShow();
+        // Simple grid template - overlay scrollbar doesn't take space
         const colTemplate = `30px repeat(${this.viewState.daysToShow}, minmax(0, 1fr))`;
 
         // Set view start date for MenuHandler (for E, ED, D type implicit start display)
@@ -121,6 +122,7 @@ export class GridRenderer {
 
         // 3. Timeline Row (Scrollable)
         const scrollArea = grid.createDiv('timeline-row timeline-scroll-area');
+        // Overlay scrollbar doesn't take space, so all rows use same template
         scrollArea.style.gridTemplateColumns = colTemplate;
 
         // Note: scroll/wheel listeners for handle position updates are no longer needed

@@ -29,12 +29,6 @@
 .timeline-row {
     display: grid;
     width: 100%;
-    scrollbar-gutter: stable;
-}
-
-/* Mobile: Scrollbars are overlays, so don't reserve space */
-.is-mobile .timeline-row {
-    scrollbar-gutter: auto;
 }
 
 /* Timeline Scroll Area */
@@ -42,11 +36,22 @@
     flex: 1;
     overflow-y: scroll;
     position: relative;
+    /* Hide scrollbar but keep scroll functionality */
+    scrollbar-width: none;
+    /* Firefox */
+    -ms-overflow-style: none;
+    /* IE/Edge */
+}
+
+/* Webkit browsers (Chrome, Safari, Obsidian) */
+.timeline-scroll-area::-webkit-scrollbar {
+    display: none;
 }
 
 /* Time Axis Column */
 .time-axis-column {
     background-color: var(--background-secondary);
+    border-left: 1px solid var(--background-modifier-border);
     border-right: 1px solid var(--background-modifier-border);
     position: relative;
     height: calc(24 * var(--hour-height));
@@ -81,15 +86,12 @@
     width: 100%;
     height: 2px;
     background-color: var(--interactive-accent);
-    z-index: 15;
+    z-index: var(--z-current-time-indicator);
     pointer-events: none;
 }
 
 /* Section Toggle Button (Shared) */
 .section-toggle-btn {
-    background: transparent;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: var(--radius-s);
     cursor: pointer;
     /* font-size: 12px; removed for icon */
     width: 20px;
@@ -98,7 +100,7 @@
     align-items: center;
     justify-content: center;
     margin: 2px;
-    /* remove padding for webkit */
+    /* remove padding for ipad */
     padding: 0 !important;
 }
 

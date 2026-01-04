@@ -9,9 +9,10 @@
     display: grid;
     grid-template-columns: 30px minmax(0, 1fr);
     width: 100%;
-    z-index: 50;
+    z-index: var(--z-future-section);
     border-bottom: 1px solid var(--background-modifier-border);
     background-color: var(--background-primary);
+    overflow: visible;
 }
 
 /* Future Axis (Left Column) */
@@ -22,6 +23,7 @@
     justify-content: flex-start;
     gap: 2px;
     padding-top: 4px;
+    border-left: 1px solid var(--background-modifier-border);
     border-right: 1px solid var(--background-modifier-border);
     background-color: var(--background-secondary);
 }
