@@ -37,38 +37,90 @@ export abstract class GenerationCommand implements CommandStrategy {
     protected abstract persistCommands(nextTask: Task, currentCmd: FlowCommand, otherCommands: FlowCommand[], ctx: CommandContext): void;
 
     private calculateNextTask(task: Task, interval: string): Task {
-        let baseDateObj: Date;
         let cleanInterval = interval;
 
         // Check for 'when done' logic
-        // Check for 'when done' logic
         const isWhenDone = interval.toLowerCase().includes('when done');
+        if (isWhenDone) {
+            cleanInterval = interval.replace(/when done/i, '').trim();
+        }
+
+        // F型タスクの場合: F型のまま維持（日付シフトなし）
+        if (task.isFuture && !task.startDate && !task.endDate && !task.deadline) {
+            return {
+                ...task,
+                id: '',
+                status: 'todo',
+                statusChar: ' ',
+                originalText: '',
+                children: []
+            };
+        }
+
+        // 基準日の決定: startDate > endDate > deadline の優先順
+        let baseDateObj: Date;
+
         if (isWhenDone) {
             baseDateObj = new Date(); // Today
             baseDateObj.setHours(0, 0, 0, 0);
-            cleanInterval = interval.replace(/when done/i, '').trim();
+        } else if (task.startDate) {
+            baseDateObj = this.parseDate(task.startDate);
+        } else if (task.endDate) {
+            baseDateObj = this.parseDate(task.endDate);
+        } else if (task.deadline) {
+            baseDateObj = this.parseDate(task.deadline);
         } else {
-            if (task.startDate) {
-                const [y, m, d] = task.startDate.split('-').map(Number);
-                baseDateObj = new Date(y, m - 1, d);
-            } else {
-                baseDateObj = new Date();
-                baseDateObj.setHours(0, 0, 0, 0);
-            }
+            // Fallback: 今日を基準
+            baseDateObj = new Date();
+            baseDateObj.setHours(0, 0, 0, 0);
         }
 
         const nextDateObj = RecurrenceUtils.calculateNextDate(baseDateObj, cleanInterval);
-        const nextDateStr = DateUtils.getLocalDateString(nextDateObj);
+
+        // シフト日数を計算
+        const shiftDays = Math.round(
+            (nextDateObj.getTime() - baseDateObj.getTime()) / (1000 * 60 * 60 * 24)
+        );
 
         return {
             ...task,
             id: '',
             status: 'todo',
             statusChar: ' ',
-            startDate: nextDateStr,
+            startDate: task.startDate ? this.shiftDate(task.startDate, shiftDays) : undefined,
+            endDate: task.endDate ? this.shiftDate(task.endDate, shiftDays) : undefined,
+            deadline: task.deadline ? this.shiftDate(task.deadline, shiftDays) : undefined,
+            isFuture: task.isFuture && !task.startDate, // F型の維持
             originalText: '',
             children: []
         };
+    }
+
+    /**
+     * 日付文字列をDateオブジェクトに変換
+     * YYYY-MM-DD または YYYY-MM-DDTHH:mm 形式対応
+     */
+    private parseDate(dateStr: string): Date {
+        const datePart = dateStr.split('T')[0];
+        const [y, m, d] = datePart.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    }
+
+    /**
+     * 日付文字列を指定日数シフト
+     * 時刻部分がある場合は保持
+     */
+    private shiftDate(dateStr: string, days: number): string {
+        const hasTime = dateStr.includes('T');
+        const datePart = dateStr.split('T')[0];
+        const timePart = hasTime ? dateStr.split('T')[1] : null;
+
+        const [y, m, d] = datePart.split('-').map(Number);
+        const date = new Date(y, m - 1, d);
+        date.setDate(date.getDate() + days);
+
+        const newDateStr = DateUtils.getLocalDateString(date);
+        return timePart ? `${newDateStr}T${timePart}` : newDateStr;
     }
 }
 

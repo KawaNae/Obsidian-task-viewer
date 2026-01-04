@@ -36,6 +36,17 @@ startについては、開始日が未定であることの表現として`futur
 - [ ] @future>2001-11-12>2001-11-13 <!--ED型と同じ扱い-->
 ```
 
+## コマンド
+(この部分は仕様策定中)
+
+```markdown
+- [ ] test ==> move([[log.md]]) 
+- [ ] test ==> repeat(1 days)
+- [ ] test ==> repeat(2 days).as(test2)
+- [ ] test ==> next(1 week)
+- [ ] test ==> next(1 week).as(test2)
+```
+
 ### テスト用
 ```markdown
 - [ ] SED型タスク @2026-01-01>2026-01-03>2026-01-05
