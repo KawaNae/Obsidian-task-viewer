@@ -1,0 +1,1115 @@
+Obsidian Developer Console
+plugin:obsidian42-brat:43 loading BRAT
+plugin:task-viewer:4550 Loading Task Viewer Plugin (Rewrite)
+plugin:task-viewer:4621 [DEBUG] Event listeners registered for investigation
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.331Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:3858 [DEBUG] getDatesToShow - viewState.startDate: 2026-01-04
+plugin:task-viewer:3859 [DEBUG] getDatesToShow - startHour setting: 5
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.332Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:3860 [DEBUG] getDatesToShow - current visual date: 2026-01-04
+plugin:task-viewer:3861 [DEBUG] getDatesToShow - actual today: 2026-01-04
+plugin:task-viewer:3867 [DEBUG] getDatesToShow - generated dates: Array(3)
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.333Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.334Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.334Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.334Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.335Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.335Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.335Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.335Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:3668 [DEBUG] setState called with: Object
+plugin:task-viewer:3671 [DEBUG] setState - updating daysToShow to: 7
+plugin:task-viewer:3675 [DEBUG] setState - updating startDate from: 2026-01-04 to: 2026-01-04
+plugin:task-viewer:3858 [DEBUG] getDatesToShow - viewState.startDate: 2026-01-04
+plugin:task-viewer:3859 [DEBUG] getDatesToShow - startHour setting: 5
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.340Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:3860 [DEBUG] getDatesToShow - current visual date: 2026-01-04
+plugin:task-viewer:3861 [DEBUG] getDatesToShow - actual today: 2026-01-04
+plugin:task-viewer:3867 [DEBUG] getDatesToShow - generated dates: Array(7)
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.340Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.341Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.341Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.341Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.341Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.341Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.341Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.341Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.341Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.341Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.341Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.341Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.341Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.341Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.341Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:39.341Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:39->[ModuleLiveSyncMain]  Loading plugin...
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:39->[ModuleLiveSyncMain]  Self-hosted LiveSync v0.25.31 0.25.31
+plugin:task-viewer:4618 [DEBUG] active-leaf-change: timeline-view at 2026-01-04T10:08:39.436Z
+plugin:obsidian-excalidraw-plugin:8 Initialized Excalidraw Image Cache
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:39->[ModuleLocalDatabaseObsidian]  しばらくお待ちください...
+plugin:task-viewer:3858 [DEBUG] getDatesToShow - viewState.startDate: 2026-01-04
+plugin:task-viewer:3859 [DEBUG] getDatesToShow - startHour setting: 5
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:40.111Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:3860 [DEBUG] getDatesToShow - current visual date: 2026-01-04
+plugin:task-viewer:3861 [DEBUG] getDatesToShow - actual today: 2026-01-04
+plugin:task-viewer:3867 [DEBUG] getDatesToShow - generated dates: Array(7)
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:40.119Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:40.125Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:40.125Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:40.125Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:40.125Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:40.125Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:40.125Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:40.125Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:40.125Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:40.125Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:40.125Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:40.125Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:40.125Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:40.125Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:40.125Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:08:40.125Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Opening Database...
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Database is now ready.
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[ModuleInitializerFile]  Initialize and checking database files
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[ModuleInitializerFile]  Checking deleted files
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[ModuleInitializerFile]  Collecting local files on the DB: 25
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[ModuleInitializerFile]  Collecting local files on the DB: 50
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[ModuleInitializerFile]  Collecting local files on the DB: 75
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[ModuleInitializerFile]  Collecting local files on the DB: 100
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[ModuleInitializerFile]  Collecting local files on the DB: 125
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[ModuleInitializerFile]  Collecting local files on the DB: 150
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[ModuleInitializerFile]  Synchronising...
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[ModuleInitializerFile]  UPDATE DATABASE: Nothing to do
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[ModuleInitializerFile]  UPDATE STORAGE
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[ModuleInitializerFile]  SYNC DATABASE AND STORAGE
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[ModuleInitializerFile]  UPDATE STORAGE: DONE:1, FAILED:0, LAST:3
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[ModuleInitializerFile]  Initialized, NOW TRACKING!
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  Track changes.
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Apply untracked changes ]
+Enumerating local files...
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Apply untracked changes ]
+Enumerating database files...
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[ModuleInitializerFile]  UPDATE STORAGE: DONE:1, FAILED:0, LAST:3
+SYNC DATABASE AND STORAGE All done: DONE:149, FAILED:0
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Apply untracked changes ]
+Applying untracked changes...
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Apply untracked changes ]
+Tracking statics:
+Local files: 0
+Database files: 4
+Untracked local files: 0
+Untracked database files: 0
+Common untracked files: 0
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Scanning Storage -> DB ]
+Scanning storage files...
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Scanning Storage -> DB ]
+[Storage hidden file statics]
+Known files: 2198
+Actual files: 0
+All files: 2198
+Offline Changed files: 668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Storage -> DB ]
+1/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Storage -> DB ]
+101/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Storage -> DB ]
+201/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Storage -> DB ]
+301/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Storage -> DB ]
+401/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Storage -> DB ]
+501/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Storage -> DB ]
+601/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Storage -> DB ]
+Done  
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Scanning Storage -> DB ]
+Done  
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [Database hidden file statics]
+All files: 4
+Offline Changed files: 0
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ DB -> Storage ]
+Done  
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Apply untracked changes ]
+Done  
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Rule satisfied: sendChunksBulk is false
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Rule satisfied: sendChunksBulkMaxSize is 1
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Rule satisfied: doNotUseFixedRevisionForChunks is true
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Rule violation: handleFilenameCaseSensitive is undefined but should be false
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Rule satisfied: useEden is false
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Rule satisfied: hashAlg is xxhash64
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Rule satisfied: disableCheckingConfigMismatch is false
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Rule satisfied: enableCompression is false
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Rule violation: usePluginSyncV2 is false but should be true
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Rule violation: chunkSplitterVersion is  but should be v3-rabin-karp
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Rule condition satisfied: customChunkSize is 0, and detection function returned false
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Rule satisfied: E2EEAlgorithm is v2
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  Track changes.
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Apply untracked changes ]
+Enumerating local files...
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Apply untracked changes ]
+Enumerating database files...
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Apply untracked changes ]
+Applying untracked changes...
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Apply untracked changes ]
+Tracking statics:
+Local files: 0
+Database files: 4
+Untracked local files: 0
+Untracked database files: 0
+Common untracked files: 0
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Scanning Storage -> DB ]
+Scanning storage files...
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Scanning Storage -> DB ]
+[Storage hidden file statics]
+Known files: 2198
+Actual files: 0
+All files: 2198
+Offline Changed files: 668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Storage -> DB ]
+1/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Storage -> DB ]
+101/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Storage -> DB ]
+201/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Storage -> DB ]
+301/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Storage -> DB ]
+401/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Storage -> DB ]
+501/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Storage -> DB ]
+601/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Storage -> DB ]
+Done  
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Scanning Storage -> DB ]
+Done  
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [Database hidden file statics]
+All files: 4
+Offline Changed files: 0
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ DB -> Storage ]
+Done  
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->[HiddenFileSync]  [⚙ Apply untracked changes ]
+Done  
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Fetched synchronisation parameters
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Synchronisation parameters fetched successfully
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Before LiveSync, start OneShot once...
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->OneShot Sync begin... (pullOnly)
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Replication completed
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->LiveSync begin...
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:08:40->Replication activated
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:33->Replication activated
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:33->Writing fetched chunks (1) to the database...
+plugin:task-viewer:4607 [DEBUG] vault.modify: 無題のファイル3.md at 2026-01-04T10:09:33.615Z
+plugin:task-viewer:4602 [DEBUG] editor-change: 無題のファイル3.md at 2026-01-04T10:09:33.625Z
+plugin:task-viewer:3858 [DEBUG] getDatesToShow - viewState.startDate: 2026-01-04
+plugin:task-viewer:3859 [DEBUG] getDatesToShow - startHour setting: 5
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.634Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:3860 [DEBUG] getDatesToShow - current visual date: 2026-01-04
+plugin:task-viewer:3861 [DEBUG] getDatesToShow - actual today: 2026-01-04
+plugin:task-viewer:3867 [DEBUG] getDatesToShow - generated dates: (7) ['2026-01-04', '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10']
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.642Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.649Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.649Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+140[Violation] Added non-passive event listener to a scroll-blocking <some> event. Consider marking event handler as 'passive' to make the page more responsive. See <URL>
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.649Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.649Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.649Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.649Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.650Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.650Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.650Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.650Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.650Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.650Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.650Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.650Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.650Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:4607 [DEBUG] vault.modify: 無題のファイル3.md at 2026-01-04T10:09:33.660Z
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:33->[ModuleFileHandler]  Processing 無題のファイル3.md (無題のファイル3 :257-d) : Done
+plugin:task-viewer:3858 [DEBUG] getDatesToShow - viewState.startDate: 2026-01-04
+plugin:task-viewer:3859 [DEBUG] getDatesToShow - startHour setting: 5
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.663Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:3860 [DEBUG] getDatesToShow - current visual date: 2026-01-04
+plugin:task-viewer:3861 [DEBUG] getDatesToShow - actual today: 2026-01-04
+plugin:task-viewer:3867 [DEBUG] getDatesToShow - generated dates: (7) ['2026-01-04', '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10']
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.673Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.681Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.681Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.681Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.681Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.681Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.681Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.681Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.681Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.681Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.682Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.682Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.682Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.682Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.682Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.682Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:3858 [DEBUG] getDatesToShow - viewState.startDate: 2026-01-04
+plugin:task-viewer:3859 [DEBUG] getDatesToShow - startHour setting: 5
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.691Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:3860 [DEBUG] getDatesToShow - current visual date: 2026-01-04
+plugin:task-viewer:3861 [DEBUG] getDatesToShow - actual today: 2026-01-04
+plugin:task-viewer:3867 [DEBUG] getDatesToShow - generated dates: (7) ['2026-01-04', '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10']
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.698Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.704Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.705Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.705Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.705Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.705Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.705Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.705Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.705Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.706Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.706Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.706Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.706Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.706Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.706Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.706Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:4612 [DEBUG] metadataCache.changed: 無題のファイル3.md at 2026-01-04T10:09:33.706Z
+plugin:task-viewer:3858 [DEBUG] getDatesToShow - viewState.startDate: 2026-01-04
+plugin:task-viewer:3859 [DEBUG] getDatesToShow - startHour setting: 5
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.717Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:3860 [DEBUG] getDatesToShow - current visual date: 2026-01-04
+plugin:task-viewer:3861 [DEBUG] getDatesToShow - actual today: 2026-01-04
+plugin:task-viewer:3867 [DEBUG] getDatesToShow - generated dates: (7) ['2026-01-04', '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10']
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.725Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.731Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.732Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.732Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.732Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.732Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.732Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.732Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.732Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.732Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.733Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.733Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.733Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.733Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.733Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:33.733Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:4612 [DEBUG] metadataCache.changed: 無題のファイル3.md at 2026-01-04T10:09:33.733Z
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:39.344Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:40->[HiddenFileSync]  [⚙ Scanning Storage -> DB ]
+Scanning storage files...
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:41->[HiddenFileSync]  [⚙ Scanning Storage -> DB ]
+[Storage hidden file statics]
+Known files: 2198
+Actual files: 0
+All files: 2198
+Offline Changed files: 668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:41->[HiddenFileSync]  [⚙ Storage -> DB ]
+1/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:41->[HiddenFileSync]  [⚙ Storage -> DB ]
+101/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:41->[HiddenFileSync]  [⚙ Storage -> DB ]
+201/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:41->[HiddenFileSync]  [⚙ Storage -> DB ]
+301/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:41->[HiddenFileSync]  [⚙ Storage -> DB ]
+401/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:41->[HiddenFileSync]  [⚙ Storage -> DB ]
+501/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:41->[HiddenFileSync]  [⚙ Storage -> DB ]
+601/668
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:41->[HiddenFileSync]  [⚙ Storage -> DB ]
+Done  
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:41->[HiddenFileSync]  [⚙ Scanning Storage -> DB ]
+Done  
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:48->Replication activated
+plugin:task-viewer:4607 [DEBUG] vault.modify: 無題のファイル3.md at 2026-01-04T10:09:48.145Z
+plugin:task-viewer:4602 [DEBUG] editor-change: 無題のファイル3.md at 2026-01-04T10:09:48.154Z
+plugin:task-viewer:3858 [DEBUG] getDatesToShow - viewState.startDate: 2026-01-04
+plugin:task-viewer:3859 [DEBUG] getDatesToShow - startHour setting: 5
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.169Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:3860 [DEBUG] getDatesToShow - current visual date: 2026-01-04
+plugin:task-viewer:3861 [DEBUG] getDatesToShow - actual today: 2026-01-04
+plugin:task-viewer:3867 [DEBUG] getDatesToShow - generated dates: (7) ['2026-01-04', '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10']
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.176Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.182Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.182Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.182Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.182Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.182Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.182Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.182Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.182Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.183Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.183Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.183Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.183Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.183Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.183Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.183Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:4607 [DEBUG] vault.modify: 無題のファイル3.md at 2026-01-04T10:09:48.205Z
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:48->[ModuleFileHandler]  Processing 無題のファイル3.md (無題のファイル3 :258-0) : Done
+plugin:task-viewer:4607 [DEBUG] vault.modify: 無題のファイル3.md at 2026-01-04T10:09:48.209Z
+plugin:task-viewer:3858 [DEBUG] getDatesToShow - viewState.startDate: 2026-01-04
+plugin:task-viewer:3859 [DEBUG] getDatesToShow - startHour setting: 5
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.211Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:3860 [DEBUG] getDatesToShow - current visual date: 2026-01-04
+plugin:task-viewer:3861 [DEBUG] getDatesToShow - actual today: 2026-01-04
+plugin:task-viewer:3867 [DEBUG] getDatesToShow - generated dates: (7) ['2026-01-04', '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10']
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.218Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.224Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.224Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.224Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.224Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.224Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.224Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.224Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.225Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.225Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.225Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.225Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.225Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.225Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.225Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.225Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:4612 [DEBUG] metadataCache.changed: 無題のファイル3.md at 2026-01-04T10:09:48.226Z
+plugin:task-viewer:3858 [DEBUG] getDatesToShow - viewState.startDate: 2026-01-04
+plugin:task-viewer:3859 [DEBUG] getDatesToShow - startHour setting: 5
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.242Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:3860 [DEBUG] getDatesToShow - current visual date: 2026-01-04
+plugin:task-viewer:3861 [DEBUG] getDatesToShow - actual today: 2026-01-04
+plugin:task-viewer:3867 [DEBUG] getDatesToShow - generated dates: (7) ['2026-01-04', '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10']
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.248Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.254Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.255Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.255Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.255Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.255Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.255Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.255Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.255Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.255Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.255Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.256Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.256Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.256Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.256Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.256Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:4602 [DEBUG] editor-change: 無題のファイル3.md at 2026-01-04T10:09:48.278Z
+plugin:task-viewer:3858 [DEBUG] getDatesToShow - viewState.startDate: 2026-01-04
+plugin:task-viewer:3859 [DEBUG] getDatesToShow - startHour setting: 5
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.290Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:3860 [DEBUG] getDatesToShow - current visual date: 2026-01-04
+plugin:task-viewer:3861 [DEBUG] getDatesToShow - actual today: 2026-01-04
+plugin:task-viewer:3867 [DEBUG] getDatesToShow - generated dates: (7) ['2026-01-04', '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10']
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.295Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.300Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.301Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.301Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.301Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.301Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.301Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.301Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.301Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.301Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.301Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.301Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.301Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.302Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.302Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.302Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:3858 [DEBUG] getDatesToShow - viewState.startDate: 2026-01-04
+plugin:task-viewer:3859 [DEBUG] getDatesToShow - startHour setting: 5
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.308Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:3860 [DEBUG] getDatesToShow - current visual date: 2026-01-04
+plugin:task-viewer:3861 [DEBUG] getDatesToShow - actual today: 2026-01-04
+plugin:task-viewer:3867 [DEBUG] getDatesToShow - generated dates: (7) ['2026-01-04', '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10']
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.314Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.320Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.320Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.320Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.320Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.320Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.320Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.320Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.321Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.321Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.321Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.321Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.321Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.321Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.321Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.321Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:4612 [DEBUG] metadataCache.changed: 無題のファイル3.md at 2026-01-04T10:09:48.321Z
+plugin:task-viewer:3858 [DEBUG] getDatesToShow - viewState.startDate: 2026-01-04
+plugin:task-viewer:3859 [DEBUG] getDatesToShow - startHour setting: 5
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.331Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:3860 [DEBUG] getDatesToShow - current visual date: 2026-01-04
+plugin:task-viewer:3861 [DEBUG] getDatesToShow - actual today: 2026-01-04
+plugin:task-viewer:3867 [DEBUG] getDatesToShow - generated dates: (7) ['2026-01-04', '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10']
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.337Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.342Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.342Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.342Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.342Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.343Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.343Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.343Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.343Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.343Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.343Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.343Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.344Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.344Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.344Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:757 [DEBUG] getVisualDateOfNow - current time: 2026-01-04T10:09:48.344Z
+plugin:task-viewer:758 [DEBUG] getVisualDateOfNow - current hour: 19, startHour: 5
+plugin:task-viewer:763 [DEBUG] getVisualDateOfNow - hour >= startHour, using current day
+plugin:task-viewer:766 [DEBUG] getVisualDateOfNow - result: 2026-01-04
+plugin:task-viewer:4612 [DEBUG] metadataCache.changed: 無題のファイル3.md at 2026-01-04T10:09:48.344Z
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:48->[ModuleDatabaseFileAccess]  STORAGE -> DB (plain) 無題のファイル3.md
+plugin:obsidian-livesync:18 Dev-7fd0e624c1ad0593:2026/1/4 19:09:48->Replication activated
