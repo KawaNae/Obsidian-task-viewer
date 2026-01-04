@@ -2,7 +2,9 @@
    Task Card Styles
    ========================================================================== */
 
-/* ===== Task Card Base ===== */
+/* ==========================================================================
+   1. BASE STYLES
+   ========================================================================== */
 
 .task-card {
     /* Positioning */
@@ -27,6 +29,7 @@
     scrollbar-width: thin;
 }
 
+/* Accent Border */
 .task-card::before {
     content: '';
     position: absolute;
@@ -36,33 +39,58 @@
     width: var(--task-card-accent-width);
     background-color: var(--file-accent, transparent);
     border-radius: 4px 0 0 4px;
-    z-index: 2;
 }
 
-/* Context Variants */
-/* Timeline View: Absolute Positioning */
-.task-viewer-container .task-card {
+/* ==========================================================================
+   2. CONTEXT VARIANTS (View-specific overrides)
+   ========================================================================== */
+
+/* Timeline View: Absolute Positioning for time-based placement */
+.timeline-view .task-card {
     position: absolute;
 }
 
-/* Modifiers */
-/* Robust All-Day Task Styles */
-.task-card.all-day {
+/* Timeline View: AllDay needs relative (Grid-based) */
+.timeline-view .task-card.task-card--allday {
+    position: relative;
+}
+
+/* ==========================================================================
+   3. MODIFIERS (--variant)
+   ========================================================================== */
+
+/* AllDay Task Card */
+.task-card.task-card--allday {
     position: relative;
     left: 4px;
-    width: calc(100% - 10px);
+    width: calc(100% - 8px);
     padding: 4px 2px 4px 8px !important;
-    z-index: var(--z-all-day);
+    z-index: var(--z-task-card-allday);
 }
 
-/* Ensure all-day tasks in timeline stay relative even with the absolute rule above */
-.task-viewer-container .task-card.all-day {
-    position: relative;
+.task-card--allday.task-card--multi-day {
+    height: auto !important;
 }
 
-/* States */
+/* Future Task Card */
+.task-card--future {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    margin-bottom: 0 !important;
+    transform: none !important;
+    min-height: auto;
+    min-width: 0;
+    overflow: visible;
+}
+
+/* ==========================================================================
+   4. STATES (:hover, .selected, .is-dragging)
+   ========================================================================== */
+
 .task-card:hover {
-    z-index: var(--z-task-card-hover);
     border-color: var(--file-accent, var(--interactive-accent));
     filter: brightness(0.95);
 }
@@ -72,152 +100,214 @@
     cursor: grabbing;
 }
 
-.task-card.selected {
-    /* Visual */
-    border: 1px solid var(--file-accent, var(--interactive-accent));
+/* Drag Ghost Task Card */
+.task-card--drag-ghost {
+    position: fixed;
+    z-index: var(--z-task-card-drag-ghost);
+    pointer-events: none;
+    opacity: 0.8;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-s);
+    transition: opacity 0.15s ease;
+}
 
-    /* Use box-shadow to simulate 2px border without changing layout size */
+.task-card--drag-ghost .task-card__handle {
+    display: none;
+}
+
+.task-card.selected {
+    border: 1px solid var(--file-accent, var(--interactive-accent));
     box-shadow: 0 0 0 1px var(--file-accent, var(--interactive-accent)),
         0 0 0 2px var(--background-primary),
         0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
+/* ==========================================================================
+   5. ELEMENTS (__element)
+   ========================================================================== */
 
-/* ===== Task Content ===== */
-
-.task-content-container {
+/* --- Content Container --- */
+.task-card__content {
     flex: 1;
     overflow-y: auto;
     scrollbar-width: thin;
 }
 
-/* Top-level list: Ensure enough padding for the main checkbox */
-.task-content-container>ul,
-.task-content-container>ol {
+.task-card__content>ul,
+.task-card__content>ol {
     padding-inline-start: 1.9em;
-    /* Keep user-requested indentation */
 }
 
-/* Nested lists: Reduce indentation to save space */
-.task-content-container li>ul,
-.task-content-container li>ol {
+.task-card__content li>ul,
+.task-card__content li>ol {
     padding-inline-start: 1.5em;
 }
 
-.task-content-container p,
-.task-content-container ul,
-.task-content-container ol,
-.task-content-container li {
+.task-card__content p,
+.task-card__content ul,
+.task-card__content ol,
+.task-card__content li {
     margin-block-start: 0.2em;
     margin-block-end: 0.2em;
 }
 
-.task-content-container .task-list-item {
+.task-card__content .task-list-item {
     list-style: none;
 }
 
-/* Links */
-.task-content-container a {
+.task-card__content a {
     color: var(--file-accent, var(--link-color));
     text-decoration: none;
 }
 
-.task-content-container a:hover {
+.task-card__content a:hover {
     color: var(--file-accent-hover, var(--link-color-hover));
     text-decoration: underline;
 }
 
-
-/* ===== Time Display ===== */
-
-.task-time-display {
-    /* Positioning */
+/* --- Time Display --- */
+.task-card__time {
     position: absolute;
     top: 2px;
     right: 6px;
-    z-index: 5;
-
-    /* Typography */
+    z-index: var(--z-time-display);
     font-family: var(--font-monospace);
     font-size: 0.75em;
     color: var(--text-muted);
-
-    /* Visual */
     background-color: transparent;
     opacity: 0.8;
-
-    /* Misc */
     pointer-events: none;
 }
 
+/* ==========================================================================
+   6. HANDLES (Resize/Move Controls)
+   ========================================================================== */
 
-/* ===== Handles ===== */
-
-.handle-container {
-    /* Positioning */
+.task-card__handle {
     position: absolute;
-    z-index: var(--z-handle);
-
-    /* Display */
+    z-index: var(--z-task-card-handle);
     display: flex;
     align-items: center;
     justify-content: center;
-
-    /* Misc */
     pointer-events: auto;
 }
 
-.top-resize-container {
+/* Higher z-index for handles in specific contexts */
+.task-card--allday .task-card__handle {
+    z-index: var(--z-task-card-allday-handle);
+}
+
+.task-card--future .task-card__handle {
+    z-index: var(--z-task-card-future-handle);
+}
+
+.task-card__handle--resize-top {
     top: -12px;
     left: 50%;
     transform: translateX(-50%);
 }
 
-.bottom-resize-container {
+.task-card__handle--resize-bottom {
     bottom: -12px;
     left: 50%;
     transform: translateX(-50%);
 }
 
-.move-handle-container {
+.task-card__handle--resize-left {
+    left: -12px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.task-card__handle--resize-right {
+    right: -12px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.task-card__handle--move {
     top: -12px;
     right: -12px;
 }
 
-.handle-btn {
-    /* Display & Box Model */
+.task-card__handle-btn {
     display: flex;
     align-items: center;
     justify-content: center;
     width: 24px;
     height: 24px;
-
-    /* Typography */
     font-family: monospace;
     font-size: 14px;
     line-height: 1;
     color: var(--text-muted);
-
-    /* Visual */
     background-color: var(--background-primary);
     border: 1px solid var(--background-modifier-border);
     border-radius: 4px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-
-    /* Misc */
     cursor: pointer;
     touch-action: none;
 }
 
-.handle-btn:hover {
+.task-card__handle-btn:hover {
     color: var(--text-normal);
     background-color: var(--background-secondary);
 }
 
-.resize-handle {
+.task-card__handle-btn--resize {
+    cursor: pointer;
+}
+
+.task-card__handle--resize-top .task-card__handle-btn,
+.task-card__handle--resize-bottom .task-card__handle-btn {
     cursor: ns-resize;
 }
 
-.move-handle {
+.task-card__handle--resize-left .task-card__handle-btn,
+.task-card__handle--resize-right .task-card__handle-btn {
+    cursor: ew-resize;
+}
+
+.task-card__handle--move .task-card__handle-btn {
     cursor: move;
+}
+
+/* ==========================================================================
+   7. DEADLINE VISUALIZATION
+   ========================================================================== */
+
+.deadline-arrow {
+    position: relative;
+    z-index: var(--z-deadline-arrow);
+    pointer-events: none;
+    height: 100%;
+    margin-left: -6px;
+    margin-right: 6px;
+}
+
+.deadline-arrow::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 0;
+    border-bottom: 2px dashed var(--text-muted);
+    transform: translateY(-50%);
+}
+
+.deadline-arrow::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: 0;
+    width: 0;
+    height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 8px solid var(--text-muted);
+    transform: translateY(-50%);
+}
+
+.deadline-arrow.deadline-clipped::before {
+    display: none;
 }

@@ -45,7 +45,6 @@
 .schedule-task-list {
     display: flex;
     flex-direction: column;
-    gap: 1px;
 }
 
 .schedule-empty-card {
@@ -66,7 +65,7 @@
 }
 
 /* Task Card Overrides for Schedule View */
-/* Increase specificity to override .task-card.all-day in _task-card.css */
+/* Increase specificity to override .task-card.task-card--allday in _task-card.css */
 .schedule-view-container .schedule-task-wrapper .task-card {
     /* Inherit relative from base .task-card */
     top: auto;

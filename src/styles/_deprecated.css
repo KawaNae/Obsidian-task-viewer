@@ -1,0 +1,62 @@
+/* =============================================================================
+   DEPRECATED STYLES
+   These styles are potentially unused and kept for future verification.
+   If confirmed unused after testing, they can be safely removed.
+============================================================================= */
+
+/* --- Header Grid Cell (unused) --- */
+.header-grid-cell {
+    border-right: 1px solid var(--background-modifier-border);
+}
+
+/* --- 1. Top Left: Empty Spacer (unused) --- */
+.header-top-left {
+    grid-column: 1 / 2;
+    grid-row: 1 / 2;
+    background-color: var(--background-secondary);
+    border-bottom: 1px solid var(--background-modifier-border);
+    height: 30px;
+}
+
+/* --- 2. Top Right: Future Label (unused) --- */
+.header-top-right {
+    grid-column: 2 / 3;
+    grid-row: 1 / 2;
+    background-color: var(--background-secondary);
+    border-bottom: 1px solid var(--background-modifier-border);
+    padding: 2px 10px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    border-right: none;
+    justify-content: center;
+}
+
+/* --- 3. Bottom Left: Toggle (unused) --- */
+.header-bottom-left {
+    grid-column: 1 / 2;
+    grid-row: 2 / 3;
+    background-color: var(--background-primary);
+    padding: 2px 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+}
+
+/* --- 4. Bottom Right: Future Task List (unused) --- */
+.header-bottom-right {
+    grid-column: 2 / 3;
+    grid-row: 2 / 3;
+    background-color: var(--background-primary);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    padding: 5px;
+    border-right: none;
+}
+
+.header-bottom-right.collapsed {
+    padding: 0;
+    min-height: 0;
+    display: none;
+}

@@ -4,17 +4,11 @@ export class TaskParser {
     // Regex to match basic task structure: - [x] ...
     private static readonly BASIC_TASK_REGEX = /^(\s*)-\s*\[(.)\]\s*(.*)$/;
 
-    // Regex for Date: Matches @Token where Token can contain >
-    // Examples: @2025-01-01, @2025-01-01>2025-01-05>2025-01-10, @>End, @>>DL
-    private static readonly DATE_TOKEN_REGEX = /@([a-zA-Z0-9\-:>]*)/;
-
-    // Helper regex to validate Date parts
-    private static readonly YMD_REGEX = /^\d{4}-\d{2}-\d{2}$/;
-    private static readonly TIME_REGEX = /^(\d{4}-\d{2}-\d{2})?T?(\d{2}:\d{2})$/; // YYYY-MM-DDTHH:mm or HH:mm
-    private static readonly TIME_ONLY_REGEX = /^(\d{1,2}):(\d{2})$/;
+    // Regex for locating the Date block start: @...
+    // Matches @ followed by date-like chars, or 'future', or just > (for empty start)
+    private static readonly DATE_BLOCK_REGEX = /(@(?:future|[\d\-T:]*)?)(?:>.*)?/;
 
     // Regex for Command: Name(Args)
-    // Matches: word(content)
     private static readonly COMMAND_REGEX = /([a-zA-Z0-9_]+)\((.*?)\)((?:\.[a-zA-Z0-9_]+\(.*?\))*)/g;
     private static readonly MODIFIER_REGEX = /\.([a-zA-Z0-9_]+)\((.*?)\)/g;
 
@@ -33,103 +27,91 @@ export class TaskParser {
 
         // Extraction
         let content = rawContent;
-        let startDate: string | undefined;
-        let endDate: string | undefined;
-        let deadline: string | undefined;
-        let isFuture: boolean | undefined;
+        let date = '';
         let startTime: string | undefined;
         let endTime: string | undefined;
+        let endDate: string | undefined;
+        let deadline: string | undefined;
+        let isFuture = false;
         let commands: any[] = [];
 
-        // 2. Parse Flow Commands
+        // 2. Parse Flow Commands if present
         if (flowPart) {
             commands = this.parseFlowCommands(flowPart);
         }
 
-        // 3. Extract Date Token
-        const dateMatch = content.match(this.DATE_TOKEN_REGEX);
-        if (dateMatch) {
-            const token = dateMatch[1]; // The part after @
+        // 3. Extract Date Block
+        // Updated Regex to capture the whole date/time/deadline chain
+        const dateBlockMatch = content.match(/(@(?:future|[\d\-T:]*)?(?:(?:>|>>)(?:[\d\-T:]*))*)/);
 
-            // Handle @>... or @>>... (Empty Start) handling
-            // If token starts with >, it means the first part (Start) is empty.
-            // Split correctly handles empty strings.
-            // e.g., ">End" -> ["", "End"]
-            // e.g., ">>DL" -> ["", "", "DL"]
+        if (dateBlockMatch) {
+            const fullDateBlock = dateBlockMatch[1];
+            content = content.replace(fullDateBlock, '').trim();
 
-            const parts = token.split('>');
-            // parts[0] = Start, parts[1] = End, parts[2] = Deadline
+            const rawBlock = fullDateBlock.substring(1); // Remove leading @
 
-            const startStr = parts[0];
-            const endStr = parts[1];
-            const dlStr = parts[2];
+            // Split by '>'
+            const parts = rawBlock.split('>');
 
-            // Valid conditions:
-            // Any component is present.
-            // @>End is VALID (Start=Implicit, End=Present)
-            // @>>DL is VALID (Start=Implicit, End=Empty, DL=Present)
-            // @2021-01-01 is VALID
+            const rawStart = parts[0];
+            const rawEnd = parts[1];
+            const rawDeadline = parts[2];
 
-            const isValid = (startStr || endStr || dlStr);
-
-            if (isValid) {
-                // Parse Start
-                if (startStr) {
-                    const s = this.parseDateString(startStr);
-                    if (s) {
-                        if (s.precision === 'someday') {
-                            isFuture = true;
-                        } else {
-                            startDate = s.date;
-                        }
-                        startTime = s.time;
-                    }
-                }
-
-                // Parse End
-                if (endStr) {
-                    const e = this.parseDateString(endStr);
-                    if (e) {
-                        if (e.date) endDate = e.date;
-                        else if (e.time && startDate) {
-                            // Time only provided for End, and Start Date exists? 
-                            // Inherit Start Date.
-                            endDate = startDate;
-                        }
-
-                        if (e.time) {
-                            endTime = e.time;
-                        }
-                    }
-                }
-
-                // Parse Deadline
-                if (dlStr) {
-                    const d = this.parseDateString(dlStr);
-                    if (d) {
-                        // Preserve deadline time by storing as YYYY-MM-DDTHH:mm if time exists
-                        if (d.date && d.time) {
-                            deadline = `${d.date}T${d.time}`;
-                        } else if (d.date) {
-                            deadline = d.date;
-                        }
-                    }
-                }
+            // --- 0. Start ---
+            if (rawStart === 'future') {
+                isFuture = true;
+            } else if (rawStart === '') {
+                // Empty Start (@>...)
+                // Do NOT set date = today. Leave undefined to indicate implicit start at Today.
+                // date = undefined;
             } else {
-                // Should not happen if regex matched something, but regex allows empty if * is used.
-                // If it was just "@", token is empty string.
-                // Treat as nothing?
+                const parsed = this.parseDateTime(rawStart);
+                if (parsed.date) date = parsed.date;
+                if (parsed.time) startTime = parsed.time;
+                if (!parsed.date) {
+                    // If only time provided? Implies Today?
+                    // Let's assume undefined logic applies here too if we want dynamic "Today"
+                    // BUT legacy behavior might expect fixed date?
+                    // Actually, @T10:00 -> Implicit "Today"
+                    // So we also leave date undefined.
+                }
             }
 
-            content = content.replace(this.DATE_TOKEN_REGEX, '').trim();
+            // --- 1. End ---
+            if (parts.length > 1) { // Has > separator
+                if (rawEnd === undefined || rawEnd === '') {
+                    // Empty End (@Start>>...) -> SD/D type: end = start
+                    if (date) endDate = date;
+                } else {
+                    const parsed = this.parseDateTime(rawEnd);
+                    if (parsed.date) endDate = parsed.date;
+                    if (parsed.time) endTime = parsed.time;
+
+                    if (!parsed.date && date) {
+                        endDate = date;
+                    }
+                }
+            }
+
+            // --- 2. Deadline ---
+            if (parts.length > 2) {
+                if (rawDeadline) {
+                    const parsed = this.parseDateTime(rawDeadline);
+                    deadline = parsed.date;
+                    if (parsed.date && parsed.time) {
+                        deadline += `T${parsed.time}`;
+                    }
+                }
+            }
         }
 
-        // Filter: Must have Date OR Commands OR isFuture OR Deadline OR EndDate to be considered a "Task"
-        // This hides simple "- [ ] item" lists.
-        // NOTE: If Start is validly empty (E, D types), startDate is undefined. But endDate or deadline will be set.
-        if (!startDate && !isFuture && !endDate && !deadline && commands.length === 0) {
+        // Filter: Must have Date OR EndDate OR Deadline OR Future OR Commands to be considered a "Task"
+        if (!date && !endDate && !deadline && !isFuture && commands.length === 0) {
             return null;
         }
+
+
+        if (date) isFuture = false;
 
         let status: 'todo' | 'done' | 'cancelled' = 'todo';
         if (statusChar === 'x' || statusChar === 'X') status = 'done';
@@ -142,15 +124,24 @@ export class TaskParser {
             content: content.trim(),
             status,
             statusChar,
-            startDate,
+            startDate: date, // Map parsed date to startDate
+            startTime,
             endDate,
+            endTime,
             deadline,
             isFuture,
-            startTime,
-            endTime,
             commands,
             originalText: line,
             children: []
+        };
+    }
+
+    private static parseDateTime(str: string): { date?: string, time?: string } {
+        const dateMatch = str.match(/(\d{4}-\d{2}-\d{2})/);
+        const timeMatch = str.match(/(\d{2}:\d{2})/);
+        return {
+            date: dateMatch ? dateMatch[1] : undefined,
+            time: timeMatch ? timeMatch[1] : undefined
         };
     }
 
@@ -172,7 +163,7 @@ export class TaskParser {
             if (modifiersStr) {
                 let modMatch;
                 // Reset modifier regex
-                this.MODIFIER_REGEX.lastIndex = 0;
+                this.MODIFIER_REGEX.lastIndex = 0; // Fix typo: this
                 while ((modMatch = this.MODIFIER_REGEX.exec(modifiersStr)) !== null) {
                     modifiers.push({
                         name: modMatch[1],
@@ -190,54 +181,54 @@ export class TaskParser {
     static format(task: Task): string {
         const statusChar = task.statusChar || (task.status === 'done' ? 'x' : (task.status === 'cancelled' ? '-' : ' '));
         let metaStr = '';
+        let hasDateBlock = false;
 
-        const hasDate = !!task.startDate || task.isFuture;
-        const hasEnd = !!task.endDate || !!task.endTime;
-        const hasDeadline = !!task.deadline;
+        let startStr = '';
+        if (task.isFuture && !task.startDate) {
+            startStr = '@future';
+            hasDateBlock = true;
+        } else if (task.startDate) {
+            startStr = `@${task.startDate}`;
+            if (task.startTime) startStr += `T${task.startTime}`;
+            hasDateBlock = true;
+        } else if (!task.isFuture) {
+            // Implicit Start (undefined startDate, not Future)
+            // e.g. D type or S-Timed with implicit date
+            startStr = '@';
+            if (task.startTime) startStr += `T${task.startTime}`;
+            hasDateBlock = true;
+        }
 
-        if (hasDate || hasEnd || hasDeadline) {
-            let timeStr = `@`;
+        if (hasDateBlock) {
+            metaStr += ` ${startStr}`;
 
-            // Start
-            if (task.startDate) {
-                timeStr += `${task.startDate}`;
-                if (task.startTime) {
-                    timeStr += `T${task.startTime}`;
-                }
-            } else if (task.isFuture) {
-                timeStr += `future`;
-            }
+            // End Part Logic
+            if (task.endDate) {
+                // If future (no startDate), isSameDay is false.
+                const isSameDay = task.startDate ? (task.endDate === task.startDate) : false;
 
-            // End
-            if (hasEnd) {
-                timeStr += `>`;
-                if (task.endDate) {
-                    // Check if we can use shorthand (if EndDate == StartDate)
-                    if (task.startDate && task.endDate === task.startDate && task.endTime) {
-                        // Format: >HH:mm
-                        timeStr += `${task.endTime}`;
+                const hasEndTime = !!task.endTime;
+                const needsExplicitEnd = !isSameDay || hasEndTime;
+
+                if (needsExplicitEnd) {
+                    metaStr += '>';
+                    if (!isSameDay) {
+                        metaStr += task.endDate;
+                        if (hasEndTime) metaStr += `T${task.endTime}`;
                     } else {
-                        timeStr += `${task.endDate}`;
-                        if (task.endTime) {
-                            timeStr += `T${task.endTime}`;
-                        }
+                        metaStr += task.endTime;
                     }
-                } else if (task.endTime) {
-                    // Should theoretically have a date if it has a time, handled above?
-                    // Use case: Implicit start?
-                    timeStr += `${task.endTime}`;
+                } else {
+                    // End=Start.
+                    if (task.deadline) metaStr += '>';
                 }
+            } else {
+                if (task.deadline) metaStr += '>';
             }
 
-            // Deadline
+            // Deadline Part
             if (task.deadline) {
-                if (!hasEnd) timeStr += `>`; // Double > if End missing
-                timeStr += `>${task.deadline}`;
-            }
-
-            // Don't append empty @ if nothing matched (e.g. invalid state)
-            if (timeStr !== '@') {
-                metaStr += ` ${timeStr}`;
+                metaStr += `>${task.deadline}`;
             }
         }
 
@@ -255,35 +246,10 @@ export class TaskParser {
 
         return `- [${statusChar}] ${task.content}${metaStr}${flowStr}`;
     }
+
     static isTriggerableStatus(task: Task): boolean {
-        // Trigger recurrence for: Done (x, X), Cancelled (-), or Important (!)
-        if (task.status === 'done' || task.status === 'cancelled') return true;
-        if (task.statusChar === '!') return true;
-        return false;
-    }
-
-    // Updated helper: Removed Year/Month precision support
-    private static parseDateString(str: string): { date: string, time?: string, precision?: 'day' | 'someday' } | null {
-        if (!str) return null;
-        const s = str.toLowerCase();
-        if (s === 'someday' || s === 'future') return { date: '', precision: 'someday' };
-
-        // Time Only (HH:mm)
-        const timeOnlyMatch = str.match(this.TIME_ONLY_REGEX);
-        if (timeOnlyMatch) {
-            return { date: '', time: str, precision: 'day' };
-        }
-
-        if (str.includes('T')) {
-            const [d, t] = str.split('T');
-            // Basic validation
-            if (this.YMD_REGEX.test(d) && /^\d{2}:\d{2}$/.test(t)) {
-                return { date: d, time: t, precision: 'day' };
-            }
-        }
-
-        if (this.YMD_REGEX.test(str)) return { date: str, precision: 'day' };
-
-        return null;
+        // Trigger for any status that is not todo (space)
+        // e.g. x, X, -, !, etc.
+        return task.statusChar !== ' ';
     }
 }

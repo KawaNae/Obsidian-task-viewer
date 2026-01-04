@@ -13,16 +13,21 @@ export class TaskRepository {
 
     async updateTaskInFile(task: Task, updatedTask: Task): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return;
+        if (!(file instanceof TFile)) {
+            console.warn(`[TaskRepository] File not found: ${task.file}`);
+            return;
+        }
 
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
             if (lines.length <= task.line) {
+                console.warn(`[TaskRepository] Line ${task.line} out of bounds (file has ${lines.length} lines)`);
                 return content;
             }
 
             // Re-format line
             const newLine = TaskParser.format(updatedTask);
+            console.log(`[TaskRepository] Updating line ${task.line}: "${lines[task.line]}" -> "${newLine}"`);
 
             // Preserve indentation if possible
             const originalIndent = lines[task.line].match(/^(\s*)/)?.[1] || '';

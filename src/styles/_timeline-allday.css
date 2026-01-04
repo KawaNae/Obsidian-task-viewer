@@ -1,0 +1,109 @@
+/* =============================================================================
+   Timeline AllDay Section
+   Contains: allday-section, allday-section__cell, allday-section__axis, 
+             allday-section__label, collapsed states, toggle button
+============================================================================= */
+
+/* AllDay Section Container */
+.allday-section {
+    background-color: var(--background-primary);
+    z-index: var(--z-allday-section);
+    flex-shrink: 0;
+    overflow-y: visible;
+    position: relative;
+}
+
+/* Spacer for Row 1 (Padding Top) */
+.allday-section::before {
+    content: '';
+    grid-column: 1 / -1;
+    grid-row: 1;
+    height: 3px;
+    z-index: var(--z-negative);
+}
+
+.allday-section.collapsed::before {
+    display: none;
+}
+
+/* AllDay Cell */
+.allday-section__cell {
+    border-right: 1px solid var(--background-modifier-border);
+    border-bottom: 2px solid var(--background-modifier-border);
+    min-height: var(--allday-min-height);
+    position: relative;
+    padding: 3px 0 2px 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+/* AllDay Axis Cell Layout */
+.allday-section__axis {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px;
+    padding-top: 4px;
+    border-left: 1px solid var(--background-modifier-border);
+    border-right: 1px solid var(--background-modifier-border);
+    border-bottom: 2px solid var(--background-modifier-border);
+    background-color: var(--background-secondary);
+}
+
+.allday-section__label {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-size: 0.8em;
+    color: var(--text-muted);
+    padding-bottom: 6px;
+}
+
+/* --- Collapsed State --- */
+/* Show cells but hide borders (except the last one) */
+.allday-section.collapsed .allday-section__cell:not(.allday-section__axis) {
+    display: flex;
+    border-right: none;
+    min-height: 36px;
+}
+
+/* Maintain right border for the last cell */
+.allday-section.collapsed .allday-section__cell.is-last-cell {
+    border-right: 1px solid var(--background-modifier-border);
+}
+
+.allday-section.collapsed .allday-section__axis {
+    grid-row: 1 / span 1 !important;
+    min-height: 36px;
+}
+
+.allday-section.collapsed .task-card,
+.allday-section.collapsed .task-card--allday,
+.allday-section.collapsed .deadline-arrow {
+    display: none !important;
+}
+
+.allday-section.collapsed .allday-section__label {
+    display: none;
+}
+
+/* Show horizontal label when collapsed */
+/* Attach to the first cell instead of container to avoid grid layout issues */
+.allday-section.collapsed .allday-section__cell.is-first-cell::after {
+    content: 'All Day';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    padding: 6px 12px;
+    color: var(--text-muted);
+    font-size: 0.85em;
+    opacity: 0.6;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    z-index: 1;
+    pointer-events: none;
+}

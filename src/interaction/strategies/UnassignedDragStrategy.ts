@@ -1,151 +1,164 @@
-import { DragStrategy } from './DragStrategy';
-import { Task, TaskViewerSettings } from '../../types';
+import { DragStrategy, DragContext } from '../DragStrategy';
+import { Task } from '../../types';
+import { DateUtils } from '../../utils/DateUtils';
+import { createGhostElement, removeGhostElement } from '../GhostFactory';
 
 export class UnassignedDragStrategy implements DragStrategy {
-    name = 'UnassignedDragStrategy';
-    private dragEl: HTMLElement | null = null;
-    private settings: TaskViewerSettings;
+    name = 'Unassigned';
 
-    private targetSection: 'unassigned' | 'all-day' | 'timeline' | null = null;
-    private currentDayDate: string | null = null;
-    private dropTime: string | null = null;
+    private dragTask: Task | null = null;
+    private ghostEl: HTMLElement | null = null;
+    private initialX: number = 0;
+    private initialY: number = 0;
+    private hasMoved: boolean = false;
+    private lastHighlighted: HTMLElement | null = null;
 
-    constructor(settings: TaskViewerSettings) {
-        this.settings = settings;
+    onDown(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
+        this.dragTask = task;
+        this.initialX = e.clientX;
+        this.initialY = e.clientY;
+        this.hasMoved = false;
+
+        // Create Ghost Element (即表示、createElement方式)
+        const doc = context.container.ownerDocument || document;
+        this.ghostEl = createGhostElement(el, doc, { initiallyVisible: true });
+
+        el.addClass('is-dragging-source');
     }
 
-    onDragStart(task: Task, el: HTMLElement, initialX: number, initialY: number, container: HTMLElement): void {
-        this.dragEl = el;
-        this.targetSection = 'unassigned';
-    }
+    onMove(e: PointerEvent, context: DragContext) {
+        if (!this.ghostEl) return;
 
-    onDragMove(e: PointerEvent, container: HTMLElement, elBelow: Element | null): void {
-        if (!this.dragEl) return;
+        const deltaX = e.clientX - this.initialX;
+        const deltaY = e.clientY - this.initialY;
 
-        const longTermRow = elBelow?.closest('.long-term-row') as HTMLElement;
-        const dayTimelineCol = elBelow?.closest('.day-timeline-column') as HTMLElement;
-        const unassignedSection = elBelow?.closest('.unassigned-section') as HTMLElement;
+        if (!this.hasMoved && (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5)) {
+            this.hasMoved = true;
+        }
 
-        if (longTermRow) {
-            this.handleCrossSectionMove(longTermRow, 'all-day'); // Treat as 'all-day' logic (Date Task)
-            // We need to determine the date from columns!
-            this.updateDateFromGrid(e, container, longTermRow);
-        } else if (dayTimelineCol) {
-            this.handleCrossSectionMove(dayTimelineCol, 'timeline');
-            if (dayTimelineCol.dataset.startDate) this.currentDayDate = dayTimelineCol.dataset.startDate;
-            this.calculateTimelineDrop(e, dayTimelineCol);
-        } else if (unassignedSection) {
-            this.handleCrossSectionMove(unassignedSection, 'unassigned');
+        if (this.hasMoved) {
+            this.ghostEl.style.left = `${e.clientX + 10}px`;
+            this.ghostEl.style.top = `${e.clientY + 10}px`;
+
+            // Update drop zone highlighting
+            this.updateDropZoneHighlight(e, context);
         }
     }
 
-    private updateDateFromGrid(e: PointerEvent, container: HTMLElement, row: HTMLElement) {
-        const rowRect = row.getBoundingClientRect();
-        const timeAxisWidth = 30;
-        const xInRow = e.clientX - rowRect.left;
+    async onUp(e: PointerEvent, context: DragContext) {
+        if (!this.dragTask || !this.ghostEl) return;
 
-        if (xInRow > timeAxisWidth) {
-            const firstCol = container.querySelector('.day-timeline-column');
-            if (firstCol) {
-                const colWidth = firstCol.getBoundingClientRect().width;
-                const colIndex = Math.floor((xInRow - timeAxisWidth) / colWidth);
-                const dayCols = Array.from(container.querySelectorAll('.day-timeline-column')) as HTMLElement[];
+        // Clear any remaining highlights
+        if (this.lastHighlighted) {
+            this.lastHighlighted.removeClass('drag-over');
+            this.lastHighlighted = null;
+        }
 
-                if (colIndex >= 0 && colIndex < dayCols.length) {
-                    const date = dayCols[colIndex].dataset.startDate;
-                    if (date) this.currentDayDate = date;
-                }
+        removeGhostElement(this.ghostEl);
+        this.ghostEl = null;
+
+        const sourceEl = context.container.querySelector(`.task-card[data-id="${this.dragTask.id}"]`);
+        if (sourceEl) {
+            sourceEl.removeClass('is-dragging-source');
+        }
+
+        if (!this.hasMoved) {
+            context.onTaskClick(this.dragTask.id);
+            return;
+        }
+
+        // Determine Drop Target
+        const doc = context.container.ownerDocument || document;
+        const elements = doc.elementsFromPoint(e.clientX, e.clientY);
+
+        if (elements.length === 0) return;
+
+        const updates: Partial<Task> = {
+            isFuture: false
+        };
+
+        // Find targets in the stack
+        let allDayCell: HTMLElement | null = null;
+        let dayCol: HTMLElement | null = null;
+
+        for (const el of elements) {
+            const cell = el.closest('.allday-section__cell') as HTMLElement;
+            if (cell && !cell.hasClass('allday-section__axis')) {
+                allDayCell = cell;
+                break;
+            }
+            if (!dayCol) {
+                dayCol = el.closest('.day-timeline-column') as HTMLElement;
             }
         }
-    }
 
-    private handleCrossSectionMove(targetContainer: HTMLElement, section: 'all-day' | 'timeline' | 'unassigned') {
-        if (this.dragEl && this.dragEl.parentElement !== targetContainer) {
-            this.targetSection = section;
-            targetContainer.appendChild(this.dragEl);
-
-            // Visual Reset
-            this.dragEl.style.position = '';
-            this.dragEl.style.top = '';
-            this.dragEl.style.left = '';
-            this.dragEl.style.width = '';
-            this.dragEl.style.height = '';
-            this.dragEl.style.gridColumnStart = '';
-            this.dragEl.style.gridColumnEnd = '';
-
-            this.dragEl.removeClass('timed');
-            this.dragEl.removeClass('all-day');
-
-            if (section === 'all-day') {
-                this.dragEl.addClass('long-term-task');
-                this.dragEl.style.gridRow = '1'; // Force row 1 in grid
-            } else if (section === 'timeline') {
-                this.dragEl.addClass('timed');
-                this.dragEl.style.position = 'absolute';
-                this.dragEl.style.width = 'calc(100% - 8px)';
-                this.dragEl.style.left = '4px';
-            }
-        }
-    }
-
-    private calculateTimelineDrop(e: PointerEvent, dayCol: HTMLElement) {
-        if (!this.dragEl || this.targetSection !== 'timeline') return;
-
-        const zoomLevel = this.settings.zoomLevel;
-        const hourHeight = 60 * zoomLevel;
-        const snapPixels = hourHeight / 4; // 15 min
-
-        const containerRect = dayCol.getBoundingClientRect();
-
-        let relativeY = e.clientY - containerRect.top;
-        const newTop = Math.round(relativeY / snapPixels) * snapPixels;
-        const clampedTop = Math.max(0, newTop);
-
-        this.dragEl.style.top = `${clampedTop}px`;
-        this.dragEl.style.height = `${hourHeight}px`;
-
-        // Calculate time string
-        const startHour = this.settings.startHour;
-        const startHourMinutes = startHour * 60;
-        const startTotalMinutes = (clampedTop / zoomLevel) + startHourMinutes;
-
-        const h = Math.floor(startTotalMinutes / 60);
-        const m = Math.round(startTotalMinutes % 60);
-        this.dropTime = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-    }
-
-    async onDragEnd(task: Task, el: HTMLElement): Promise<Partial<Task>> {
-        const updates: Partial<Task> = {};
-
-        if (this.targetSection === 'all-day' && this.currentDayDate) {
-            // Future -> All-Day
-            updates.startDate = this.currentDayDate;
-            updates.isFuture = undefined; // Remove 'someday'
+        // 1. All-Day Row Target
+        if (allDayCell && allDayCell.dataset.date) {
+            updates.startDate = allDayCell.dataset.date;
             updates.startTime = undefined;
             updates.endTime = undefined;
-            updates.endDate = undefined;
-        } else if (this.targetSection === 'timeline' && this.currentDayDate && this.dropTime) {
-            // Future -> Timeline
-            updates.startDate = this.currentDayDate;
-            updates.isFuture = undefined;
-            updates.startTime = this.dropTime;
-            updates.endTime = undefined; // Point or 1h default
-            updates.endDate = undefined;
-        } else if (this.targetSection === 'unassigned') {
-            // Stay/Reorder in Future (No-op data change unless reordering is implemented)
-            // But if we want to ensure it stays 'someday' just in case:
-            if (task.isFuture !== true) {
-                // Should not happen if started as Unassigned but good safeguard
+            updates.endDate = undefined; // S-All tasks are single day (implied)
+            await context.taskIndex.updateTask(this.dragTask.id, updates);
+            return;
+        }
+
+        // 2. Timeline Column Target
+        if (dayCol && dayCol.dataset.date) {
+            updates.startDate = dayCol.dataset.date;
+
+            const rect = dayCol.getBoundingClientRect();
+            const yInContainer = e.clientY - rect.top;
+
+            const zoomLevel = context.plugin.settings.zoomLevel;
+            const snapPixels = 15 * zoomLevel;
+            const snappedTop = Math.round(yInContainer / snapPixels) * snapPixels;
+
+            const startHour = context.plugin.settings.startHour;
+            const startHourMinutes = startHour * 60;
+            const minutesFromStart = snappedTop / zoomLevel;
+            const totalMinutes = startHourMinutes + minutesFromStart;
+
+            updates.startTime = DateUtils.minutesToTime(totalMinutes);
+            updates.endTime = DateUtils.minutesToTime(totalMinutes + 60);
+
+            await context.taskIndex.updateTask(this.dragTask.id, updates);
+            return;
+        }
+    }
+
+    private updateDropZoneHighlight(e: PointerEvent, context: DragContext) {
+        const doc = context.container.ownerDocument || document;
+        // Use elementsFromPoint to handle overlapping elements (like other task cards)
+        const elements = doc.elementsFromPoint(e.clientX, e.clientY);
+
+        if (this.lastHighlighted) {
+            this.lastHighlighted.removeClass('drag-over');
+            this.lastHighlighted = null;
+        }
+
+        if (elements.length === 0) return;
+
+        // Find targets in the stack of elements
+        let allDayCell: HTMLElement | null = null;
+        let timelineCol: HTMLElement | null = null;
+
+        for (const el of elements) {
+            const cell = el.closest('.allday-section__cell') as HTMLElement;
+            if (cell && !cell.hasClass('allday-section__axis')) {
+                allDayCell = cell;
+                break; // Prioritize all-day cell if found
+            }
+            if (!timelineCol) {
+                timelineCol = el.closest('.day-timeline-column') as HTMLElement;
             }
         }
 
-        return updates;
-    }
-
-    cleanup() {
-        this.dragEl = null;
-        this.targetSection = null;
-        this.currentDayDate = null;
-        this.dropTime = null;
+        if (allDayCell) {
+            allDayCell.addClass('drag-over');
+            this.lastHighlighted = allDayCell;
+        } else if (timelineCol) {
+            timelineCol.addClass('drag-over');
+            this.lastHighlighted = timelineCol;
+        }
     }
 }

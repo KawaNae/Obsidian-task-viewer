@@ -5,8 +5,8 @@ import { Task } from '../types';
 import { MenuHandler } from '../interaction/MenuHandler';
 import { DateUtils } from '../utils/DateUtils';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
-import { ColorUtils } from '../utils/ColorUtils';
 import TaskViewerPlugin from '../main';
+import { ViewUtils, FileFilterMenu } from './ViewUtils';
 
 export const VIEW_TYPE_SCHEDULE = 'schedule-view';
 
@@ -17,7 +17,7 @@ export class ScheduleView extends ItemView {
     private menuHandler: MenuHandler;
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
-    private visibleFiles: Set<string> | null = null;
+    private filterMenu = new FileFilterMenu();
 
     constructor(leaf: WorkspaceLeaf, taskIndex: TaskIndex, plugin: TaskViewerPlugin) {
         super(leaf);
@@ -69,6 +69,11 @@ export class ScheduleView extends ItemView {
 
         const { pastDates, futureDates, tasksByDate } = this.getTasksForSchedule();
 
+        // Set view start date for MenuHandler (use today for ScheduleView)
+        // For E, ED, D types in ScheduleView, use today as implicit start
+        const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        this.menuHandler.setViewStartDate(today);
+
         // Render Past Dates (only if they have tasks)
         pastDates.forEach(date => {
             this.renderDateSection(scheduleContainer, date, tasksByDate[date], true);
@@ -81,13 +86,11 @@ export class ScheduleView extends ItemView {
     }
 
     private renderToolbar() {
-        const toolbar = this.container.createDiv('task-viewer-toolbar');
+        const toolbar = this.container.createDiv('view-toolbar');
 
         // Filter Button
         const filterBtn = toolbar.createEl('button', { text: 'Filter' });
         filterBtn.onclick = (e) => {
-            const menu = new Menu();
-
             // Calculate relevant files (Past Incomplete + Future Any)
             const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
             const futureDates = new Set<string>();
@@ -104,7 +107,6 @@ export class ScheduleView extends ItemView {
                 const taskDate = task.startDate;
                 if (!taskDate) return;
 
-                // Check completion status
                 const isLineCompleted = (char: string) => ['x', 'X', '!', '-'].includes(char);
                 const selfStatusChar = task.statusChar || ' ';
                 let isCompleted = isLineCompleted(selfStatusChar);
@@ -128,41 +130,12 @@ export class ScheduleView extends ItemView {
 
             const distinctFiles = Array.from(relevantFiles).sort();
 
-            distinctFiles.forEach(file => {
-                const isVisible = this.visibleFiles === null || this.visibleFiles.has(file);
-                const color = this.getFileColor(file);
-                const fileName = file.split('/').pop() || file;
-                menu.addItem(item => {
-                    item.setTitle(fileName)
-                        .setChecked(isVisible)
-                        .onClick(() => {
-                            if (this.visibleFiles === null) {
-                                this.visibleFiles = new Set(distinctFiles);
-                            }
-
-                            if (isVisible) {
-                                this.visibleFiles.delete(file);
-                            } else {
-                                this.visibleFiles.add(file);
-                            }
-
-                            if (this.visibleFiles.size === distinctFiles.length) {
-                                this.visibleFiles = null;
-                            }
-
-                            this.render();
-                        });
-
-                    item.setIcon('circle');
-                    const iconEl = (item as any).dom.querySelector('.menu-item-icon');
-                    if (iconEl && color) {
-                        iconEl.style.color = color;
-                        iconEl.style.fill = color;
-                    }
-                });
-            });
-
-            menu.showAtPosition({ x: e.pageX, y: e.pageY });
+            this.filterMenu.showMenu(
+                e,
+                distinctFiles,
+                (file) => this.getFileColor(file),
+                () => this.render()
+            );
         };
     }
 
@@ -222,7 +195,7 @@ export class ScheduleView extends ItemView {
                 const cardWrapper = taskList.createDiv('schedule-task-wrapper');
                 const card = cardWrapper.createDiv('task-card');
                 if (!task.startTime) {
-                    card.addClass('all-day');
+                    card.addClass('task-card--allday');
                 }
 
                 // Apply color
@@ -259,7 +232,7 @@ export class ScheduleView extends ItemView {
             if (!taskDate) return;
 
             // Filter by visible files
-            if (this.visibleFiles && !this.visibleFiles.has(task.file)) {
+            if (!this.filterMenu.isFileVisible(task.file)) {
                 return;
             }
 
@@ -308,31 +281,10 @@ export class ScheduleView extends ItemView {
     }
 
     private getFileColor(filePath: string): string | null {
-        const key = this.plugin.settings.frontmatterColorKey;
-        if (!key) return null;
-
-        const cache = this.app.metadataCache.getCache(filePath);
-        return cache?.frontmatter?.[key] || null;
+        return ViewUtils.getFileColor(this.app, filePath, this.plugin.settings.frontmatterColorKey);
     }
 
     private applyTaskColor(el: HTMLElement, filePath: string) {
-        const color = this.getFileColor(filePath);
-
-        if (color) {
-            const hsl = ColorUtils.hexToHSL(color);
-            if (hsl) {
-                const { h, s, l } = hsl;
-                el.style.setProperty('--accent-h', h.toString());
-                el.style.setProperty('--accent-s', s + '%');
-                el.style.setProperty('--accent-l', l + '%');
-
-                el.style.setProperty('--color-accent-hsl', `var(--accent-h), var(--accent-s), var(--accent-l)`);
-                el.style.setProperty('--file-accent', `hsl(var(--accent-h), var(--accent-s), var(--accent-l))`);
-                el.style.setProperty('--file-accent-hover', `hsl(calc(var(--accent-h) - 1), calc(var(--accent-s) * 1.01), calc(var(--accent-l) * 1.075))`);
-            } else {
-                el.style.setProperty('--file-accent', color);
-                el.style.setProperty('--file-accent-hover', color);
-            }
-        }
+        ViewUtils.applyFileColor(this.app, el, filePath, this.plugin.settings.frontmatterColorKey);
     }
 }

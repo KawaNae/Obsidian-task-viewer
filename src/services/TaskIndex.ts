@@ -4,6 +4,7 @@ import { TaskParser } from './TaskParser';
 import { TaskViewerSettings } from '../types';
 import { TaskRepository } from './TaskRepository';
 import { RecurrenceManager } from './RecurrenceManager';
+import { DateUtils } from '../utils/DateUtils';
 
 export class TaskIndex {
     private app: App;
@@ -15,6 +16,10 @@ export class TaskIndex {
     private recurrenceManager: RecurrenceManager;
     private isInitializing = true;
 
+    // Sync detection: track editor-change timestamps to distinguish local vs sync changes
+    private lastEditorChangeTime: Map<string, number> = new Map();
+    private lastVaultModifyTime: Map<string, number> = new Map();
+
     async initialize() {
         this.isInitializing = true;
         // Wait for layout to be ready before initial scan
@@ -25,8 +30,18 @@ export class TaskIndex {
 
         this.app.vault.on('modify', async (file) => {
             if (file instanceof TFile && file.extension === 'md') {
+                // Record vault.modify timestamp for sync detection
+                this.lastVaultModifyTime.set(file.path, Date.now());
                 await this.queueScan(file);
                 this.notifyListeners();
+            }
+        });
+
+        // Track editor-change events to detect local user edits
+        this.app.workspace.on('editor-change', (editor, info) => {
+            const filePath = (info as any).file?.path;
+            if (filePath) {
+                this.lastEditorChangeTime.set(filePath, Date.now());
             }
         });
 
@@ -60,13 +75,21 @@ export class TaskIndex {
         return this.tasks.get(taskId);
     }
 
-    getTasksForDate(date: string): Task[] {
-        return this.getTasks().filter(t => t.startDate === date);
+    getTasksForDate(date: string, startHour?: number): Task[] {
+        // Use visual date if startHour is provided, otherwise use actual today
+        const today = startHour !== undefined ?
+            DateUtils.getVisualDateOfNow(startHour) :
+            DateUtils.getToday();
+        return this.getTasks().filter(t => {
+            if (t.isFuture) return false;
+            const effectiveStart = t.startDate || today;
+            return effectiveStart === date;
+        });
     }
 
     getTasksForVisualDay(visualDate: string, startHour: number): Task[] {
         // 1. Tasks from visualDate (startHour to 23:59)
-        const currentDayTasks = this.getTasksForDate(visualDate).filter(t => {
+        const currentDayTasks = this.getTasksForDate(visualDate, startHour).filter(t => {
             if (!t.startTime) return true; // All-day tasks belong to the date
             const [h] = t.startTime.split(':').map(Number);
             return h >= startHour;
@@ -77,7 +100,7 @@ export class TaskIndex {
         nextDate.setDate(nextDate.getDate() + 1);
         const nextDateStr = nextDate.toISOString().split('T')[0];
 
-        const nextDayTasks = this.getTasksForDate(nextDateStr).filter(t => {
+        const nextDayTasks = this.getTasksForDate(nextDateStr, startHour).filter(t => {
             if (!t.startTime) return false; // All-day tasks of next day don't belong here
             const [h] = t.startTime.split(':').map(Number);
             return h < startHour;
@@ -204,6 +227,22 @@ export class TaskIndex {
             isFirstScan = true;
         }
 
+        // Sync detection: check if this change was from local user edit or sync
+        // Local edit: editor-change fires BEFORE vault.modify
+        // Sync: vault.modify fires BEFORE editor-change (or editor-change doesn't fire at all)
+        const lastEditorChange = this.lastEditorChangeTime.get(file.path) || 0;
+        const lastVaultModify = this.lastVaultModifyTime.get(file.path) || 0;
+        const timeSinceEditorChange = Date.now() - lastEditorChange;
+
+        // Consider it a local change if:
+        // 1. editor-change happened more recently than vault.modify, OR
+        // 2. editor-change happened within 500ms (likely user typing)
+        const isLocalChange = lastEditorChange > lastVaultModify || timeSinceEditorChange < 500;
+
+        if (!isLocalChange && !isFirstScan && !this.isInitializing) {
+            console.log(`[TaskIndex] Sync-driven change detected for ${file.path}, skipping command execution`);
+        }
+
         for (const task of doneTasks) {
             const sig = this.getTaskSignature(task);
             if (checkedSignatures.has(sig)) continue; // Process each unique signature once per scan
@@ -216,8 +255,11 @@ export class TaskIndex {
                 // Number of done tasks increased! Trigger recurrence for the *difference*
                 const diff = currentCount - previousCount;
 
-                // Only trigger if NOT initializing AND NOT the first scan of this file
-                if (!this.isInitializing && !isFirstScan) {
+                // Only trigger if:
+                // 1. NOT initializing
+                // 2. NOT the first scan of this file
+                // 3. IS a local change (not sync-driven)
+                if (!this.isInitializing && !isFirstScan && isLocalChange) {
                     for (let k = 0; k < diff; k++) {
                         tasksToTrigger.push(task);
                     }

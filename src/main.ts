@@ -1,6 +1,6 @@
 import { Plugin, WorkspaceLeaf } from 'obsidian';
 import { TaskIndex } from './services/TaskIndex';
-import { TimelineView, VIEW_TYPE_TIMELINE } from './views/TimelineView';
+import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { KanbanView, VIEW_TYPE_KANBAN } from './views/KanbanView';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/ScheduleView';
 import { TaskViewerSettings, DEFAULT_SETTINGS } from './types';

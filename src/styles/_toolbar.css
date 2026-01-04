@@ -1,0 +1,48 @@
+/* =============================================================================
+   View Toolbar
+   Shared toolbar styles for Timeline, Schedule, and Kanban views
+   命名規則: BEM (Block: view-toolbar)
+============================================================================= */
+
+/* Toolbar Container */
+.view-toolbar {
+    padding: var(--toolbar-padding, 8px);
+    display: flex;
+    gap: var(--toolbar-gap, 8px);
+    overflow-x: auto;
+}
+
+/* Zoom Controls */
+.view-toolbar__zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.view-toolbar__label {
+    min-width: 40px;
+    text-align: center;
+    margin-top: 2px;
+}
+
+/* Toolbar Buttons (iPad Fix & Sizing) */
+.view-toolbar__btn--icon {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    /* remove padding for ipad */
+    padding: 0 !important;
+}
+
+.view-toolbar__btn--text {
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    /* remove padding for ipad */
+    padding: 0 12px !important;
+}

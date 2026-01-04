@@ -1,120 +1,412 @@
-import { DragStrategy } from './DragStrategy';
-import { Task, TaskViewerSettings } from '../../types';
+import { DragStrategy, DragContext } from '../DragStrategy';
+import { Notice } from 'obsidian';
+import { Task } from '../../types';
+import { DateUtils } from '../../utils/DateUtils';
+import { createGhostElement, removeGhostElement } from '../GhostFactory';
 
 export class AllDayDragStrategy implements DragStrategy {
-    name = 'AllDayDragStrategy';
+    name = 'AllDay';
+
+    private dragTask: Task | null = null;
     private dragEl: HTMLElement | null = null;
+    private ghostEl: HTMLElement | null = null;
+    private mode: 'move' | 'resize-left' | 'resize-right' = 'move';
+    private initialX: number = 0;
+
+    // Grid geometry
+    private colWidth: number = 0;
+    private startCol: number = 0;
+    private initialSpan: number = 0;
+    private initialDate: string = '';
+    private initialEndDate: string = '';
+
+    private currentSpan: number = 0;
+    private currentStartOffset: number = 0;
+    private hasMoved: boolean = false;
+    private initialWidth: number = 0;
     private container: HTMLElement | null = null;
-    private mode: 'move' | 'resize-left' | 'resize-right' | null = null;
-    private currentDayDate: string | null = null;
-    private settings: TaskViewerSettings;
+    private lastHighlighted: HTMLElement | null = null;
+    private isOutsideSection: boolean = false;
+    private refHeaderCell: HTMLElement | null = null;
+    private initialGridColumn: string = '';
 
-    private targetSection: 'all-day' | 'timeline' | 'unassigned' | null = null;
-    private dropTime: string | null = null; // Store calculated time for drop on timeline
+    // We rely on grid columns for snapping.
+    // 1 col = 1 day.
 
-    constructor(settings: TaskViewerSettings) {
-        this.settings = settings;
-    }
-
-    onDragStart(task: Task, el: HTMLElement, initialX: number, initialY: number, container: HTMLElement): void {
+    onDown(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
+        this.dragTask = task;
         this.dragEl = el;
-        this.container = container;
-        this.targetSection = 'all-day'; // default
-        // Mode is set by Manager via setMode before this is called
-    }
+        this.initialX = e.clientX;
+        this.container = context.container;
 
-    setMode(mode: 'move' | 'resize-left' | 'resize-right') {
-        this.mode = mode;
-    }
+        // Determine Mode
+        const target = e.target as HTMLElement;
+        if (target.closest('.task-card__handle--resize-left, .task-card__handle--resize-right')) {
+            // AllDay/LongTerm resize handles detected
+        }
 
-    onDragMove(e: PointerEvent, container: HTMLElement, elBelow: Element | null): void {
-        if (!this.dragEl) return;
+        if (target.closest('.task-card__handle--resize-left')) {
+            this.mode = 'resize-left';
+        } else if (target.closest('.task-card__handle--resize-right')) {
+            this.mode = 'resize-right';
+        } else {
+            this.mode = 'move';
+        }
 
-        // Unified Section Detection: 'long-term-row' now handles both
-        const longTermRow = elBelow?.closest('.long-term-row') as HTMLElement;
-        const dayTimelineCol = elBelow?.closest('.day-timeline-column') as HTMLElement;
-        const unassignedSection = elBelow?.closest('.unassigned-section') as HTMLElement;
+        // Initialize Geometry
+        // We can get column width from the grid
+        const grid = el.closest('.timeline-grid');
+        const headerCell = grid?.querySelector('.date-header__cell:nth-child(2)') as HTMLElement; // First day cell
+        this.refHeaderCell = headerCell;
 
+        if (headerCell) {
+            this.colWidth = headerCell.getBoundingClientRect().width;
+        } else {
+            this.colWidth = 100; // Fallback
+        }
+
+        this.initialWidth = el.getBoundingClientRect().width;
+
+        // Get view start date from context (spec: use view start date for E/ED/D types)
+        // This is safe because TimelineView provides the start date via context
+        const viewStartDate = context.getViewStartDate();
+
+        this.initialDate = task.startDate || viewStartDate || DateUtils.getToday();
+        this.initialEndDate = task.endDate || this.initialDate;
+        const diffDays = DateUtils.getDiffDays(this.initialDate, this.initialEndDate);
+        this.initialSpan = diffDays + 1;
+
+        // Parse startCol from gridColumn style (e.g., "3 / span 2" → startCol = 3)
+        const gridCol = el.style.gridColumn;
+        const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
+        if (colMatch) {
+            this.startCol = parseInt(colMatch[1]);
+        } else {
+            // Fallback: calculate from date
+            this.startCol = 2; // Default
+        }
+
+        // Save initial gridColumn for potential reset on cancel
+        this.initialGridColumn = el.style.gridColumn;
+
+        // Visual setup
+        el.addClass('is-dragging');
+        el.style.zIndex = '1000';
+        this.hasMoved = false;
+        this.isOutsideSection = false;
+
+        // Create ghost element for cross-section dragging (move mode only)
         if (this.mode === 'move') {
-            if (longTermRow) {
-                this.handleCrossSectionMove(longTermRow, 'all-day'); // 'all-day' internally equals 'long-term' here
-                // Update Date Context via Grid Calculation
-                this.updateDateFromGrid(e, container, longTermRow);
-            } else if (unassignedSection) {
-                this.handleCrossSectionMove(unassignedSection, 'unassigned');
-            } else if (dayTimelineCol) {
-                this.handleCrossSectionMove(dayTimelineCol, 'timeline');
-                if (dayTimelineCol.dataset.startDate) this.currentDayDate = dayTimelineCol.dataset.startDate;
-
-                // Calculate time for visual feedback or drop preparation
-                this.calculateTimelineDrop(e, dayTimelineCol);
-            }
+            const doc = context.container.ownerDocument || document;
+            this.ghostEl = createGhostElement(el, doc, { useCloneNode: true });
         }
 
-        // Resize Logic (works for both single and multi-day in the long-term row)
-        if ((this.mode === 'resize-left' || this.mode === 'resize-right') && this.targetSection === 'all-day') {
-            this.handleResizeGrid(e, container, elBelow);
+        // Note: Unlike TimelineDragStrategy, we use transform for visual feedback
+        // because LongTerm tasks are positioned via CSS grid-column.
+        // Handle positions will update via onTaskMove callback in DragHandler.
+    }
+
+    onMove(e: PointerEvent, context: DragContext) {
+        if (!this.dragTask || !this.dragEl) return;
+
+        const deltaX = e.clientX - this.initialX;
+
+        // Threshold check (only if not already moving)
+        if (!this.hasMoved && Math.abs(deltaX) < 5) return;
+        this.hasMoved = true;
+
+        // Convert pixels to days
+        const snapPixels = this.colWidth;
+        const rawDeltaX = deltaX;
+        let dayDelta = Math.round(rawDeltaX / snapPixels);
+
+        // Clamp to prevent dragging before column 2 (axis cell is column 1)
+        const minColOffset = 2 - this.startCol; // How far left we can go before hitting axis
+        if (dayDelta < minColOffset) {
+            dayDelta = minColOffset;
+        }
+
+        const snappedDeltaX = dayDelta * snapPixels;
+
+        // Visual feedback based on mode
+        if (this.mode === 'move') {
+            // Check if cursor is outside the long-term section
+            const doc = context.container.ownerDocument || document;
+            const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
+            const futureSection = elBelow?.closest('.future-section-grid') || elBelow?.closest('.future-section__content') || elBelow?.closest('.future-section__list');
+            const timelineSection = elBelow?.closest('.day-timeline-column');
+            const wasOutside = this.isOutsideSection;
+            this.isOutsideSection = !!(futureSection || timelineSection);
+
+            console.log('[LongTermDrag] isOutsideSection:', this.isOutsideSection, 'futureSection:', !!futureSection, 'timelineSection:', !!timelineSection);
+
+            // Update ghost and card visibility based on section
+            if (this.isOutsideSection && this.ghostEl) {
+                // Outside LT section: show ghost, reset original to initial position
+                this.ghostEl.style.opacity = '0.8';
+                this.ghostEl.style.left = `${e.clientX + 10}px`;
+                this.ghostEl.style.top = `${e.clientY + 10}px`;
+                this.dragEl.style.opacity = '0.3';
+
+                // Keep task card at initial position (no transform, original gridColumn)
+                this.dragEl.style.transform = '';
+                this.dragEl.style.gridColumn = this.initialGridColumn;
+
+                // Reset arrow to initial position
+                const originalEndLine = this.startCol + this.initialSpan;
+                this.updateArrowPosition(originalEndLine);
+            } else if (this.ghostEl) {
+                // Inside LT section: hide ghost, move original
+                this.ghostEl.style.opacity = '0';
+                this.ghostEl.style.left = '-9999px';
+                this.dragEl.style.opacity = '';
+                this.dragEl.style.transform = `translateX(${snappedDeltaX}px)`;
+
+                // Update arrow: keep deadline end fixed, stretch arrow start
+                const newTaskEndLine = this.startCol + this.initialSpan + dayDelta;
+                this.updateArrowPosition(newTaskEndLine);
+            }
+
+            // Update cross-section drop zone highlighting
+            this.updateDropZoneHighlight(e, context);
+        } else if (this.mode === 'resize-right') {
+            if (!this.refHeaderCell) return;
+            const baseX = this.refHeaderCell.getBoundingClientRect().left;
+
+            // Use relative width for intuitive snapping
+            const taskLeft = baseX + (this.startCol - 2) * this.colWidth;
+            const widthPx = e.clientX - taskLeft;
+
+            // Snap to cell right edge (Ceil)
+            const newSpan = Math.max(1, Math.ceil(widthPx / this.colWidth));
+
+            // Use gridColumn instead of width for proper Grid alignment
+            // This ensures End aligns to cell boundary (left of divider line)
+            this.dragEl.style.gridColumn = `${this.startCol} / span ${newSpan}`;
+
+            const taskEndLine = this.startCol + newSpan;
+            this.updateArrowPosition(taskEndLine);
+        } else if (this.mode === 'resize-left') {
+            if (!this.refHeaderCell) return;
+            const baseX = this.refHeaderCell.getBoundingClientRect().left;
+            const colIndex = Math.floor((e.clientX - baseX) / this.colWidth);
+
+            // New Start Col = colIndex + 2.
+            let targetStartCol = colIndex + 2;
+
+            // Limit: Start <= End. End Col is fixed based on initial state.
+            const currentEndCol = this.startCol + this.initialSpan - 1;
+            targetStartCol = Math.min(targetStartCol, currentEndCol);
+
+            // New Span
+            const newSpan = Math.max(1, currentEndCol - targetStartCol + 1);
+
+            // Use gridColumn instead of width/transform for proper Grid alignment
+            this.dragEl.style.gridColumn = `${targetStartCol} / span ${newSpan}`;
         }
     }
 
-    private updateDateFromGrid(e: PointerEvent, container: HTMLElement, row: HTMLElement) {
-        const rowRect = row.getBoundingClientRect();
-        const timeAxisWidth = 30;
-        const xInRow = e.clientX - rowRect.left;
+    async onUp(e: PointerEvent, context: DragContext) {
+        if (!this.dragTask || !this.dragEl) return;
 
-        if (xInRow > timeAxisWidth) {
-            const firstCol = container.querySelector('.day-timeline-column');
-            if (firstCol) {
-                const colWidth = firstCol.getBoundingClientRect().width;
-                const colIndex = Math.floor((xInRow - timeAxisWidth) / colWidth);
-                const dayCols = Array.from(container.querySelectorAll('.day-timeline-column')) as HTMLElement[];
+        // Clear any remaining highlights
+        if (this.lastHighlighted) {
+            this.lastHighlighted.removeClass('drag-over');
+            this.lastHighlighted = null;
+        }
 
-                if (colIndex >= 0 && colIndex < dayCols.length) {
-                    const date = dayCols[colIndex].dataset.startDate;
-                    if (date) {
-                        this.currentDayDate = date;
+        // Reset cursor immediately
+        document.body.style.cursor = '';
 
-                        // Visual Feedback: Move the task to this column
-                        // Assuming single day move for now or maintain span?
-                        // Let's assume maintain span.
-                        const startGridLine = colIndex + 2;
+        // Clean up ghost element
+        removeGhostElement(this.ghostEl);
+        this.ghostEl = null;
 
-                        // Calculate Current Span
-                        const currentStart = parseInt(this.dragEl!.style.gridColumnStart) || 0;
-                        const currentEnd = parseInt(this.dragEl!.style.gridColumnEnd) || 0;
-                        const span = (currentEnd > currentStart) ? (currentEnd - currentStart) : 1;
+        this.dragEl.removeClass('is-dragging');
+        this.dragEl.style.transform = '';
+        this.dragEl.style.width = '';
+        this.dragEl.style.zIndex = '';
+        this.dragEl.style.opacity = '';
 
-                        if (this.dragEl) {
-                            this.dragEl.style.gridColumnStart = startGridLine.toString();
-                            this.dragEl.style.gridColumnEnd = (startGridLine + span).toString();
+        if (!this.hasMoved) {
+            context.onTaskClick(this.dragTask.id);
+            this.dragEl = null;
+            this.dragTask = null;
+            return;
+        }
 
-                            // Update Arrow
-                            this.updateArrowPosition(startGridLine + span);
-                        }
+        // Check for cross-section drops first
+        const doc = context.container.ownerDocument || document;
+        const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
+
+        if (elBelow) {
+            // Check for drop on Future section (LT→FU)
+            const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-section__content') || elBelow.closest('.future-section__list');
+            if (futureSection && this.mode === 'move') {
+                if (this.dragTask.deadline) {
+                    new Notice('DeadlineがあるタスクはFutureに移動できません');
+                    // Reset visual state before returning
+                    this.resetVisualState();
+                    this.dragTask = null;
+                    this.dragEl = null;
+                    this.container = null;
+                    return;
+                }
+
+                if (!this.dragTask.deadline) {
+                    // Convert to Future type: Remove start/end dates, set isFuture=true
+                    const updates: Partial<Task> = {
+                        isFuture: true,
+                        startDate: undefined,
+                        startTime: undefined,
+                        endDate: undefined,
+                        endTime: undefined
+                    };
+                    await context.taskIndex.updateTask(this.dragTask.id, updates);
+                    this.dragEl = null;
+                    this.dragTask = null;
+                    this.container = null;
+                    return;
+                }
+            }
+
+            // Check for drop on Timeline section (LT→TL)
+            const timelineSection = elBelow.closest('.day-timeline-column') as HTMLElement;
+            if (timelineSection && this.mode === 'move') {
+                const targetDate = timelineSection.dataset.date;
+                if (targetDate) {
+                    // Calculate drop position for time
+                    const rect = timelineSection.getBoundingClientRect();
+                    const yInContainer = e.clientY - rect.top;
+
+                    const zoomLevel = context.plugin.settings.zoomLevel;
+                    const snapPixels = 15 * zoomLevel;
+                    const snappedTop = Math.round(yInContainer / snapPixels) * snapPixels;
+
+                    const startHour = context.plugin.settings.startHour;
+                    const startHourMinutes = startHour * 60;
+                    const minutesFromStart = snappedTop / zoomLevel;
+                    const totalMinutes = startHourMinutes + minutesFromStart;
+
+                    const updates: Partial<Task> = {
+                        startDate: targetDate,
+                        startTime: DateUtils.minutesToTime(totalMinutes),
+                        endTime: DateUtils.minutesToTime(totalMinutes + 60), // 1h default
+                        endDate: targetDate
+                    };
+
+                    // If task has deadline, preserve it but convert to timed format
+                    if (this.dragTask.deadline) {
+                        // Keep deadline as SD type (start+end times, deadline date)
+                        updates.endDate = undefined; // Remove explicit end date for SD type
                     }
+
+                    await context.taskIndex.updateTask(this.dragTask.id, updates);
+                    this.dragEl = null;
+                    this.dragTask = null;
+                    this.container = null;
+                    return;
                 }
             }
         }
+
+        // Regular long-term movement/resize within same section
+        const deltaX = e.clientX - this.initialX;
+        const dayDelta = Math.round(deltaX / this.colWidth);
+
+        if (dayDelta === 0) {
+            this.dragEl = null;
+            this.dragTask = null;
+            return;
+        }
+
+        const updates: Partial<Task> = {};
+        const oldStart = this.initialDate;
+        const oldEnd = this.initialEndDate;
+
+        if (this.mode === 'move') {
+            const newStart = DateUtils.addDays(oldStart, dayDelta);
+            const duration = DateUtils.getDiffDays(oldStart, oldEnd);
+            const newEnd = DateUtils.addDays(newStart, duration);
+
+            // Determine task type for proper conversion
+            const hasExplicitStart = !!this.dragTask.startDate;
+            const hasExplicitEnd = !!this.dragTask.endDate;
+            const hasDeadline = !!this.dragTask.deadline;
+
+            if (hasExplicitStart && hasExplicitEnd) {
+                // SED/SE型: 両方の日付を更新
+                updates.startDate = newStart;
+                updates.endDate = newEnd;
+            } else if (hasExplicitStart && !hasExplicitEnd && hasDeadline) {
+                // SD型: startとendを設定してSED型に変換、deadlineはそのまま
+                updates.startDate = newStart;
+                updates.endDate = newEnd;
+            } else if (!hasExplicitStart && hasExplicitEnd && hasDeadline) {
+                // ED型: startとendを設定してSED型に変換、deadlineはそのまま
+                updates.startDate = newStart;
+                updates.endDate = newEnd;
+            } else if (!hasExplicitStart && hasExplicitEnd && !hasDeadline) {
+                // E型: startとendを設定してSE型に変換
+                updates.startDate = newStart;
+                updates.endDate = newEnd;
+            } else if (!hasExplicitStart && !hasExplicitEnd && hasDeadline) {
+                // D型: startを設定してS-All型に変換、deadlineはそのまま
+                updates.startDate = newStart;
+                // endDateは設定しない（S-All型は1日タスク）
+            } else if (hasExplicitStart && !hasExplicitEnd && !hasDeadline) {
+                // S-All型: startのみ更新
+                updates.startDate = newStart;
+            } else {
+                // その他: startとendを更新
+                updates.startDate = newStart;
+                if (this.dragTask.endDate) {
+                    updates.endDate = newEnd;
+                }
+            }
+        } else if (this.mode === 'resize-right') {
+            // Change End Date
+            // SD -> SED / D -> ED / S-All -> SE
+            // Basic logic: Just set explicit End Date. 
+            // TaskParser/Format will handle type if End != Start (or if End is explicit).
+
+            const newEnd = DateUtils.addDays(oldEnd, dayDelta);
+
+            // Ensure end >= start
+            if (newEnd >= oldStart) {
+                updates.endDate = newEnd;
+            }
+        } else if (this.mode === 'resize-left') {
+            // Change Start Date
+            // ED -> SED / D -> SD / E -> SE
+            // Basic logic: Set explicit Start.
+            // AND ensure floating start is cleared if we set explicit start.
+
+            const newStart = DateUtils.addDays(oldStart, dayDelta);
+
+            // Ensure start <= end
+            if (newStart <= oldEnd) {
+                updates.startDate = newStart;
+                // updates.isFloatingStart = false; // Left resize always implies explicit start
+            }
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await context.taskIndex.updateTask(this.dragTask.id, updates);
+        }
+
+        this.dragEl = null;
+        this.dragTask = null;
+        this.container = null;
     }
 
     private updateArrowPosition(taskEndGridLine: number) {
         if (!this.dragEl || !this.dragEl.dataset.id || !this.container) return;
 
-        // Find the arrow associated with this task
         const taskId = this.dragEl.dataset.id;
         const arrow = this.container.querySelector(`.deadline-arrow[data-task-id="${taskId}"]`) as HTMLElement;
-
         if (arrow) {
-            // Arrow starts where task ends (or used to?)
-            // We want arrow start = taskEndGridLine
             arrow.style.gridColumnStart = taskEndGridLine.toString();
-            // gridColumnEnd shouldn't change unless we want to keep it fixed deadline?
-            // If task moves, deadline (absolute date) stays same?
-            // Yes, usually. So end line is fixed.
-            // If task moves past deadline? Arrow might flip or disappear. 
-            // For now let's just update start. Logic handles valid rendering on redraw.
-
-            // Check visibility
             const arrowEnd = parseInt(arrow.style.gridColumnEnd) || 0;
             if (taskEndGridLine >= arrowEnd) {
                 arrow.style.display = 'none';
@@ -124,231 +416,91 @@ export class AllDayDragStrategy implements DragStrategy {
         }
     }
 
-    private handleCrossSectionMove(targetContainer: HTMLElement, section: 'all-day' | 'timeline' | 'unassigned') {
-        if (this.dragEl && this.dragEl.parentElement !== targetContainer) {
-            this.targetSection = section;
-            targetContainer.appendChild(this.dragEl);
+    private moveArrowWithTask(translateX: number) {
+        if (!this.dragEl || !this.dragEl.dataset.id || !this.container) return;
 
-            // Visual Reset
-            this.dragEl.style.position = '';
-            this.dragEl.style.top = '';
-            this.dragEl.style.left = '';
-            this.dragEl.style.width = '';
-            this.dragEl.style.height = '';
-            this.dragEl.style.gridColumnStart = '';
-            this.dragEl.style.gridColumnEnd = '';
-
-            this.dragEl.removeClass('timed');
-
-            if (section === 'all-day') {
-                this.dragEl.addClass('long-term-task'); // New Base Class
-                // Reset to standard grid item styles for drag preview if needed,
-                // But generally rendering puts it in grid.
-                // For drag preview, we might want it to follow cursor or snap.
-                // If it's a "move", we probably want to update grid columns on the fly or just absolute move?
-                // Visual feedback: Snap to grid column immediately?
-
-                // Let's rely on onDragMove calling updateDateFromGrid, we can update visual if we want.
-                // But simply appending to row might make it jump.
-                // For now, let's keep it simple: Add class, allow free float or basic snap?
-                // Spec implies "Move handle operation" -> visual update.
-                // But handleCrossSectionMove mainly re-parents.
-
-                // Important: Unified grid items are positioned by grid-column.
-                // When we drag a non-grid item (from timeline) into here, it needs grid styles.
-                this.dragEl.style.position = ''; // Allows grid flow? No, grid items need specific column.
-                // We should probably set a temporary grid column based on mouse position.
-                // But simpler validation: Just re-parenting triggers CSS. grid-row=1.
-                this.dragEl.style.gridRow = '1';
-
-                // We need to calculate which column!
-                // Implemented in onDragMove -> we update currentDayDate.
-                // But visual feedback? we should set gridColumnStart/End to follow mouse.
-                // Let's add that logic to updateDateFromGrid or separate.
-            } else if (section === 'timeline') {
-                this.dragEl.addClass('timed');
-                this.dragEl.style.position = 'absolute';
-                this.dragEl.style.width = 'calc(100% - 8px)';
-                this.dragEl.style.left = '4px';
-                // height set in calculation
-            }
+        const taskId = this.dragEl.dataset.id;
+        const arrow = this.container.querySelector(`.deadline-arrow[data-task-id="${taskId}"]`) as HTMLElement;
+        if (arrow) {
+            arrow.style.transform = `translateX(${translateX}px)`;
         }
     }
 
-    private calculateTimelineDrop(e: PointerEvent, dayCol: HTMLElement) {
-        if (!this.dragEl || this.targetSection !== 'timeline') return;
+    private updateDropZoneHighlight(e: PointerEvent, context: DragContext) {
+        // Only highlight drop zones during move operations
+        if (this.mode !== 'move') return;
 
-        const zoomLevel = this.settings.zoomLevel;
-        const hourHeight = 60 * zoomLevel;
-        const snapPixels = hourHeight / 4; // 15 min
+        const doc = context.container.ownerDocument || document;
+        const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
 
-        const containerRect = dayCol.getBoundingClientRect();
-        // Since we re-parented, local Y is roughly e.clientY - containerRect.top
-        // But we need to account for grabOffset... wait, AllDay tasks are small.
-        // Let's assume cursor centers on the task or top?
-        // For All-Day -> Timeline, we treat the cursor as the start time reference.
+        // Reset cursor by default
+        document.body.style.cursor = '';
+        if (this.ghostEl) this.ghostEl.removeClass('is-invalid');
 
-        let relativeY = e.clientY - containerRect.top;
-        const newTop = Math.round(relativeY / snapPixels) * snapPixels;
-        const clampedTop = Math.max(0, newTop);
+        // Clear previous highlight
+        if (this.lastHighlighted) {
+            this.lastHighlighted.removeClass('drag-over');
+            this.lastHighlighted = null;
+        }
 
-        this.dragEl.style.top = `${clampedTop}px`;
-        // Default duration 1 hour for converted task?
-        this.dragEl.style.height = `${hourHeight}px`;
+        if (!elBelow) return;
 
-        // Calculate time string
-        const startHour = this.settings.startHour;
-        const startHourMinutes = startHour * 60;
-        const startTotalMinutes = (clampedTop / zoomLevel) + startHourMinutes;
+        // Check for valid drop targets
+        const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-section__content') || elBelow.closest('.future-section__list');
+        const timelineCol = elBelow.closest('.day-timeline-column') as HTMLElement;
 
-        const h = Math.floor(startTotalMinutes / 60);
-        const m = Math.round(startTotalMinutes % 60);
-        this.dropTime = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-    }
+        if (futureSection) {
+            if (this.dragTask?.deadline) {
+                // Invalid drop: no highlight, just cursor
+                document.body.style.cursor = 'not-allowed';
+            } else {
+                // Valid drop
+                const futureGrid = futureSection.closest('.future-section-grid') || futureSection.querySelector('.future-section-grid') || (futureSection.hasClass('future-section-grid') ? futureSection : null);
+                let targetEl = futureSection;
 
-    private handleResizeGrid(e: PointerEvent, container: HTMLElement, elBelow: Element | null) {
-        const row = elBelow?.closest('.timeline-row') || this.dragEl?.parentElement;
-        if (row) {
-            const rowRect = row.getBoundingClientRect();
-            const timeAxisWidth = 30;
-            const xInRow = e.clientX - rowRect.left;
-
-            if (xInRow > timeAxisWidth) {
-                const firstCol = container.querySelector('.day-timeline-column');
-                if (firstCol) {
-                    const colWidth = firstCol.getBoundingClientRect().width;
-                    const colIndex = Math.floor((xInRow - timeAxisWidth) / colWidth);
-                    if (colIndex >= 0) {
-                        const gridLine = colIndex + 2;
-
-                        if (this.mode === 'resize-left') {
-                            const currentEnd = parseInt(this.dragEl!.style.gridColumnEnd || '0') || (gridLine + 1);
-                            if (gridLine < currentEnd) {
-                                this.dragEl!.style.gridColumnStart = gridLine.toString();
-                                if (!this.dragEl!.style.gridColumnEnd) this.dragEl!.style.gridColumnEnd = currentEnd.toString();
-                            }
-                        } else if (this.mode === 'resize-right') {
-                            const currentStart = parseInt(this.dragEl!.style.gridColumnStart || '0') || gridLine;
-                            const targetLine = gridLine + 1;
-                            if (targetLine > currentStart) {
-                                this.dragEl!.style.gridColumnEnd = targetLine.toString();
-                                if (!this.dragEl!.style.gridColumnStart) this.dragEl!.style.gridColumnStart = currentStart.toString();
-
-                                // Update Arrow Start Position (Task End changed)
-                                this.updateArrowPosition(targetLine);
-                            }
-                        }
-                    }
+                if (futureGrid) {
+                    const content = futureGrid.querySelector('.future-section__content');
+                    if (content) targetEl = content as HTMLElement;
+                } else if (futureSection.hasClass('future-section__content')) {
+                    targetEl = futureSection;
+                } else if (futureSection.closest('.future-section__content')) {
+                    targetEl = futureSection.closest('.future-section__content') as HTMLElement;
                 }
+
+                targetEl.addClass('drag-over');
+                this.lastHighlighted = targetEl as HTMLElement;
             }
+        } else if (timelineCol) {
+            timelineCol.addClass('drag-over');
+            this.lastHighlighted = timelineCol;
         }
     }
 
-    async onDragEnd(task: Task, el: HTMLElement): Promise<Partial<Task>> {
-        const updates: Partial<Task> = {};
+    /**
+     * Reset visual state when drag operation is cancelled.
+     * Restores gridColumn and arrow position to initial state.
+     */
+    private resetVisualState() {
+        if (!this.dragEl) return;
 
-        if (this.targetSection === 'timeline' && this.currentDayDate && this.dropTime) {
-            // All-Day -> Timeline
-            updates.startDate = this.currentDayDate;
-            updates.startTime = this.dropTime;
-            updates.endTime = undefined;
-            updates.endDate = undefined;
-            updates.isFuture = undefined;
+        // Reset task card gridColumn
+        this.dragEl.style.gridColumn = this.initialGridColumn;
+        this.dragEl.style.transform = '';
+        this.dragEl.style.opacity = '';
+        this.dragEl.removeClass('is-dragging');
 
-        } else if (this.targetSection === 'unassigned') {
-            // All-Day -> Future
-            updates.startDate = undefined;
-            updates.isFuture = true;
-            updates.startTime = undefined;
-            updates.endTime = undefined;
-            updates.endDate = undefined;
-
-        } else if (this.targetSection === 'all-day') {
-            if (this.mode === 'move') {
-                if (this.currentDayDate) {
-                    let durationDays = 0;
-                    if (task.endDate) {
-                        const start = new Date(task.startDate!);
-                        const end = new Date(task.endDate);
-                        durationDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24));
-                    }
-
-                    if (this.currentDayDate !== task.startDate) {
-                        updates.startDate = this.currentDayDate;
-                        if (durationDays > 0) {
-                            const newStart = new Date(this.currentDayDate);
-                            const newEnd = new Date(newStart);
-                            newEnd.setDate(newEnd.getDate() + durationDays);
-                            updates.endDate = newEnd.toISOString().split('T')[0];
-                        } else {
-                            if (task.endDate && task.endDate === task.startDate) {
-                                updates.endDate = this.currentDayDate;
-                            }
-                        }
-
-                        const isFuture = task.isFuture;
-                        if (isFuture) updates.isFuture = undefined;
-                    }
-
-                    // IMPORTANT: Do NOT clear startTime/endTime - preserve existing times
-                    // This is a date-precision operation, times should be kept as-is
-                }
-            }
-            else if (this.mode === 'resize-left' || this.mode === 'resize-right') {
-                if (!this.container) return {};
-
-                const dayCols = Array.from(this.container.querySelectorAll('.day-timeline-column')) as HTMLElement[];
-                if (dayCols.length === 0) return {};
-
-                const startLine = parseInt(el.style.gridColumnStart);
-                const endLine = parseInt(el.style.gridColumnEnd);
-
-                // Determine current task type for conversion logic
-                const hasDate = !!task.startDate;
-                const hasEnd = !!task.endDate;
-                const hasDeadline = !!task.deadline;
-
-                if (this.mode === 'resize-left' && !isNaN(startLine)) {
-                    const colIndex = startLine - 2;
-                    if (colIndex >= 0 && colIndex < dayCols.length) {
-                        const newDate = dayCols[colIndex].dataset.startDate;
-                        if (newDate) {
-                            updates.startDate = newDate;
-                            // Type conversion: If task had no start, adding start changes type
-                            // D垁E-> SD垁E E垁E-> SE垁E ED垁E-> SED垁E
-                            // No additional changes needed - just setting date is enough
-                        }
-                    }
-                }
-
-                if (this.mode === 'resize-right' && !isNaN(endLine)) {
-                    const colIndex = endLine - 3;
-                    if (colIndex >= 0 && colIndex < dayCols.length) {
-                        const newEndDate = dayCols[colIndex].dataset.startDate;
-                        if (newEndDate) {
-                            updates.endDate = newEndDate;
-                            // Type conversion: If task had no end, adding end changes type
-                            // D型-> ED型 S-All型-> SE型 SD型-> SED型
-                            // No additional changes needed - just setting endDate is enough
-                        }
-                    }
-                }
-
-                // IMPORTANT: Do NOT clear startTime/endTime - preserve existing times
-                // This is a date-precision operation, times should be kept as-is
-                // deadline is also never modified in resize operations
+        // Reset arrow position
+        if (this.container && this.dragEl.dataset.id) {
+            const taskId = this.dragEl.dataset.id;
+            const arrow = this.container.querySelector(`.deadline-arrow[data-task-id="${taskId}"]`) as HTMLElement;
+            if (arrow) {
+                // Reset arrow to original position based on initial span
+                const originalEndLine = this.startCol + this.initialSpan;
+                arrow.style.gridColumnStart = originalEndLine.toString();
+                arrow.style.transform = '';
+                arrow.style.display = '';
             }
         }
-
-        return updates;
-    }
-
-    cleanup() {
-        this.dragEl = null;
-        this.container = null;
-        this.mode = null;
-        this.currentDayDate = null;
-        this.targetSection = null;
-        this.dropTime = null;
     }
 }
+

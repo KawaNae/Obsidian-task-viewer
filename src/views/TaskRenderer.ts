@@ -14,7 +14,7 @@ export class TaskRenderer {
     async render(container: HTMLElement, task: Task, component: Component, settings: TaskViewerSettings) {
         // Time Display
         if (task.startTime) {
-            const timeDisplay = container.createDiv('task-time-display');
+            const timeDisplay = container.createDiv('task-card__time');
             let timeText = task.startTime;
 
             if (task.endTime) {
@@ -69,7 +69,7 @@ export class TaskRenderer {
             timeDisplay.innerText = timeText;
         }
 
-        const contentContainer = container.createDiv('task-content-container');
+        const contentContainer = container.createDiv('task-card__content');
 
         // Construct full markdown
         // Strip time info from parent task line for display

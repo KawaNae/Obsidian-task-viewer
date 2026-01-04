@@ -1,251 +1,400 @@
-import { DragStrategy } from './DragStrategy';
+import { DragStrategy, DragContext } from '../DragStrategy';
+import { Notice } from 'obsidian';
 import { Task } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { TaskViewerSettings } from '../../types';
+import { createGhostElement, removeGhostElement } from '../GhostFactory';
 
 export class TimelineDragStrategy implements DragStrategy {
-    name = 'TimelineDragStrategy';
+    name = 'Timeline';
+
+    private dragTask: Task | null = null;
     private dragEl: HTMLElement | null = null;
-    private initialHeight: number = 0;
+    private ghostEl: HTMLElement | null = null;
+    private initialY: number = 0;
     private initialTop: number = 0;
-    private grabOffsetY: number = 0;
-    private mode: 'move' | 'resize-top' | 'resize-bottom' | null = null;
+    private initialHeight: number = 0;
+    private initialBottom: number = 0;
+    private dragOffsetY: number = 0;
+    private mode: 'move' | 'resize-top' | 'resize-bottom' = 'move';
     private currentDayDate: string | null = null;
-    private settings: TaskViewerSettings;
+    private hasKeyMoved: boolean = false;
+    private lastHighlighted: HTMLElement | null = null;
+    private isOutsideSection: boolean = false;
 
-    // Track target section for cross-section moves
-    private targetSection: 'timeline' | 'all-day' | 'unassigned' | 'long-term' | null = null;
+    // Auto-scroll properties
+    private autoScrollTimer: number | null = null;
+    private scrollContainer: HTMLElement | null = null;
+    private lastClientX: number = 0;
+    private lastClientY: number = 0;
+    private currentContext: DragContext | null = null;
 
-    constructor(settings: TaskViewerSettings) {
-        this.settings = settings;
-    }
-
-    onDragStart(task: Task, el: HTMLElement, initialX: number, initialY: number, container: HTMLElement): void {
+    onDown(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
+        this.dragTask = task;
         this.dragEl = el;
-        const rect = el.getBoundingClientRect();
+        this.currentContext = context;
+        this.initialY = e.clientY;
         this.initialTop = parseInt(el.style.top || '0');
         this.initialHeight = parseInt(el.style.height || '0');
-        this.grabOffsetY = initialY - rect.top;
 
-        // Initial state
-        this.targetSection = 'timeline';
+        const logicalTop = this.initialTop - 1;
+        const logicalHeight = this.initialHeight + 3;
+        this.initialBottom = logicalTop + logicalHeight;
 
-        // Mode is set by Manager via setMode before this is called
-    }
+        const rect = el.getBoundingClientRect();
+        this.dragOffsetY = e.clientY - rect.top;
 
-    setMode(mode: 'move' | 'resize-top' | 'resize-bottom') {
-        this.mode = mode;
-    }
+        // Determine Mode
+        const target = e.target as HTMLElement;
+        if (target.closest('.task-card__handle--resize-top')) {
+            this.mode = 'resize-top';
+        } else if (target.closest('.task-card__handle--resize-bottom')) {
+            this.mode = 'resize-bottom';
+        } else {
+            this.mode = 'move';
+        }
 
-    onDragMove(e: PointerEvent, container: HTMLElement, elBelow: Element | null): void {
-        if (!this.dragEl) return;
+        const dayCol = el.closest('.day-timeline-column') as HTMLElement;
+        this.currentDayDate = dayCol ? dayCol.dataset.date || null : (task.startDate || null);
 
-        // Detect Sections
-        const dayCol = elBelow?.closest('.day-timeline-column') as HTMLElement;
-        const unassignedSection = elBelow?.closest('.unassigned-section') as HTMLElement;
-        const longTermRow = elBelow?.closest('.long-term-row') as HTMLElement;
+        this.hasKeyMoved = false;
+        this.isOutsideSection = false;
 
+        // Get scroll container reference for auto-scroll
+        this.scrollContainer = context.container.querySelector('.timeline-scroll-area') as HTMLElement;
 
+        // Visual feedback
+        el.addClass('is-dragging');
+        el.style.zIndex = '1000';
+
+        // Create ghost element for cross-section dragging (move mode only)
         if (this.mode === 'move') {
-            if (longTermRow && !dayCol) {
-                // Unified Date Section
-                this.handleCrossSectionMove(longTermRow, 'long-term', 'long-term-task');
-                // Update context if we want to capture specific date?
-                // Usually long-term row is just the container. 
-                // We don't necessarily update `currentDayDate` from row container unless we do grid calc.
-                // But TimelineStrategy -> LongTerm puts it in D-Type usually (no dates?). 
-                // Spec says: "Timeline -> Long Term: Convert to D type (remove start/end)".
-                // So we don't strictly need the specific column date for the Conversion Logic (it becomes Unscheduled Date Task effectively? Or just D type).
-                // Wait, D type = "Deadline only". 
-            } else if (unassignedSection) {
-                this.handleCrossSectionMove(unassignedSection, 'unassigned', 'unassigned');
-            }
+            const doc = context.container.ownerDocument || document;
+            this.ghostEl = createGhostElement(el, doc, { useCloneNode: true });
+        }
+    }
+
+    onMove(e: PointerEvent, context: DragContext) {
+        if (!this.dragTask || !this.dragEl) return;
+        this.currentContext = context;
+        this.lastClientX = e.clientX;
+        this.lastClientY = e.clientY;
+
+        const deltaY = e.clientY - this.initialY;
+
+        // Threshold check - don't count as moved until 5px movement
+        if (!this.hasKeyMoved && Math.abs(deltaY) < 5) return;
+        this.hasKeyMoved = true;
+
+        this.processDragMove(e.clientX, e.clientY);
+
+        // Check for auto-scroll when dragging/resizing in timeline
+        this.checkAutoScroll(e.clientY);
+    }
+
+    private processDragMove(clientX: number, clientY: number) {
+        if (!this.dragTask || !this.dragEl || !this.currentContext) return;
+        const context = this.currentContext;
+
+        // Snap logic
+        const zoomLevel = context.plugin.settings.zoomLevel;
+        const snapPixels = 15 * zoomLevel;
+
+        // Find current column
+        const doc = context.container.ownerDocument || document;
+        const elBelow = doc.elementFromPoint(clientX, clientY);
+        let dayCol = elBelow?.closest('.day-timeline-column') as HTMLElement;
+
+        // Fallback to parent if slightly out
+        if (!dayCol && this.dragEl.parentElement?.classList.contains('day-timeline-column')) {
+            dayCol = this.dragEl.parentElement as HTMLElement;
         }
 
         if (dayCol) {
-            this.targetSection = 'timeline';
-
-            // Re-parent / Visual Feedback for Timeline
             if (this.dragEl.parentElement !== dayCol) {
                 dayCol.appendChild(this.dragEl);
-                this.currentDayDate = dayCol.dataset.startDate || null;
+                this.currentDayDate = dayCol.dataset.date || null;
 
-                // Restore Timeline Styles
+                // Reset styles
                 this.dragEl.style.position = 'absolute';
                 this.dragEl.style.width = 'calc(100% - 8px)';
                 this.dragEl.style.left = '4px';
-                this.dragEl.removeClass('all-day');
-                this.dragEl.addClass('timed');
-            } else {
-                if (dayCol.dataset.startDate) this.currentDayDate = dayCol.dataset.startDate;
             }
 
-            // Snap Logic (Only apply if in Timeline)
-            if (this.mode) {
-                this.applyTimelineSnap(e, dayCol);
+            // Calculations
+            const rect = dayCol.getBoundingClientRect();
+
+            // Note: We do NOT need manual scroll compensation here because getBoundingClientRect()
+            // is relative to the viewport. If the container scrolls, rect.top changes, and 
+            // yInContainer (clientY - rect.top) automatically reflects the new relative position
+            // correctly. Adding scroll compensation would double-count the movement.
+
+            const yInContainer = clientY - rect.top;
+            const snappedMouseY = Math.round(yInContainer / snapPixels) * snapPixels;
+
+            if (this.mode === 'move') {
+                const rawTop = yInContainer - this.dragOffsetY;
+                const snappedTop = Math.round(rawTop / snapPixels) * snapPixels;
+
+                const currentHeight = parseInt(this.dragEl.style.height || `${60 * zoomLevel}`);
+                const logicalHeight = currentHeight + 3;
+
+                const maxTop = (1440 * zoomLevel) - logicalHeight;
+                const clampedTop = Math.max(0, Math.min(maxTop, snappedTop));
+
+                this.dragEl.style.top = `${clampedTop + 1}px`;
+            } else if (this.mode === 'resize-bottom') {
+                const logicalTop = this.initialTop - 1;
+                const newHeight = Math.max(snapPixels, snappedMouseY - logicalTop);
+                const maxHeight = (1440 * zoomLevel) - logicalTop;
+                const clampedHeight = Math.min(newHeight, maxHeight);
+                this.dragEl.style.height = `${clampedHeight - 3}px`;
+            } else if (this.mode === 'resize-top') {
+                const currentBottom = this.initialBottom;
+                const newTop = Math.max(0, snappedMouseY);
+                const clampedTop = Math.max(0, newTop);
+                const clampedHeight = Math.max(snapPixels, currentBottom - clampedTop);
+
+                this.dragEl.style.top = `${clampedTop + 1}px`;
+                this.dragEl.style.height = `${clampedHeight - 3}px`;
             }
         }
-    }
 
-    private handleCrossSectionMove(targetContainer: HTMLElement, section: 'all-day' | 'unassigned' | 'long-term', cssClass: string) {
-        if (this.dragEl && this.dragEl.parentElement !== targetContainer) {
-            this.targetSection = section;
-            targetContainer.appendChild(this.dragEl);
-
-            // Visual reset for non-timeline
-            this.dragEl.style.position = '';
-            this.dragEl.style.top = '';
-            this.dragEl.style.left = '';
-            this.dragEl.style.width = '';
-            this.dragEl.style.height = '';
-
-            this.dragEl.removeClass('timed');
-            this.dragEl.removeClass('all-day'); // reset
-
-            if (section === 'long-term' || section === 'all-day') this.dragEl.addClass('long-term-task');
-            // Unassigned/LongTerm might rely on default or specific classes if needed
-        }
-    }
-
-    private applyTimelineSnap(e: PointerEvent, dayCol: HTMLElement) {
-        if (!this.dragEl) return;
-        const zoomLevel = this.settings.zoomLevel;
-        const hourHeight = 60 * zoomLevel;
-        const snapPixels = hourHeight / 4; // 15 min
-
-        const containerRect = dayCol.getBoundingClientRect();
-        let relativeY = (e.clientY - containerRect.top) - this.grabOffsetY;
-
+        // Update cross-section drop zone highlighting only during move
         if (this.mode === 'move') {
-            const newTop = Math.round(relativeY / snapPixels) * snapPixels;
-            const clampedTop = Math.max(0, newTop);
-            this.dragEl.style.top = `${clampedTop}px`;
-        } else if (this.mode === 'resize-top') {
-            const currentTop = parseInt(this.dragEl.style.top || '0');
-            const currentHeight = parseInt(this.dragEl.style.height || `${60 * zoomLevel}`);
-            const currentBottom = currentTop + currentHeight;
-            const rawNewTop = Math.round(((e.clientY - containerRect.top) / snapPixels)) * snapPixels;
-            const newTop = Math.min(rawNewTop, currentBottom - snapPixels);
-            const clampedTop = Math.max(0, newTop);
-            const newHeight = currentBottom - clampedTop;
-            this.dragEl.style.top = `${clampedTop + 1}px`;
-            this.dragEl.style.height = `${newHeight - 3}px`;
-        } else if (this.mode === 'resize-bottom') {
-            const currentTop = parseInt(this.dragEl.style.top || '0');
-            const relativeMouseY = e.clientY - containerRect.top;
-            const rawNewBottom = Math.round(relativeMouseY / snapPixels) * snapPixels;
-            const newHeight = Math.max(snapPixels, rawNewBottom - currentTop);
-            this.dragEl.style.height = `${newHeight - 3}px`;
+            // Check if cursor is outside the timeline section (over Future area)
+            const futureSection = elBelow?.closest('.future-section-grid') || elBelow?.closest('.future-section__content') || elBelow?.closest('.future-section__list');
+            this.isOutsideSection = !!futureSection;
+
+            // Update ghost and card visibility based on section
+            if (this.isOutsideSection && this.ghostEl) {
+                // Outside TL section: show ghost, hide original visually
+                this.ghostEl.style.opacity = '0.8';
+                this.ghostEl.style.left = `${clientX + 10}px`;
+                this.ghostEl.style.top = `${clientY + 10}px`;
+                this.dragEl.style.opacity = '0.3';
+            } else if (this.ghostEl) {
+                // Inside TL section: hide ghost
+                this.ghostEl.style.opacity = '0';
+                this.ghostEl.style.left = '-9999px';
+                this.dragEl.style.opacity = '';
+            }
+
+            this.updateDropZoneHighlight(clientX, clientY, context);
         }
     }
 
-    async onDragEnd(task: Task, el: HTMLElement): Promise<Partial<Task>> {
-        const updates: Partial<Task> = {};
+    async onUp(e: PointerEvent, context: DragContext) {
+        // Reset cursor immediately
+        document.body.style.cursor = '';
 
-        if (this.targetSection === 'all-day') {
-            // Timeline (SE/Timed) -> All-Day
-            // Spec: Remove start time, delete end completely.
-            // S-Timed: Remove start time.
-            if (this.currentDayDate) {
-                updates.startDate = this.currentDayDate;
-            }
-            updates.startTime = undefined;
-            updates.endTime = undefined;
-            updates.endDate = undefined; // Force delete end per spec
+        if (!this.dragTask || !this.dragEl || !this.currentDayDate) return;
 
-        } else if (this.targetSection === 'unassigned') {
-            // Timeline -> Future
-            // Spec: start -> future, delete end.
-            updates.startDate = undefined;
-            updates.isFuture = true; // future
-            updates.startTime = undefined;
-            updates.endDate = undefined;
-            updates.endTime = undefined;
+        // Clear any remaining highlights
+        if (this.lastHighlighted) {
+            this.lastHighlighted.removeClass('drag-over');
+            this.lastHighlighted = null;
+        }
 
-        } else if (this.targetSection === 'long-term') {
-            // Timeline (SED < 24h) -> Long Term
-            // Spec: Convert to D type (remove start/end).
-            updates.startDate = undefined;
-            updates.startTime = undefined;
-            updates.endDate = undefined;
-            updates.endTime = undefined;
-            updates.isFuture = undefined;
+        // Clean up ghost element
+        removeGhostElement(this.ghostEl);
+        this.ghostEl = null;
 
-        } else if (this.targetSection === 'timeline') {
-            // Standard Timeline Logic
-            if (!this.currentDayDate || !this.dragEl) return {};
+        // Stop auto-scroll
+        this.stopAutoScroll();
 
-            const top = parseInt(this.dragEl.style.top || '0');
-            const zoomLevel = this.settings.zoomLevel;
-            const height = parseInt(this.dragEl.style.height || `${60 * zoomLevel}`);
-            const logicalTop = Math.max(0, top - 1);
+        this.dragEl.removeClass('is-dragging');
+        this.dragEl.style.zIndex = '';
+        this.dragEl.style.opacity = '';
+        this.currentContext = null;
 
-            const startHour = this.settings.startHour;
-            const startHourMinutes = startHour * 60;
-            const startTotalMinutes = (logicalTop / zoomLevel) + startHourMinutes;
-            const endTotalMinutes = startTotalMinutes + ((height + 3) / zoomLevel);
+        if (!this.hasKeyMoved) {
+            context.onTaskClick(this.dragTask.id);
+            this.dragTask = null;
+            this.dragEl = null;
+            return;
+        }
 
-            const newStart = this.calcDateAndTime(this.currentDayDate, startTotalMinutes);
-            const newEnd = this.calcDateAndTime(this.currentDayDate, endTotalMinutes);
+        // Check for cross-section drops first
+        const doc = context.container.ownerDocument || document;
+        const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
 
-            const isFuture = task.isFuture;
-            const hasStart = !!task.startDate && !isFuture;
-            const hasEnd = !!task.endDate || !!task.endTime;
-            const hasDeadline = !!task.deadline;
-
-            if (isFuture || (!hasStart && !hasEnd && !hasDeadline)) {
-                // Future/Unassigned dragged to Timeline (Wait, this is UnassignedStrategy territory usually, but what if converted mid-drag? Unlikely unless strategy allows swap. But TimelineStrategy handles "Timeline items".)
-                // If we had a "Future being dragged in TimelineStrategy", it would mean we handle it here. 
-                // But for now, this handles "Already Timed Task moved within Timeline".
-
-                // However, spec allows moving Timed Task to another day/time in Timeline.
-                updates.startDate = newStart.startDate;
-                updates.startTime = newStart.time;
-                updates.endTime = newEnd.time;
-                if (newStart.startDate !== newEnd.startDate) updates.endDate = newEnd.startDate;
-                if (isFuture) updates.isFuture = undefined;
-            } else {
-                if (this.mode === 'move') {
-                    updates.startDate = newStart.startDate;
-                    updates.startTime = newStart.time;
-                    if (hasEnd || task.endTime) {
-                        updates.endDate = newEnd.startDate;
-                        updates.endTime = newEnd.time;
-                    }
-                    // Ensure end date consistency if simple move
-                    // Calculate duration? No, we used newStart/newEnd logic above which preserves duration if height preserved.
-                    // The logic above recalculates end based on height. This is correct for move too.
-                } else if (this.mode === 'resize-top') {
-                    updates.startDate = newStart.startDate;
-                    updates.startTime = newStart.time;
-                } else if (this.mode === 'resize-bottom') {
-                    updates.endDate = newEnd.startDate;
-                    updates.endTime = newEnd.time;
+        if (elBelow) {
+            // Check for drop on Future section (TL→FU) - only if no deadline
+            const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-section__content') || elBelow.closest('.future-section__list');
+            if (futureSection) {
+                if (this.dragTask.deadline) {
+                    new Notice('DeadlineがあるタスクはFutureに移動できません');
+                    this.dragTask = null;
+                    this.dragEl = null;
+                    return;
                 }
+
+                const updates: Partial<Task> = {
+                    isFuture: true,
+                    startDate: undefined,
+                    startTime: undefined,
+                    endDate: undefined,
+                    endTime: undefined
+                };
+                await context.taskIndex.updateTask(this.dragTask.id, updates);
+                this.dragTask = null;
+                this.dragEl = null;
+                return;
             }
         }
 
-        return updates;
-    }
+        // Regular timeline movement/resize within timeline section
+        // Calculate Final Time
+        const top = parseInt(this.dragEl.style.top || '0');
+        const zoomLevel = context.plugin.settings.zoomLevel;
+        const height = parseInt(this.dragEl.style.height || `${60 * zoomLevel}`);
 
-    cleanup() {
+        const logicalTop = top - 1;
+        const logicalHeight = height + 3;
+
+        const startHour = context.plugin.settings.startHour;
+        const startHourMinutes = startHour * 60;
+
+        const startTotalMinutes = (logicalTop / zoomLevel) + startHourMinutes;
+        const endTotalMinutes = startTotalMinutes + (logicalHeight / zoomLevel);
+
+        let finalDate = this.currentDayDate;
+        let finalStartMinutes = startTotalMinutes;
+        let finalEndMinutes = endTotalMinutes;
+
+        // Day Wrap Logic
+        if (startTotalMinutes >= 24 * 60) {
+            const d = new Date(this.currentDayDate);
+            d.setDate(d.getDate() + 1);
+            finalDate = d.toISOString().split('T')[0];
+            finalStartMinutes -= 24 * 60;
+            finalEndMinutes -= 24 * 60;
+        }
+
+        const newStartTime = DateUtils.minutesToTime(finalStartMinutes);
+        let newEndTime: string;
+        let newEndDate: string = finalDate; // Default to same day
+
+        if (finalEndMinutes >= 24 * 60) {
+            const endDateObj = new Date(finalDate);
+            endDateObj.setDate(endDateObj.getDate() + 1);
+            newEndDate = endDateObj.toISOString().split('T')[0];
+            // Only store time portion, date is in endDate
+            newEndTime = DateUtils.minutesToTime(finalEndMinutes - 24 * 60);
+        } else {
+            newEndTime = DateUtils.minutesToTime(finalEndMinutes);
+        }
+
+        // Always update all fields to handle undefined startDate and full ISO endTime cases
+        const updates: Partial<Task> = {
+            startDate: finalDate,
+            startTime: newStartTime,
+            endDate: newEndDate, // Required for TaskParser.format() to output endTime
+            endTime: newEndTime
+        };
+
+        if (Object.keys(updates).length > 0) {
+            await context.taskIndex.updateTask(this.dragTask.id, updates);
+        }
+
+        this.dragTask = null;
         this.dragEl = null;
-        this.mode = null;
-        this.currentDayDate = null;
-        this.targetSection = null;
     }
 
-    private calcDateAndTime(baseDate: string, totalMinutes: number): { startDate: string, time: string } {
-        const d = new Date(baseDate);
-        const addDays = Math.floor(totalMinutes / (24 * 60));
-        const remMinutes = totalMinutes % (24 * 60);
+    private updateDropZoneHighlight(clientX: number, clientY: number, context: DragContext) {
+        const doc = context.container.ownerDocument || document;
+        const elBelow = doc.elementFromPoint(clientX, clientY);
 
-        d.setDate(d.getDate() + addDays);
-        const dateStr = d.toISOString().split('T')[0];
+        // Reset cursor by default
+        document.body.style.cursor = '';
 
-        const h = Math.floor(remMinutes / 60);
-        const m = Math.round(remMinutes % 60);
-        const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-        return { startDate: dateStr, time: timeStr };
+        // Clear previous highlight
+        if (this.lastHighlighted) {
+            this.lastHighlighted.removeClass('drag-over');
+            this.lastHighlighted = null;
+        }
+
+        if (!elBelow) return;
+
+        // Check for valid drop targets (only Future for timeline tasks)
+        const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-section__content') || elBelow.closest('.future-section__list');
+
+        if (futureSection) {
+            if (this.dragTask?.deadline) {
+                // Invalid drop: no highlight, just cursor
+                document.body.style.cursor = 'not-allowed';
+            } else {
+                // Valid drop - Target .future-section__content for highlight if possible
+                let targetEl = futureSection;
+                const futureGrid = futureSection.closest('.future-section-grid') || futureSection.querySelector('.future-section-grid') || (futureSection.hasClass('future-section-grid') ? futureSection : null);
+
+                if (futureGrid) {
+                    const content = futureGrid.querySelector('.future-section__content');
+                    if (content) targetEl = content as HTMLElement;
+                } else if (futureSection.hasClass('future-section__content')) {
+                    targetEl = futureSection;
+                } else if (futureSection.closest('.future-section__content')) {
+                    targetEl = futureSection.closest('.future-section__content') as HTMLElement;
+                }
+
+                targetEl.addClass('drag-over');
+                this.lastHighlighted = targetEl as HTMLElement;
+            }
+        }
+    }
+
+    private checkAutoScroll(mouseY: number): void {
+        if (!this.scrollContainer) return;
+
+        const rect = this.scrollContainer.getBoundingClientRect();
+        const scrollThreshold = 50; // Pixels from edge to trigger scroll
+        const scrollSpeed = 10; // Pixels per scroll step
+
+        let shouldScrollUp = false;
+        let shouldScrollDown = false;
+
+        // Check if mouse is near the top or bottom edges of the timeline area
+        if (mouseY < rect.top + scrollThreshold) {
+            shouldScrollUp = true;
+        } else if (mouseY > rect.bottom - scrollThreshold) {
+            shouldScrollDown = true;
+        }
+
+        if (shouldScrollUp || shouldScrollDown) {
+            this.startAutoScroll(shouldScrollUp ? -scrollSpeed : scrollSpeed);
+        } else {
+            this.stopAutoScroll();
+        }
+    }
+
+    private startAutoScroll(direction: number): void {
+        // Don't start if already running in the same direction
+        if (this.autoScrollTimer !== null) return;
+
+        this.autoScrollTimer = window.setInterval(() => {
+            if (!this.scrollContainer) return;
+
+            this.scrollContainer.scrollTop += direction;
+
+            // Trigger drag update to keep task synced with scroll
+            // Use last known clientX/Y which are relative to viewport
+            this.processDragMove(this.lastClientX, this.lastClientY);
+
+            // Stop scrolling if we've reached the boundaries or if direction flipped (not handled here but implicitly safe)
+            if (direction < 0 && this.scrollContainer.scrollTop <= 0) {
+                this.stopAutoScroll();
+            } else if (direction > 0 &&
+                this.scrollContainer.scrollTop >=
+                this.scrollContainer.scrollHeight - this.scrollContainer.clientHeight) {
+                this.stopAutoScroll();
+            }
+        }, 16); // ~60fps for smooth scrolling
+    }
+
+    private stopAutoScroll(): void {
+        if (this.autoScrollTimer !== null) {
+            clearInterval(this.autoScrollTimer);
+            this.autoScrollTimer = null;
+        }
     }
 }
