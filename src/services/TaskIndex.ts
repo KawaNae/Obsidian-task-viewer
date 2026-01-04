@@ -3,7 +3,7 @@ import { Task } from '../types';
 import { TaskParser } from './TaskParser';
 import { TaskViewerSettings } from '../types';
 import { TaskRepository } from './TaskRepository';
-import { RecurrenceManager } from './RecurrenceManager';
+import { TaskCommandExecutor } from './TaskCommandExecutor';
 import { DateUtils } from '../utils/DateUtils';
 
 export class TaskIndex {
@@ -13,12 +13,12 @@ export class TaskIndex {
 
     // Services
     private repository: TaskRepository;
-    private recurrenceManager: RecurrenceManager;
+    private commandExecutor: TaskCommandExecutor;
     private isInitializing = true;
 
-    // Sync detection: track editor-change timestamps to distinguish local vs sync changes
-    private lastEditorChangeTime: Map<string, number> = new Map();
-    private lastVaultModifyTime: Map<string, number> = new Map();
+    // Sync detection: track files that have been edited locally
+    // If editor-change fires before vault.modify, it's a local change
+    private hasLocalEdit: Map<string, boolean> = new Map();
 
     async initialize() {
         this.isInitializing = true;
@@ -30,9 +30,12 @@ export class TaskIndex {
 
         this.app.vault.on('modify', async (file) => {
             if (file instanceof TFile && file.extension === 'md') {
-                // Record vault.modify timestamp for sync detection
-                this.lastVaultModifyTime.set(file.path, Date.now());
-                await this.queueScan(file);
+                console.log(`[TaskIndex] vault.modify event for: ${file.path}`);
+                // Check if this file has been edited locally
+                const isLocal = this.hasLocalEdit.get(file.path) || false;
+                // Clear the flag (it will be set again by editor-change if user edits again)
+                this.hasLocalEdit.delete(file.path);
+                await this.queueScan(file, isLocal);
                 this.notifyListeners();
             }
         });
@@ -41,7 +44,9 @@ export class TaskIndex {
         this.app.workspace.on('editor-change', (editor, info) => {
             const filePath = (info as any).file?.path;
             if (filePath) {
-                this.lastEditorChangeTime.set(filePath, Date.now());
+                console.log(`[TaskIndex] editor-change event for: ${filePath}`);
+                // Mark this file as having local edits
+                this.hasLocalEdit.set(filePath, true);
             }
         });
 
@@ -63,7 +68,7 @@ export class TaskIndex {
     constructor(app: App) {
         this.app = app;
         this.repository = new TaskRepository(app);
-        this.recurrenceManager = new RecurrenceManager(this.repository, this, this.app);
+        this.commandExecutor = new TaskCommandExecutor(this.repository, this, this.app);
     }
 
 
@@ -145,13 +150,13 @@ export class TaskIndex {
         return this.queueScan(file);
     }
 
-    private async queueScan(file: TFile): Promise<void> {
+    private async queueScan(file: TFile, isLocal: boolean = false): Promise<void> {
         // Simple queue mechanism: chain promises per file path
         const previousScan = this.scanQueue.get(file.path) || Promise.resolve();
 
         const currentScan = previousScan.then(async () => {
             try {
-                await this.scanFile(file);
+                await this.scanFile(file, isLocal);
             } catch (error) {
                 console.error(`Error scanning file ${file.path}:`, error);
             }
@@ -161,7 +166,7 @@ export class TaskIndex {
         return currentScan;
     }
 
-    private async scanFile(file: TFile) {
+    private async scanFile(file: TFile, isLocalChange: boolean = false) {
         // Double check: if layout is not ready, maybe skip? But queue handles ordering.
         const content = await this.app.vault.read(file);
         const lines = content.split('\n');
@@ -227,17 +232,8 @@ export class TaskIndex {
             isFirstScan = true;
         }
 
-        // Sync detection: check if this change was from local user edit or sync
-        // Local edit: editor-change fires BEFORE vault.modify
-        // Sync: vault.modify fires BEFORE editor-change (or editor-change doesn't fire at all)
-        const lastEditorChange = this.lastEditorChangeTime.get(file.path) || 0;
-        const lastVaultModify = this.lastVaultModifyTime.get(file.path) || 0;
-        const timeSinceEditorChange = Date.now() - lastEditorChange;
-
-        // Consider it a local change if:
-        // 1. editor-change happened more recently than vault.modify, OR
-        // 2. editor-change happened within 500ms (likely user typing)
-        const isLocalChange = lastEditorChange > lastVaultModify || timeSinceEditorChange < 500;
+        // Sync detection logging
+        console.log(`[TaskIndex] Scan for ${file.path}: isLocalChange=${isLocalChange}, isFirstScan=${isFirstScan}, isInitializing=${this.isInitializing}`);
 
         if (!isLocalChange && !isFirstScan && !this.isInitializing) {
             console.log(`[TaskIndex] Sync-driven change detected for ${file.path}, skipping command execution`);
@@ -251,6 +247,8 @@ export class TaskIndex {
             const currentCount = currentCounts.get(sig) || 0;
             const previousCount = this.processedCompletions.get(sig) || 0;
 
+            console.log(`[TaskIndex] Task ${task.content}: currentCount=${currentCount}, previousCount=${previousCount}, isInitializing=${this.isInitializing}, isFirstScan=${isFirstScan}, isLocalChange=${isLocalChange}`);
+
             if (currentCount > previousCount) {
                 // Number of done tasks increased! Trigger recurrence for the *difference*
                 const diff = currentCount - previousCount;
@@ -260,9 +258,12 @@ export class TaskIndex {
                 // 2. NOT the first scan of this file
                 // 3. IS a local change (not sync-driven)
                 if (!this.isInitializing && !isFirstScan && isLocalChange) {
+                    console.log(`[TaskIndex] Triggering command for task: ${task.content}`);
                     for (let k = 0; k < diff; k++) {
                         tasksToTrigger.push(task);
                     }
+                } else {
+                    console.log(`[TaskIndex] Skipping command - isInitializing=${this.isInitializing}, isFirstScan=${isFirstScan}, isLocalChange=${isLocalChange}`);
                 }
             }
         }
@@ -293,7 +294,7 @@ export class TaskIndex {
         // 6. Execute Triggers
         if (tasksToTrigger.length > 0) {
             for (const task of tasksToTrigger) {
-                await this.recurrenceManager.handleTaskCompletion(task);
+                await this.commandExecutor.handleTaskCompletion(task);
             }
         }
     }
