@@ -1,0 +1,194 @@
+/**
+ * Pomodoro Timer Styles
+ * 命名規則: BEM (Block: pomodoro-view)
+ */
+
+.pomodoro-view {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg,
+            var(--background-primary) 0%,
+            var(--background-secondary) 100%);
+    overflow: hidden;
+    padding: 0 !important;
+    position: relative;
+}
+
+/* Hide the view header (navigation bar) */
+.workspace-leaf-content:has(.pomodoro-view) .view-header {
+    display: none;
+}
+
+/* Hide scrollbar */
+.pomodoro-view::-webkit-scrollbar {
+    display: none;
+}
+
+.pomodoro-view__main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(12px, 4vh, 24px);
+    padding: clamp(16px, 5vw, 32px);
+    width: 100%;
+    max-width: 400px;
+}
+
+.pomodoro-view__settings-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: transparent;
+    border: none;
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 8px;
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+}
+
+.pomodoro-view__settings-btn:hover {
+    opacity: 1;
+}
+
+.pomodoro-view__title {
+    font-size: clamp(1rem, 4vw, 1.5rem);
+    font-weight: 600;
+    color: var(--text-normal);
+    text-align: center;
+}
+
+.pomodoro-view__progress-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    max-width: 200px;
+    aspect-ratio: 1 / 1;
+}
+
+.pomodoro-view__progress-ring {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.pomodoro-view__progress-ring-bg {
+    fill: none;
+    stroke: var(--background-modifier-border);
+}
+
+.pomodoro-view__progress-ring-progress {
+    fill: none;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.5s ease;
+}
+
+.pomodoro-view__progress-ring-progress--work {
+    stroke: var(--color-red);
+}
+
+.pomodoro-view__progress-ring-progress--break {
+    stroke: var(--color-green);
+}
+
+.pomodoro-view__progress-ring-progress--idle {
+    stroke: var(--interactive-accent);
+}
+
+.pomodoro-view__time-display {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: min(2.5rem, 25cqw);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-normal);
+}
+
+/* Container query for progress container */
+.pomodoro-view__progress-container {
+    container-type: inline-size;
+}
+
+.pomodoro-view__controls {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.pomodoro-view__btn {
+    padding: clamp(8px, 2vw, 12px) clamp(16px, 4vw, 24px);
+    border-radius: 8px;
+    border: none;
+    font-size: clamp(0.875rem, 3vw, 1rem);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.pomodoro-view__btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.pomodoro-view__btn--primary {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+.pomodoro-view__btn--primary:hover {
+    background: var(--interactive-accent-hover);
+}
+
+.pomodoro-view__btn--secondary {
+    background: var(--background-modifier-border);
+    color: var(--text-normal);
+}
+
+.pomodoro-view__btn--secondary:hover {
+    background: var(--background-modifier-hover);
+}
+
+.pomodoro-view__btn--danger {
+    background: var(--background-modifier-error);
+    color: var(--text-on-accent);
+}
+
+.pomodoro-view__btn--danger:hover {
+    opacity: 0.9;
+}
+
+/* Input Modal Styles */
+.input-modal__input-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.input-modal__label {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.input-modal__input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 1rem;
+}
+
+.input-modal__input:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+}

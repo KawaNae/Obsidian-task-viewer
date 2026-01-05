@@ -50,6 +50,8 @@ export interface TaskViewerSettings {
     zoomLevel: number;      // 0.25 - 4.0 (default 1.0)
     dailyNoteHeader: string; // Header to add tasks under (default: "Tasks")
     dailyNoteHeaderLevel: number; // Header level (default: 2)
+    pomodoroWorkMinutes: number;  // Pomodoro work duration (default: 25)
+    pomodoroBreakMinutes: number; // Pomodoro break duration (default: 5)
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -58,5 +60,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     frontmatterColorKey: 'color',
     zoomLevel: 1.0,
     dailyNoteHeader: 'Tasks',
-    dailyNoteHeaderLevel: 2
+    dailyNoteHeaderLevel: 2,
+    pomodoroWorkMinutes: 25,
+    pomodoroBreakMinutes: 5,
 };

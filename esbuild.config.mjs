@@ -38,6 +38,7 @@ const copyStaticFiles = {
           '_task-card.css',
           '_checkboxes.css',
           '_toolbar.css',
+          '_pomodoro.css',
           '_deprecated.css'
         ];
 
