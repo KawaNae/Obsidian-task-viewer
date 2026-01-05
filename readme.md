@@ -36,6 +36,51 @@ startについては、開始日が未定であることの表現として`futur
 - [ ] @future>2001-11-12>2001-11-13 <!--ED型と同じ扱い-->
 ```
 
+### 子タスクの扱い
+(仕様策定中)
+以下のような子タスクに＠記法による日付時刻指定がある場合について、
+```markdown
+- [ ] parent-task ＠date/time
+    - [ ] child-task1 ＠date/time
+        - [ ] grand-child-task ＠date/time
+            - [ ] great-grand-child-task
+    - [ ] child-task2 ＠date/time
+        - [ ] grand-child-task
+    - [ ] child-task3
+```
+
+以下のようにタスクカードを生成する
+```markdown
+<!--task-card(parent-task)-->
+- [ ] parent-task：[[filename]]
+    - [ ] child-task1
+        - [ ] grand-child-task
+            - [ ] great-grand-child-task
+    - [ ] child-task2
+        - [ ] grand-child-task
+    - [ ] child-task3
+
+<!--task-card(child-task1)-->
+- [ ] child-task1：[[filename]]
+    - [ ] grand-child-task
+        - [ ] great-grand-child-task
+    
+<!--task-card(child-task2)-->
+- [ ] child-task2：[[filename]]
+    - [ ] grand-child-task
+
+<!--task-card(grand-child-task)-->
+- [ ] grand-child-task：[[filename]]
+    - [ ] great-grand-child-task
+```
+
+
+- そのタスクの指定する時間は親タスクのみ考慮し、子タスクの＠記法の指定する日付時刻は親タスクの型決定に一切影響しない
+- 親タスクカードには子タスクをすべて表示する
+- ＠記法がある子タスクはそれ以下の子タスクを子タスクとしてもつ親タスクとして扱い独立したカードを持つ
+- このような子タスクの処理は再帰的に行われる
+
+
 ## コマンド
 
 タスクを完了（`[ ]`→`[x]`）したときに自動実行されるコマンドを`==>`の後に記述する。

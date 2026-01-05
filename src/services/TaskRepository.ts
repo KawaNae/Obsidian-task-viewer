@@ -77,7 +77,12 @@ export class TaskRepository {
             const lines = content.split('\n');
             if (lines.length <= lineNumber) return content;
 
-            lines[lineNumber] = newContent;
+            // Preserve original indentation
+            const originalLine = lines[lineNumber];
+            const originalIndent = originalLine.match(/^(\s*)/)?.[1] || '';
+            const newContentTrimmed = newContent.trimStart();
+
+            lines[lineNumber] = originalIndent + newContentTrimmed;
 
             return lines.join('\n');
         });
