@@ -95,6 +95,19 @@ export class MenuHandler {
                 });
         });
 
+        // 3. Open Pomodoro (for All-Day tasks)
+        if (!task.startTime) {
+            menu.addItem((item) => {
+                item.setTitle('🍅 Open Pomodoro')
+                    .setIcon('timer')
+                    .onClick(() => {
+                        // Show floating pomodoro widget
+                        const widget = this.plugin.getPomodoroWidget();
+                        widget.show(task.id, task.content);
+                    });
+            });
+        }
+
         // 3. Move/Convert Options based on Type
         // Classification logic based on README
         // F: isFuture
@@ -221,13 +234,28 @@ export class MenuHandler {
 
         menu.addSeparator();
 
-        // Duplicate
+        // Duplicate (Submenu)
         menu.addItem((item) => {
-            item.setTitle('Duplicate')
+            const subMenu = (item as any)
+                .setTitle('Duplicate')
                 .setIcon('copy')
-                .onClick(async () => {
-                    await this.taskIndex.duplicateTask(task.id);
-                });
+                .setSubmenu() as Menu;
+
+            subMenu.addItem((sub) => {
+                sub.setTitle('Once')
+                    .setIcon('copy')
+                    .onClick(async () => {
+                        await this.taskIndex.duplicateTask(task.id);
+                    });
+            });
+
+            subMenu.addItem((sub) => {
+                sub.setTitle('For Week (7 days)')
+                    .setIcon('calendar-range')
+                    .onClick(async () => {
+                        await this.taskIndex.duplicateTaskForWeek(task.id);
+                    });
+            });
         });
 
         // Delete

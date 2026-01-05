@@ -86,7 +86,18 @@ export class TaskRenderer {
             cleanParentLine += `[[${fileName}]]`;
         }
 
-        const fullText = [cleanParentLine, ...task.children].join('\n');
+        // Clean child lines: remove @ notation and add proper indentation for nesting
+        const cleanChildren = task.children.map(childLine => {
+            // Remove @... notation (matches @date, @date>time, @future, etc.)
+            // Pattern: @... up to the next space or end of line, including ==> commands
+            const cleaned = childLine
+                .replace(/\s*@[\w\-:>T]+(?:\s*==>.*)?/g, '')
+                .trimEnd();
+            // Add 4-space indent so children render nested under parent task
+            return '    ' + cleaned;
+        });
+
+        const fullText = [cleanParentLine, ...cleanChildren].join('\n');
 
         // Use MarkdownRenderer
         await MarkdownRenderer.render(this.app, fullText, contentContainer, task.file, component);

@@ -77,7 +77,12 @@ export class TaskRepository {
             const lines = content.split('\n');
             if (lines.length <= lineNumber) return content;
 
-            lines[lineNumber] = newContent;
+            // Preserve original indentation
+            const originalLine = lines[lineNumber];
+            const originalIndent = originalLine.match(/^(\s*)/)?.[1] || '';
+            const newContentTrimmed = newContent.trimStart();
+
+            lines[lineNumber] = originalIndent + newContentTrimmed;
 
             return lines.join('\n');
         });
@@ -105,22 +110,119 @@ export class TaskRepository {
             const lines = content.split('\n');
             if (lines.length <= task.line) return content;
 
-            // 1. Get original lines (task + children)
+            // 1. Get original task line from file
             const taskLine = lines[task.line];
+            const taskIndent = taskLine.search(/\S|$/);
 
-            // 2. Prepare new lines
-            // Strip block ID from task line: ^blockid at end of line
+            // 2. Collect original children lines from file (with original indentation)
+            const childrenLines: string[] = [];
+            let j = task.line + 1;
+            while (j < lines.length) {
+                const nextLine = lines[j];
+                const nextIndent = nextLine.search(/\S|$/);
+
+                if (nextLine.trim() === '') {
+                    childrenLines.push(nextLine);
+                    j++;
+                    continue;
+                }
+
+                if (nextIndent > taskIndent) {
+                    childrenLines.push(nextLine);
+                    j++;
+                } else {
+                    break;
+                }
+            }
+
+            // 3. Strip block ID from task line and children: ^blockid at end of line
             const blockIdRegex = /\s\^[a-zA-Z0-9-]+$/;
             const newTaskLine = taskLine.replace(blockIdRegex, '');
-
-            const newChildLines = task.children.map(child => child.replace(blockIdRegex, ''));
+            const newChildLines = childrenLines.map(child => child.replace(blockIdRegex, ''));
 
             const linesToInsert = [newTaskLine, ...newChildLines];
 
-            // 3. Insert after the original block
-            const insertIndex = task.line + 1 + task.children.length;
+            // 4. Insert after the original block
+            const insertIndex = task.line + 1 + childrenLines.length;
 
             lines.splice(insertIndex, 0, ...linesToInsert);
+
+            return lines.join('\n');
+        });
+    }
+
+    /**
+     * タスクを1週間分（7日間）複製。各タスクの日付を1日ずつシフト
+     * @param task 複製元タスク
+     */
+    async duplicateTaskForWeek(task: Task): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) return;
+
+        // Import needed inside method to avoid circular dependencies
+        const { DateUtils } = await import('../utils/DateUtils');
+
+        await this.app.vault.process(file, (content) => {
+            const lines = content.split('\n');
+            if (lines.length <= task.line) return content;
+
+            // Get original task line and its indentation
+            const taskLine = lines[task.line];
+            const taskIndent = taskLine.search(/\S|$/);
+
+            // Collect original children lines from file (with original indentation)
+            const childrenLines: string[] = [];
+            let j = task.line + 1;
+            while (j < lines.length) {
+                const nextLine = lines[j];
+                const nextIndent = nextLine.search(/\S|$/);
+
+                if (nextLine.trim() === '') {
+                    childrenLines.push(nextLine);
+                    j++;
+                    continue;
+                }
+
+                if (nextIndent > taskIndent) {
+                    childrenLines.push(nextLine);
+                    j++;
+                } else {
+                    break;
+                }
+            }
+
+            const blockIdRegex = /\s\^[a-zA-Z0-9-]+$/;
+            const allNewLines: string[] = [];
+
+            // Generate 7 copies with shifted dates (1 day, 2 days, ..., 7 days)
+            for (let dayOffset = 1; dayOffset <= 7; dayOffset++) {
+                // Create shifted task
+                const shiftedTask: Task = {
+                    ...task,
+                    startDate: task.startDate ? DateUtils.shiftDateString(task.startDate, dayOffset) : undefined,
+                    endDate: task.endDate ? DateUtils.shiftDateString(task.endDate, dayOffset) : undefined,
+                    deadline: task.deadline ? DateUtils.shiftDateString(task.deadline, dayOffset) : undefined,
+                };
+
+                // Format the shifted task
+                const formattedLine = TaskParser.format(shiftedTask);
+
+                // Preserve original indentation
+                const originalIndent = taskLine.match(/^(\s*)/)?.[1] || '';
+
+                // Strip block ID
+                const cleanLine = (originalIndent + formattedLine.trim()).replace(blockIdRegex, '');
+                allNewLines.push(cleanLine);
+
+                // Add children without block IDs (from file, with original indentation)
+                for (const child of childrenLines) {
+                    allNewLines.push(child.replace(blockIdRegex, ''));
+                }
+            }
+
+            // Insert after the original task block
+            const insertIndex = task.line + 1 + childrenLines.length;
+            lines.splice(insertIndex, 0, ...allNewLines);
 
             return lines.join('\n');
         });

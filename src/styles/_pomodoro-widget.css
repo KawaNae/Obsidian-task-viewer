@@ -1,0 +1,223 @@
+/* Floating Pomodoro Widget Styles */
+
+.pomodoro-widget {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 65;
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    min-width: 220px;
+    max-width: 280px;
+    cursor: grab;
+    user-select: none;
+}
+
+.pomodoro-widget:active {
+    cursor: grabbing;
+}
+
+/* Timer Item */
+.pomodoro-widget__item {
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.pomodoro-widget__item:last-child {
+    border-bottom: none;
+}
+
+/* Header */
+.pomodoro-widget__header {
+    display: flex;
+    align-items: center;
+    padding: 8px 10px;
+    gap: 6px;
+    background: var(--background-secondary);
+    cursor: grab;
+}
+
+.pomodoro-widget__item:first-child .pomodoro-widget__header {
+    border-radius: 8px 8px 0 0;
+}
+
+.pomodoro-widget__item:last-child .pomodoro-widget__header {
+    border-radius: 0 0 8px 8px;
+}
+
+.pomodoro-widget__item:only-child .pomodoro-widget__header {
+    border-radius: 8px;
+}
+
+.pomodoro-widget__title {
+    flex: 1;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-normal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pomodoro-widget__header-time {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-accent);
+    margin-left: auto;
+}
+
+.pomodoro-widget__header-time--break {
+    color: #4ade80;
+}
+
+.pomodoro-widget__toggle-btn,
+.pomodoro-widget__close-btn,
+.pomodoro-widget__settings-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pomodoro-widget__toggle-btn:hover,
+.pomodoro-widget__close-btn:hover,
+.pomodoro-widget__settings-btn:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.pomodoro-widget__close-btn:hover {
+    color: var(--text-error);
+}
+
+/* Content */
+.pomodoro-widget__content {
+    padding: 12px;
+    background: var(--background-primary);
+}
+
+/* Label Input (custom task description) */
+.pomodoro-widget__label-container {
+    margin-bottom: 12px;
+}
+
+.pomodoro-widget__label-input {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 12px;
+    color: var(--text-normal);
+    background: var(--background-modifier-form-field);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+}
+
+.pomodoro-widget__label-input::placeholder {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.pomodoro-widget__label-input:focus {
+    border-color: var(--interactive-accent);
+    outline: none;
+}
+
+/* Progress Container */
+.pomodoro-widget__progress-container {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.pomodoro-widget__progress-ring {
+    width: 140px;
+    height: 140px;
+}
+
+.pomodoro-widget__progress-ring-bg {
+    fill: none;
+    stroke: var(--background-modifier-border);
+}
+
+.pomodoro-widget__progress-ring-progress {
+    fill: none;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.3s ease;
+}
+
+.pomodoro-widget__progress-ring-progress--work {
+    stroke: #f87171;
+}
+
+.pomodoro-widget__progress-ring-progress--break {
+    stroke: #4ade80;
+}
+
+.pomodoro-widget__progress-ring-progress--idle {
+    stroke: var(--text-muted);
+}
+
+.pomodoro-widget__time-display {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-normal);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Controls */
+.pomodoro-widget__controls {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+}
+
+.pomodoro-widget__btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.pomodoro-widget__btn--primary {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+.pomodoro-widget__btn--primary:hover {
+    background: var(--interactive-accent-hover);
+}
+
+.pomodoro-widget__btn--secondary {
+    background: var(--background-modifier-border);
+    color: var(--text-normal);
+}
+
+.pomodoro-widget__btn--secondary:hover {
+    background: var(--background-modifier-hover);
+}
+
+.pomodoro-widget__btn--danger {
+    background: rgba(248, 113, 113, 0.2);
+    color: #f87171;
+}
+
+.pomodoro-widget__btn--danger:hover {
+    background: rgba(248, 113, 113, 0.3);
+}

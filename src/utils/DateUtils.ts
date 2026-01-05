@@ -43,6 +43,22 @@ export class DateUtils {
         return this.getLocalDateString(d);
     }
 
+    /**
+     * 日時文字列を指定日数シフト（時刻部分は保持）
+     * @param dateStr YYYY-MM-DD or YYYY-MM-DDTHH:mm
+     * @param days シフトする日数
+     * @returns シフト後の日時文字列
+     */
+    static shiftDateString(dateStr: string, days: number): string {
+        const hasTime = dateStr.includes('T');
+        const datePart = dateStr.split('T')[0];
+        const timePart = hasTime ? dateStr.split('T')[1] : null;
+
+        const newDateStr = this.addDays(datePart, days);
+        return timePart ? `${newDateStr}T${timePart}` : newDateStr;
+    }
+
+
     static timeToMinutes(time: string): number {
         const [h, m] = time.split(':').map(Number);
         return h * 60 + m;

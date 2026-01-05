@@ -3,12 +3,17 @@ import { TaskIndex } from './services/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { KanbanView, VIEW_TYPE_KANBAN } from './views/KanbanView';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/ScheduleView';
+import { PomodoroView, VIEW_TYPE_POMODORO } from './views/PomodoroView';
+import { PomodoroService } from './services/PomodoroService';
+import { PomodoroWidget } from './widgets/PomodoroWidget';
 import { TaskViewerSettings, DEFAULT_SETTINGS } from './types';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/ColorSuggest';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
+    private pomodoroService: PomodoroService;
+    private pomodoroWidget: PomodoroWidget;
     public settings: TaskViewerSettings;
 
     async onload() {
@@ -20,6 +25,14 @@ export default class TaskViewerPlugin extends Plugin {
         // Initialize Services
         this.taskIndex = new TaskIndex(this.app);
         await this.taskIndex.initialize();
+
+        this.pomodoroService = new PomodoroService({
+            workMinutes: this.settings.pomodoroWorkMinutes,
+            breakMinutes: this.settings.pomodoroBreakMinutes,
+        });
+
+        // Initialize Pomodoro Widget
+        this.pomodoroWidget = new PomodoroWidget(this.app, this);
 
         // Register View
         this.registerView(
@@ -37,6 +50,11 @@ export default class TaskViewerPlugin extends Plugin {
             (leaf) => new ScheduleView(leaf, this.taskIndex, this)
         );
 
+        this.registerView(
+            VIEW_TYPE_POMODORO,
+            (leaf) => new PomodoroView(leaf, this, this.pomodoroService)
+        );
+
         // Add Ribbon Icon
         this.addRibbonIcon('calendar-clock', 'Open Timeline', () => {
             this.activateView(VIEW_TYPE_TIMELINE);
@@ -48,6 +66,10 @@ export default class TaskViewerPlugin extends Plugin {
 
         this.addRibbonIcon('calendar-days', 'Open Schedule', () => {
             this.activateView(VIEW_TYPE_SCHEDULE);
+        });
+
+        this.addRibbonIcon('clock', 'Open Pomodoro Timer', () => {
+            this.activateView(VIEW_TYPE_POMODORO);
         });
 
         // Add Command
@@ -75,6 +97,14 @@ export default class TaskViewerPlugin extends Plugin {
             }
         });
 
+        this.addCommand({
+            id: 'open-pomodoro-view',
+            name: 'Open Pomodoro Timer',
+            callback: () => {
+                this.activateView(VIEW_TYPE_POMODORO);
+            }
+        });
+
         // Register Settings Tab
         this.addSettingTab(new TaskViewerSettingTab(this.app, this));
 
@@ -92,6 +122,12 @@ export default class TaskViewerPlugin extends Plugin {
     async saveSettings() {
         await this.saveData(this.settings);
 
+        // Update pomodoro service settings
+        this.pomodoroService?.updateSettings({
+            workMinutes: this.settings.pomodoroWorkMinutes,
+            breakMinutes: this.settings.pomodoroBreakMinutes,
+        });
+
         // Refresh all Timeline Views
         this.app.workspace.getLeavesOfType(VIEW_TYPE_TIMELINE).forEach(leaf => {
             if (leaf.view instanceof TimelineView) {
@@ -106,6 +142,19 @@ export default class TaskViewerPlugin extends Plugin {
         } else {
             document.body.classList.remove('task-viewer-global-styles');
         }
+    }
+
+    // Public accessors for services
+    getTaskIndex(): TaskIndex {
+        return this.taskIndex;
+    }
+
+    getTaskRepository() {
+        return (this.taskIndex as any).repository;
+    }
+
+    getPomodoroWidget(): PomodoroWidget {
+        return this.pomodoroWidget;
     }
 
     async activateView(viewType: string) {
@@ -129,5 +178,7 @@ export default class TaskViewerPlugin extends Plugin {
     onunload() {
         console.log('Unloading Task Viewer Plugin');
         document.body.classList.remove('task-viewer-global-styles');
+        this.pomodoroService?.destroy();
+        this.pomodoroWidget?.destroy();
     }
 }

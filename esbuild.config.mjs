@@ -38,6 +38,8 @@ const copyStaticFiles = {
           '_task-card.css',
           '_checkboxes.css',
           '_toolbar.css',
+          '_pomodoro.css',
+          '_pomodoro-widget.css',
           '_deprecated.css'
         ];
 

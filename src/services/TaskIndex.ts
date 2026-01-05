@@ -171,43 +171,84 @@ export class TaskIndex {
         const content = await this.app.vault.read(file);
         const lines = content.split('\n');
 
-        // 1. Parse all new tasks first
+        // 1. Parse all new tasks first (with recursive child extraction)
         const newTasks: Task[] = [];
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            const task = TaskParser.parse(line, file.path, i);
 
-            if (task) {
-                // Look ahead for children
-                const children: string[] = [];
-                let j = i + 1;
-                const taskIndent = line.search(/\S|$/); // Index of first non-whitespace
+        /**
+         * Recursively extract tasks from a range of lines.
+         * @param startIdx - Starting line index in the file
+         * @param linesToProcess - Array of line strings to process
+         * @param baseLineNumber - The actual line number in the file for the first line
+         * @returns Array of extracted tasks
+         */
+        const extractTasksFromLines = (
+            linesToProcess: string[],
+            baseLineNumber: number
+        ): Task[] => {
+            const extractedTasks: Task[] = [];
 
-                while (j < lines.length) {
-                    const nextLine = lines[j];
-                    const nextIndent = nextLine.search(/\S|$/);
+            for (let i = 0; i < linesToProcess.length; i++) {
+                const line = linesToProcess[i];
+                const actualLineNumber = baseLineNumber + i;
+                const task = TaskParser.parse(line, file.path, actualLineNumber);
 
-                    if (nextLine.trim() === '') {
-                        children.push(nextLine);
-                        j++;
-                        continue;
+                if (task) {
+                    // Look ahead for children
+                    const children: string[] = [];
+                    let j = i + 1;
+                    const taskIndent = line.search(/\S|$/); // Index of first non-whitespace
+
+                    while (j < linesToProcess.length) {
+                        const nextLine = linesToProcess[j];
+                        const nextIndent = nextLine.search(/\S|$/);
+
+                        if (nextLine.trim() === '') {
+                            children.push(nextLine);
+                            j++;
+                            continue;
+                        }
+
+                        if (nextIndent > taskIndent) {
+                            children.push(nextLine);
+                            j++;
+                        } else {
+                            break;
+                        }
                     }
 
-                    if (nextIndent > taskIndent) {
-                        children.push(nextLine);
-                        j++;
+                    // Normalize children indentation: remove base indent so they render correctly
+                    // Find the minimum indent of non-empty children
+                    const nonEmptyChildren = children.filter(c => c.trim() !== '');
+                    if (nonEmptyChildren.length > 0) {
+                        const minIndent = Math.min(...nonEmptyChildren.map(c => c.search(/\S|$/)));
+                        task.children = children.map(c => {
+                            if (c.trim() === '') return c;
+                            return c.substring(minIndent);
+                        });
                     } else {
-                        break;
+                        task.children = children;
                     }
+
+                    extractedTasks.push(task);
+
+                    // Recursively extract child tasks that have @ notation
+                    if (children.length > 0) {
+                        const childLineNumber = actualLineNumber + 1;
+                        const childTasks = extractTasksFromLines(children, childLineNumber);
+                        extractedTasks.push(...childTasks);
+                    }
+
+                    // Skip consumed lines
+                    i = j - 1;
                 }
-
-                task.children = children;
-                newTasks.push(task);
-
-                // Skip consumed lines
-                i = j - 1;
             }
-        }
+
+            return extractedTasks;
+        };
+
+        // Extract all tasks recursively
+        const allExtractedTasks = extractTasksFromLines(lines, 0);
+        newTasks.push(...allExtractedTasks);
 
         // 2. Count Current Completions
         const currentCounts = new Map<string, number>();
@@ -398,6 +439,13 @@ export class TaskIndex {
         if (!task) return;
 
         await this.repository.duplicateTaskInFile(task);
+    }
+
+    async duplicateTaskForWeek(taskId: string) {
+        const task = this.tasks.get(taskId);
+        if (!task) return;
+
+        await this.repository.duplicateTaskForWeek(task);
     }
 
     async addTaskToDailyNote(fileDateStr: string, time: string, content: string, settings: TaskViewerSettings, taskDateStr?: string) {
