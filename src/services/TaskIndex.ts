@@ -400,6 +400,13 @@ export class TaskIndex {
         await this.repository.duplicateTaskInFile(task);
     }
 
+    async duplicateTaskForWeek(taskId: string) {
+        const task = this.tasks.get(taskId);
+        if (!task) return;
+
+        await this.repository.duplicateTaskForWeek(task);
+    }
+
     async addTaskToDailyNote(fileDateStr: string, time: string, content: string, settings: TaskViewerSettings, taskDateStr?: string) {
         await this.repository.addTaskToDailyNote(fileDateStr, time, content, settings, taskDateStr);
     }

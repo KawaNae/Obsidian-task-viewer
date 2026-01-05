@@ -221,13 +221,28 @@ export class MenuHandler {
 
         menu.addSeparator();
 
-        // Duplicate
+        // Duplicate (Submenu)
         menu.addItem((item) => {
-            item.setTitle('Duplicate')
+            const subMenu = (item as any)
+                .setTitle('Duplicate')
                 .setIcon('copy')
-                .onClick(async () => {
-                    await this.taskIndex.duplicateTask(task.id);
-                });
+                .setSubmenu() as Menu;
+
+            subMenu.addItem((sub) => {
+                sub.setTitle('Once')
+                    .setIcon('copy')
+                    .onClick(async () => {
+                        await this.taskIndex.duplicateTask(task.id);
+                    });
+            });
+
+            subMenu.addItem((sub) => {
+                sub.setTitle('For Week (7 days)')
+                    .setIcon('calendar-range')
+                    .onClick(async () => {
+                        await this.taskIndex.duplicateTaskForWeek(task.id);
+                    });
+            });
         });
 
         // Delete

@@ -126,6 +126,58 @@ export class TaskRepository {
         });
     }
 
+    /**
+     * タスクを1週間分（7日間）複製。各タスクの日付を1日ずつシフト
+     * @param task 複製元タスク
+     */
+    async duplicateTaskForWeek(task: Task): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) return;
+
+        // Import needed inside method to avoid circular dependencies
+        const { DateUtils } = await import('../utils/DateUtils');
+
+        await this.app.vault.process(file, (content) => {
+            const lines = content.split('\n');
+            if (lines.length <= task.line) return content;
+
+            const blockIdRegex = /\s\^[a-zA-Z0-9-]+$/;
+            const allNewLines: string[] = [];
+
+            // Generate 7 copies with shifted dates (1 day, 2 days, ..., 7 days)
+            for (let dayOffset = 1; dayOffset <= 7; dayOffset++) {
+                // Create shifted task
+                const shiftedTask: Task = {
+                    ...task,
+                    startDate: task.startDate ? DateUtils.shiftDateString(task.startDate, dayOffset) : undefined,
+                    endDate: task.endDate ? DateUtils.shiftDateString(task.endDate, dayOffset) : undefined,
+                    deadline: task.deadline ? DateUtils.shiftDateString(task.deadline, dayOffset) : undefined,
+                };
+
+                // Format the shifted task
+                const formattedLine = TaskParser.format(shiftedTask);
+
+                // Preserve original indentation
+                const originalIndent = lines[task.line].match(/^(\s*)/)?.[1] || '';
+
+                // Strip block ID
+                const cleanLine = (originalIndent + formattedLine.trim()).replace(blockIdRegex, '');
+                allNewLines.push(cleanLine);
+
+                // Add children without block IDs
+                for (const child of task.children) {
+                    allNewLines.push(child.replace(blockIdRegex, ''));
+                }
+            }
+
+            // Insert after the original task block
+            const insertIndex = task.line + 1 + task.children.length;
+            lines.splice(insertIndex, 0, ...allNewLines);
+
+            return lines.join('\n');
+        });
+    }
+
     async addTaskToDailyNote(fileDateStr: string, time: string, content: string, settings: TaskViewerSettings, taskDateStr?: string): Promise<void> {
         const date = new Date(fileDateStr);
         // Fix timezone offset issue
