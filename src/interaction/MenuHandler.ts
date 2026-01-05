@@ -95,6 +95,19 @@ export class MenuHandler {
                 });
         });
 
+        // 3. Open Pomodoro (for All-Day tasks)
+        if (!task.startTime) {
+            menu.addItem((item) => {
+                item.setTitle('🍅 Open Pomodoro')
+                    .setIcon('timer')
+                    .onClick(() => {
+                        // Show floating pomodoro widget
+                        const widget = this.plugin.getPomodoroWidget();
+                        widget.show(task.id, task.content);
+                    });
+            });
+        }
+
         // 3. Move/Convert Options based on Type
         // Classification logic based on README
         // F: isFuture

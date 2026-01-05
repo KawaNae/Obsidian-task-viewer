@@ -18,6 +18,10 @@ export class PomodoroView extends ItemView {
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
 
+    // Task info (passed via setState)
+    private linkedTaskId?: string;
+    private linkedTaskName?: string;
+
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin, pomodoroService: PomodoroService) {
         super(leaf);
         this.plugin = plugin;
@@ -47,12 +51,17 @@ export class PomodoroView extends ItemView {
         });
 
         // Subscribe to completion events
-        this.pomodoroService.onComplete((mode) => {
+        this.pomodoroService.onComplete(async (mode, taskId) => {
             // Play completion sound
             const { AudioUtils } = require('../utils/AudioUtils');
             if (mode === 'work') {
                 AudioUtils.playWorkCompleteChime();
                 new Notice('🍅 Pomodoro complete! Time for a break.');
+
+                // Add pomodoro record as child task
+                if (taskId && this.linkedTaskId) {
+                    await this.addPomodoroRecord();
+                }
             } else {
                 AudioUtils.playBreakCompleteChime();
                 new Notice('☕ Break complete! Ready for another pomodoro?');
@@ -67,6 +76,28 @@ export class PomodoroView extends ItemView {
             this.unsubscribe();
             this.unsubscribe = null;
         }
+    }
+
+    // Save state for popout window restore
+    getState(): any {
+        return {
+            taskId: this.linkedTaskId,
+            taskName: this.linkedTaskName,
+        };
+    }
+
+    // Receive state from popout window or workspace.getLeaf
+    async setState(state: any, result: any): Promise<void> {
+        if (state?.taskId) {
+            this.linkedTaskId = state.taskId;
+            this.linkedTaskName = state.taskName || '';
+            // Start pomodoro with this task
+            this.pomodoroService.start(this.linkedTaskId);
+            // Play start sound
+            const { AudioUtils } = require('../utils/AudioUtils');
+            AudioUtils.playStartSound();
+        }
+        this.render();
     }
 
     private render(): void {
@@ -84,6 +115,12 @@ export class PomodoroView extends ItemView {
 
         // Main container with gradient background
         const mainContainer = this.container.createDiv('pomodoro-view__main');
+
+        // Task name display (if linked to a task)
+        if (this.linkedTaskName) {
+            const taskLabel = mainContainer.createDiv('pomodoro-view__task-label');
+            taskLabel.setText(`🎯 ${this.linkedTaskName}`);
+        }
 
         // Circular progress container
         const progressContainer = mainContainer.createDiv('pomodoro-view__progress-container');
@@ -277,5 +314,43 @@ export class PomodoroView extends ItemView {
         });
 
         menu.showAtMouseEvent(e);
+    }
+
+    /**
+     * Add a pomodoro record as child task to the linked parent task.
+     * Format: - [x] 🍅 @YYYY-MM-DDTHH:mm>HH:mm
+     */
+    private async addPomodoroRecord(): Promise<void> {
+        if (!this.linkedTaskId) return;
+
+        // Get the parent task
+        const taskIndex = this.plugin.getTaskIndex();
+        const parentTask = taskIndex.getTask(this.linkedTaskId);
+        if (!parentTask) {
+            console.warn('[PomodoroView] Parent task not found:', this.linkedTaskId);
+            return;
+        }
+
+        // Calculate start and end times
+        const endTime = new Date();
+        const workMinutes = this.plugin.settings.pomodoroWorkMinutes;
+        const startTime = new Date(endTime.getTime() - workMinutes * 60 * 1000);
+
+        // Format datetime strings
+        const formatDate = (d: Date) => d.toISOString().split('T')[0];
+        const formatTime = (d: Date) => `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+
+        const dateStr = formatDate(startTime);
+        const startTimeStr = formatTime(startTime);
+        const endTimeStr = formatTime(endTime);
+
+        // Build child task line with proper indentation (4 spaces for child)
+        const childLine = `    - [x] 🍅 @${dateStr}T${startTimeStr}>${endTimeStr}`;
+
+        // Insert as child task
+        const taskRepository = this.plugin.getTaskRepository();
+        await taskRepository.insertLineAfterTask(parentTask, childLine);
+
+        new Notice('🍅 Pomodoro recorded!');
     }
 }

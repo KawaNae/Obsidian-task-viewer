@@ -110,20 +110,40 @@ export class TaskRepository {
             const lines = content.split('\n');
             if (lines.length <= task.line) return content;
 
-            // 1. Get original lines (task + children)
+            // 1. Get original task line from file
             const taskLine = lines[task.line];
+            const taskIndent = taskLine.search(/\S|$/);
 
-            // 2. Prepare new lines
-            // Strip block ID from task line: ^blockid at end of line
+            // 2. Collect original children lines from file (with original indentation)
+            const childrenLines: string[] = [];
+            let j = task.line + 1;
+            while (j < lines.length) {
+                const nextLine = lines[j];
+                const nextIndent = nextLine.search(/\S|$/);
+
+                if (nextLine.trim() === '') {
+                    childrenLines.push(nextLine);
+                    j++;
+                    continue;
+                }
+
+                if (nextIndent > taskIndent) {
+                    childrenLines.push(nextLine);
+                    j++;
+                } else {
+                    break;
+                }
+            }
+
+            // 3. Strip block ID from task line and children: ^blockid at end of line
             const blockIdRegex = /\s\^[a-zA-Z0-9-]+$/;
             const newTaskLine = taskLine.replace(blockIdRegex, '');
-
-            const newChildLines = task.children.map(child => child.replace(blockIdRegex, ''));
+            const newChildLines = childrenLines.map(child => child.replace(blockIdRegex, ''));
 
             const linesToInsert = [newTaskLine, ...newChildLines];
 
-            // 3. Insert after the original block
-            const insertIndex = task.line + 1 + task.children.length;
+            // 4. Insert after the original block
+            const insertIndex = task.line + 1 + childrenLines.length;
 
             lines.splice(insertIndex, 0, ...linesToInsert);
 
@@ -146,6 +166,31 @@ export class TaskRepository {
             const lines = content.split('\n');
             if (lines.length <= task.line) return content;
 
+            // Get original task line and its indentation
+            const taskLine = lines[task.line];
+            const taskIndent = taskLine.search(/\S|$/);
+
+            // Collect original children lines from file (with original indentation)
+            const childrenLines: string[] = [];
+            let j = task.line + 1;
+            while (j < lines.length) {
+                const nextLine = lines[j];
+                const nextIndent = nextLine.search(/\S|$/);
+
+                if (nextLine.trim() === '') {
+                    childrenLines.push(nextLine);
+                    j++;
+                    continue;
+                }
+
+                if (nextIndent > taskIndent) {
+                    childrenLines.push(nextLine);
+                    j++;
+                } else {
+                    break;
+                }
+            }
+
             const blockIdRegex = /\s\^[a-zA-Z0-9-]+$/;
             const allNewLines: string[] = [];
 
@@ -163,20 +208,20 @@ export class TaskRepository {
                 const formattedLine = TaskParser.format(shiftedTask);
 
                 // Preserve original indentation
-                const originalIndent = lines[task.line].match(/^(\s*)/)?.[1] || '';
+                const originalIndent = taskLine.match(/^(\s*)/)?.[1] || '';
 
                 // Strip block ID
                 const cleanLine = (originalIndent + formattedLine.trim()).replace(blockIdRegex, '');
                 allNewLines.push(cleanLine);
 
-                // Add children without block IDs
-                for (const child of task.children) {
+                // Add children without block IDs (from file, with original indentation)
+                for (const child of childrenLines) {
                     allNewLines.push(child.replace(blockIdRegex, ''));
                 }
             }
 
             // Insert after the original task block
-            const insertIndex = task.line + 1 + task.children.length;
+            const insertIndex = task.line + 1 + childrenLines.length;
             lines.splice(insertIndex, 0, ...allNewLines);
 
             return lines.join('\n');

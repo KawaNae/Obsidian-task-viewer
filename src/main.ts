@@ -5,6 +5,7 @@ import { KanbanView, VIEW_TYPE_KANBAN } from './views/KanbanView';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/ScheduleView';
 import { PomodoroView, VIEW_TYPE_POMODORO } from './views/PomodoroView';
 import { PomodoroService } from './services/PomodoroService';
+import { PomodoroWidget } from './widgets/PomodoroWidget';
 import { TaskViewerSettings, DEFAULT_SETTINGS } from './types';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/ColorSuggest';
@@ -12,6 +13,7 @@ import { ColorSuggest } from './suggest/ColorSuggest';
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
     private pomodoroService: PomodoroService;
+    private pomodoroWidget: PomodoroWidget;
     public settings: TaskViewerSettings;
 
     async onload() {
@@ -28,6 +30,9 @@ export default class TaskViewerPlugin extends Plugin {
             workMinutes: this.settings.pomodoroWorkMinutes,
             breakMinutes: this.settings.pomodoroBreakMinutes,
         });
+
+        // Initialize Pomodoro Widget
+        this.pomodoroWidget = new PomodoroWidget(this.app, this);
 
         // Register View
         this.registerView(
@@ -139,6 +144,19 @@ export default class TaskViewerPlugin extends Plugin {
         }
     }
 
+    // Public accessors for services
+    getTaskIndex(): TaskIndex {
+        return this.taskIndex;
+    }
+
+    getTaskRepository() {
+        return (this.taskIndex as any).repository;
+    }
+
+    getPomodoroWidget(): PomodoroWidget {
+        return this.pomodoroWidget;
+    }
+
     async activateView(viewType: string) {
         const { workspace } = this.app;
 
@@ -161,5 +179,6 @@ export default class TaskViewerPlugin extends Plugin {
         console.log('Unloading Task Viewer Plugin');
         document.body.classList.remove('task-viewer-global-styles');
         this.pomodoroService?.destroy();
+        this.pomodoroWidget?.destroy();
     }
 }
