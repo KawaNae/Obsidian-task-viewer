@@ -5,7 +5,7 @@ import { KanbanView, VIEW_TYPE_KANBAN } from './views/KanbanView';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/ScheduleView';
 import { PomodoroView, VIEW_TYPE_POMODORO } from './views/PomodoroView';
 import { PomodoroService } from './services/PomodoroService';
-import { PomodoroWidget } from './widgets/PomodoroWidget';
+import { TimerWidget } from './widgets/TimerWidget';
 import { TaskViewerSettings, DEFAULT_SETTINGS } from './types';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/ColorSuggest';
@@ -13,7 +13,7 @@ import { ColorSuggest } from './suggest/ColorSuggest';
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
     private pomodoroService: PomodoroService;
-    private pomodoroWidget: PomodoroWidget;
+    private timerWidget: TimerWidget;
     public settings: TaskViewerSettings;
 
     async onload() {
@@ -31,8 +31,8 @@ export default class TaskViewerPlugin extends Plugin {
             breakMinutes: this.settings.pomodoroBreakMinutes,
         });
 
-        // Initialize Pomodoro Widget
-        this.pomodoroWidget = new PomodoroWidget(this.app, this);
+        // Initialize Timer Widget
+        this.timerWidget = new TimerWidget(this.app, this);
 
         // Register View
         this.registerView(
@@ -153,8 +153,8 @@ export default class TaskViewerPlugin extends Plugin {
         return (this.taskIndex as any).repository;
     }
 
-    getPomodoroWidget(): PomodoroWidget {
-        return this.pomodoroWidget;
+    getTimerWidget(): TimerWidget {
+        return this.timerWidget;
     }
 
     async activateView(viewType: string) {
@@ -179,6 +179,6 @@ export default class TaskViewerPlugin extends Plugin {
         console.log('Unloading Task Viewer Plugin');
         document.body.classList.remove('task-viewer-global-styles');
         this.pomodoroService?.destroy();
-        this.pomodoroWidget?.destroy();
+        this.timerWidget?.destroy();
     }
 }
