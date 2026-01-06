@@ -1,6 +1,6 @@
 /* Floating Pomodoro Widget Styles */
 
-.pomodoro-widget {
+.timer-widget {
     position: fixed;
     right: 20px;
     bottom: 20px;
@@ -15,21 +15,21 @@
     user-select: none;
 }
 
-.pomodoro-widget:active {
+.timer-widget:active {
     cursor: grabbing;
 }
 
 /* Timer Item */
-.pomodoro-widget__item {
+.timer-widget__item {
     border-bottom: 1px solid var(--background-modifier-border);
 }
 
-.pomodoro-widget__item:last-child {
+.timer-widget__item:last-child {
     border-bottom: none;
 }
 
 /* Header */
-.pomodoro-widget__header {
+.timer-widget__header {
     display: flex;
     align-items: center;
     padding: 8px 10px;
@@ -38,19 +38,19 @@
     cursor: grab;
 }
 
-.pomodoro-widget__item:first-child .pomodoro-widget__header {
+.timer-widget__item:first-child .timer-widget__header {
     border-radius: 8px 8px 0 0;
 }
 
-.pomodoro-widget__item:last-child .pomodoro-widget__header {
+.timer-widget__item:last-child .timer-widget__header {
     border-radius: 0 0 8px 8px;
 }
 
-.pomodoro-widget__item:only-child .pomodoro-widget__header {
+.timer-widget__item:only-child .timer-widget__header {
     border-radius: 8px;
 }
 
-.pomodoro-widget__title {
+.timer-widget__title {
     flex: 1;
     font-size: 0.85rem;
     font-weight: 500;
@@ -60,20 +60,20 @@
     white-space: nowrap;
 }
 
-.pomodoro-widget__header-time {
+.timer-widget__header-time {
     font-size: 0.8rem;
     font-weight: 600;
     color: var(--text-accent);
     margin-left: auto;
 }
 
-.pomodoro-widget__header-time--break {
+.timer-widget__header-time--break {
     color: #4ade80;
 }
 
-.pomodoro-widget__toggle-btn,
-.pomodoro-widget__close-btn,
-.pomodoro-widget__settings-btn {
+.timer-widget__toggle-btn,
+.timer-widget__close-btn,
+.timer-widget__settings-btn {
     background: transparent;
     border: none;
     color: var(--text-muted);
@@ -85,29 +85,29 @@
     justify-content: center;
 }
 
-.pomodoro-widget__toggle-btn:hover,
-.pomodoro-widget__close-btn:hover,
-.pomodoro-widget__settings-btn:hover {
+.timer-widget__toggle-btn:hover,
+.timer-widget__close-btn:hover,
+.timer-widget__settings-btn:hover {
     background: var(--background-modifier-hover);
     color: var(--text-normal);
 }
 
-.pomodoro-widget__close-btn:hover {
+.timer-widget__close-btn:hover {
     color: var(--text-error);
 }
 
 /* Content */
-.pomodoro-widget__content {
+.timer-widget__content {
     padding: 12px;
     background: var(--background-primary);
 }
 
 /* Label Input (custom task description) */
-.pomodoro-widget__label-container {
+.timer-widget__label-container {
     margin-bottom: 12px;
 }
 
-.pomodoro-widget__label-input {
+.timer-widget__label-input {
     width: 100%;
     padding: 6px 8px;
     font-size: 12px;
@@ -117,18 +117,18 @@
     border-radius: 4px;
 }
 
-.pomodoro-widget__label-input::placeholder {
+.timer-widget__label-input::placeholder {
     color: var(--text-muted);
     font-size: 11px;
 }
 
-.pomodoro-widget__label-input:focus {
+.timer-widget__label-input:focus {
     border-color: var(--interactive-accent);
     outline: none;
 }
 
 /* Progress Container */
-.pomodoro-widget__progress-container {
+.timer-widget__progress-container {
     position: relative;
     display: flex;
     justify-content: center;
@@ -136,35 +136,35 @@
     margin-bottom: 12px;
 }
 
-.pomodoro-widget__progress-ring {
+.timer-widget__progress-ring {
     width: 140px;
     height: 140px;
 }
 
-.pomodoro-widget__progress-ring-bg {
+.timer-widget__progress-ring-bg {
     fill: none;
     stroke: var(--background-modifier-border);
 }
 
-.pomodoro-widget__progress-ring-progress {
+.timer-widget__progress-ring-progress {
     fill: none;
     stroke-linecap: round;
     transition: stroke-dashoffset 0.3s ease;
 }
 
-.pomodoro-widget__progress-ring-progress--work {
+.timer-widget__progress-ring-progress--work {
     stroke: #f87171;
 }
 
-.pomodoro-widget__progress-ring-progress--break {
+.timer-widget__progress-ring-progress--break {
     stroke: #4ade80;
 }
 
-.pomodoro-widget__progress-ring-progress--idle {
+.timer-widget__progress-ring-progress--idle {
     stroke: var(--text-muted);
 }
 
-.pomodoro-widget__time-display {
+.timer-widget__time-display {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -176,13 +176,13 @@
 }
 
 /* Controls */
-.pomodoro-widget__controls {
+.timer-widget__controls {
     display: flex;
     justify-content: center;
     gap: 8px;
 }
 
-.pomodoro-widget__btn {
+.timer-widget__btn {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -195,29 +195,29 @@
     transition: all 0.15s ease;
 }
 
-.pomodoro-widget__btn--primary {
+.timer-widget__btn--primary {
     background: var(--interactive-accent);
     color: var(--text-on-accent);
 }
 
-.pomodoro-widget__btn--primary:hover {
+.timer-widget__btn--primary:hover {
     background: var(--interactive-accent-hover);
 }
 
-.pomodoro-widget__btn--secondary {
+.timer-widget__btn--secondary {
     background: var(--background-modifier-border);
     color: var(--text-normal);
 }
 
-.pomodoro-widget__btn--secondary:hover {
+.timer-widget__btn--secondary:hover {
     background: var(--background-modifier-hover);
 }
 
-.pomodoro-widget__btn--danger {
+.timer-widget__btn--danger {
     background: rgba(248, 113, 113, 0.2);
     color: #f87171;
 }
 
-.pomodoro-widget__btn--danger:hover {
+.timer-widget__btn--danger:hover {
     background: rgba(248, 113, 113, 0.3);
 }

@@ -39,7 +39,7 @@ const copyStaticFiles = {
           '_checkboxes.css',
           '_toolbar.css',
           '_pomodoro.css',
-          '_pomodoro-widget.css',
+          '_timer-widget.css',
           '_deprecated.css'
         ];
 

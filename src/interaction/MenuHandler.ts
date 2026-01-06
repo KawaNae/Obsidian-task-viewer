@@ -102,8 +102,18 @@ export class MenuHandler {
                     .setIcon('timer')
                     .onClick(() => {
                         // Show floating pomodoro widget
-                        const widget = this.plugin.getPomodoroWidget();
+                        const widget = this.plugin.getTimerWidget();
                         widget.show(task.id, task.content);
+                    });
+            });
+
+            menu.addItem((item) => {
+                item.setTitle('⏱️ Start Timer')
+                    .setIcon('clock')
+                    .onClick(() => {
+                        // Show floating countup widget
+                        const widget = this.plugin.getTimerWidget();
+                        widget.showCountup(task.id, task.content);
                     });
             });
         }

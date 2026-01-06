@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import { App, TFile, WorkspaceLeaf, MarkdownView } from 'obsidian';
 import { Task } from '../types';
 import { TaskParser } from './TaskParser';
 import { TaskViewerSettings } from '../types';
@@ -16,9 +16,12 @@ export class TaskIndex {
     private commandExecutor: TaskCommandExecutor;
     private isInitializing = true;
 
-    // Sync detection: track files that have been edited locally
-    // If editor-change fires before vault.modify, it's a local change
-    private hasLocalEdit: Map<string, boolean> = new Map();
+    // Sync detection: track local edits via active editor input events
+    // Local edit: User types in editor OR Plugin UI operation
+    // Sync: File modified without local interaction
+    private pendingLocalEdit: Map<string, boolean> = new Map();
+    private currentEditorEl: HTMLElement | null = null;
+    private editorListenerBound: ((e: InputEvent) => void) | null = null;
 
     async initialize() {
         this.isInitializing = true;
@@ -28,27 +31,27 @@ export class TaskIndex {
             this.isInitializing = false;
         });
 
+        // Track user interactions to distinguish local edits from sync/programmatic changes
+        this.setupInteractionListeners();
+
         this.app.vault.on('modify', async (file) => {
             if (file instanceof TFile && file.extension === 'md') {
-                console.log(`[TaskIndex] vault.modify event for: ${file.path}`);
-                // Check if this file has been edited locally
-                const isLocal = this.hasLocalEdit.get(file.path) || false;
-                // Clear the flag (it will be set again by editor-change if user edits again)
-                this.hasLocalEdit.delete(file.path);
+                // Check if this file had a verified local edit
+                const isLocal = this.pendingLocalEdit.get(file.path) || false;
+
+                // Clear the pending flag
+                this.pendingLocalEdit.delete(file.path);
+
+                console.log(`[🔄SYNC] vault.modify: ${file.path}, isLocal=${isLocal}`);
+
                 await this.queueScan(file, isLocal);
                 this.notifyListeners();
             }
         });
 
-        // Track editor-change events to detect local user edits
-        this.app.workspace.on('editor-change', (editor, info) => {
-            const filePath = (info as any).file?.path;
-            if (filePath) {
-                console.log(`[TaskIndex] editor-change event for: ${filePath}`);
-                // Mark this file as having local edits
-                this.hasLocalEdit.set(filePath, true);
-            }
-        });
+        // Note: editor-change event is no longer used for sync detection.
+        // Instead, we use active-leaf-change + beforeinput events on the editor element
+        // to reliably detect local edits.
 
         this.app.vault.on('delete', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
@@ -274,10 +277,10 @@ export class TaskIndex {
         }
 
         // Sync detection logging
-        console.log(`[TaskIndex] Scan for ${file.path}: isLocalChange=${isLocalChange}, isFirstScan=${isFirstScan}, isInitializing=${this.isInitializing}`);
+        console.log(`[🔄SYNC] Scan: ${file.path}, isLocalChange=${isLocalChange}, isFirstScan=${isFirstScan}, isInitializing=${this.isInitializing}`);
 
         if (!isLocalChange && !isFirstScan && !this.isInitializing) {
-            console.log(`[TaskIndex] Sync-driven change detected for ${file.path}, skipping command execution`);
+            console.log(`[🔄SYNC] ⛔ Sync-driven change detected, skipping command: ${file.path}`);
         }
 
         for (const task of doneTasks) {
@@ -288,7 +291,7 @@ export class TaskIndex {
             const currentCount = currentCounts.get(sig) || 0;
             const previousCount = this.processedCompletions.get(sig) || 0;
 
-            console.log(`[TaskIndex] Task ${task.content}: currentCount=${currentCount}, previousCount=${previousCount}, isInitializing=${this.isInitializing}, isFirstScan=${isFirstScan}, isLocalChange=${isLocalChange}`);
+            console.log(`[🔄SYNC] Task: ${task.content.substring(0, 30)}..., cur=${currentCount}, prev=${previousCount}, local=${isLocalChange}`);
 
             if (currentCount > previousCount) {
                 // Number of done tasks increased! Trigger recurrence for the *difference*
@@ -299,7 +302,7 @@ export class TaskIndex {
                 // 2. NOT the first scan of this file
                 // 3. IS a local change (not sync-driven)
                 if (!this.isInitializing && !isFirstScan && isLocalChange) {
-                    console.log(`[TaskIndex] Triggering command for task: ${task.content}`);
+                    console.log(`[🔄SYNC] ✅ Executing command for: ${task.content.substring(0, 30)}...`);
                     for (let k = 0; k < diff; k++) {
                         tasksToTrigger.push(task);
                     }
@@ -391,6 +394,9 @@ export class TaskIndex {
             return;
         }
 
+        // Mark as local edit before making file changes
+        this.markLocalEdit(task.file);
+
         // Optimistic Update
         // If we are unchecking a task, we must eagerly decrement the processed count.
         // "Unchecking": Transitioning from Triggerable -> Not Triggerable (Todo)
@@ -427,6 +433,9 @@ export class TaskIndex {
         const task = this.tasks.get(taskId);
         if (!task) return;
 
+        // Mark as local edit before making file changes
+        this.markLocalEdit(task.file);
+
         // Optimistic Update
         this.tasks.delete(taskId);
         this.notifyListeners();
@@ -438,6 +447,9 @@ export class TaskIndex {
         const task = this.tasks.get(taskId);
         if (!task) return;
 
+        // Mark as local edit before making file changes
+        this.markLocalEdit(task.file);
+
         await this.repository.duplicateTaskInFile(task);
     }
 
@@ -445,10 +457,106 @@ export class TaskIndex {
         const task = this.tasks.get(taskId);
         if (!task) return;
 
+        // Mark as local edit before making file changes
+        this.markLocalEdit(task.file);
+
         await this.repository.duplicateTaskForWeek(task);
     }
 
     async addTaskToDailyNote(fileDateStr: string, time: string, content: string, settings: TaskViewerSettings, taskDateStr?: string) {
         await this.repository.addTaskToDailyNote(fileDateStr, time, content, settings, taskDateStr);
+    }
+
+    /**
+     * Mark a file as having a local edit.
+     * This should be called:
+     * 1. When user types in the active editor (via beforeinput event)
+     * 2. When plugin UI makes changes (e.g., updateTask, deleteTask)
+     */
+    private markLocalEdit(filePath: string): void {
+        this.pendingLocalEdit.set(filePath, true);
+        console.log(`[🔄SYNC] Marked local edit: ${filePath}`);
+    }
+
+    private setupInteractionListeners(): void {
+        // Create bound handler for editor input events
+        this.editorListenerBound = (e: InputEvent) => {
+            const filePath = this.app.workspace.getActiveFile()?.path;
+            if (filePath) {
+                this.markLocalEdit(filePath);
+            }
+        };
+
+        // Listen for active leaf changes to attach/detach editor listeners
+        this.app.workspace.on('active-leaf-change', (leaf: WorkspaceLeaf | null) => {
+            this.attachEditorListener(leaf);
+        });
+
+        // Attach to initially active leaf
+        const activeLeaf = this.app.workspace.activeLeaf;
+        if (activeLeaf) {
+            this.attachEditorListener(activeLeaf);
+        }
+    }
+
+    private attachEditorListener(leaf: WorkspaceLeaf | null): void {
+        // Remove listener from previous editor element
+        if (this.currentEditorEl && this.editorListenerBound) {
+            this.currentEditorEl.removeEventListener('beforeinput', this.editorListenerBound as EventListener);
+            this.currentEditorEl.removeEventListener('input', this.editorListenerBound as EventListener);
+            this.currentEditorEl = null;
+        }
+
+        if (!leaf) {
+            console.log(`[🔄SYNC] No leaf provided`);
+            return;
+        }
+
+        const view = leaf.view;
+        console.log(`[🔄SYNC] View type: ${view.getViewType()}`);
+        if (view.getViewType() !== 'markdown') return;
+
+        const markdownView = view as MarkdownView;
+        const editor = markdownView.editor;
+
+        // Try multiple ways to get the editable element
+        let editorEl: HTMLElement | null = null;
+
+        // Method 1: CodeMirror 6 via cm.dom
+        const cm6Dom = (editor as any).cm?.dom as HTMLElement | undefined;
+        if (cm6Dom) {
+            editorEl = cm6Dom;
+            console.log(`[🔄SYNC] Found editor via cm.dom`);
+        }
+
+        // Method 2: Find contenteditable element in the container
+        if (!editorEl) {
+            const containerEl = markdownView.containerEl;
+            const contentEditable = containerEl.querySelector('.cm-content[contenteditable="true"]') as HTMLElement;
+            if (contentEditable) {
+                editorEl = contentEditable;
+                console.log(`[🔄SYNC] Found editor via .cm-content`);
+            }
+        }
+
+        // Method 3: Use the container's editor area
+        if (!editorEl) {
+            const containerEl = markdownView.containerEl;
+            const editorArea = containerEl.querySelector('.markdown-source-view') as HTMLElement;
+            if (editorArea) {
+                editorEl = editorArea;
+                console.log(`[🔄SYNC] Found editor via .markdown-source-view`);
+            }
+        }
+
+        if (editorEl && this.editorListenerBound) {
+            // Use both beforeinput and input for better coverage
+            editorEl.addEventListener('beforeinput', this.editorListenerBound as EventListener);
+            editorEl.addEventListener('input', this.editorListenerBound as EventListener);
+            this.currentEditorEl = editorEl;
+            console.log(`[🔄SYNC] Attached editor listener for: ${this.app.workspace.getActiveFile()?.path || 'unknown'}`);
+        } else {
+            console.log(`[🔄SYNC] Could not find editor element. editor:`, editor);
+        }
     }
 }
