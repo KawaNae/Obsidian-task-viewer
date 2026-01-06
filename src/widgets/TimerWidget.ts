@@ -9,22 +9,9 @@ import { App, setIcon, Notice, Menu } from 'obsidian';
 import TaskViewerPlugin from '../main';
 import { AudioUtils } from '../utils/AudioUtils';
 import { InputModal } from '../modals/InputModal';
-
-interface TimerInstance {
-    id: string;
-    taskId: string;
-    taskName: string;
-    startTime: Date;
-    timeRemaining: number;
-    totalTime: number;
-    mode: 'work' | 'break' | 'idle';
-    isRunning: boolean;
-    isExpanded: boolean;
-    intervalId: number | null;
-    customLabel: string;
-    timerType: 'pomodoro' | 'countup';
-    elapsedTime: number; // for countup mode (seconds)
-}
+import { TimerInstance } from './TimerInstance';
+import { TimerRecorder } from './TimerRecorder';
+import { TimerProgressUI } from './TimerProgressUI';
 
 export class TimerWidget {
     private app: App;
@@ -33,10 +20,12 @@ export class TimerWidget {
     private timers: Map<string, TimerInstance> = new Map();
     private isDragging = false;
     private dragOffset = { x: 0, y: 0 };
+    private recorder: TimerRecorder;
 
     constructor(app: App, plugin: TaskViewerPlugin) {
         this.app = app;
         this.plugin = plugin;
+        this.recorder = new TimerRecorder(app, plugin);
     }
 
     /**
@@ -206,7 +195,7 @@ export class TimerWidget {
             AudioUtils.playWorkCompleteChime();
             new Notice(`🍅 ${timer.taskName} - Pomodoro complete!`);
 
-            await this.addPomodoroRecord(timer);
+            await this.recorder.addPomodoroRecord(timer);
 
             // Start break
             timer.mode = 'break';
@@ -227,92 +216,6 @@ export class TimerWidget {
         }
 
         this.render();
-    }
-
-    private async addPomodoroRecord(timer: TimerInstance): Promise<void> {
-        const taskIndex = this.plugin.getTaskIndex();
-        const parentTask = taskIndex.getTask(timer.taskId);
-
-        const endTime = new Date();
-        const workMinutes = this.plugin.settings.pomodoroWorkMinutes;
-        const startTime = new Date(endTime.getTime() - workMinutes * 60 * 1000);
-
-        const formatDate = (d: Date) => d.toISOString().split('T')[0];
-        const formatTime = (d: Date) => `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-
-        const dateStr = formatDate(startTime);
-        const startTimeStr = formatTime(startTime);
-        const endTimeStr = formatTime(endTime);
-
-        // Use 🍅 + custom label if provided
-        const customText = timer.customLabel.trim();
-        const label = customText ? `🍅 ${customText}` : '🍅';
-
-        if (parentTask) {
-            // Record as child task under parent
-            const childLine = `    - [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
-            const taskRepository = this.plugin.getTaskRepository();
-            await taskRepository.insertLineAfterTask(parentTask, childLine);
-        } else if (timer.taskId.startsWith('daily-')) {
-            // Daily note timer - add completed task directly to daily note
-            const dailyDate = timer.taskId.replace('daily-', '');
-            const taskLine = `- [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
-            await this.addTimerRecordToDailyNote(dailyDate, taskLine);
-        }
-
-        new Notice('🍅 Pomodoro recorded!');
-    }
-
-    private async addCountupRecord(timer: TimerInstance): Promise<void> {
-        const taskIndex = this.plugin.getTaskIndex();
-        const parentTask = taskIndex.getTask(timer.taskId);
-
-        // Calculate start and end times based on elapsed time
-        const endTime = new Date();
-        const startTime = new Date(endTime.getTime() - timer.elapsedTime * 1000);
-
-        const formatDate = (d: Date) => d.toISOString().split('T')[0];
-        const formatTime = (d: Date) => `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-
-        const dateStr = formatDate(startTime);
-        const startTimeStr = formatTime(startTime);
-        const endTimeStr = formatTime(endTime);
-
-        // Use ⏱️ + custom label if provided
-        const customText = timer.customLabel.trim();
-        const label = customText ? `⏱️ ${customText}` : '⏱️';
-
-        if (parentTask) {
-            // Record as child task under parent
-            const childLine = `    - [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
-            const taskRepository = this.plugin.getTaskRepository();
-            await taskRepository.insertLineAfterTask(parentTask, childLine);
-        } else if (timer.taskId.startsWith('daily-')) {
-            // Daily note timer - add completed task directly to daily note
-            const dailyDate = timer.taskId.replace('daily-', '');
-            const taskLine = `- [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
-            await this.addTimerRecordToDailyNote(dailyDate, taskLine);
-        }
-
-        new Notice(`⏱️ Timer recorded! (${this.formatTime(timer.elapsedTime)})`);
-    }
-
-    /** Add timer record directly to daily note (completed task format) */
-    private async addTimerRecordToDailyNote(dateStr: string, taskLine: string): Promise<void> {
-        const { DailyNoteUtils } = await import('../utils/DailyNoteUtils');
-
-        const [y, m, d] = dateStr.split('-').map(Number);
-        const date = new Date();
-        date.setFullYear(y, m - 1, d);
-        date.setHours(0, 0, 0, 0);
-
-        await DailyNoteUtils.appendLineToDailyNote(
-            this.app,
-            date,
-            taskLine,
-            this.plugin.settings.dailyNoteHeader,
-            this.plugin.settings.dailyNoteHeaderLevel
-        );
     }
 
     private render(): void {
@@ -420,35 +323,8 @@ export class TimerWidget {
             }
         }
 
-        // Update main time display
-        const mainTimeDisplay = itemEl.querySelector('.timer-widget__time-display') as HTMLElement;
-        if (mainTimeDisplay) {
-            if (timer.timerType === 'countup') {
-                mainTimeDisplay.setText(this.formatTime(timer.elapsedTime));
-            } else {
-                mainTimeDisplay.setText(this.formatTime(timer.timeRemaining));
-            }
-        }
-
-        // Update progress ring
-        const progressCircle = itemEl.querySelector('.timer-widget__progress-ring-progress') as SVGCircleElement;
-        if (progressCircle) {
-            const size = 120;
-            const strokeWidth = 6;
-            const radius = (size - strokeWidth) / 2;
-            const circumference = 2 * Math.PI * radius;
-
-            let progress: number;
-            if (timer.timerType === 'countup') {
-                const COUNTUP_FULL_ROTATION_SECONDS = 30 * 60;
-                progress = (timer.elapsedTime % COUNTUP_FULL_ROTATION_SECONDS) / COUNTUP_FULL_ROTATION_SECONDS;
-            } else {
-                progress = timer.totalTime > 0 ? timer.timeRemaining / timer.totalTime : 1;
-            }
-
-            const offset = circumference * (1 - progress);
-            progressCircle.setAttribute('stroke-dashoffset', offset.toString());
-        }
+        // Update progress ring and time display using TimerProgressUI
+        TimerProgressUI.updateDisplay(itemEl, timer, this.formatTime.bind(this));
     }
 
     private renderTimerUI(container: HTMLElement, timer: TimerInstance): void {
@@ -474,58 +350,7 @@ export class TimerWidget {
     }
 
     private renderCircularProgress(container: HTMLElement, timer: TimerInstance): void {
-        const size = 120;
-        const strokeWidth = 6;
-        const radius = (size - strokeWidth) / 2;
-        const circumference = 2 * Math.PI * radius;
-
-        // Calculate progress based on timer type
-        let progress: number;
-        let displayTime: number;
-        if (timer.timerType === 'countup') {
-            // Countup: ring fills up over time (1 full rotation = 30 minutes)
-            const COUNTUP_FULL_ROTATION_SECONDS = 30 * 60; // 30 minutes
-            progress = (timer.elapsedTime % COUNTUP_FULL_ROTATION_SECONDS) / COUNTUP_FULL_ROTATION_SECONDS;
-            displayTime = timer.elapsedTime;
-        } else {
-            // Pomodoro: show countdown progress
-            progress = timer.totalTime > 0 ? timer.timeRemaining / timer.totalTime : 1;
-            displayTime = timer.timeRemaining;
-        }
-        const offset = circumference * (1 - progress);
-
-        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
-        svg.setAttribute('class', 'timer-widget__progress-ring');
-
-        const bgCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        bgCircle.setAttribute('cx', (size / 2).toString());
-        bgCircle.setAttribute('cy', (size / 2).toString());
-        bgCircle.setAttribute('r', radius.toString());
-        bgCircle.setAttribute('class', 'timer-widget__progress-ring-bg');
-        bgCircle.setAttribute('stroke-width', strokeWidth.toString());
-        svg.appendChild(bgCircle);
-
-        const progressCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        progressCircle.setAttribute('cx', (size / 2).toString());
-        progressCircle.setAttribute('cy', (size / 2).toString());
-        progressCircle.setAttribute('r', radius.toString());
-        progressCircle.setAttribute('class', `timer-widget__progress-ring-progress timer-widget__progress-ring-progress--${timer.mode}`);
-        progressCircle.setAttribute('stroke-width', strokeWidth.toString());
-        progressCircle.setAttribute('stroke-dasharray', circumference.toString());
-        progressCircle.setAttribute('stroke-dashoffset', offset.toString());
-        progressCircle.setAttribute('transform', `rotate(-90 ${size / 2} ${size / 2})`);
-        svg.appendChild(progressCircle);
-
-        container.appendChild(svg);
-
-        const timeDisplay = container.createDiv('timer-widget__time-display');
-        timeDisplay.setText(this.formatTime(displayTime));
-
-        // Add type indicator for countup
-        if (timer.timerType === 'countup') {
-            timeDisplay.addClass('timer-widget__time-display--countup');
-        }
+        TimerProgressUI.render(container, timer, this.formatTime.bind(this));
     }
 
     private renderControls(container: HTMLElement, timer: TimerInstance): void {
@@ -625,7 +450,7 @@ export class TimerWidget {
                 timer.isRunning = false;
                 this.stopTimer(timer.id);
                 AudioUtils.playWorkCompleteChime();
-                await this.addCountupRecord(timer);
+                await this.recorder.addCountupRecord(timer);
                 this.closeTimer(timer.id);
             };
 
