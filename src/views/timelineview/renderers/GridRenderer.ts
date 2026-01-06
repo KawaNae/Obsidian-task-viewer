@@ -121,6 +121,9 @@ export class GridRenderer {
             cell.style.gridColumn = `${i + 2}`; // +2 because 1 is axis
             cell.style.gridRow = '1 / span 50'; // Span implicit rows (large enough number)
             cell.style.zIndex = '0';
+
+            // Add context menu for empty space
+            allDayRenderer.addEmptySpaceContextMenu(cell, date);
         });
 
         // Render Tasks (Overlaid)

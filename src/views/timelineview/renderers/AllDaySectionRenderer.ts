@@ -1,4 +1,4 @@
-import { Component } from 'obsidian';
+import { Component, Menu } from 'obsidian';
 
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/MenuHandler';
@@ -8,6 +8,7 @@ import { TaskIndex } from '../../../services/TaskIndex';
 import { TaskRenderer } from '../../TaskRenderer';
 import { HandleManager } from '../HandleManager';
 import { Task } from '../../../types';
+import { CreateTaskModal } from '../../../modals/CreateTaskModal';
 
 export class AllDaySectionRenderer {
     constructor(
@@ -156,6 +157,79 @@ export class AllDaySectionRenderer {
 
         if (isClipped) {
             arrowEl.addClass('deadline-clipped');
+        }
+    }
+
+    /** Add context menu listeners to AllDay section cell */
+    public addEmptySpaceContextMenu(cell: HTMLElement, date: string) {
+        cell.addEventListener('contextmenu', (e) => {
+            if (e.target === cell) {
+                e.preventDefault();
+                this.showEmptySpaceMenu(e.pageX, e.pageY, date);
+            }
+        });
+    }
+
+    /** Show context menu for empty space click */
+    private showEmptySpaceMenu(x: number, y: number, date: string) {
+        const menu = new Menu();
+
+        // Create Task (All-Day type)
+        menu.addItem((item) => {
+            item.setTitle('Create Task')
+                .setIcon('plus')
+                .onClick(() => this.handleCreateTask(date));
+        });
+
+        menu.addSeparator();
+
+        // Open Pomodoro (Daily Note)
+        menu.addItem((item) => {
+            item.setTitle('🍅 Open Pomodoro')
+                .setIcon('timer')
+                .onClick(() => this.openDailyNoteTimer(date, 'pomodoro'));
+        });
+
+        // Open Timer (Daily Note)
+        menu.addItem((item) => {
+            item.setTitle('⏱️ Open Timer')
+                .setIcon('clock')
+                .onClick(() => this.openDailyNoteTimer(date, 'countup'));
+        });
+
+        menu.showAtPosition({ x, y });
+    }
+
+    /** Create an all-day task for the specified date */
+    private handleCreateTask(date: string) {
+        new CreateTaskModal(this.plugin.app, async (content) => {
+            // Create all-day task (S-All type: just date, no time)
+            const taskLine = `- [ ] ${content} @${date}`;
+            const [y, m, d] = date.split('-').map(Number);
+            const dateObj = new Date();
+            dateObj.setFullYear(y, m - 1, d);
+            dateObj.setHours(0, 0, 0, 0);
+
+            const { DailyNoteUtils } = await import('../../../utils/DailyNoteUtils');
+            await DailyNoteUtils.appendLineToDailyNote(
+                this.plugin.app,
+                dateObj,
+                taskLine,
+                this.plugin.settings.dailyNoteHeader,
+                this.plugin.settings.dailyNoteHeaderLevel
+            );
+        }).open();
+    }
+
+    /** Open timer for daily note */
+    private openDailyNoteTimer(date: string, timerType: 'pomodoro' | 'countup') {
+        const dailyNoteId = `daily-${date}`;
+        const displayName = date;
+        const widget = this.plugin.getTimerWidget();
+        if (timerType === 'pomodoro') {
+            widget.show(dailyNoteId, displayName);
+        } else {
+            widget.showCountup(dailyNoteId, displayName);
         }
     }
 }
