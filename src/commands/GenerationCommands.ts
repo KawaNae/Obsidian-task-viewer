@@ -28,7 +28,7 @@ export abstract class GenerationCommand implements CommandStrategy {
         this.persistCommands(nextTask, cmd, otherCommands, ctx);
 
         const nextContent = TaskParser.format(nextTask);
-        await ctx.repository.insertRecurrenceForTask(ctx.task, nextContent.trim());
+        await ctx.repository.insertRecurrenceForTask(ctx.task, nextContent.trim(), nextTask);
 
         // Generation commands do NOT delete the original task by themselves
         return { shouldDeleteOriginal: false };
@@ -53,7 +53,7 @@ export abstract class GenerationCommand implements CommandStrategy {
                 status: 'todo',
                 statusChar: ' ',
                 originalText: '',
-                children: []
+                children: [...task.children] // Preserve children for recurrence
             };
         }
 
@@ -92,7 +92,7 @@ export abstract class GenerationCommand implements CommandStrategy {
             deadline: task.deadline ? this.shiftDate(task.deadline, shiftDays) : undefined,
             isFuture: task.isFuture && !task.startDate, // F型の維持
             originalText: '',
-            children: []
+            children: [...task.children] // Preserve children for recurrence
         };
     }
 
