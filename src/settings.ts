@@ -14,6 +14,16 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
         containerEl.empty();
 
+        // Version display at top
+        const versionEl = containerEl.createDiv('setting-item');
+        versionEl.style.paddingBottom = '12px';
+        versionEl.style.marginBottom = '12px';
+        versionEl.style.borderBottom = '1px solid var(--background-modifier-border)';
+        versionEl.createSpan({
+            text: `Task Viewer v${this.plugin.manifest.version}`,
+            cls: 'setting-item-description'
+        });
+
         new Setting(containerEl)
             .setName('Start Hour')
             .setDesc('The hour when your day starts (0-23). Tasks before this hour will be shown in the previous day.')

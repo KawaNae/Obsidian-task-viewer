@@ -106,6 +106,16 @@ export class MenuHandler {
                         widget.show(task.id, task.content);
                     });
             });
+
+            menu.addItem((item) => {
+                item.setTitle('⏱️ Start Timer')
+                    .setIcon('clock')
+                    .onClick(() => {
+                        // Show floating countup widget
+                        const widget = this.plugin.getPomodoroWidget();
+                        widget.showCountup(task.id, task.content);
+                    });
+            });
         }
 
         // 3. Move/Convert Options based on Type
