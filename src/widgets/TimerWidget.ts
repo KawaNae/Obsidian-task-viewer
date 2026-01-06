@@ -58,6 +58,8 @@ export class TimerWidget {
             customLabel: '',
             timerType: 'pomodoro',
             elapsedTime: 0,
+            startTimeMs: 0,
+            pausedElapsedTime: 0,
         };
 
         this.timers.set(taskId, timer);
@@ -94,6 +96,8 @@ export class TimerWidget {
             customLabel: '',
             timerType: 'countup',
             elapsedTime: 0,
+            startTimeMs: 0,
+            pausedElapsedTime: 0,
         };
 
         this.timers.set(taskId, timer);
@@ -169,14 +173,19 @@ export class TimerWidget {
         const timer = this.timers.get(taskId);
         if (!timer || !timer.isRunning) return;
 
+        // Calculate elapsed time based on real time (not tick count)
+        const now = Date.now();
+        const currentSessionElapsed = Math.floor((now - timer.startTimeMs) / 1000);
+        const totalElapsed = timer.pausedElapsedTime + currentSessionElapsed;
+
         if (timer.timerType === 'countup') {
-            // Countup mode: increment elapsed time
-            timer.elapsedTime++;
+            // Countup mode: update elapsed time based on real time
+            timer.elapsedTime = totalElapsed;
             this.renderTimerItem(taskId);
         } else {
-            // Pomodoro mode: decrement remaining time
+            // Pomodoro mode: calculate remaining time based on real time
+            timer.timeRemaining = Math.max(0, timer.totalTime - totalElapsed);
             if (timer.timeRemaining > 0) {
-                timer.timeRemaining--;
                 this.renderTimerItem(taskId);
             } else {
                 this.handleComplete(taskId);
@@ -201,6 +210,8 @@ export class TimerWidget {
             timer.mode = 'break';
             timer.timeRemaining = this.plugin.settings.pomodoroBreakMinutes * 60;
             timer.totalTime = this.plugin.settings.pomodoroBreakMinutes * 60;
+            timer.startTimeMs = Date.now();
+            timer.pausedElapsedTime = 0;
             timer.isRunning = true;
             this.startTimer(taskId);
         } else {
@@ -212,6 +223,8 @@ export class TimerWidget {
             timer.mode = 'idle';
             timer.timeRemaining = this.plugin.settings.pomodoroWorkMinutes * 60;
             timer.totalTime = this.plugin.settings.pomodoroWorkMinutes * 60;
+            timer.startTimeMs = 0;
+            timer.pausedElapsedTime = 0;
             timer.isRunning = false;
         }
 
@@ -373,6 +386,8 @@ export class TimerWidget {
             startBtn.onclick = () => {
                 timer.mode = 'work';
                 timer.startTime = new Date();
+                timer.startTimeMs = Date.now();
+                timer.pausedElapsedTime = 0;
                 timer.isRunning = true;
                 this.startTimer(timer.id);
                 AudioUtils.playStartSound();
@@ -385,6 +400,10 @@ export class TimerWidget {
             setIcon(pauseBtn, 'pause');
             pauseBtn.createSpan({ text: ' Pause' });
             pauseBtn.onclick = () => {
+                // Save accumulated elapsed time before pause
+                const now = Date.now();
+                const currentSessionElapsed = Math.floor((now - timer.startTimeMs) / 1000);
+                timer.pausedElapsedTime += currentSessionElapsed;
                 timer.isRunning = false;
                 this.stopTimer(timer.id);
                 this.render();
@@ -405,6 +424,7 @@ export class TimerWidget {
             setIcon(resumeBtn, 'play');
             resumeBtn.createSpan({ text: ' Resume' });
             resumeBtn.onclick = () => {
+                timer.startTimeMs = Date.now(); // Reset start time for new session
                 timer.isRunning = true;
                 this.startTimer(timer.id);
                 AudioUtils.playStartSound();
@@ -433,8 +453,10 @@ export class TimerWidget {
             startBtn.onclick = () => {
                 timer.mode = 'work';
                 timer.startTime = new Date();
-                timer.isRunning = true;
+                timer.startTimeMs = Date.now();
+                timer.pausedElapsedTime = 0;
                 timer.elapsedTime = 0;
+                timer.isRunning = true;
                 this.startTimer(timer.id);
                 AudioUtils.playStartSound();
                 this.render();
@@ -471,6 +493,7 @@ export class TimerWidget {
             setIcon(resumeBtn, 'play');
             resumeBtn.createSpan({ text: ' Resume' });
             resumeBtn.onclick = () => {
+                timer.startTimeMs = Date.now(); // Reset start time for new session
                 timer.isRunning = true;
                 this.startTimer(timer.id);
                 this.render();
@@ -495,6 +518,8 @@ export class TimerWidget {
         timer.mode = 'idle';
         timer.timeRemaining = this.plugin.settings.pomodoroWorkMinutes * 60;
         timer.totalTime = this.plugin.settings.pomodoroWorkMinutes * 60;
+        timer.startTimeMs = 0;
+        timer.pausedElapsedTime = 0;
         timer.isRunning = false;
         this.render();
     }

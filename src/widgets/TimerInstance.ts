@@ -18,4 +18,7 @@ export interface TimerInstance {
     customLabel: string;
     timerType: 'pomodoro' | 'countup';
     elapsedTime: number; // for countup mode (seconds)
+    // Real-time based calculation fields
+    startTimeMs: number;       // Timestamp when timer was last started/resumed (ms)
+    pausedElapsedTime: number; // Accumulated elapsed time before pause (seconds)
 }
