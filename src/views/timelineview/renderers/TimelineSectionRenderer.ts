@@ -1,4 +1,4 @@
-import { Component } from 'obsidian';
+import { Component, Menu } from 'obsidian';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
@@ -112,7 +112,7 @@ export class TimelineSectionRenderer {
             // Prevent default context menu if clicking on empty space
             if (e.target === col) {
                 e.preventDefault();
-                this.handleCreateTaskTrigger(e.offsetY, date);
+                this.showEmptySpaceMenu(e.pageX, e.pageY, e.offsetY, date);
             }
         });
 
@@ -206,5 +206,47 @@ export class TimelineSectionRenderer {
             // taskDate is the actual date for the task (@YYYY-MM-DD)
             await this.taskIndex.addTaskToDailyNote(date, timeString, result, this.plugin.settings, taskDate);
         }).open();
+    }
+
+    /** Show context menu for empty space click */
+    private showEmptySpaceMenu(x: number, y: number, offsetY: number, date: string) {
+        const menu = new Menu();
+
+        // Create new Task
+        menu.addItem((item) => {
+            item.setTitle('Create Task')
+                .setIcon('plus')
+                .onClick(() => this.handleCreateTaskTrigger(offsetY, date));
+        });
+
+        menu.addSeparator();
+
+        // Open Pomodoro (Daily Note)
+        menu.addItem((item) => {
+            item.setTitle('🍅 Open Pomodoro')
+                .setIcon('timer')
+                .onClick(() => this.openDailyNoteTimer(date, 'pomodoro'));
+        });
+
+        // Open Timer (Daily Note)
+        menu.addItem((item) => {
+            item.setTitle('⏱️ Open Timer')
+                .setIcon('clock')
+                .onClick(() => this.openDailyNoteTimer(date, 'countup'));
+        });
+
+        menu.showAtPosition({ x, y });
+    }
+
+    /** Open timer for daily note */
+    private openDailyNoteTimer(date: string, timerType: 'pomodoro' | 'countup') {
+        const dailyNoteId = `daily-${date}`;
+        const displayName = date;
+        const widget = this.plugin.getTimerWidget();
+        if (timerType === 'pomodoro') {
+            widget.show(dailyNoteId, displayName);
+        } else {
+            widget.showCountup(dailyNoteId, displayName);
+        }
     }
 }

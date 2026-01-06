@@ -232,7 +232,6 @@ export class TimerWidget {
     private async addPomodoroRecord(timer: TimerInstance): Promise<void> {
         const taskIndex = this.plugin.getTaskIndex();
         const parentTask = taskIndex.getTask(timer.taskId);
-        if (!parentTask) return;
 
         const endTime = new Date();
         const workMinutes = this.plugin.settings.pomodoroWorkMinutes;
@@ -248,10 +247,18 @@ export class TimerWidget {
         // Use 🍅 + custom label if provided
         const customText = timer.customLabel.trim();
         const label = customText ? `🍅 ${customText}` : '🍅';
-        const childLine = `    - [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
 
-        const taskRepository = this.plugin.getTaskRepository();
-        await taskRepository.insertLineAfterTask(parentTask, childLine);
+        if (parentTask) {
+            // Record as child task under parent
+            const childLine = `    - [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
+            const taskRepository = this.plugin.getTaskRepository();
+            await taskRepository.insertLineAfterTask(parentTask, childLine);
+        } else if (timer.taskId.startsWith('daily-')) {
+            // Daily note timer - add completed task directly to daily note
+            const dailyDate = timer.taskId.replace('daily-', '');
+            const taskLine = `- [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
+            await this.addTimerRecordToDailyNote(dailyDate, taskLine);
+        }
 
         new Notice('🍅 Pomodoro recorded!');
     }
@@ -259,7 +266,6 @@ export class TimerWidget {
     private async addCountupRecord(timer: TimerInstance): Promise<void> {
         const taskIndex = this.plugin.getTaskIndex();
         const parentTask = taskIndex.getTask(timer.taskId);
-        if (!parentTask) return;
 
         // Calculate start and end times based on elapsed time
         const endTime = new Date();
@@ -275,12 +281,38 @@ export class TimerWidget {
         // Use ⏱️ + custom label if provided
         const customText = timer.customLabel.trim();
         const label = customText ? `⏱️ ${customText}` : '⏱️';
-        const childLine = `    - [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
 
-        const taskRepository = this.plugin.getTaskRepository();
-        await taskRepository.insertLineAfterTask(parentTask, childLine);
+        if (parentTask) {
+            // Record as child task under parent
+            const childLine = `    - [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
+            const taskRepository = this.plugin.getTaskRepository();
+            await taskRepository.insertLineAfterTask(parentTask, childLine);
+        } else if (timer.taskId.startsWith('daily-')) {
+            // Daily note timer - add completed task directly to daily note
+            const dailyDate = timer.taskId.replace('daily-', '');
+            const taskLine = `- [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
+            await this.addTimerRecordToDailyNote(dailyDate, taskLine);
+        }
 
         new Notice(`⏱️ Timer recorded! (${this.formatTime(timer.elapsedTime)})`);
+    }
+
+    /** Add timer record directly to daily note (completed task format) */
+    private async addTimerRecordToDailyNote(dateStr: string, taskLine: string): Promise<void> {
+        const { DailyNoteUtils } = await import('../utils/DailyNoteUtils');
+
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const date = new Date();
+        date.setFullYear(y, m - 1, d);
+        date.setHours(0, 0, 0, 0);
+
+        await DailyNoteUtils.appendLineToDailyNote(
+            this.app,
+            date,
+            taskLine,
+            this.plugin.settings.dailyNoteHeader,
+            this.plugin.settings.dailyNoteHeaderLevel
+        );
     }
 
     private render(): void {
@@ -592,6 +624,7 @@ export class TimerWidget {
             stopBtn.onclick = async () => {
                 timer.isRunning = false;
                 this.stopTimer(timer.id);
+                AudioUtils.playWorkCompleteChime();
                 await this.addCountupRecord(timer);
                 this.closeTimer(timer.id);
             };
