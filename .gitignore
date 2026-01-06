@@ -7,4 +7,7 @@ main.js
 styles.css
 log.md
 .agent
-.claude
+.claude/
+build/
+tmp_legacy
+debug_tasks.md
