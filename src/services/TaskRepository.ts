@@ -11,6 +11,48 @@ export class TaskRepository {
         this.app = app;
     }
 
+    /**
+     * Helper: Collect children lines from file content starting at taskLine
+     * Returns { childrenLines, taskIndent, blockIdRegex }
+     */
+    private collectChildrenFromLines(lines: string[], taskLineIndex: number): {
+        childrenLines: string[];
+        taskIndent: number;
+    } {
+        const taskLine = lines[taskLineIndex];
+        const taskIndent = taskLine.search(/\S|$/);
+        const childrenLines: string[] = [];
+
+        let j = taskLineIndex + 1;
+        while (j < lines.length) {
+            const nextLine = lines[j];
+            const nextIndent = nextLine.search(/\S|$/);
+
+            if (nextLine.trim() === '') {
+                childrenLines.push(nextLine);
+                j++;
+                continue;
+            }
+
+            if (nextIndent > taskIndent) {
+                childrenLines.push(nextLine);
+                j++;
+            } else {
+                break;
+            }
+        }
+
+        return { childrenLines, taskIndent };
+    }
+
+    /**
+     * Helper: Strip block IDs from lines
+     */
+    private stripBlockIds(lines: string[]): string[] {
+        const blockIdRegex = /\s\^[a-zA-Z0-9-]+$/;
+        return lines.map(line => line.replace(blockIdRegex, ''));
+    }
+
     async updateTaskInFile(task: Task, updatedTask: Task): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
@@ -96,7 +138,10 @@ export class TaskRepository {
             const lines = content.split('\n');
             if (lines.length <= task.line) return content;
 
-            lines.splice(task.line, 1);
+            const { childrenLines } = this.collectChildrenFromLines(lines, task.line);
+
+            // Delete task line + all children
+            lines.splice(task.line, 1 + childrenLines.length);
 
             return lines.join('\n');
         });
@@ -110,41 +155,18 @@ export class TaskRepository {
             const lines = content.split('\n');
             if (lines.length <= task.line) return content;
 
-            // 1. Get original task line from file
+            // 1. Get original task line and collect children
             const taskLine = lines[task.line];
-            const taskIndent = taskLine.search(/\S|$/);
+            const { childrenLines } = this.collectChildrenFromLines(lines, task.line);
 
-            // 2. Collect original children lines from file (with original indentation)
-            const childrenLines: string[] = [];
-            let j = task.line + 1;
-            while (j < lines.length) {
-                const nextLine = lines[j];
-                const nextIndent = nextLine.search(/\S|$/);
-
-                if (nextLine.trim() === '') {
-                    childrenLines.push(nextLine);
-                    j++;
-                    continue;
-                }
-
-                if (nextIndent > taskIndent) {
-                    childrenLines.push(nextLine);
-                    j++;
-                } else {
-                    break;
-                }
-            }
-
-            // 3. Strip block ID from task line and children: ^blockid at end of line
-            const blockIdRegex = /\s\^[a-zA-Z0-9-]+$/;
-            const newTaskLine = taskLine.replace(blockIdRegex, '');
-            const newChildLines = childrenLines.map(child => child.replace(blockIdRegex, ''));
+            // 2. Strip block IDs from task line and children
+            const newTaskLine = this.stripBlockIds([taskLine])[0];
+            const newChildLines = this.stripBlockIds(childrenLines);
 
             const linesToInsert = [newTaskLine, ...newChildLines];
 
-            // 4. Insert after the original block
+            // 3. Insert after the original block
             const insertIndex = task.line + 1 + childrenLines.length;
-
             lines.splice(insertIndex, 0, ...linesToInsert);
 
             return lines.join('\n');
@@ -248,7 +270,7 @@ export class TaskRepository {
         );
     }
 
-    async insertRecurrenceForTask(task: Task, content: string): Promise<void> {
+    async insertRecurrenceForTask(task: Task, content: string, newTask?: Task): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;
 
@@ -256,25 +278,20 @@ export class TaskRepository {
             const lines = fileContent.split('\n');
             if (lines.length <= task.line) return fileContent;
 
-            // 1. Get indent from original task
+            // 1. Get indent and collect children
             const originalIndent = lines[task.line].match(/^(\s*)/)?.[1] || '';
+            const { childrenLines } = this.collectChildrenFromLines(lines, task.line);
+
+            // 2. Strip block IDs from children
+            const newChildLines = this.stripBlockIds(childrenLines);
+
+            // 3. Build lines to insert: new task line + children
             const nextLine = originalIndent + content;
+            const linesToInsert = [nextLine, ...newChildLines];
 
-            // 2. Insert using gap-skip logic
-            // Insert after children, but effectively ignoring trailing blank lines to avoid gaps.
-            let effectiveChildrenCount = task.children ? task.children.length : 0;
-            if (task.children) {
-                for (let i = task.children.length - 1; i >= 0; i--) {
-                    if (task.children[i].trim() === '') {
-                        effectiveChildrenCount--;
-                    } else {
-                        break;
-                    }
-                }
-            }
-
-            const insertIndex = task.line + 1 + effectiveChildrenCount;
-            lines.splice(insertIndex, 0, nextLine);
+            // 4. Insert after the original block
+            const insertIndex = task.line + 1 + childrenLines.length;
+            lines.splice(insertIndex, 0, ...linesToInsert);
 
             return lines.join('\n');
         });
@@ -299,6 +316,51 @@ export class TaskRepository {
                 return fileContent + prefix + content;
             });
         }
+    }
+
+    /**
+     * Append task with children to file (for move command)
+     * Reads children from the original file and appends them together
+     * Adjusts children indentation relative to new parent position
+     */
+    async appendTaskWithChildren(destPath: string, content: string, task: Task): Promise<void> {
+        // 1. Read children from original file
+        const sourceFile = this.app.vault.getAbstractFileByPath(task.file);
+        let childrenLines: string[] = [];
+        let parentIndent = 0;
+
+        if (sourceFile instanceof TFile) {
+            const sourceContent = await this.app.vault.read(sourceFile);
+            const lines = sourceContent.split('\n');
+
+            if (lines.length > task.line) {
+                // Get parent's original indentation
+                const parentLine = lines[task.line];
+                parentIndent = parentLine.search(/\S|$/);
+
+                const result = this.collectChildrenFromLines(lines, task.line);
+                childrenLines = result.childrenLines;
+            }
+        }
+
+        // 2. Strip block IDs from children
+        const cleanedChildren = this.stripBlockIds(childrenLines);
+
+        // 3. Adjust children indentation relative to parent
+        // Remove parent's indentation amount, keep only relative indent
+        const adjustedChildren = cleanedChildren.map(line => {
+            if (line.trim() === '') return line; // Keep empty lines as-is
+            const currentIndent = line.search(/\S|$/);
+            const relativeIndent = Math.max(0, currentIndent - parentIndent);
+            // Use tabs for the relative indentation
+            return '\t'.repeat(relativeIndent / (line.includes('\t') ? 1 : 4)) + line.trimStart();
+        });
+
+        // 4. Build full content to append
+        const fullContent = [content, ...adjustedChildren].join('\n');
+
+        // 5. Append to destination file
+        await this.appendTaskToFile(destPath, fullContent);
     }
 
     private async ensureDirectoryExists(filePath: string): Promise<void> {

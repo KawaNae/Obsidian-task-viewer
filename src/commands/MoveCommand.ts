@@ -37,7 +37,8 @@ export class MoveCommand implements CommandStrategy {
         const archivedTask = { ...ctx.task, commands: [] };
         const content = TaskParser.format(archivedTask);
 
-        await ctx.repository.appendTaskToFile(dest, content);
+        // Move task with children
+        await ctx.repository.appendTaskWithChildren(dest, content, ctx.task);
 
         return { shouldDeleteOriginal: true };
     }
