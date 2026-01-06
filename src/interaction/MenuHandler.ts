@@ -95,25 +95,26 @@ export class MenuHandler {
                 });
         });
 
-        // 3. Open Pomodoro (for All-Day tasks)
+        // 3. Open Pomodoro/Timer (for All-Day tasks)
         if (!task.startTime) {
+            // Determine display name: use task content, or fall back to file name
+            const displayName = task.content.trim() || task.file.replace(/\.md$/, '').split('/').pop() || 'Untitled';
+
             menu.addItem((item) => {
                 item.setTitle('🍅 Open Pomodoro')
                     .setIcon('timer')
                     .onClick(() => {
-                        // Show floating pomodoro widget
                         const widget = this.plugin.getTimerWidget();
-                        widget.show(task.id, task.content);
+                        widget.show(task.id, displayName);
                     });
             });
 
             menu.addItem((item) => {
-                item.setTitle('⏱️ Start Timer')
+                item.setTitle('⏱️ Open Timer')
                     .setIcon('clock')
                     .onClick(() => {
-                        // Show floating countup widget
                         const widget = this.plugin.getTimerWidget();
-                        widget.showCountup(task.id, task.content);
+                        widget.showCountup(task.id, displayName);
                     });
             });
         }

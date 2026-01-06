@@ -84,4 +84,77 @@ export class DailyNoteUtils {
             return match;
         });
     }
+
+    /**
+     * Append a line to the daily note under the specified header.
+     * Creates the daily note and/or header if they don't exist.
+     * @param app Obsidian App instance
+     * @param date Target date for the daily note
+     * @param line The line to append (should include full task format, e.g., "- [x] ...")
+     * @param header Header text (without # prefix)
+     * @param headerLevel Number of # to use (e.g., 2 for ##)
+     */
+    static async appendLineToDailyNote(
+        app: App,
+        date: Date,
+        line: string,
+        header: string,
+        headerLevel: number
+    ): Promise<void> {
+        let file = this.getDailyNote(app, date);
+        if (!file) {
+            file = await this.createDailyNote(app, date);
+        }
+        if (!file) return;
+
+        await app.vault.process(file, (fileContent) => {
+            const lines = fileContent.split('\n');
+            const headerPrefix = '#'.repeat(headerLevel) + ' ';
+            const fullHeader = headerPrefix + header;
+
+            let headerIndex = -1;
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].trim() === fullHeader) {
+                    headerIndex = i;
+                    break;
+                }
+            }
+
+            if (headerIndex !== -1) {
+                // Header exists - find end of section
+                let insertIndex = headerIndex + 1;
+                while (insertIndex < lines.length) {
+                    const currentLine = lines[insertIndex];
+                    if (currentLine.startsWith('#')) {
+                        const match = currentLine.match(/^(#+)\s/);
+                        if (match && match[1].length <= headerLevel) {
+                            break;
+                        }
+                    }
+                    insertIndex++;
+                }
+
+                // Skip trailing blank lines
+                let effectiveInsertIndex = insertIndex;
+                while (effectiveInsertIndex > headerIndex + 1) {
+                    if (lines[effectiveInsertIndex - 1].trim() === '') {
+                        effectiveInsertIndex--;
+                    } else {
+                        break;
+                    }
+                }
+
+                lines.splice(effectiveInsertIndex, 0, line);
+            } else {
+                // Header doesn't exist - create it
+                if (lines.length > 0 && lines[lines.length - 1].trim() !== '') {
+                    lines.push('');
+                }
+                lines.push(fullHeader);
+                lines.push(line);
+            }
+
+            return lines.join('\n');
+        });
+    }
 }
