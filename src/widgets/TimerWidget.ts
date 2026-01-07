@@ -119,7 +119,7 @@ export class TimerWidget {
 
         const header = this.container;
 
-        header.addEventListener('mousedown', (e) => {
+        header.addEventListener('pointerdown', (e) => {
             if ((e.target as HTMLElement).closest('.timer-widget__item')) {
                 // Don't start drag if clicking inside an item
                 if ((e.target as HTMLElement).closest('button, input')) return;
@@ -130,9 +130,12 @@ export class TimerWidget {
             this.dragOffset.x = e.clientX - rect.left;
             this.dragOffset.y = e.clientY - rect.top;
             this.container!.style.cursor = 'grabbing';
+
+            // Capture pointer for reliable tracking across boundaries
+            header.setPointerCapture(e.pointerId);
         });
 
-        document.addEventListener('mousemove', (e) => {
+        header.addEventListener('pointermove', (e) => {
             if (!this.isDragging || !this.container) return;
 
             const x = e.clientX - this.dragOffset.x;
@@ -144,11 +147,20 @@ export class TimerWidget {
             this.container.style.bottom = 'auto';
         });
 
-        document.addEventListener('mouseup', () => {
+        header.addEventListener('pointerup', (e) => {
             this.isDragging = false;
             if (this.container) {
                 this.container.style.cursor = 'grab';
             }
+            header.releasePointerCapture(e.pointerId);
+        });
+
+        header.addEventListener('pointercancel', (e) => {
+            this.isDragging = false;
+            if (this.container) {
+                this.container.style.cursor = 'grab';
+            }
+            header.releasePointerCapture(e.pointerId);
         });
     }
 
