@@ -16,9 +16,6 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
         // Version display at top
         const versionEl = containerEl.createDiv('setting-item');
-        versionEl.style.paddingBottom = '12px';
-        versionEl.style.marginBottom = '12px';
-        versionEl.style.borderBottom = '1px solid var(--background-modifier-border)';
         versionEl.createSpan({
             text: `Task Viewer v${this.plugin.manifest.version}`,
             cls: 'setting-item-description'
