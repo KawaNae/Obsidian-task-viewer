@@ -44,6 +44,26 @@ export class DateUtils {
     }
 
     /**
+     * Get the visual start date for a task considering startHour.
+     * If a task's startTime is before startHour, it visually belongs to the previous day.
+     * 
+     * @param startDate YYYY-MM-DD - The task's actual start date
+     * @param startTime HH:mm or undefined - The task's start time
+     * @param startHour The configured start hour for visual day (e.g., 5 for 5:00 AM)
+     * @returns The visual date YYYY-MM-DD
+     */
+    static getVisualStartDate(startDate: string, startTime: string | undefined, startHour: number): string {
+        if (!startTime) return startDate;  // All-day tasks use actual date
+
+        const [h] = startTime.split(':').map(Number);
+        if (h < startHour) {
+            // startTime is before startHour → visually belongs to previous day
+            return this.addDays(startDate, -1);
+        }
+        return startDate;
+    }
+
+    /**
      * 日時文字列を指定日数シフト（時刻部分は保持）
      * @param dateStr YYYY-MM-DD or YYYY-MM-DDTHH:mm
      * @param days シフトする日数
@@ -108,8 +128,9 @@ export class DateUtils {
                 // HH:mm format
                 const effectiveEndDate = endDate || startDate;
                 endDateTime = new Date(`${effectiveEndDate}T${endTime}`);
-                // If end is before start, assume next day
-                if (endDateTime <= startDateTime) {
+                // If end is strictly before start, assume next day
+                // Note: end == start means 0 duration, not 24 hours
+                if (endDateTime < startDateTime) {
                     endDateTime.setDate(endDateTime.getDate() + 1);
                 }
             }

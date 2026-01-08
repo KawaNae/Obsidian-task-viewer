@@ -27,10 +27,13 @@ export class AllDaySectionRenderer {
 
         let tasks = this.taskIndex.getTasks().filter(t => {
             if (t.isFuture) return false;
-            const tStart = t.startDate || viewStart;
-            const tEnd = t.endDate || tStart;
-            if (!(tStart <= viewEnd && tEnd >= viewStart)) return false;
-            return DateUtils.isAllDayTask(tStart, t.startTime, t.endDate, t.endTime, startHour);
+            // Use visual start date considering startHour
+            const visualStart = t.startDate
+                ? DateUtils.getVisualStartDate(t.startDate, t.startTime, startHour)
+                : viewStart;
+            const tEnd = t.endDate || visualStart;
+            if (!(visualStart <= viewEnd && tEnd >= viewStart)) return false;
+            return DateUtils.isAllDayTask(t.startDate || visualStart, t.startTime, t.endDate, t.endTime, startHour);
         });
 
         if (visibleFiles) {
@@ -38,8 +41,12 @@ export class AllDaySectionRenderer {
         }
 
         tasks.sort((a, b) => {
-            const startA = a.startDate || viewStart;
-            const startB = b.startDate || viewStart;
+            const startA = a.startDate
+                ? DateUtils.getVisualStartDate(a.startDate, a.startTime, startHour)
+                : viewStart;
+            const startB = b.startDate
+                ? DateUtils.getVisualStartDate(b.startDate, b.startTime, startHour)
+                : viewStart;
             if (startA !== startB) return startA.localeCompare(startB);
             const endA = a.endDate || startA;
             const endB = b.endDate || startB;
@@ -51,7 +58,10 @@ export class AllDaySectionRenderer {
         const tracks: string[] = [];
 
         tasks.forEach(task => {
-            const tStart = task.startDate || viewStart;
+            // Use visual start date for positioning
+            const tStart = task.startDate
+                ? DateUtils.getVisualStartDate(task.startDate, task.startTime, startHour)
+                : viewStart;
             const tEnd = task.endDate || tStart;
 
             // Calculate deadline line for arrow
