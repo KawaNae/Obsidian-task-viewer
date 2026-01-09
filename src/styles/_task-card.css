@@ -342,8 +342,6 @@
 /* Expanded state */
 .task-card__children--expanded {
     display: block;
-    padding-left: 1em;
     border-left: 2px solid var(--background-modifier-border);
-    margin-left: 1em;
     margin-top: 4px;
 }
