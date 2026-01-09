@@ -116,10 +116,11 @@
 }
 
 .task-card.selected {
-    border: 1px solid var(--file-accent, var(--interactive-accent));
-    box-shadow: 0 0 0 1px var(--file-accent, var(--interactive-accent)),
-        0 0 0 2px var(--background-primary),
-        0 4px 8px rgba(0, 0, 0, 0.3);
+    outline: 2px solid var(--file-accent, var(--interactive-accent));
+    outline-offset: -2px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    z-index: 200;
+    /* Ensure selected card and its handles appear above other cards */
 }
 
 /* ==========================================================================
