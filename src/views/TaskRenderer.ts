@@ -5,6 +5,8 @@ import { TaskIndex } from '../services/TaskIndex';
 export class TaskRenderer {
     private app: App;
     private taskIndex: TaskIndex;
+    // Track which tasks have their children expanded (preserved across re-renders)
+    private expandedTaskIds: Set<string> = new Set();
 
     constructor(app: App, taskIndex: TaskIndex) {
         this.app = app;
@@ -86,21 +88,82 @@ export class TaskRenderer {
             cleanParentLine += `[[${fileName}]]`;
         }
 
-        // Clean child lines: remove @ notation and add proper indentation for nesting
-        const cleanChildren = task.children.map(childLine => {
-            // Remove @... notation (matches @date, @date>time, @future, etc.)
-            // Pattern: @... up to the next space or end of line, including ==> commands
-            const cleaned = childLine
-                .replace(/\s*@[\w\-:>T]+(?:\s*==>.*)?/g, '')
-                .trimEnd();
-            // Add 4-space indent so children render nested under parent task
-            return '    ' + cleaned;
-        });
+        // Collapse threshold for children
+        const COLLAPSE_THRESHOLD = 3;
+        const shouldCollapse = task.children.length >= COLLAPSE_THRESHOLD;
 
-        const fullText = [cleanParentLine, ...cleanChildren].join('\n');
+        if (shouldCollapse) {
+            // Render parent only first
+            await MarkdownRenderer.render(this.app, cleanParentLine, contentContainer, task.file, component);
 
-        // Use MarkdownRenderer
-        await MarkdownRenderer.render(this.app, fullText, contentContainer, task.file, component);
+            // Check if this task was expanded before re-render
+            const wasExpanded = this.expandedTaskIds.has(task.id);
+
+            // Create toggle button
+            const toggle = contentContainer.createDiv('task-card__children-toggle');
+
+            // Create children container
+            const childrenContainer = contentContainer.createDiv('task-card__children');
+
+            // Set initial state based on saved state
+            if (wasExpanded) {
+                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${task.children.length}件の子タスク`;
+                toggle.dataset.collapsed = 'false';
+                childrenContainer.addClass('task-card__children--expanded');
+            } else {
+                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${task.children.length}件の子タスク`;
+                toggle.dataset.collapsed = 'true';
+                childrenContainer.addClass('task-card__children--collapsed');
+            }
+
+            // Render children
+            const cleanChildren = task.children.map(childLine => {
+                const cleaned = childLine
+                    .replace(/\s*@[\w\-:>T]+(?:\s*==>.*)?/g, '')
+                    .trimEnd();
+                return cleaned;
+            });
+
+            const childrenText = cleanChildren.join('\n');
+            await MarkdownRenderer.render(this.app, childrenText, childrenContainer, task.file, component);
+
+            // Toggle click handler
+            toggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isCollapsed = toggle.dataset.collapsed === 'true';
+                if (isCollapsed) {
+                    toggle.dataset.collapsed = 'false';
+                    toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${task.children.length}件の子タスク`;
+                    childrenContainer.removeClass('task-card__children--collapsed');
+                    childrenContainer.addClass('task-card__children--expanded');
+                    // Save expanded state
+                    this.expandedTaskIds.add(task.id);
+                } else {
+                    toggle.dataset.collapsed = 'true';
+                    toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${task.children.length}件の子タスク`;
+                    childrenContainer.removeClass('task-card__children--expanded');
+                    childrenContainer.addClass('task-card__children--collapsed');
+                    // Remove from expanded state
+                    this.expandedTaskIds.delete(task.id);
+                }
+            });
+
+            // Handle checkboxes in children container
+            this.setupChildCheckboxHandlers(childrenContainer, task, 0);
+        } else {
+            // Original behavior: render everything together
+            const cleanChildren = task.children.map(childLine => {
+                const cleaned = childLine
+                    .replace(/\s*@[\w\-:>T]+(?:\s*==>.*)?/g, '')
+                    .trimEnd();
+                return '    ' + cleaned;
+            });
+
+            const fullText = [cleanParentLine, ...cleanChildren].join('\n');
+
+            // Use MarkdownRenderer
+            await MarkdownRenderer.render(this.app, fullText, contentContainer, task.file, component);
+        }
 
         // Handle Internal Links
         const internalLinks = contentContainer.querySelectorAll('a.internal-link');
@@ -120,45 +183,65 @@ export class TaskRenderer {
         });
 
         // Handle Checkbox Clicks
-        const checkboxes = contentContainer.querySelectorAll('input[type="checkbox"]');
-        checkboxes.forEach((checkbox, index) => {
-            checkbox.addEventListener('click', (e) => {
-                // If it's the main task (index 0)
-                if (index === 0) {
-                    const isChecked = (checkbox as HTMLInputElement).checked;
-                    const newStatus = isChecked ? 'done' : 'todo';
+        // For collapsed mode, parent checkbox is handled here, children are handled separately
+        const mainCheckbox = contentContainer.querySelector(':scope > ul > li > input[type="checkbox"]');
+        if (mainCheckbox) {
+            mainCheckbox.addEventListener('click', () => {
+                const isChecked = (mainCheckbox as HTMLInputElement).checked;
+                const newStatus = isChecked ? 'done' : 'todo';
+                const newStatusChar = isChecked ? 'x' : ' ';
+                this.taskIndex.updateTask(task.id, {
+                    status: newStatus,
+                    statusChar: newStatusChar
+                });
+            });
+            mainCheckbox.addEventListener('pointerdown', (e) => e.stopPropagation());
+        }
 
-                    // Update statusChar as well to ensure visual change
-                    // If checking: default to 'x'
-                    // If unchecking: default to ' '
-                    const newStatusChar = isChecked ? 'x' : ' ';
-
-                    this.taskIndex.updateTask(task.id, {
-                        status: newStatus,
-                        statusChar: newStatusChar
-                    });
-                } else {
-                    // For children
-                    const childLineIndex = index - 1; // 0-based index into children array
+        // For non-collapsed mode, also handle children checkboxes (old behavior)
+        if (!shouldCollapse) {
+            const checkboxes = contentContainer.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach((checkbox, index) => {
+                if (index === 0) return; // Already handled above
+                checkbox.addEventListener('click', () => {
+                    const childLineIndex = index - 1;
                     if (childLineIndex < task.children.length) {
                         let childLine = task.children[childLineIndex];
-                        // Regex to find - [?]
                         const match = childLine.match(/\[(.)\]/);
                         if (match) {
                             const currentChar = match[1];
                             const newChar = currentChar === ' ' ? 'x' : ' ';
                             childLine = childLine.replace(`[${currentChar}]`, `[${newChar}]`);
                         }
-
-                        // Calculate absolute line number
                         const absoluteLineNumber = task.line + 1 + childLineIndex;
-
                         this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
                     }
+                });
+                checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
+            });
+        }
+    }
+
+    /**
+     * Setup checkbox handlers for children in a collapsed container
+     */
+    private setupChildCheckboxHandlers(container: HTMLElement, task: Task, startOffset: number): void {
+        const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach((checkbox, index) => {
+            checkbox.addEventListener('click', () => {
+                const childLineIndex = startOffset + index;
+                if (childLineIndex < task.children.length) {
+                    let childLine = task.children[childLineIndex];
+                    const match = childLine.match(/\[(.)\]/);
+                    if (match) {
+                        const currentChar = match[1];
+                        const newChar = currentChar === ' ' ? 'x' : ' ';
+                        childLine = childLine.replace(`[${currentChar}]`, `[${newChar}]`);
+                    }
+                    const absoluteLineNumber = task.line + 1 + childLineIndex;
+                    this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
                 }
             });
-
-            // Stop propagation so clicking checkbox doesn't drag/select card
             checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
         });
     }

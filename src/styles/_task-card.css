@@ -311,3 +311,39 @@
 .deadline-arrow.deadline-clipped::before {
     display: none;
 }
+
+/* ==========================================================================
+   8. COLLAPSIBLE CHILDREN
+   ========================================================================== */
+
+.task-card__children-toggle {
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 0.85em;
+    padding: 4px 0 2px 1.5em;
+    user-select: none;
+}
+
+.task-card__children-toggle:hover {
+    color: var(--text-normal);
+    background-color: var(--background-modifier-hover);
+}
+
+.task-card__children-toggle-icon {
+    font-size: 0.8em;
+    margin-right: 4px;
+}
+
+/* Hidden state */
+.task-card__children--collapsed {
+    display: none;
+}
+
+/* Expanded state */
+.task-card__children--expanded {
+    display: block;
+    padding-left: 1em;
+    border-left: 2px solid var(--background-modifier-border);
+    margin-left: 1em;
+    margin-top: 4px;
+}
