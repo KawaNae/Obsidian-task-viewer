@@ -9,12 +9,17 @@ import { TimerWidget } from './widgets/TimerWidget';
 import { TaskViewerSettings, DEFAULT_SETTINGS } from './types';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/ColorSuggest';
+import { DateUtils } from './utils/DateUtils';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
     private pomodoroService: PomodoroService;
     private timerWidget: TimerWidget;
     public settings: TaskViewerSettings;
+
+    // Day boundary check
+    private lastVisualDate: string = '';
+    private dateCheckInterval: ReturnType<typeof setInterval> | null = null;
 
     async onload() {
         console.log('Loading Task Viewer Plugin (Rewrite)');
@@ -113,6 +118,9 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Apply global styles if enabled
         this.updateGlobalStyles();
+
+        // Start day boundary check (every 5 minutes)
+        this.startDateBoundaryCheck();
     }
 
     async loadSettings() {
@@ -157,6 +165,35 @@ export default class TaskViewerPlugin extends Plugin {
         return this.timerWidget;
     }
 
+    /**
+     * Start checking for day boundary changes every 5 minutes
+     */
+    private startDateBoundaryCheck(): void {
+        // Record current visual date
+        this.lastVisualDate = DateUtils.getVisualDateOfNow(this.settings.startHour);
+
+        // Check every 5 minutes
+        this.dateCheckInterval = setInterval(() => {
+            const currentVisualDate = DateUtils.getVisualDateOfNow(this.settings.startHour);
+            if (currentVisualDate !== this.lastVisualDate) {
+                console.log(`[TaskViewer] Day boundary crossed: ${this.lastVisualDate} -> ${currentVisualDate}`);
+                this.lastVisualDate = currentVisualDate;
+                this.refreshAllViews();
+            }
+        }, 5 * 60 * 1000); // 5 minutes
+    }
+
+    /**
+     * Refresh all task viewer views
+     */
+    private refreshAllViews(): void {
+        [VIEW_TYPE_TIMELINE, VIEW_TYPE_KANBAN, VIEW_TYPE_SCHEDULE].forEach(viewType => {
+            this.app.workspace.getLeavesOfType(viewType).forEach(leaf => {
+                (leaf.view as any).refresh?.();
+            });
+        });
+    }
+
     async activateView(viewType: string) {
         const { workspace } = this.app;
 
@@ -180,5 +217,11 @@ export default class TaskViewerPlugin extends Plugin {
         document.body.classList.remove('task-viewer-global-styles');
         this.pomodoroService?.destroy();
         this.timerWidget?.destroy();
+
+        // Clear day boundary check interval
+        if (this.dateCheckInterval) {
+            clearInterval(this.dateCheckInterval);
+            this.dateCheckInterval = null;
+        }
     }
 }
