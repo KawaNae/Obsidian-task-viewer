@@ -4,6 +4,7 @@ import { TaskIndex } from '../services/TaskIndex';
 import TaskViewerPlugin from '../main';
 import { ConfirmModal } from '../modals/ConfirmModal';
 import { DateUtils } from '../utils/DateUtils';
+import { DateTimeInputModal, DateTimeValue, DateTimeModalOptions } from '../modals/DateTimeInputModal';
 
 export class MenuHandler {
     private app: App;
@@ -396,15 +397,115 @@ export class MenuHandler {
             deadlineText = `Deadline: ${task.deadline}`;
         }
 
-        // Add menu items
+        // Add menu items (now clickable for editing)
         menu.addItem((item) => {
-            item.setTitle(startText).setIcon(startIcon).setDisabled(true);
+            item.setTitle(startText).setIcon(startIcon)
+                .onClick(() => {
+                    const currentValue: DateTimeValue = {
+                        date: task.startDate || null,
+                        time: task.startTime || null,
+                        isFuture: task.isFuture
+                    };
+                    new DateTimeInputModal(this.app, 'start', currentValue, async (value) => {
+                        if (value.isFuture) {
+                            await this.taskIndex.updateTask(task.id, {
+                                isFuture: true,
+                                startDate: undefined,
+                                startTime: undefined
+                            });
+                        } else if (value.date === null) {
+                            // Clear: only remove start, not other fields
+                            await this.taskIndex.updateTask(task.id, {
+                                startDate: undefined,
+                                startTime: undefined,
+                                isFuture: false
+                            });
+                        } else {
+                            await this.taskIndex.updateTask(task.id, {
+                                startDate: value.date,
+                                startTime: value.time || undefined,
+                                isFuture: false
+                            });
+                        }
+                    }).open();
+                });
         });
         menu.addItem((item) => {
-            item.setTitle(endText).setIcon(endIcon).setDisabled(true);
+            item.setTitle(endText).setIcon(endIcon)
+                .onClick(() => {
+                    // Parse current endTime if it's full ISO format
+                    let endDate = task.endDate || null;
+                    let endTime = task.endTime || null;
+                    if (endTime && endTime.includes('T')) {
+                        const parts = endTime.split('T');
+                        endDate = parts[0];
+                        endTime = parts[1];
+                    }
+
+                    const currentValue: DateTimeValue = {
+                        date: endDate,
+                        time: endTime
+                    };
+                    const options: DateTimeModalOptions = {
+                        hasStartDate: !!task.startDate
+                    };
+                    new DateTimeInputModal(this.app, 'end', currentValue, async (value) => {
+                        if (value.date === null && value.time === null) {
+                            // Clear both
+                            await this.taskIndex.updateTask(task.id, {
+                                endDate: undefined,
+                                endTime: undefined
+                            });
+                        } else if (value.date === null && value.time !== null) {
+                            // Time-only (inherit date from start)
+                            await this.taskIndex.updateTask(task.id, {
+                                endDate: undefined,
+                                endTime: value.time
+                            });
+                        } else {
+                            await this.taskIndex.updateTask(task.id, {
+                                endDate: value.date || undefined,
+                                endTime: value.time || undefined
+                            });
+                        }
+                    }, options).open();
+                });
         });
         menu.addItem((item) => {
-            item.setTitle(deadlineText).setIcon(deadlineIcon).setDisabled(true);
+            item.setTitle(deadlineText).setIcon(deadlineIcon)
+                .onClick(() => {
+                    // Parse deadline (can be YYYY-MM-DD or YYYY-MM-DDTHH:mm)
+                    let deadlineDate: string | null = null;
+                    let deadlineTime: string | null = null;
+                    if (task.deadline) {
+                        if (task.deadline.includes('T')) {
+                            const parts = task.deadline.split('T');
+                            deadlineDate = parts[0];
+                            deadlineTime = parts[1];
+                        } else {
+                            deadlineDate = task.deadline;
+                        }
+                    }
+
+                    const currentValue: DateTimeValue = {
+                        date: deadlineDate,
+                        time: deadlineTime
+                    };
+                    new DateTimeInputModal(this.app, 'deadline', currentValue, async (value) => {
+                        if (value.date === null) {
+                            await this.taskIndex.updateTask(task.id, {
+                                deadline: undefined
+                            });
+                        } else {
+                            const newDeadline = value.time
+                                ? `${value.date}T${value.time}`
+                                : value.date;
+                            await this.taskIndex.updateTask(task.id, {
+                                deadline: newDeadline
+                            });
+                        }
+                    }).open();
+                });
         });
     }
 

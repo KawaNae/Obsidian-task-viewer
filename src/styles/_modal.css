@@ -1,0 +1,71 @@
+/* DateTime Input Modal Styles */
+.datetime-input-modal {
+    padding: 16px;
+}
+
+.datetime-input-modal h3 {
+    margin-top: 0;
+    margin-bottom: 16px;
+}
+
+.datetime-input-modal__future {
+    margin-bottom: 16px;
+}
+
+.datetime-input-modal__future label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.datetime-input-modal__field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.datetime-input-modal__field label {
+    font-size: 0.9em;
+    color: var(--text-muted);
+}
+
+.datetime-input-modal__text-input {
+    padding: 8px 12px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-s);
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 1em;
+    font-family: var(--font-monospace);
+    width: 100%;
+}
+
+.datetime-input-modal__text-input:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+.datetime-input-modal__text-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.datetime-input-modal__text-input::placeholder {
+    color: var(--text-faint);
+}
+
+/* Invalid state */
+.datetime-input-modal__input--invalid {
+    border-color: var(--text-error) !important;
+    background-color: rgba(var(--color-red-rgb), 0.1);
+}
+
+/* Error message */
+.datetime-input-modal__error {
+    color: var(--text-error);
+    font-size: 0.85em;
+    margin-bottom: 12px;
+}

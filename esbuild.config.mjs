@@ -40,6 +40,7 @@ const copyStaticFiles = {
           '_toolbar.css',
           '_pomodoro.css',
           '_timer-widget.css',
+          '_modal.css',
           '_deprecated.css'
         ];
 
