@@ -1,7 +1,7 @@
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import { TaskRenderer } from '../TaskRenderer';
 import { TaskIndex } from '../../services/TaskIndex';
-import { Task, ViewState } from '../../types';
+import { Task, ViewState, isCompleteStatus } from '../../types';
 import { DragHandler } from '../../interaction/DragHandler';
 import { MenuHandler } from '../../interaction/MenuHandler';
 
@@ -52,6 +52,7 @@ export class TimelineView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private currentTimeInterval: number | null = null;
     private lastScrollTop: number = 0;
+    private hasInitializedStartDate: boolean = false;
 
     // ==================== Lifecycle ====================
 
@@ -85,24 +86,23 @@ export class TimelineView extends ItemView {
                 console.log('[DEBUG] setState - updating daysToShow to:', state.daysToShow);
                 this.viewState.daysToShow = state.daysToShow;
             }
-            if (state.startDate) {
-                console.log('[DEBUG] setState - updating startDate from:', this.viewState.startDate, 'to:', state.startDate);
-                this.viewState.startDate = state.startDate;
-            }
+            // Note: startDate is not restored - always use "Today" logic on reload
         }
         await super.setState(state, result);
         this.render();
     }
 
     getState() {
+        // Only save daysToShow, not startDate (startDate resets on reload like Today button)
         const state = {
-            daysToShow: this.viewState.daysToShow,
-            startDate: this.viewState.startDate
+            daysToShow: this.viewState.daysToShow
         };
         return state;
     }
 
     async onOpen() {
+        // Set initial startDate - will be re-evaluated in onChange when tasks are loaded
+        this.viewState.startDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
 
         this.container = this.contentEl;
         this.container.empty();
@@ -162,6 +162,15 @@ export class TimelineView extends ItemView {
 
         // Subscribe to data changes
         this.unsubscribe = this.taskIndex.onChange((taskId, changes) => {
+            // On first data load, re-evaluate startDate using Today button logic
+            if (!this.hasInitializedStartDate && this.taskIndex.getTasks().length > 0) {
+                this.hasInitializedStartDate = true;
+                const oldestOverdue = this.findOldestOverdueDate();
+                if (oldestOverdue) {
+                    this.viewState.startDate = oldestOverdue;
+                }
+            }
+
             if (taskId && changes) {
                 // Check if we can do partial update
                 // Only content/status changes are safe for partial update (no layout change)
@@ -351,4 +360,39 @@ export class TimelineView extends ItemView {
 
 
     // ==================== Task Creation ====================
+
+    // ==================== Overdue Date Logic ====================
+
+    /**
+     * Finds the oldest date with incomplete overdue tasks.
+     * Returns null if all past tasks are completed.
+     * Used for initial view date on open/reload.
+     */
+    private findOldestOverdueDate(): string | null {
+        const startHour = this.plugin.settings.startHour;
+        const today = DateUtils.getVisualDateOfNow(startHour);
+
+        // Get all incomplete tasks with dates before today
+        const tasks = this.taskIndex.getTasks().filter(t =>
+            !isCompleteStatus(t.status) &&
+            !t.isFuture &&
+            t.startDate
+        );
+
+        // Find the oldest past date among incomplete tasks
+        let oldestDate: string | null = null;
+
+        for (const task of tasks) {
+            const taskDate = task.startDate!;
+
+            // Only consider tasks that are before today (visual date)
+            if (taskDate < today) {
+                if (!oldestDate || taskDate < oldestDate) {
+                    oldestDate = taskDate;
+                }
+            }
+        }
+
+        return oldestDate;
+    }
 }
