@@ -174,4 +174,54 @@ export class DateUtils {
         const hours24 = 24 * 60 * 60 * 1000;
         return durationMs >= hours24;
     }
+
+    /**
+     * Check if a date/time is in the past considering startHour.
+     * For visual date boundary: if current time < startHour, yesterday is considered "today".
+     * 
+     * @param dateStr YYYY-MM-DD - The date to check
+     * @param timeStr HH:mm or undefined - The time to check (optional)
+     * @param startHour The configured start hour for visual day boundary
+     * @returns true if the date/time is in the past
+     */
+    static isPastDate(dateStr: string, timeStr: string | undefined, startHour: number): boolean {
+        const now = new Date();
+        const visualToday = this.getVisualDateOfNow(startHour);
+
+        // Compare the date part first
+        if (dateStr < visualToday) {
+            return true;
+        }
+
+        if (dateStr > visualToday) {
+            return false;
+        }
+
+        // Same visual date - check time if provided
+        if (timeStr) {
+            const currentHour = now.getHours();
+            const currentMinute = now.getMinutes();
+            const currentMinutes = currentHour * 60 + currentMinute;
+            const taskMinutes = this.timeToMinutes(timeStr);
+            return taskMinutes < currentMinutes;
+        }
+
+        // Same date, no time specified - not past yet (it's "today")
+        return false;
+    }
+
+    /**
+     * Check if a deadline is in the past considering startHour.
+     * 
+     * @param deadline YYYY-MM-DD or YYYY-MM-DDTHH:mm format
+     * @param startHour The configured start hour for visual day boundary
+     * @returns true if the deadline is in the past
+     */
+    static isPastDeadline(deadline: string, startHour: number): boolean {
+        const hasTime = deadline.includes('T');
+        const datePart = deadline.split('T')[0];
+        const timePart = hasTime ? deadline.split('T')[1] : undefined;
+
+        return this.isPastDate(datePart, timePart, startHour);
+    }
 }

@@ -1,6 +1,7 @@
 import { App, MarkdownRenderer, Component } from 'obsidian';
 import { Task, TaskViewerSettings } from '../types';
 import { TaskIndex } from '../services/TaskIndex';
+import { DateUtils } from '../utils/DateUtils';
 
 export class TaskRenderer {
     private app: App;
@@ -76,7 +77,26 @@ export class TaskRenderer {
         // Construct full markdown
         // Strip time info from parent task line for display
         const statusChar = task.statusChar || (task.status === 'done' ? 'x' : (task.status === 'cancelled' ? '-' : ' '));
-        let cleanParentLine = `- [${statusChar}] ${task.content}`;
+
+        // Check if task is overdue and add warning icon
+        // Complete status chars: x, X, -, ! (no warning)
+        // Incomplete status chars: space, ?, > (show warning if overdue)
+        const isComplete = ['x', 'X', '-', '!'].includes(statusChar);
+        let overdueIcon = '';
+        if (!isComplete) {
+            if (task.deadline && DateUtils.isPastDeadline(task.deadline, settings.startHour)) {
+                overdueIcon = '🚨 ';
+            } else if (task.startDate && DateUtils.isPastDate(task.startDate, task.startTime, settings.startHour)) {
+                overdueIcon = '⚠️ ';
+            } else if (task.endDate) {
+                const endTime = task.endTime?.includes('T') ? task.endTime.split('T')[1] : task.endTime;
+                if (DateUtils.isPastDate(task.endDate, endTime, settings.startHour)) {
+                    overdueIcon = '⚠️ ';
+                }
+            }
+        }
+
+        let cleanParentLine = `- [${statusChar}] ${overdueIcon}${task.content}`;
 
         // Append source file link
         const fileName = task.file.split('/').pop()?.replace('.md', '') || task.file;

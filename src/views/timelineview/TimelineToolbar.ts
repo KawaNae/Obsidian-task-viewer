@@ -59,10 +59,47 @@ export class TimelineToolbar {
             toolbar,
             (days) => this.navigateDate(days),
             () => {
-                this.viewState.startDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+                const oldestOverdueDate = this.findOldestOverdueDate();
+                const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+                this.viewState.startDate = oldestOverdueDate || today;
                 this.callbacks.onRender();
             }
         );
+    }
+
+    /**
+     * Finds the oldest date with incomplete overdue tasks.
+     * Returns null if all past tasks are completed.
+     * Complete status chars: x, X, -, ! (no warning)
+     */
+    private findOldestOverdueDate(): string | null {
+        const startHour = this.plugin.settings.startHour;
+        const today = DateUtils.getVisualDateOfNow(startHour);
+        const completeChars = ['x', 'X', '-', '!'];
+
+        // Get all incomplete tasks with dates before today
+        const tasks = this.taskIndex.getTasks().filter(t => {
+            const statusChar = t.statusChar || (t.status === 'done' ? 'x' : (t.status === 'cancelled' ? '-' : ' '));
+            return !completeChars.includes(statusChar) &&
+                !t.isFuture &&
+                t.startDate;
+        });
+
+        // Find the oldest past date among incomplete tasks
+        let oldestDate: string | null = null;
+
+        for (const task of tasks) {
+            const taskDate = task.startDate!;
+
+            // Only consider tasks that are before today (visual date)
+            if (taskDate < today) {
+                if (!oldestDate || taskDate < oldestDate) {
+                    oldestDate = taskDate;
+                }
+            }
+        }
+
+        return oldestDate;
     }
 
     private renderViewModeSwitch(toolbar: HTMLElement): void {

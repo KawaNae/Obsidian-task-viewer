@@ -8,13 +8,15 @@ import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { FutureSectionRenderer } from './FutureSectionRenderer';
 import { AllDaySectionRenderer } from './AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './TimelineSectionRenderer';
+import { TaskIndex } from '../../../services/TaskIndex';
 
 export class GridRenderer {
     constructor(
         private container: HTMLElement,
         private viewState: ViewState,
         private plugin: TaskViewerPlugin,
-        private menuHandler: MenuHandler
+        private menuHandler: MenuHandler,
+        private taskIndex: TaskIndex
     ) { }
 
     public render(
@@ -56,6 +58,21 @@ export class GridRenderer {
             if (date === todayVisualDate) {
                 cell.addClass('is-today');
             }
+
+            // Check if this date has incomplete overdue tasks
+            // Complete status chars: x, X, -, ! (no warning)
+            if (date < todayVisualDate) {
+                const tasksForDate = this.taskIndex.getTasksForVisualDay(date, this.plugin.settings.startHour);
+                const completeChars = ['x', 'X', '-', '!'];
+                const hasOverdueTasks = tasksForDate.some(t => {
+                    const statusChar = t.statusChar || (t.status === 'done' ? 'x' : (t.status === 'cancelled' ? '-' : ' '));
+                    return !completeChars.includes(statusChar) && !t.isFuture;
+                });
+                if (hasOverdueTasks) {
+                    cell.addClass('has-overdue');
+                }
+            }
+
             cell.dataset.date = date;
 
             // Add click listener to open daily note

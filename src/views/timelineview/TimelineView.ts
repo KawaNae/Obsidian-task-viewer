@@ -133,7 +133,7 @@ export class TimelineView extends ItemView {
         this.futureRenderer = new FutureSectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer);
         this.allDayRenderer = new AllDaySectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow);
         this.timelineRenderer = new TimelineSectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer);
-        this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler);
+        this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler, this.taskIndex);
 
         // Initialize DragHandler with selection callback, move callback, and view start date provider
         this.dragHandler = new DragHandler(this.container, this.taskIndex, this.plugin,

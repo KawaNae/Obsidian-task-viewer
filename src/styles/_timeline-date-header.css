@@ -62,3 +62,12 @@
 .date-header__cell.is-today:hover::after {
     opacity: 1;
 }
+
+/* Date with overdue incomplete tasks - warning text color */
+.date-header__cell.has-overdue {
+    color: var(--color-orange);
+}
+
+.date-header__cell.has-overdue:hover {
+    color: var(--color-orange);
+}
