@@ -1,5 +1,5 @@
 import { App, MarkdownRenderer, Component } from 'obsidian';
-import { Task, TaskViewerSettings } from '../types';
+import { Task, TaskViewerSettings, isCompleteStatus } from '../types';
 import { TaskIndex } from '../services/TaskIndex';
 import { DateUtils } from '../utils/DateUtils';
 
@@ -79,11 +79,9 @@ export class TaskRenderer {
         const statusChar = task.statusChar || (task.status === 'done' ? 'x' : (task.status === 'cancelled' ? '-' : ' '));
 
         // Check if task is overdue and add warning icon
-        // Complete status chars: x, X, -, ! (no warning)
-        // Incomplete status chars: space, ?, > (show warning if overdue)
-        const isComplete = ['x', 'X', '-', '!'].includes(statusChar);
+        // Use isCompleteStatus for completion detection
         let overdueIcon = '';
-        if (!isComplete) {
+        if (!isCompleteStatus(task.status)) {
             if (task.deadline && DateUtils.isPastDeadline(task.deadline, settings.startHour)) {
                 overdueIcon = '🚨 ';
             } else if (task.startDate && DateUtils.isPastDate(task.startDate, task.startTime, settings.startHour)) {

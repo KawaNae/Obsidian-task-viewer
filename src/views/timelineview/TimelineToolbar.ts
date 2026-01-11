@@ -1,5 +1,5 @@
 import { App } from 'obsidian';
-import { ViewState } from '../../types';
+import { ViewState, isCompleteStatus } from '../../types';
 import { TaskIndex } from '../../services/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
 import TaskViewerPlugin from '../../main';
@@ -70,20 +70,17 @@ export class TimelineToolbar {
     /**
      * Finds the oldest date with incomplete overdue tasks.
      * Returns null if all past tasks are completed.
-     * Complete status chars: x, X, -, ! (no warning)
      */
     private findOldestOverdueDate(): string | null {
         const startHour = this.plugin.settings.startHour;
         const today = DateUtils.getVisualDateOfNow(startHour);
-        const completeChars = ['x', 'X', '-', '!'];
 
         // Get all incomplete tasks with dates before today
-        const tasks = this.taskIndex.getTasks().filter(t => {
-            const statusChar = t.statusChar || (t.status === 'done' ? 'x' : (t.status === 'cancelled' ? '-' : ' '));
-            return !completeChars.includes(statusChar) &&
-                !t.isFuture &&
-                t.startDate;
-        });
+        const tasks = this.taskIndex.getTasks().filter(t =>
+            !isCompleteStatus(t.status) &&
+            !t.isFuture &&
+            t.startDate
+        );
 
         // Find the oldest past date among incomplete tasks
         let oldestDate: string | null = null;

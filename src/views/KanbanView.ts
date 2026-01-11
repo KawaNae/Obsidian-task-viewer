@@ -1,7 +1,7 @@
 import { ItemView, WorkspaceLeaf, Menu } from 'obsidian';
 import { TaskIndex } from '../services/TaskIndex';
 import { TaskRenderer } from './TaskRenderer';
-import { Task, ViewState } from '../types';
+import { Task, ViewState, TaskStatusType } from '../types';
 import { DateUtils } from '../utils/DateUtils';
 import TaskViewerPlugin from '../main';
 import { ViewUtils, FileFilterMenu, DateNavigator, ViewModeSelector } from './ViewUtils';
@@ -12,7 +12,7 @@ interface KanbanColumn {
     id: string;
     title: string;
     statusChar: string;
-    status: 'todo' | 'done' | 'cancelled';
+    status: TaskStatusType;
 }
 
 export class KanbanView extends ItemView {
@@ -28,8 +28,9 @@ export class KanbanView extends ItemView {
         { id: 'todo', title: 'Todo', statusChar: ' ', status: 'todo' },
         { id: 'done', title: 'Done', statusChar: 'x', status: 'done' },
         { id: 'cancelled', title: 'Cancelled', statusChar: '-', status: 'cancelled' },
-        { id: 'important', title: 'Important', statusChar: '!', status: 'todo' },
-        { id: 'question', title: 'Question', statusChar: '?', status: 'todo' }
+        { id: 'failed', title: 'Failed', statusChar: '!', status: 'failed' },
+        { id: 'blocked', title: 'Blocked', statusChar: '?', status: 'blocked' },
+        { id: 'postponed', title: 'Postponed', statusChar: '>', status: 'postponed' }
     ];
 
     constructor(leaf: WorkspaceLeaf, taskIndex: TaskIndex, plugin: TaskViewerPlugin) {

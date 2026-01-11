@@ -1,9 +1,23 @@
+/**
+ * Task status type - represents the semantic state of a task
+ * Complete states: done, cancelled, failed
+ * Incomplete states: todo, blocked, postponed
+ */
+export type TaskStatusType = 'todo' | 'done' | 'cancelled' | 'failed' | 'blocked' | 'postponed';
+
+/** 
+ * Check if a status represents a complete (finished) task 
+ */
+export function isCompleteStatus(status: TaskStatusType): boolean {
+    return status === 'done' || status === 'cancelled' || status === 'failed';
+}
+
 export interface Task {
     id: string;             // Unique identifier (file path + line number)
     file: string;           // Absolute file path
     line: number;           // Line number (0-indexed)
     content: string;        // Task description (without checkbox and time)
-    status: 'todo' | 'done' | 'cancelled';
+    status: TaskStatusType;
     statusChar: string;     // The actual character inside [ ]
 
     // Date/Time info
