@@ -224,6 +224,11 @@ export class TimelineView extends ItemView {
     }
 
     public refresh() {
+        // Re-evaluate startDate (Today button logic) for day boundary crossing or settings change
+        const oldestOverdue = this.findOldestOverdueDate();
+        const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        this.viewState.startDate = oldestOverdue || today;
+
         this.render();
     }
 
