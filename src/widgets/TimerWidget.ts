@@ -60,6 +60,7 @@ export class TimerWidget {
             elapsedTime: 0,
             startTimeMs: 0,
             pausedElapsedTime: 0,
+            autoRepeat: false,
         };
 
         this.timers.set(taskId, timer);
@@ -98,6 +99,7 @@ export class TimerWidget {
             elapsedTime: 0,
             startTimeMs: 0,
             pausedElapsedTime: 0,
+            autoRepeat: false,
         };
 
         this.timers.set(taskId, timer);
@@ -231,13 +233,26 @@ export class TimerWidget {
             AudioUtils.playBreakCompleteChime();
             new Notice(`☕ ${timer.taskName} - Break complete!`);
 
-            // Reset to idle
-            timer.mode = 'idle';
-            timer.timeRemaining = this.plugin.settings.pomodoroWorkMinutes * 60;
-            timer.totalTime = this.plugin.settings.pomodoroWorkMinutes * 60;
-            timer.startTimeMs = 0;
-            timer.pausedElapsedTime = 0;
-            timer.isRunning = false;
+            if (timer.autoRepeat) {
+                // Auto-repeat: start work session again
+                timer.mode = 'work';
+                timer.timeRemaining = this.plugin.settings.pomodoroWorkMinutes * 60;
+                timer.totalTime = this.plugin.settings.pomodoroWorkMinutes * 60;
+                timer.startTime = new Date();
+                timer.startTimeMs = Date.now();
+                timer.pausedElapsedTime = 0;
+                timer.isRunning = true;
+                this.startTimer(taskId);
+                AudioUtils.playStartSound();
+            } else {
+                // Reset to idle
+                timer.mode = 'idle';
+                timer.timeRemaining = this.plugin.settings.pomodoroWorkMinutes * 60;
+                timer.totalTime = this.plugin.settings.pomodoroWorkMinutes * 60;
+                timer.startTimeMs = 0;
+                timer.pausedElapsedTime = 0;
+                timer.isRunning = false;
+            }
         }
 
         this.render();
@@ -638,6 +653,16 @@ export class TimerWidget {
                             }
                         }
                     ).open();
+                });
+        });
+
+        menu.addSeparator();
+
+        // Auto Repeat toggle
+        menu.addItem((item) => {
+            item.setTitle(`Auto Repeat${timer.autoRepeat ? ' ✓' : ''}`)
+                .onClick(() => {
+                    timer.autoRepeat = !timer.autoRepeat;
                 });
         });
 

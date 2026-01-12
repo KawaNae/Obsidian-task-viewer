@@ -21,4 +21,5 @@ export interface TimerInstance {
     // Real-time based calculation fields
     startTimeMs: number;       // Timestamp when timer was last started/resumed (ms)
     pausedElapsedTime: number; // Accumulated elapsed time before pause (seconds)
+    autoRepeat: boolean;       // Whether to auto-restart work after break
 }
