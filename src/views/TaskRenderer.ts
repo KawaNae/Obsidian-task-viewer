@@ -1,4 +1,4 @@
-import { App, MarkdownRenderer, Component } from 'obsidian';
+import { App, MarkdownRenderer, Component, Menu } from 'obsidian';
 import { Task, TaskViewerSettings, isCompleteStatus } from '../types';
 import { TaskIndex } from '../services/TaskIndex';
 import { DateUtils } from '../utils/DateUtils';
@@ -167,7 +167,7 @@ export class TaskRenderer {
             });
 
             // Handle checkboxes in children container
-            this.setupChildCheckboxHandlers(childrenContainer, task, 0);
+            this.setupChildCheckboxHandlers(childrenContainer, task, 0, settings);
         } else {
             // Original behavior: render everything together
             const cleanChildren = task.children.map(childLine => {
@@ -214,6 +214,15 @@ export class TaskRenderer {
                 });
             });
             mainCheckbox.addEventListener('pointerdown', (e) => e.stopPropagation());
+
+            // Right-click context menu for custom checkbox (only if applyGlobalStyles is enabled)
+            if (settings.applyGlobalStyles) {
+                mainCheckbox.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.showCheckboxStatusMenu(e as MouseEvent, task.id);
+                });
+            }
         }
 
         // For non-collapsed mode, also handle children checkboxes (old behavior)
@@ -221,8 +230,9 @@ export class TaskRenderer {
             const checkboxes = contentContainer.querySelectorAll('input[type="checkbox"]');
             checkboxes.forEach((checkbox, index) => {
                 if (index === 0) return; // Already handled above
+                const childLineIndex = index - 1;
+
                 checkbox.addEventListener('click', () => {
-                    const childLineIndex = index - 1;
                     if (childLineIndex < task.children.length) {
                         let childLine = task.children[childLineIndex];
                         const match = childLine.match(/\[(.)\]/);
@@ -236,6 +246,15 @@ export class TaskRenderer {
                     }
                 });
                 checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
+
+                // Right-click context menu for custom checkbox (only if applyGlobalStyles is enabled)
+                if (settings.applyGlobalStyles) {
+                    checkbox.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this.showChildCheckboxStatusMenu(e as MouseEvent, task, childLineIndex);
+                    });
+                }
             });
         }
     }
@@ -243,14 +262,15 @@ export class TaskRenderer {
     /**
      * Setup checkbox handlers for children in a collapsed container
      */
-    private setupChildCheckboxHandlers(container: HTMLElement, task: Task, startOffset: number): void {
+    private setupChildCheckboxHandlers(container: HTMLElement, task: Task, startOffset: number, settings: TaskViewerSettings): void {
         const checkboxes = container.querySelectorAll('input[type="checkbox"]');
         checkboxes.forEach((checkbox, index) => {
+            const childLineIndex = startOffset + index;
+
             checkbox.addEventListener('click', () => {
-                const childLineIndex = startOffset + index;
                 if (childLineIndex < task.children.length) {
                     let childLine = task.children[childLineIndex];
-                    const match = childLine.match(/\[(.)\]/);
+                    const match = childLine.match(/\[(.)]\]/);
                     if (match) {
                         const currentChar = match[1];
                         const newChar = currentChar === ' ' ? 'x' : ' ';
@@ -261,6 +281,81 @@ export class TaskRenderer {
                 }
             });
             checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
+
+            // Right-click context menu for custom checkbox (only if applyGlobalStyles is enabled)
+            if (settings.applyGlobalStyles) {
+                checkbox.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.showChildCheckboxStatusMenu(e as MouseEvent, task, childLineIndex);
+                });
+            }
         });
+    }
+
+    /**
+     * Show context menu for custom checkbox status selection
+     */
+    private showCheckboxStatusMenu(e: MouseEvent, taskId: string): void {
+        const menu = new Menu();
+
+        const statusOptions: { char: string; status: string; label: string; icon: string }[] = [
+            { char: 'x', status: 'done', label: 'Check as Done', icon: 'check' },
+            { char: '!', status: 'failed', label: 'Check as Failed', icon: 'alert-triangle' },
+            { char: '?', status: 'blocked', label: 'Check as Blocked', icon: 'help-circle' },
+            { char: '>', status: 'postponed', label: 'Check as Postponed', icon: 'arrow-right' },
+            { char: '-', status: 'cancelled', label: 'Check as Cancelled', icon: 'minus' },
+            { char: ' ', status: 'todo', label: 'Uncheck', icon: 'square' },
+        ];
+
+        for (const opt of statusOptions) {
+            menu.addItem((item) => {
+                item.setTitle(opt.label)
+                    .setIcon(opt.icon)
+                    .onClick(async () => {
+                        await this.taskIndex.updateTask(taskId, {
+                            status: opt.status as any,
+                            statusChar: opt.char
+                        });
+                    });
+            });
+        }
+
+        menu.showAtPosition({ x: e.pageX, y: e.pageY });
+    }
+
+    /**
+     * Show context menu for child checkbox status selection
+     * Child tasks are updated via updateLine (direct file modification)
+     */
+    private showChildCheckboxStatusMenu(e: MouseEvent, task: Task, childLineIndex: number): void {
+        const menu = new Menu();
+
+        const statusOptions: { char: string; label: string; icon: string }[] = [
+            { char: 'x', label: 'Check as Done', icon: 'check' },
+            { char: '!', label: 'Check as Failed', icon: 'alert-triangle' },
+            { char: '?', label: 'Check as Blocked', icon: 'help-circle' },
+            { char: '>', label: 'Check as Postponed', icon: 'arrow-right' },
+            { char: '-', label: 'Check as Cancelled', icon: 'minus' },
+            { char: ' ', label: 'Uncheck', icon: 'square' },
+        ];
+
+        for (const opt of statusOptions) {
+            menu.addItem((item) => {
+                item.setTitle(opt.label)
+                    .setIcon(opt.icon)
+                    .onClick(async () => {
+                        if (childLineIndex < task.children.length) {
+                            let childLine = task.children[childLineIndex];
+                            // Replace [.] with new status char
+                            childLine = childLine.replace(/\[(.)\]/, `[${opt.char}]`);
+                            const absoluteLineNumber = task.line + 1 + childLineIndex;
+                            await this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
+                        }
+                    });
+            });
+        }
+
+        menu.showAtPosition({ x: e.pageX, y: e.pageY });
     }
 }
