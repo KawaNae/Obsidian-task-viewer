@@ -9,6 +9,7 @@ import { TimerWidget } from './widgets/TimerWidget';
 import { TaskViewerSettings, DEFAULT_SETTINGS } from './types';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/ColorSuggest';
+import { PropertyColorSuggest } from './suggest/PropertyColorSuggest';
 import { DateUtils } from './utils/DateUtils';
 
 export default class TaskViewerPlugin extends Plugin {
@@ -20,6 +21,10 @@ export default class TaskViewerPlugin extends Plugin {
     // Day boundary check
     private lastVisualDate: string = '';
     private dateCheckInterval: ReturnType<typeof setInterval> | null = null;
+
+    // MutationObserver for Properties View color suggestions
+    private propertiesObserver: MutationObserver | null = null;
+    private attachedInputs: WeakSet<HTMLElement> = new WeakSet();
 
     async onload() {
         console.log('Loading Task Viewer Plugin (Rewrite)');
@@ -121,6 +126,9 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Start day boundary check (every 5 minutes)
         this.startDateBoundaryCheck();
+
+        // Start Properties View color suggest observer
+        this.startPropertiesColorSuggest();
     }
 
     async loadSettings() {
@@ -223,5 +231,54 @@ export default class TaskViewerPlugin extends Plugin {
             clearInterval(this.dateCheckInterval);
             this.dateCheckInterval = null;
         }
+
+        // Disconnect Properties color suggest observer
+        if (this.propertiesObserver) {
+            this.propertiesObserver.disconnect();
+            this.propertiesObserver = null;
+        }
+    }
+
+    /**
+     * Start observing Properties View for timeline-color inputs
+     */
+    private startPropertiesColorSuggest(): void {
+        this.propertiesObserver = new MutationObserver(() => {
+            this.attachPropertyColorSuggests();
+        });
+
+        this.propertiesObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        // Initial scan
+        this.attachPropertyColorSuggests();
+    }
+
+    /**
+     * Attach PropertyColorSuggest to timeline-color property value inputs
+     */
+    private attachPropertyColorSuggests(): void {
+        const colorKey = this.settings.frontmatterColorKey;
+
+        // Find all property key inputs
+        const keyInputs = document.querySelectorAll('.metadata-property-key-input');
+
+        keyInputs.forEach((keyInput) => {
+            const input = keyInput as HTMLInputElement;
+            if (input.value === colorKey) {
+                // Find the corresponding value contenteditable div
+                const propertyContainer = input.closest('.metadata-property');
+                if (propertyContainer) {
+                    // The value field is a contenteditable div, not an input
+                    const valueDiv = propertyContainer.querySelector('.metadata-input-longtext[contenteditable="true"]') as HTMLDivElement;
+                    if (valueDiv && !this.attachedInputs.has(valueDiv)) {
+                        new PropertyColorSuggest(this.app, valueDiv);
+                        this.attachedInputs.add(valueDiv);
+                    }
+                }
+            }
+        });
     }
 }
