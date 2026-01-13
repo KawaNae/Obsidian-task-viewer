@@ -19,9 +19,6 @@ export class TimerRecorder {
      * Record a completed Pomodoro session
      */
     async addPomodoroRecord(timer: TimerInstance): Promise<void> {
-        const taskIndex = this.plugin.getTaskIndex();
-        const parentTask = taskIndex.getTask(timer.taskId);
-
         const endTime = new Date();
         const workMinutes = this.plugin.settings.pomodoroWorkMinutes;
         const startTime = new Date(endTime.getTime() - workMinutes * 60 * 1000);
@@ -34,11 +31,19 @@ export class TimerRecorder {
         const customText = timer.customLabel.trim();
         const label = customText ? `🍅 ${customText}` : '🍅';
 
-        if (parentTask) {
-            // Record as child task under parent
-            const childLine = `    - [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
+        if (timer.taskOriginalText && timer.taskFile) {
+            // Use stored originalText for reliable lookup (avoids stale line number issues)
+            const childIndent = this.getChildIndent(timer.taskOriginalText);
+            const childLine = `${childIndent}- [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
             const taskRepository = this.plugin.getTaskRepository();
-            await taskRepository.insertLineAfterTask(parentTask, childLine);
+
+            // Create a minimal task object with the info we need
+            const taskForInsert = {
+                file: timer.taskFile,
+                originalText: timer.taskOriginalText,
+                line: -1, // Will be looked up by originalText
+            };
+            await taskRepository.insertLineAsFirstChild(taskForInsert as any, childLine);
         } else if (timer.taskId.startsWith('daily-')) {
             // Daily note timer - add completed task directly to daily note
             const dailyDate = timer.taskId.replace('daily-', '');
@@ -53,9 +58,6 @@ export class TimerRecorder {
      * Record a completed Countup timer session
      */
     async addCountupRecord(timer: TimerInstance): Promise<void> {
-        const taskIndex = this.plugin.getTaskIndex();
-        const parentTask = taskIndex.getTask(timer.taskId);
-
         // Calculate start and end times based on elapsed time
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - timer.elapsedTime * 1000);
@@ -68,11 +70,19 @@ export class TimerRecorder {
         const customText = timer.customLabel.trim();
         const label = customText ? `⏱️ ${customText}` : '⏱️';
 
-        if (parentTask) {
-            // Record as child task under parent
-            const childLine = `    - [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
+        if (timer.taskOriginalText && timer.taskFile) {
+            // Use stored originalText for reliable lookup (avoids stale line number issues)
+            const childIndent = this.getChildIndent(timer.taskOriginalText);
+            const childLine = `${childIndent}- [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
             const taskRepository = this.plugin.getTaskRepository();
-            await taskRepository.insertLineAfterTask(parentTask, childLine);
+
+            // Create a minimal task object with the info we need
+            const taskForInsert = {
+                file: timer.taskFile,
+                originalText: timer.taskOriginalText,
+                line: -1, // Will be looked up by originalText
+            };
+            await taskRepository.insertLineAsFirstChild(taskForInsert as any, childLine);
         } else if (timer.taskId.startsWith('daily-')) {
             // Daily note timer - add completed task directly to daily note
             const dailyDate = timer.taskId.replace('daily-', '');
@@ -117,5 +127,36 @@ export class TimerRecorder {
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    /**
+     * Get proper child indentation based on parent's actual indentation style.
+     * Detects whether tabs or spaces are used and adds one level.
+     */
+    private getChildIndent(originalText: string): string {
+        // Extract the actual leading whitespace from parent
+        const match = originalText.match(/^(\s*)/);
+        const parentIndent = match ? match[1] : '';
+
+        // Detect indentation style: tabs or spaces
+        if (parentIndent.includes('\t')) {
+            // Tab-based: add one tab
+            return parentIndent + '\t';
+        } else {
+            // Space-based: detect unit size (commonly 2 or 4)
+            // Look for the first list marker to detect indent unit
+            const listMatch = originalText.match(/^(\s*)-/);
+            if (listMatch) {
+                const existingIndent = listMatch[1];
+                // If parent has no indent, use 4 spaces as default
+                if (existingIndent.length === 0) {
+                    return '    ';
+                }
+                // Otherwise use same unit as parent's indent
+                return parentIndent + existingIndent.substring(0, Math.max(2, existingIndent.length)) || '    ';
+            }
+            // Default: parent indent + 4 spaces
+            return parentIndent + '    ';
+        }
     }
 }

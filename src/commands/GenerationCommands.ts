@@ -45,7 +45,7 @@ export abstract class GenerationCommand implements CommandStrategy {
             cleanInterval = interval.replace(/when done/i, '').trim();
         }
 
-        // F型タスクの場合: F型のまま維持（日付シフトなし）
+        // F型タスクの場吁E F型�Eまま維持E��日付シフトなし！E
         if (task.isFuture && !task.startDate && !task.endDate && !task.deadline) {
             return {
                 ...task,
@@ -53,11 +53,11 @@ export abstract class GenerationCommand implements CommandStrategy {
                 status: 'todo',
                 statusChar: ' ',
                 originalText: '',
-                children: [...task.children] // Preserve children for recurrence
+                childLines: [...task.childLines] // Preserve children for recurrence
             };
         }
 
-        // 基準日の決定: startDate > endDate > deadline の優先順
+        // 基準日の決宁E startDate > endDate > deadline の優先頁E
         let baseDateObj: Date;
 
         if (isWhenDone) {
@@ -70,14 +70,14 @@ export abstract class GenerationCommand implements CommandStrategy {
         } else if (task.deadline) {
             baseDateObj = this.parseDate(task.deadline);
         } else {
-            // Fallback: 今日を基準
+            // Fallback: 今日を基溁E
             baseDateObj = new Date();
             baseDateObj.setHours(0, 0, 0, 0);
         }
 
         const nextDateObj = RecurrenceUtils.calculateNextDate(baseDateObj, cleanInterval);
 
-        // シフト日数を計算
+        // シフト日数を計箁E
         const shiftDays = Math.round(
             (nextDateObj.getTime() - baseDateObj.getTime()) / (1000 * 60 * 60 * 24)
         );
@@ -90,15 +90,15 @@ export abstract class GenerationCommand implements CommandStrategy {
             startDate: task.startDate ? this.shiftDate(task.startDate, shiftDays) : undefined,
             endDate: task.endDate ? this.shiftDate(task.endDate, shiftDays) : undefined,
             deadline: task.deadline ? this.shiftDate(task.deadline, shiftDays) : undefined,
-            isFuture: task.isFuture && !task.startDate, // F型の維持
+            isFuture: task.isFuture && !task.startDate, // F型�E維持E
             originalText: '',
-            children: [...task.children] // Preserve children for recurrence
+            childLines: [...task.childLines] // Preserve children for recurrence
         };
     }
 
     /**
-     * 日付文字列をDateオブジェクトに変換
-     * YYYY-MM-DD または YYYY-MM-DDTHH:mm 形式対応
+     * 日付文字�EをDateオブジェクトに変換
+     * YYYY-MM-DD また�E YYYY-MM-DDTHH:mm 形式対忁E
      */
     private parseDate(dateStr: string): Date {
         const datePart = dateStr.split('T')[0];
@@ -107,8 +107,8 @@ export abstract class GenerationCommand implements CommandStrategy {
     }
 
     /**
-     * 日付文字列を指定日数シフト
-     * 時刻部分がある場合は保持
+     * 日付文字�Eを指定日数シフト
+     * 時刻部刁E��ある場合�E保持
      */
     private shiftDate(dateStr: string, days: number): string {
         const hasTime = dateStr.includes('T');

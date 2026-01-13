@@ -174,7 +174,7 @@ export class TimelineView extends ItemView {
             if (taskId && changes) {
                 // Check if we can do partial update
                 // Only content/status changes are safe for partial update (no layout change)
-                const safeKeys = ['status', 'statusChar', 'content', 'children'];
+                const safeKeys = ['status', 'statusChar', 'content', 'childLines'];
                 const isSafe = changes.every(k => safeKeys.includes(k));
 
                 if (isSafe) {

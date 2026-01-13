@@ -31,7 +31,7 @@ export class TimerWidget {
     /**
      * Show the widget and start a new timer for the given task
      */
-    show(taskId: string, taskName: string): void {
+    show(taskId: string, taskName: string, taskOriginalText: string = '', taskFile: string = ''): void {
         // Create container if not exists
         if (!this.container) {
             this.createContainer();
@@ -48,6 +48,8 @@ export class TimerWidget {
             id: taskId,
             taskId: taskId,
             taskName: taskName,
+            taskOriginalText: taskOriginalText,
+            taskFile: taskFile,
             startTime: new Date(),
             timeRemaining: this.plugin.settings.pomodoroWorkMinutes * 60,
             totalTime: this.plugin.settings.pomodoroWorkMinutes * 60,
@@ -70,7 +72,7 @@ export class TimerWidget {
     /**
      * Show the widget and start a new countup timer for the given task
      */
-    showCountup(taskId: string, taskName: string): void {
+    showCountup(taskId: string, taskName: string, taskOriginalText: string = '', taskFile: string = ''): void {
         // Create container if not exists
         if (!this.container) {
             this.createContainer();
@@ -87,6 +89,8 @@ export class TimerWidget {
             id: taskId,
             taskId: taskId,
             taskName: taskName,
+            taskOriginalText: taskOriginalText,
+            taskFile: taskFile,
             startTime: new Date(),
             timeRemaining: 0, // not used for countup
             totalTime: 0, // not used for countup

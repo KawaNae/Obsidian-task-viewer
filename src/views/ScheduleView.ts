@@ -111,8 +111,8 @@ export class ScheduleView extends ItemView {
                 const selfStatusChar = task.statusChar || ' ';
                 let isCompleted = isLineCompleted(selfStatusChar);
 
-                if (isCompleted && task.children.length > 0) {
-                    for (const childLine of task.children) {
+                if (isCompleted && task.childLines.length > 0) {
+                    for (const childLine of task.childLines) {
                         const match = childLine.match(/^\s*-\s*\[(.)\]/);
                         if (match && !isLineCompleted(match[1])) {
                             isCompleted = false;
@@ -245,8 +245,8 @@ export class ScheduleView extends ItemView {
             const selfStatusChar = task.statusChar || ' ';
             let isCompleted = isLineCompleted(selfStatusChar);
 
-            if (isCompleted && task.children.length > 0) {
-                for (const childLine of task.children) {
+            if (isCompleted && task.childLines.length > 0) {
+                for (const childLine of task.childLines) {
                     // Check if line is a task
                     const match = childLine.match(/^\s*-\s*\[(.)\]/);
                     if (match) {

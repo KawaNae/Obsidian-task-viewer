@@ -20,7 +20,12 @@ export interface Task {
     status: TaskStatusType;
     statusChar: string;     // The actual character inside [ ]
 
-    // Date/Time info
+    // Tree Structure
+    parentId?: string;      // Parent task ID (undefined if root-level)
+    indent: number;         // Leading whitespace count (spaces)
+    childIds: string[];     // IDs of direct child tasks (parsed as separate Tasks)
+    childLines: string[];   // Raw child lines for display (normalized indentation)
+
     // Date/Time info
     startDate?: string;      // Renamed from date, YYYY-MM-DD (Optional for D/E types)
     startTime?: string;     // HH:mm
@@ -33,9 +38,6 @@ export interface Task {
     // Original text for reconstruction
     originalText: string;
     recurrence?: string;    // @repeat(...) content
-
-    // Child lines (sub-tasks, notes)
-    children: string[];
 
     // Flow Commands
     commands?: FlowCommand[];

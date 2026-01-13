@@ -13,7 +13,8 @@ export class TaskRepository {
 
     /**
      * Helper: Collect children lines from file content starting at taskLine
-     * Returns { childrenLines, taskIndent, blockIdRegex }
+     * Returns { childrenLines, taskIndent }
+     * Note: Empty/blank lines are NOT included as children
      */
     private collectChildrenFromLines(lines: string[], taskLineIndex: number): {
         childrenLines: string[];
@@ -26,14 +27,13 @@ export class TaskRepository {
         let j = taskLineIndex + 1;
         while (j < lines.length) {
             const nextLine = lines[j];
-            const nextIndent = nextLine.search(/\S|$/);
 
+            // Skip blank lines - they are NOT children
             if (nextLine.trim() === '') {
-                childrenLines.push(nextLine);
-                j++;
-                continue;
+                break;
             }
 
+            const nextIndent = nextLine.search(/\S|$/);
             if (nextIndent > taskIndent) {
                 childrenLines.push(nextLine);
                 j++;
@@ -62,18 +62,21 @@ export class TaskRepository {
 
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
-            if (lines.length <= task.line) {
-                console.warn(`[TaskRepository] Line ${task.line} out of bounds (file has ${lines.length} lines)`);
+
+            // Find current line number using originalText (handles line shifts)
+            const currentLine = this.findTaskLineNumber(lines, task);
+            if (currentLine < 0 || currentLine >= lines.length) {
+                console.warn(`[TaskRepository] Task not found in file`);
                 return content;
             }
 
             // Re-format line
             const newLine = TaskParser.format(updatedTask);
-            console.log(`[TaskRepository] Updating line ${task.line}: "${lines[task.line]}" -> "${newLine}"`);
+            console.log(`[TaskRepository] Updating line ${currentLine}: "${lines[currentLine]}" -> "${newLine}"`);
 
             // Preserve indentation if possible
-            const originalIndent = lines[task.line].match(/^(\s*)/)?.[1] || '';
-            lines[task.line] = originalIndent + newLine.trim();
+            const originalIndent = lines[currentLine].match(/^(\s*)/)?.[1] || '';
+            lines[currentLine] = originalIndent + newLine.trim();
 
             return lines.join('\n');
         });
@@ -87,21 +90,25 @@ export class TaskRepository {
 
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
-            if (lines.length <= task.line) return content;
 
-            // Insert after children, but effectively ignoring trailing blank lines to avoid gaps.
-            let effectiveChildrenCount = task.children ? task.children.length : 0;
-            if (task.children) {
-                for (let i = task.children.length - 1; i >= 0; i--) {
-                    if (task.children[i].trim() === '') {
-                        effectiveChildrenCount--;
-                    } else {
-                        break;
-                    }
+            // Find current line using originalText (handles line shifts)
+            const currentLine = this.findTaskLineNumber(lines, task);
+            if (currentLine < 0 || currentLine >= lines.length) return content;
+
+            // Use file-based calculation to get actual children count
+            const { childrenLines } = this.collectChildrenFromLines(lines, currentLine);
+
+            // Ignore trailing blank lines to avoid gaps
+            let effectiveChildrenCount = childrenLines.length;
+            for (let i = childrenLines.length - 1; i >= 0; i--) {
+                if (childrenLines[i].trim() === '') {
+                    effectiveChildrenCount--;
+                } else {
+                    break;
                 }
             }
 
-            const insertIndex = task.line + 1 + effectiveChildrenCount;
+            const insertIndex = currentLine + 1 + effectiveChildrenCount;
             lines.splice(insertIndex, 0, lineContent);
             insertedLineIndex = insertIndex;
 
@@ -110,6 +117,71 @@ export class TaskRepository {
 
         return insertedLineIndex;
     }
+
+    /**
+     * Insert a line as the first child of a task (right after the task line).
+     * Used for timer/pomodoro records that should appear at the top of children.
+     */
+    async insertLineAsFirstChild(task: Task, lineContent: string): Promise<number> {
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) return -1;
+
+        let insertedLineIndex = -1;
+
+        await this.app.vault.process(file, (content) => {
+            const lines = content.split('\n');
+
+            // Find the current line number using multiple strategies
+            let currentLine = this.findTaskLineNumber(lines, task);
+
+            if (currentLine < 0 || currentLine >= lines.length) return content;
+
+            // Insert directly after the task line (as first child)
+            const insertIndex = currentLine + 1;
+            lines.splice(insertIndex, 0, lineContent);
+            insertedLineIndex = insertIndex;
+
+            return lines.join('\n');
+        });
+
+        return insertedLineIndex;
+    }
+
+    /**
+     * Find the current line number of a task in the file.
+     * Uses multiple strategies: exact match, content + date match, fallback to stored line.
+     */
+    private findTaskLineNumber(lines: string[], task: Task): number {
+        // Strategy 1: Exact originalText match
+        for (let i = 0; i < lines.length; i++) {
+            if (lines[i] === task.originalText) {
+                return i;
+            }
+        }
+
+        // Strategy 2: Match by content and date notation (more resilient)
+        // Build a pattern: contains task content AND @ date notation
+        const escapedContent = task.content.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const datePattern = task.startDate ? `@${task.startDate}` : (task.deadline ? `@` : null);
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+
+            // Must be a task line (checkbox), contain the content, and match approx indent
+            if (line.includes(`] ${task.content}`) || line.match(new RegExp(`\\]\\s+${escapedContent}`))) {
+                // Verify it has similar characteristics
+                if (datePattern && line.includes(datePattern)) {
+                    return i;
+                } else if (!datePattern && line.includes(task.content)) {
+                    return i;
+                }
+            }
+        }
+
+        // Strategy 3: Fallback to stored line number
+        return task.line;
+    }
+
 
     async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
@@ -136,12 +208,15 @@ export class TaskRepository {
 
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
-            if (lines.length <= task.line) return content;
 
-            const { childrenLines } = this.collectChildrenFromLines(lines, task.line);
+            // Find current line using originalText
+            const currentLine = this.findTaskLineNumber(lines, task);
+            if (currentLine < 0 || currentLine >= lines.length) return content;
+
+            const { childrenLines } = this.collectChildrenFromLines(lines, currentLine);
 
             // Delete task line + all children
-            lines.splice(task.line, 1 + childrenLines.length);
+            lines.splice(currentLine, 1 + childrenLines.length);
 
             return lines.join('\n');
         });
@@ -153,11 +228,14 @@ export class TaskRepository {
 
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
-            if (lines.length <= task.line) return content;
+
+            // Find current line using originalText
+            const currentLine = this.findTaskLineNumber(lines, task);
+            if (currentLine < 0 || currentLine >= lines.length) return content;
 
             // 1. Get original task line and collect children
-            const taskLine = lines[task.line];
-            const { childrenLines } = this.collectChildrenFromLines(lines, task.line);
+            const taskLine = lines[currentLine];
+            const { childrenLines } = this.collectChildrenFromLines(lines, currentLine);
 
             // 2. Strip block IDs from task line and children
             const newTaskLine = this.stripBlockIds([taskLine])[0];
@@ -166,7 +244,7 @@ export class TaskRepository {
             const linesToInsert = [newTaskLine, ...newChildLines];
 
             // 3. Insert after the original block
-            const insertIndex = task.line + 1 + childrenLines.length;
+            const insertIndex = currentLine + 1 + childrenLines.length;
             lines.splice(insertIndex, 0, ...linesToInsert);
 
             return lines.join('\n');
@@ -186,15 +264,18 @@ export class TaskRepository {
 
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
-            if (lines.length <= task.line) return content;
+
+            // Find current line using originalText
+            const currentLine = this.findTaskLineNumber(lines, task);
+            if (currentLine < 0 || currentLine >= lines.length) return content;
 
             // Get original task line and its indentation
-            const taskLine = lines[task.line];
+            const taskLine = lines[currentLine];
             const taskIndent = taskLine.search(/\S|$/);
 
             // Collect original children lines from file (with original indentation)
             const childrenLines: string[] = [];
-            let j = task.line + 1;
+            let j = currentLine + 1;
             while (j < lines.length) {
                 const nextLine = lines[j];
                 const nextIndent = nextLine.search(/\S|$/);
@@ -243,7 +324,7 @@ export class TaskRepository {
             }
 
             // Insert after the original task block
-            const insertIndex = task.line + 1 + childrenLines.length;
+            const insertIndex = currentLine + 1 + childrenLines.length;
             lines.splice(insertIndex, 0, ...allNewLines);
 
             return lines.join('\n');
@@ -276,11 +357,14 @@ export class TaskRepository {
 
         await this.app.vault.process(file, (fileContent) => {
             const lines = fileContent.split('\n');
-            if (lines.length <= task.line) return fileContent;
+
+            // Find current line using originalText
+            const currentLine = this.findTaskLineNumber(lines, task);
+            if (currentLine < 0 || currentLine >= lines.length) return fileContent;
 
             // 1. Get indent and collect children
-            const originalIndent = lines[task.line].match(/^(\s*)/)?.[1] || '';
-            const { childrenLines } = this.collectChildrenFromLines(lines, task.line);
+            const originalIndent = lines[currentLine].match(/^(\s*)/)?.[1] || '';
+            const { childrenLines } = this.collectChildrenFromLines(lines, currentLine);
 
             // 2. Strip block IDs from children
             const newChildLines = this.stripBlockIds(childrenLines);
@@ -290,7 +374,7 @@ export class TaskRepository {
             const linesToInsert = [nextLine, ...newChildLines];
 
             // 4. Insert after the original block
-            const insertIndex = task.line + 1 + childrenLines.length;
+            const insertIndex = currentLine + 1 + childrenLines.length;
             lines.splice(insertIndex, 0, ...linesToInsert);
 
             return lines.join('\n');
@@ -333,12 +417,15 @@ export class TaskRepository {
             const sourceContent = await this.app.vault.read(sourceFile);
             const lines = sourceContent.split('\n');
 
-            if (lines.length > task.line) {
+            // Find current line using originalText
+            const currentLine = this.findTaskLineNumber(lines, task);
+
+            if (currentLine >= 0 && currentLine < lines.length) {
                 // Get parent's original indentation
-                const parentLine = lines[task.line];
+                const parentLine = lines[currentLine];
                 parentIndent = parentLine.search(/\S|$/);
 
-                const result = this.collectChildrenFromLines(lines, task.line);
+                const result = this.collectChildrenFromLines(lines, currentLine);
                 childrenLines = result.childrenLines;
             }
         }

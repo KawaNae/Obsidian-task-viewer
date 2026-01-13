@@ -106,7 +106,7 @@ export class MenuHandler {
                     .setIcon('timer')
                     .onClick(() => {
                         const widget = this.plugin.getTimerWidget();
-                        widget.show(task.id, displayName);
+                        widget.show(task.id, displayName, task.originalText, task.file);
                     });
             });
 
@@ -115,7 +115,7 @@ export class MenuHandler {
                     .setIcon('clock')
                     .onClick(() => {
                         const widget = this.plugin.getTimerWidget();
-                        widget.showCountup(task.id, displayName);
+                        widget.showCountup(task.id, displayName, task.originalText, task.file);
                     });
             });
         }

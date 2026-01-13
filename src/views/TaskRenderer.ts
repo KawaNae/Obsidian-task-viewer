@@ -108,7 +108,7 @@ export class TaskRenderer {
 
         // Collapse threshold for children
         const COLLAPSE_THRESHOLD = 3;
-        const shouldCollapse = task.children.length >= COLLAPSE_THRESHOLD;
+        const shouldCollapse = task.childLines.length >= COLLAPSE_THRESHOLD;
 
         if (shouldCollapse) {
             // Render parent only first
@@ -125,17 +125,17 @@ export class TaskRenderer {
 
             // Set initial state based on saved state
             if (wasExpanded) {
-                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${task.children.length}件の子タスク`;
+                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${task.childLines.length}件の子タスク`;
                 toggle.dataset.collapsed = 'false';
                 childrenContainer.addClass('task-card__children--expanded');
             } else {
-                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${task.children.length}件の子タスク`;
+                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${task.childLines.length}件の子タスク`;
                 toggle.dataset.collapsed = 'true';
                 childrenContainer.addClass('task-card__children--collapsed');
             }
 
             // Render children
-            const cleanChildren = task.children.map(childLine => {
+            const cleanChildren = task.childLines.map(childLine => {
                 const cleaned = childLine
                     .replace(/\s*@[\w\-:>T]+(?:\s*==>.*)?/g, '')
                     .trimEnd();
@@ -151,14 +151,14 @@ export class TaskRenderer {
                 const isCollapsed = toggle.dataset.collapsed === 'true';
                 if (isCollapsed) {
                     toggle.dataset.collapsed = 'false';
-                    toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${task.children.length}件の子タスク`;
+                    toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${task.childLines.length}件の子タスク`;
                     childrenContainer.removeClass('task-card__children--collapsed');
                     childrenContainer.addClass('task-card__children--expanded');
                     // Save expanded state
                     this.expandedTaskIds.add(task.id);
                 } else {
                     toggle.dataset.collapsed = 'true';
-                    toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${task.children.length}件の子タスク`;
+                    toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${task.childLines.length}件の子タスク`;
                     childrenContainer.removeClass('task-card__children--expanded');
                     childrenContainer.addClass('task-card__children--collapsed');
                     // Remove from expanded state
@@ -170,7 +170,7 @@ export class TaskRenderer {
             this.setupChildCheckboxHandlers(childrenContainer, task, 0, settings);
         } else {
             // Original behavior: render everything together
-            const cleanChildren = task.children.map(childLine => {
+            const cleanChildren = task.childLines.map(childLine => {
                 const cleaned = childLine
                     .replace(/\s*@[\w\-:>T]+(?:\s*==>.*)?/g, '')
                     .trimEnd();
@@ -233,8 +233,8 @@ export class TaskRenderer {
                 const childLineIndex = index - 1;
 
                 checkbox.addEventListener('click', () => {
-                    if (childLineIndex < task.children.length) {
-                        let childLine = task.children[childLineIndex];
+                    if (childLineIndex < task.childLines.length) {
+                        let childLine = task.childLines[childLineIndex];
                         const match = childLine.match(/\[(.)\]/);
                         if (match) {
                             const currentChar = match[1];
@@ -268,8 +268,8 @@ export class TaskRenderer {
             const childLineIndex = startOffset + index;
 
             checkbox.addEventListener('click', () => {
-                if (childLineIndex < task.children.length) {
-                    let childLine = task.children[childLineIndex];
+                if (childLineIndex < task.childLines.length) {
+                    let childLine = task.childLines[childLineIndex];
                     const match = childLine.match(/\[(.)]\]/);
                     if (match) {
                         const currentChar = match[1];
@@ -345,8 +345,8 @@ export class TaskRenderer {
                 item.setTitle(opt.label)
                     .setIcon(opt.icon)
                     .onClick(async () => {
-                        if (childLineIndex < task.children.length) {
-                            let childLine = task.children[childLineIndex];
+                        if (childLineIndex < task.childLines.length) {
+                            let childLine = task.childLines[childLineIndex];
                             // Replace [.] with new status char
                             childLine = childLine.replace(/\[(.)\]/, `[${opt.char}]`);
                             const absoluteLineNumber = task.line + 1 + childLineIndex;

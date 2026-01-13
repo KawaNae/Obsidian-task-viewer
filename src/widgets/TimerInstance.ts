@@ -8,6 +8,8 @@ export interface TimerInstance {
     id: string;
     taskId: string;
     taskName: string;
+    taskOriginalText: string;  // Store original task line for reliable lookup after line shifts
+    taskFile: string;          // Store file path for lookup
     startTime: Date;
     timeRemaining: number;
     totalTime: number;

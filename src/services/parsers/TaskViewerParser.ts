@@ -150,6 +150,8 @@ export class TaskViewerParser implements ParserStrategy {
             content: content.trim(),
             status,
             statusChar,
+            indent: 0,          // Will be set by TaskIndex
+            childIds: [],       // Will be set by TaskIndex
             startDate: date, // Map parsed date to startDate
             startTime,
             endDate,
@@ -158,7 +160,7 @@ export class TaskViewerParser implements ParserStrategy {
             isFuture,
             commands,
             originalText: line,
-            children: []
+            childLines: []
         };
     }
 

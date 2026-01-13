@@ -196,21 +196,26 @@ export class TaskIndex {
                 const task = TaskParser.parse(line, file.path, actualLineNumber);
 
                 if (task) {
-                    // Look ahead for children
+                    // Set indent (leading whitespace count)
+                    const taskIndent = line.search(/\S|$/);
+                    task.indent = taskIndent;
+
+                    // Initialize child arrays
+                    task.childIds = [];
+
+                    // Look ahead for children (skip blank lines)
                     const children: string[] = [];
                     let j = i + 1;
-                    const taskIndent = line.search(/\S|$/); // Index of first non-whitespace
 
                     while (j < linesToProcess.length) {
                         const nextLine = linesToProcess[j];
-                        const nextIndent = nextLine.search(/\S|$/);
 
+                        // Stop at blank lines - they are not children
                         if (nextLine.trim() === '') {
-                            children.push(nextLine);
-                            j++;
-                            continue;
+                            break;
                         }
 
+                        const nextIndent = nextLine.search(/\S|$/);
                         if (nextIndent > taskIndent) {
                             children.push(nextLine);
                             j++;
@@ -224,12 +229,12 @@ export class TaskIndex {
                     const nonEmptyChildren = children.filter(c => c.trim() !== '');
                     if (nonEmptyChildren.length > 0) {
                         const minIndent = Math.min(...nonEmptyChildren.map(c => c.search(/\S|$/)));
-                        task.children = children.map(c => {
+                        task.childLines = children.map(c => {
                             if (c.trim() === '') return c;
                             return c.substring(minIndent);
                         });
                     } else {
-                        task.children = children;
+                        task.childLines = children;
                     }
 
                     extractedTasks.push(task);
@@ -238,6 +243,16 @@ export class TaskIndex {
                     if (children.length > 0) {
                         const childLineNumber = actualLineNumber + 1;
                         const childTasks = extractTasksFromLines(children, childLineNumber);
+
+                        // Set up parent-child relationships
+                        for (const childTask of childTasks) {
+                            // Only set parentId for direct children (indent diff = 1 level)
+                            if (childTask.indent === taskIndent + 4 || childTask.indent === taskIndent + 2) {
+                                childTask.parentId = task.id;
+                                task.childIds.push(childTask.id);
+                            }
+                        }
+
                         extractedTasks.push(...childTasks);
                     }
 
