@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf } from 'obsidian';
+import { Plugin, WorkspaceLeaf, setIcon } from 'obsidian';
 import { TaskIndex } from './services/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { KanbanView, VIEW_TYPE_KANBAN } from './views/KanbanView';
@@ -274,11 +274,88 @@ export default class TaskViewerPlugin extends Plugin {
                     // The value field is a contenteditable div, not an input
                     const valueDiv = propertyContainer.querySelector('.metadata-input-longtext[contenteditable="true"]') as HTMLDivElement;
                     if (valueDiv && !this.attachedInputs.has(valueDiv)) {
+                        // Attach text suggest
                         new PropertyColorSuggest(this.app, valueDiv);
                         this.attachedInputs.add(valueDiv);
+
+                        // Add color picker icon
+                        this.addColorPickerIcon(propertyContainer as HTMLElement, valueDiv);
                     }
                 }
             }
+        });
+    }
+
+    /**
+     * Add color picker icon next to the value field
+     */
+    private addColorPickerIcon(container: HTMLElement, valueDiv: HTMLDivElement): void {
+        // Check if icon already exists
+        if (container.querySelector('.task-viewer-color-picker-icon')) {
+            return;
+        }
+
+        // Create icon button with relative positioning
+        const iconBtn = container.createDiv({ cls: 'task-viewer-color-picker-icon clickable-icon' });
+        iconBtn.setAttribute('aria-label', 'カラーピッカーを開く');
+        iconBtn.style.position = 'relative';
+        iconBtn.style.marginLeft = '4px';
+        iconBtn.style.display = 'inline-flex';
+        iconBtn.style.alignItems = 'center';
+        iconBtn.style.cursor = 'pointer';
+        setIcon(iconBtn, 'palette');
+
+        // Create hidden color input inside icon button (so picker appears at icon position)
+        const colorInput = document.createElement('input');
+        colorInput.type = 'color';
+        colorInput.style.position = 'absolute';
+        colorInput.style.top = '0';
+        colorInput.style.left = '0';
+        colorInput.style.width = '100%';
+        colorInput.style.height = '100%';
+        colorInput.style.opacity = '0';
+        colorInput.style.cursor = 'pointer';
+        iconBtn.appendChild(colorInput);
+
+        // Insert after the value container
+        const valueContainer = container.querySelector('.metadata-property-value');
+        if (valueContainer) {
+            valueContainer.after(iconBtn);
+        }
+
+        // Color input change handler
+        colorInput.addEventListener('input', () => {
+            // Focus the div first, then set content, then blur to trigger save
+            valueDiv.focus();
+            valueDiv.textContent = colorInput.value;
+            valueDiv.dispatchEvent(new Event('input', { bubbles: true }));
+            valueDiv.blur();
+        });
+
+        // Set initial value when clicking
+        iconBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const currentValue = valueDiv.textContent?.trim() || '';
+
+            // Convert color name to hex if needed
+            let hexValue = currentValue;
+            if (currentValue && !currentValue.startsWith('#')) {
+                const tempEl = document.createElement('div');
+                tempEl.style.color = currentValue;
+                document.body.appendChild(tempEl);
+                const computedColor = getComputedStyle(tempEl).color;
+                document.body.removeChild(tempEl);
+
+                const rgbMatch = computedColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+                if (rgbMatch) {
+                    const r = parseInt(rgbMatch[1]).toString(16).padStart(2, '0');
+                    const g = parseInt(rgbMatch[2]).toString(16).padStart(2, '0');
+                    const b = parseInt(rgbMatch[3]).toString(16).padStart(2, '0');
+                    hexValue = `#${r}${g}${b}`;
+                }
+            }
+
+            colorInput.value = hexValue || '#000000';
         });
     }
 }
