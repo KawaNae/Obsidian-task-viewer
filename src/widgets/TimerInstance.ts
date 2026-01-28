@@ -24,4 +24,5 @@ export interface TimerInstance {
     startTimeMs: number;       // Timestamp when timer was last started/resumed (ms)
     pausedElapsedTime: number; // Accumulated elapsed time before pause (seconds)
     autoRepeat: boolean;       // Whether to auto-restart work after break
+    recordMode: 'child' | 'self';  // 'child': add as child task, 'self': update this task's start/end
 }

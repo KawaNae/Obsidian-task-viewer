@@ -94,6 +94,36 @@ export class TimerRecorder {
     }
 
     /**
+     * Update the task's start/end times directly (for 'self' recordMode)
+     * This converts the task to SE-Timed type
+     */
+    async updateTaskDirectly(timer: TimerInstance): Promise<void> {
+        // Calculate start and end times based on elapsed time
+        const endTime = new Date();
+        const startTime = new Date(endTime.getTime() - timer.elapsedTime * 1000);
+
+        const startDateStr = this.formatDate(startTime);
+        const startTimeStr = this.formatTime(startTime);
+        const endDateStr = this.formatDate(endTime);
+        const endTimeStr = this.formatTime(endTime);
+
+        if (timer.taskId) {
+            const taskIndex = this.plugin.getTaskIndex();
+
+            // Always pass complete data - Parser handles abbreviation
+            await taskIndex.updateTask(timer.taskId, {
+                startDate: startDateStr,
+                startTime: startTimeStr,
+                endDate: endDateStr,
+                endTime: endTimeStr,
+                isFuture: false
+            });
+        }
+
+        new Notice(`⏱️ Task updated! (${this.formatElapsedTime(timer.elapsedTime)})`);
+    }
+
+    /**
      * Add timer record directly to daily note (completed task format)
      */
     private async addTimerRecordToDailyNote(dateStr: string, taskLine: string): Promise<void> {

@@ -31,7 +31,7 @@ export class TimerWidget {
     /**
      * Show the widget and start a new timer for the given task
      */
-    show(taskId: string, taskName: string, taskOriginalText: string = '', taskFile: string = ''): void {
+    show(taskId: string, taskName: string, taskOriginalText: string = '', taskFile: string = '', recordMode: 'child' | 'self' = 'child'): void {
         // Create container if not exists
         if (!this.container) {
             this.createContainer();
@@ -63,6 +63,7 @@ export class TimerWidget {
             startTimeMs: 0,
             pausedElapsedTime: 0,
             autoRepeat: false,
+            recordMode: recordMode,
         };
 
         this.timers.set(taskId, timer);
@@ -71,8 +72,10 @@ export class TimerWidget {
 
     /**
      * Show the widget and start a new countup timer for the given task
+     * @param recordMode 'child' = add child task, 'self' = update this task's start/end
+     * @param autoStart if true, start the timer immediately
      */
-    showCountup(taskId: string, taskName: string, taskOriginalText: string = '', taskFile: string = ''): void {
+    showCountup(taskId: string, taskName: string, taskOriginalText: string = '', taskFile: string = '', recordMode: 'child' | 'self' = 'child', autoStart: boolean = false): void {
         // Create container if not exists
         if (!this.container) {
             this.createContainer();
@@ -94,19 +97,26 @@ export class TimerWidget {
             startTime: new Date(),
             timeRemaining: 0, // not used for countup
             totalTime: 0, // not used for countup
-            mode: 'idle',
-            isRunning: false,
+            mode: autoStart ? 'work' : 'idle',
+            isRunning: autoStart,
             isExpanded: true,
             intervalId: null,
             customLabel: '',
             timerType: 'countup',
             elapsedTime: 0,
-            startTimeMs: 0,
+            startTimeMs: autoStart ? Date.now() : 0,
             pausedElapsedTime: 0,
             autoRepeat: false,
+            recordMode: recordMode,
         };
 
         this.timers.set(taskId, timer);
+
+        if (autoStart) {
+            this.startTimer(taskId);
+            AudioUtils.playStartSound();
+        }
+
         this.render();
     }
 
@@ -372,17 +382,19 @@ export class TimerWidget {
     }
 
     private renderTimerUI(container: HTMLElement, timer: TimerInstance): void {
-        // Custom label input field
-        const labelContainer = container.createDiv('timer-widget__label-container');
-        const labelInput = labelContainer.createEl('input', {
-            type: 'text',
-            cls: 'timer-widget__label-input',
-            placeholder: 'What are you working on? (empty = 🍅)',
-            value: timer.customLabel
-        });
-        labelInput.oninput = () => {
-            timer.customLabel = labelInput.value;
-        };
+        // Custom label input field - only show for 'child' recordMode (not for 'self')
+        if (timer.recordMode !== 'self') {
+            const labelContainer = container.createDiv('timer-widget__label-container');
+            const labelInput = labelContainer.createEl('input', {
+                type: 'text',
+                cls: 'timer-widget__label-input',
+                placeholder: 'What are you working on? (empty = 🍅)',
+                value: timer.customLabel
+            });
+            labelInput.oninput = () => {
+                timer.customLabel = labelInput.value;
+            };
+        }
 
         // Circular progress
         const progressContainer = container.createDiv('timer-widget__progress-container');
@@ -503,7 +515,14 @@ export class TimerWidget {
                 timer.isRunning = false;
                 this.stopTimer(timer.id);
                 AudioUtils.playWorkCompleteChime();
-                await this.recorder.addCountupRecord(timer);
+
+                // Record based on recordMode
+                if (timer.recordMode === 'self') {
+                    await this.recorder.updateTaskDirectly(timer);
+                } else {
+                    await this.recorder.addCountupRecord(timer);
+                }
+
                 this.closeTimer(timer.id);
             };
 

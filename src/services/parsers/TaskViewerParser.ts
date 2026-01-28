@@ -232,6 +232,7 @@ export class TaskViewerParser implements ParserStrategy {
 
             // End Part Logic
             if (task.endDate) {
+                // endDate is explicitly set
                 // If future (no startDate), isSameDay is false.
                 const isSameDay = task.startDate ? (task.endDate === task.startDate) : false;
 
@@ -250,7 +251,12 @@ export class TaskViewerParser implements ParserStrategy {
                     // End=Start.
                     if (task.deadline) metaStr += '>';
                 }
+            } else if (task.endTime) {
+                // endTime is set but endDate is not (same day case)
+                // Output: >HH:mm
+                metaStr += `>${task.endTime}`;
             } else {
+                // No end date or time
                 if (task.deadline) metaStr += '>';
             }
 

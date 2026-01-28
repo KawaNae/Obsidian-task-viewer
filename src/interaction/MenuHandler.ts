@@ -1,4 +1,4 @@
-import { App, Menu } from 'obsidian';
+import { App, Menu, Notice } from 'obsidian';
 import { Task } from '../types';
 import { TaskIndex } from '../services/TaskIndex';
 import TaskViewerPlugin from '../main';
@@ -82,64 +82,66 @@ export class MenuHandler {
     private showContextMenu(x: number, y: number, task: Task) {
         const menu = new Menu();
 
-        // 1. Parameter Display (C:Parameters)
-        this.addParameterDisplay(menu, task);
-
-        menu.addSeparator();
-
-        // 2. Open
+        // ========================================
+        // 1. Properties Submenu
+        // ========================================
         menu.addItem((item) => {
-            item.setTitle('Open')
-                .setIcon('document')
-                .onClick(async () => {
-                    await this.app.workspace.openLinkText(task.file, '', true);
-                });
-        });
+            const subMenu = (item as any)
+                .setTitle('Properties')
+                .setIcon('settings')
+                .setSubmenu() as Menu;
 
-        // 3. Open Pomodoro/Timer (for All-Day tasks)
-        if (!task.startTime) {
-            // Determine display name: use task content, or fall back to file name
-            const displayName = task.content.trim() || task.file.replace(/\.md$/, '').split('/').pop() || 'Untitled';
-
-            menu.addItem((item) => {
-                item.setTitle('🍅 Open Pomodoro')
-                    .setIcon('timer')
+            // Task Name (placeholder)
+            subMenu.addItem((sub) => {
+                const taskName = task.content.trim() || 'Untitled';
+                sub.setTitle(`Task Name: ${taskName.substring(0, 20)}${taskName.length > 20 ? '...' : ''}`)
+                    .setIcon('pencil')
                     .onClick(() => {
-                        const widget = this.plugin.getTimerWidget();
-                        widget.show(task.id, displayName, task.originalText, task.file);
+                        new Notice('Task Name editing: Coming soon');
                     });
             });
 
+            // Status (placeholder)
+            subMenu.addItem((sub) => {
+                const status = task.status === 'done' ? '[x]' : '[ ]';
+                sub.setTitle(`Status: ${status}`)
+                    .setIcon('check-square')
+                    .onClick(() => {
+                        new Notice('Status editing: Coming soon');
+                    });
+            });
+
+            subMenu.addSeparator();
+
+            // Start, End, Deadline (existing functionality)
+            this.addPropertyItems(subMenu, task);
+        });
+
+        menu.addSeparator();
+
+        // ========================================
+        // 2. Start Timer - directly records to this task's start/end
+        // ========================================
+        if (!task.startTime) {
             menu.addItem((item) => {
-                item.setTitle('⏱️ Open Timer')
-                    .setIcon('clock')
+                const displayName = task.content.trim() || task.file.replace(/\.md$/, '').split('/').pop() || 'Untitled';
+                item.setTitle('⏱️ Start Timer')
+                    .setIcon('play')
                     .onClick(() => {
                         const widget = this.plugin.getTimerWidget();
-                        widget.showCountup(task.id, displayName, task.originalText, task.file);
+                        // recordMode: 'self' = update this task directly, autoStart: true
+                        widget.showCountup(task.id, displayName, task.originalText, task.file, 'self', true);
                     });
             });
         }
 
-        // 3. Move/Convert Options based on Type
-        // Classification logic based on README
-        // F: isFuture
-        // S-All: Start defined, No End (or End=Start), No Time (implicit 1 day)
-        // SE/SED (Long): Start, End, No Time (or >=24h)
-        // S-Timed: Start Time, No End Time (implicit 1h)
-        // SE/SED (Timed): Start Time, End Time
-        // D: No Start, No End, Deadline only (isFloatingStart=true implicitly for visual, but data-wise only deadline?)
-        //    Actually parser sets date=today if empty start. But let's check parsing.
-        //    If D type (@>>2023-01-01), parser sets date=Today, isFloatingStart=true.
-        //    So we check isFloatingStart.
-
+        // ========================================
+        // 3. Move Operations
+        // ========================================
         if (task.isFuture) {
             // F Type
-            // - Move to All day (S-All)
-            // - Move to Timeline (S-Timed)
-
-            // Move to All Day (Today)
             menu.addItem((item) => {
-                item.setTitle('Move to All day (Today)')
+                item.setTitle('Move to All Day (Today)')
                     .setIcon('calendar-days')
                     .onClick(async () => {
                         const startHour = this.plugin.settings.startHour;
@@ -154,7 +156,6 @@ export class MenuHandler {
                     });
             });
 
-            // Move to Timeline (Now)
             menu.addItem((item) => {
                 item.setTitle('Move to Timeline (Now)')
                     .setIcon('clock')
@@ -169,25 +170,19 @@ export class MenuHandler {
                             startDate: today,
                             startTime: timeStr,
                             endDate: undefined,
-                            endTime: undefined // S-Timed implies +1h or just start
+                            endTime: undefined
                         });
                     });
             });
-
         } else {
-            // Non-Future Tasks
             const isTime = !!task.startTime;
-            const isFloating = !task.startDate && !task.isFuture;
 
             if (isTime) {
                 // S-Timed, SE-Timed, SED-Timed
-
-                // Common: Move to Future
                 this.addMoveToFutureItem(menu, task);
 
-                // Move to All Day (Strip time)
                 menu.addItem((item) => {
-                    item.setTitle('Move to All day')
+                    item.setTitle('Move to All Day')
                         .setIcon('calendar-with-checkmark')
                         .onClick(async () => {
                             await this.taskIndex.updateTask(task.id, {
@@ -197,14 +192,10 @@ export class MenuHandler {
                         });
                 });
 
-                // Move to Long Term (D Type conversion per README line 165)
-                // "start全体とend全体を削除する（deadlineが残る）"
-                // Only for SED-Timed? README says "SED型のうち... D型に変換する"
-                // But generally converting to D type (Deadline only) might be useful.
                 if (task.deadline) {
                     menu.addItem((item) => {
                         item.setTitle('Move to All Day (Deadline only)')
-                            .setIcon('calendar-clock') // Icon for long term?
+                            .setIcon('calendar-clock')
                             .onClick(async () => {
                                 await this.taskIndex.updateTask(task.id, {
                                     startDate: undefined,
@@ -212,32 +203,24 @@ export class MenuHandler {
                                     endDate: undefined,
                                     endTime: undefined,
                                     isFuture: false
-                                    // isFloatingStart removed. Implicit Today.
                                 });
                             });
                     });
                 }
             } else {
-                // All-Day / Long-Term (S-All, SE, SED, D, E, SD)
-
-                // Common: Move to Future
+                // All-Day / Long-Term
                 this.addMoveToFutureItem(menu, task);
 
-                // Move to Timeline
-                // "Move to Timeline (S-timed型に変換)"
                 menu.addItem((item) => {
                     item.setTitle('Move to Timeline')
                         .setIcon('clock')
                         .onClick(async () => {
                             const startHour = this.plugin.settings.startHour;
-                            // Default to "now" or 09:00? README says "追加する時刻はタイムライン上で指定する"
-                            // implies drag operation? But context menu is immediate.
-                            // Let's default to startHour or current time.
                             const h = startHour.toString().padStart(2, '0');
 
                             await this.taskIndex.updateTask(task.id, {
                                 startTime: `${h}:00`,
-                                endTime: undefined // S-Timed
+                                endTime: undefined
                             });
                         });
                 });
@@ -245,6 +228,44 @@ export class MenuHandler {
         }
 
         menu.addSeparator();
+
+        // ========================================
+        // 4. Add Child Tasks (Pomodoro/Timer)
+        // ========================================
+        if (!task.startTime) {
+            const displayName = task.content.trim() || task.file.replace(/\.md$/, '').split('/').pop() || 'Untitled';
+
+            menu.addItem((item) => {
+                item.setTitle('🍅 Open Pomodoro as Child')
+                    .setIcon('timer')
+                    .onClick(() => {
+                        const widget = this.plugin.getTimerWidget();
+                        widget.show(task.id, displayName, task.originalText, task.file);
+                    });
+            });
+
+            menu.addItem((item) => {
+                item.setTitle('⏱️ Open Timer as Child')
+                    .setIcon('clock')
+                    .onClick(() => {
+                        const widget = this.plugin.getTimerWidget();
+                        widget.showCountup(task.id, displayName, task.originalText, task.file);
+                    });
+            });
+        }
+
+        menu.addSeparator();
+
+        // ========================================
+        // 5. Task Actions
+        // ========================================
+        menu.addItem((item) => {
+            item.setTitle('Open in Editor')
+                .setIcon('document')
+                .onClick(async () => {
+                    await this.app.workspace.openLinkText(task.file, '', true);
+                });
+        });
 
         // Duplicate (Submenu)
         menu.addItem((item) => {
@@ -290,7 +311,7 @@ export class MenuHandler {
         menu.showAtPosition({ x, y });
     }
 
-    private addParameterDisplay(menu: Menu, task: Task) {
+    private addPropertyItems(menu: Menu, task: Task) {
         // Display start, end, deadline with appropriate icons
         // Auto-derived values are shown in parentheses based on README spec:
         //
@@ -457,9 +478,9 @@ export class MenuHandler {
                                 endTime: undefined
                             });
                         } else if (value.date === null && value.time !== null) {
-                            // Time-only (inherit date from start)
+                            // Time-only: inherit date from start (required for Parser to handle abbreviation)
                             await this.taskIndex.updateTask(task.id, {
-                                endDate: undefined,
+                                endDate: task.startDate,  // Always set endDate when endTime is set
                                 endTime: value.time
                             });
                         } else {

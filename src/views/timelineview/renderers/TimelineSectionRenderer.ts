@@ -214,7 +214,7 @@ export class TimelineSectionRenderer {
 
         // Create new Task
         menu.addItem((item) => {
-            item.setTitle('Create Task')
+            item.setTitle('Create Task for Daily Note')
                 .setIcon('plus')
                 .onClick(() => this.handleCreateTaskTrigger(offsetY, date));
         });
@@ -223,14 +223,14 @@ export class TimelineSectionRenderer {
 
         // Open Pomodoro (Daily Note)
         menu.addItem((item) => {
-            item.setTitle('🍅 Open Pomodoro')
+            item.setTitle('🍅 Start Pomodoro for Daily Note')
                 .setIcon('timer')
                 .onClick(() => this.openDailyNoteTimer(date, 'pomodoro'));
         });
 
         // Open Timer (Daily Note)
         menu.addItem((item) => {
-            item.setTitle('⏱️ Open Timer')
+            item.setTitle('⏱️ Start Timer for Daily Note')
                 .setIcon('clock')
                 .onClick(() => this.openDailyNoteTimer(date, 'countup'));
         });
