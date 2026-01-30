@@ -179,14 +179,15 @@ export class TaskIndex {
 
         /**
          * Recursively extract tasks from a range of lines.
-         * @param startIdx - Starting line index in the file
          * @param linesToProcess - Array of line strings to process
          * @param baseLineNumber - The actual line number in the file for the first line
+         * @param parentStartDate - Parent task's startDate for inheritance (optional)
          * @returns Array of extracted tasks
          */
         const extractTasksFromLines = (
             linesToProcess: string[],
-            baseLineNumber: number
+            baseLineNumber: number,
+            parentStartDate?: string
         ): Task[] => {
             const extractedTasks: Task[] = [];
 
@@ -196,6 +197,16 @@ export class TaskIndex {
                 const task = TaskParser.parse(line, file.path, actualLineNumber);
 
                 if (task) {
+                    // Inherit parent's startDate if child has time-only notation
+                    // (startTime exists but startDate is missing)
+                    if (parentStartDate && !task.startDate && task.startTime) {
+                        task.startDate = parentStartDate;
+                    }
+                    // Also inherit for endDate if endTime exists but endDate is missing
+                    if (parentStartDate && !task.endDate && task.endTime) {
+                        task.endDate = parentStartDate;
+                    }
+
                     // Set indent (leading whitespace count)
                     const taskIndent = line.search(/\S|$/);
                     task.indent = taskIndent;
@@ -240,9 +251,10 @@ export class TaskIndex {
                     extractedTasks.push(task);
 
                     // Recursively extract child tasks that have @ notation
+                    // Pass this task's startDate for inheritance
                     if (children.length > 0) {
                         const childLineNumber = actualLineNumber + 1;
-                        const childTasks = extractTasksFromLines(children, childLineNumber);
+                        const childTasks = extractTasksFromLines(children, childLineNumber, task.startDate);
 
                         // Set up parent-child relationships
                         for (const childTask of childTasks) {
