@@ -201,6 +201,7 @@ export class TaskIndex {
                     // (startTime exists but startDate is missing)
                     if (parentStartDate && !task.startDate && task.startTime) {
                         task.startDate = parentStartDate;
+                        task.startDateInherited = true;
                     }
                     // Also inherit for endDate if endTime exists but endDate is missing
                     if (parentStartDate && !task.endDate && task.endTime) {

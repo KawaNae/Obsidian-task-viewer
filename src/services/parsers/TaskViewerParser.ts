@@ -110,8 +110,9 @@ export class TaskViewerParser implements ParserStrategy {
             }
         }
 
-        // Filter: Must have Date OR EndDate OR Deadline OR Future OR Commands to be considered a "Task"
-        if (!date && !endDate && !deadline && !isFuture && commands.length === 0) {
+        // Filter: Must have Date/Time OR EndDate/Time OR Deadline OR Future OR Commands to be considered a "Task"
+        // Added startTime and endTime to allow time-only notation for child task inheritance
+        if (!date && !startTime && !endDate && !endTime && !deadline && !isFuture && commands.length === 0) {
             return null;
         }
 
@@ -211,9 +212,17 @@ export class TaskViewerParser implements ParserStrategy {
         let metaStr = '';
         let hasDateBlock = false;
 
+        // Determine if we should use inherited (time-only) notation
+        // startDateInherited covers both start and end dates (they are inherited together)
+        const useInheritedNotation = task.startDateInherited && task.startTime;
+
         let startStr = '';
         if (task.isFuture && !task.startDate) {
             startStr = '@future';
+            hasDateBlock = true;
+        } else if (useInheritedNotation) {
+            // Inherited date - output time only
+            startStr = `@${task.startTime}`;
             hasDateBlock = true;
         } else if (task.startDate) {
             startStr = `@${task.startDate}`;
@@ -231,7 +240,10 @@ export class TaskViewerParser implements ParserStrategy {
             metaStr += ` ${startStr}`;
 
             // End Part Logic
-            if (task.endDate) {
+            if (useInheritedNotation && task.endTime) {
+                // Inherited end date - output time only
+                metaStr += `>${task.endTime}`;
+            } else if (task.endDate) {
                 // endDate is explicitly set
                 // If future (no startDate), isSameDay is false.
                 const isSameDay = task.startDate ? (task.endDate === task.startDate) : false;

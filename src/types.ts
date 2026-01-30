@@ -34,6 +34,9 @@ export interface Task {
     deadline?: string;      // Added, YYYY-MM-DD or ISO
     isFuture: boolean;      // Added, true if startDate is empty or "future"
 
+    // Inheritance flag - true if dates were inherited from parent (should be omitted on write)
+    startDateInherited?: boolean;
+
 
     // Original text for reconstruction
     originalText: string;
