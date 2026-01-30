@@ -87,7 +87,7 @@
 }
 
 /* Inherited Task Card - date inherited from parent (time-only notation) */
-/* Using background gradient for customizable dashed line */
+/* Using background gradient for customizable dashed line, centered vertically */
 .task-card--inherited::before {
     background-color: transparent;
     background-image: linear-gradient(to bottom,
@@ -96,7 +96,7 @@
             transparent 4px,
             transparent 8px);
     background-size: var(--task-card-accent-width) 8px;
-    background-position: left top;
+    background-position: left center;
     background-repeat: repeat-y;
 }
 
