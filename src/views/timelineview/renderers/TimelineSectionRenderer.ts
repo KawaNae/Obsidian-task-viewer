@@ -44,6 +44,7 @@ export class TimelineSectionRenderer {
 
             const el = container.createDiv('task-card timed');
             if (task.id === this.handleManager.getSelectedTaskId()) el.addClass('selected');
+            if (task.startDateInherited) el.addClass('task-card--inherited');
             el.dataset.id = task.id;
 
             // Apply Color

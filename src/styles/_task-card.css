@@ -86,6 +86,14 @@
     overflow: visible;
 }
 
+/* Inherited Task Card - date inherited from parent (time-only notation) */
+.task-card--inherited::before {
+    /* Replace solid background with dashed border */
+    background-color: transparent !important;
+    border-left: var(--task-card-accent-width) dashed var(--file-accent, var(--interactive-accent));
+}
+
+
 /* ==========================================================================
    4. STATES (:hover, .selected, .is-dragging)
    ========================================================================== */

@@ -111,6 +111,7 @@ export class AllDaySectionRenderer {
                 el.addClass('task-card--multi-day'); // Multi-day task marker
             }
             if (task.id === this.handleManager.getSelectedTaskId()) el.addClass('selected');
+            if (task.startDateInherited) el.addClass('task-card--inherited');
             el.dataset.id = task.id;
 
             ViewUtils.applyFileColor(this.plugin.app, el, task.file, this.plugin.settings.frontmatterColorKey);
