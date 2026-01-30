@@ -29,15 +29,15 @@
     scrollbar-width: thin;
 }
 
-/* Accent Border */
+/* Accent Border - using border-left for both solid and dashed styles */
 .task-card::before {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     bottom: 0;
-    width: var(--task-card-accent-width);
-    background-color: var(--file-accent, transparent);
+    width: 0;
+    border-left: var(--task-card-accent-width) solid var(--file-accent, transparent);
     border-radius: 4px 0 0 4px;
 }
 
@@ -88,9 +88,7 @@
 
 /* Inherited Task Card - date inherited from parent (time-only notation) */
 .task-card--inherited::before {
-    /* Replace solid background with dashed border */
-    background-color: transparent !important;
-    border-left: var(--task-card-accent-width) dashed var(--file-accent, var(--interactive-accent));
+    border-left-style: dashed;
 }
 
 
