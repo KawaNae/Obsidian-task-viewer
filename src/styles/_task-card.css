@@ -29,15 +29,15 @@
     scrollbar-width: thin;
 }
 
-/* Accent Border - using border-left for both solid and dashed styles */
+/* Accent Border - solid background for normal tasks */
 .task-card::before {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     bottom: 0;
-    width: 0;
-    border-left: var(--task-card-accent-width) solid var(--file-accent, transparent);
+    width: var(--task-card-accent-width);
+    background-color: var(--file-accent, transparent);
     border-radius: 4px 0 0 4px;
 }
 
@@ -87,8 +87,17 @@
 }
 
 /* Inherited Task Card - date inherited from parent (time-only notation) */
+/* Using background gradient for customizable dashed line */
 .task-card--inherited::before {
-    border-left-style: dashed;
+    background-color: transparent;
+    background-image: linear-gradient(to bottom,
+            var(--file-accent, var(--interactive-accent)) 0,
+            var(--file-accent, var(--interactive-accent)) 4px,
+            transparent 4px,
+            transparent 8px);
+    background-size: var(--task-card-accent-width) 8px;
+    background-position: left top;
+    background-repeat: repeat-y;
 }
 
 
