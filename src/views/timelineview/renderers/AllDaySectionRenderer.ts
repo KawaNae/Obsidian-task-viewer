@@ -195,14 +195,14 @@ export class AllDaySectionRenderer {
 
         // Open Pomodoro (Daily Note)
         menu.addItem((item) => {
-            item.setTitle('🍅 Start Pomodoro for Daily Note')
+            item.setTitle('🍅 Open Pomodoro for Daily Note')
                 .setIcon('timer')
                 .onClick(() => this.openDailyNoteTimer(date, 'pomodoro'));
         });
 
         // Open Timer (Daily Note)
         menu.addItem((item) => {
-            item.setTitle('⏱️ Start Timer for Daily Note')
+            item.setTitle('⏱️ Open Timer for Daily Note')
                 .setIcon('clock')
                 .onClick(() => this.openDailyNoteTimer(date, 'countup'));
         });
