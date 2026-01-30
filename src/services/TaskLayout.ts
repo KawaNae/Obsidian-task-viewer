@@ -98,16 +98,16 @@ export class TaskLayout {
                 }
             }
 
-            // Assign width and left position for this cluster
-            const totalColumns = columns.length;
-            const width = 100 / totalColumns;
+            // Assign width and left position for this cluster (Cascade layout)
+            // Each overlapping task gets progressively narrower and right-aligned
+            const CASCADE_STEP = 10; // 10% narrower per overlap
+            const MIN_WIDTH = 50;    // Minimum width 50%
 
             columns.forEach((column, colIndex) => {
+                const width = Math.max(MIN_WIDTH, 100 - colIndex * CASCADE_STEP);
+                const left = 100 - width; // Right-aligned
                 column.forEach(item => {
-                    layout.set(item.task.id, {
-                        width: width,
-                        left: colIndex * width
-                    });
+                    layout.set(item.task.id, { width, left });
                 });
             });
         }
