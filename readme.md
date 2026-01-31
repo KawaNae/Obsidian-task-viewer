@@ -438,7 +438,7 @@ src/styles/
 ├── _timeline-allday.css    # 終日タスク欄
 ├── _timeline-future.css    # 未割当タスク欄
 ├── _timeline-drag.css      # ドラッグ関連スタイル
-├── _kanban.css             # カンバンビュー
+
 ├── _schedule.css           # スケジュールビュー
 └── _deprecated.css         # 非推奨・未使用スタイル（検証用）
 ```

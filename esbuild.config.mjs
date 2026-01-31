@@ -33,7 +33,7 @@ const copyStaticFiles = {
           '_timeline-allday.css',
           '_timeline-future.css',
           '_timeline-drag.css',
-          '_kanban.css',
+
           '_schedule.css',
           '_task-card.css',
           '_checkboxes.css',

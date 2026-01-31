@@ -164,18 +164,16 @@ export class MenuHandler {
         // ========================================
         // 2. Start Timer - directly records to this task's start/end
         // ========================================
-        if (!task.startTime) {
-            menu.addItem((item) => {
-                const displayName = task.content.trim() || task.file.replace(/\.md$/, '').split('/').pop() || 'Untitled';
-                item.setTitle('⏱️ Start Timer')
-                    .setIcon('play')
-                    .onClick(() => {
-                        const widget = this.plugin.getTimerWidget();
-                        // recordMode: 'self' = update this task directly, autoStart: true
-                        widget.showCountup(task.id, displayName, task.originalText, task.file, 'self', true);
-                    });
-            });
-        }
+        menu.addItem((item) => {
+            const displayName = task.content.trim() || task.file.replace(/\.md$/, '').split('/').pop() || 'Untitled';
+            item.setTitle('⏱️ Start Timer')
+                .setIcon('play')
+                .onClick(() => {
+                    const widget = this.plugin.getTimerWidget();
+                    // recordMode: 'self' = update this task directly, autoStart: true
+                    widget.showCountup(task.id, displayName, task.originalText, task.file, 'self', true);
+                });
+        });
 
         // ========================================
         // 3. Move Operations
@@ -274,27 +272,25 @@ export class MenuHandler {
         // ========================================
         // 4. Add Child Tasks (Pomodoro/Timer)
         // ========================================
-        if (!task.startTime) {
-            const displayName = task.content.trim() || task.file.replace(/\.md$/, '').split('/').pop() || 'Untitled';
+        const displayName = task.content.trim() || task.file.replace(/\.md$/, '').split('/').pop() || 'Untitled';
 
-            menu.addItem((item) => {
-                item.setTitle('🍅 Open Pomodoro as Child')
-                    .setIcon('timer')
-                    .onClick(() => {
-                        const widget = this.plugin.getTimerWidget();
-                        widget.show(task.id, displayName, task.originalText, task.file);
-                    });
-            });
+        menu.addItem((item) => {
+            item.setTitle('🍅 Open Pomodoro as Child')
+                .setIcon('timer')
+                .onClick(() => {
+                    const widget = this.plugin.getTimerWidget();
+                    widget.show(task.id, displayName, task.originalText, task.file);
+                });
+        });
 
-            menu.addItem((item) => {
-                item.setTitle('⏱️ Open Timer as Child')
-                    .setIcon('clock')
-                    .onClick(() => {
-                        const widget = this.plugin.getTimerWidget();
-                        widget.showCountup(task.id, displayName, task.originalText, task.file);
-                    });
-            });
-        }
+        menu.addItem((item) => {
+            item.setTitle('⏱️ Open Timer as Child')
+                .setIcon('clock')
+                .onClick(() => {
+                    const widget = this.plugin.getTimerWidget();
+                    widget.showCountup(task.id, displayName, task.originalText, task.file);
+                });
+        });
 
         menu.addSeparator();
 
@@ -368,10 +364,10 @@ export class MenuHandler {
         isUnset?: boolean;
     }): DocumentFragment {
         const frag = document.createDocumentFragment();
-        
+
         // Create a single container span that holds all content
         const container = document.createElement('span');
-        
+
         // Label
         container.appendChild(document.createTextNode(label));
 

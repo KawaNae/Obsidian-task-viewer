@@ -116,7 +116,8 @@ export class TimerRecorder {
                 startTime: startTimeStr,
                 endDate: endDateStr,
                 endTime: endTimeStr,
-                isFuture: false
+                isFuture: false,
+                statusChar: 'x' // Auto-complete when timer stops
             });
         }
 
