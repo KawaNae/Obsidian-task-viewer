@@ -7,7 +7,6 @@
 /* AllDay Section Container */
 .allday-section {
     background-color: var(--background-primary);
-    z-index: var(--z-allday-section);
     flex-shrink: 0;
     overflow-y: visible;
     position: relative;

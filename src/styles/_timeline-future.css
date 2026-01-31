@@ -9,11 +9,9 @@
     display: grid;
     /* grid-template-columns set via inline style */
     width: 100%;
-    z-index: var(--z-future-section);
     background-color: var(--background-primary);
     overflow: visible;
     position: relative;
-    /* For z-index stacking context if needed */
 }
 
 /* Future Axis (Left Column) */
@@ -29,8 +27,6 @@
     border-right: 1px solid var(--background-modifier-border);
     border-bottom: 1px solid var(--background-modifier-border);
     background-color: var(--background-secondary);
-    z-index: 2;
-    /* Above cells */
     grid-column: 1;
     grid-row: 1;
 }

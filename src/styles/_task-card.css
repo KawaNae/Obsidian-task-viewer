@@ -135,8 +135,7 @@
     outline: 2px solid var(--file-accent, var(--interactive-accent));
     outline-offset: -2px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-    z-index: 200;
-    /* Ensure selected card and its handles appear above other cards */
+    /* z-index is set via JavaScript in HandleManager.selectTask() to override inline styles */
 }
 
 /* ==========================================================================
@@ -187,7 +186,6 @@
     position: absolute;
     top: 2px;
     right: 6px;
-    z-index: var(--z-time-display);
     font-family: var(--font-monospace);
     font-size: 0.75em;
     color: var(--text-muted);
@@ -294,7 +292,6 @@
 
 .deadline-arrow {
     position: relative;
-    z-index: var(--z-deadline-arrow);
     pointer-events: none;
     height: 100%;
     margin-left: -6px;

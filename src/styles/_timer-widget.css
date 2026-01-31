@@ -4,7 +4,7 @@
     position: fixed;
     right: 20px;
     bottom: 20px;
-    z-index: 65;
+    z-index: var(--z-timer-widget);
     background: var(--background-primary);
     border: 1px solid var(--background-modifier-border);
     border-radius: 8px;

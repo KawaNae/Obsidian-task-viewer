@@ -33,9 +33,15 @@ export class HandleManager {
      * Selects a task and renders its handles.
      */
     selectTask(taskId: string | null): void {
-        // Remove handles from previously selected task
+        // Remove handles from previously selected task and restore z-index
         if (this.selectedTaskId) {
             this.removeHandles(this.selectedTaskId);
+            const prevEl = this.container.querySelector(`.task-card[data-id="${this.selectedTaskId}"]`) as HTMLElement;
+            if (prevEl) {
+                // Restore original z-index from data attribute
+                const originalZ = prevEl.dataset.originalZIndex;
+                prevEl.style.zIndex = originalZ || '';
+            }
         }
 
         this.selectedTaskId = taskId;
@@ -43,8 +49,12 @@ export class HandleManager {
         // Update .selected class on all task cards
         const taskCards = this.container.querySelectorAll('.task-card');
         taskCards.forEach(el => {
-            if ((el as HTMLElement).dataset.id === taskId) {
+            const htmlEl = el as HTMLElement;
+            if (htmlEl.dataset.id === taskId) {
                 el.addClass('selected');
+                // Store original z-index and set high z-index for selected
+                htmlEl.dataset.originalZIndex = htmlEl.style.zIndex || '1';
+                htmlEl.style.zIndex = '200';
             } else {
                 el.removeClass('selected');
             }

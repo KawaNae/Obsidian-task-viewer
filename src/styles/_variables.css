@@ -31,22 +31,32 @@
     --toolbar-gap: 8px;
 
     /* Z-Index Layers */
-    --z-negative: -1;                    /* Spacer elements */
-    --z-base: 0;                         /* Grid cells */
-    --z-task-card: 1;                    /* Task cards */
-    --z-task-card-handle: 20;            /* .task-card__handle */
-    --z-task-card-allday: 25;            /* .task-card--allday */
-    --z-task-card-allday-handle: 100;     /* .task-card--allday .task-card__handle */
-    --z-task-card-future-handle: 100;     /* .task-card--future .task-card__handle */
-    --z-task-card-drag-ghost: 9999;      /* .task-card--drag-ghost */
-    --z-allday-cell-drag-over: 50;       /* .allday-section__cell.drag-over */
-    --z-overlay: 1000;                   /* General overlay */
-    --z-current-time-indicator: 15;      /* .current-time-indicator */
-    --z-ghost-factory: 2147483647;       /* GhostFactory max */
-
-    --z-deadline-arrow: unset; /* Deadline arrows (was: 1) - Natural stacking sufficient */
-    --z-time-display: unset;   /* Task card time display (was: 5) - Absolute positioned, no conflicts */
-    --z-allday-section: unset; /* AllDay section (was: 20) - Grid row, natural stacking */
-    --z-header: unset;         /* Date header (was: 30) - Grid row, natural stacking */
-    --z-future-section: unset; /* Future section (was: 50) - Grid row, natural stacking */
+    --z-negative: -1;
+    /* Spacer elements */
+    --z-base: 0;
+    /* Grid cells */
+    --z-task-card: 1;
+    /* Task cards base */
+    --z-current-time-indicator: 15;
+    /* .current-time-indicator */
+    --z-task-card-handle: 20;
+    /* .task-card__handle */
+    --z-task-card-allday: 25;
+    /* .task-card--allday */
+    --z-allday-cell-drag-over: 50;
+    /* .allday-section__cell.drag-over */
+    --z-timer-widget: 65;
+    /* Timer widget */
+    --z-task-card-allday-handle: 100;
+    /* .task-card--allday .task-card__handle */
+    --z-task-card-future-handle: 100;
+    /* .task-card--future .task-card__handle */
+    --z-task-card-selected: 200;
+    /* .task-card.selected */
+    --z-overlay: 1000;
+    /* General overlay */
+    --z-task-card-drag-ghost: 9999;
+    /* .task-card--drag-ghost */
+    --z-ghost-factory: 2147483647;
+    /* GhostFactory max */
 }

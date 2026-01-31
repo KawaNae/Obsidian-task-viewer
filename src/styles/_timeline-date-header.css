@@ -6,7 +6,6 @@
 /* Date Header Row */
 .date-header {
     background-color: var(--background-secondary);
-    z-index: var(--z-header);
     flex-shrink: 0;
     overflow-y: hidden;
 }
