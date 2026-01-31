@@ -125,31 +125,21 @@ export class MenuHandler {
                 const statusMenu = (sub as any).submenu as Menu;
 
                 const statuses = [
-                    { char: ' ', label: 'Todo' },
-                    { char: 'x', label: 'Done' },
-                    { char: '-', label: 'Cancelled' },
-                    { char: '!', label: 'Failed' },
-                    { char: '?', label: 'Blocked' },
-                    { char: '>', label: 'Postponed' }
+                    { char: ' ', label: 'Check as [ ]' },
+                    { char: 'x', label: 'Check as [x]' },
+                    { char: '-', label: 'Check as [-]' },
+                    { char: '!', label: 'Check as [!]' },
+                    { char: '?', label: 'Check as [?]' },
+                    { char: '>', label: 'Check as [>]' }
                 ];
 
                 statuses.forEach(s => {
                     statusMenu.addItem(item => {
-                        item.setTitle(`[${s.char}] ${s.label}`)
+                        item.setTitle(s.label)
                             .setChecked(task.statusChar === s.char)
                             .onClick(async () => {
-                                let newStatus: import('../types').TaskStatusType = 'todo';
-                                switch (s.char) {
-                                    case 'x': newStatus = 'done'; break;
-                                    case '-': newStatus = 'cancelled'; break;
-                                    case '!': newStatus = 'failed'; break;
-                                    case '?': newStatus = 'blocked'; break;
-                                    case '>': newStatus = 'postponed'; break;
-                                    default: newStatus = 'todo';
-                                }
                                 await this.taskIndex.updateTask(task.id, {
-                                    statusChar: s.char,
-                                    status: newStatus
+                                    statusChar: s.char
                                 });
                             });
                     });

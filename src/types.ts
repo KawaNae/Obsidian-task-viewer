@@ -1,15 +1,9 @@
 /**
- * Task status type - represents the semantic state of a task
- * Complete states: done, cancelled, failed
- * Incomplete states: todo, blocked, postponed
+ * Check if a statusChar represents a complete (finished) task
+ * Uses the settings to determine which characters are considered complete
  */
-export type TaskStatusType = 'todo' | 'done' | 'cancelled' | 'failed' | 'blocked' | 'postponed';
-
-/** 
- * Check if a status represents a complete (finished) task 
- */
-export function isCompleteStatus(status: TaskStatusType): boolean {
-    return status === 'done' || status === 'cancelled' || status === 'failed';
+export function isCompleteStatusChar(statusChar: string, completeChars: string[]): boolean {
+    return completeChars.includes(statusChar);
 }
 
 export interface Task {
@@ -17,7 +11,6 @@ export interface Task {
     file: string;           // Absolute file path
     line: number;           // Line number (0-indexed)
     content: string;        // Task description (without checkbox and time)
-    status: TaskStatusType;
     statusChar: string;     // The actual character inside [ ]
 
     // Tree Structure
@@ -77,6 +70,7 @@ export interface TaskViewerSettings {
     dailyNoteHeaderLevel: number; // Header level (default: 2)
     pomodoroWorkMinutes: number;  // Pomodoro work duration (default: 25)
     pomodoroBreakMinutes: number; // Pomodoro break duration (default: 5)
+    completeStatusChars: string[]; // Characters that represent completed tasks (default: ['x', '-', '!'])
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -88,4 +82,5 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     dailyNoteHeaderLevel: 2,
     pomodoroWorkMinutes: 25,
     pomodoroBreakMinutes: 5,
+    completeStatusChars: ['x', 'X', '-', '!'],
 };

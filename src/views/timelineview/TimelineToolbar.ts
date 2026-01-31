@@ -1,5 +1,5 @@
 import { App } from 'obsidian';
-import { ViewState, isCompleteStatus } from '../../types';
+import { ViewState, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
 import TaskViewerPlugin from '../../main';
@@ -77,7 +77,7 @@ export class TimelineToolbar {
 
         // Get all incomplete tasks with dates before today
         const tasks = this.taskIndex.getTasks().filter(t =>
-            !isCompleteStatus(t.status) &&
+            !isCompleteStatusChar(t.statusChar, this.plugin.settings.completeStatusChars) &&
             !t.isFuture &&
             t.startDate
         );

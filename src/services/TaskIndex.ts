@@ -434,8 +434,8 @@ export class TaskIndex {
         // We need to check if it *was* triggerable before updates.
         const wasTriggerable = TaskParser.isTriggerableStatus(task);
 
-        // Assuming updates.status is 'todo' means uncheck. 
-        const willBeTodo = updates.status === 'todo';
+        // Assuming updates.statusChar is ' ' means uncheck. 
+        const willBeTodo = updates.statusChar === ' ';
 
         if (wasTriggerable && willBeTodo) {
             const sig = this.getTaskSignature(task);

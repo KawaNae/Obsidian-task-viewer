@@ -1,5 +1,5 @@
 import { Component, setIcon } from 'obsidian';
-import { ViewState, isCompleteStatus } from '../../../types';
+import { ViewState, isCompleteStatusChar } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
@@ -62,7 +62,7 @@ export class GridRenderer {
             // Check if this date has incomplete overdue tasks
             if (date < todayVisualDate) {
                 const tasksForDate = this.taskIndex.getTasksForVisualDay(date, this.plugin.settings.startHour);
-                const hasOverdueTasks = tasksForDate.some(t => !isCompleteStatus(t.status) && !t.isFuture);
+                const hasOverdueTasks = tasksForDate.some(t => !isCompleteStatusChar(t.statusChar, this.plugin.settings.completeStatusChars) && !t.isFuture);
                 if (hasOverdueTasks) {
                     cell.addClass('has-overdue');
                 }

@@ -1,4 +1,4 @@
-import { CommandStrategy, CommandContext, CommandResult } from './CommandStrategy';
+﻿import { CommandStrategy, CommandContext, CommandResult } from './CommandStrategy';
 import { FlowCommand, Task } from '../types';
 import { TaskParser } from '../services/TaskParser';
 import { RecurrenceUtils } from '../utils/RecurrenceUtils';
@@ -45,12 +45,12 @@ export abstract class GenerationCommand implements CommandStrategy {
             cleanInterval = interval.replace(/when done/i, '').trim();
         }
 
-        // F型タスクの場吁E F型�Eまま維持E��日付シフトなし！E
+        // F型タスクの場吁E F型�Eまま維持E��日付シフトなし！E
         if (task.isFuture && !task.startDate && !task.endDate && !task.deadline) {
             return {
                 ...task,
                 id: '',
-                status: 'todo',
+                
                 statusChar: ' ',
                 originalText: '',
                 childLines: [...task.childLines] // Preserve children for recurrence
@@ -85,20 +85,20 @@ export abstract class GenerationCommand implements CommandStrategy {
         return {
             ...task,
             id: '',
-            status: 'todo',
+            
             statusChar: ' ',
             startDate: task.startDate ? this.shiftDate(task.startDate, shiftDays) : undefined,
             endDate: task.endDate ? this.shiftDate(task.endDate, shiftDays) : undefined,
             deadline: task.deadline ? this.shiftDate(task.deadline, shiftDays) : undefined,
-            isFuture: task.isFuture && !task.startDate, // F型�E維持E
+            isFuture: task.isFuture && !task.startDate, // F型�E維持E
             originalText: '',
             childLines: [...task.childLines] // Preserve children for recurrence
         };
     }
 
     /**
-     * 日付文字�EをDateオブジェクトに変換
-     * YYYY-MM-DD また�E YYYY-MM-DDTHH:mm 形式対忁E
+     * 日付文字�EをDateオブジェクトに変換
+     * YYYY-MM-DD また�E YYYY-MM-DDTHH:mm 形式対忁E
      */
     private parseDate(dateStr: string): Date {
         const datePart = dateStr.split('T')[0];
@@ -107,8 +107,8 @@ export abstract class GenerationCommand implements CommandStrategy {
     }
 
     /**
-     * 日付文字�Eを指定日数シフト
-     * 時刻部刁E��ある場合�E保持
+     * 日付文字�Eを指定日数シフト
+     * 時刻部刁E��ある場合�E保持
      */
     private shiftDate(dateStr: string, days: number): string {
         const hasTime = dateStr.includes('T');

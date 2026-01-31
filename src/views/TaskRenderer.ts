@@ -1,5 +1,5 @@
 import { App, MarkdownRenderer, Component, Menu } from 'obsidian';
-import { Task, TaskViewerSettings, isCompleteStatus } from '../types';
+import { Task, TaskViewerSettings, isCompleteStatusChar } from '../types';
 import { TaskIndex } from '../services/TaskIndex';
 import { DateUtils } from '../utils/DateUtils';
 
@@ -76,12 +76,12 @@ export class TaskRenderer {
 
         // Construct full markdown
         // Strip time info from parent task line for display
-        const statusChar = task.statusChar || (task.status === 'done' ? 'x' : (task.status === 'cancelled' ? '-' : ' '));
+        const statusChar = task.statusChar || ' ';
 
         // Check if task is overdue and add warning icon
-        // Use isCompleteStatus for completion detection
+        // Use isCompleteStatusChar for completion detection
         let overdueIcon = '';
-        if (!isCompleteStatus(task.status)) {
+        if (!isCompleteStatusChar(task.statusChar, settings.completeStatusChars)) {
             if (task.deadline && DateUtils.isPastDeadline(task.deadline, settings.startHour)) {
                 overdueIcon = '🚨 ';
             } else if (task.startDate && DateUtils.isPastDate(task.startDate, task.startTime, settings.startHour)) {
@@ -206,10 +206,8 @@ export class TaskRenderer {
         if (mainCheckbox) {
             mainCheckbox.addEventListener('click', () => {
                 const isChecked = (mainCheckbox as HTMLInputElement).checked;
-                const newStatus = isChecked ? 'done' : 'todo';
                 const newStatusChar = isChecked ? 'x' : ' ';
                 this.taskIndex.updateTask(task.id, {
-                    status: newStatus,
                     statusChar: newStatusChar
                 });
             });
@@ -299,13 +297,13 @@ export class TaskRenderer {
     private showCheckboxStatusMenu(e: MouseEvent, taskId: string): void {
         const menu = new Menu();
 
-        const statusOptions: { char: string; status: string; label: string; icon: string }[] = [
-            { char: 'x', status: 'done', label: 'Check as Done', icon: 'check' },
-            { char: '!', status: 'failed', label: 'Check as Failed', icon: 'alert-triangle' },
-            { char: '?', status: 'blocked', label: 'Check as Blocked', icon: 'help-circle' },
-            { char: '>', status: 'postponed', label: 'Check as Postponed', icon: 'arrow-right' },
-            { char: '-', status: 'cancelled', label: 'Check as Cancelled', icon: 'minus' },
-            { char: ' ', status: 'todo', label: 'Uncheck', icon: 'square' },
+        const statusOptions: { char: string; label: string; icon: string }[] = [
+            { char: 'x', label: 'Check as [x]', icon: 'check' },
+            { char: '!', label: 'Check as [!]', icon: 'alert-triangle' },
+            { char: '?', label: 'Check as [?]', icon: 'help-circle' },
+            { char: '>', label: 'Check as [>]', icon: 'arrow-right' },
+            { char: '-', label: 'Check as [-]', icon: 'minus' },
+            { char: ' ', label: 'Check as [ ]', icon: 'square' },
         ];
 
         for (const opt of statusOptions) {
@@ -314,7 +312,6 @@ export class TaskRenderer {
                     .setIcon(opt.icon)
                     .onClick(async () => {
                         await this.taskIndex.updateTask(taskId, {
-                            status: opt.status as any,
                             statusChar: opt.char
                         });
                     });
@@ -332,12 +329,12 @@ export class TaskRenderer {
         const menu = new Menu();
 
         const statusOptions: { char: string; label: string; icon: string }[] = [
-            { char: 'x', label: 'Check as Done', icon: 'check' },
-            { char: '!', label: 'Check as Failed', icon: 'alert-triangle' },
-            { char: '?', label: 'Check as Blocked', icon: 'help-circle' },
-            { char: '>', label: 'Check as Postponed', icon: 'arrow-right' },
-            { char: '-', label: 'Check as Cancelled', icon: 'minus' },
-            { char: ' ', label: 'Uncheck', icon: 'square' },
+            { char: 'x', label: 'Check as [x]', icon: 'check' },
+            { char: '!', label: 'Check as [!]', icon: 'alert-triangle' },
+            { char: '?', label: 'Check as [?]', icon: 'help-circle' },
+            { char: '>', label: 'Check as [>]', icon: 'arrow-right' },
+            { char: '-', label: 'Check as [-]', icon: 'minus' },
+            { char: ' ', label: 'Check as [ ]', icon: 'square' },
         ];
 
         for (const opt of statusOptions) {

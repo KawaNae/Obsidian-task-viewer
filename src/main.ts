@@ -1,7 +1,6 @@
 import { Plugin, WorkspaceLeaf, setIcon } from 'obsidian';
 import { TaskIndex } from './services/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
-import { KanbanView, VIEW_TYPE_KANBAN } from './views/KanbanView';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/ScheduleView';
 import { PomodoroView, VIEW_TYPE_POMODORO } from './views/PomodoroView';
 import { PomodoroService } from './services/PomodoroService';
@@ -51,11 +50,6 @@ export default class TaskViewerPlugin extends Plugin {
         );
 
         this.registerView(
-            VIEW_TYPE_KANBAN,
-            (leaf) => new KanbanView(leaf, this.taskIndex, this)
-        );
-
-        this.registerView(
             VIEW_TYPE_SCHEDULE,
             (leaf) => new ScheduleView(leaf, this.taskIndex, this)
         );
@@ -68,10 +62,6 @@ export default class TaskViewerPlugin extends Plugin {
         // Add Ribbon Icon
         this.addRibbonIcon('calendar-clock', 'Open Timeline', () => {
             this.activateView(VIEW_TYPE_TIMELINE);
-        });
-
-        this.addRibbonIcon('kanban-square', 'Open Kanban', () => {
-            this.activateView(VIEW_TYPE_KANBAN);
         });
 
         this.addRibbonIcon('calendar-days', 'Open Schedule', () => {
@@ -88,14 +78,6 @@ export default class TaskViewerPlugin extends Plugin {
             name: 'Open Timeline View',
             callback: () => {
                 this.activateView(VIEW_TYPE_TIMELINE);
-            }
-        });
-
-        this.addCommand({
-            id: 'open-kanban-view',
-            name: 'Open Kanban View',
-            callback: () => {
-                this.activateView(VIEW_TYPE_KANBAN);
             }
         });
 
@@ -195,7 +177,7 @@ export default class TaskViewerPlugin extends Plugin {
      * Refresh all task viewer views
      */
     private refreshAllViews(): void {
-        [VIEW_TYPE_TIMELINE, VIEW_TYPE_KANBAN, VIEW_TYPE_SCHEDULE].forEach(viewType => {
+        [VIEW_TYPE_TIMELINE, VIEW_TYPE_SCHEDULE].forEach(viewType => {
             this.app.workspace.getLeavesOfType(viewType).forEach(leaf => {
                 (leaf.view as any).refresh?.();
             });

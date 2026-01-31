@@ -1,7 +1,7 @@
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import { TaskRenderer } from '../TaskRenderer';
 import { TaskIndex } from '../../services/TaskIndex';
-import { Task, ViewState, isCompleteStatus } from '../../types';
+import { Task, ViewState, isCompleteStatusChar } from '../../types';
 import { DragHandler } from '../../interaction/DragHandler';
 import { MenuHandler } from '../../interaction/MenuHandler';
 
@@ -379,7 +379,7 @@ export class TimelineView extends ItemView {
 
         // Get all incomplete tasks with dates before today
         const tasks = this.taskIndex.getTasks().filter(t =>
-            !isCompleteStatus(t.status) &&
+            !isCompleteStatusChar(t.statusChar, this.plugin.settings.completeStatusChars) &&
             !t.isFuture &&
             t.startDate
         );

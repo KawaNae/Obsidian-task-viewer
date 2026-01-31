@@ -138,37 +138,11 @@ export class TaskViewerParser implements ParserStrategy {
 
         if (date) isFuture = false;
 
-        // Map statusChar to semantic status
-        // Complete: done (x/X), cancelled (-), failed (!)
-        // Incomplete: todo (space), blocked (?), postponed (>)
-        let status: import('../../types').TaskStatusType = 'todo';
-        switch (statusChar) {
-            case 'x':
-            case 'X':
-                status = 'done';
-                break;
-            case '-':
-                status = 'cancelled';
-                break;
-            case '!':
-                status = 'failed';
-                break;
-            case '?':
-                status = 'blocked';
-                break;
-            case '>':
-                status = 'postponed';
-                break;
-            default:
-                status = 'todo';
-        }
-
         return {
             id: `${filePath}:${lineNumber}`,
             file: filePath,
             line: lineNumber,
             content: content.trim(),
-            status,
             statusChar,
             indent: 0,          // Will be set by TaskIndex
             childIds: [],       // Will be set by TaskIndex
@@ -231,7 +205,7 @@ export class TaskViewerParser implements ParserStrategy {
     }
 
     format(task: Task): string {
-        const statusChar = task.statusChar || (task.status === 'done' ? 'x' : (task.status === 'cancelled' ? '-' : ' '));
+        const statusChar = task.statusChar || ' ';
         let metaStr = '';
         let hasDateBlock = false;
 
