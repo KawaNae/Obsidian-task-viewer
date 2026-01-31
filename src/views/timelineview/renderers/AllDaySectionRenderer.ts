@@ -48,23 +48,7 @@ export class AllDaySectionRenderer {
                 startHour
             );
             const hours24 = 24 * 60 * 60 * 1000;
-            const result = durationMs >= hours24;
-            
-            // Debug log for SE/SED type tasks
-            if (t.startTime && t.endDate && t.endDate !== t.startDate) {
-                console.log('[AllDayRenderer] Task:', t.content, {
-                    startDate: t.startDate,
-                    startTime: t.startTime,
-                    endDate: t.endDate,
-                    endTime: t.endTime,
-                    durationMs,
-                    hours24,
-                    durationHours: durationMs / (1000 * 60 * 60),
-                    isAllDay: result
-                });
-            }
-            
-            return result;
+            return durationMs >= hours24;
         });
 
         if (visibleFiles) {

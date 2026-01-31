@@ -47,22 +47,6 @@ export class TimelineSectionRenderer {
             // Check if it's an all-day task (>= 24 hours)
             const tStart = t.startDate || date;
             const isAllDay = DateUtils.isAllDayTask(tStart, t.startTime, t.endDate, t.endTime, startHour);
-            
-            // Debug log for SE/SED type tasks
-            if (t.endDate && t.endDate !== t.startDate) {
-                console.log('[TimelineRenderer] Task:', t.content, {
-                    date,
-                    startDate: t.startDate,
-                    startTime: t.startTime,
-                    endDate: t.endDate,
-                    endTime: t.endTime,
-                    visualStart,
-                    visualEnd: t.endTime ? DateUtils.getVisualStartDate(t.endDate, t.endTime, startHour) : undefined,
-                    isAllDay,
-                    willRender: !isAllDay
-                });
-            }
-            
             return !isAllDay;
         });
 
@@ -74,54 +58,24 @@ export class TimelineSectionRenderer {
         // Split tasks that cross day boundary
         const renderableTasks: RenderableTask[] = [];
         tasks.forEach(task => {
-            const shouldSplit = shouldSplitTask(task, startHour);
-            console.log(`[TimelineRenderer] Split check for "${task.content}" in column ${date}:`, {
-                shouldSplit,
-                startDate: task.startDate,
-                startTime: task.startTime,
-                endDate: task.endDate,
-                endTime: task.endTime
-            });
-            
-            if (shouldSplit) {
+            if (shouldSplitTask(task, startHour)) {
                 const [before, after] = splitTaskAtBoundary(task, startHour);
-                
-                console.log(`[TimelineRenderer] Split segments:`, {
-                    before: { id: before.id, start: `${before.startDate} ${before.startTime}`, end: `${before.endDate} ${before.endTime}` },
-                    after: { id: after.id, start: `${after.startDate} ${after.startTime}`, end: `${after.endDate} ${after.endTime}` }
-                });
                 
                 // Calculate visual dates for each segment
                 const beforeVisualStart = DateUtils.getVisualStartDate(before.startDate!, before.startTime!, startHour);
-                const beforeVisualEnd = DateUtils.getVisualStartDate(before.endDate!, before.endTime!, startHour);
                 const afterVisualStart = DateUtils.getVisualStartDate(after.startDate!, after.startTime!, startHour);
-                const afterVisualEnd = DateUtils.getVisualStartDate(after.endDate!, after.endTime!, startHour);
-                
-                console.log(`[TimelineRenderer] Visual dates for column ${date}:`, {
-                    beforeVisualStart,
-                    beforeVisualEnd,
-                    afterVisualStart,
-                    afterVisualEnd
-                });
                 
                 // Add segment only if its visual start matches this column
-                // (Not visual end, to avoid duplicate rendering)
                 if (beforeVisualStart === date) {
-                    console.log(`[TimelineRenderer] Adding before segment to column ${date}`);
                     renderableTasks.push(before);
                 }
                 if (afterVisualStart === date) {
-                    console.log(`[TimelineRenderer] Adding after segment to column ${date}`);
                     renderableTasks.push(after);
                 }
             } else {
                 renderableTasks.push(task);
             }
         });
-
-        console.log(`[TimelineRenderer] Column ${date}: ${renderableTasks.length} renderable tasks`, 
-            renderableTasks.map(t => ({ id: t.id, content: t.content, start: `${t.startDate} ${t.startTime}`, end: `${t.endDate} ${t.endTime}` }))
-        );
 
         // Calculate layout for overlapping tasks
         const layout = TaskLayout.calculateTaskLayout(renderableTasks, date, startHour);
