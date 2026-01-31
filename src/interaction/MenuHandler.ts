@@ -95,7 +95,7 @@ export class MenuHandler {
             // Task Name
             subMenu.addItem((sub) => {
                 const taskName = task.content.trim() || 'Untitled';
-                sub.setTitle(`Task Name: ${taskName.substring(0, 20)}${taskName.length > 20 ? '...' : ''}`)
+                sub.setTitle(`Name: ${taskName.substring(0, 20)}${taskName.length > 20 ? '...' : ''}`)
                     .setIcon('pencil')
                     .onClick(() => {
                         new InputModal(
@@ -113,9 +113,7 @@ export class MenuHandler {
             // Status
             subMenu.addItem((sub) => {
                 const statusChar = task.statusChar;
-                const statusDisplay = statusChar === ' ' ? '[ ] Todo' :
-                    statusChar === 'x' ? '[x] Done' :
-                        `[${statusChar}]`;
+                const statusDisplay = `[${statusChar}]`;
 
                 (sub as any).setTitle(`Status: ${statusDisplay}`)
                     .setIcon('check-square')
@@ -125,12 +123,12 @@ export class MenuHandler {
                 const statusMenu = (sub as any).submenu as Menu;
 
                 const statuses = [
-                    { char: ' ', label: 'Check as [ ]' },
-                    { char: 'x', label: 'Check as [x]' },
-                    { char: '-', label: 'Check as [-]' },
-                    { char: '!', label: 'Check as [!]' },
-                    { char: '?', label: 'Check as [?]' },
-                    { char: '>', label: 'Check as [>]' }
+                    { char: ' ', label: '[ ]' },
+                    { char: 'x', label: '[x]' },
+                    { char: '-', label: '[-]' },
+                    { char: '!', label: '[!]' },
+                    { char: '?', label: '[?]' },
+                    { char: '>', label: '[>]' }
                 ];
 
                 statuses.forEach(s => {

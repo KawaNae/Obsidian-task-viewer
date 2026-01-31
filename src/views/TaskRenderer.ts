@@ -297,19 +297,18 @@ export class TaskRenderer {
     private showCheckboxStatusMenu(e: MouseEvent, taskId: string): void {
         const menu = new Menu();
 
-        const statusOptions: { char: string; label: string; icon: string }[] = [
-            { char: 'x', label: 'Check as [x]', icon: 'check' },
-            { char: '!', label: 'Check as [!]', icon: 'alert-triangle' },
-            { char: '?', label: 'Check as [?]', icon: 'help-circle' },
-            { char: '>', label: 'Check as [>]', icon: 'arrow-right' },
-            { char: '-', label: 'Check as [-]', icon: 'minus' },
-            { char: ' ', label: 'Check as [ ]', icon: 'square' },
+        const statusOptions: { char: string; label: string }[] = [
+            { char: 'x', label: '[x]' },
+            { char: '!', label: '[!]' },
+            { char: '?', label: '[?]' },
+            { char: '>', label: '[>]' },
+            { char: '-', label: '[-]' },
+            { char: ' ', label: '[ ]' },
         ];
 
         for (const opt of statusOptions) {
             menu.addItem((item) => {
                 item.setTitle(opt.label)
-                    .setIcon(opt.icon)
                     .onClick(async () => {
                         await this.taskIndex.updateTask(taskId, {
                             statusChar: opt.char
@@ -328,19 +327,18 @@ export class TaskRenderer {
     private showChildCheckboxStatusMenu(e: MouseEvent, task: Task, childLineIndex: number): void {
         const menu = new Menu();
 
-        const statusOptions: { char: string; label: string; icon: string }[] = [
-            { char: 'x', label: 'Check as [x]', icon: 'check' },
-            { char: '!', label: 'Check as [!]', icon: 'alert-triangle' },
-            { char: '?', label: 'Check as [?]', icon: 'help-circle' },
-            { char: '>', label: 'Check as [>]', icon: 'arrow-right' },
-            { char: '-', label: 'Check as [-]', icon: 'minus' },
-            { char: ' ', label: 'Check as [ ]', icon: 'square' },
+        const statusOptions: { char: string; label: string }[] = [
+            { char: 'x', label: '[x]' },
+            { char: '!', label: '[!]' },
+            { char: '?', label: '[?]' },
+            { char: '>', label: '[>]' },
+            { char: '-', label: '[-]' },
+            { char: ' ', label: '[ ]' },
         ];
 
         for (const opt of statusOptions) {
             menu.addItem((item) => {
                 item.setTitle(opt.label)
-                    .setIcon(opt.icon)
                     .onClick(async () => {
                         if (childLineIndex < task.childLines.length) {
                             let childLine = task.childLines[childLineIndex];

@@ -49,6 +49,22 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
+            .setName('Complete Status Characters')
+            .setDesc('Characters that represent completed tasks (comma or space separated, e.g., "x, X, -, !").')
+            .addText(text => text
+                .setPlaceholder('x, X, -, !')
+                .setValue(this.plugin.settings.completeStatusChars.join(', '))
+                .onChange(async (value) => {
+                    // Parse input: split by comma or space, trim, filter empty
+                    const chars = value.split(/[,\s]+/)
+                        .map(c => c.trim())
+                        .filter(c => c.length > 0);
+                    
+                    this.plugin.settings.completeStatusChars = chars.length > 0 ? chars : ['x', 'X', '-', '!'];
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
             .setName('Frontmatter Color Key')
             .setDesc('The key to look for in the file\'s frontmatter to determine the task color (e.g. "color" or "timeline-color").')
             .addText(text => text
