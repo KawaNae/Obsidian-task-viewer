@@ -39,6 +39,12 @@ export class TaskViewerParser implements ParserStrategy {
         let deadline: string | undefined;
         let isFuture = false;
         let commands: any[] = [];
+        
+        // Explicit field flags - track which fields were explicitly written
+        let explicitStartDate = false;
+        let explicitStartTime = false;
+        let explicitEndDate = false;
+        let explicitEndTime = false;
 
         // 2. Parse Flow Commands if present
         if (flowPart) {
@@ -71,8 +77,14 @@ export class TaskViewerParser implements ParserStrategy {
                 // date = undefined;
             } else {
                 const parsed = this.parseDateTime(rawStart);
-                if (parsed.date) date = parsed.date;
-                if (parsed.time) startTime = parsed.time;
+                if (parsed.date) {
+                    date = parsed.date;
+                    explicitStartDate = true;
+                }
+                if (parsed.time) {
+                    startTime = parsed.time;
+                    explicitStartTime = true;
+                }
                 if (!parsed.date) {
                     // If only time provided? Implies Today?
                     // Let's assume undefined logic applies here too if we want dynamic "Today"
@@ -89,11 +101,18 @@ export class TaskViewerParser implements ParserStrategy {
                     if (date) endDate = date;
                 } else {
                     const parsed = this.parseDateTime(rawEnd);
-                    if (parsed.date) endDate = parsed.date;
-                    if (parsed.time) endTime = parsed.time;
+                    if (parsed.date) {
+                        endDate = parsed.date;
+                        explicitEndDate = true;
+                    }
+                    if (parsed.time) {
+                        endTime = parsed.time;
+                        explicitEndTime = true;
+                    }
 
                     if (!parsed.date && date) {
                         endDate = date;
+                        // Date is inherited from start, not explicit
                     }
                 }
             }
@@ -159,6 +178,10 @@ export class TaskViewerParser implements ParserStrategy {
             endTime,
             deadline,
             isFuture,
+            explicitStartDate,
+            explicitStartTime,
+            explicitEndDate,
+            explicitEndTime,
             commands,
             originalText: line,
             childLines: []

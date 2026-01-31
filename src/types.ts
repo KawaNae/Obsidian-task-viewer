@@ -37,6 +37,12 @@ export interface Task {
     // Inheritance flag - true if dates were inherited from parent (should be omitted on write)
     startDateInherited?: boolean;
 
+    // Explicit field flags - indicate which fields were explicitly written in markdown
+    // Used for UI display to distinguish implicit (gray) from explicit (normal) values
+    explicitStartDate?: boolean;  // true if YYYY-MM-DD was written in start position
+    explicitStartTime?: boolean;  // true if HH:mm was written in start position
+    explicitEndDate?: boolean;    // true if YYYY-MM-DD was written in end position
+    explicitEndTime?: boolean;    // true if HH:mm was written in end position
 
     // Original text for reconstruction
     originalText: string;

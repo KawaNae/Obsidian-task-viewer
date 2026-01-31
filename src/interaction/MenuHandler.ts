@@ -5,6 +5,7 @@ import TaskViewerPlugin from '../main';
 import { ConfirmModal } from '../modals/ConfirmModal';
 import { DateUtils } from '../utils/DateUtils';
 import { DateTimeInputModal, DateTimeValue, DateTimeModalOptions } from '../modals/DateTimeInputModal';
+import { InputModal } from '../modals/InputModal';
 
 export class MenuHandler {
     private app: App;
@@ -91,23 +92,76 @@ export class MenuHandler {
                 .setIcon('settings')
                 .setSubmenu() as Menu;
 
-            // Task Name (placeholder)
+            // Task Name
             subMenu.addItem((sub) => {
                 const taskName = task.content.trim() || 'Untitled';
                 sub.setTitle(`Task Name: ${taskName.substring(0, 20)}${taskName.length > 20 ? '...' : ''}`)
                     .setIcon('pencil')
                     .onClick(() => {
-                        new Notice('Task Name editing: Coming soon');
+                        new InputModal(
+                            this.app,
+                            'Edit Task Name',
+                            'Task Name',
+                            task.content,
+                            async (value) => {
+                                await this.taskIndex.updateTask(task.id, { content: value });
+                            }
+                        ).open();
                     });
             });
 
-            // Status (placeholder)
+            // Status
             subMenu.addItem((sub) => {
-                const status = task.status === 'done' ? '[x]' : '[ ]';
-                sub.setTitle(`Status: ${status}`)
+                const statusChar = task.statusChar;
+                const statusDisplay = statusChar === ' ' ? '[ ] Todo' :
+                    statusChar === 'x' ? '[x] Done' :
+                        `[${statusChar}]`;
+
+                (sub as any).setTitle(`Status: ${statusDisplay}`)
                     .setIcon('check-square')
+                    .setSubmenu();
+
+                // Status Options
+                const statusMenu = (sub as any).submenu as Menu;
+
+                const statuses = [
+                    { char: ' ', label: 'Todo' },
+                    { char: 'x', label: 'Done' },
+                    { char: '-', label: 'Cancelled' },
+                    { char: '!', label: 'Failed' },
+                    { char: '?', label: 'Blocked' },
+                    { char: '>', label: 'Postponed' }
+                ];
+
+                statuses.forEach(s => {
+                    statusMenu.addItem(item => {
+                        item.setTitle(`[${s.char}] ${s.label}`)
+                            .setChecked(task.statusChar === s.char)
+                            .onClick(async () => {
+                                let newStatus: import('../types').TaskStatusType = 'todo';
+                                switch (s.char) {
+                                    case 'x': newStatus = 'done'; break;
+                                    case '-': newStatus = 'cancelled'; break;
+                                    case '!': newStatus = 'failed'; break;
+                                    case '?': newStatus = 'blocked'; break;
+                                    case '>': newStatus = 'postponed'; break;
+                                    default: newStatus = 'todo';
+                                }
+                                await this.taskIndex.updateTask(task.id, {
+                                    statusChar: s.char,
+                                    status: newStatus
+                                });
+                            });
+                    });
+                });
+            });
+
+            // File
+            subMenu.addItem((sub) => {
+                sub.setTitle(`File: ${task.file.split('/').pop()}`)
+                    .setIcon('file-text')
                     .onClick(() => {
-                        new Notice('Status editing: Coming soon');
+                        this.app.workspace.openLinkText(task.file, '', true);
                     });
             });
 
@@ -311,16 +365,96 @@ export class MenuHandler {
         menu.showAtPosition({ x, y });
     }
 
+    /**
+     * Create property title with partial gray and italic styling for implicit parts
+     * e.g., if date is implicit but time is explicit: "2026-01-01T" in gray italic, "13:00" in normal
+     * 
+     * Uses a DocumentFragment with a single parent span containing styled child spans.
+     */
+    private createPropertyTitleWithParts(label: string, parts: {
+        date?: string;
+        time?: string;
+        dateImplicit: boolean;
+        timeImplicit: boolean;
+        isFuture?: boolean;
+        isUnset?: boolean;
+    }): DocumentFragment {
+        const frag = document.createDocumentFragment();
+        
+        // Create a single container span that holds all content
+        const container = document.createElement('span');
+        
+        // Label
+        container.appendChild(document.createTextNode(label));
+
+        if (parts.isUnset) {
+            container.appendChild(document.createTextNode('-'));
+            frag.appendChild(container);
+            return frag;
+        }
+
+        if (parts.isFuture) {
+            container.appendChild(document.createTextNode('Future'));
+            frag.appendChild(container);
+            return frag;
+        }
+
+        const mutedColor = 'var(--text-muted)';
+
+        // Date part
+        if (parts.date) {
+            const dateSpan = document.createElement('span');
+            dateSpan.textContent = parts.date;
+            if (parts.dateImplicit) {
+                dateSpan.style.setProperty('color', mutedColor, 'important');
+                dateSpan.style.setProperty('font-style', 'italic', 'important');
+            }
+            container.appendChild(dateSpan);
+        }
+
+        // Space separator
+        if (parts.date && parts.time) {
+            const separatorSpan = document.createElement('span');
+            separatorSpan.textContent = ' ';
+            // Separator follows the date's implicit status
+            if (parts.dateImplicit) {
+                separatorSpan.style.setProperty('color', mutedColor, 'important');
+                separatorSpan.style.setProperty('font-style', 'italic', 'important');
+            }
+            container.appendChild(separatorSpan);
+        }
+
+        // Time part
+        if (parts.time) {
+            const timeSpan = document.createElement('span');
+            timeSpan.textContent = parts.time;
+            if (parts.timeImplicit) {
+                timeSpan.style.setProperty('color', mutedColor, 'important');
+                timeSpan.style.setProperty('font-style', 'italic', 'important');
+            }
+            container.appendChild(timeSpan);
+        }
+
+        frag.appendChild(container);
+        return frag;
+    }
+
+
     private addPropertyItems(menu: Menu, task: Task) {
         // Display start, end, deadline with appropriate icons
-        // Auto-derived values are shown in parentheses based on README spec:
+        // Auto-derived values are shown in gray (implicit) based on README spec:
         //
-        // README Period Calculation Rules (lines 40-46):
+        // README Period Calculation Rules:
         // 1. SED, SE: actual time from start to end
         // 2. SD, S-All: start day's startHour to startHour+23:59 (1 day = 24h)
         // 3. S-Timed: start time to +1 hour
         // 4. E, ED: view's left edge date's startHour as start
         // 5. D: view's left edge date's startHour as start, start+23:59 as end
+        //
+        // Partial implicit styling:
+        // - If date is implicit but time is explicit: date and T are gray, time is normal
+        // - If time is implicit but date is explicit: date is normal, T and time are gray
+        // - If both are implicit: entire value is gray
 
         const startHour = this.plugin.settings.startHour;
         const startHourStr = startHour.toString().padStart(2, '0') + ':00';
@@ -336,91 +470,164 @@ export class MenuHandler {
         const implicitStartDate = this.viewStartDate || DateUtils.getVisualDateOfNow(startHour);
 
         // Determine task type for period calculation
-        const hasExplicitStart = !!task.startDate;
-        const hasExplicitEnd = !!task.endDate;
-        const hasStartTime = !!task.startTime;
-        const hasEndTime = !!task.endTime;
-        const hasDeadline = !!task.deadline;
+        // Use explicit flags from Task object (set by parser)
+        const hasExplicitStart = task.explicitStartDate ?? false;
+        const hasExplicitEnd = task.explicitEndDate ?? false;
+        const hasStartTime = task.explicitStartTime ?? false;
+        const hasEndTime = task.explicitEndTime ?? false;
 
-        // --- Start ---
+        // --- Start Parts ---
         const startIcon = 'play';
-        let startText = 'Start: -';
+        const startLabel = 'Start: ';
+        type PropertyParts = {
+            date?: string;
+            time?: string;
+            dateImplicit: boolean;
+            timeImplicit: boolean;
+            isFuture?: boolean;
+            isUnset?: boolean;
+        };
+
+        let startParts: PropertyParts;
 
         if (task.isFuture) {
-            startText = 'Start: Future';
+            startParts = { dateImplicit: false, timeImplicit: false, isFuture: true };
         } else if (hasExplicitStart) {
-            // Explicit startDate
             if (hasStartTime) {
                 // SED-Timed, SE-Timed, S-Timed: explicit start date and time
-                startText = `Start: ${task.startDate}T${task.startTime}`;
+                startParts = {
+                    date: task.startDate,
+                    time: task.startTime,
+                    dateImplicit: false,
+                    timeImplicit: false
+                };
             } else {
                 // SD, S-All, SE, SED (Long-term): explicit date, implicit time = startHour
-                startText = `Start: ${task.startDate}T(${startHourStr})`;
+                startParts = {
+                    date: task.startDate,
+                    time: startHourStr,
+                    dateImplicit: false,
+                    timeImplicit: true
+                };
             }
         } else {
             // Auto-derived: startDate undefined → view's left edge (E, ED, D types)
             if (hasStartTime) {
-                // Edge case: startTime without startDate (shouldn't normally happen)
-                startText = `Start: (${implicitStartDate})T${task.startTime}`;
+                // Time-only notation: startTime is explicit but date is inherited/implicit
+                // Use task.startDate (which may have been inherited from parent in TaskIndex)
+                startParts = {
+                    date: task.startDate || implicitStartDate,
+                    time: task.startTime,
+                    dateImplicit: true,
+                    timeImplicit: false
+                };
             } else {
                 // E, ED, D types: implicit date and implicit time
-                startText = `Start: (${implicitStartDate}T${startHourStr})`;
+                startParts = {
+                    date: implicitStartDate,
+                    time: startHourStr,
+                    dateImplicit: true,
+                    timeImplicit: true
+                };
             }
         }
 
-        // --- End ---
+        // --- End Parts ---
         const endIcon = 'square';
-        let endText = 'End: -';
+        const endLabel = 'End: ';
+        let endParts: PropertyParts;
 
         if (task.isFuture) {
-            endText = 'End: -';
+            endParts = { dateImplicit: false, timeImplicit: false, isUnset: true };
         } else {
             const effectiveStartDate = task.startDate || implicitStartDate;
 
             if (hasExplicitEnd) {
-                // Explicit endDate exists - always show it as explicit
                 if (hasEndTime) {
-                    endText = `End: ${task.endDate}T${task.endTime}`;
+                    // Explicit endDate and endTime
+                    endParts = {
+                        date: task.endDate,
+                        time: task.endTime,
+                        dateImplicit: false,
+                        timeImplicit: false
+                    };
                 } else {
                     // SE, SED (Long-term): explicit date, implicit time
-                    endText = `End: ${task.endDate}T(${endHourStr})`;
+                    endParts = {
+                        date: task.endDate,
+                        time: endHourStr,
+                        dateImplicit: false,
+                        timeImplicit: true
+                    };
                 }
             } else if (hasEndTime) {
                 // Has endTime but no endDate: derive date from start
-                const effectiveEndDate = effectiveStartDate;
-                endText = `End: (${effectiveEndDate})T${task.endTime}`;
+                // e.g., @2026-01-11T12:00>13:00 → end date is implicit (same as start)
+                endParts = {
+                    date: effectiveStartDate,
+                    time: task.endTime,
+                    dateImplicit: true,
+                    timeImplicit: false
+                };
             } else if (hasStartTime && !hasEndTime) {
                 // S-Timed type: implicit end = start + 1 hour
                 const [h, m] = task.startTime!.split(':').map(Number);
                 let endH = h + 1;
-                let endM = m;
+                const endM = m;
                 let endDateStr = effectiveStartDate;
                 if (endH >= 24) {
                     endH -= 24;
-                    // Next day
                     endDateStr = DateUtils.addDays(effectiveStartDate, 1);
                 }
                 const implicitEndTime = `${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
-                endText = `End: (${endDateStr}T${implicitEndTime})`;
+                endParts = {
+                    date: endDateStr,
+                    time: implicitEndTime,
+                    dateImplicit: true,
+                    timeImplicit: true
+                };
             } else {
                 // No endDate and no endTime
                 // SD, S-All, D types: end = start day's startHour+23:59 (next day)
                 const nextDay = DateUtils.addDays(effectiveStartDate, 1);
-                endText = `End: (${nextDay}T${endHourStr})`;
+                endParts = {
+                    date: nextDay,
+                    time: endHourStr,
+                    dateImplicit: true,
+                    timeImplicit: true
+                };
             }
         }
 
-        // --- Deadline ---
+        // --- Deadline Parts ---
         const deadlineIcon = 'alert-circle';
-        let deadlineText = 'Deadline: -';
+        const deadlineLabel = 'Deadline: ';
+        let deadlineParts: PropertyParts;
 
         if (task.deadline) {
-            deadlineText = `Deadline: ${task.deadline}`;
+            if (task.deadline.includes('T')) {
+                const [date, time] = task.deadline.split('T');
+                deadlineParts = {
+                    date: date,
+                    time: time,
+                    dateImplicit: false,
+                    timeImplicit: false
+                };
+            } else {
+                deadlineParts = {
+                    date: task.deadline,
+                    dateImplicit: false,
+                    timeImplicit: false
+                };
+            }
+        } else {
+            deadlineParts = { dateImplicit: false, timeImplicit: false, isUnset: true };
         }
 
         // Add menu items (now clickable for editing)
         menu.addItem((item) => {
-            item.setTitle(startText).setIcon(startIcon)
+            item.setTitle(this.createPropertyTitleWithParts(startLabel, startParts))
+                .setIcon(startIcon)
                 .onClick(() => {
                     const currentValue: DateTimeValue = {
                         date: task.startDate || null,
@@ -428,44 +635,29 @@ export class MenuHandler {
                         isFuture: task.isFuture
                     };
                     new DateTimeInputModal(this.app, 'start', currentValue, async (value) => {
+                        const newProps: Partial<Task> = {};
                         if (value.isFuture) {
-                            await this.taskIndex.updateTask(task.id, {
-                                isFuture: true,
-                                startDate: undefined,
-                                startTime: undefined
-                            });
-                        } else if (value.date === null) {
-                            // Clear: only remove start, not other fields
-                            await this.taskIndex.updateTask(task.id, {
-                                startDate: undefined,
-                                startTime: undefined,
-                                isFuture: false
-                            });
+                            newProps.isFuture = true;
+                            newProps.startDate = undefined;
+                            newProps.startTime = undefined;
                         } else {
-                            await this.taskIndex.updateTask(task.id, {
-                                startDate: value.date,
-                                startTime: value.time || undefined,
-                                isFuture: false
-                            });
+                            newProps.isFuture = false;
+                            newProps.startDate = value.date || undefined;
+                            newProps.startTime = value.time || undefined;
                         }
+                        await this.taskIndex.updateTask(task.id, newProps);
                     }).open();
                 });
         });
-        menu.addItem((item) => {
-            item.setTitle(endText).setIcon(endIcon)
-                .onClick(() => {
-                    // Parse current endTime if it's full ISO format
-                    let endDate = task.endDate || null;
-                    let endTime = task.endTime || null;
-                    if (endTime && endTime.includes('T')) {
-                        const parts = endTime.split('T');
-                        endDate = parts[0];
-                        endTime = parts[1];
-                    }
 
+        menu.addItem((item) => {
+            item.setTitle(this.createPropertyTitleWithParts(endLabel, endParts))
+                .setIcon(endIcon)
+                .onClick(() => {
                     const currentValue: DateTimeValue = {
-                        date: endDate,
-                        time: endTime
+                        date: task.endDate || null,
+                        time: task.endTime || null,
+                        isFuture: false
                     };
                     const options: DateTimeModalOptions = {
                         hasStartDate: !!task.startDate
@@ -492,8 +684,10 @@ export class MenuHandler {
                     }, options).open();
                 });
         });
+
         menu.addItem((item) => {
-            item.setTitle(deadlineText).setIcon(deadlineIcon)
+            item.setTitle(this.createPropertyTitleWithParts(deadlineLabel, deadlineParts))
+                .setIcon(deadlineIcon)
                 .onClick(() => {
                     // Parse deadline (can be YYYY-MM-DD or YYYY-MM-DDTHH:mm)
                     let deadlineDate: string | null = null;
