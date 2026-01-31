@@ -446,6 +446,37 @@ export class TaskIndex {
 
     async updateTask(taskId: string, updates: Partial<Task>) {
         console.log(`[TaskIndex] updateTask called for ${taskId}`, updates);
+        
+        // Handle split task updates
+        // If taskId contains ":before" or ":after", extract original ID
+        if (taskId.includes(':before') || taskId.includes(':after')) {
+            const originalId = taskId.split(':')[0];
+            const segment = taskId.includes(':before') ? 'before' : 'after';
+            
+            const originalTask = this.tasks.get(originalId);
+            if (!originalTask) {
+                console.warn(`[TaskIndex] Original task ${originalId} not found for split segment`);
+                return;
+            }
+            
+            // Map segment updates to original task fields
+            const originalUpdates: Partial<Task> = {};
+            if (segment === 'before') {
+                // Before segment: only startDate/startTime can change
+                if (updates.startDate !== undefined) originalUpdates.startDate = updates.startDate;
+                if (updates.startTime !== undefined) originalUpdates.startTime = updates.startTime;
+            } else {
+                // After segment: only endDate/endTime can change
+                if (updates.endDate !== undefined) originalUpdates.endDate = updates.endDate;
+                if (updates.endTime !== undefined) originalUpdates.endTime = updates.endTime;
+            }
+            
+            // Update original task
+            console.log(`[TaskIndex] Mapping split segment ${segment} update to original task ${originalId}`, originalUpdates);
+            await this.updateTask(originalId, originalUpdates);
+            return;
+        }
+        
         const task = this.tasks.get(taskId);
         if (!task) {
             console.warn(`[TaskIndex] Task ${taskId} not found in index`);

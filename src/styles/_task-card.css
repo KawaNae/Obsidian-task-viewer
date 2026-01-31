@@ -101,6 +101,24 @@
     background-repeat: repeat-y;
 }
 
+/* Split Task Cards - tasks that cross day boundary */
+.task-card--split {
+    /* Visual indicator for split tasks */
+    border-style: dashed;
+}
+
+/* Before segment - top border emphasized */
+.task-card--split-before {
+    border-top-width: 2px;
+    border-top-style: solid;
+}
+
+/* After segment - bottom border emphasized */
+.task-card--split-after {
+    border-bottom-width: 2px;
+    border-bottom-style: solid;
+}
+
 
 /* ==========================================================================
    4. STATES (:hover, .selected, .is-dragging)
