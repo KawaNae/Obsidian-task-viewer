@@ -10,6 +10,7 @@ export class TaskIndex {
     private app: App;
     private tasks: Map<string, Task> = new Map(); // ID -> Task
     private listeners: ((taskId?: string, changes?: string[]) => void)[] = [];
+    private settings: TaskViewerSettings;
 
     // Services
     private repository: TaskRepository;
@@ -68,10 +69,24 @@ export class TaskIndex {
         });
     }
 
-    constructor(app: App) {
+    constructor(app: App, settings: TaskViewerSettings) {
         this.app = app;
+        this.settings = settings;
         this.repository = new TaskRepository(app);
         this.commandExecutor = new TaskCommandExecutor(this.repository, this, this.app);
+    }
+
+    public updateSettings(settings: TaskViewerSettings) {
+        this.settings = settings;
+        // Re-scan vault as exclusion rules might have changed
+        this.scanVault();
+    }
+
+    private isExcluded(filePath: string): boolean {
+        if (!this.settings.excludedPaths || this.settings.excludedPaths.length === 0) {
+            return false;
+        }
+        return this.settings.excludedPaths.some(excluded => filePath.startsWith(excluded));
     }
 
 
@@ -141,6 +156,10 @@ export class TaskIndex {
         const files = this.app.vault.getMarkdownFiles();
 
         for (const file of files) {
+            if (this.isExcluded(file.path)) {
+                this.removeTasksForFile(file.path);
+                continue;
+            }
             await this.queueScan(file);
         }
         this.notifyListeners();
@@ -154,6 +173,17 @@ export class TaskIndex {
     }
 
     private async queueScan(file: TFile, isLocal: boolean = false): Promise<void> {
+        if (this.isExcluded(file.path)) {
+            // Ensure no tasks remain for this excluded file
+            if (this.tasks.size > 0) { // Optimization: check if we have any tasks at all first
+                // We need to check if there are any tasks for this file to remove
+                // But removeTasksForFile iterates all tasks, which is fine but let's just do it
+                this.removeTasksForFile(file.path);
+                this.notifyListeners();
+            }
+            return;
+        }
+
         // Simple queue mechanism: chain promises per file path
         const previousScan = this.scanQueue.get(file.path) || Promise.resolve();
 

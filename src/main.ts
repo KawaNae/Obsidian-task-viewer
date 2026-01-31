@@ -32,7 +32,7 @@ export default class TaskViewerPlugin extends Plugin {
         await this.loadSettings();
 
         // Initialize Services
-        this.taskIndex = new TaskIndex(this.app);
+        this.taskIndex = new TaskIndex(this.app, this.settings);
         await this.taskIndex.initialize();
 
         this.pomodoroService = new PomodoroService({
@@ -119,6 +119,7 @@ export default class TaskViewerPlugin extends Plugin {
 
     async saveSettings() {
         await this.saveData(this.settings);
+        this.taskIndex.updateSettings(this.settings);
 
         // Update pomodoro service settings
         this.pomodoroService?.updateSettings({

@@ -71,6 +71,7 @@ export interface TaskViewerSettings {
     pomodoroWorkMinutes: number;  // Pomodoro work duration (default: 25)
     pomodoroBreakMinutes: number; // Pomodoro break duration (default: 5)
     completeStatusChars: string[]; // Characters that represent completed tasks (default: ['x', '-', '!'])
+    excludedPaths: string[]; // Paths to exclude from task scanning
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -83,4 +84,5 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     pomodoroWorkMinutes: 25,
     pomodoroBreakMinutes: 5,
     completeStatusChars: ['x', 'X', '-', '!'],
+    excludedPaths: [],
 };

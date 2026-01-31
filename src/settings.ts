@@ -59,7 +59,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     const chars = value.split(/[,\s]+/)
                         .map(c => c.trim())
                         .filter(c => c.length > 0);
-                    
+
                     this.plugin.settings.completeStatusChars = chars.length > 0 ? chars : ['x', 'X', '-', '!'];
                     await this.plugin.saveSettings();
                 }));
@@ -109,5 +109,28 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     this.plugin.settings.dailyNoteHeaderLevel = value;
                     await this.plugin.saveSettings();
                 }));
+
+        new Setting(containerEl)
+            .setName('Excluded Paths')
+            .setDesc('Paths to exclude from task scanning (one per line). Files starting with these paths will be ignored.')
+            .addTextArea(text => text
+                .setPlaceholder('Templates/\nArchive/\nSecret.md')
+                .setValue(this.plugin.settings.excludedPaths.join('\n'))
+                .onChange(async (value) => {
+                    const paths = value.split('\n')
+                        .map(p => p.trim())
+                        .filter(p => p.length > 0);
+                    this.plugin.settings.excludedPaths = paths;
+                    await this.plugin.saveSettings();
+                }));
+
+        // Enhance the textarea for better visibility
+        const excludedPathsSetting = containerEl.lastElementChild as HTMLElement;
+        const textarea = excludedPathsSetting?.querySelector('textarea');
+        if (textarea) {
+            textarea.rows = 10;
+            textarea.style.width = '100%';
+            textarea.style.minWidth = '300px';
+        }
     }
 }
