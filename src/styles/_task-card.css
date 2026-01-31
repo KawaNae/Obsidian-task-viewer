@@ -24,6 +24,7 @@
     /* Visual */
     background-color: var(--interactive-normal);
     border-radius: var(--task-card-border-radius);
+    box-shadow: -2px 0 4px rgba(0, 0, 0, 0.25);
 
     /* Misc */
     scrollbar-width: thin;
