@@ -38,9 +38,10 @@ export class HandleManager {
             this.removeHandles(this.selectedTaskId);
             const prevEl = this.container.querySelector(`.task-card[data-id="${this.selectedTaskId}"]`) as HTMLElement;
             if (prevEl) {
-                // Restore original z-index from data attribute
-                const originalZ = prevEl.dataset.originalZIndex;
-                prevEl.style.zIndex = originalZ || '';
+                // Restore original z-index from data attribute if it exists
+                if (prevEl.dataset.originalZIndex) {
+                    prevEl.style.zIndex = prevEl.dataset.originalZIndex;
+                }
             }
         }
 

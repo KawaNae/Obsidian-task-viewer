@@ -75,43 +75,54 @@ export class TaskLayout {
 
         // 4. Process each cluster independently
         for (const cluster of clusters) {
-            const columns: typeof preparedTasks[] = [];
+            // Sort cluster by start time (critical for waterfall logic)
+            // If start times are equal, longer tasks go first (so shorter ones sit on top)
+            cluster.sort((a, b) => {
+                if (a.start !== b.start) return a.start - b.start;
+                return (b.end - b.start) - (a.end - a.start);
+            });
+
+            // Map to store assigned levels for tasks in this cluster
+            const taskLevels = new Map<string, number>();
+            const processedItems: typeof preparedTasks = [];
 
             for (const item of cluster) {
-                let placed = false;
-                for (let i = 0; i < columns.length; i++) {
-                    const column = columns[i];
-                    // Check overlap
-                    const overlaps = column.some(t => {
-                        return item.start < t.end && item.end > t.start;
-                    });
+                let maxOverlappingLevel = 0;
 
-                    if (!overlaps) {
-                        column.push(item);
-                        placed = true;
-                        break;
+                // Find all previously processed tasks that overlap with current item
+                for (const processed of processedItems) {
+                    // Check overlap
+                    if (item.start < processed.end && item.end > processed.start) {
+                        const level = taskLevels.get(processed.task.id) || 0;
+                        if (level > maxOverlappingLevel) {
+                            maxOverlappingLevel = level;
+                        }
                     }
                 }
 
-                if (!placed) {
-                    columns.push([item]);
-                }
+                // Assign level = max + 1
+                const currentLevel = maxOverlappingLevel + 1;
+                taskLevels.set(item.task.id, currentLevel);
+                processedItems.push(item);
             }
 
-            // Assign width, left position, and z-index for this cluster (Cascade layout)
-            // Each overlapping task gets progressively narrower and right-aligned
-            // Higher column index = higher z-index (appears on top)
-            const CASCADE_STEP = 10; // 10% narrower per overlap
-            const MIN_WIDTH = 50;    // Minimum width 50%
+            // Assign layout based on levels
+            // Level 1 = Width 100%, Left 0%, Z-Index 1
+            // Level n = Width 100 - (n-1)*10, Left (n-1)*10, Z-Index n
+            const CASCADE_STEP = 10;
+            const MIN_WIDTH = 50;
 
-            columns.forEach((column, colIndex) => {
-                const width = Math.max(MIN_WIDTH, 100 - colIndex * CASCADE_STEP);
-                const left = 100 - width; // Right-aligned
-                const zIndex = colIndex + 1; // Higher index = on top
-                column.forEach(item => {
-                    layout.set(item.task.id, { width, left, zIndex });
-                });
-            });
+            for (const item of cluster) {
+                const level = taskLevels.get(item.task.id) || 1;
+                // Determine step index (0-based) from level (1-based)
+                const stepIndex = level - 1;
+
+                const width = Math.max(MIN_WIDTH, 100 - stepIndex * CASCADE_STEP);
+                const left = 100 - width; // Right-aligned logic
+                const zIndex = level;
+
+                layout.set(item.task.id, { width, left, zIndex });
+            }
         }
 
         return layout;
