@@ -91,7 +91,7 @@ export class TimelineSectionRenderer {
             const duration = endMinutes - startMinutes;
 
             // Apply layout
-            const taskLayout = layout.get(task.id) || { width: 100, left: 0 };
+            const taskLayout = layout.get(task.id) || { width: 100, left: 0, zIndex: 1 };
             const widthFraction = taskLayout.width / 100;
             const leftFraction = taskLayout.left / 100;
 
@@ -99,6 +99,7 @@ export class TimelineSectionRenderer {
             el.style.height = `${(duration * zoomLevel) - 3}px`;
             el.style.width = `calc((100% - 8px) * ${widthFraction})`;
             el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
+            el.style.zIndex = String(taskLayout.zIndex);
             el.style.setProperty('--initial-height', `${duration * zoomLevel}px`);
 
             this.taskRenderer.render(el, task, owner, this.plugin.settings);

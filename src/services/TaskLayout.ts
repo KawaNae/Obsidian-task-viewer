@@ -2,8 +2,8 @@ import { Task } from '../types';
 import { DateUtils } from '../utils/DateUtils';
 
 export class TaskLayout {
-    static calculateTaskLayout(tasks: Task[], date: string, startHour: number): Map<string, { width: number, left: number }> {
-        const layout = new Map<string, { width: number, left: number }>();
+    static calculateTaskLayout(tasks: Task[], date: string, startHour: number): Map<string, { width: number, left: number, zIndex: number }> {
+        const layout = new Map<string, { width: number, left: number, zIndex: number }>();
         if (tasks.length === 0) return layout;
 
         const startHourMinutes = startHour * 60;
@@ -98,16 +98,18 @@ export class TaskLayout {
                 }
             }
 
-            // Assign width and left position for this cluster (Cascade layout)
+            // Assign width, left position, and z-index for this cluster (Cascade layout)
             // Each overlapping task gets progressively narrower and right-aligned
+            // Higher column index = higher z-index (appears on top)
             const CASCADE_STEP = 10; // 10% narrower per overlap
             const MIN_WIDTH = 50;    // Minimum width 50%
 
             columns.forEach((column, colIndex) => {
                 const width = Math.max(MIN_WIDTH, 100 - colIndex * CASCADE_STEP);
                 const left = 100 - width; // Right-aligned
+                const zIndex = colIndex + 1; // Higher index = on top
                 column.forEach(item => {
-                    layout.set(item.task.id, { width, left });
+                    layout.set(item.task.id, { width, left, zIndex });
                 });
             });
         }
