@@ -55,6 +55,27 @@ export class GhostManager {
                 ghost.style.height = `${seg.height}px`;
                 ghost.style.opacity = '0.8';
                 ghost.style.display = 'block';
+
+                // --- Manage Split Classes Dynamically ---
+                // Remove relevant classes inherited from sourceEl
+                ghost.classList.remove('task-card--split', 'task-card--split-before', 'task-card--split-after');
+
+                if (segments.length > 1) {
+                    ghost.classList.add('task-card--split');
+
+                    if (index === 0) {
+                        // First segment (Earliest time) -> Bottom cut
+                        ghost.classList.add('task-card--split-before');
+                    } else if (index === segments.length - 1) {
+                        // Last segment (Latest time) -> Top cut
+                        ghost.classList.add('task-card--split-after');
+                    } else {
+                        // Middle segment -> Both cut
+                        // Note: Currently CSS handles these independently, so adding both works.
+                        ghost.classList.add('task-card--split-before');
+                        ghost.classList.add('task-card--split-after');
+                    }
+                }
             } else {
                 // Column not found (e.g. scrolled out of view or not rendered)
                 // Hide ghost for now

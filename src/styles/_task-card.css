@@ -103,29 +103,44 @@
 
 /* Split Task Cards - tasks that cross day boundary */
 .task-card--split {
-    /* Visual indicator for split tasks */
-    border-style: dashed;
+    /* Reset default border to ensure we only style the cut edges */
+    border-style: none;
+    border-width: 0;
 }
 
-/* Before segment - top border emphasized */
+/* Before segment - Cut is at the bottom */
 .task-card--split-before {
-    border-top-width: 2px;
-    border-top-style: solid;
+    /* Dashed border at the bottom to indicate continuation */
+    border-bottom: 2px dashed var(--file-accent, var(--interactive-accent));
+    /* Square off bottom corners */
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
 }
 
-/* After segment - bottom border emphasized */
+/* Square off the bottom-left of the accent border */
+.task-card--split-before::before {
+    border-bottom-left-radius: 0;
+}
+
+/* After segment - Cut is at the top */
 .task-card--split-after {
-    border-bottom-width: 2px;
-    border-bottom-style: solid;
+    /* Dashed border at the top to indicate continuation */
+    border-top: 2px dashed var(--file-accent, var(--interactive-accent));
+    /* Square off top corners */
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
 }
 
+/* Square off the top-left of the accent border */
+.task-card--split-after::before {
+    border-top-left-radius: 0;
+}
 
 /* ==========================================================================
    4. STATES (:hover, .selected, .is-dragging)
    ========================================================================== */
 
 .task-card:hover {
-    border-color: var(--file-accent, var(--interactive-accent));
     filter: brightness(0.95);
 }
 
@@ -149,11 +164,32 @@
     display: none;
 }
 
-.task-card.selected {
-    outline: 2px solid var(--file-accent, var(--interactive-accent));
-    outline-offset: -2px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-    /* z-index is set via JavaScript in HandleManager.selectTask() to override inline styles */
+/* Selection Border using ::after */
+.task-card.selected::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 2px solid var(--file-accent, var(--interactive-accent));
+    border-radius: var(--task-card-border-radius);
+    pointer-events: none;
+    z-index: 5;
+    /* Above content background but below context menus if any */
+}
+
+/* For split cards: remove selection border on the cut side */
+.task-card--split-before.selected::after {
+    border-bottom: none;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.task-card--split-after.selected::after {
+    border-top: none;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
 }
 
 /* ==========================================================================

@@ -194,7 +194,7 @@ export class HandleManager {
     private createMoveHandle(taskEl: HTMLElement, taskId: string, position: 'top-right' | 'bottom-right'): void {
         const container = taskEl.createDiv(`task-card__handle task-card__handle--move-${position}`);
         const handle = container.createDiv('task-card__handle-btn');
-        handle.setText(':');
+        handle.setText('::');
         handle.dataset.taskId = taskId;
         handle.style.cursor = 'move'; // Ensure cursor is set explicitly if not covered by CSS
     }

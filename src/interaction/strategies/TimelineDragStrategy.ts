@@ -153,12 +153,12 @@ export class TimelineDragStrategy implements DragStrategy {
 
             allSegments.forEach(segment => {
                 if (segment instanceof HTMLElement) {
-                    segment.style.opacity = '0';
+                    // segment.style.opacity = '0'; // Delayed until onMove
                     this.hiddenElements.push(segment);
                 }
             });
             // Ensure the main dragEl is also hidden (it should be in the list above, but just in case)
-            el.style.opacity = '0';
+            // el.style.opacity = '0'; // Delayed
         } else {
             el.style.zIndex = '1000';
         }
@@ -173,8 +173,16 @@ export class TimelineDragStrategy implements DragStrategy {
         const deltaY = e.clientY - this.initialY;
 
         // Threshold check
-        if (!this.hasKeyMoved && Math.abs(deltaY) < 5) return;
-        this.hasKeyMoved = true;
+        if (!this.hasKeyMoved) {
+            if (Math.abs(deltaY) < 5) return;
+            this.hasKeyMoved = true;
+
+            // Apply hiding now that we are actually moving
+            if (this.mode === 'move') {
+                this.hiddenElements.forEach(el => el.style.opacity = '0');
+                if (this.dragEl) this.dragEl.style.opacity = '0';
+            }
+        }
 
         this.processDragMove(e.clientX, e.clientY);
         this.checkAutoScroll(e.clientY);
