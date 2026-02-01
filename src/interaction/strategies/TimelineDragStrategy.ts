@@ -18,6 +18,7 @@ export class TimelineDragStrategy implements DragStrategy {
     private initialBottom: number = 0;
     private dragOffsetY: number = 0; // offset of mouse within the card
     private dragOffsetBottom: number = 0; // offset from bottom (for end-anchor)
+    private dragTimeOffset: number = 0; // NEW: Time difference (minutes) between mouse and anchor time
     private anchorType: 'start' | 'end' = 'start';
     private lastDragResult: { startDate: string, startTime: string, endDate: string, endTime: string } | null = null;
 
@@ -131,6 +132,66 @@ export class TimelineDragStrategy implements DragStrategy {
         const dayCol = el.closest('.day-timeline-column') as HTMLElement;
         this.currentDayDate = dayCol ? dayCol.dataset.date || null : (task.startDate || null);
 
+        // --- NEW: Calculate Time Offset ---
+        const zoomLevel = context.plugin.settings.zoomLevel;
+        const startHour = context.plugin.settings.startHour;
+        const startHourMinutes = startHour * 60;
+
+        let mouseMinutes = 0;
+        if (dayCol) {
+            const dayRect = dayCol.getBoundingClientRect();
+            const yInCol = e.clientY - dayRect.top;
+            mouseMinutes = startHourMinutes + (yInCol / zoomLevel);
+        } else {
+            // Fallback if not in column (approximate using top + offset)
+            // But we really should rely on column. If dragging existing task, it should be in a column.
+            // If absolute positioned?
+            const yInCol = parseInt(el.style.top || '0') + (e.clientY - rect.top);
+            mouseMinutes = startHourMinutes + (yInCol / zoomLevel);
+        }
+
+        // Parse Task Times
+        const tStart = new Date(`${task.startDate}T${task.startTime}`);
+        const tEnd = new Date(`${task.endDate}T${task.endTime}`);
+        if (tEnd < tStart) tEnd.setDate(tEnd.getDate() + 1); // Handle wrap
+
+        // Normalize to minutes from midnight of currentDayDate?
+        // Actually simpler: Just store diff.
+        // We know task duration.
+        // But for split tasks, 'task' might be the whole task, but we are dragging a SEGMENT.
+        // Ideally we want to anchor to the 'Task Start' or 'Task End' regardless of segment?
+        // User wants to move the WHOLE task.
+        // So offset from WHOLE task start/end is correct.
+
+        // Calculate task start/end in "minutes from day start" context
+        // We assume the task belongs to currentDayDate context roughly.
+        // But simpler: just get diff between Mouse and Time.
+
+        // But wait, Date objects include Day info. MouseMinutes is relative to 00:00 of THIS day.
+        // We need to be careful with multi-day shifts.
+        // Let's stick to relative minutes for simplicity if we assume we are moving within days.
+
+        // Correction: We just need "Mouse Time" vs "Task Start Time" on the specific day we are interacting with.
+
+        // Let's use the visual top/height to derive "Visual Task Time" to match exactly what the user sees.
+        // This avoids misalignment if the rendered pos is slightly off from data.
+        // Snap logic usually wants to snap the *Visual* edge to the grid.
+
+        const visualTop = this.initialTop;
+        const visualHeight = this.initialHeight; // We already force-corrected this to logical duration in onDown
+        // So visualTop is the only variable.
+
+        const visualStartMinutes = startHourMinutes + (visualTop / zoomLevel);
+        const visualEndMinutes = visualStartMinutes + (visualHeight / zoomLevel);
+
+        if (this.anchorType === 'end') {
+            this.dragTimeOffset = visualEndMinutes - mouseMinutes; // Positive if mouse is above bottom
+        } else {
+            this.dragTimeOffset = mouseMinutes - visualStartMinutes; // Positive if mouse is below top
+        }
+
+        console.log(`[TimelineDragStrategy] TimeOffset: ${this.dragTimeOffset.toFixed(2)} min (Anchor: ${this.anchorType})`);
+
         this.hasKeyMoved = false;
         this.isOutsideSection = false;
 
@@ -230,27 +291,46 @@ export class TimelineDragStrategy implements DragStrategy {
 
                 if (this.anchorType === 'end') {
                     // END ANCHOR (Bottom-based)
-                    // Calculate visual Bottom
-                    const rawBottom = yInContainer + this.dragOffsetBottom;
-                    const snappedBottom = Math.round(rawBottom / snapPixels) * snapPixels;
-                    snappedTop = snappedBottom - this.initialHeight; // Determine top implicitly for some calculations
+                    // New End Time = Mouse + Offset
+                    // We calculate minutes relative to StartHour (window start) for snapping
+                    // actually mouseMinutes includes StartHour.
 
-                    // Visual End Minutes (0 = StartHour)
-                    const visualEndMinutes = (snappedBottom / zoomLevel);
-                    // Total End = StartHour + VisualEnd
-                    const totalEndMinutesCalc = startHourMinutes + visualEndMinutes;
-                    // Total Start = Total End - Duration
-                    totalStartMinutes = totalEndMinutesCalc - durationMinutes;
-                    totalEndMinutes = totalEndMinutesCalc;
+                    const rect = dayCol.getBoundingClientRect();
+                    const yInContainer = clientY - rect.top;
+                    const mouseMinutes = startHourMinutes + (yInContainer / zoomLevel);
+
+                    const rawEndMinutes = mouseMinutes + this.dragTimeOffset;
+
+                    // SNAP: Round rawEndMinutes to nearest grid interval (15 min)
+                    // To do this properly in minutes:
+                    const snapInterval = 15;
+                    const snappedEndMinutes = Math.round(rawEndMinutes / snapInterval) * snapInterval;
+
+                    // Reconstruct Top/height
+                    totalEndMinutes = snappedEndMinutes;
+                    totalStartMinutes = totalEndMinutes - durationMinutes;
+
+                    // For ghost positioning (relative to column top 0-based)
+                    // Ghost Top = (Start - StartHour) * Zoom
+                    // But we used absolute minutes (StartHour included).
+                    // So:
+                    snappedTop = (totalStartMinutes - startHourMinutes) * zoomLevel;
 
                 } else {
-                    // START ANCHOR (Top-based) - Standard
-                    const rawTop = yInContainer - this.dragOffsetY;
-                    snappedTop = Math.round(rawTop / snapPixels) * snapPixels;
+                    // START ANCHOR (Top-based)
+                    const rect = dayCol.getBoundingClientRect();
+                    const yInContainer = clientY - rect.top;
+                    const mouseMinutes = startHourMinutes + (yInContainer / zoomLevel);
 
-                    const visualStartMinutes = (snappedTop / zoomLevel);
-                    totalStartMinutes = startHourMinutes + visualStartMinutes;
+                    const rawStartMinutes = mouseMinutes - this.dragTimeOffset;
+
+                    const snapInterval = 15;
+                    const snappedStartMinutes = Math.round(rawStartMinutes / snapInterval) * snapInterval;
+
+                    totalStartMinutes = snappedStartMinutes;
                     totalEndMinutes = totalStartMinutes + durationMinutes;
+
+                    snappedTop = (totalStartMinutes - startHourMinutes) * zoomLevel;
                 }
 
             } else {
@@ -275,15 +355,22 @@ export class TimelineDragStrategy implements DragStrategy {
             const baseDateObj = new Date(this.currentDayDate + 'T00:00:00');
 
             // Calculate Start Date/Time for Result Storage (WYSIWYG)
-            const startDateObj = new Date(baseDateObj.getTime() + totalStartMinutes * 60000);
-            const endDateObj = new Date(startDateObj.getTime() + durationMinutes * 60000); // Derive end from start+duration to ensure consistency (except explicit end anchor logic?)
-            // Actually, for End-Anchor, we calculated totalEnd. Let's use that if available?
-            // consistency check: totalStart = totalEnd - duration. Yes.
-
-            const newStartDate = DateUtils.getLocalDateString(startDateObj);
-            const newStartTime = `${startDateObj.getHours().toString().padStart(2, '0')}:${startDateObj.getMinutes().toString().padStart(2, '0')}`;
-            const newEndDate = DateUtils.getLocalDateString(endDateObj);
-            const newEndTime = `${endDateObj.getHours().toString().padStart(2, '0')}:${endDateObj.getMinutes().toString().padStart(2, '0')}`;
+            // Round to integer minutes to avoid floating-point errors
+            const roundedStartMinutes = Math.round(totalStartMinutes);
+            const roundedEndMinutes = Math.round(totalEndMinutes);
+            
+            // Calculate date offsets from base date (minutes can be negative or >= 1440)
+            const startDayOffset = Math.floor(roundedStartMinutes / 1440);
+            const endDayOffset = Math.floor(roundedEndMinutes / 1440);
+            
+            // Normalize minutes to 0-1439 range for time calculation
+            const normalizedStartMinutes = ((roundedStartMinutes % 1440) + 1440) % 1440;
+            const normalizedEndMinutes = ((roundedEndMinutes % 1440) + 1440) % 1440;
+            
+            const newStartDate = DateUtils.addDays(this.currentDayDate!, startDayOffset);
+            const newStartTime = DateUtils.minutesToTime(normalizedStartMinutes);
+            const newEndDate = DateUtils.addDays(this.currentDayDate!, endDayOffset);
+            const newEndTime = DateUtils.minutesToTime(normalizedEndMinutes);
 
             this.lastDragResult = {
                 startDate: newStartDate,
@@ -483,21 +570,42 @@ export class TimelineDragStrategy implements DragStrategy {
             const diffTop = parseInt(this.dragEl.style.top || '0');
             const startHour = context.plugin.settings.startHour;
             const startHourMinutes = startHour * 60;
-            const visualStartMinutes = (diffTop / zoomLevel); // 0 at StartHour
-            const totalStartMinutes = startHourMinutes + visualStartMinutes;
-
-            let height = parseInt(this.dragEl.style.height || '0');
-            const durationMinutes = height / zoomLevel;
-            // ... Date conversion ...
-
-            const baseDateObj = new Date(this.currentDayDate + 'T00:00:00');
-            const startDateObj = new Date(baseDateObj.getTime() + totalStartMinutes * 60000);
-            const endDateObj = new Date(startDateObj.getTime() + durationMinutes * 60000);
-
-            const newStartDate = DateUtils.getLocalDateString(startDateObj);
-            const newStartTime = `${startDateObj.getHours().toString().padStart(2, '0')}:${startDateObj.getMinutes().toString().padStart(2, '0')}`;
-            const newEndDate = DateUtils.getLocalDateString(endDateObj);
-            const newEndTime = `${endDateObj.getHours().toString().padStart(2, '0')}:${endDateObj.getMinutes().toString().padStart(2, '0')}`;
+            
+            // Calculate logical values (account for CSS offset)
+            const logicalTop = diffTop - 1;
+            const height = parseInt(this.dragEl.style.height || '0');
+            const logicalHeight = height + 3;
+            
+            // Calculate total minutes from midnight
+            const totalStartMinutes = startHourMinutes + (logicalTop / zoomLevel);
+            const totalEndMinutes = totalStartMinutes + (logicalHeight / zoomLevel);
+            
+            // Round to integer minutes to avoid floating-point errors
+            const roundedStartMinutes = Math.round(totalStartMinutes);
+            const roundedEndMinutes = Math.round(totalEndMinutes);
+            
+            // Handle day wrapping
+            let finalStartDate = this.currentDayDate!;
+            let finalEndDate = this.currentDayDate!;
+            let finalStartMinutes = roundedStartMinutes;
+            let finalEndMinutes = roundedEndMinutes;
+            
+            // Day wrap for start time (>= 24:00)
+            if (finalStartMinutes >= 24 * 60) {
+                finalStartDate = DateUtils.addDays(this.currentDayDate!, 1);
+                finalStartMinutes -= 24 * 60;
+            }
+            
+            // Day wrap for end time (>= 24:00)
+            if (finalEndMinutes >= 24 * 60) {
+                finalEndDate = DateUtils.addDays(finalStartDate, Math.floor(finalEndMinutes / (24 * 60)));
+                finalEndMinutes = finalEndMinutes % (24 * 60);
+            }
+            
+            const newStartDate = finalStartDate;
+            const newStartTime = DateUtils.minutesToTime(finalStartMinutes);
+            const newEndDate = finalEndDate;
+            const newEndTime = DateUtils.minutesToTime(finalEndMinutes);
 
             if (this.mode === 'resize-top') {
                 updates.startDate = newStartDate;
