@@ -2,24 +2,34 @@ import { DragStrategy, DragContext } from '../DragStrategy';
 import { Notice } from 'obsidian';
 import { Task } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { createGhostElement, removeGhostElement } from '../GhostFactory';
+import { GhostManager, GhostSegment } from '../GhostManager';
 
 export class TimelineDragStrategy implements DragStrategy {
     name = 'Timeline';
 
     private dragTask: Task | null = null;
     private dragEl: HTMLElement | null = null;
-    private ghostEl: HTMLElement | null = null;
+    private ghostManager: GhostManager | null = null;
+
+    // Original task geometry
     private initialY: number = 0;
     private initialTop: number = 0;
     private initialHeight: number = 0;
     private initialBottom: number = 0;
-    private dragOffsetY: number = 0;
+    private dragOffsetY: number = 0; // offset of mouse within the card
+    private dragOffsetBottom: number = 0; // offset from bottom (for end-anchor)
+    private dragTimeOffset: number = 0; // NEW: Time difference (minutes) between mouse and anchor time
+    private anchorType: 'start' | 'end' = 'start';
+    private lastDragResult: { startDate: string, startTime: string, endDate: string, endTime: string } | null = null;
+
+    // Drag mode
     private mode: 'move' | 'resize-top' | 'resize-bottom' = 'move';
     private currentDayDate: string | null = null;
     private hasKeyMoved: boolean = false;
     private lastHighlighted: HTMLElement | null = null;
+
     private isOutsideSection: boolean = false;
+    private hiddenElements: HTMLElement[] = [];
 
     // Auto-scroll properties
     private autoScrollTimer: number | null = null;
@@ -32,18 +42,9 @@ export class TimelineDragStrategy implements DragStrategy {
         this.dragTask = task;
         this.dragEl = el;
         this.currentContext = context;
-        this.initialY = e.clientY;
-        this.initialTop = parseInt(el.style.top || '0');
-        this.initialHeight = parseInt(el.style.height || '0');
+        this.ghostManager = new GhostManager(context.container);
 
-        const logicalTop = this.initialTop - 1;
-        const logicalHeight = this.initialHeight + 3;
-        this.initialBottom = logicalTop + logicalHeight;
-
-        const rect = el.getBoundingClientRect();
-        this.dragOffsetY = e.clientY - rect.top;
-
-        // Determine Mode
+        // Determine Mode first to check for invalid resizes
         const target = e.target as HTMLElement;
         if (target.closest('.task-card__handle--resize-top')) {
             this.mode = 'resize-top';
@@ -53,23 +54,174 @@ export class TimelineDragStrategy implements DragStrategy {
             this.mode = 'move';
         }
 
+        // 1. Disable Invalid Resizing for Split Tasks
+        if (this.mode === 'resize-top' && el.classList.contains('task-card--split-after')) {
+            console.log('[TimelineDragStrategy] Blocked resize-top on split-after segment');
+            this.dragTask = null;
+            this.dragEl = null;
+            return;
+        }
+        if (this.mode === 'resize-bottom' && el.classList.contains('task-card--split-before')) {
+            console.log('[TimelineDragStrategy] Blocked resize-bottom on split-before segment');
+            this.dragTask = null;
+            this.dragEl = null;
+            return;
+        }
+
+        this.initialY = e.clientY;
+        this.initialTop = parseInt(el.style.top || '0');
+        this.initialHeight = parseInt(el.style.height || '0');
+
+        const rect = el.getBoundingClientRect();
+        this.dragOffsetY = e.clientY - rect.top;
+        this.dragOffsetBottom = rect.bottom - e.clientY;
+
+        // Determine Anchor Type
+        // If split-after, we anchor to the END (Bottom Right handle) to prevent snapping to start boundary
+        // Also support explicit bottom-right handle click
+        if (target.closest('.task-card__handle--move-bottom-right')) {
+            this.anchorType = 'end';
+            console.log('[TimelineDragStrategy] Anchor: END (bottom-right handle)');
+        } else if (target.closest('.task-card__handle--move-top-right')) {
+            this.anchorType = 'start';
+            console.log('[TimelineDragStrategy] Anchor: START (top-right handle)');
+        } else {
+            // Fallback for unexpected cases or legacy
+            if (el.classList.contains('task-card--split-after')) {
+                this.anchorType = 'end';
+            } else {
+                this.anchorType = 'start';
+            }
+            console.log(`[TimelineDragStrategy] Anchor: ${this.anchorType.toUpperCase()} (fallback)`);
+        }
+
+        // 2. Expand Split Task on Move (Virtual Expansion using Original Task Logic)
+        if (this.mode === 'move') {
+            const originalId = (task as any).originalTaskId || task.id;
+            const originalTask = context.taskIndex.getTask(originalId);
+
+            if (originalTask && originalTask.startDate && originalTask.startTime && originalTask.endDate && originalTask.endTime) {
+                const start = new Date(`${originalTask.startDate}T${originalTask.startTime}`);
+                const end = new Date(`${originalTask.endDate}T${originalTask.endTime}`);
+
+                // Handle day wrapping for duration calc
+                if (end < start) {
+                    end.setDate(end.getDate() + 1);
+                }
+
+                const durationMs = end.getTime() - start.getTime();
+                const durationMinutes = durationMs / 60000;
+                const zoomLevel = context.plugin.settings.zoomLevel;
+                const fullHeight = durationMinutes * zoomLevel;
+
+                // If we are dragging a split segment, we want to visually simulate dragging the WHOLE task.
+                // Ideally, we calculate the offset based on where the segment is relative to the start.
+                // However, for Simplicity in V1 Dynamic Drag:
+                // We will calculate the 'new time' based on the CURRENT segment's top,
+                // and then project the full duration from that new start time.
+
+                // Update initialHeight to be the FULL duration height for calculation purposes
+                this.initialHeight = fullHeight;
+            }
+        }
+
+        const logicalTop = this.initialTop - 1;
+        const logicalHeight = this.initialHeight + 3;
+        this.initialBottom = logicalTop + logicalHeight;
+
         const dayCol = el.closest('.day-timeline-column') as HTMLElement;
         this.currentDayDate = dayCol ? dayCol.dataset.date || null : (task.startDate || null);
+
+        // --- NEW: Calculate Time Offset ---
+        const zoomLevel = context.plugin.settings.zoomLevel;
+        const startHour = context.plugin.settings.startHour;
+        const startHourMinutes = startHour * 60;
+
+        let mouseMinutes = 0;
+        if (dayCol) {
+            const dayRect = dayCol.getBoundingClientRect();
+            const yInCol = e.clientY - dayRect.top;
+            mouseMinutes = startHourMinutes + (yInCol / zoomLevel);
+        } else {
+            // Fallback if not in column (approximate using top + offset)
+            // But we really should rely on column. If dragging existing task, it should be in a column.
+            // If absolute positioned?
+            const yInCol = parseInt(el.style.top || '0') + (e.clientY - rect.top);
+            mouseMinutes = startHourMinutes + (yInCol / zoomLevel);
+        }
+
+        // Parse Task Times
+        const tStart = new Date(`${task.startDate}T${task.startTime}`);
+        const tEnd = new Date(`${task.endDate}T${task.endTime}`);
+        if (tEnd < tStart) tEnd.setDate(tEnd.getDate() + 1); // Handle wrap
+
+        // Normalize to minutes from midnight of currentDayDate?
+        // Actually simpler: Just store diff.
+        // We know task duration.
+        // But for split tasks, 'task' might be the whole task, but we are dragging a SEGMENT.
+        // Ideally we want to anchor to the 'Task Start' or 'Task End' regardless of segment?
+        // User wants to move the WHOLE task.
+        // So offset from WHOLE task start/end is correct.
+
+        // Calculate task start/end in "minutes from day start" context
+        // We assume the task belongs to currentDayDate context roughly.
+        // But simpler: just get diff between Mouse and Time.
+
+        // But wait, Date objects include Day info. MouseMinutes is relative to 00:00 of THIS day.
+        // We need to be careful with multi-day shifts.
+        // Let's stick to relative minutes for simplicity if we assume we are moving within days.
+
+        // Correction: We just need "Mouse Time" vs "Task Start Time" on the specific day we are interacting with.
+
+        // Let's use the visual top/height to derive "Visual Task Time" to match exactly what the user sees.
+        // This avoids misalignment if the rendered pos is slightly off from data.
+        // Snap logic usually wants to snap the *Visual* edge to the grid.
+
+        const visualTop = this.initialTop;
+        const visualHeight = this.initialHeight; // We already force-corrected this to logical duration in onDown
+        // So visualTop is the only variable.
+
+        const visualStartMinutes = startHourMinutes + (visualTop / zoomLevel);
+        const visualEndMinutes = visualStartMinutes + (visualHeight / zoomLevel);
+
+        if (this.anchorType === 'end') {
+            this.dragTimeOffset = visualEndMinutes - mouseMinutes; // Positive if mouse is above bottom
+        } else {
+            this.dragTimeOffset = mouseMinutes - visualStartMinutes; // Positive if mouse is below top
+        }
+
+        console.log(`[TimelineDragStrategy] TimeOffset: ${this.dragTimeOffset.toFixed(2)} min (Anchor: ${this.anchorType})`);
 
         this.hasKeyMoved = false;
         this.isOutsideSection = false;
 
-        // Get scroll container reference for auto-scroll
         this.scrollContainer = context.container.querySelector('.timeline-scroll-area') as HTMLElement;
 
         // Visual feedback
         el.addClass('is-dragging');
-        el.style.zIndex = '1000';
 
-        // Create ghost element for cross-section dragging (move mode only)
+        // In move mode, we hide ALL segments of this task (for split tasks)
+        // because the GhostManager will handle ALL visualization
         if (this.mode === 'move') {
-            const doc = context.container.ownerDocument || document;
-            this.ghostEl = createGhostElement(el, doc, { useCloneNode: true });
+            const originalId = (task as any).originalTaskId || task.id;
+            console.log(`[TimelineDragStrategy] Hiding segments for originalId: ${originalId}`);
+
+            // Query for both direct ID matches and split segments using the original ID
+            const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
+            const allSegments = context.container.querySelectorAll(selector);
+
+            console.log(`[TimelineDragStrategy] Found ${allSegments.length} segments to hide`);
+
+            allSegments.forEach(segment => {
+                if (segment instanceof HTMLElement) {
+                    // segment.style.opacity = '0'; // Delayed until onMove
+                    this.hiddenElements.push(segment);
+                }
+            });
+            // Ensure the main dragEl is also hidden (it should be in the list above, but just in case)
+            // el.style.opacity = '0'; // Delayed
+        } else {
+            el.style.zIndex = '1000';
         }
     }
 
@@ -81,130 +233,266 @@ export class TimelineDragStrategy implements DragStrategy {
 
         const deltaY = e.clientY - this.initialY;
 
-        // Threshold check - don't count as moved until 5px movement
-        if (!this.hasKeyMoved && Math.abs(deltaY) < 5) return;
-        this.hasKeyMoved = true;
+        // Threshold check
+        if (!this.hasKeyMoved) {
+            if (Math.abs(deltaY) < 5) return;
+            this.hasKeyMoved = true;
+
+            // Apply hiding now that we are actually moving
+            if (this.mode === 'move') {
+                this.hiddenElements.forEach(el => el.style.opacity = '0');
+                if (this.dragEl) this.dragEl.style.opacity = '0';
+            }
+        }
 
         this.processDragMove(e.clientX, e.clientY);
-
-        // Check for auto-scroll when dragging/resizing in timeline
         this.checkAutoScroll(e.clientY);
     }
 
     private processDragMove(clientX: number, clientY: number) {
-        if (!this.dragTask || !this.dragEl || !this.currentContext) return;
+        if (!this.dragTask || !this.dragEl || !this.currentContext || !this.ghostManager) return;
         const context = this.currentContext;
 
-        // Snap logic
         const zoomLevel = context.plugin.settings.zoomLevel;
         const snapPixels = 15 * zoomLevel;
 
-        // Find current column
+        // 1. Find Current Day Column (for visual snapping reference)
         const doc = context.container.ownerDocument || document;
         const elBelow = doc.elementFromPoint(clientX, clientY);
         let dayCol = elBelow?.closest('.day-timeline-column') as HTMLElement;
 
-        // Fallback to parent if slightly out
+        // Fallback
         if (!dayCol && this.dragEl.parentElement?.classList.contains('day-timeline-column')) {
             dayCol = this.dragEl.parentElement as HTMLElement;
         }
 
-        if (dayCol) {
-            if (this.dragEl.parentElement !== dayCol) {
-                dayCol.appendChild(this.dragEl);
-                this.currentDayDate = dayCol.dataset.date || null;
+        if (this.mode === 'move') {
+            // --- DYNAMIC SPLIT RENDER LOGIC ---
 
-                // Reset styles
-                this.dragEl.style.position = 'absolute';
-                this.dragEl.style.width = 'calc(100% - 8px)';
-                this.dragEl.style.left = '4px';
+            // Calculate Target Start Time based on mouse position
+            let snappedTop = 0;
+
+            // Need to define these before use in anchor logic
+            const startHour = context.plugin.settings.startHour;
+            const startHourMinutes = startHour * 60;
+            const durationMinutes = this.initialHeight / zoomLevel;
+
+            let totalStartMinutes = 0;
+            let totalEndMinutes = 0;
+
+            if (dayCol) {
+                const rect = dayCol.getBoundingClientRect();
+                const yInContainer = clientY - rect.top;
+
+                // Update current reference date if changed column
+                if (dayCol.dataset.date) {
+                    this.currentDayDate = dayCol.dataset.date;
+                }
+
+                if (this.anchorType === 'end') {
+                    // END ANCHOR (Bottom-based)
+                    // New End Time = Mouse + Offset
+                    // We calculate minutes relative to StartHour (window start) for snapping
+                    // actually mouseMinutes includes StartHour.
+
+                    const rect = dayCol.getBoundingClientRect();
+                    const yInContainer = clientY - rect.top;
+                    const mouseMinutes = startHourMinutes + (yInContainer / zoomLevel);
+
+                    const rawEndMinutes = mouseMinutes + this.dragTimeOffset;
+
+                    // SNAP: Round rawEndMinutes to nearest grid interval (15 min)
+                    // To do this properly in minutes:
+                    const snapInterval = 15;
+                    const snappedEndMinutes = Math.round(rawEndMinutes / snapInterval) * snapInterval;
+
+                    // Reconstruct Top/height
+                    totalEndMinutes = snappedEndMinutes;
+                    totalStartMinutes = totalEndMinutes - durationMinutes;
+
+                    // For ghost positioning (relative to column top 0-based)
+                    // Ghost Top = (Start - StartHour) * Zoom
+                    // But we used absolute minutes (StartHour included).
+                    // So:
+                    snappedTop = (totalStartMinutes - startHourMinutes) * zoomLevel;
+
+                } else {
+                    // START ANCHOR (Top-based)
+                    const rect = dayCol.getBoundingClientRect();
+                    const yInContainer = clientY - rect.top;
+                    const mouseMinutes = startHourMinutes + (yInContainer / zoomLevel);
+
+                    const rawStartMinutes = mouseMinutes - this.dragTimeOffset;
+
+                    const snapInterval = 15;
+                    const snappedStartMinutes = Math.round(rawStartMinutes / snapInterval) * snapInterval;
+
+                    totalStartMinutes = snappedStartMinutes;
+                    totalEndMinutes = totalStartMinutes + durationMinutes;
+
+                    snappedTop = (totalStartMinutes - startHourMinutes) * zoomLevel;
+                }
+
+            } else {
+                // If out of column, just extrapolate from initial
+                const deltaY = clientY - this.initialY;
+                snappedTop = this.initialTop + deltaY;
+                snappedTop = Math.round(snappedTop / snapPixels) * snapPixels;
+
+                // Fallback to start-based
+                const visualStartMinutes = (snappedTop / zoomLevel);
+                totalStartMinutes = startHourMinutes + visualStartMinutes;
+                totalEndMinutes = totalStartMinutes + durationMinutes;
             }
+            // Generate Ghost Segments
+            const segments: GhostSegment[] = [];
 
-            // Calculations
-            const rect = dayCol.getBoundingClientRect();
+            // We need to map time ranges to [Date, Top, Height]
+            const dayMinutes = 24 * 60;
 
-            // Note: We do NOT need manual scroll compensation here because getBoundingClientRect()
-            // is relative to the viewport. If the container scrolls, rect.top changes, and 
-            // yInContainer (clientY - rect.top) automatically reflects the new relative position
-            // correctly. Adding scroll compensation would double-count the movement.
+            // Normalize currentDayDate object
+            const baseDate = new Date(this.currentDayDate!);
+            const baseDateObj = new Date(this.currentDayDate + 'T00:00:00');
+
+            // Calculate Start Date/Time for Result Storage (WYSIWYG)
+            // Round to integer minutes to avoid floating-point errors
+            const roundedStartMinutes = Math.round(totalStartMinutes);
+            const roundedEndMinutes = Math.round(totalEndMinutes);
+            
+            // Calculate date offsets from base date (minutes can be negative or >= 1440)
+            const startDayOffset = Math.floor(roundedStartMinutes / 1440);
+            const endDayOffset = Math.floor(roundedEndMinutes / 1440);
+            
+            // Normalize minutes to 0-1439 range for time calculation
+            const normalizedStartMinutes = ((roundedStartMinutes % 1440) + 1440) % 1440;
+            const normalizedEndMinutes = ((roundedEndMinutes % 1440) + 1440) % 1440;
+            
+            const newStartDate = DateUtils.addDays(this.currentDayDate!, startDayOffset);
+            const newStartTime = DateUtils.minutesToTime(normalizedStartMinutes);
+            const newEndDate = DateUtils.addDays(this.currentDayDate!, endDayOffset);
+            const newEndTime = DateUtils.minutesToTime(normalizedEndMinutes);
+
+            this.lastDragResult = {
+                startDate: newStartDate,
+                startTime: newStartTime,
+                endDate: newEndDate,
+                endTime: newEndTime
+            };
+
+            // Calculate start and end normalized to baseDate's midnight (00:00)
+            // If totalStartMinutes < 0, it means previous day relative to 00:00?
+            // No, totalStartMinutes is e.g. 5*60 + (-60) = 240 (04:00).
+            // So 0..1440 represents 00:00 to 24:00 of the baseDate.
+
+            // Handle splitting.
+            // Boundaries are at StartHour of each day.
+            // StartHour of baseDate = startHourMinutes.
+            // StartHour of nextDay = startHourMinutes + 1440.
+            // StartHour of prevDay = startHourMinutes - 1440.
+
+            // We check overlaps with day windows.
+            // Window 0 (Current): [startHourMinutes, startHourMinutes + 1440)
+            // Window -1 (Prev):   [startHourMinutes - 1440, startHourMinutes)
+            // Window +1 (Next):   [startHourMinutes + 1440, startHourMinutes + 2880)
+
+            const checkWindow = (offsetDays: number) => {
+                const windowStart = startHourMinutes + (offsetDays * 1440);
+                const windowEnd = windowStart + 1440;
+
+                // Intersection logic
+                const overlapStart = Math.max(totalStartMinutes, windowStart);
+                const overlapEnd = Math.min(totalEndMinutes, windowEnd);
+
+                if (overlapStart < overlapEnd) {
+                    // Has overlap
+                    const segHeightMinutes = overlapEnd - overlapStart;
+                    const segTopMinutes = overlapStart - windowStart; // Relative to window start (StartHour)
+
+                    // Convert back to pixels
+                    // Top relative to column (0 = StartHour)
+                    // Note: windowStart IS the StartHour for that day
+                    // So segTopMinutes * zoomLevel IS the top px
+
+                    const segDate = DateUtils.addDays(this.currentDayDate!, offsetDays);
+
+                    segments.push({
+                        date: segDate,
+                        top: segTopMinutes * zoomLevel,
+                        height: segHeightMinutes * zoomLevel
+                    });
+                }
+            };
+
+            // Check previous, current, next days (covers most drag scenarios)
+            checkWindow(-1);
+            checkWindow(0);
+            checkWindow(1);
+
+            // Render Ghosts
+            // We pass dragEl to clone styles from
+            this.ghostManager.update(segments, this.dragEl);
+
+        } else {
+            // RESIZE MODE - Use existing simple rendering logic (direct manipulation)
+            const rect = dayCol ? dayCol.getBoundingClientRect() : this.dragEl.getBoundingClientRect();
+            // Just ensure dragEl is visible for resize
+            this.dragEl.style.opacity = '1';
+
+            if (!dayCol) return;
 
             const yInContainer = clientY - rect.top;
             const snappedMouseY = Math.round(yInContainer / snapPixels) * snapPixels;
 
-            if (this.mode === 'move') {
-                const rawTop = yInContainer - this.dragOffsetY;
-                const snappedTop = Math.round(rawTop / snapPixels) * snapPixels;
-
-                const currentHeight = parseInt(this.dragEl.style.height || `${60 * zoomLevel}`);
-                const logicalHeight = currentHeight + 3;
-
-                const maxTop = (1440 * zoomLevel) - logicalHeight;
-                const clampedTop = Math.max(0, Math.min(maxTop, snappedTop));
-
-                this.dragEl.style.top = `${clampedTop + 1}px`;
-            } else if (this.mode === 'resize-bottom') {
+            if (this.mode === 'resize-bottom') {
                 const logicalTop = this.initialTop - 1;
                 const newHeight = Math.max(snapPixels, snappedMouseY - logicalTop);
-                const maxHeight = (1440 * zoomLevel) - logicalTop;
-                const clampedHeight = Math.min(newHeight, maxHeight);
-                this.dragEl.style.height = `${clampedHeight - 3}px`;
+                this.dragEl.style.height = `${newHeight - 3}px`;
             } else if (this.mode === 'resize-top') {
                 const currentBottom = this.initialBottom;
-                const newTop = Math.max(0, snappedMouseY);
-                const clampedTop = Math.max(0, newTop);
-                const clampedHeight = Math.max(snapPixels, currentBottom - clampedTop);
+                const newTop = snappedMouseY;
+                // We don't clamp newTop to 0 anymore to allow negative resize if needed/supported later,
+                // but for simple resize, keeping within day is usually safer UI-wise unless we do dynamic resize ghosts too.
+                // For now, let's allow negative but clamping physics might be weird without ghost manager.
+                // Let's stick to simple resize for V1.
+                const clampedHeight = Math.max(snapPixels, currentBottom - newTop);
+                const finalTop = currentBottom - clampedHeight;
 
-                this.dragEl.style.top = `${clampedTop + 1}px`;
+                this.dragEl.style.top = `${finalTop + 1}px`;
                 this.dragEl.style.height = `${clampedHeight - 3}px`;
             }
         }
 
-        // Update cross-section drop zone highlighting only during move
+        // Highlight drop zone
         if (this.mode === 'move') {
-            // Check if cursor is outside the timeline section (over Future area)
-            const futureSection = elBelow?.closest('.future-section-grid') || elBelow?.closest('.future-section__content') || elBelow?.closest('.future-section__list');
-            this.isOutsideSection = !!futureSection;
-
-            // Update ghost and card visibility based on section
-            if (this.isOutsideSection && this.ghostEl) {
-                // Outside TL section: show ghost, hide original visually
-                this.ghostEl.style.opacity = '0.8';
-                this.ghostEl.style.left = `${clientX + 10}px`;
-                this.ghostEl.style.top = `${clientY + 10}px`;
-                this.dragEl.style.opacity = '0.3';
-            } else if (this.ghostEl) {
-                // Inside TL section: hide ghost
-                this.ghostEl.style.opacity = '0';
-                this.ghostEl.style.left = '-9999px';
-                this.dragEl.style.opacity = '';
-            }
-
             this.updateDropZoneHighlight(clientX, clientY, context);
         }
     }
 
     async onUp(e: PointerEvent, context: DragContext) {
-        // Reset cursor immediately
         document.body.style.cursor = '';
 
-        if (!this.dragTask || !this.dragEl || !this.currentDayDate) return;
+        if (!this.dragTask || !this.dragEl || !this.currentDayDate || !this.ghostManager) return;
 
-        // Clear any remaining highlights
+        // Cleanup
         if (this.lastHighlighted) {
             this.lastHighlighted.removeClass('drag-over');
             this.lastHighlighted = null;
         }
 
-        // Clean up ghost element
-        removeGhostElement(this.ghostEl);
-        this.ghostEl = null;
-
-        // Stop auto-scroll
+        this.ghostManager.clear();
+        this.ghostManager = null;
         this.stopAutoScroll();
 
         this.dragEl.removeClass('is-dragging');
         this.dragEl.style.zIndex = '';
-        this.dragEl.style.opacity = '';
+        this.dragEl.removeClass('is-dragging');
+        this.dragEl.style.zIndex = '';
+
+        // Restore all hidden elements
+        this.hiddenElements.forEach(el => el.style.opacity = '');
+        this.hiddenElements = [];
+
+        this.dragEl.style.opacity = ''; // Restore visibility of main el just in case
         this.currentContext = null;
 
         if (!this.hasKeyMoved) {
@@ -214,84 +502,123 @@ export class TimelineDragStrategy implements DragStrategy {
             return;
         }
 
-        // Check for cross-section drops first
+        // ... (Drop Logic - same as before, handling Future Section drop) ...
         const doc = context.container.ownerDocument || document;
         const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
-
         if (elBelow) {
-            // Check for drop on Future section (TL→FU) - only if no deadline
-            const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-section__content') || elBelow.closest('.future-section__list');
+            const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-section__content');
             if (futureSection) {
+                // Future logic...
                 if (this.dragTask.deadline) {
                     new Notice('DeadlineがあるタスクはFutureに移動できません');
                     this.dragTask = null;
-                    this.dragEl = null;
                     return;
                 }
-
                 const updates: Partial<Task> = {
                     isFuture: true,
-                    startDate: undefined,
-                    startTime: undefined,
-                    endDate: undefined,
-                    endTime: undefined
+                    startDate: undefined, startTime: undefined, endDate: undefined, endTime: undefined
                 };
                 await context.taskIndex.updateTask(this.dragTask.id, updates);
                 this.dragTask = null;
-                this.dragEl = null;
                 return;
             }
         }
 
-        // Regular timeline movement/resize within timeline section
-        // Calculate Final Time
-        const top = parseInt(this.dragEl.style.top || '0');
-        const zoomLevel = context.plugin.settings.zoomLevel;
-        const height = parseInt(this.dragEl.style.height || `${60 * zoomLevel}`);
+        // Regular timeline movement/resize
+        const originalId = (this.dragTask as any).originalTaskId || this.dragTask.id;
+        const originalTask = context.taskIndex.getTask(originalId);
 
-        const logicalTop = top - 1;
-        const logicalHeight = height + 3;
-
-        const startHour = context.plugin.settings.startHour;
-        const startHourMinutes = startHour * 60;
-
-        const startTotalMinutes = (logicalTop / zoomLevel) + startHourMinutes;
-        const endTotalMinutes = startTotalMinutes + (logicalHeight / zoomLevel);
-
-        let finalDate = this.currentDayDate;
-        let finalStartMinutes = startTotalMinutes;
-        let finalEndMinutes = endTotalMinutes;
-
-        // Day Wrap Logic
-        if (startTotalMinutes >= 24 * 60) {
-            const d = new Date(this.currentDayDate);
-            d.setDate(d.getDate() + 1);
-            finalDate = d.toISOString().split('T')[0];
-            finalStartMinutes -= 24 * 60;
-            finalEndMinutes -= 24 * 60;
+        if (!originalTask) {
+            this.dragTask = null;
+            this.dragEl = null;
+            return;
         }
 
-        const newStartTime = DateUtils.minutesToTime(finalStartMinutes);
-        let newEndTime: string;
-        let newEndDate: string = finalDate; // Default to same day
+        const updates: Partial<Task> = {};
 
-        if (finalEndMinutes >= 24 * 60) {
-            const endDateObj = new Date(finalDate);
-            endDateObj.setDate(endDateObj.getDate() + 1);
-            newEndDate = endDateObj.toISOString().split('T')[0];
-            // Only store time portion, date is in endDate
-            newEndTime = DateUtils.minutesToTime(finalEndMinutes - 24 * 60);
+        if (this.mode === 'move') {
+            if (this.lastDragResult) {
+                updates.startDate = this.lastDragResult.startDate;
+                updates.startTime = this.lastDragResult.startTime;
+                updates.endDate = this.lastDragResult.endDate;
+                updates.endTime = this.lastDragResult.endTime;
+            } else {
+                // Fallback if no move happened or something went wrong
+                // Re-calculate using original logic (should rarely be hit if hasKeyMoved is check correctly)
+                console.warn('[TimelineDragStrategy] No lastDragResult found, falling back to basic calculation');
+                // ... fallback calculation logic or just return?
+                // Given hasKeyMoved check above, this might happen only on simple clicks treated as drags?
+                // But hasKeyMoved protects against simple clicks.
+
+                // Let's keep the re-calculation logic alive as fallback or just use what we have?
+                // If we trust lastDragResult, we don't need the complex block below. 
+                // But for RESIZE mode, processDragMove is NOT populating lastDragResult (it skips that block).
+                // So we need to separate paths clearly.
+
+                // If we are here, mode is 'move'. lastDragResult SHOULD exist.
+                // If not, maybe we didn't move enough?
+                return;
+            }
         } else {
-            newEndTime = DateUtils.minutesToTime(finalEndMinutes);
-        }
+            // Re-calculate for Resize (or implement lastDragResult for resize too? - Let's keep resize logic separate for now as it works)
 
-        // Always update all fields to handle undefined startDate and full ISO endTime cases
-        const updates: Partial<Task> = {
-            startDate: finalDate,
-            startTime: newStartTime,
-            endDate: newEndDate, // Required for TaskParser.format() to output endTime
-            endTime: newEndTime
-        };
+            // ... Need to re-build calculation for Resize ...
+            if (!originalTask) return; // Should be checked
+
+            // For RESIZE mode, we DID update dragEl, so we can read from it.
+            const zoomLevel = context.plugin.settings.zoomLevel;
+            const diffTop = parseInt(this.dragEl.style.top || '0');
+            const startHour = context.plugin.settings.startHour;
+            const startHourMinutes = startHour * 60;
+            
+            // Calculate logical values (account for CSS offset)
+            const logicalTop = diffTop - 1;
+            const height = parseInt(this.dragEl.style.height || '0');
+            const logicalHeight = height + 3;
+            
+            // Calculate total minutes from midnight
+            const totalStartMinutes = startHourMinutes + (logicalTop / zoomLevel);
+            const totalEndMinutes = totalStartMinutes + (logicalHeight / zoomLevel);
+            
+            // Round to integer minutes to avoid floating-point errors
+            const roundedStartMinutes = Math.round(totalStartMinutes);
+            const roundedEndMinutes = Math.round(totalEndMinutes);
+            
+            // Handle day wrapping
+            let finalStartDate = this.currentDayDate!;
+            let finalEndDate = this.currentDayDate!;
+            let finalStartMinutes = roundedStartMinutes;
+            let finalEndMinutes = roundedEndMinutes;
+            
+            // Day wrap for start time (>= 24:00)
+            if (finalStartMinutes >= 24 * 60) {
+                finalStartDate = DateUtils.addDays(this.currentDayDate!, 1);
+                finalStartMinutes -= 24 * 60;
+            }
+            
+            // Day wrap for end time (>= 24:00)
+            if (finalEndMinutes >= 24 * 60) {
+                finalEndDate = DateUtils.addDays(finalStartDate, Math.floor(finalEndMinutes / (24 * 60)));
+                finalEndMinutes = finalEndMinutes % (24 * 60);
+            }
+            
+            const newStartDate = finalStartDate;
+            const newStartTime = DateUtils.minutesToTime(finalStartMinutes);
+            const newEndDate = finalEndDate;
+            const newEndTime = DateUtils.minutesToTime(finalEndMinutes);
+
+            if (this.mode === 'resize-top') {
+                updates.startDate = newStartDate;
+                updates.startTime = newStartTime;
+                updates.endDate = originalTask.endDate;
+                updates.endTime = originalTask.endTime;
+            } else if (this.mode === 'resize-bottom') {
+                updates.startDate = originalTask.startDate;
+                updates.startTime = originalTask.startTime;
+                updates.endDate = newEndDate;
+                updates.endTime = newEndTime;
+            }
+        }
 
         if (Object.keys(updates).length > 0) {
             await context.taskIndex.updateTask(this.dragTask.id, updates);
@@ -305,10 +632,8 @@ export class TimelineDragStrategy implements DragStrategy {
         const doc = context.container.ownerDocument || document;
         const elBelow = doc.elementFromPoint(clientX, clientY);
 
-        // Reset cursor by default
         document.body.style.cursor = '';
 
-        // Clear previous highlight
         if (this.lastHighlighted) {
             this.lastHighlighted.removeClass('drag-over');
             this.lastHighlighted = null;
@@ -316,26 +641,16 @@ export class TimelineDragStrategy implements DragStrategy {
 
         if (!elBelow) return;
 
-        // Check for valid drop targets (only Future for timeline tasks)
-        const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-section__content') || elBelow.closest('.future-section__list');
+        const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-section__content');
 
         if (futureSection) {
             if (this.dragTask?.deadline) {
-                // Invalid drop: no highlight, just cursor
                 document.body.style.cursor = 'not-allowed';
             } else {
-                // Valid drop - Target .future-section__content for highlight if possible
                 let targetEl = futureSection;
-                const futureGrid = futureSection.closest('.future-section-grid') || futureSection.querySelector('.future-section-grid') || (futureSection.hasClass('future-section-grid') ? futureSection : null);
-
-                if (futureGrid) {
-                    const content = futureGrid.querySelector('.future-section__content');
-                    if (content) targetEl = content as HTMLElement;
-                } else if (futureSection.hasClass('future-section__content')) {
-                    targetEl = futureSection;
-                } else if (futureSection.closest('.future-section__content')) {
-                    targetEl = futureSection.closest('.future-section__content') as HTMLElement;
-                }
+                // Try to target content area
+                const content = futureSection.closest('.future-section__content') || futureSection.querySelector('.future-section__content');
+                if (content) targetEl = content as HTMLElement;
 
                 targetEl.addClass('drag-over');
                 this.lastHighlighted = targetEl as HTMLElement;
@@ -345,15 +660,13 @@ export class TimelineDragStrategy implements DragStrategy {
 
     private checkAutoScroll(mouseY: number): void {
         if (!this.scrollContainer) return;
-
         const rect = this.scrollContainer.getBoundingClientRect();
-        const scrollThreshold = 50; // Pixels from edge to trigger scroll
-        const scrollSpeed = 10; // Pixels per scroll step
+        const scrollThreshold = 50;
+        const scrollSpeed = 10;
 
         let shouldScrollUp = false;
         let shouldScrollDown = false;
 
-        // Check if mouse is near the top or bottom edges of the timeline area
         if (mouseY < rect.top + scrollThreshold) {
             shouldScrollUp = true;
         } else if (mouseY > rect.bottom - scrollThreshold) {
@@ -368,19 +681,11 @@ export class TimelineDragStrategy implements DragStrategy {
     }
 
     private startAutoScroll(direction: number): void {
-        // Don't start if already running in the same direction
         if (this.autoScrollTimer !== null) return;
-
         this.autoScrollTimer = window.setInterval(() => {
             if (!this.scrollContainer) return;
-
             this.scrollContainer.scrollTop += direction;
-
-            // Trigger drag update to keep task synced with scroll
-            // Use last known clientX/Y which are relative to viewport
-            this.processDragMove(this.lastClientX, this.lastClientY);
-
-            // Stop scrolling if we've reached the boundaries or if direction flipped (not handled here but implicitly safe)
+            this.processDragMove(this.lastClientX, this.lastClientY); // Re-process drag with new scroll pos
             if (direction < 0 && this.scrollContainer.scrollTop <= 0) {
                 this.stopAutoScroll();
             } else if (direction > 0 &&
@@ -388,13 +693,12 @@ export class TimelineDragStrategy implements DragStrategy {
                 this.scrollContainer.scrollHeight - this.scrollContainer.clientHeight) {
                 this.stopAutoScroll();
             }
-        }, 16); // ~60fps for smooth scrolling
+        }, 16);
     }
 
     private stopAutoScroll(): void {
         if (this.autoScrollTimer !== null) {
             clearInterval(this.autoScrollTimer);
-            this.autoScrollTimer = null;
         }
     }
 }

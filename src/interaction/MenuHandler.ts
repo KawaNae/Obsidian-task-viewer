@@ -80,7 +80,17 @@ export class MenuHandler {
         });
     }
 
-    private showContextMenu(x: number, y: number, task: Task) {
+    private showContextMenu(x: number, y: number, taskInput: Task) {
+        // Resolve the real task from the index to ensure we have the full, valid data
+        // and not a modified RenderableTask segment
+        const originalId = (taskInput as any).originalTaskId || taskInput.id;
+        const task = this.taskIndex.getTask(originalId);
+
+        if (!task) {
+            new Notice('Task not found in index');
+            return;
+        }
+
         const menu = new Menu();
 
         // ========================================
