@@ -64,24 +64,47 @@ export class GhostManager {
                 ghost.style.opacity = '0.8';
                 ghost.style.display = 'block';
 
-                // --- Manage Split Classes Dynamically ---
+                // --- Manage Split Classes and Inline Styles Dynamically ---
                 // Remove relevant classes inherited from sourceEl
                 ghost.classList.remove('task-card--split', 'task-card--split-before', 'task-card--split-after');
+                
+                // Reset split-related inline styles (GhostFactory sets these, which override CSS classes)
+                ghost.style.borderTop = '';
+                ghost.style.borderBottom = '';
+                ghost.style.borderTopLeftRadius = '';
+                ghost.style.borderTopRightRadius = '';
+                ghost.style.borderBottomLeftRadius = '';
+                ghost.style.borderBottomRightRadius = '';
 
                 if (segments.length > 1) {
                     ghost.classList.add('task-card--split');
+                    
+                    // Get accent color for dashed border
+                    const accentColor = getComputedStyle(sourceEl).getPropertyValue('--file-accent').trim() 
+                        || getComputedStyle(document.documentElement).getPropertyValue('--interactive-accent').trim()
+                        || '#7c3aed';
 
                     if (index === 0) {
                         // First segment (Earliest time) -> Bottom cut
                         ghost.classList.add('task-card--split-before');
+                        // Apply inline styles to override GhostFactory defaults
+                        ghost.style.borderBottom = `2px dashed ${accentColor}`;
+                        ghost.style.borderBottomLeftRadius = '0';
+                        ghost.style.borderBottomRightRadius = '0';
                     } else if (index === segments.length - 1) {
                         // Last segment (Latest time) -> Top cut
                         ghost.classList.add('task-card--split-after');
+                        // Apply inline styles to override GhostFactory defaults
+                        ghost.style.borderTop = `2px dashed ${accentColor}`;
+                        ghost.style.borderTopLeftRadius = '0';
+                        ghost.style.borderTopRightRadius = '0';
                     } else {
                         // Middle segment -> Both cut
-                        // Note: Currently CSS handles these independently, so adding both works.
                         ghost.classList.add('task-card--split-before');
                         ghost.classList.add('task-card--split-after');
+                        ghost.style.borderTop = `2px dashed ${accentColor}`;
+                        ghost.style.borderBottom = `2px dashed ${accentColor}`;
+                        ghost.style.borderRadius = '0';
                     }
                 }
             } else {
