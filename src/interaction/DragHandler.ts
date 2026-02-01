@@ -76,13 +76,33 @@ export class DragHandler implements DragContext {
 
         if (handle) {
             isFromHandle = true;
+            isFromHandle = true;
             taskId = handle.dataset.taskId || null;
             if (taskId) {
-                taskEl = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
+                if (taskId) {
+                    // Simplest way to get the card: look up from the handle
+                    taskEl = handle.closest('.task-card') as HTMLElement;
+
+                    // If for some reason that fails (shouldn't), fallback
+                    if (!taskEl) {
+                        taskEl = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
+                    }
+
+                    // If it's a split card, ensure we have the original ID (though handle should have it)
+                    if (taskEl && taskEl.dataset.splitOriginalId) {
+                        taskId = taskEl.dataset.splitOriginalId;
+                    }
+                }
             }
         } else {
             taskEl = target.closest('.task-card') as HTMLElement;
-            if (taskEl) taskId = taskEl.dataset.id || null;
+            if (taskEl) {
+                // Prioritize splitOriginalId if available
+                taskId = taskEl.dataset.splitOriginalId || taskEl.dataset.id || null;
+                if (taskEl.dataset.splitOriginalId) {
+                    console.log(`[DragHandler] Resolved split task ${taskEl.dataset.id} -> ${taskId}`);
+                }
+            }
         }
 
         if (!taskEl || !taskId) return;

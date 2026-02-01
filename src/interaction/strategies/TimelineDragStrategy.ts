@@ -32,18 +32,8 @@ export class TimelineDragStrategy implements DragStrategy {
         this.dragTask = task;
         this.dragEl = el;
         this.currentContext = context;
-        this.initialY = e.clientY;
-        this.initialTop = parseInt(el.style.top || '0');
-        this.initialHeight = parseInt(el.style.height || '0');
 
-        const logicalTop = this.initialTop - 1;
-        const logicalHeight = this.initialHeight + 3;
-        this.initialBottom = logicalTop + logicalHeight;
-
-        const rect = el.getBoundingClientRect();
-        this.dragOffsetY = e.clientY - rect.top;
-
-        // Determine Mode
+        // Determine Mode first to check for invalid resizes
         const target = e.target as HTMLElement;
         if (target.closest('.task-card__handle--resize-top')) {
             this.mode = 'resize-top';
@@ -52,6 +42,105 @@ export class TimelineDragStrategy implements DragStrategy {
         } else {
             this.mode = 'move';
         }
+
+        // 1. Disable Invalid Resizing for Split Tasks
+        if (this.mode === 'resize-top' && el.classList.contains('task-card--split-after')) {
+            // Preventing resize of the start boundary (it's the day transition)
+            console.log('[TimelineDragStrategy] Blocked resize-top on split-after segment');
+            this.dragTask = null;
+            this.dragEl = null;
+            return;
+        }
+        if (this.mode === 'resize-bottom' && el.classList.contains('task-card--split-before')) {
+            // Preventing resize of the end boundary
+            console.log('[TimelineDragStrategy] Blocked resize-bottom on split-before segment');
+            this.dragTask = null;
+            this.dragEl = null;
+            return;
+        }
+
+        this.initialY = e.clientY;
+        this.initialTop = parseInt(el.style.top || '0');
+        this.initialHeight = parseInt(el.style.height || '0');
+
+        const rect = el.getBoundingClientRect();
+        this.dragOffsetY = e.clientY - rect.top;
+
+        // 2. Expand Split Task on Move
+        if (this.mode === 'move' && task.startDate && task.startTime && task.endDate && task.endTime) {
+            // Check if we need to expand visually
+            const isSplitAfter = el.classList.contains('task-card--split-after');
+            // We only need to adjust if we are dragging the 'after' part (to add the 'before' part to visual)
+            // Or if we are dragging 'before' part (to add 'after' part)
+            // Actually, simpler: Calculate full duration and set height.
+
+            const start = new Date(`${task.startDate}T${task.startTime}`);
+            const end = new Date(`${task.endDate}T${task.endTime}`);
+            const durationMs = end.getTime() - start.getTime();
+            const durationMinutes = durationMs / 60000;
+
+            const zoomLevel = context.plugin.settings.zoomLevel;
+            const fullHeight = durationMinutes * zoomLevel;
+
+            // Check if current height is significantly different (implying split)
+            if (Math.abs(this.initialHeight - fullHeight) > 5) {
+                console.log('[TimelineDragStrategy] Expanding split task for drag');
+
+                // Calculate offset if we are int the 'after' segment
+                // The 'before' segment would be "above" us.
+                let missingTopHeight = 0;
+
+                if (isSplitAfter) {
+                    // We are at the start of the day (StartHour). Task started yesterday.
+                    // Calculate how much time passed until StartHour
+                    const startHour = context.plugin.settings.startHour;
+                    // Need to be careful with crossing calendar days vs crossing visual days
+                    // Simplified: The 'after' segment starts at StartHour.
+                    // The 'before' segment ends at StartHour.
+                    // So we need to add the height of the 'before' segment to the top.
+                    // Height of 'before' = (StartHour - TaskStart) -- simplified
+
+                    // Let's compute exact missing minutes
+                    // Segment Start (visual) is StartHour.
+                    // Task Start is task.startTime.
+
+                    const startHourMinutes = startHour * 60;
+                    const taskStartMinutes = DateUtils.timeToMinutes(task.startTime);
+
+                    // Task Start (yesterday) -> Midnight (24:00) -> StartHour
+                    let missingMinutes = 0;
+                    if (taskStartMinutes > startHourMinutes) {
+                        // Started yesterday (e.g. 23:00) vs StartHour (05:00)
+                        // Minutes from 23:00 to 24:00 = 60
+                        // Minutes from 00:00 to 05:00 = 300
+                        // Total = 360
+                        missingMinutes = (24 * 60 - taskStartMinutes) + startHourMinutes;
+                    } else {
+                        // Started earlier today (but previous visual day)? 
+                        // e.g. StartHour=5, TaskStart=02:00.
+                        // 02:00 to 05:00 = 180 min
+                        missingMinutes = startHourMinutes - taskStartMinutes;
+                    }
+
+                    missingTopHeight = missingMinutes * zoomLevel;
+                }
+
+                // Apply Expansion
+                this.dragEl.style.height = `${fullHeight - 3}px`;
+                this.initialHeight = fullHeight;
+
+                if (missingTopHeight > 0) {
+                    const newTop = this.initialTop - missingTopHeight;
+                    this.dragEl.style.top = `${newTop}px`;
+                    this.initialTop = newTop;
+                    this.dragOffsetY += missingTopHeight; // Fix offset so text doesn't jump
+                }
+            }
+        }
+
+        const logicalTop = this.initialTop - 1;
+        const logicalHeight = this.initialHeight + 3;
+        this.initialBottom = logicalTop + logicalHeight;
 
         const dayCol = el.closest('.day-timeline-column') as HTMLElement;
         this.currentDayDate = dayCol ? dayCol.dataset.date || null : (task.startDate || null);
@@ -104,11 +193,6 @@ export class TimelineDragStrategy implements DragStrategy {
         const elBelow = doc.elementFromPoint(clientX, clientY);
         let dayCol = elBelow?.closest('.day-timeline-column') as HTMLElement;
 
-        // Fallback to parent if slightly out
-        if (!dayCol && this.dragEl.parentElement?.classList.contains('day-timeline-column')) {
-            dayCol = this.dragEl.parentElement as HTMLElement;
-        }
-
         if (dayCol) {
             if (this.dragEl.parentElement !== dayCol) {
                 dayCol.appendChild(this.dragEl);
@@ -119,7 +203,14 @@ export class TimelineDragStrategy implements DragStrategy {
                 this.dragEl.style.width = 'calc(100% - 8px)';
                 this.dragEl.style.left = '4px';
             }
+        }
 
+        // If we didn't find a dayCol (e.g. mouse over header), fallback to the current parent
+        if (!dayCol && this.dragEl.parentElement?.classList.contains('day-timeline-column')) {
+            dayCol = this.dragEl.parentElement as HTMLElement;
+        }
+
+        if (dayCol) {
             // Calculations
             const rect = dayCol.getBoundingClientRect();
 
@@ -136,25 +227,25 @@ export class TimelineDragStrategy implements DragStrategy {
                 const snappedTop = Math.round(rawTop / snapPixels) * snapPixels;
 
                 const currentHeight = parseInt(this.dragEl.style.height || `${60 * zoomLevel}`);
-                const logicalHeight = currentHeight + 3;
-
-                const maxTop = (1440 * zoomLevel) - logicalHeight;
-                const clampedTop = Math.max(0, Math.min(maxTop, snappedTop));
-
-                this.dragEl.style.top = `${clampedTop + 1}px`;
+                // Allow negative top (previous day visual space)
+                // Also allow going below bottom (next day visual space) - maxTop check was preventing full bottom drag
+                // But we should probably keep some sanity limits if needed, but for now allow free drag
+                this.dragEl.style.top = `${snappedTop + 1}px`;
             } else if (this.mode === 'resize-bottom') {
                 const logicalTop = this.initialTop - 1;
+                // Height must be at least snapPixels
                 const newHeight = Math.max(snapPixels, snappedMouseY - logicalTop);
-                const maxHeight = (1440 * zoomLevel) - logicalTop;
-                const clampedHeight = Math.min(newHeight, maxHeight);
-                this.dragEl.style.height = `${clampedHeight - 3}px`;
+                // No max height limit needed strictly, user can drag down
+                this.dragEl.style.height = `${newHeight - 3}px`;
             } else if (this.mode === 'resize-top') {
                 const currentBottom = this.initialBottom;
-                const newTop = Math.max(0, snappedMouseY);
-                const clampedTop = Math.max(0, newTop);
-                const clampedHeight = Math.max(snapPixels, currentBottom - clampedTop);
+                // Top can be negative
+                const newTop = snappedMouseY;
+                const clampedHeight = Math.max(snapPixels, currentBottom - newTop);
+                // Adjust top based on height constraint
+                const finalTop = currentBottom - clampedHeight;
 
-                this.dragEl.style.top = `${clampedTop + 1}px`;
+                this.dragEl.style.top = `${finalTop + 1}px`;
                 this.dragEl.style.height = `${clampedHeight - 3}px`;
             }
         }
@@ -244,7 +335,20 @@ export class TimelineDragStrategy implements DragStrategy {
         }
 
         // Regular timeline movement/resize within timeline section
-        // Calculate Final Time
+
+        // 1. Resolve to the ORIGINAL task to get the true full duration/times
+        // The dragged element (dragTask) might be a split segment with clipped times.
+        const originalId = (this.dragTask as any).originalTaskId || this.dragTask.id;
+        const originalTask = context.taskIndex.getTask(originalId);
+
+        if (!originalTask) {
+            console.error(`[TimelineDragStrategy] Original task not found: ${originalId}`);
+            this.dragTask = null;
+            this.dragEl = null;
+            return;
+        }
+
+        // Calculate Final Time from Drag State
         const top = parseInt(this.dragEl.style.top || '0');
         const zoomLevel = context.plugin.settings.zoomLevel;
         const height = parseInt(this.dragEl.style.height || `${60 * zoomLevel}`);
@@ -255,43 +359,82 @@ export class TimelineDragStrategy implements DragStrategy {
         const startHour = context.plugin.settings.startHour;
         const startHourMinutes = startHour * 60;
 
-        const startTotalMinutes = (logicalTop / zoomLevel) + startHourMinutes;
-        const endTotalMinutes = startTotalMinutes + (logicalHeight / zoomLevel);
+        // Visual start/end times in minutes relative to the current card's specific day
+        const visualStartTotalMinutes = (logicalTop / zoomLevel) + startHourMinutes;
+        const visualEndTotalMinutes = visualStartTotalMinutes + (logicalHeight / zoomLevel);
 
         let finalDate = this.currentDayDate;
-        let finalStartMinutes = startTotalMinutes;
-        let finalEndMinutes = endTotalMinutes;
+        let finalStartMinutes = visualStartTotalMinutes;
+        let finalEndMinutes = visualEndTotalMinutes;
 
-        // Day Wrap Logic
-        if (startTotalMinutes >= 24 * 60) {
-            const d = new Date(this.currentDayDate);
+        // Day Wrap Logic (Forward: if visual time goes past midnight 24:00)
+        while (finalStartMinutes >= 24 * 60) {
+            const d = new Date(finalDate);
             d.setDate(d.getDate() + 1);
             finalDate = d.toISOString().split('T')[0];
             finalStartMinutes -= 24 * 60;
             finalEndMinutes -= 24 * 60;
         }
 
+        // Day Wrap Logic (Backward: if visual time is negative)
+        // e.g. -60 min -> Previous Day 23:00 (1440 - 60)
+        while (finalStartMinutes < 0) {
+            const d = new Date(finalDate);
+            d.setDate(d.getDate() - 1);
+            finalDate = d.toISOString().split('T')[0];
+            finalStartMinutes += 24 * 60;
+            finalEndMinutes += 24 * 60;
+        }
+
         const newStartTime = DateUtils.minutesToTime(finalStartMinutes);
         let newEndTime: string;
         let newEndDate: string = finalDate; // Default to same day
 
-        if (finalEndMinutes >= 24 * 60) {
-            const endDateObj = new Date(finalDate);
-            endDateObj.setDate(endDateObj.getDate() + 1);
-            newEndDate = endDateObj.toISOString().split('T')[0];
-            // Only store time portion, date is in endDate
-            newEndTime = DateUtils.minutesToTime(finalEndMinutes - 24 * 60);
-        } else {
-            newEndTime = DateUtils.minutesToTime(finalEndMinutes);
-        }
+        // Handle end time wrapping
+        // Note: finalEndMinutes can be > 24*60 (next day) or even > 48*60 (2 days later)
+        // But also, if finalStart was negative, finalEnd might still be negative (if task is entirely yesterday)
+        // The while loop above ensures finalStart is [0, 1440).
+        // So finalEnd must be > finalStart.
+        // We only need to check forward wrap for End now.
 
-        // Always update all fields to handle undefined startDate and full ISO endTime cases
-        const updates: Partial<Task> = {
-            startDate: finalDate,
-            startTime: newStartTime,
-            endDate: newEndDate, // Required for TaskParser.format() to output endTime
-            endTime: newEndTime
-        };
+        const durationMinutes = finalEndMinutes - finalStartMinutes;
+
+        // Calculate End Date/Time from Start + Duration
+        // This is safer than manipulating minutes independently
+        const startDateObj = new Date(`${finalDate}T${newStartTime}`);
+        const endDateObj = new Date(startDateObj.getTime() + durationMinutes * 60000);
+
+        newEndDate = DateUtils.getLocalDateString(endDateObj);
+        newEndTime = `${endDateObj.getHours().toString().padStart(2, '0')}:${endDateObj.getMinutes().toString().padStart(2, '0')}`;
+
+        // --- MERGE LOGIC ---
+        // We only want to update the side we are resizing. 
+        // For 'move', we update everything.
+        // For 'resize-top', we update start, keep original END.
+        // For 'resize-bottom', we update end, keep original START.
+
+        const updates: Partial<Task> = {};
+
+        if (this.mode === 'move') {
+            updates.startDate = finalDate;
+            updates.startTime = newStartTime;
+            updates.endDate = newEndDate;
+            updates.endTime = newEndTime;
+        } else if (this.mode === 'resize-top') {
+            // Updating START. Preserve ORIGINAL End.
+            updates.startDate = finalDate;
+            updates.startTime = newStartTime;
+            // Keep original end info
+            updates.endDate = originalTask.endDate;
+            updates.endTime = originalTask.endTime;
+        } else if (this.mode === 'resize-bottom') {
+            // Updating END. Preserve ORIGINAL Start.
+            updates.startDate = originalTask.startDate;
+            updates.startTime = originalTask.startTime;
+            // Update end info
+            updates.endDate = newEndDate;
+            updates.endTime = newEndTime;
+        }
 
         if (Object.keys(updates).length > 0) {
             await context.taskIndex.updateTask(this.dragTask.id, updates);

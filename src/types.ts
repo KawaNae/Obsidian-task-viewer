@@ -17,35 +17,56 @@ export function shouldSplitTask(task: Task, startHour: number): boolean {
     if (!task.startDate || !task.endDate || !task.startTime || !task.endTime) {
         return false;
     }
-    
+
     // Calculate duration in hours
     const startDateTime = new Date(`${task.startDate}T${task.startTime}`);
     const endDateTime = new Date(`${task.endDate}T${task.endTime}`);
     const durationHours = (endDateTime.getTime() - startDateTime.getTime()) / (1000 * 60 * 60);
-    
+
     // Only split if duration < 24 hours
     if (durationHours >= 24) {
         return false;
     }
-    
+
     // Check if task crosses visual day boundary
     // Visual day boundary is at startHour:00
     const startHourNum = parseInt(task.startTime.split(':')[0]);
     const endHourNum = parseInt(task.endTime.split(':')[0]);
-    
+
     // If calendar dates are different, definitely crosses boundary
     if (task.startDate !== task.endDate) {
         return true;
     }
-    
+
     // Same calendar date: check if times straddle the startHour boundary
     // e.g., startHour=5, startTime=02:00, endTime=08:00
     // 02:00 < 5 (previous visual day), 08:00 >= 5 (current visual day) → split needed
-    if (startHourNum < startHour && endHourNum >= startHour) {
-        return true;
+    if (startHourNum < startHour) {
+        const [endH, endM] = task.endTime.split(':').map(Number);
+        if (endH > startHour) return true;
+        if (endH === startHour && endM > 0) return true;
     }
-    
+
     return false;
+}
+
+/**
+ * Renderable task type - purely for view representation.
+ * Represents a visual segment of a task.
+ */
+export interface RenderableTask extends Task {
+    // Unique identifier for the DOM element (e.g. "taskid:before")
+    id: string;
+
+    // Link back to the original data model
+    originalTaskId: string;
+
+    // Split metadata
+    isSplit: boolean;
+    splitSegment?: 'before' | 'after';
+
+    // Read-only flag for interaction handling
+    _isReadOnly?: boolean;
 }
 
 /**
@@ -56,11 +77,11 @@ export function splitTaskAtBoundary(task: Task, startHour: number): [RenderableT
     if (!task.startDate || !task.endDate || !task.startTime || !task.endTime) {
         throw new Error('Task must have start and end date/time to split');
     }
-    
+
     // Calculate the boundary date/time
     let boundaryDate: string;
     const boundaryTime = `${startHour.toString().padStart(2, '0')}:00`;
-    
+
     if (task.startDate === task.endDate) {
         // Same calendar date, but crosses visual day boundary at startHour
         // e.g., @2026-02-01T02:00>08:00 with startHour=5
@@ -74,35 +95,32 @@ export function splitTaskAtBoundary(task: Task, startHour: number): [RenderableT
         boundaryDateObj.setDate(boundaryDateObj.getDate() + 1);
         boundaryDate = boundaryDateObj.toISOString().split('T')[0];
     }
-    
+
     // Before segment: original start -> boundary
     const beforeSegment: RenderableTask = {
         ...task,
         id: `${task.id}:before`,
+        originalTaskId: task.id,
+        isSplit: true,
+        splitSegment: 'before',
         endDate: boundaryDate,
         endTime: boundaryTime,
-        _splitInfo: {
-            originalTaskId: task.id,
-            segment: 'before',
-            boundaryDate,
-            boundaryTime
-        }
+        // _splitInfo is deprecated in favor of explicit fields in RenderableTask, 
+        // but keeping it for backward compat if needed during transition or just removing it if safe.
+        // Let's rely on the new fields.
     };
-    
+
     // After segment: boundary -> original end
     const afterSegment: RenderableTask = {
         ...task,
         id: `${task.id}:after`,
+        originalTaskId: task.id,
+        isSplit: true,
+        splitSegment: 'after',
         startDate: boundaryDate,
         startTime: boundaryTime,
-        _splitInfo: {
-            originalTaskId: task.id,
-            segment: 'after',
-            boundaryDate,
-            boundaryTime
-        }
     };
-    
+
     return [beforeSegment, afterSegment];
 }
 
@@ -154,26 +172,6 @@ export interface FlowCommand {
 export interface FlowModifier {
     name: string;           // e.g. 'as'
     args: string[];         // e.g. ['New Name']
-}
-
-/**
- * Split task boundary information
- * Used when a task crosses the visual day boundary (startHour)
- */
-export interface TaskSplitInfo {
-    originalTaskId: string;        // ID of the original task before splitting
-    segment: 'before' | 'after';   // Which segment this represents
-    boundaryDate: string;          // YYYY-MM-DD of the boundary
-    boundaryTime: string;          // HH:mm of the boundary (typically startHour)
-}
-
-/**
- * Renderable task type - may be split version of original Task
- * Used in rendering layers (TimelineSectionRenderer, etc.)
- */
-export interface RenderableTask extends Task {
-    _splitInfo?: TaskSplitInfo;    // Present if this is a split segment
-    _isReadOnly?: boolean;          // If true, disable handle operations
 }
 
 export interface ViewState {

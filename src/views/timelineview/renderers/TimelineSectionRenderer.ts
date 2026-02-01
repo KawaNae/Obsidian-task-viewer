@@ -23,27 +23,41 @@ export class TimelineSectionRenderer {
     public render(container: HTMLElement, date: string, owner: Component, visibleFiles: Set<string> | null) {
         const startHour = this.plugin.settings.startHour;
         const zoomLevel = this.plugin.settings.zoomLevel;
-        
+
         // Get all tasks and filter for those that should appear in this timeline column
         let tasks = this.taskIndex.getTasks().filter(t => {
             if (t.isFuture) return false;
             if (!t.startTime) return false; // No startTime = not a timed task
-            
+
             // Calculate visual date range for this task
-            const visualStart = t.startDate 
+            const visualStart = t.startDate
                 ? DateUtils.getVisualStartDate(t.startDate, t.startTime, startHour)
                 : date;
-            
+
             // For tasks with endDate/endTime, check if they span into this visual day
             if (t.endDate && t.endTime) {
-                const visualEnd = DateUtils.getVisualStartDate(t.endDate, t.endTime, startHour);
+                // If endTime is exactly startHour (e.g. 05:00), it belongs to the previous visual day
+                // So we subtract small amount to get the visual day it effectively "ends" in
+                const endDateTime = new Date(`${t.endDate}T${t.endTime}`);
+
+                // Check if end time matches startHour exactly
+                const [endH, endM] = t.endTime.split(':').map(Number);
+                if (endH === startHour && endM === 0) {
+                    endDateTime.setMinutes(endDateTime.getMinutes() - 1);
+                }
+
+                const effectiveEndDate = DateUtils.getLocalDateString(endDateTime);
+                const effectiveEndTime = `${endDateTime.getHours().toString().padStart(2, '0')}:${endDateTime.getMinutes().toString().padStart(2, '0')}`;
+
+                const visualEnd = DateUtils.getVisualStartDate(effectiveEndDate, effectiveEndTime, startHour);
+
                 // Task appears in this column if: visualStart <= date <= visualEnd
                 if (visualStart > date || visualEnd < date) return false;
             } else {
                 // Single-point or no-end task: only show on visualStart day
                 if (visualStart !== date) return false;
             }
-            
+
             // Check if it's an all-day task (>= 24 hours)
             const tStart = t.startDate || date;
             const isAllDay = DateUtils.isAllDayTask(tStart, t.startTime, t.endDate, t.endTime, startHour);
@@ -60,11 +74,11 @@ export class TimelineSectionRenderer {
         tasks.forEach(task => {
             if (shouldSplitTask(task, startHour)) {
                 const [before, after] = splitTaskAtBoundary(task, startHour);
-                
+
                 // Calculate visual dates for each segment
                 const beforeVisualStart = DateUtils.getVisualStartDate(before.startDate!, before.startTime!, startHour);
                 const afterVisualStart = DateUtils.getVisualStartDate(after.startDate!, after.startTime!, startHour);
-                
+
                 // Add segment only if its visual start matches this column
                 if (beforeVisualStart === date) {
                     renderableTasks.push(before);
@@ -73,7 +87,14 @@ export class TimelineSectionRenderer {
                     renderableTasks.push(after);
                 }
             } else {
-                renderableTasks.push(task);
+                // Wrap original task as RenderableTask
+                const renderable: RenderableTask = {
+                    ...task,
+                    id: task.id, // Keep original ID
+                    originalTaskId: task.id,
+                    isSplit: false
+                };
+                renderableTasks.push(renderable);
             }
         });
 
@@ -86,14 +107,20 @@ export class TimelineSectionRenderer {
             const el = container.createDiv('task-card timed');
             if (task.id === this.handleManager.getSelectedTaskId()) el.addClass('selected');
             if (task.startDateInherited) el.addClass('task-card--inherited');
-            
+
             // Add split segment classes if applicable
-            if (task._splitInfo) {
+            // Cast to RenderableTask to access split properties if they exist
+            const renderable = task as RenderableTask;
+            if (renderable.isSplit) {
                 el.addClass('task-card--split');
-                el.addClass(`task-card--split-${task._splitInfo.segment}`);
-                el.dataset.splitOriginalId = task._splitInfo.originalTaskId;
+                if (renderable.splitSegment) {
+                    el.addClass(`task-card--split-${renderable.splitSegment}`);
+                }
+                if (renderable.originalTaskId) {
+                    el.dataset.splitOriginalId = renderable.originalTaskId;
+                }
             }
-            
+
             el.dataset.id = task.id;
 
             // Apply Color

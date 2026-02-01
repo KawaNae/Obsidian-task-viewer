@@ -36,13 +36,17 @@ export class HandleManager {
         // Remove handles from previously selected task and restore z-index
         if (this.selectedTaskId) {
             this.removeHandles(this.selectedTaskId);
-            const prevEl = this.container.querySelector(`.task-card[data-id="${this.selectedTaskId}"]`) as HTMLElement;
-            if (prevEl) {
-                // Restore original z-index from data attribute if it exists
-                if (prevEl.dataset.originalZIndex) {
-                    prevEl.style.zIndex = prevEl.dataset.originalZIndex;
+            // Need to find ALL previous cards (including split ones)
+            const prevEls = this.container.querySelectorAll('.task-card');
+            prevEls.forEach(el => {
+                const htmlEl = el as HTMLElement;
+                // Check direct ID or split original ID
+                if (htmlEl.dataset.id === this.selectedTaskId || htmlEl.dataset.splitOriginalId === this.selectedTaskId) {
+                    if (htmlEl.dataset.originalZIndex) {
+                        htmlEl.style.zIndex = htmlEl.dataset.originalZIndex;
+                    }
                 }
-            }
+            });
         }
 
         this.selectedTaskId = taskId;
@@ -51,7 +55,8 @@ export class HandleManager {
         const taskCards = this.container.querySelectorAll('.task-card');
         taskCards.forEach(el => {
             const htmlEl = el as HTMLElement;
-            if (htmlEl.dataset.id === taskId) {
+            // Match ID or Split ID
+            if (taskId && (htmlEl.dataset.id === taskId || htmlEl.dataset.splitOriginalId === taskId)) {
                 el.addClass('selected');
                 // Store original z-index and set high z-index for selected
                 htmlEl.dataset.originalZIndex = htmlEl.style.zIndex || '1';
@@ -79,46 +84,73 @@ export class HandleManager {
      * Removes handles from a task card.
      */
     private removeHandles(taskId: string): void {
-        const taskEl = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
-        if (!taskEl) return;
-
-        const handles = taskEl.querySelectorAll('.task-card__handle');
-        handles.forEach(h => h.remove());
+        // Find ALL matching cards
+        const taskCards = this.container.querySelectorAll('.task-card');
+        taskCards.forEach(el => {
+            const htmlEl = el as HTMLElement;
+            if (htmlEl.dataset.id === taskId || htmlEl.dataset.splitOriginalId === taskId) {
+                const handles = htmlEl.querySelectorAll('.task-card__handle');
+                handles.forEach(h => h.remove());
+            }
+        });
     }
 
     /**
      * Renders handles directly inside the task card element.
      */
     private renderHandles(taskId: string): void {
-        const taskEl = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
-        if (!taskEl) return;
+        // Find ALL matching cards
+        const taskCards = Array.from(this.container.querySelectorAll('.task-card')).filter(el => {
+            const htmlEl = el as HTMLElement;
+            return htmlEl.dataset.id === taskId || htmlEl.dataset.splitOriginalId === taskId;
+        });
+
+        if (taskCards.length === 0) return;
 
         const task = this.taskIndex.getTask(taskId);
         if (!task) return;
 
-        // Remove existing handles first
-        this.removeHandles(taskId);
+        taskCards.forEach(el => {
+            const taskEl = el as HTMLElement;
 
-        const isFuture = task.isFuture;
-        const isAllDay = taskEl.classList.contains('task-card--allday');
+            // Remove existing handles first (safety check)
+            const existingHandles = taskEl.querySelectorAll('.task-card__handle');
+            existingHandles.forEach(h => h.remove());
 
-        // --- Render Handles ---
-        if (isFuture) {
-            // Future tasks only get move handle
-            this.createMoveHandle(taskEl, taskId);
-        } else if (isAllDay) {
-            // Left Resize Handle
-            this.createResizeHandle(taskEl, taskId, 'left', '↔');
-            // Right Resize Handle
-            this.createResizeHandle(taskEl, taskId, 'right', '↔');
-            // Move Handle
-            this.createMoveHandle(taskEl, taskId);
-        } else {
-            // Timed tasks: Top/Bottom resize + Move
-            this.createResizeHandle(taskEl, taskId, 'top', '↕');
-            this.createResizeHandle(taskEl, taskId, 'bottom', '↕');
-            this.createMoveHandle(taskEl, taskId);
-        }
+            const isFuture = task.isFuture;
+            const isAllDay = taskEl.classList.contains('task-card--allday');
+
+            // Split checks
+            const isSplitBefore = taskEl.classList.contains('task-card--split-before');
+            const isSplitAfter = taskEl.classList.contains('task-card--split-after');
+
+            // --- Render Handles ---
+            if (isFuture) {
+                // Future tasks only get move handle
+                this.createMoveHandle(taskEl, taskId);
+            } else if (isAllDay) {
+                // Left Resize Handle
+                this.createResizeHandle(taskEl, taskId, 'left', '↔');
+                // Right Resize Handle
+                this.createResizeHandle(taskEl, taskId, 'right', '↔');
+                // Move Handle
+                this.createMoveHandle(taskEl, taskId);
+            } else {
+                // Timed tasks: Top/Bottom resize + Move
+
+                // Top Handle: Render unless it's the 'after' segment (start boundary)
+                if (!isSplitAfter) {
+                    this.createResizeHandle(taskEl, taskId, 'top', '↕');
+                }
+
+                // Bottom Handle: Render unless it's the 'before' segment (end boundary)
+                if (!isSplitBefore) {
+                    this.createResizeHandle(taskEl, taskId, 'bottom', '↕');
+                }
+
+                this.createMoveHandle(taskEl, taskId);
+            }
+        });
     }
 
     private createResizeHandle(taskEl: HTMLElement, taskId: string, position: 'left' | 'right' | 'top' | 'bottom', icon: string): void {
