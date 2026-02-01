@@ -49,10 +49,11 @@ export class GhostManager {
 
                 // Position relative to viewport since ghosts are fixed/absolute
                 // If createGhostElement uses 'fixed', we add rect.left/top
+                // Apply CSS offsets to match TimelineSectionRenderer: top +1, height -3
                 ghost.style.left = `${rect.left + 4}px`; // +4px for padding/margin adjustment
-                ghost.style.top = `${rect.top + seg.top}px`;
+                ghost.style.top = `${rect.top + seg.top + 1}px`; // +1px CSS offset
                 ghost.style.width = `${rect.width - 8}px`; // -8px for padding
-                ghost.style.height = `${seg.height}px`;
+                ghost.style.height = `${seg.height - 3}px`; // -3px CSS offset
                 ghost.style.opacity = '0.8';
                 ghost.style.display = 'block';
 
