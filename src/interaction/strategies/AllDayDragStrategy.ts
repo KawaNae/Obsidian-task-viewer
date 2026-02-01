@@ -53,6 +53,7 @@ export class AllDayDragStrategy implements DragStrategy {
             this.mode = 'move';
         }
 
+
         // Initialize Geometry
         // We can get column width from the grid
         const grid = el.closest('.timeline-grid');
@@ -75,6 +76,7 @@ export class AllDayDragStrategy implements DragStrategy {
         this.initialEndDate = task.endDate || this.initialDate;
         const diffDays = DateUtils.getDiffDays(this.initialDate, this.initialEndDate);
         this.initialSpan = diffDays + 1;
+
 
         // Parse startCol from gridColumn style (e.g., "3 / span 2" → startCol = 3)
         const gridCol = el.style.gridColumn;

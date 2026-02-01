@@ -96,6 +96,18 @@ export class TimelineDragStrategy implements DragStrategy {
         }
 
         // 2. Expand Split Task on Move (Virtual Expansion using Original Task Logic)
+        // For split tasks, we need to calculate visual position based on the ORIGINAL task's times,
+        // not the segment's visual position (which would cause jumps when dragging)
+        let originalTaskStartMinutes: number | null = null;
+        let originalTaskEndMinutes: number | null = null;
+        
+        const dayCol = el.closest('.day-timeline-column') as HTMLElement;
+        this.currentDayDate = dayCol ? dayCol.dataset.date || null : (task.startDate || null);
+        
+        const zoomLevel = context.plugin.settings.zoomLevel;
+        const startHour = context.plugin.settings.startHour;
+        const startHourMinutes = startHour * 60;
+        
         if (this.mode === 'move') {
             const originalId = (task as any).originalTaskId || task.id;
             const originalTask = context.taskIndex.getTask(originalId);
@@ -111,17 +123,24 @@ export class TimelineDragStrategy implements DragStrategy {
 
                 const durationMs = end.getTime() - start.getTime();
                 const durationMinutes = durationMs / 60000;
-                const zoomLevel = context.plugin.settings.zoomLevel;
                 const fullHeight = durationMinutes * zoomLevel;
-
-                // If we are dragging a split segment, we want to visually simulate dragging the WHOLE task.
-                // Ideally, we calculate the offset based on where the segment is relative to the start.
-                // However, for Simplicity in V1 Dynamic Drag:
-                // We will calculate the 'new time' based on the CURRENT segment's top,
-                // and then project the full duration from that new start time.
 
                 // Update initialHeight to be the FULL duration height for calculation purposes
                 this.initialHeight = fullHeight;
+                
+                // Calculate original task's start/end in minutes relative to currentDayDate's startHour
+                // This is needed to correctly calculate dragTimeOffset for split tasks
+                if (this.currentDayDate) {
+                    const currentDayStart = new Date(`${this.currentDayDate}T00:00:00`);
+                    
+                    // Calculate start minutes relative to currentDayDate's midnight
+                    const startDiffMs = start.getTime() - currentDayStart.getTime();
+                    originalTaskStartMinutes = startDiffMs / 60000;
+                    
+                    // Calculate end minutes relative to currentDayDate's midnight
+                    const endDiffMs = end.getTime() - currentDayStart.getTime();
+                    originalTaskEndMinutes = endDiffMs / 60000;
+                }
             }
         }
 
@@ -129,60 +148,32 @@ export class TimelineDragStrategy implements DragStrategy {
         const logicalHeight = this.initialHeight + 3;
         this.initialBottom = logicalTop + logicalHeight;
 
-        const dayCol = el.closest('.day-timeline-column') as HTMLElement;
-        this.currentDayDate = dayCol ? dayCol.dataset.date || null : (task.startDate || null);
-
-        // --- NEW: Calculate Time Offset ---
-        const zoomLevel = context.plugin.settings.zoomLevel;
-        const startHour = context.plugin.settings.startHour;
-        const startHourMinutes = startHour * 60;
-
+        // --- Calculate Time Offset ---
         let mouseMinutes = 0;
         if (dayCol) {
             const dayRect = dayCol.getBoundingClientRect();
             const yInCol = e.clientY - dayRect.top;
             mouseMinutes = startHourMinutes + (yInCol / zoomLevel);
         } else {
-            // Fallback if not in column (approximate using top + offset)
-            // But we really should rely on column. If dragging existing task, it should be in a column.
-            // If absolute positioned?
             const yInCol = parseInt(el.style.top || '0') + (e.clientY - rect.top);
             mouseMinutes = startHourMinutes + (yInCol / zoomLevel);
         }
 
-        // Parse Task Times
-        const tStart = new Date(`${task.startDate}T${task.startTime}`);
-        const tEnd = new Date(`${task.endDate}T${task.endTime}`);
-        if (tEnd < tStart) tEnd.setDate(tEnd.getDate() + 1); // Handle wrap
-
-        // Normalize to minutes from midnight of currentDayDate?
-        // Actually simpler: Just store diff.
-        // We know task duration.
-        // But for split tasks, 'task' might be the whole task, but we are dragging a SEGMENT.
-        // Ideally we want to anchor to the 'Task Start' or 'Task End' regardless of segment?
-        // User wants to move the WHOLE task.
-        // So offset from WHOLE task start/end is correct.
-
-        // Calculate task start/end in "minutes from day start" context
-        // We assume the task belongs to currentDayDate context roughly.
-        // But simpler: just get diff between Mouse and Time.
-
-        // But wait, Date objects include Day info. MouseMinutes is relative to 00:00 of THIS day.
-        // We need to be careful with multi-day shifts.
-        // Let's stick to relative minutes for simplicity if we assume we are moving within days.
-
-        // Correction: We just need "Mouse Time" vs "Task Start Time" on the specific day we are interacting with.
-
-        // Let's use the visual top/height to derive "Visual Task Time" to match exactly what the user sees.
-        // This avoids misalignment if the rendered pos is slightly off from data.
-        // Snap logic usually wants to snap the *Visual* edge to the grid.
-
-        const visualTop = this.initialTop;
-        const visualHeight = this.initialHeight; // We already force-corrected this to logical duration in onDown
-        // So visualTop is the only variable.
-
-        const visualStartMinutes = startHourMinutes + (visualTop / zoomLevel);
-        const visualEndMinutes = visualStartMinutes + (visualHeight / zoomLevel);
+        // Calculate visual start/end minutes for dragTimeOffset
+        let visualStartMinutes: number;
+        let visualEndMinutes: number;
+        
+        if (originalTaskStartMinutes !== null && originalTaskEndMinutes !== null) {
+            // For split tasks: use original task's actual start/end times
+            visualStartMinutes = originalTaskStartMinutes;
+            visualEndMinutes = originalTaskEndMinutes;
+        } else {
+            // For normal tasks: derive from visual position
+            const visualTop = this.initialTop;
+            const visualHeight = this.initialHeight;
+            visualStartMinutes = startHourMinutes + (visualTop / zoomLevel);
+            visualEndMinutes = visualStartMinutes + (visualHeight / zoomLevel);
+        }
 
         if (this.anchorType === 'end') {
             this.dragTimeOffset = visualEndMinutes - mouseMinutes; // Positive if mouse is above bottom
@@ -190,7 +181,6 @@ export class TimelineDragStrategy implements DragStrategy {
             this.dragTimeOffset = mouseMinutes - visualStartMinutes; // Positive if mouse is below top
         }
 
-        console.log(`[TimelineDragStrategy] TimeOffset: ${this.dragTimeOffset.toFixed(2)} min (Anchor: ${this.anchorType})`);
 
         this.hasKeyMoved = false;
         this.isOutsideSection = false;
