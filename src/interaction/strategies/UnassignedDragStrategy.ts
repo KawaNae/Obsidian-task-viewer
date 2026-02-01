@@ -118,6 +118,12 @@ export class UnassignedDragStrategy implements DragStrategy {
             const minutesFromStart = snappedTop / zoomLevel;
             const totalMinutes = startHourMinutes + minutesFromStart;
 
+            let finalStartDate = dayCol.dataset.date;
+            if (totalMinutes >= 24 * 60) {
+                finalStartDate = DateUtils.addDays(dayCol.dataset.date, 1);
+            }
+
+            updates.startDate = finalStartDate;
             updates.startTime = DateUtils.minutesToTime(totalMinutes);
             updates.endTime = DateUtils.minutesToTime(totalMinutes + 60);
 

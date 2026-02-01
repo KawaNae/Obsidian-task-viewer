@@ -77,12 +77,21 @@ export class TimelineDragStrategy implements DragStrategy {
 
         // Determine Anchor Type
         // If split-after, we anchor to the END (Bottom Right handle) to prevent snapping to start boundary
-        if (el.classList.contains('task-card--split-after')) {
+        // Also support explicit bottom-right handle click
+        if (target.closest('.task-card__handle--move-bottom-right')) {
             this.anchorType = 'end';
-            console.log('[TimelineDragStrategy] Anchor: END (split-after)');
-        } else {
+            console.log('[TimelineDragStrategy] Anchor: END (bottom-right handle)');
+        } else if (target.closest('.task-card__handle--move-top-right')) {
             this.anchorType = 'start';
-            console.log('[TimelineDragStrategy] Anchor: START');
+            console.log('[TimelineDragStrategy] Anchor: START (top-right handle)');
+        } else {
+            // Fallback for unexpected cases or legacy
+            if (el.classList.contains('task-card--split-after')) {
+                this.anchorType = 'end';
+            } else {
+                this.anchorType = 'start';
+            }
+            console.log(`[TimelineDragStrategy] Anchor: ${this.anchorType.toUpperCase()} (fallback)`);
         }
 
         // 2. Expand Split Task on Move (Virtual Expansion using Original Task Logic)

@@ -1,3 +1,5 @@
+import { DateUtils } from './utils/DateUtils';
+
 /**
  * Check if a statusChar represents a complete (finished) task
  * Uses the settings to determine which characters are considered complete
@@ -18,36 +20,71 @@ export function shouldSplitTask(task: Task, startHour: number): boolean {
         return false;
     }
 
-    // Calculate duration in hours
-    const startDateTime = new Date(`${task.startDate}T${task.startTime}`);
-    const endDateTime = new Date(`${task.endDate}T${task.endTime}`);
-    const durationHours = (endDateTime.getTime() - startDateTime.getTime()) / (1000 * 60 * 60);
+    // Calculate duration in hours to ensure we don't split really long tasks (logic from before)
+    // Note: DateUtils.getTaskDurationMs is more accurate but let's keep it simple here or reuse if we imported it
+    // We can use a simpler check for visual days.
 
-    // Only split if duration < 24 hours
-    if (durationHours >= 24) {
-        return false;
+    // 1. Get Visual Start Day
+    const visualStartDay = DateUtils.getVisualStartDate(task.startDate, task.startTime, startHour);
+
+    // 2. Get Visual End Day
+    // Logic: If endTime is strictly > StartHour, it belongs to that calendar day.
+    // If endTime <= StartHour (and m=0), it belongs to previous calendar day (visually).
+    // Actually, let's look at `DateUtils.getVisualStartDate` equivalent for End Time.
+    // Spec: "Visual day ends at StartHour:00 of the next day".
+    // So 05:00 belongs to the END of the previous visual day ?
+    // Or start of next?
+    // In our timeline, 05:00 is the top of the day.
+    // So 04:59 is bottom of previous.
+    // If a task ends at 05:00, it ends at the top of the NEXT day visually? 
+    // No, if it ends at 05:00, it touches the boundary.
+    // Ideally, a task 23:00-05:00 should NOT split.
+    // A task 23:00-05:01 SHOULD split (1 minute in next day).
+
+    let visualEndDay = task.endDate;
+    const [endH, endM] = task.endTime.split(':').map(Number);
+
+    // If time is strictly before startHour, OR exactly startHour:00
+    // Then it belongs to the previous visual day block.
+    // e.g. 03:00 < 05:00 -> Previous
+    // 05:00 == 05:00 -> Previous (End Boundary)
+    // 05:01 > 05:00 -> Current (Next Visual Day)
+
+    if (endH < startHour || (endH === startHour && endM === 0)) {
+        visualEndDay = DateUtils.addDays(task.endDate, -1);
+    } else {
+        // >= StartHour:01 (approx)
+        visualEndDay = task.endDate;
     }
 
-    // Check if task crosses visual day boundary
-    // Visual day boundary is at startHour:00
-    const startHourNum = parseInt(task.startTime.split(':')[0]);
-    const endHourNum = parseInt(task.endTime.split(':')[0]);
-
-    // If calendar dates are different, definitely crosses boundary
-    if (task.startDate !== task.endDate) {
+    // 3. Comparison
+    if (visualStartDay !== visualEndDay) {
+        // It crosses a boundary
         return true;
     }
 
-    // Same calendar date: check if times straddle the startHour boundary
-    // e.g., startHour=5, startTime=02:00, endTime=08:00
-    // 02:00 < 5 (previous visual day), 08:00 >= 5 (current visual day) → split needed
-    if (startHourNum < startHour) {
-        const [endH, endM] = task.endTime.split(':').map(Number);
-        if (endH > startHour) return true;
-        if (endH === startHour && endM > 0) return true;
-    }
+    // 4. Double check length < 24h?
+    // If visual days are different, it might be a huge task (2 days long).
+    // The original code had: if (durationHours >= 24) return false;
+    // We should preserve that check to avoid splitting 48h tasks into 2 pieces (logic elsewhere handles long tasks?)
+    // But RenderableTask splitting usually handles 1 split.
 
-    return false;
+    const startDateTime = new Date(`${task.startDate}T${task.startTime}`);
+    // Handle next-day calculation for duration check simplistically
+    let endDateForCalc = task.endDate;
+    if (task.endTime < task.startTime && task.endDate === task.startDate) {
+        // Implicit next day? No, task always has endDate nowadays if properly parsed
+        // But let's trust dates.
+    }
+    // Let's just trust Date object calc
+    let endDateTime = new Date(`${task.endDate}T${task.endTime}`);
+    // If end < start (sanity check, inconsistent data), swap? No.
+    if (endDateTime < startDateTime) return false; // Invalid 
+
+    const durationHours = (endDateTime.getTime() - startDateTime.getTime()) / (1000 * 60 * 60);
+    if (durationHours >= 24) return false;
+
+    return false; // Visual days are same
 }
 
 /**

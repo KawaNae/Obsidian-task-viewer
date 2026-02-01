@@ -126,29 +126,60 @@ export class HandleManager {
 
             // --- Render Handles ---
             if (isFuture) {
-                // Future tasks only get move handle
-                this.createMoveHandle(taskEl, taskId);
+                // Future tasks only get top-right move handle (simplest)
+                this.createMoveHandle(taskEl, taskId, 'top-right');
             } else if (isAllDay) {
                 // Left Resize Handle
                 this.createResizeHandle(taskEl, taskId, 'left', '↔');
                 // Right Resize Handle
                 this.createResizeHandle(taskEl, taskId, 'right', '↔');
-                // Move Handle
-                this.createMoveHandle(taskEl, taskId);
+                // Move Handle (Top-Right default for AllDay)
+                this.createMoveHandle(taskEl, taskId, 'top-right');
             } else {
-                // Timed tasks: Top/Bottom resize + Move
+                // Timed tasks: Top/Bottom resize + Top-Right/Bottom-Right Move
 
-                // Top Handle: Render unless it's the 'after' segment (start boundary)
-                if (!isSplitAfter) {
+                // 1. Check if touching Top Boundary (Start Hour)
+                // Logic: If task startTime matches startHour:00 exactly, it touches the top.
+                // However, visually, 'split-after' ALWAYS touches the top.
+                // But user requirement says: "Boundary touching tasks" -> Hide Top Handles.
+                // For a split-after task, it effectively starts at StartHour.
+                // So split-after should HIDE Top Resize & Top Move.
+
+                // Let's rely on time check for generic case, and class for split case if easier.
+                // But time check is more robust for non-split tasks that just happen to start at boundary.
+
+                const startHour = this.taskIndex.getSettings().startHour;
+                const [startH, startM] = (task.startTime || '00:00').split(':').map(Number);
+
+                // Touching Top Boundary if:
+                // 1. It is a 'split-after' segment (always starts at boundary)
+                // 2. OR it starts exactly at StartHour:00 (for normal tasks)
+                const isTouchingTop = isSplitAfter || (startH === startHour && startM === 0);
+
+                // Check if touching Bottom Boundary (Next Start Hour)
+                // Logic: If task ends exactly at next day's StartHour:00
+                // 'split-before' segment always ends at boundary.
+                let isTouchingBottom = isSplitBefore;
+
+                if (!isTouchingBottom && task.endTime) {
+                    const [endH, endM] = task.endTime.split(':').map(Number);
+                    // If end time is StartHour:00, it touches the bottom boundary of the visual day
+                    if (endH === startHour && endM === 0) {
+                        isTouchingBottom = true;
+                    }
+                }
+
+                // Render Top Handles (Hide if touching top)
+                if (!isTouchingTop) {
                     this.createResizeHandle(taskEl, taskId, 'top', '↕');
+                    this.createMoveHandle(taskEl, taskId, 'top-right');
                 }
 
-                // Bottom Handle: Render unless it's the 'before' segment (end boundary)
-                if (!isSplitBefore) {
+                // Render Bottom Handles (Hide if touching bottom)
+                if (!isTouchingBottom) {
                     this.createResizeHandle(taskEl, taskId, 'bottom', '↕');
+                    this.createMoveHandle(taskEl, taskId, 'bottom-right');
                 }
-
-                this.createMoveHandle(taskEl, taskId);
             }
         });
     }
@@ -160,10 +191,11 @@ export class HandleManager {
         handle.dataset.taskId = taskId;
     }
 
-    private createMoveHandle(taskEl: HTMLElement, taskId: string): void {
-        const container = taskEl.createDiv('task-card__handle task-card__handle--move');
+    private createMoveHandle(taskEl: HTMLElement, taskId: string, position: 'top-right' | 'bottom-right'): void {
+        const container = taskEl.createDiv(`task-card__handle task-card__handle--move-${position}`);
         const handle = container.createDiv('task-card__handle-btn');
-        handle.setText('::');
+        handle.setText(':');
         handle.dataset.taskId = taskId;
+        handle.style.cursor = 'move'; // Ensure cursor is set explicitly if not covered by CSS
     }
 }
