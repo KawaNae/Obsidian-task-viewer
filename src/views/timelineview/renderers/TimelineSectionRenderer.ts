@@ -104,7 +104,7 @@ export class TimelineSectionRenderer {
         renderableTasks.forEach(task => {
             if (!task.startTime) return;
 
-            const el = container.createDiv('task-card timed');
+            const el = container.createDiv('task-card');
             if (task.id === this.handleManager.getSelectedTaskId()) el.addClass('selected');
             if (task.startDateInherited) el.addClass('task-card--inherited');
 
