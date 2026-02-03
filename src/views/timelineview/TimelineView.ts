@@ -279,7 +279,9 @@ export class TimelineView extends ItemView {
             targetColumn.addClass('hidden');
         } else {
             // Header
-            targetColumn.createEl('h3', { text: 'Deadline List', attr: { style: 'padding: 10px; border-bottom: 1px solid var(--background-modifier-border); margin: 0;' } });
+            targetColumn.createEl('p', { text: 'Deadline List', attr: { 
+                style: 'padding: 10px; border-bottom: 1px solid var(--background-modifier-border); margin: 0;font-size: 0.8em;color: var(--text-muted);' 
+            } });
 
             const listContainer = targetColumn.createDiv({ cls: 'deadline-list-wrapper', attr: { style: 'flex: 1; overflow-y: auto; padding: 10px;' } });
 

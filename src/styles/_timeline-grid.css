@@ -13,7 +13,7 @@
     overflow: hidden;
     background-color: var(--background-primary);
     position: relative;
-    padding: 0;
+    padding: 0 !important;
     /* Ensure no padding interferes with full height */
 }
 

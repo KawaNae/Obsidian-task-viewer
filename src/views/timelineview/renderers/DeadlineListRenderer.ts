@@ -110,7 +110,7 @@ export class DeadlineListRenderer {
         if (tasks.length === 0) return;
 
         const groupEl = container.createDiv(`deadline-group ${className}`);
-        const header = groupEl.createEl('h4', { text: title, cls: 'deadline-group-header' });
+        const header = groupEl.createEl('p', { text: title, cls: 'deadline-group-header' });
         header.createSpan({ text: ` (${tasks.length})`, cls: 'deadline-count' });
 
         const listEl = groupEl.createDiv('deadline-group-list');
