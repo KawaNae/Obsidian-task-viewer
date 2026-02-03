@@ -1,4 +1,4 @@
-import { App } from 'obsidian';
+import { App, setIcon } from 'obsidian';
 import { ViewState, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
@@ -52,6 +52,9 @@ export class TimelineToolbar {
 
         // Filter Button
         this.renderFilterButton(toolbar);
+
+        // Sidebar Toggle
+        this.renderSidebarToggle(toolbar);
     }
 
     private renderDateNavigation(toolbar: HTMLElement): void {
@@ -138,6 +141,27 @@ export class TimelineToolbar {
                 (file) => this.callbacks.getFileColor(file),
                 () => this.callbacks.onRender()
             );
+        };
+    }
+
+    private renderSidebarToggle(toolbar: HTMLElement): void {
+        const toggleBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(toggleBtn, 'sidebar-right');
+        toggleBtn.setAttribute('aria-label', 'Toggle Deadline List');
+
+        if (this.viewState.showDeadlineList) {
+            toggleBtn.addClass('is-active');
+        }
+
+        toggleBtn.onclick = () => {
+            this.viewState.showDeadlineList = !this.viewState.showDeadlineList;
+            if (this.viewState.showDeadlineList) {
+                toggleBtn.addClass('is-active');
+            } else {
+                toggleBtn.removeClass('is-active');
+            }
+            // Trigger full render to update layout
+            this.callbacks.onRender();
         };
     }
 

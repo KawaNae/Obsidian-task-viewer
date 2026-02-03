@@ -20,7 +20,7 @@ export class GridRenderer {
     ) { }
 
     public render(
-
+        parentContainer: HTMLElement,
         allDayRenderer: AllDaySectionRenderer,
         timelineRenderer: TimelineSectionRenderer,
         handleManager: HandleManager,
@@ -28,7 +28,8 @@ export class GridRenderer {
         owner: Component,
         visibleFiles: Set<string> | null
     ) {
-        const grid = this.container.createDiv('timeline-grid');
+        // Use parentContainer for rendering the grid
+        const grid = parentContainer.createDiv('timeline-grid');
         const dates = getDatesToShow();
         // Simple grid template - overlay scrollbar doesn't take space
         const colTemplate = `30px repeat(${this.viewState.daysToShow}, minmax(0, 1fr))`;

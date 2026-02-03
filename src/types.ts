@@ -198,7 +198,7 @@ export interface Task {
 
     // Flow Commands
     commands?: FlowCommand[];
-    
+
     // Validation warning - set during parse if task has formatting issues
     validationWarning?: string;
 }
@@ -217,6 +217,7 @@ export interface FlowModifier {
 export interface ViewState {
     startDate: string;      // YYYY-MM-DD
     daysToShow: number;     // 1, 3, 7, etc.
+    showDeadlineList: boolean; // Toggle for right sidebar
 }
 
 export interface TaskViewerSettings {

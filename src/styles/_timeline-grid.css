@@ -8,12 +8,47 @@
 /* Timeline View Container */
 .timeline-view {
     height: 100%;
-    display: flex;
-    flex-direction: column;
+    /* display: flex;  <-- removed, managed by inner layout */
+    /* flex-direction: column; */
     overflow: hidden;
     background-color: var(--background-primary);
     position: relative;
-    /* Fix for handle alignment */
+    padding: 0;
+    /* Ensure no padding interferes with full height */
+}
+
+/* 2-Column Layout Wrapper */
+.timeline-view-layout {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+}
+
+.execution-column {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    /* This column contains the toolbar and grid */
+}
+
+.target-column {
+    width: 300px;
+    border-left: 1px solid var(--background-modifier-border);
+    display: flex;
+    flex-direction: column;
+    background-color: var(--background-secondary);
+    transition: margin-right 0.3s ease, min-width 0.3s ease, width 0.3s ease;
+    overflow: hidden;
+}
+
+.target-column.hidden {
+    width: 0;
+    min-width: 0;
+    border-left: none;
+    margin-right: 0;
 }
 
 /* Timeline Grid Container (Flex Column of Rows) */

@@ -62,7 +62,8 @@ export class TimelineView extends ItemView {
         this.plugin = plugin;
         this.viewState = {
             startDate: DateUtils.getVisualDateOfNow(this.plugin.settings.startHour),
-            daysToShow: 3
+            daysToShow: 3,
+            showDeadlineList: true // Default: show deadline list
         };
         this.taskRenderer = new TaskRenderer(this.app, this.taskIndex);
     }
@@ -262,10 +263,47 @@ export class TimelineView extends ItemView {
         const scrollbarWidth = this.measureScrollbarWidth();
         this.container.style.setProperty('--scrollbar-width-actual', `${scrollbarWidth}px`);
 
+        // Initialize 2-Column Layout
+        const layoutContainer = this.container.createDiv('timeline-view-layout');
+
+        // Execution Column (Timeline, AllDay)
+        const executionColumn = layoutContainer.createDiv('execution-column');
+
+        // Target Column (Deadline List)
+        const targetColumn = layoutContainer.createDiv('target-column');
+        if (!this.viewState.showDeadlineList) {
+            targetColumn.addClass('hidden');
+        } else {
+            // Placeholder content for now
+            targetColumn.createEl('h3', { text: 'Deadline List', attr: { style: 'padding: 10px; border-bottom: 1px solid var(--background-modifier-border); margin: 0;' } });
+            const listContainer = targetColumn.createDiv({ attr: { style: 'padding: 10px; color: var(--text-muted);' } });
+            listContainer.setText('Coming soon...');
+        }
+
+        // Render Toolbar (into execution column)
+        // We probably want toolbar in execution column OR above both.
+        // Current design: Toolbar is part of timeline view functionality.
+        // Let's put it in execution column for now as verified in plan.
+        this.toolbar = new TimelineToolbar(
+            executionColumn,
+            this.app,
+            this.viewState,
+            this.plugin,
+            this.taskIndex,
+            {
+                onRender: () => this.render(),
+                onStateChange: () => {
+                    this.plugin.saveSettings();
+                },
+                getFileColor: (file) => this.getFileColor(file),
+                getDatesToShow: () => this.getDatesToShow()
+            }
+        );
         this.toolbar.render();
 
-        // Use GridRenderer
+        // Use GridRenderer (render into execution column)
         this.gridRenderer.render(
+            executionColumn,
             this.allDayRenderer,
             this.timelineRenderer,
             this.handleManager,
@@ -352,6 +390,9 @@ export class TimelineView extends ItemView {
     // ==================== Color & Styling ====================
 
     /** Gets the custom color for a file from its frontmatter. */
+    private getFileColor(filePath: string): string | null {
+        return ViewUtils.getFileColor(this.app, filePath, this.plugin.settings.frontmatterColorKey);
+    }
 
 
     // ==================== Task Creation ====================
