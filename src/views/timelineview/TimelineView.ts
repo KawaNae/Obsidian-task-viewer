@@ -15,6 +15,7 @@ import { ViewUtils } from '../ViewUtils';
 import { GridRenderer } from './renderers/GridRenderer';
 import { AllDaySectionRenderer } from './renderers/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
+import { DeadlineListRenderer } from './renderers/DeadlineListRenderer';
 
 
 export const VIEW_TYPE_TIMELINE = 'timeline-view';
@@ -44,6 +45,7 @@ export class TimelineView extends ItemView {
     private gridRenderer: GridRenderer;
     private allDayRenderer: AllDaySectionRenderer;
     private timelineRenderer: TimelineSectionRenderer;
+    private deadlineRenderer: DeadlineListRenderer;
 
 
     // ==================== State ====================
@@ -132,9 +134,11 @@ export class TimelineView extends ItemView {
 
         // Initialize Renderers
 
+        // Initialize Renderers
         this.allDayRenderer = new AllDaySectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow);
         this.timelineRenderer = new TimelineSectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer);
         this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler, this.taskIndex);
+        this.deadlineRenderer = new DeadlineListRenderer(this.taskRenderer, this.plugin, this.menuHandler);
 
         // Initialize DragHandler with selection callback, move callback, and view start date provider
         this.dragHandler = new DragHandler(this.container, this.taskIndex, this.plugin,
@@ -274,10 +278,13 @@ export class TimelineView extends ItemView {
         if (!this.viewState.showDeadlineList) {
             targetColumn.addClass('hidden');
         } else {
-            // Placeholder content for now
+            // Header
             targetColumn.createEl('h3', { text: 'Deadline List', attr: { style: 'padding: 10px; border-bottom: 1px solid var(--background-modifier-border); margin: 0;' } });
-            const listContainer = targetColumn.createDiv({ attr: { style: 'padding: 10px; color: var(--text-muted);' } });
-            listContainer.setText('Coming soon...');
+
+            const listContainer = targetColumn.createDiv({ cls: 'deadline-list-wrapper', attr: { style: 'flex: 1; overflow-y: auto; padding: 10px;' } });
+
+            const deadlineTasks = this.taskIndex.getDeadlineTasks();
+            this.deadlineRenderer.render(listContainer, deadlineTasks, this);
         }
 
         // Render Toolbar (into execution column)

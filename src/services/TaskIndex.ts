@@ -120,6 +120,11 @@ export class TaskIndex {
             DateUtils.getVisualDateOfNow(startHour) :
             DateUtils.getToday();
         return this.getTasks().filter(t => {
+            // Exclude D-type tasks (Deadline only, no start date/time)
+            // They belong to the Deadline List, not the daily schedule
+            if (!t.startDate && !t.startTime && t.deadline) {
+                return false;
+            }
 
             const effectiveStart = t.startDate || today;
             return effectiveStart === date;
@@ -146,6 +151,14 @@ export class TaskIndex {
         });
 
         return [...currentDayTasks, ...nextDayTasks];
+    }
+
+    /**
+     * Get tasks that are purely Deadline tasks (D-type)
+     * No start date, no start time, but has deadline.
+     */
+    getDeadlineTasks(): Task[] {
+        return this.getTasks().filter(t => !t.startDate && !t.startTime && t.deadline);
     }
 
     onChange(callback: (taskId?: string, changes?: string[]) => void): () => void {

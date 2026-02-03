@@ -27,6 +27,9 @@ export class AllDaySectionRenderer {
 
         let tasks = this.taskIndex.getTasks().filter(t => {
 
+            // Exclude D-type tasks (Deadline only)
+            if (!t.startDate && !t.startTime && t.deadline) return false;
+
             // Use visual start date considering startHour
             const visualStart = t.startDate
                 ? DateUtils.getVisualStartDate(t.startDate, t.startTime, startHour)
