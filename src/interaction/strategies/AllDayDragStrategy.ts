@@ -274,12 +274,6 @@ export class AllDayDragStrategy implements DragStrategy {
                         endDate: finalEndDate
                     };
 
-                    // If task has deadline, preserve it but convert to timed format
-                    if (this.dragTask.deadline) {
-                        // Keep deadline as SD type (start+end times, deadline date)
-                        updates.endDate = undefined; // Remove explicit end date for SD type
-                    }
-
                     await context.taskIndex.updateTask(this.dragTask.id, updates);
                     this.dragEl = null;
                     this.dragTask = null;
