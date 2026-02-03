@@ -56,6 +56,7 @@ export class TimelineView extends ItemView {
     private lastScrollTop: number = 0;
     private hasInitializedStartDate: boolean = false;
     private targetColumnEl: HTMLElement | null = null;
+    private executionColumnEl: HTMLElement | null = null;
 
     // ==================== Lifecycle ====================
 
@@ -273,6 +274,10 @@ export class TimelineView extends ItemView {
 
         // Execution Column (Timeline, AllDay)
         const executionColumn = layoutContainer.createDiv('execution-column');
+        if (this.viewState.showDeadlineList) {
+            executionColumn.addClass('deadline-visible');
+        }
+        this.executionColumnEl = executionColumn;
 
         // Target Column (Deadline List)
         const targetColumn = layoutContainer.createDiv('target-column');
@@ -312,6 +317,9 @@ export class TimelineView extends ItemView {
                 onToggleDeadlineList: () => {
                     if (this.targetColumnEl) {
                         this.targetColumnEl.classList.toggle('hidden', !this.viewState.showDeadlineList);
+                    }
+                    if (this.executionColumnEl) {
+                        this.executionColumnEl.classList.toggle('deadline-visible', this.viewState.showDeadlineList);
                     }
                 }
             }
