@@ -55,6 +55,7 @@ export class TimelineView extends ItemView {
     private currentTimeInterval: number | null = null;
     private lastScrollTop: number = 0;
     private hasInitializedStartDate: boolean = false;
+    private targetColumnEl: HTMLElement | null = null;
 
     // ==================== Lifecycle ====================
 
@@ -277,17 +278,19 @@ export class TimelineView extends ItemView {
         const targetColumn = layoutContainer.createDiv('target-column');
         if (!this.viewState.showDeadlineList) {
             targetColumn.addClass('hidden');
-        } else {
-            // Header
-            targetColumn.createEl('p', { text: 'Deadline List', attr: { 
-                style: 'padding: 10px; border-bottom: 1px solid var(--background-modifier-border); margin: 0;font-size: 0.8em;color: var(--text-muted);' 
-            } });
-
-            const listContainer = targetColumn.createDiv({ cls: 'deadline-list-wrapper', attr: { style: 'flex: 1; overflow-y: auto; padding: 10px;' } });
-
-            const deadlineTasks = this.taskIndex.getDeadlineTasks();
-            this.deadlineRenderer.render(listContainer, deadlineTasks, this);
         }
+
+        // Header
+        targetColumn.createEl('p', { text: 'Deadline List', attr: {
+            style: 'padding: 10px; border-bottom: 1px solid var(--background-modifier-border); margin: 0;font-size: 0.8em;color: var(--text-muted);'
+        } });
+
+        const listContainer = targetColumn.createDiv({ cls: 'deadline-list-wrapper', attr: { style: 'flex: 1; overflow-y: auto; padding: 10px;' } });
+
+        const deadlineTasks = this.taskIndex.getDeadlineTasks();
+        this.deadlineRenderer.render(listContainer, deadlineTasks, this);
+
+        this.targetColumnEl = targetColumn;
 
         // Render Toolbar (into execution column)
         // We probably want toolbar in execution column OR above both.
@@ -305,7 +308,12 @@ export class TimelineView extends ItemView {
                     this.plugin.saveSettings();
                 },
                 getFileColor: (file) => this.getFileColor(file),
-                getDatesToShow: () => this.getDatesToShow()
+                getDatesToShow: () => this.getDatesToShow(),
+                onToggleDeadlineList: () => {
+                    if (this.targetColumnEl) {
+                        this.targetColumnEl.classList.toggle('hidden', !this.viewState.showDeadlineList);
+                    }
+                }
             }
         );
         this.toolbar.render();
