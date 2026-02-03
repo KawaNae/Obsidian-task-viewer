@@ -88,7 +88,7 @@
 }
 
 /* Deadline Task Card */
-.task-card--deadline {
+.task-card.task-card--deadline {
     position: relative;
     top: auto;
     left: auto;
