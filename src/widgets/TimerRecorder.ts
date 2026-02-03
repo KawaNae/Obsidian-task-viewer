@@ -8,6 +8,8 @@ import { App, Notice } from 'obsidian';
 import TaskViewerPlugin from '../main';
 import { TimerInstance } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
+import { TaskParser } from '../services/TaskParser';
+import { Task } from '../types';
 
 export class TimerRecorder {
     constructor(
@@ -23,18 +25,23 @@ export class TimerRecorder {
         const workMinutes = this.plugin.settings.pomodoroWorkMinutes;
         const startTime = new Date(endTime.getTime() - workMinutes * 60 * 1000);
 
-        const dateStr = this.formatDate(startTime);
+        const startDateStr = this.formatDate(startTime);
         const startTimeStr = this.formatTime(startTime);
+        const endDateStr = this.formatDate(endTime);
         const endTimeStr = this.formatTime(endTime);
 
         // Use 🍅 + custom label if provided
         const customText = timer.customLabel.trim();
         const label = customText ? `🍅 ${customText}` : '🍅';
 
+        // Create Task object and use Parser to format
+        const taskObj = this.createTaskObject(label, startDateStr, startTimeStr, endDateStr, endTimeStr);
+        const formattedLine = TaskParser.format(taskObj);
+
         if (timer.taskOriginalText && timer.taskFile) {
             // Use stored originalText for reliable lookup (avoids stale line number issues)
             const childIndent = this.getChildIndent(timer.taskOriginalText);
-            const childLine = `${childIndent}- [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
+            const childLine = childIndent + formattedLine;
             const taskRepository = this.plugin.getTaskRepository();
 
             // Create a minimal task object with the info we need
@@ -47,8 +54,7 @@ export class TimerRecorder {
         } else if (timer.taskId.startsWith('daily-')) {
             // Daily note timer - add completed task directly to daily note
             const dailyDate = timer.taskId.replace('daily-', '');
-            const taskLine = `- [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
-            await this.addTimerRecordToDailyNote(dailyDate, taskLine);
+            await this.addTimerRecordToDailyNote(dailyDate, formattedLine);
         }
 
         new Notice('🍅 Pomodoro recorded!');
@@ -62,18 +68,23 @@ export class TimerRecorder {
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - timer.elapsedTime * 1000);
 
-        const dateStr = this.formatDate(startTime);
+        const startDateStr = this.formatDate(startTime);
         const startTimeStr = this.formatTime(startTime);
+        const endDateStr = this.formatDate(endTime);
         const endTimeStr = this.formatTime(endTime);
 
         // Use ⏱️ + custom label if provided
         const customText = timer.customLabel.trim();
         const label = customText ? `⏱️ ${customText}` : '⏱️';
 
+        // Create Task object and use Parser to format
+        const taskObj = this.createTaskObject(label, startDateStr, startTimeStr, endDateStr, endTimeStr);
+        const formattedLine = TaskParser.format(taskObj);
+
         if (timer.taskOriginalText && timer.taskFile) {
             // Use stored originalText for reliable lookup (avoids stale line number issues)
             const childIndent = this.getChildIndent(timer.taskOriginalText);
-            const childLine = `${childIndent}- [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
+            const childLine = childIndent + formattedLine;
             const taskRepository = this.plugin.getTaskRepository();
 
             // Create a minimal task object with the info we need
@@ -86,8 +97,7 @@ export class TimerRecorder {
         } else if (timer.taskId.startsWith('daily-')) {
             // Daily note timer - add completed task directly to daily note
             const dailyDate = timer.taskId.replace('daily-', '');
-            const taskLine = `- [x] ${label} @${dateStr}T${startTimeStr}>${endTimeStr}`;
-            await this.addTimerRecordToDailyNote(dailyDate, taskLine);
+            await this.addTimerRecordToDailyNote(dailyDate, formattedLine);
         }
 
         new Notice(`⏱️ Timer recorded! (${this.formatElapsedTime(timer.elapsedTime)})`);
@@ -140,6 +150,41 @@ export class TimerRecorder {
             this.plugin.settings.dailyNoteHeader,
             this.plugin.settings.dailyNoteHeaderLevel
         );
+    }
+
+    /**
+     * Create a minimal Task object for formatting
+     */
+    private createTaskObject(
+        label: string,
+        startDate: string,
+        startTime: string,
+        endDate: string,
+        endTime: string
+    ): Task {
+        return {
+            id: 'timer-temp',
+            file: '',
+            line: 0,
+            indent: 0,
+            content: label,
+            statusChar: 'x',
+            parentId: undefined,
+            childIds: [],
+            startDate,
+            startTime,
+            endDate,
+            endTime,
+            deadline: undefined,
+            isFuture: false,
+            explicitStartDate: true,
+            explicitStartTime: true,
+            explicitEndDate: true,
+            explicitEndTime: true,
+            commands: [],
+            originalText: '',
+            childLines: []
+        };
     }
 
     // Utility methods
