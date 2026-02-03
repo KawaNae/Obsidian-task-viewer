@@ -120,7 +120,7 @@ export class TaskIndex {
             DateUtils.getVisualDateOfNow(startHour) :
             DateUtils.getToday();
         return this.getTasks().filter(t => {
-            if (t.isFuture) return false;
+
             const effectiveStart = t.startDate || today;
             return effectiveStart === date;
         });

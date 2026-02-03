@@ -26,7 +26,7 @@ export class AllDaySectionRenderer {
         const startHour = this.plugin.settings.startHour;
 
         let tasks = this.taskIndex.getTasks().filter(t => {
-            if (t.isFuture) return false;
+
             // Use visual start date considering startHour
             const visualStart = t.startDate
                 ? DateUtils.getVisualStartDate(t.startDate, t.startTime, startHour)

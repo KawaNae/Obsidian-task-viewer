@@ -126,7 +126,7 @@ export class TimerRecorder {
                 startTime: startTimeStr,
                 endDate: endDateStr,
                 endTime: endTimeStr,
-                isFuture: false,
+
                 statusChar: 'x' // Auto-complete when timer stops
             });
         }
@@ -176,7 +176,7 @@ export class TimerRecorder {
             endDate,
             endTime,
             deadline: undefined,
-            isFuture: false,
+
             explicitStartDate: true,
             explicitStartTime: true,
             explicitEndDate: true,

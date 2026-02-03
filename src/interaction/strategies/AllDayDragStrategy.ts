@@ -135,12 +135,11 @@ export class AllDayDragStrategy implements DragStrategy {
             // Check if cursor is outside the long-term section
             const doc = context.container.ownerDocument || document;
             const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
-            const futureSection = elBelow?.closest('.future-section-grid') || elBelow?.closest('.future-section__content') || elBelow?.closest('.future-section__list');
             const timelineSection = elBelow?.closest('.day-timeline-column');
             const wasOutside = this.isOutsideSection;
-            this.isOutsideSection = !!(futureSection || timelineSection);
+            this.isOutsideSection = !!(timelineSection);
 
-            console.log('[LongTermDrag] isOutsideSection:', this.isOutsideSection, 'futureSection:', !!futureSection, 'timelineSection:', !!timelineSection);
+            console.log('[LongTermDrag] isOutsideSection:', this.isOutsideSection, 'timelineSection:', !!timelineSection);
 
             // Update ghost and card visibility based on section
             if (this.isOutsideSection && this.ghostEl) {
@@ -242,35 +241,7 @@ export class AllDayDragStrategy implements DragStrategy {
         const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
 
         if (elBelow) {
-            // Check for drop on Future section (LT→FU)
-            const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-section__content') || elBelow.closest('.future-section__list');
-            if (futureSection && this.mode === 'move') {
-                if (this.dragTask.deadline) {
-                    new Notice('DeadlineがあるタスクはFutureに移動できません');
-                    // Reset visual state before returning
-                    this.resetVisualState();
-                    this.dragTask = null;
-                    this.dragEl = null;
-                    this.container = null;
-                    return;
-                }
 
-                if (!this.dragTask.deadline) {
-                    // Convert to Future type: Remove start/end dates, set isFuture=true
-                    const updates: Partial<Task> = {
-                        isFuture: true,
-                        startDate: undefined,
-                        startTime: undefined,
-                        endDate: undefined,
-                        endTime: undefined
-                    };
-                    await context.taskIndex.updateTask(this.dragTask.id, updates);
-                    this.dragEl = null;
-                    this.dragTask = null;
-                    this.container = null;
-                    return;
-                }
-            }
 
             // Check for drop on Timeline section (LT→TL)
             const timelineSection = elBelow.closest('.day-timeline-column') as HTMLElement;
@@ -452,32 +423,9 @@ export class AllDayDragStrategy implements DragStrategy {
 
         if (!elBelow) return;
 
-        // Check for valid drop targets
-        const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-section__content') || elBelow.closest('.future-section__list');
         const timelineCol = elBelow.closest('.day-timeline-column') as HTMLElement;
 
-        if (futureSection) {
-            if (this.dragTask?.deadline) {
-                // Invalid drop: no highlight, just cursor
-                document.body.style.cursor = 'not-allowed';
-            } else {
-                // Valid drop
-                const futureGrid = futureSection.closest('.future-section-grid') || futureSection.querySelector('.future-section-grid') || (futureSection.hasClass('future-section-grid') ? futureSection : null);
-                let targetEl = futureSection;
-
-                if (futureGrid) {
-                    const content = futureGrid.querySelector('.future-section__content');
-                    if (content) targetEl = content as HTMLElement;
-                } else if (futureSection.hasClass('future-section__content')) {
-                    targetEl = futureSection;
-                } else if (futureSection.closest('.future-section__content')) {
-                    targetEl = futureSection.closest('.future-section__content') as HTMLElement;
-                }
-
-                targetEl.addClass('drag-over');
-                this.lastHighlighted = targetEl as HTMLElement;
-            }
-        } else if (timelineCol) {
+        if (timelineCol) {
             timelineCol.addClass('drag-over');
             this.lastHighlighted = timelineCol;
         }

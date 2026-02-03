@@ -4,7 +4,7 @@ import TaskViewerPlugin from '../main';
 import { DragStrategy, DragContext } from './DragStrategy';
 import { TimelineDragStrategy } from './strategies/TimelineDragStrategy';
 import { AllDayDragStrategy } from './strategies/AllDayDragStrategy';
-import { UnassignedDragStrategy } from './strategies/UnassignedDragStrategy';
+
 
 export class DragHandler implements DragContext {
     container: HTMLElement;
@@ -113,15 +113,8 @@ export class DragHandler implements DragContext {
         // Select Strategy
         // Determine if this is an AllDay task (either no startTime, or 24h+ duration with startTime)
         const isAllDayTask = this.isAllDayTask(task);
-        
-        if (task.isFuture) {
-            // Future tasks also require handle to drag
-            if (!isFromHandle) {
-                this.onTaskClick(taskId);
-                return;
-            }
-            this.currentStrategy = new UnassignedDragStrategy();
-        } else if (isAllDayTask) {
+
+        if (isAllDayTask) {
             // AllDay/LongTerm tasks require handle to drag
             if (!isFromHandle) {
                 // Not from handle: just select the task, don't start drag
@@ -166,12 +159,12 @@ export class DragHandler implements DragContext {
      */
     private isAllDayTask(task: Task): boolean {
         if (!task.startTime) return true;
-        
+
         // Check if duration >= 24 hours
         const startHour = this.plugin.settings.startHour;
         const viewStartDate = this.getViewStartDate();
         const startDate = task.startDate || viewStartDate;
-        
+
         const durationMs = this.getTaskDurationMs(
             startDate,
             task.startTime,
@@ -179,7 +172,7 @@ export class DragHandler implements DragContext {
             task.endTime,
             startHour
         );
-        
+
         const hours24 = 24 * 60 * 60 * 1000;
         return durationMs >= hours24;
     }
@@ -197,10 +190,10 @@ export class DragHandler implements DragContext {
     ): number {
         const effectiveStartDate = startDate;
         const effectiveStartTime = startTime || `${startHour.toString().padStart(2, '0')}:00`;
-        
+
         let effectiveEndDate = endDate || effectiveStartDate;
         let effectiveEndTime = endTime || `${startHour.toString().padStart(2, '0')}:00`;
-        
+
         // If no endTime but has endDate, use next day's startHour
         if (!endTime && endDate) {
             effectiveEndTime = `${startHour.toString().padStart(2, '0')}:00`;
@@ -209,10 +202,10 @@ export class DragHandler implements DragContext {
             d.setDate(d.getDate() + 1);
             effectiveEndDate = d.toISOString().split('T')[0];
         }
-        
+
         const start = new Date(`${effectiveStartDate}T${effectiveStartTime}`);
         const end = new Date(`${effectiveEndDate}T${effectiveEndTime}`);
-        
+
         return end.getTime() - start.getTime();
     }
 }

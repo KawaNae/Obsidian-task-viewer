@@ -11,7 +11,8 @@ export class TaskViewerParser implements ParserStrategy {
 
     // Regex for locating the Date block start: @...
     // Matches @ followed by date-like chars, or 'future', or just > (for empty start)
-    private static readonly DATE_BLOCK_REGEX = /(@(?:future|[\d\-T:]*)?)(?:>.*)?/;
+    private static readonly DATE_BLOCK_REGEX = /(@(?:[\d\-T:]*)?)(?:>.*)?/;
+
 
     // Regex for Command: Name(Args)
     private static readonly COMMAND_REGEX = /([a-zA-Z0-9_]+)\((.*?)\)((?:\.[a-zA-Z0-9_]+\(.*?\))*)/g;
@@ -37,9 +38,9 @@ export class TaskViewerParser implements ParserStrategy {
         let endTime: string | undefined;
         let endDate: string | undefined;
         let deadline: string | undefined;
-        let isFuture = false;
+
         let commands: any[] = [];
-        
+
         // Explicit field flags - track which fields were explicitly written
         let explicitStartDate = false;
         let explicitStartTime = false;
@@ -53,7 +54,8 @@ export class TaskViewerParser implements ParserStrategy {
 
         // 3. Extract Date Block
         // Updated Regex to capture the whole date/time/deadline chain
-        const dateBlockMatch = content.match(/(@(?:future|[\d\-T:]*)?(?:(?:>|>>)(?:[\d\-T:]*))*)/);
+        const dateBlockMatch = content.match(/(@(?:[\d\-T:]*)?(?:(?:>|>>)(?:[\d\-T:]*))*)/);
+
 
         if (dateBlockMatch) {
             const fullDateBlock = dateBlockMatch[1];
@@ -69,9 +71,8 @@ export class TaskViewerParser implements ParserStrategy {
             const rawDeadline = parts[2];
 
             // --- 0. Start ---
-            if (rawStart === 'future') {
-                isFuture = true;
-            } else if (rawStart === '') {
+            if (rawStart === '') {
+
                 // Empty Start (@>...)
                 // Do NOT set date = today. Leave undefined to indicate implicit start at Today.
                 // date = undefined;
@@ -131,12 +132,12 @@ export class TaskViewerParser implements ParserStrategy {
 
         // Filter: Must have Date/Time OR EndDate/Time OR Deadline OR Future OR Commands to be considered a "Task"
         // Added startTime and endTime to allow time-only notation for child task inheritance
-        if (!date && !startTime && !endDate && !endTime && !deadline && !isFuture && commands.length === 0) {
+        if (!date && !startTime && !endDate && !endTime && !deadline && commands.length === 0) {
+
             return null;
         }
 
 
-        if (date) isFuture = false;
 
         // Validate task data during parse
         let validationWarning: string | undefined;
@@ -176,7 +177,6 @@ export class TaskViewerParser implements ParserStrategy {
             endDate,
             endTime,
             deadline,
-            isFuture,
             explicitStartDate,
             explicitStartTime,
             explicitEndDate,
@@ -240,10 +240,8 @@ export class TaskViewerParser implements ParserStrategy {
         const useInheritedNotation = task.startDateInherited && task.startTime;
 
         let startStr = '';
-        if (task.isFuture && !task.startDate) {
-            startStr = '@future';
-            hasDateBlock = true;
-        } else if (useInheritedNotation) {
+        if (useInheritedNotation) {
+
             // Inherited date - output time only
             startStr = `@${task.startTime}`;
             hasDateBlock = true;
@@ -251,7 +249,8 @@ export class TaskViewerParser implements ParserStrategy {
             startStr = `@${task.startDate}`;
             if (task.startTime) startStr += `T${task.startTime}`;
             hasDateBlock = true;
-        } else if (!task.isFuture) {
+        } else {
+
             // Implicit Start (undefined startDate, not Future)
             // e.g. D type or S-Timed with implicit date
             startStr = '@';

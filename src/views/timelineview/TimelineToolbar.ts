@@ -78,7 +78,7 @@ export class TimelineToolbar {
         // Get all incomplete tasks with dates before today
         const tasks = this.taskIndex.getTasks().filter(t =>
             !isCompleteStatusChar(t.statusChar, this.plugin.settings.completeStatusChars) &&
-            !t.isFuture &&
+
             t.startDate
         );
 

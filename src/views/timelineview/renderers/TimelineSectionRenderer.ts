@@ -26,7 +26,7 @@ export class TimelineSectionRenderer {
 
         // Get all tasks and filter for those that should appear in this timeline column
         let tasks = this.taskIndex.getTasks().filter(t => {
-            if (t.isFuture) return false;
+
             if (!t.startTime) return false; // No startTime = not a timed task
 
             // Calculate visual date range for this task

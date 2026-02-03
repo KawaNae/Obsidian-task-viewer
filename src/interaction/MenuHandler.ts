@@ -188,93 +188,53 @@ export class MenuHandler {
         // ========================================
         // 3. Move Operations
         // ========================================
-        if (task.isFuture) {
-            // F Type
+        // All tasks are treated as normal tasks now
+        const isTime = !!task.startTime;
+
+        if (isTime) {
+            // S-Timed, SE-Timed, SED-Timed
+
             menu.addItem((item) => {
-                item.setTitle('Move to All Day (Today)')
-                    .setIcon('calendar-days')
+                item.setTitle('Move to All Day')
+                    .setIcon('calendar-with-checkmark')
                     .onClick(async () => {
-                        const startHour = this.plugin.settings.startHour;
-                        const today = DateUtils.getVisualDateOfNow(startHour);
                         await this.taskIndex.updateTask(task.id, {
-                            isFuture: false,
-                            startDate: today,
                             startTime: undefined,
-                            endDate: undefined,
                             endTime: undefined
                         });
                     });
             });
 
-            menu.addItem((item) => {
-                item.setTitle('Move to Timeline (Now)')
-                    .setIcon('clock')
-                    .onClick(async () => {
-                        const startHour = this.plugin.settings.startHour;
-                        const today = DateUtils.getVisualDateOfNow(startHour);
-                        const now = new Date();
-                        const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-
-                        await this.taskIndex.updateTask(task.id, {
-                            isFuture: false,
-                            startDate: today,
-                            startTime: timeStr,
-                            endDate: undefined,
-                            endTime: undefined
-                        });
-                    });
-            });
-        } else {
-            const isTime = !!task.startTime;
-
-            if (isTime) {
-                // S-Timed, SE-Timed, SED-Timed
-                this.addMoveToFutureItem(menu, task);
-
+            if (task.deadline) {
                 menu.addItem((item) => {
-                    item.setTitle('Move to All Day')
-                        .setIcon('calendar-with-checkmark')
+                    item.setTitle('Move to All Day (Deadline only)')
+                        .setIcon('calendar-clock')
                         .onClick(async () => {
                             await this.taskIndex.updateTask(task.id, {
+                                startDate: undefined,
                                 startTime: undefined,
-                                endTime: undefined
-                            });
-                        });
-                });
-
-                if (task.deadline) {
-                    menu.addItem((item) => {
-                        item.setTitle('Move to All Day (Deadline only)')
-                            .setIcon('calendar-clock')
-                            .onClick(async () => {
-                                await this.taskIndex.updateTask(task.id, {
-                                    startDate: undefined,
-                                    startTime: undefined,
-                                    endDate: undefined,
-                                    endTime: undefined,
-                                    isFuture: false
-                                });
-                            });
-                    });
-                }
-            } else {
-                // All-Day / Long-Term
-                this.addMoveToFutureItem(menu, task);
-
-                menu.addItem((item) => {
-                    item.setTitle('Move to Timeline')
-                        .setIcon('clock')
-                        .onClick(async () => {
-                            const startHour = this.plugin.settings.startHour;
-                            const h = startHour.toString().padStart(2, '0');
-
-                            await this.taskIndex.updateTask(task.id, {
-                                startTime: `${h}:00`,
+                                endDate: undefined,
                                 endTime: undefined
                             });
                         });
                 });
             }
+        } else {
+            // All-Day / Long-Term
+
+            menu.addItem((item) => {
+                item.setTitle('Move to Timeline')
+                    .setIcon('clock')
+                    .onClick(async () => {
+                        const startHour = this.plugin.settings.startHour;
+                        const h = startHour.toString().padStart(2, '0');
+
+                        await this.taskIndex.updateTask(task.id, {
+                            startTime: `${h}:00`,
+                            endTime: undefined
+                        });
+                    });
+            });
         }
 
         menu.addSeparator();
@@ -370,7 +330,7 @@ export class MenuHandler {
         time?: string;
         dateImplicit: boolean;
         timeImplicit: boolean;
-        isFuture?: boolean;
+
         isUnset?: boolean;
     }): DocumentFragment {
         const frag = document.createDocumentFragment();
@@ -387,11 +347,7 @@ export class MenuHandler {
             return frag;
         }
 
-        if (parts.isFuture) {
-            container.appendChild(document.createTextNode('Future'));
-            frag.appendChild(container);
-            return frag;
-        }
+
 
         const mutedColor = 'var(--text-muted)';
 
@@ -484,9 +440,7 @@ export class MenuHandler {
 
         let startParts: PropertyParts;
 
-        if (task.isFuture) {
-            startParts = { dateImplicit: false, timeImplicit: false, isFuture: true };
-        } else if (hasExplicitStart) {
+        if (hasExplicitStart) {
             if (hasStartTime) {
                 // SED-Timed, SE-Timed, S-Timed: explicit start date and time
                 startParts = {
@@ -531,66 +485,62 @@ export class MenuHandler {
         const endLabel = 'End: ';
         let endParts: PropertyParts;
 
-        if (task.isFuture) {
-            endParts = { dateImplicit: false, timeImplicit: false, isUnset: true };
-        } else {
-            const effectiveStartDate = task.startDate || implicitStartDate;
+        const effectiveStartDate = task.startDate || implicitStartDate;
 
-            if (hasExplicitEnd) {
-                if (hasEndTime) {
-                    // Explicit endDate and endTime
-                    endParts = {
-                        date: task.endDate,
-                        time: task.endTime,
-                        dateImplicit: false,
-                        timeImplicit: false
-                    };
-                } else {
-                    // SE, SED (Long-term): explicit date, implicit time
-                    endParts = {
-                        date: task.endDate,
-                        time: endHourStr,
-                        dateImplicit: false,
-                        timeImplicit: true
-                    };
-                }
-            } else if (hasEndTime) {
-                // Has endTime but no endDate: derive date from start
-                // e.g., @2026-01-11T12:00>13:00 → end date is implicit (same as start)
+        if (hasExplicitEnd) {
+            if (hasEndTime) {
+                // Explicit endDate and endTime
                 endParts = {
-                    date: effectiveStartDate,
+                    date: task.endDate,
                     time: task.endTime,
-                    dateImplicit: true,
+                    dateImplicit: false,
                     timeImplicit: false
                 };
-            } else if (hasStartTime && !hasEndTime) {
-                // S-Timed type: implicit end = start + 1 hour
-                const [h, m] = task.startTime!.split(':').map(Number);
-                let endH = h + 1;
-                const endM = m;
-                let endDateStr = effectiveStartDate;
-                if (endH >= 24) {
-                    endH -= 24;
-                    endDateStr = DateUtils.addDays(effectiveStartDate, 1);
-                }
-                const implicitEndTime = `${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
-                endParts = {
-                    date: endDateStr,
-                    time: implicitEndTime,
-                    dateImplicit: true,
-                    timeImplicit: true
-                };
             } else {
-                // No endDate and no endTime
-                // SD, S-All, D types: end = start day's startHour+23:59 (next day)
-                const nextDay = DateUtils.addDays(effectiveStartDate, 1);
+                // SE, SED (Long-term): explicit date, implicit time
                 endParts = {
-                    date: nextDay,
+                    date: task.endDate,
                     time: endHourStr,
-                    dateImplicit: true,
+                    dateImplicit: false,
                     timeImplicit: true
                 };
             }
+        } else if (hasEndTime) {
+            // Has endTime but no endDate: derive date from start
+            // e.g., @2026-01-11T12:00>13:00 → end date is implicit (same as start)
+            endParts = {
+                date: effectiveStartDate,
+                time: task.endTime,
+                dateImplicit: true,
+                timeImplicit: false
+            };
+        } else if (hasStartTime && !hasEndTime) {
+            // S-Timed type: implicit end = start + 1 hour
+            const [h, m] = task.startTime!.split(':').map(Number);
+            let endH = h + 1;
+            const endM = m;
+            let endDateStr = effectiveStartDate;
+            if (endH >= 24) {
+                endH -= 24;
+                endDateStr = DateUtils.addDays(effectiveStartDate, 1);
+            }
+            const implicitEndTime = `${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
+            endParts = {
+                date: endDateStr,
+                time: implicitEndTime,
+                dateImplicit: true,
+                timeImplicit: true
+            };
+        } else {
+            // No endDate and no endTime
+            // SD, S-All, D types: end = start day's startHour+23:59 (next day)
+            const nextDay = DateUtils.addDays(effectiveStartDate, 1);
+            endParts = {
+                date: nextDay,
+                time: endHourStr,
+                dateImplicit: true,
+                timeImplicit: true
+            };
         }
 
         // --- Deadline Parts ---
@@ -625,20 +575,12 @@ export class MenuHandler {
                 .onClick(() => {
                     const currentValue: DateTimeValue = {
                         date: task.startDate || null,
-                        time: task.startTime || null,
-                        isFuture: task.isFuture
+                        time: task.startTime || null
                     };
                     new DateTimeInputModal(this.app, 'start', currentValue, async (value) => {
                         const newProps: Partial<Task> = {};
-                        if (value.isFuture) {
-                            newProps.isFuture = true;
-                            newProps.startDate = undefined;
-                            newProps.startTime = undefined;
-                        } else {
-                            newProps.isFuture = false;
-                            newProps.startDate = value.date || undefined;
-                            newProps.startTime = value.time || undefined;
-                        }
+                        newProps.startDate = value.date || undefined;
+                        newProps.startTime = value.time || undefined;
                         await this.taskIndex.updateTask(task.id, newProps);
                     }).open();
                 });
@@ -650,8 +592,8 @@ export class MenuHandler {
                 .onClick(() => {
                     const currentValue: DateTimeValue = {
                         date: task.endDate || null,
-                        time: task.endTime || null,
-                        isFuture: false
+
+                        time: task.endTime || null
                     };
                     const options: DateTimeModalOptions = {
                         hasStartDate: !!task.startDate
@@ -718,23 +660,5 @@ export class MenuHandler {
         });
     }
 
-    private addMoveToFutureItem(menu: Menu, task: Task) {
-        menu.addItem((item) => {
-            item.setTitle('Move to Future')
-                .setIcon('archive')
-                .onClick(async () => {
-                    await this.taskIndex.updateTask(task.id, {
-                        isFuture: true,
-                        startDate: undefined,
-                        startTime: undefined,
-                        endDate: undefined,
-                        endTime: undefined,
-                        // isFloatingStart removed
-                        // F type typically @future. 
-                        // Some README variants allow @future>>deadline.
-                        // We will keep deadline.
-                    });
-                });
-        });
-    }
+
 }

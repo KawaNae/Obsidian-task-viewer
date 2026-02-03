@@ -117,7 +117,7 @@ export class HandleManager {
             const existingHandles = taskEl.querySelectorAll('.task-card__handle');
             existingHandles.forEach(h => h.remove());
 
-            const isFuture = task.isFuture;
+
             const isAllDay = taskEl.classList.contains('task-card--allday');
 
             // Split checks
@@ -125,10 +125,7 @@ export class HandleManager {
             const isSplitAfter = taskEl.classList.contains('task-card--split-after');
 
             // --- Render Handles ---
-            if (isFuture) {
-                // Future tasks only get top-right move handle (simplest)
-                this.createMoveHandle(taskEl, taskId, 'top-right');
-            } else if (isAllDay) {
+            if (isAllDay) {
                 // Left Resize Handle
                 this.createResizeHandle(taskEl, taskId, 'left', '↔');
                 // Right Resize Handle

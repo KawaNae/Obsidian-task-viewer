@@ -100,14 +100,14 @@ export class TimelineDragStrategy implements DragStrategy {
         // not the segment's visual position (which would cause jumps when dragging)
         let originalTaskStartMinutes: number | null = null;
         let originalTaskEndMinutes: number | null = null;
-        
+
         const dayCol = el.closest('.day-timeline-column') as HTMLElement;
         this.currentDayDate = dayCol ? dayCol.dataset.date || null : (task.startDate || null);
-        
+
         const zoomLevel = context.plugin.settings.zoomLevel;
         const startHour = context.plugin.settings.startHour;
         const startHourMinutes = startHour * 60;
-        
+
         if (this.mode === 'move') {
             const originalId = (task as any).originalTaskId || task.id;
             const originalTask = context.taskIndex.getTask(originalId);
@@ -127,16 +127,16 @@ export class TimelineDragStrategy implements DragStrategy {
 
                 // Update initialHeight to be the FULL duration height for calculation purposes
                 this.initialHeight = fullHeight;
-                
+
                 // Calculate original task's start/end in minutes relative to currentDayDate's startHour
                 // This is needed to correctly calculate dragTimeOffset for split tasks
                 if (this.currentDayDate) {
                     const currentDayStart = new Date(`${this.currentDayDate}T00:00:00`);
-                    
+
                     // Calculate start minutes relative to currentDayDate's midnight
                     const startDiffMs = start.getTime() - currentDayStart.getTime();
                     originalTaskStartMinutes = startDiffMs / 60000;
-                    
+
                     // Calculate end minutes relative to currentDayDate's midnight
                     const endDiffMs = end.getTime() - currentDayStart.getTime();
                     originalTaskEndMinutes = endDiffMs / 60000;
@@ -162,7 +162,7 @@ export class TimelineDragStrategy implements DragStrategy {
         // Calculate visual start/end minutes for dragTimeOffset
         let visualStartMinutes: number;
         let visualEndMinutes: number;
-        
+
         if (originalTaskStartMinutes !== null && originalTaskEndMinutes !== null) {
             // For split tasks: use original task's actual start/end times
             visualStartMinutes = originalTaskStartMinutes;
@@ -348,15 +348,15 @@ export class TimelineDragStrategy implements DragStrategy {
             // Round to integer minutes to avoid floating-point errors
             const roundedStartMinutes = Math.round(totalStartMinutes);
             const roundedEndMinutes = Math.round(totalEndMinutes);
-            
+
             // Calculate date offsets from base date (minutes can be negative or >= 1440)
             const startDayOffset = Math.floor(roundedStartMinutes / 1440);
             const endDayOffset = Math.floor(roundedEndMinutes / 1440);
-            
+
             // Normalize minutes to 0-1439 range for time calculation
             const normalizedStartMinutes = ((roundedStartMinutes % 1440) + 1440) % 1440;
             const normalizedEndMinutes = ((roundedEndMinutes % 1440) + 1440) % 1440;
-            
+
             const newStartDate = DateUtils.addDays(this.currentDayDate!, startDayOffset);
             const newStartTime = DateUtils.minutesToTime(normalizedStartMinutes);
             const newEndDate = DateUtils.addDays(this.currentDayDate!, endDayOffset);
@@ -453,9 +453,7 @@ export class TimelineDragStrategy implements DragStrategy {
         }
 
         // Highlight drop zone
-        if (this.mode === 'move') {
-            this.updateDropZoneHighlight(clientX, clientY, context);
-        }
+
     }
 
     async onUp(e: PointerEvent, context: DragContext) {
@@ -492,27 +490,7 @@ export class TimelineDragStrategy implements DragStrategy {
             return;
         }
 
-        // ... (Drop Logic - same as before, handling Future Section drop) ...
-        const doc = context.container.ownerDocument || document;
-        const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
-        if (elBelow) {
-            const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-section__content');
-            if (futureSection) {
-                // Future logic...
-                if (this.dragTask.deadline) {
-                    new Notice('DeadlineがあるタスクはFutureに移動できません');
-                    this.dragTask = null;
-                    return;
-                }
-                const updates: Partial<Task> = {
-                    isFuture: true,
-                    startDate: undefined, startTime: undefined, endDate: undefined, endTime: undefined
-                };
-                await context.taskIndex.updateTask(this.dragTask.id, updates);
-                this.dragTask = null;
-                return;
-            }
-        }
+
 
         // Regular timeline movement/resize
         const originalId = (this.dragTask as any).originalTaskId || this.dragTask.id;
@@ -560,38 +538,38 @@ export class TimelineDragStrategy implements DragStrategy {
             const diffTop = parseInt(this.dragEl.style.top || '0');
             const startHour = context.plugin.settings.startHour;
             const startHourMinutes = startHour * 60;
-            
+
             // Calculate logical values (account for CSS offset)
             const logicalTop = diffTop - 1;
             const height = parseInt(this.dragEl.style.height || '0');
             const logicalHeight = height + 3;
-            
+
             // Calculate total minutes from midnight
             const totalStartMinutes = startHourMinutes + (logicalTop / zoomLevel);
             const totalEndMinutes = totalStartMinutes + (logicalHeight / zoomLevel);
-            
+
             // Round to integer minutes to avoid floating-point errors
             const roundedStartMinutes = Math.round(totalStartMinutes);
             const roundedEndMinutes = Math.round(totalEndMinutes);
-            
+
             // Handle day wrapping
             let finalStartDate = this.currentDayDate!;
             let finalEndDate = this.currentDayDate!;
             let finalStartMinutes = roundedStartMinutes;
             let finalEndMinutes = roundedEndMinutes;
-            
+
             // Day wrap for start time (>= 24:00)
             if (finalStartMinutes >= 24 * 60) {
                 finalStartDate = DateUtils.addDays(this.currentDayDate!, 1);
                 finalStartMinutes -= 24 * 60;
             }
-            
+
             // Day wrap for end time (>= 24:00)
             if (finalEndMinutes >= 24 * 60) {
                 finalEndDate = DateUtils.addDays(finalStartDate, Math.floor(finalEndMinutes / (24 * 60)));
                 finalEndMinutes = finalEndMinutes % (24 * 60);
             }
-            
+
             const newStartDate = finalStartDate;
             const newStartTime = DateUtils.minutesToTime(finalStartMinutes);
             const newEndDate = finalEndDate;
@@ -619,32 +597,11 @@ export class TimelineDragStrategy implements DragStrategy {
     }
 
     private updateDropZoneHighlight(clientX: number, clientY: number, context: DragContext) {
-        const doc = context.container.ownerDocument || document;
-        const elBelow = doc.elementFromPoint(clientX, clientY);
-
+        // No-op (Future section removed)
         document.body.style.cursor = '';
-
         if (this.lastHighlighted) {
             this.lastHighlighted.removeClass('drag-over');
             this.lastHighlighted = null;
-        }
-
-        if (!elBelow) return;
-
-        const futureSection = elBelow.closest('.future-section-grid') || elBelow.closest('.future-section__content');
-
-        if (futureSection) {
-            if (this.dragTask?.deadline) {
-                document.body.style.cursor = 'not-allowed';
-            } else {
-                let targetEl = futureSection;
-                // Try to target content area
-                const content = futureSection.closest('.future-section__content') || futureSection.querySelector('.future-section__content');
-                if (content) targetEl = content as HTMLElement;
-
-                targetEl.addClass('drag-over');
-                this.lastHighlighted = targetEl as HTMLElement;
-            }
         }
     }
 

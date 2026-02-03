@@ -45,17 +45,6 @@ export abstract class GenerationCommand implements CommandStrategy {
             cleanInterval = interval.replace(/when done/i, '').trim();
         }
 
-        // F型タスクの場吁E F型�Eまま維持E��日付シフトなし！E
-        if (task.isFuture && !task.startDate && !task.endDate && !task.deadline) {
-            return {
-                ...task,
-                id: '',
-                
-                statusChar: ' ',
-                originalText: '',
-                childLines: [...task.childLines] // Preserve children for recurrence
-            };
-        }
 
         // 基準日の決宁E startDate > endDate > deadline の優先頁E
         let baseDateObj: Date;
@@ -85,12 +74,11 @@ export abstract class GenerationCommand implements CommandStrategy {
         return {
             ...task,
             id: '',
-            
+
             statusChar: ' ',
             startDate: task.startDate ? this.shiftDate(task.startDate, shiftDays) : undefined,
             endDate: task.endDate ? this.shiftDate(task.endDate, shiftDays) : undefined,
             deadline: task.deadline ? this.shiftDate(task.deadline, shiftDays) : undefined,
-            isFuture: task.isFuture && !task.startDate, // F型�E維持E
             originalText: '',
             childLines: [...task.childLines] // Preserve children for recurrence
         };

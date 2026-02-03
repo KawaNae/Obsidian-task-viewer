@@ -5,7 +5,7 @@ import { MenuHandler } from '../../../interaction/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
 import { HandleManager } from '../HandleManager';
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
-import { FutureSectionRenderer } from './FutureSectionRenderer';
+
 import { AllDaySectionRenderer } from './AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './TimelineSectionRenderer';
 import { TaskIndex } from '../../../services/TaskIndex';
@@ -20,7 +20,7 @@ export class GridRenderer {
     ) { }
 
     public render(
-        futureRenderer: FutureSectionRenderer,
+
         allDayRenderer: AllDaySectionRenderer,
         timelineRenderer: TimelineSectionRenderer,
         handleManager: HandleManager,
@@ -36,8 +36,7 @@ export class GridRenderer {
         // Set view start date for MenuHandler (for E, ED, D type implicit start display)
         this.menuHandler.setViewStartDate(dates[0]);
 
-        // 0. Future Section (Header Grid)
-        futureRenderer.render(grid, owner, visibleFiles, colTemplate, dates);
+
 
         // 1. Date Header Row
         const headerRow = grid.createDiv('timeline-row date-header');
@@ -62,7 +61,7 @@ export class GridRenderer {
             // Check if this date has incomplete overdue tasks
             if (date < todayVisualDate) {
                 const tasksForDate = this.taskIndex.getTasksForVisualDay(date, this.plugin.settings.startHour);
-                const hasOverdueTasks = tasksForDate.some(t => !isCompleteStatusChar(t.statusChar, this.plugin.settings.completeStatusChars) && !t.isFuture);
+                const hasOverdueTasks = tasksForDate.some(t => !isCompleteStatusChar(t.statusChar, this.plugin.settings.completeStatusChars));
                 if (hasOverdueTasks) {
                     cell.addClass('has-overdue');
                 }

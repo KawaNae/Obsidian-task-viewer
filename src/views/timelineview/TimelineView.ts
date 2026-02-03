@@ -15,7 +15,7 @@ import { ViewUtils } from '../ViewUtils';
 import { GridRenderer } from './renderers/GridRenderer';
 import { AllDaySectionRenderer } from './renderers/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
-import { FutureSectionRenderer } from './renderers/FutureSectionRenderer';
+
 
 export const VIEW_TYPE_TIMELINE = 'timeline-view';
 
@@ -44,7 +44,7 @@ export class TimelineView extends ItemView {
     private gridRenderer: GridRenderer;
     private allDayRenderer: AllDaySectionRenderer;
     private timelineRenderer: TimelineSectionRenderer;
-    private futureRenderer: FutureSectionRenderer;
+
 
     // ==================== State ====================
     private container: HTMLElement;
@@ -130,7 +130,7 @@ export class TimelineView extends ItemView {
         );
 
         // Initialize Renderers
-        this.futureRenderer = new FutureSectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer);
+
         this.allDayRenderer = new AllDaySectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow);
         this.timelineRenderer = new TimelineSectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer);
         this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler, this.taskIndex);
@@ -249,9 +249,7 @@ export class TimelineView extends ItemView {
         }
 
         // Save toggle states
-        const futureSection = this.container.querySelector('.future-section-grid');
-        const allDayRow = this.container.querySelector('.allday-section');
-        const wasFutureCollapsed = futureSection?.hasClass('collapsed') || false;
+        const allDayRow = this.container.querySelector('.all-day-row');
         const wasAllDayCollapsed = allDayRow?.hasClass('collapsed') || false;
 
         this.container.empty();
@@ -268,7 +266,6 @@ export class TimelineView extends ItemView {
 
         // Use GridRenderer
         this.gridRenderer.render(
-            this.futureRenderer,
             this.allDayRenderer,
             this.timelineRenderer,
             this.handleManager,
@@ -287,14 +284,7 @@ export class TimelineView extends ItemView {
         }
 
         // Restore toggle states
-        const newFutureSection = this.container.querySelector('.future-section-grid');
-        const newAllDayRow = this.container.querySelector('.allday-section');
-
-        if (wasFutureCollapsed && newFutureSection) {
-            newFutureSection.addClass('collapsed');
-            const toggleBtn = newFutureSection.querySelector('.section-toggle-btn');
-            if (toggleBtn) toggleBtn.setText('+');
-        }
+        const newAllDayRow = this.container.querySelector('.all-day-row');
 
         if (wasAllDayCollapsed && newAllDayRow) {
             newAllDayRow.addClass('collapsed');
@@ -380,7 +370,6 @@ export class TimelineView extends ItemView {
         // Get all incomplete tasks with dates before today
         const tasks = this.taskIndex.getTasks().filter(t =>
             !isCompleteStatusChar(t.statusChar, this.plugin.settings.completeStatusChars) &&
-            !t.isFuture &&
             t.startDate
         );
 

@@ -31,7 +31,7 @@ const copyStaticFiles = {
           '_timeline-grid.css',
           '_timeline-date-header.css',
           '_timeline-allday.css',
-          '_timeline-future.css',
+
           '_timeline-drag.css',
 
           '_schedule.css',

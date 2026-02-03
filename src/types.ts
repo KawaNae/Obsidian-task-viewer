@@ -180,7 +180,7 @@ export interface Task {
     endDate?: string;       // Added, YYYY-MM-DD
     endTime?: string;       // HH:mm
     deadline?: string;      // Added, YYYY-MM-DD or ISO
-    isFuture: boolean;      // Added, true if startDate is empty or "future"
+
 
     // Inheritance flag - true if dates were inherited from parent (should be omitted on write)
     startDateInherited?: boolean;
