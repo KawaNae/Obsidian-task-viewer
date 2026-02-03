@@ -87,6 +87,19 @@
     overflow: visible;
 }
 
+/* Deadline Task Card */
+.task-card.deadline-task-card {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    margin-bottom: var(--task-card-gap) !important;
+    transform: none !important;
+    min-height: auto;
+    overflow: visible;
+}
+
 /* Inherited Task Card - date inherited from parent (time-only notation) */
 /* Using background gradient for customizable dashed line, centered vertically */
 .task-card--inherited::before {
