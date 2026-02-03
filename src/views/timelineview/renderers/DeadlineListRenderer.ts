@@ -1,9 +1,10 @@
-import { Component } from 'obsidian';
+import { Component, Menu } from 'obsidian';
 import { Task } from '../../../types';
 import { TaskRenderer } from '../../TaskRenderer';
 import { DateUtils } from '../../../utils/DateUtils';
 import { MenuHandler } from '../../../interaction/MenuHandler';
 import TaskViewerPlugin from '../../../main';
+import { CreateTaskModal } from '../../../modals/CreateTaskModal';
 
 export class DeadlineListRenderer {
     constructor(
@@ -53,7 +54,54 @@ export class DeadlineListRenderer {
         this.renderGroup(container, 'Overdue', overdue, 'is-overdue', owner);
         this.renderGroup(container, 'Today', todayTasks, 'is-today', owner);
         this.renderGroup(container, 'Upcoming', upcoming, 'is-upcoming', owner);
+
+        // Add Context Menu for Empty Space
+        container.addEventListener('contextmenu', (event) => {
+            if (event.target === container || (event.target as HTMLElement).closest('.deadline-group')) {
+                // Determine if we clicked on a card or handle (handled by card menu)
+                if ((event.target as HTMLElement).closest('.task-card')) return;
+
+                event.preventDefault();
+                const menu = new Menu();
+                menu.addItem((item) =>
+                    item
+                        .setTitle('Create Deadline Task')
+                        .setIcon('plus')
+                        .onClick(() => {
+                            this.handleCreateDeadlineTask();
+                        })
+                );
+                menu.showAtPosition({ x: event.pageX, y: event.pageY });
+            }
+        });
     }
+
+    private handleCreateDeadlineTask() {
+        new CreateTaskModal(this.plugin.app, async (content) => {
+            const startHour = this.plugin.settings.startHour;
+            const today = DateUtils.getVisualDateOfNow(startHour);
+            // Default deadline: Today
+            // Format: - [ ] content @>>YYYY-MM-DD
+            const taskLine = `- [ ] ${content} @>>${today}`;
+
+            // We append to Today's Daily Note for now, as a safe default.
+            // Or maybe separate backlog file? But plugin is Daily Note focused.
+            const [y, m, d] = today.split('-').map(Number);
+            const dateObj = new Date();
+            dateObj.setFullYear(y, m - 1, d);
+            dateObj.setHours(0, 0, 0, 0);
+
+            const { DailyNoteUtils } = await import('../../../utils/DailyNoteUtils');
+            await DailyNoteUtils.appendLineToDailyNote(
+                this.plugin.app,
+                dateObj,
+                taskLine,
+                this.plugin.settings.dailyNoteHeader,
+                this.plugin.settings.dailyNoteHeaderLevel
+            );
+        }).open();
+    }
+
 
     private renderGroup(container: HTMLElement, title: string, tasks: Task[], className: string, owner: Component) {
         if (tasks.length === 0) return;
