@@ -18,7 +18,7 @@
 }
 
 /* 2-Column Layout Wrapper */
-.timeline-view-layout {
+.timeline-view__layout {
     display: flex;
     height: 100%;
     width: 100%;
@@ -26,7 +26,7 @@
     position: relative;
 }
 
-.execution-column {
+.timeline-view__main {
     flex: 1;
     position: relative;
     overflow: hidden;
@@ -35,11 +35,11 @@
     transition: margin-right 0.3s ease;
 }
 
-.execution-column.deadline-visible {
+.timeline-view__main--sidebar-open {
     margin-right: 300px;
 }
 
-.target-column {
+.timeline-view__sidebar {
     position: absolute;
     right: 0;
     top: 0;
@@ -53,7 +53,7 @@
     overflow: hidden;
 }
 
-.target-column.hidden {
+.timeline-view__sidebar--hidden {
     transform: translateX(100%);
 }
 

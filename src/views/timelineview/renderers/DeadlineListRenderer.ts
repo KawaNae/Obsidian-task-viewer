@@ -117,7 +117,7 @@ export class DeadlineListRenderer {
         const listEl = groupEl.createDiv('deadline-group-list');
 
         tasks.forEach(task => {
-            const card = listEl.createDiv('task-card deadline-task-card');
+            const card = listEl.createDiv('task-card task-card--deadline');
 
             ViewUtils.applyFileColor(this.plugin.app, card, task.file, this.plugin.settings.frontmatterColorKey);
 

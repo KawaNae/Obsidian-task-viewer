@@ -270,19 +270,19 @@ export class TimelineView extends ItemView {
         this.container.style.setProperty('--scrollbar-width-actual', `${scrollbarWidth}px`);
 
         // Initialize 2-Column Layout
-        const layoutContainer = this.container.createDiv('timeline-view-layout');
+        const layoutContainer = this.container.createDiv('timeline-view__layout');
 
-        // Execution Column (Timeline, AllDay)
-        const executionColumn = layoutContainer.createDiv('execution-column');
+        // Main Column (Timeline, AllDay)
+        const executionColumn = layoutContainer.createDiv('timeline-view__main');
         if (this.viewState.showDeadlineList) {
-            executionColumn.addClass('deadline-visible');
+            executionColumn.addClass('timeline-view__main--sidebar-open');
         }
         this.executionColumnEl = executionColumn;
 
-        // Target Column (Deadline List)
-        const targetColumn = layoutContainer.createDiv('target-column');
+        // Sidebar Column (Deadline List)
+        const targetColumn = layoutContainer.createDiv('timeline-view__sidebar');
         if (!this.viewState.showDeadlineList) {
-            targetColumn.addClass('hidden');
+            targetColumn.addClass('timeline-view__sidebar--hidden');
         }
 
         // Header
@@ -316,10 +316,10 @@ export class TimelineView extends ItemView {
                 getDatesToShow: () => this.getDatesToShow(),
                 onToggleDeadlineList: () => {
                     if (this.targetColumnEl) {
-                        this.targetColumnEl.classList.toggle('hidden', !this.viewState.showDeadlineList);
+                        this.targetColumnEl.classList.toggle('timeline-view__sidebar--hidden', !this.viewState.showDeadlineList);
                     }
                     if (this.executionColumnEl) {
-                        this.executionColumnEl.classList.toggle('deadline-visible', this.viewState.showDeadlineList);
+                        this.executionColumnEl.classList.toggle('timeline-view__main--sidebar-open', this.viewState.showDeadlineList);
                     }
                 }
             }
