@@ -65,7 +65,7 @@
     position: relative;
     left: 4px;
     width: calc(100% - 8px);
-    padding: 4px 2px 4px 8px !important;
+    padding: 4px 2px 4px 8px;
     z-index: var(--z-task-card-allday);
 }
 
@@ -88,14 +88,14 @@
 }
 
 /* Deadline Task Card */
-.task-card.deadline-task-card {
-    position: relative !important;
-    top: auto !important;
-    left: auto !important;
-    width: 100% !important;
-    height: auto !important;
-    margin-bottom: var(--task-card-gap) !important;
-    transform: none !important;
+.task-card.task-card--deadline {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 100%;
+    height: auto;
+    margin-bottom: var(--task-card-gap);
+    transform: none;
     min-height: auto;
     overflow: visible;
 }
@@ -394,7 +394,7 @@
     transform: translateY(-50%);
 }
 
-.deadline-arrow.deadline-clipped::before {
+.deadline-arrow--clipped::before {
     display: none;
 }
 

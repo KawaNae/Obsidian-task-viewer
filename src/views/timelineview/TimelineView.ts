@@ -55,6 +55,8 @@ export class TimelineView extends ItemView {
     private currentTimeInterval: number | null = null;
     private lastScrollTop: number = 0;
     private hasInitializedStartDate: boolean = false;
+    private targetColumnEl: HTMLElement | null = null;
+    private executionColumnEl: HTMLElement | null = null;
 
     // ==================== Lifecycle ====================
 
@@ -268,26 +270,32 @@ export class TimelineView extends ItemView {
         this.container.style.setProperty('--scrollbar-width-actual', `${scrollbarWidth}px`);
 
         // Initialize 2-Column Layout
-        const layoutContainer = this.container.createDiv('timeline-view-layout');
+        const layoutContainer = this.container.createDiv('timeline-view__layout');
 
-        // Execution Column (Timeline, AllDay)
-        const executionColumn = layoutContainer.createDiv('execution-column');
-
-        // Target Column (Deadline List)
-        const targetColumn = layoutContainer.createDiv('target-column');
-        if (!this.viewState.showDeadlineList) {
-            targetColumn.addClass('hidden');
-        } else {
-            // Header
-            targetColumn.createEl('p', { text: 'Deadline List', attr: { 
-                style: 'padding: 10px; border-bottom: 1px solid var(--background-modifier-border); margin: 0;font-size: 0.8em;color: var(--text-muted);' 
-            } });
-
-            const listContainer = targetColumn.createDiv({ cls: 'deadline-list-wrapper', attr: { style: 'flex: 1; overflow-y: auto; padding: 10px;' } });
-
-            const deadlineTasks = this.taskIndex.getDeadlineTasks();
-            this.deadlineRenderer.render(listContainer, deadlineTasks, this);
+        // Main Column (Timeline, AllDay)
+        const executionColumn = layoutContainer.createDiv('timeline-view__main');
+        if (this.viewState.showDeadlineList) {
+            executionColumn.addClass('timeline-view__main--sidebar-open');
         }
+        this.executionColumnEl = executionColumn;
+
+        // Sidebar Column (Deadline List)
+        const targetColumn = layoutContainer.createDiv('timeline-view__sidebar');
+        if (!this.viewState.showDeadlineList) {
+            targetColumn.addClass('timeline-view__sidebar--hidden');
+        }
+
+        // Header
+        targetColumn.createEl('p', { text: 'Deadline List', attr: {
+            style: 'padding: 10px; border-bottom: 1px solid var(--background-modifier-border); margin: 0;font-size: 0.8em;color: var(--text-muted);'
+        } });
+
+        const listContainer = targetColumn.createDiv({ cls: 'deadline-list-wrapper', attr: { style: 'flex: 1; overflow-y: auto; padding: 10px;' } });
+
+        const deadlineTasks = this.taskIndex.getDeadlineTasks();
+        this.deadlineRenderer.render(listContainer, deadlineTasks, this);
+
+        this.targetColumnEl = targetColumn;
 
         // Render Toolbar (into execution column)
         // We probably want toolbar in execution column OR above both.
@@ -305,7 +313,15 @@ export class TimelineView extends ItemView {
                     this.plugin.saveSettings();
                 },
                 getFileColor: (file) => this.getFileColor(file),
-                getDatesToShow: () => this.getDatesToShow()
+                getDatesToShow: () => this.getDatesToShow(),
+                onToggleDeadlineList: () => {
+                    if (this.targetColumnEl) {
+                        this.targetColumnEl.classList.toggle('timeline-view__sidebar--hidden', !this.viewState.showDeadlineList);
+                    }
+                    if (this.executionColumnEl) {
+                        this.executionColumnEl.classList.toggle('timeline-view__main--sidebar-open', this.viewState.showDeadlineList);
+                    }
+                }
             }
         );
         this.toolbar.render();

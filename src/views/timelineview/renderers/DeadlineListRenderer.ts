@@ -5,6 +5,7 @@ import { DateUtils } from '../../../utils/DateUtils';
 import { MenuHandler } from '../../../interaction/MenuHandler';
 import TaskViewerPlugin from '../../../main';
 import { CreateTaskModal } from '../../../modals/CreateTaskModal';
+import { ViewUtils } from '../../ViewUtils';
 
 export class DeadlineListRenderer {
     constructor(
@@ -116,10 +117,9 @@ export class DeadlineListRenderer {
         const listEl = groupEl.createDiv('deadline-group-list');
 
         tasks.forEach(task => {
-            const card = listEl.createDiv('task-card deadline-task-card');
+            const card = listEl.createDiv('task-card task-card--deadline');
 
-            // Add deadline indicator visual if needed, but TaskRenderer handles content
-            // Maybe add explicit deadline label? TaskRenderer usually shows icon+date?
+            ViewUtils.applyFileColor(this.plugin.app, card, task.file, this.plugin.settings.frontmatterColorKey);
 
             this.taskRenderer.render(card, task, owner, this.plugin.settings);
             // TaskRenderer signature: render(container, task, view?, settings?)

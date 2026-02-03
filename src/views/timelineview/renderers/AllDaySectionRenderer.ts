@@ -185,7 +185,7 @@ export class AllDaySectionRenderer {
         arrowEl.title = `Deadline: ${task.deadline}`;
 
         if (isClipped) {
-            arrowEl.addClass('deadline-clipped');
+            arrowEl.addClass('deadline-arrow--clipped');
         }
     }
 

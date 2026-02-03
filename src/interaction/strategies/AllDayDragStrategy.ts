@@ -261,23 +261,18 @@ export class AllDayDragStrategy implements DragStrategy {
                     const minutesFromStart = snappedTop / zoomLevel;
                     const totalMinutes = startHourMinutes + minutesFromStart;
 
-                    let finalStartDate = targetDate;
-                    if (totalMinutes >= 24 * 60) {
-                        finalStartDate = DateUtils.addDays(targetDate, 1);
-                    }
+                    const totalEndMinutes = totalMinutes + 60;
+                    const startDayOffset = Math.floor(totalMinutes / (24 * 60));
+                    const endDayOffset = Math.floor(totalEndMinutes / (24 * 60));
+                    const finalStartDate = DateUtils.addDays(targetDate, startDayOffset);
+                    const finalEndDate = DateUtils.addDays(targetDate, endDayOffset);
 
                     const updates: Partial<Task> = {
                         startDate: finalStartDate,
                         startTime: DateUtils.minutesToTime(totalMinutes),
-                        endTime: DateUtils.minutesToTime(totalMinutes + 60), // 1h default
-                        endDate: finalStartDate
+                        endTime: DateUtils.minutesToTime(totalEndMinutes),
+                        endDate: finalEndDate
                     };
-
-                    // If task has deadline, preserve it but convert to timed format
-                    if (this.dragTask.deadline) {
-                        // Keep deadline as SD type (start+end times, deadline date)
-                        updates.endDate = undefined; // Remove explicit end date for SD type
-                    }
 
                     await context.taskIndex.updateTask(this.dragTask.id, updates);
                     this.dragEl = null;

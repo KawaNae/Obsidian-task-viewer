@@ -10,6 +10,7 @@ export interface ToolbarCallbacks {
     onStateChange: () => void;
     getFileColor: (filePath: string) => string | null;
     getDatesToShow: () => string[];
+    onToggleDeadlineList?: () => void;
 }
 
 /**
@@ -160,8 +161,7 @@ export class TimelineToolbar {
             } else {
                 toggleBtn.removeClass('is-active');
             }
-            // Trigger full render to update layout
-            this.callbacks.onRender();
+            this.callbacks.onToggleDeadlineList?.();
         };
     }
 
