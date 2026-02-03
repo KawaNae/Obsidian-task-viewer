@@ -6,11 +6,19 @@ import { TaskRepository } from './TaskRepository';
 import { TaskCommandExecutor } from './TaskCommandExecutor';
 import { DateUtils } from '../utils/DateUtils';
 
+export interface ValidationError {
+    file: string;
+    line: number;
+    taskId: string;
+    error: string;
+}
+
 export class TaskIndex {
     private app: App;
     private tasks: Map<string, Task> = new Map(); // ID -> Task
     private listeners: ((taskId?: string, changes?: string[]) => void)[] = [];
     private settings: TaskViewerSettings;
+    private validationErrors: ValidationError[] = [];
 
     public getSettings(): TaskViewerSettings {
         return this.settings;
@@ -102,6 +110,10 @@ export class TaskIndex {
         return this.tasks.get(taskId);
     }
 
+    getValidationErrors(): ValidationError[] {
+        return this.validationErrors;
+    }
+
     getTasksForDate(date: string, startHour?: number): Task[] {
         // Use visual date if startHour is provided, otherwise use actual today
         const today = startHour !== undefined ?
@@ -157,6 +169,7 @@ export class TaskIndex {
     }
 
     private async scanVault() {
+        this.validationErrors = []; // Clear previous errors
         const files = this.app.vault.getMarkdownFiles();
 
         for (const file of files) {
@@ -245,6 +258,16 @@ export class TaskIndex {
                     // Set indent (leading whitespace count)
                     const taskIndent = line.search(/\S|$/);
                     task.indent = taskIndent;
+
+                    // Collect validation warnings (set during parse)
+                    if (task.validationWarning) {
+                        this.validationErrors.push({
+                            file: file.path,
+                            line: actualLineNumber + 1, // Display as 1-indexed
+                            taskId: task.id,
+                            error: task.validationWarning
+                        });
+                    }
 
                     // Initialize child arrays
                     task.childIds = [];
