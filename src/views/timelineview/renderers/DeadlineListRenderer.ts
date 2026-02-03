@@ -80,9 +80,12 @@ export class DeadlineListRenderer {
         new CreateTaskModal(this.plugin.app, async (content) => {
             const startHour = this.plugin.settings.startHour;
             const today = DateUtils.getVisualDateOfNow(startHour);
-            // Default deadline: Today
+            const offset = this.plugin.settings.defaultDeadlineOffset || 0;
+            const deadline = DateUtils.addDays(today, offset);
+
+            // Default deadline: Today + Offset
             // Format: - [ ] content @>>YYYY-MM-DD
-            const taskLine = `- [ ] ${content} @>>${today}`;
+            const taskLine = `- [ ] ${content} @>>${deadline}`;
 
             // We append to Today's Daily Note for now, as a safe default.
             // Or maybe separate backlog file? But plugin is Daily Note focused.

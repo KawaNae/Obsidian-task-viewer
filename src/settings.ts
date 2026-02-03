@@ -111,6 +111,19 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
+            .setName('Default Deadline Offset')
+            .setDesc('Number of days from today to set as the default deadline for new deadline tasks.')
+            .addText(text => text
+                .setPlaceholder('0')
+                .setValue(this.plugin.settings.defaultDeadlineOffset.toString())
+                .onChange(async (value) => {
+                    let days = parseInt(value);
+                    if (isNaN(days)) days = 0;
+                    this.plugin.settings.defaultDeadlineOffset = days;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
             .setName('Excluded Paths')
             .setDesc('Paths to exclude from task scanning (one per line). Files starting with these paths will be ignored.')
             .addTextArea(text => text
