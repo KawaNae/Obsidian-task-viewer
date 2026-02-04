@@ -28,6 +28,14 @@
     transition: background-color 0.2s ease;
 }
 
+.date-header__weekday {
+    margin-left: 4px;
+}
+
+.date-header__cell.is-compact .date-header__weekday {
+    display: none;
+}
+
 /* First cell (axis) - add left border */
 .date-header__cell:first-child {
     border-left: 1px solid var(--background-modifier-border);

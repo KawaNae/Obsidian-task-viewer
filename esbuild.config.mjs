@@ -51,6 +51,18 @@ const copyStaticFiles = {
           '_deprecated.css'
         ];
 
+        const cssFilesSet = new Set(cssFiles);
+        const allCssFiles = fs
+          .readdirSync(cssDir, { withFileTypes: true })
+          .filter((entry) => entry.isFile() && entry.name.endsWith('.css'))
+          .map((entry) => entry.name);
+        const unregistered = allCssFiles.filter((name) => !cssFilesSet.has(name));
+        if (unregistered.length > 0) {
+          console.warn(
+            `Warning: Unregistered CSS files in ${cssDir}: ${unregistered.join(', ')}`
+          );
+        }
+
         let cssContent = '';
         for (const file of cssFiles) {
           const filePath = path.join(cssDir, file);

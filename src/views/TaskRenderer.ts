@@ -320,7 +320,7 @@ export class TaskRenderer {
             checkbox.addEventListener('click', () => {
                 if (childLineIndex < task.childLines.length) {
                     let childLine = task.childLines[childLineIndex];
-                    const match = childLine.match(/\[(.)]\]/);
+                    const match = childLine.match(/\[(.)\]/);
                     if (match) {
                         const currentChar = match[1];
                         const newChar = currentChar === ' ' ? 'x' : ' ';

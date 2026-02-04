@@ -41,7 +41,7 @@
 .task-viewer-global-styles input[data-task="x"].task-list-item-checkbox:checked,
 .task-viewer-global-styles li[data-task="x"]>input.task-list-item-checkbox:checked,
 .task-viewer-global-styles li[data-task="x"]>p>input.task-list-item-checkbox:checked {
-    background-color: var(--file-accent, var(--interactive-accent));
+    background-color: var(--file-accent, var(--interactive-accent)) !important;
     border-color: transparent;
 }
 

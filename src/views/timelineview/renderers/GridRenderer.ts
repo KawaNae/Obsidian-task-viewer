@@ -49,10 +49,13 @@ export class GridRenderer {
         const todayVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
 
         // Day Headers
+        const headerCells: HTMLElement[] = [];
         dates.forEach(date => {
             const cell = headerRow.createDiv('date-header__cell');
             const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
-            cell.setText(`${date} (${dayName})`);
+            cell.createEl('span', { cls: 'date-header__date', text: date });
+            cell.createEl('span', { cls: 'date-header__weekday', text: dayName });
+            headerCells.push(cell);
 
             // Highlight today's date
             if (date === todayVisualDate) {
@@ -87,6 +90,7 @@ export class GridRenderer {
                 }
             });
         });
+        this.applyDateHeaderCompactBehavior(headerCells);
 
         // 2. All-Day Row (Merged All-Day & Long-Term)
         const allDayRow = grid.createDiv('timeline-row allday-section');
@@ -182,6 +186,18 @@ export class GridRenderer {
 
             label.setText(`${displayHour}`);
         }
+    }
+
+    private applyDateHeaderCompactBehavior(cells: HTMLElement[]) {
+        const compactThresholdPx = 120;
+        const observer = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const cell = entry.target as HTMLElement;
+                const isCompact = entry.contentRect.width < compactThresholdPx;
+                cell.toggleClass('is-compact', isCompact);
+            }
+        });
+        cells.forEach((cell) => observer.observe(cell));
     }
 
     public renderCurrentTimeIndicator() {
