@@ -40,7 +40,7 @@
     border-right: 1px solid var(--background-modifier-border);
     border-bottom: 2px solid var(--background-modifier-border);
     min-height: 40px;
-    padding: 4px 2px;
+    padding: 3px 6px;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -58,7 +58,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    font-size: 0.82em;
+    font-size: 0.85em;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -101,13 +101,27 @@
     color: var(--text-normal);
 }
 
-/* Inline input field (number or text, shown on click) */
-.habits-section__input {
+/* Unit suffix label (e.g. "kg", "min") — value が未設定なら非表示 */
+.habits-section__unit {
+    color: var(--text-muted);
+    font-size: 0.85em;
+    flex-shrink: 0;
+}
+
+.habits-section__unit:not(.is-set) {
+    display: none;
+}
+
+/* Inline input field (number or text, shown on click)
+   Parent selector bumps specificity to 0-2-0 to beat Obsidian's
+   app.css input[type='number'] rules (0-1-1) */
+.habits-section .habits-section__input {
     width: 100%;
     flex: 1;
     min-width: 0;
-    font-size: 0.9em;
-    padding: 1px 3px;
+    height: auto;
+    font-size: inherit;
+    padding: 0 3px;
     border: 1px solid var(--background-modifier-border);
     border-radius: 3px;
     background-color: var(--background-primary);
@@ -115,7 +129,7 @@
     outline: none;
 }
 
-.habits-section__input:focus {
+.habits-section .habits-section__input:focus {
     border-color: var(--interactive-accent);
 }
 

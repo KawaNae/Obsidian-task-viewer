@@ -55,7 +55,8 @@ export class GridRenderer {
         dates.forEach(date => {
             const cell = headerRow.createDiv('date-header__cell');
             const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
-            cell.createEl('span', { cls: 'date-header__date', text: date });
+            cell.createEl('span', { cls: 'date-header__date date-header__date--full', text: date });
+            cell.createEl('span', { cls: 'date-header__date date-header__date--short', text: date.slice(5) });
             cell.createEl('span', { cls: 'date-header__weekday', text: dayName });
             headerCells.push(cell);
 
@@ -199,11 +200,14 @@ export class GridRenderer {
 
     private applyDateHeaderCompactBehavior(cells: HTMLElement[]) {
         const compactThresholdPx = 120;
+        const narrowThresholdPx = 90;
         const observer = new ResizeObserver((entries) => {
             for (const entry of entries) {
                 const cell = entry.target as HTMLElement;
                 const isCompact = entry.contentRect.width < compactThresholdPx;
+                const isNarrow = entry.contentRect.width < narrowThresholdPx;
                 cell.toggleClass('is-compact', isCompact);
+                cell.toggleClass('is-narrow', isNarrow);
             }
         });
         cells.forEach((cell) => observer.observe(cell));

@@ -138,6 +138,12 @@ export class HabitTrackerRenderer {
         });
         display.toggleClass('is-set', hasValue);
 
+        // Unit suffix (number type + unit defined のときのみ)
+        const unitSpan = habit.unit
+            ? container.createEl('span', { cls: 'habits-section__unit', text: habit.unit })
+            : null;
+        if (unitSpan) unitSpan.toggleClass('is-set', hasValue);
+
         display.addEventListener('click', () => {
             // Prevent duplicate input if already editing
             if (container.querySelector('.habits-section__input')) return;
@@ -145,9 +151,19 @@ export class HabitTrackerRenderer {
             display.style.display = 'none';
 
             const inputType = habit.type === 'number' ? 'number' : 'text';
-            const input = container.createEl('input', { cls: 'habits-section__input' });
+            const input = document.createElement('input');
+            input.className = 'habits-section__input';
             input.type = inputType;
             input.value = hasValue ? String(currentValue) : '';
+
+            // unit の直前に挿入 → label | input | unit の順序を維持
+            if (unitSpan) {
+                container.insertBefore(input, unitSpan);
+                unitSpan.addClass('is-set'); // 編集中は単位ラベルを表示
+            } else {
+                container.appendChild(input);
+            }
+
             input.focus();
             input.select();
 
@@ -171,6 +187,7 @@ export class HabitTrackerRenderer {
                 const newHasValue = newValue !== undefined;
                 display.textContent = newHasValue ? String(newValue) : '—';
                 display.toggleClass('is-set', newHasValue);
+                if (unitSpan) unitSpan.toggleClass('is-set', newHasValue);
                 display.style.display = '';
                 input.remove();
 
@@ -187,6 +204,7 @@ export class HabitTrackerRenderer {
                 } else if (e.key === 'Escape') {
                     escaped = true;
                     input.remove();
+                    if (unitSpan) unitSpan.toggleClass('is-set', hasValue);
                     display.style.display = '';
                 }
             });

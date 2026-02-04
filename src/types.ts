@@ -166,6 +166,7 @@ export type HabitType = 'boolean' | 'number' | 'string';
 export interface HabitDefinition {
     name: string;    // frontmatter キー名をそのまま使用
     type: HabitType;
+    unit?: string;   // 表示用単位ラベル (number のみ)
 }
 
 export interface Task {

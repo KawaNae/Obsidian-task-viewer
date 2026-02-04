@@ -184,7 +184,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
     private renderHabitsList(container: HTMLElement): void {
         container.empty();
         this.plugin.settings.habits.forEach((habit, i) => {
-            new Setting(container)
+            const setting = new Setting(container)
                 .setName(`Habit ${i + 1}`)
                 .addText(text => text
                     .setPlaceholder('Habit name')
@@ -202,17 +202,30 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     .onChange(async (value) => {
                         this.plugin.settings.habits[i].type = value as HabitType;
                         await this.plugin.saveSettings();
-                    })
-                )
-                .addButton(btn => btn
-                    .setIcon('trash')
-                    .setTooltip('Remove habit')
-                    .onClick(async () => {
-                        this.plugin.settings.habits.splice(i, 1);
-                        await this.plugin.saveSettings();
                         this.renderHabitsList(container);
                     })
                 );
+
+            if (habit.type === 'number') {
+                setting.addText(text => text
+                    .setPlaceholder('Unit (e.g. kg)')
+                    .setValue(habit.unit ?? '')
+                    .onChange(async (value) => {
+                        this.plugin.settings.habits[i].unit = value.trim() || undefined;
+                        await this.plugin.saveSettings();
+                    })
+                );
+            }
+
+            setting.addButton(btn => btn
+                .setIcon('trash')
+                .setTooltip('Remove habit')
+                .onClick(async () => {
+                    this.plugin.settings.habits.splice(i, 1);
+                    await this.plugin.saveSettings();
+                    this.renderHabitsList(container);
+                })
+            );
         });
     }
 }
