@@ -103,7 +103,7 @@ export class TaskRenderer {
         const hasContent = cleanParentLine.replace(/^- \[[xX! -]\]\s*/, '').trim().length > 0;
 
         if (hasContent) {
-            cleanParentLine += `：[[${fileName}]]`;
+            cleanParentLine += ` : [[${fileName}]]`;
         } else {
             cleanParentLine += `[[${fileName}]]`;
         }
@@ -309,6 +309,29 @@ export class TaskRenderer {
         }
     }
 
+    private updateCheckboxDataTask(el: HTMLElement, newChar: string): void {
+        const value = newChar === ' ' ? '' : newChar;
+        const input = el.matches('input.task-list-item-checkbox')
+            ? el
+            : (el.closest('input.task-list-item-checkbox') as HTMLElement | null);
+        const listItem = el.closest('li');
+
+        if (input) {
+            if (value) {
+                input.setAttribute('data-task', value);
+            } else {
+                input.removeAttribute('data-task');
+            }
+        }
+        if (listItem) {
+            if (value) {
+                listItem.setAttribute('data-task', value);
+            } else {
+                listItem.removeAttribute('data-task');
+            }
+        }
+    }
+
     /**
      * Setup checkbox handlers for children in a collapsed container
      */
@@ -324,6 +347,7 @@ export class TaskRenderer {
                     if (match) {
                         const currentChar = match[1];
                         const newChar = currentChar === ' ' ? 'x' : ' ';
+                        this.updateCheckboxDataTask(checkbox as HTMLElement, newChar);
                         childLine = childLine.replace(`[${currentChar}]`, `[${newChar}]`);
                     }
                     const absoluteLineNumber = task.line + 1 + childLineIndex;
@@ -378,6 +402,7 @@ export class TaskRenderer {
      */
     private showChildCheckboxStatusMenu(e: MouseEvent, task: Task, childLineIndex: number): void {
         const menu = new Menu();
+        const targetEl = e.target as HTMLElement | null;
 
         const statusOptions: { char: string; label: string }[] = [
             { char: 'x', label: '[x]' },
@@ -396,6 +421,9 @@ export class TaskRenderer {
                             let childLine = task.childLines[childLineIndex];
                             // Replace [.] with new status char
                             childLine = childLine.replace(/\[(.)\]/, `[${opt.char}]`);
+                            if (targetEl) {
+                                this.updateCheckboxDataTask(targetEl, opt.char);
+                            }
                             const absoluteLineNumber = task.line + 1 + childLineIndex;
                             await this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
                         }
