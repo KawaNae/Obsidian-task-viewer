@@ -120,15 +120,20 @@ export class TimerRecorder {
         if (timer.taskId) {
             const taskIndex = this.plugin.getTaskIndex();
 
-            // Always pass complete data - Parser handles abbreviation
-            await taskIndex.updateTask(timer.taskId, {
-                startDate: startDateStr,
-                startTime: startTimeStr,
-                endDate: endDateStr,
-                endTime: endTimeStr,
+            const task = taskIndex.getTask(timer.taskId);
+            if (task) {
+                const content = task.content.startsWith('⏱️') ? task.content : `⏱️ ${task.content}`;
+                // Always pass complete data - Parser handles abbreviation
+                await taskIndex.updateTask(timer.taskId, {
+                    content,
+                    startDate: startDateStr,
+                    startTime: startTimeStr,
+                    endDate: endDateStr,
+                    endTime: endTimeStr,
 
-                statusChar: 'x' // Auto-complete when timer stops
-            });
+                    statusChar: 'x' // Auto-complete when timer stops
+                });
+            }
         }
 
         new Notice(`⏱️ Task updated! (${this.formatElapsedTime(timer.elapsedTime)})`);

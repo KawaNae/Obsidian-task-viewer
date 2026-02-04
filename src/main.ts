@@ -258,7 +258,7 @@ export default class TaskViewerPlugin extends Plugin {
                     const valueDiv = propertyContainer.querySelector('.metadata-input-longtext[contenteditable="true"]') as HTMLDivElement;
                     if (valueDiv && !this.attachedInputs.has(valueDiv)) {
                         // Attach text suggest
-                        new PropertyColorSuggest(this.app, valueDiv);
+                        new PropertyColorSuggest(this.app, valueDiv, this);
                         this.attachedInputs.add(valueDiv);
 
                         // Add color picker icon
@@ -307,12 +307,20 @@ export default class TaskViewerPlugin extends Plugin {
         }
 
         // Color input change handler
-        colorInput.addEventListener('input', () => {
-            // Focus the div first, then set content, then blur to trigger save
-            valueDiv.focus();
+        colorInput.addEventListener('input', async () => {
+            const activeFile = this.app.workspace.getActiveFile();
+            if (!activeFile) {
+                return;
+            }
+
+            const colorKey = this.settings.frontmatterColorKey;
+            // @ts-ignore - processFrontMatter
+            await this.app.fileManager.processFrontMatter(activeFile, (frontmatter: any) => {
+                frontmatter[colorKey] = colorInput.value;
+            });
+
+            // Sync UI
             valueDiv.textContent = colorInput.value;
-            valueDiv.dispatchEvent(new Event('input', { bubbles: true }));
-            valueDiv.blur();
         });
 
         // Set initial value when clicking
