@@ -71,11 +71,7 @@ export class TaskRenderer {
         } else if (topRight === 'deadline' && task.deadline) {
             const timeDisplay = container.createDiv('task-card__time');
             const parts = task.deadline.split('T');
-            timeDisplay.createSpan({ text: parts[0] });
-            if (parts[1]) {
-                timeDisplay.createEl('br');
-                timeDisplay.createSpan({ text: parts[1] });
-            }
+            timeDisplay.innerText = parts[1] ? `${parts[0]} ${parts[1]}` : parts[0];
         }
 
         const contentContainer = container.createDiv('task-card__content');
