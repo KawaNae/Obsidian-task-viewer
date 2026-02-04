@@ -32,8 +32,20 @@
     margin-left: 4px;
 }
 
+.date-header__date--short {
+    display: none;
+}
+
 .date-header__cell.is-compact .date-header__weekday {
     display: none;
+}
+
+.date-header__cell.is-narrow .date-header__date--full {
+    display: none;
+}
+
+.date-header__cell.is-narrow .date-header__date--short {
+    display: inline;
 }
 
 /* First cell (axis) - add left border */

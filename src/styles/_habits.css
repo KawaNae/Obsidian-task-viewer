@@ -1,0 +1,177 @@
+/* =============================================================================
+   Habits Section
+   Contains: habits-section, habits-section__cell, habits-section__axis,
+             habits-section__label, habit-row, habit inputs, collapsed state
+============================================================================= */
+
+/* Habits Section Container (the grid row) */
+.habits-section {
+    background-color: var(--background-primary);
+    flex-shrink: 0;
+    overflow-y: visible;
+    position: relative;
+}
+
+/* Axis Cell (column 1: toggle + vertical label) */
+.habits-section__axis {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px;
+    padding-top: 4px;
+    border-left: 1px solid var(--background-modifier-border);
+    border-right: 1px solid var(--background-modifier-border);
+    border-bottom: 2px solid var(--background-modifier-border);
+    background-color: var(--background-secondary);
+}
+
+/* Vertical label in axis */
+.habits-section__label {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-size: 0.8em;
+    color: var(--text-muted);
+    padding-bottom: 6px;
+}
+
+/* Each date column cell */
+.habits-section__cell {
+    border-right: 1px solid var(--background-modifier-border);
+    border-bottom: 2px solid var(--background-modifier-border);
+    min-height: 40px;
+    padding: 3px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* First cell needs position: relative for collapsed ::after overlay */
+.habits-section__cell.is-first-cell {
+    position: relative;
+}
+
+/* Single habit row inside a cell (label + value side by side) */
+.habits-section__habit-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.85em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Habit name label */
+.habits-section__habit-label {
+    color: var(--text-muted);
+    flex-shrink: 0;
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Boolean checkbox (native input — Obsidian theme styles apply) */
+.habits-section__checkbox {
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+/* Number / string value display (before inline edit) */
+.habits-section__value-display {
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 1px 4px;
+    border-radius: 3px;
+    transition: background-color 0.15s ease;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.habits-section__value-display:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.habits-section__value-display.is-set {
+    color: var(--text-normal);
+}
+
+/* Unit suffix label (e.g. "kg", "min") — value が未設定なら非表示 */
+.habits-section__unit {
+    color: var(--text-muted);
+    font-size: 0.85em;
+    flex-shrink: 0;
+}
+
+.habits-section__unit:not(.is-set) {
+    display: none;
+}
+
+/* Inline input field (number or text, shown on click)
+   Parent selector bumps specificity to 0-2-0 to beat Obsidian's
+   app.css input[type='number'] rules (0-1-1) */
+.habits-section .habits-section__input {
+    width: 100%;
+    flex: 1;
+    min-width: 0;
+    height: auto;
+    font-size: inherit;
+    padding: 0 3px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 3px;
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    outline: none;
+}
+
+.habits-section .habits-section__input:focus {
+    border-color: var(--interactive-accent);
+}
+
+/* --- Collapsed State --- */
+.habits-section.collapsed .habits-section__axis {
+    min-height: 36px;
+}
+
+.habits-section.collapsed .habits-section__label {
+    display: none;
+}
+
+.habits-section.collapsed .habits-section__cell {
+    min-height: 36px;
+    border-right: none;
+    justify-content: center;
+}
+
+/* Restore right border on last cell when collapsed */
+.habits-section.collapsed .habits-section__cell.is-last-cell {
+    border-right: 1px solid var(--background-modifier-border);
+}
+
+/* Hide all habit rows when collapsed */
+.habits-section.collapsed .habits-section__habit-row {
+    display: none !important;
+}
+
+/* Horizontal "Habits" label overlay when collapsed */
+.habits-section.collapsed .habits-section__cell.is-first-cell::after {
+    content: 'Habits';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    padding: 6px 12px;
+    color: var(--text-muted);
+    font-size: 0.85em;
+    opacity: 0.6;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    z-index: 1;
+    pointer-events: none;
+}

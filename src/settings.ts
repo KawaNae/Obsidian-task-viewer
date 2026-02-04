@@ -1,5 +1,6 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import TaskViewerPlugin from './main';
+import { HabitType } from './types';
 
 export class TaskViewerSettingTab extends PluginSettingTab {
     plugin: TaskViewerPlugin;
@@ -21,6 +22,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             cls: 'setting-item-description'
         });
 
+        containerEl.createEl('h3', { text: 'Display', cls: 'setting-section-header' });
+
         new Setting(containerEl)
             .setName('Start Hour')
             .setDesc('The hour when your day starts (0-23). Tasks before this hour will be shown in the previous day.')
@@ -38,6 +41,18 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
+            .setName('Default Zoom Level')
+            .setDesc('The default zoom level for the timeline view (0.25 - 4.0).')
+            .addSlider(slider => slider
+                .setLimits(0.25, 4.0, 0.25)
+                .setValue(this.plugin.settings.zoomLevel)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.zoomLevel = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
             .setName('Apply Custom Checkboxes Styles')
             .setDesc('If enabled, the plugin will apply its checkbox styles to the entire Obsidian editor, replacing the need for a separate CSS snippet.')
             .addToggle(toggle => toggle
@@ -47,6 +62,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                     this.plugin.updateGlobalStyles();
                 }));
+
+        containerEl.createEl('h3', { text: 'Tasks', cls: 'setting-section-header' });
 
         new Setting(containerEl)
             .setName('Complete Status Characters')
@@ -76,41 +93,6 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Default Zoom Level')
-            .setDesc('The default zoom level for the timeline view (0.25 - 4.0).')
-            .addSlider(slider => slider
-                .setLimits(0.25, 4.0, 0.25)
-                .setValue(this.plugin.settings.zoomLevel)
-                .setDynamicTooltip()
-                .onChange(async (value) => {
-                    this.plugin.settings.zoomLevel = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Daily Note Header')
-            .setDesc('The header under which new tasks will be added in the Daily Note.')
-            .addText(text => text
-                .setPlaceholder('Tasks')
-                .setValue(this.plugin.settings.dailyNoteHeader)
-                .onChange(async (value) => {
-                    this.plugin.settings.dailyNoteHeader = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Daily Note Header Level')
-            .setDesc('The level of the header (1-6).')
-            .addSlider(slider => slider
-                .setLimits(1, 6, 1)
-                .setValue(this.plugin.settings.dailyNoteHeaderLevel)
-                .setDynamicTooltip()
-                .onChange(async (value) => {
-                    this.plugin.settings.dailyNoteHeaderLevel = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
             .setName('Default Deadline Offset')
             .setDesc('Number of days from today to set as the default deadline for new deadline tasks.')
             .addText(text => text
@@ -136,7 +118,32 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
+        containerEl.createEl('h3', { text: 'Daily Notes', cls: 'setting-section-header' });
+
         new Setting(containerEl)
+            .setName('Daily Note Header')
+            .setDesc('The header under which new tasks will be added in the Daily Note.')
+            .addText(text => text
+                .setPlaceholder('Tasks')
+                .setValue(this.plugin.settings.dailyNoteHeader)
+                .onChange(async (value) => {
+                    this.plugin.settings.dailyNoteHeader = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Daily Note Header Level')
+            .setDesc('The level of the header (1-6).')
+            .addSlider(slider => slider
+                .setLimits(1, 6, 1)
+                .setValue(this.plugin.settings.dailyNoteHeaderLevel)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.dailyNoteHeaderLevel = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        const excludedPathsSetting = new Setting(containerEl)
             .setName('Excluded Paths')
             .setDesc('Paths to exclude from task scanning (one per line). Files starting with these paths will be ignored.')
             .addTextArea(text => text
@@ -151,12 +158,117 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         // Enhance the textarea for better visibility
-        const excludedPathsSetting = containerEl.lastElementChild as HTMLElement;
-        const textarea = excludedPathsSetting?.querySelector('textarea');
+        const textarea = excludedPathsSetting.settingEl.querySelector('textarea');
         if (textarea) {
             textarea.rows = 10;
             textarea.style.width = '100%';
             textarea.style.minWidth = '300px';
         }
+
+        containerEl.createEl('h3', { text: 'Timer Widget', cls: 'setting-section-header' });
+
+        new Setting(containerEl)
+            .setName('Custom Pomodoro Work Minutes')
+            .setDesc('Custom Work duration in minutes for the Pomodoro timer.')
+            .addText(text => {
+                text.inputEl.type = 'number';
+                text.inputEl.min = '1';
+                text
+                    .setPlaceholder('25')
+                    .setValue(this.plugin.settings.pomodoroWorkMinutes.toString())
+                    .onChange(async (value) => {
+                        let mins = parseInt(value);
+                        if (isNaN(mins) || mins < 1) mins = 1;
+                        this.plugin.settings.pomodoroWorkMinutes = mins;
+                        await this.plugin.saveSettings();
+                    });
+            });
+
+        new Setting(containerEl)
+            .setName('Custom Pomodoro Break Minutes')
+            .setDesc('Custom Break duration in minutes for the Pomodoro timer.')
+            .addText(text => {
+                text.inputEl.type = 'number';
+                text.inputEl.min = '1';
+                text
+                    .setPlaceholder('5')
+                    .setValue(this.plugin.settings.pomodoroBreakMinutes.toString())
+                    .onChange(async (value) => {
+                        let mins = parseInt(value);
+                        if (isNaN(mins) || mins < 1) mins = 1;
+                        this.plugin.settings.pomodoroBreakMinutes = mins;
+                        await this.plugin.saveSettings();
+                    });
+            });
+
+        containerEl.createEl('h3', { text: 'Habit Tracker', cls: 'setting-section-header' });
+
+        // --- Habit Tracker Section ---
+        const habitHeader = containerEl.createDiv('setting-item');
+        habitHeader.createSpan({ text: 'Habit Tracker', cls: 'setting-item-name' });
+        habitHeader.createSpan({ text: 'Define habits to track in your daily notes\' frontmatter.', cls: 'setting-item-description' });
+
+        const habitsListContainer = containerEl.createDiv('habits-list-container');
+        this.renderHabitsList(habitsListContainer);
+
+        new Setting(containerEl)
+            .setName('Add Habit')
+            .setDesc('Create a new habit to track.')
+            .addButton(btn => btn
+                .setButtonText('+ Add')
+                .onClick(async () => {
+                    this.plugin.settings.habits.push({ name: '', type: 'boolean' });
+                    await this.plugin.saveSettings();
+                    this.renderHabitsList(habitsListContainer);
+                })
+            );
+    }
+
+    private renderHabitsList(container: HTMLElement): void {
+        container.empty();
+        this.plugin.settings.habits.forEach((habit, i) => {
+            const setting = new Setting(container)
+                .setName(`Habit ${i + 1}`)
+                .addText(text => text
+                    .setPlaceholder('Habit name')
+                    .setValue(habit.name)
+                    .onChange(async (value) => {
+                        this.plugin.settings.habits[i].name = value.trim();
+                        await this.plugin.saveSettings();
+                    })
+                )
+                .addDropdown(dropdown => dropdown
+                    .addOption('boolean', 'Boolean (on/off)')
+                    .addOption('number', 'Number')
+                    .addOption('string', 'Text')
+                    .setValue(habit.type)
+                    .onChange(async (value) => {
+                        this.plugin.settings.habits[i].type = value as HabitType;
+                        await this.plugin.saveSettings();
+                        this.renderHabitsList(container);
+                    })
+                );
+
+            if (habit.type === 'number') {
+                setting.addText(text => text
+                    .setPlaceholder('Unit (e.g. kg)')
+                    .setValue(habit.unit ?? '')
+                    .onChange(async (value) => {
+                        this.plugin.settings.habits[i].unit = value.trim() || undefined;
+                        await this.plugin.saveSettings();
+                    })
+                );
+            }
+
+            setting.addButton(btn => btn
+                .setIcon('trash')
+                .setTooltip('Remove habit')
+                .onClick(async () => {
+                    this.plugin.settings.habits.splice(i, 1);
+                    await this.plugin.saveSettings();
+                    this.renderHabitsList(container);
+                })
+            );
+        });
     }
 }

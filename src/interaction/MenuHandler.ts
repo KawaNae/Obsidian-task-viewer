@@ -658,6 +658,32 @@ export class MenuHandler {
                     }).open();
                 });
         });
+
+        // Separator under Deadline
+        menu.addSeparator();
+
+        // --- Length (Duration) ---
+        const durationMs = DateUtils.getTaskDurationMs(
+            effectiveStartDate,
+            task.startTime,
+            task.endDate,
+            task.endTime,
+            startHour
+        );
+
+        let lengthText = '-';
+        if (!Number.isNaN(durationMs) && durationMs > 0) {
+            const totalMinutes = Math.round(durationMs / 60000);
+            const days = Math.floor(totalMinutes / 1440);
+            const hours = Math.floor((totalMinutes % 1440) / 60);
+            const minutes = totalMinutes % 60;
+            lengthText = `${days}d ${hours}h ${minutes}m`;
+        }
+
+        menu.addItem((item) => {
+            item.setTitle(`Length: ${lengthText}`)
+                .setIcon('clock');
+        });
     }
 
 

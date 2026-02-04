@@ -9,6 +9,7 @@ import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { AllDaySectionRenderer } from './AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './TimelineSectionRenderer';
 import { TaskIndex } from '../../../services/TaskIndex';
+import { HabitTrackerRenderer } from './HabitTrackerRenderer';
 
 export class GridRenderer {
     constructor(
@@ -23,6 +24,7 @@ export class GridRenderer {
         parentContainer: HTMLElement,
         allDayRenderer: AllDaySectionRenderer,
         timelineRenderer: TimelineSectionRenderer,
+        habitRenderer: HabitTrackerRenderer,
         handleManager: HandleManager,
         getDatesToShow: () => string[],
         owner: Component,
@@ -53,7 +55,8 @@ export class GridRenderer {
         dates.forEach(date => {
             const cell = headerRow.createDiv('date-header__cell');
             const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
-            cell.createEl('span', { cls: 'date-header__date', text: date });
+            cell.createEl('span', { cls: 'date-header__date date-header__date--full', text: date });
+            cell.createEl('span', { cls: 'date-header__date date-header__date--short', text: date.slice(5) });
             cell.createEl('span', { cls: 'date-header__weekday', text: dayName });
             headerCells.push(cell);
 
@@ -91,6 +94,13 @@ export class GridRenderer {
             });
         });
         this.applyDateHeaderCompactBehavior(headerCells);
+
+        // 1.5. Habits Row (between date header and all-day)
+        if (this.plugin.settings.habits.length > 0) {
+            const habitsRow = grid.createDiv('timeline-row habits-section');
+            habitsRow.style.gridTemplateColumns = colTemplate;
+            habitRenderer.render(habitsRow, dates);
+        }
 
         // 2. All-Day Row (Merged All-Day & Long-Term)
         const allDayRow = grid.createDiv('timeline-row allday-section');
@@ -190,11 +200,14 @@ export class GridRenderer {
 
     private applyDateHeaderCompactBehavior(cells: HTMLElement[]) {
         const compactThresholdPx = 120;
+        const narrowThresholdPx = 90;
         const observer = new ResizeObserver((entries) => {
             for (const entry of entries) {
                 const cell = entry.target as HTMLElement;
                 const isCompact = entry.contentRect.width < compactThresholdPx;
+                const isNarrow = entry.contentRect.width < narrowThresholdPx;
                 cell.toggleClass('is-compact', isCompact);
+                cell.toggleClass('is-narrow', isNarrow);
             }
         });
         cells.forEach((cell) => observer.observe(cell));
