@@ -179,8 +179,6 @@ export class TimelineSectionRenderer {
             el.style.zIndex = String(taskLayout.zIndex);
             el.style.setProperty('--initial-height', `${duration * zoomLevel}px`);
 
-            if (heightPx < 48) el.addClass('task-card--compact');
-
             this.taskRenderer.render(el, task, owner, this.plugin.settings);
             this.menuHandler.addTaskContextMenu(el, task);
         });

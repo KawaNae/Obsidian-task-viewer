@@ -27,7 +27,7 @@
     box-shadow: -2px 0 4px rgba(0, 0, 0, 0.25);
 
     /* Misc */
-    scrollbar-width: thin;
+    scrollbar-width: none;
 }
 
 /* Accent Border - solid background for normal tasks */
@@ -213,7 +213,7 @@
 .task-card__content {
     flex: 1;
     overflow-y: auto;
-    scrollbar-width: thin;
+    scrollbar-width: none;
 }
 
 .task-card__content>ul,
@@ -259,6 +259,8 @@
     background-color: transparent;
     opacity: 0.8;
     pointer-events: none;
+    text-align: right;
+    line-height: 1.3;
 }
 
 /* ==========================================================================
@@ -443,7 +445,8 @@
     margin-left: 0.4em;
 }
 
-/* Compact timeline card: suppress time label when card height is too short */
-.task-card--compact .task-card__time {
+/* Hide scrollbars while preserving scroll ability */
+.task-card::-webkit-scrollbar,
+.task-card__content::-webkit-scrollbar {
     display: none;
 }

@@ -70,7 +70,12 @@ export class TaskRenderer {
             timeDisplay.innerText = timeText;
         } else if (topRight === 'deadline' && task.deadline) {
             const timeDisplay = container.createDiv('task-card__time');
-            timeDisplay.innerText = task.deadline.split('T')[0];
+            const parts = task.deadline.split('T');
+            timeDisplay.createSpan({ text: parts[0] });
+            if (parts[1]) {
+                timeDisplay.createEl('br');
+                timeDisplay.createSpan({ text: parts[1] });
+            }
         }
 
         const contentContainer = container.createDiv('task-card__content');
@@ -163,8 +168,13 @@ export class TaskRenderer {
                 if (!notation || !childTaskListItems[i]) return;
                 const span = document.createElement('span');
                 span.className = 'task-card__child-notation';
-                span.textContent = notation;
-                childTaskListItems[i].appendChild(span);
+                span.textContent = this.formatChildNotation(notation, task.startDate);
+                const nestedUl = childTaskListItems[i].querySelector(':scope > ul');
+                if (nestedUl) {
+                    childTaskListItems[i].insertBefore(span, nestedUl);
+                } else {
+                    childTaskListItems[i].appendChild(span);
+                }
             });
 
             // Toggle click handler
@@ -219,8 +229,13 @@ export class TaskRenderer {
                 if (!notation || !allTaskListItems[i + 1]) return;
                 const span = document.createElement('span');
                 span.className = 'task-card__child-notation';
-                span.textContent = notation;
-                allTaskListItems[i + 1].appendChild(span);
+                span.textContent = this.formatChildNotation(notation, task.startDate);
+                const nestedUl = allTaskListItems[i + 1].querySelector(':scope > ul');
+                if (nestedUl) {
+                    allTaskListItems[i + 1].insertBefore(span, nestedUl);
+                } else {
+                    allTaskListItems[i + 1].appendChild(span);
+                }
             });
         }
 
@@ -393,5 +408,23 @@ export class TaskRenderer {
         }
 
         menu.showAtPosition({ x: e.pageX, y: e.pageY });
+    }
+
+    /**
+     * Format @notation for child task display.
+     * Shows only startDate; appends … if there is more content after the date.
+     * For inherited time-only notation (@Txx:xx), substitutes parent's startDate.
+     */
+    private formatChildNotation(notation: string, parentStartDate: string | undefined): string {
+        const raw = notation.slice(1); // remove leading @
+        if (raw.startsWith('T')) {
+            // Inherited time-only: @T10:00 → use parent startDate
+            return parentStartDate ? `@${parentStartDate}…` : notation;
+        }
+        const dateMatch = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (!dateMatch) return notation;
+        const datePart = dateMatch[1];
+        // If notation is exactly @YYYY-MM-DD, show as-is; otherwise truncate
+        return raw === datePart ? `@${datePart}` : `@${datePart}…`;
     }
 }
