@@ -172,7 +172,8 @@ export class TimelineSectionRenderer {
             const leftFraction = taskLayout.left / 100;
 
             el.style.top = `${(relativeStart * zoomLevel) + 1}px`;
-            el.style.height = `${(duration * zoomLevel) - 3}px`;
+            const heightPx = (duration * zoomLevel) - 3;
+            el.style.height = `${heightPx}px`;
             el.style.width = `calc((100% - 8px) * ${widthFraction})`;
             el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
             el.style.zIndex = String(taskLayout.zIndex);

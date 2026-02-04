@@ -218,6 +218,7 @@ export interface ViewState {
     startDate: string;      // YYYY-MM-DD
     daysToShow: number;     // 1, 3, 7, etc.
     showDeadlineList: boolean; // Toggle for right sidebar
+    filterFiles: string[] | null; // Persisted file filter (null = all visible)
 }
 
 export interface TaskViewerSettings {
@@ -232,6 +233,7 @@ export interface TaskViewerSettings {
     completeStatusChars: string[]; // Characters that represent completed tasks (default: ['x', '-', '!'])
     excludedPaths: string[]; // Paths to exclude from task scanning
     defaultDeadlineOffset: number; // Default number of days from today for new deadline tasks (default: 0)
+    upcomingDays: number; // Days from tomorrow to consider as "Upcoming" in deadline list (default: 7)
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -246,4 +248,5 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     completeStatusChars: ['x', 'X', '-', '!'],
     excludedPaths: [],
     defaultDeadlineOffset: 0,
+    upcomingDays: 7,
 };

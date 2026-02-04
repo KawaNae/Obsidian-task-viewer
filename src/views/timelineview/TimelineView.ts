@@ -67,7 +67,8 @@ export class TimelineView extends ItemView {
         this.viewState = {
             startDate: DateUtils.getVisualDateOfNow(this.plugin.settings.startHour),
             daysToShow: 3,
-            showDeadlineList: true // Default: show deadline list
+            showDeadlineList: true, // Default: show deadline list
+            filterFiles: null
         };
         this.taskRenderer = new TaskRenderer(this.app, this.taskIndex);
     }
@@ -91,6 +92,9 @@ export class TimelineView extends ItemView {
                 console.log('[DEBUG] setState - updating daysToShow to:', state.daysToShow);
                 this.viewState.daysToShow = state.daysToShow;
             }
+            if (state.filterFiles) {
+                this.viewState.filterFiles = state.filterFiles;
+            }
             // Note: startDate is not restored - always use "Today" logic on reload
         }
         await super.setState(state, result);
@@ -100,7 +104,8 @@ export class TimelineView extends ItemView {
     getState() {
         // Only save daysToShow, not startDate (startDate resets on reload like Today button)
         const state = {
-            daysToShow: this.viewState.daysToShow
+            daysToShow: this.viewState.daysToShow,
+            filterFiles: this.viewState.filterFiles
         };
         return state;
     }
@@ -293,7 +298,8 @@ export class TimelineView extends ItemView {
         const listContainer = targetColumn.createDiv({ cls: 'deadline-list-wrapper', attr: { style: 'flex: 1; overflow-y: auto; padding: 10px;' } });
 
         const deadlineTasks = this.taskIndex.getDeadlineTasks();
-        this.deadlineRenderer.render(listContainer, deadlineTasks, this);
+        const visibleFiles = this.viewState.filterFiles ? new Set(this.viewState.filterFiles) : null;
+        this.deadlineRenderer.render(listContainer, deadlineTasks, this, visibleFiles);
 
         this.targetColumnEl = targetColumn;
 

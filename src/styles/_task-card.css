@@ -27,7 +27,7 @@
     box-shadow: -2px 0 4px rgba(0, 0, 0, 0.25);
 
     /* Misc */
-    scrollbar-width: thin;
+    scrollbar-width: none;
 }
 
 /* Accent Border - solid background for normal tasks */
@@ -213,7 +213,7 @@
 .task-card__content {
     flex: 1;
     overflow-y: auto;
-    scrollbar-width: thin;
+    scrollbar-width: none;
 }
 
 .task-card__content>ul,
@@ -259,6 +259,7 @@
     background-color: transparent;
     opacity: 0.8;
     pointer-events: none;
+    text-align: right;
 }
 
 /* ==========================================================================
@@ -430,4 +431,21 @@
     display: block;
     border-left: 2px solid var(--background-modifier-border);
     margin-top: 4px;
+}
+
+/* ==========================================================================
+   9. CHILD NOTATION & COMPACT CARD
+   ========================================================================== */
+
+/* Child @notation label — small muted text after checkbox content */
+.task-card__child-notation {
+    font-size: 0.8em;
+    color: var(--text-muted);
+    margin-left: 0.4em;
+}
+
+/* Hide scrollbars while preserving scroll ability */
+.task-card::-webkit-scrollbar,
+.task-card__content::-webkit-scrollbar {
+    display: none;
 }

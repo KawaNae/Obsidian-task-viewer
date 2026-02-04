@@ -81,6 +81,13 @@ export class FileFilterMenu {
     }
 
     /**
+     * Sets the visible files filter state (e.g. for restoring persisted state).
+     */
+    setVisibleFiles(files: Set<string> | null): void {
+        this.visibleFiles = files;
+    }
+
+    /**
      * Shows the filter menu at the given position.
      * @param e - Mouse event for positioning
      * @param files - Array of distinct file paths to show in menu
@@ -110,7 +117,8 @@ export class FileFilterMenu {
                             this.visibleFiles = new Set(files);
                         }
 
-                        if (isVisible) {
+                        // Read current state dynamically (not stale closure value)
+                        if (this.visibleFiles.has(file)) {
                             this.visibleFiles.delete(file);
                         } else {
                             this.visibleFiles.add(file);

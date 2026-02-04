@@ -14,9 +14,11 @@ export class TaskRenderer {
         this.taskIndex = taskIndex;
     }
 
-    async render(container: HTMLElement, task: Task, component: Component, settings: TaskViewerSettings) {
-        // Time Display
-        if (task.startTime) {
+    async render(container: HTMLElement, task: Task, component: Component, settings: TaskViewerSettings, options?: { topRight?: 'time' | 'deadline' | 'none' }) {
+        // Top-right display: time (default), deadline date, or none
+        const topRight = options?.topRight ?? 'time';
+
+        if (topRight === 'time' && task.startTime) {
             const timeDisplay = container.createDiv('task-card__time');
             let timeText = task.startTime;
 
@@ -57,10 +59,6 @@ export class TaskRenderer {
                     timeText = `${startStr}>${endStr}`;
                 } else {
                     // Within visual day: Show time only
-                    // If it's next day but within visual day (e.g. 25:00), we still just show the time (01:00)
-                    // The user requested "01:00のように表示します" (Display like 01:00)
-
-                    // We need to extract just HH:mm from endDate
                     const endH = endDate.getHours().toString().padStart(2, '0');
                     const endMin = endDate.getMinutes().toString().padStart(2, '0');
                     const endStr = `${endH}:${endMin}`;
@@ -70,6 +68,10 @@ export class TaskRenderer {
             }
 
             timeDisplay.innerText = timeText;
+        } else if (topRight === 'deadline' && task.deadline) {
+            const timeDisplay = container.createDiv('task-card__time');
+            const parts = task.deadline.split('T');
+            timeDisplay.innerText = parts[1] ? `${parts[0]} ${parts[1]}` : parts[0];
         }
 
         const contentContainer = container.createDiv('task-card__content');
@@ -101,7 +103,7 @@ export class TaskRenderer {
         const hasContent = cleanParentLine.replace(/^- \[[xX! -]\]\s*/, '').trim().length > 0;
 
         if (hasContent) {
-            cleanParentLine += `：[[${fileName}]]`;
+            cleanParentLine += ` : [[${fileName}]]`;
         } else {
             cleanParentLine += `[[${fileName}]]`;
         }
@@ -134,16 +136,42 @@ export class TaskRenderer {
                 childrenContainer.addClass('task-card__children--collapsed');
             }
 
-            // Render children
+            // Render children: extract @notation for checkbox lines before stripping
+            const checkboxNotations: (string | null)[] = [];
             const cleanChildren = task.childLines.map(childLine => {
-                const cleaned = childLine
+                if (/^\s*-\s*\[.\]/.test(childLine)) {
+                    const m = childLine.match(/@[\w\-:>T]+/);
+                    checkboxNotations.push(m ? m[0] : null);
+                }
+
+                let cleaned = childLine
                     .replace(/\s*@[\w\-:>T]+(?:\s*==>.*)?/g, '')
                     .trimEnd();
+
+                // Bare checkbox "- [ ]" with no content: append ZWS to force checkbox rendering
+                if (/^\s*-\s*\[.\]$/.test(cleaned)) {
+                    cleaned += ' \u200B';
+                }
                 return cleaned;
             });
 
             const childrenText = cleanChildren.join('\n');
             await MarkdownRenderer.render(this.app, childrenText, childrenContainer, task.file, component);
+
+            // Post-process: append @notation labels to rendered checkbox items
+            const childTaskListItems = childrenContainer.querySelectorAll('.task-list-item');
+            checkboxNotations.forEach((notation, i) => {
+                if (!notation || !childTaskListItems[i]) return;
+                const span = document.createElement('span');
+                span.className = 'task-card__child-notation';
+                span.textContent = this.formatChildNotation(notation, task.startDate);
+                const nestedUl = childTaskListItems[i].querySelector(':scope > ul');
+                if (nestedUl) {
+                    childTaskListItems[i].insertBefore(span, nestedUl);
+                } else {
+                    childTaskListItems[i].appendChild(span);
+                }
+            });
 
             // Toggle click handler
             toggle.addEventListener('click', (e) => {
@@ -169,18 +197,42 @@ export class TaskRenderer {
             // Handle checkboxes in children container
             this.setupChildCheckboxHandlers(childrenContainer, task, 0, settings);
         } else {
-            // Original behavior: render everything together
+            // Render parent + children together: extract @notation for checkbox lines
+            const checkboxNotations: (string | null)[] = [];
             const cleanChildren = task.childLines.map(childLine => {
-                const cleaned = childLine
+                if (/^\s*-\s*\[.\]/.test(childLine)) {
+                    const m = childLine.match(/@[\w\-:>T]+/);
+                    checkboxNotations.push(m ? m[0] : null);
+                }
+
+                let cleaned = childLine
                     .replace(/\s*@[\w\-:>T]+(?:\s*==>.*)?/g, '')
                     .trimEnd();
+
+                if (/^\s*-\s*\[.\]$/.test(cleaned)) {
+                    cleaned += ' \u200B';
+                }
                 return '    ' + cleaned;
             });
 
             const fullText = [cleanParentLine, ...cleanChildren].join('\n');
 
-            // Use MarkdownRenderer
             await MarkdownRenderer.render(this.app, fullText, contentContainer, task.file, component);
+
+            // Post-process: append @notation labels (skip index 0 = parent)
+            const allTaskListItems = contentContainer.querySelectorAll('.task-list-item');
+            checkboxNotations.forEach((notation, i) => {
+                if (!notation || !allTaskListItems[i + 1]) return;
+                const span = document.createElement('span');
+                span.className = 'task-card__child-notation';
+                span.textContent = this.formatChildNotation(notation, task.startDate);
+                const nestedUl = allTaskListItems[i + 1].querySelector(':scope > ul');
+                if (nestedUl) {
+                    allTaskListItems[i + 1].insertBefore(span, nestedUl);
+                } else {
+                    allTaskListItems[i + 1].appendChild(span);
+                }
+            });
         }
 
         // Handle Internal Links
@@ -257,6 +309,29 @@ export class TaskRenderer {
         }
     }
 
+    private updateCheckboxDataTask(el: HTMLElement, newChar: string): void {
+        const value = newChar === ' ' ? '' : newChar;
+        const input = el.matches('input.task-list-item-checkbox')
+            ? el
+            : (el.closest('input.task-list-item-checkbox') as HTMLElement | null);
+        const listItem = el.closest('li');
+
+        if (input) {
+            if (value) {
+                input.setAttribute('data-task', value);
+            } else {
+                input.removeAttribute('data-task');
+            }
+        }
+        if (listItem) {
+            if (value) {
+                listItem.setAttribute('data-task', value);
+            } else {
+                listItem.removeAttribute('data-task');
+            }
+        }
+    }
+
     /**
      * Setup checkbox handlers for children in a collapsed container
      */
@@ -268,10 +343,11 @@ export class TaskRenderer {
             checkbox.addEventListener('click', () => {
                 if (childLineIndex < task.childLines.length) {
                     let childLine = task.childLines[childLineIndex];
-                    const match = childLine.match(/\[(.)]\]/);
+                    const match = childLine.match(/\[(.)\]/);
                     if (match) {
                         const currentChar = match[1];
                         const newChar = currentChar === ' ' ? 'x' : ' ';
+                        this.updateCheckboxDataTask(checkbox as HTMLElement, newChar);
                         childLine = childLine.replace(`[${currentChar}]`, `[${newChar}]`);
                     }
                     const absoluteLineNumber = task.line + 1 + childLineIndex;
@@ -326,6 +402,7 @@ export class TaskRenderer {
      */
     private showChildCheckboxStatusMenu(e: MouseEvent, task: Task, childLineIndex: number): void {
         const menu = new Menu();
+        const targetEl = e.target as HTMLElement | null;
 
         const statusOptions: { char: string; label: string }[] = [
             { char: 'x', label: '[x]' },
@@ -344,6 +421,9 @@ export class TaskRenderer {
                             let childLine = task.childLines[childLineIndex];
                             // Replace [.] with new status char
                             childLine = childLine.replace(/\[(.)\]/, `[${opt.char}]`);
+                            if (targetEl) {
+                                this.updateCheckboxDataTask(targetEl, opt.char);
+                            }
                             const absoluteLineNumber = task.line + 1 + childLineIndex;
                             await this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
                         }
@@ -352,5 +432,23 @@ export class TaskRenderer {
         }
 
         menu.showAtPosition({ x: e.pageX, y: e.pageY });
+    }
+
+    /**
+     * Format @notation for child task display.
+     * Shows only startDate; appends … if there is more content after the date.
+     * For inherited time-only notation (@Txx:xx), substitutes parent's startDate.
+     */
+    private formatChildNotation(notation: string, parentStartDate: string | undefined): string {
+        const raw = notation.slice(1); // remove leading @
+        if (raw.startsWith('T')) {
+            // Inherited time-only: @T10:00 → use parent startDate
+            return parentStartDate ? `@${parentStartDate}…` : notation;
+        }
+        const dateMatch = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (!dateMatch) return notation;
+        const datePart = dateMatch[1];
+        // If notation is exactly @YYYY-MM-DD, show as-is; otherwise truncate
+        return raw === datePart ? `@${datePart}` : `@${datePart}…`;
     }
 }

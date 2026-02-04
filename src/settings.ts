@@ -124,6 +124,19 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
+            .setName('Upcoming Days')
+            .setDesc('Number of days (from tomorrow) to show as "Upcoming" in the Deadline list. Set to 0 to hide the Upcoming group.')
+            .addText(text => text
+                .setPlaceholder('7')
+                .setValue(this.plugin.settings.upcomingDays.toString())
+                .onChange(async (value) => {
+                    let days = parseInt(value);
+                    if (isNaN(days) || days < 0) days = 0;
+                    this.plugin.settings.upcomingDays = days;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
             .setName('Excluded Paths')
             .setDesc('Paths to exclude from task scanning (one per line). Files starting with these paths will be ignored.')
             .addTextArea(text => text

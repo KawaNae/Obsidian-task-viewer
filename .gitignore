@@ -8,6 +8,7 @@ styles.css
 log.md
 .agent
 .claude/
+.plan/
 build/
 tmp_legacy
 debug_tasks.md
