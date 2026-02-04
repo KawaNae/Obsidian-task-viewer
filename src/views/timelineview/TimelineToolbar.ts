@@ -40,6 +40,11 @@ export class TimelineToolbar {
      * Renders the toolbar into the container.
      */
     render(): void {
+        // Restore persisted filter state
+        if (this.viewState.filterFiles) {
+            this.filterMenu.setVisibleFiles(new Set(this.viewState.filterFiles));
+        }
+
         const toolbar = this.container.createDiv('view-toolbar');
 
         // Date Navigation
@@ -134,13 +139,25 @@ export class TimelineToolbar {
             const allTasksInView = dates.flatMap(date =>
                 this.taskIndex.getTasksForVisualDay(date, this.plugin.settings.startHour)
             );
-            const distinctFiles = Array.from(new Set(allTasksInView.map(t => t.file))).sort();
+            // Include deadline task files in the filter list
+            const deadlineTasks = this.taskIndex.getDeadlineTasks();
+            const allFiles = new Set([
+                ...allTasksInView.map(t => t.file),
+                ...deadlineTasks.map(t => t.file)
+            ]);
+            const distinctFiles = Array.from(allFiles).sort();
 
             this.filterMenu.showMenu(
                 e,
                 distinctFiles,
                 (file) => this.callbacks.getFileColor(file),
-                () => this.callbacks.onRender()
+                () => {
+                    // Persist filter state
+                    const visible = this.filterMenu.getVisibleFiles();
+                    this.viewState.filterFiles = visible ? Array.from(visible) : null;
+                    this.app.workspace.requestSaveLayout();
+                    this.callbacks.onRender();
+                }
             );
         };
     }

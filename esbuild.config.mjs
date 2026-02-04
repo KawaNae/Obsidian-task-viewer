@@ -12,7 +12,13 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = process.argv[2] === "production";
 
-const outDir = "C:\\Obsidian\\Dev\\.obsidian\\plugins\\obsidian-task-viewer";
+const vaultPath = process.env.OBSIDIAN_VAULT_PATH ?? "C:\\Obsidian\\Dev";
+const outDir = path.join(
+  vaultPath,
+  ".obsidian",
+  "plugins",
+  "obsidian-task-viewer"
+);
 
 if (!fs.existsSync(outDir)) {
   fs.mkdirSync(outDir, { recursive: true });
@@ -36,6 +42,7 @@ const copyStaticFiles = {
 
           '_schedule.css',
           '_task-card.css',
+          '_deadline.css',
           '_checkboxes.css',
           '_toolbar.css',
           '_pomodoro.css',
@@ -53,14 +60,12 @@ const copyStaticFiles = {
             console.warn(`Warning: CSS file not found: ${filePath}`);
           }
         }
-        fs.writeFileSync('styles.css', cssContent);
+        fs.writeFileSync(path.join(outDir, 'styles.css'), cssContent);
 
         // 2. Copy files to outDir
         fs.copyFileSync('manifest.json', path.join(outDir, 'manifest.json'));
-        fs.copyFileSync('styles.css', path.join(outDir, 'styles.css'));
-        fs.copyFileSync('main.js', path.join(outDir, 'main.js'));
 
-        console.log('Built locally and copied to ' + outDir);
+        console.log('Built to ' + outDir);
       } catch (e) {
         console.error('Failed to copy static files:', e);
       }
@@ -95,7 +100,7 @@ const context = await esbuild.context({
   logLevel: "info",
   sourcemap: prod ? false : "inline",
   treeShaking: true,
-  outfile: "main.js",
+  outfile: path.join(outDir, "main.js"),
   plugins: [copyStaticFiles],
 });
 

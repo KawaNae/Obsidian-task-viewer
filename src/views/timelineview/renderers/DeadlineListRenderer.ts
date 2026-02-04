@@ -1,5 +1,5 @@
 import { Component, Menu } from 'obsidian';
-import { Task } from '../../../types';
+import { Task, isCompleteStatusChar } from '../../../types';
 import { TaskRenderer } from '../../TaskRenderer';
 import { DateUtils } from '../../../utils/DateUtils';
 import { MenuHandler } from '../../../interaction/MenuHandler';
@@ -8,58 +8,70 @@ import { CreateTaskModal } from '../../../modals/CreateTaskModal';
 import { ViewUtils } from '../../ViewUtils';
 
 export class DeadlineListRenderer {
+    // Preserve collapsed state across re-renders
+    private collapsedGroups: Set<string> = new Set();
+
     constructor(
         private taskRenderer: TaskRenderer,
         private plugin: TaskViewerPlugin,
         private menuHandler: MenuHandler
     ) { }
 
-    public render(container: HTMLElement, tasks: Task[], owner: Component) {
+    public render(container: HTMLElement, tasks: Task[], owner: Component, visibleFiles: Set<string> | null) {
         container.empty();
         container.addClass('deadline-list-container');
 
-        const startHour = this.plugin.settings.startHour;
+        const settings = this.plugin.settings;
+        const startHour = settings.startHour;
         const today = DateUtils.getVisualDateOfNow(startHour);
+        const upcomingEnd = DateUtils.addDays(today, settings.upcomingDays);
 
-        // Group tasks
+        // Apply file filter
+        if (visibleFiles) {
+            tasks = tasks.filter(t => visibleFiles.has(t.file));
+        }
+
+        // Classify into 4 groups
         const overdue: Task[] = [];
-        const todayTasks: Task[] = [];
         const upcoming: Task[] = [];
+        const notCompleted: Task[] = [];
+        const completed: Task[] = [];
 
         tasks.forEach(task => {
             if (!task.deadline) return;
 
-            if (task.deadline < today) {
+            const deadlineDate = task.deadline.split('T')[0];
+
+            if (isCompleteStatusChar(task.statusChar, settings.completeStatusChars)) {
+                completed.push(task);
+            } else if (deadlineDate < today) {
                 overdue.push(task);
-            } else if (task.deadline === today) {
-                todayTasks.push(task);
-            } else {
+            } else if (deadlineDate > today && deadlineDate <= upcomingEnd) {
                 upcoming.push(task);
+            } else {
+                notCompleted.push(task);
             }
         });
 
-        // Sort overlapping tasks by deadline or file position
+        // Sort each group by deadline ascending
         const sorter = (a: Task, b: Task) => {
-            if (a.deadline !== b.deadline) {
-                return (a.deadline || '').localeCompare(b.deadline || '');
-            }
-            return 0;
-            // Stable sort by original order or ID?
+            return (a.deadline || '').localeCompare(b.deadline || '');
         };
 
         overdue.sort(sorter);
-        todayTasks.sort(sorter);
         upcoming.sort(sorter);
+        notCompleted.sort(sorter);
+        completed.sort(sorter);
 
-        // Render Groups
+        // Render groups in order: OverDue → Upcoming → Not completed → Completed
         this.renderGroup(container, 'Overdue', overdue, 'is-overdue', owner);
-        this.renderGroup(container, 'Today', todayTasks, 'is-today', owner);
         this.renderGroup(container, 'Upcoming', upcoming, 'is-upcoming', owner);
+        this.renderGroup(container, 'Not completed', notCompleted, 'is-not-completed', owner);
+        this.renderGroup(container, 'Completed', completed, 'is-completed', owner);
 
-        // Add Context Menu for Empty Space
+        // Context menu for empty space
         container.addEventListener('contextmenu', (event) => {
             if (event.target === container || (event.target as HTMLElement).closest('.deadline-group')) {
-                // Determine if we clicked on a card or handle (handled by card menu)
                 if ((event.target as HTMLElement).closest('.task-card')) return;
 
                 event.preventDefault();
@@ -84,12 +96,8 @@ export class DeadlineListRenderer {
             const offset = this.plugin.settings.defaultDeadlineOffset || 0;
             const deadline = DateUtils.addDays(today, offset);
 
-            // Default deadline: Today + Offset
-            // Format: - [ ] content @>>YYYY-MM-DD
             const taskLine = `- [ ] ${content} @>>${deadline}`;
 
-            // We append to Today's Daily Note for now, as a safe default.
-            // Or maybe separate backlog file? But plugin is Daily Note focused.
             const [y, m, d] = today.split('-').map(Number);
             const dateObj = new Date();
             dateObj.setFullYear(y, m - 1, d);
@@ -106,14 +114,36 @@ export class DeadlineListRenderer {
         }).open();
     }
 
-
     private renderGroup(container: HTMLElement, title: string, tasks: Task[], className: string, owner: Component) {
         if (tasks.length === 0) return;
 
+        const isCollapsed = this.collapsedGroups.has(title);
+
         const groupEl = container.createDiv(`deadline-group ${className}`);
-        const header = groupEl.createEl('p', { text: title, cls: 'deadline-group-header' });
+        if (isCollapsed) {
+            groupEl.addClass('deadline-group--collapsed');
+        }
+
+        // Header: toggle icon + title + count
+        const header = groupEl.createDiv('deadline-group-header');
+        const toggle = header.createSpan({ text: isCollapsed ? '▶' : '▼', cls: 'deadline-group-toggle' });
+        header.createSpan({ text: title, cls: 'deadline-group-title' });
         header.createSpan({ text: ` (${tasks.length})`, cls: 'deadline-count' });
 
+        // Toggle click handler
+        header.addEventListener('click', () => {
+            if (this.collapsedGroups.has(title)) {
+                this.collapsedGroups.delete(title);
+                groupEl.removeClass('deadline-group--collapsed');
+                toggle.textContent = '▼';
+            } else {
+                this.collapsedGroups.add(title);
+                groupEl.addClass('deadline-group--collapsed');
+                toggle.textContent = '▶';
+            }
+        });
+
+        // Task list
         const listEl = groupEl.createDiv('deadline-group-list');
 
         tasks.forEach(task => {
@@ -122,9 +152,6 @@ export class DeadlineListRenderer {
             ViewUtils.applyFileColor(this.plugin.app, card, task.file, this.plugin.settings.frontmatterColorKey);
 
             this.taskRenderer.render(card, task, owner, this.plugin.settings, { topRight: 'deadline' });
-            // TaskRenderer signature: render(container, task, view?, settings?)
-            // View is used for refresh(). Passing null might be risky if checkbox change tries to refresh view.
-            // But TaskRenderer's `handleCheckboxClick` uses `view.refresh()` if provided.
 
             this.menuHandler.addTaskContextMenu(card, task);
         });

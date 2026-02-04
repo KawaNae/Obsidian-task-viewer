@@ -1,0 +1,60 @@
+/* ==========================================================================
+   Deadline List — Group Headers & Toggle
+   ========================================================================== */
+
+/* Group header (clickable toggle bar) */
+.deadline-group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 4px 4px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
+.deadline-group-header:hover {
+    color: var(--text-accent);
+}
+
+/* Toggle arrow icon */
+.deadline-group-toggle {
+    font-size: 0.7em;
+    color: var(--text-muted);
+    min-width: 10px;
+    text-align: center;
+}
+
+/* Group title text */
+.deadline-group-title {
+    flex: 1;
+}
+
+/* Task count badge */
+.deadline-count {
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+/* Collapsed state: hide the task list */
+.deadline-group--collapsed .deadline-group-list {
+    display: none;
+}
+
+/* ==========================================================================
+   Group-specific title colors
+   ========================================================================== */
+
+.deadline-group.is-overdue .deadline-group-title {
+    color: var(--text-error);
+}
+
+.deadline-group.is-upcoming .deadline-group-title {
+    color: var(--text-warning, var(--text-accent));
+}
+
+.deadline-group.is-completed .deadline-group-title {
+    color: var(--text-muted);
+}
