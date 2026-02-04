@@ -161,6 +161,13 @@ export function splitTaskAtBoundary(task: Task, startHour: number): [RenderableT
     return [beforeSegment, afterSegment];
 }
 
+export type HabitType = 'boolean' | 'number' | 'string';
+
+export interface HabitDefinition {
+    name: string;    // frontmatter キー名をそのまま使用
+    type: HabitType;
+}
+
 export interface Task {
     id: string;             // Unique identifier (file path + line number)
     file: string;           // Absolute file path
@@ -234,6 +241,7 @@ export interface TaskViewerSettings {
     excludedPaths: string[]; // Paths to exclude from task scanning
     defaultDeadlineOffset: number; // Default number of days from today for new deadline tasks (default: 0)
     upcomingDays: number; // Days from tomorrow to consider as "Upcoming" in deadline list (default: 7)
+    habits: HabitDefinition[]; // User-defined habit list (empty = feature invisible)
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -249,4 +257,5 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     excludedPaths: [],
     defaultDeadlineOffset: 0,
     upcomingDays: 7,
+    habits: [],
 };

@@ -9,6 +9,7 @@ import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { AllDaySectionRenderer } from './AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './TimelineSectionRenderer';
 import { TaskIndex } from '../../../services/TaskIndex';
+import { HabitTrackerRenderer } from './HabitTrackerRenderer';
 
 export class GridRenderer {
     constructor(
@@ -23,6 +24,7 @@ export class GridRenderer {
         parentContainer: HTMLElement,
         allDayRenderer: AllDaySectionRenderer,
         timelineRenderer: TimelineSectionRenderer,
+        habitRenderer: HabitTrackerRenderer,
         handleManager: HandleManager,
         getDatesToShow: () => string[],
         owner: Component,
@@ -91,6 +93,13 @@ export class GridRenderer {
             });
         });
         this.applyDateHeaderCompactBehavior(headerCells);
+
+        // 1.5. Habits Row (between date header and all-day)
+        if (this.plugin.settings.habits.length > 0) {
+            const habitsRow = grid.createDiv('timeline-row habits-section');
+            habitsRow.style.gridTemplateColumns = colTemplate;
+            habitRenderer.render(habitsRow, dates);
+        }
 
         // 2. All-Day Row (Merged All-Day & Long-Term)
         const allDayRow = grid.createDiv('timeline-row allday-section');

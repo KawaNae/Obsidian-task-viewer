@@ -1,5 +1,6 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import TaskViewerPlugin from './main';
+import { HabitType } from './types';
 
 export class TaskViewerSettingTab extends PluginSettingTab {
     plugin: TaskViewerPlugin;
@@ -158,5 +159,60 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             textarea.style.width = '100%';
             textarea.style.minWidth = '300px';
         }
+
+        // --- Habit Tracker Section ---
+        const habitHeader = containerEl.createDiv('setting-item');
+        habitHeader.createSpan({ text: 'Habit Tracker', cls: 'setting-item-name' });
+        habitHeader.createSpan({ text: 'Define habits to track in your daily notes\' frontmatter.', cls: 'setting-item-description' });
+
+        const habitsListContainer = containerEl.createDiv('habits-list-container');
+        this.renderHabitsList(habitsListContainer);
+
+        new Setting(containerEl)
+            .setName('Add Habit')
+            .setDesc('Create a new habit to track.')
+            .addButton(btn => btn
+                .setButtonText('+ Add')
+                .onClick(async () => {
+                    this.plugin.settings.habits.push({ name: '', type: 'boolean' });
+                    await this.plugin.saveSettings();
+                    this.renderHabitsList(habitsListContainer);
+                })
+            );
+    }
+
+    private renderHabitsList(container: HTMLElement): void {
+        container.empty();
+        this.plugin.settings.habits.forEach((habit, i) => {
+            new Setting(container)
+                .setName(`Habit ${i + 1}`)
+                .addText(text => text
+                    .setPlaceholder('Habit name')
+                    .setValue(habit.name)
+                    .onChange(async (value) => {
+                        this.plugin.settings.habits[i].name = value.trim();
+                        await this.plugin.saveSettings();
+                    })
+                )
+                .addDropdown(dropdown => dropdown
+                    .addOption('boolean', 'Boolean (on/off)')
+                    .addOption('number', 'Number')
+                    .addOption('string', 'Text')
+                    .setValue(habit.type)
+                    .onChange(async (value) => {
+                        this.plugin.settings.habits[i].type = value as HabitType;
+                        await this.plugin.saveSettings();
+                    })
+                )
+                .addButton(btn => btn
+                    .setIcon('trash')
+                    .setTooltip('Remove habit')
+                    .onClick(async () => {
+                        this.plugin.settings.habits.splice(i, 1);
+                        await this.plugin.saveSettings();
+                        this.renderHabitsList(container);
+                    })
+                );
+        });
     }
 }

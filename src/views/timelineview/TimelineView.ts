@@ -16,6 +16,7 @@ import { GridRenderer } from './renderers/GridRenderer';
 import { AllDaySectionRenderer } from './renderers/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
 import { DeadlineListRenderer } from './renderers/DeadlineListRenderer';
+import { HabitTrackerRenderer } from './renderers/HabitTrackerRenderer';
 
 
 export const VIEW_TYPE_TIMELINE = 'timeline-view';
@@ -46,6 +47,7 @@ export class TimelineView extends ItemView {
     private allDayRenderer: AllDaySectionRenderer;
     private timelineRenderer: TimelineSectionRenderer;
     private deadlineRenderer: DeadlineListRenderer;
+    private habitRenderer: HabitTrackerRenderer;
 
 
     // ==================== State ====================
@@ -146,6 +148,7 @@ export class TimelineView extends ItemView {
         this.timelineRenderer = new TimelineSectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer);
         this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler, this.taskIndex);
         this.deadlineRenderer = new DeadlineListRenderer(this.taskRenderer, this.plugin, this.menuHandler);
+        this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
 
         // Initialize DragHandler with selection callback, move callback, and view start date provider
         this.dragHandler = new DragHandler(this.container, this.taskIndex, this.plugin,
@@ -337,6 +340,7 @@ export class TimelineView extends ItemView {
             executionColumn,
             this.allDayRenderer,
             this.timelineRenderer,
+            this.habitRenderer,
             this.handleManager,
             () => this.getDatesToShow(),
             this,
