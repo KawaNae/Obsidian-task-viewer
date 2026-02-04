@@ -135,7 +135,7 @@ export class AllDaySectionRenderer {
             ViewUtils.applyFileColor(this.plugin.app, el, task.file, this.plugin.settings.frontmatterColorKey);
 
             // Use TaskRenderer
-            this.taskRenderer.render(el, task, owner, this.plugin.settings);
+            this.taskRenderer.render(el, task, owner, this.plugin.settings, { topRight: 'none' });
 
             this.menuHandler.addTaskContextMenu(el, task);
 

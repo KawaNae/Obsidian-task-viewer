@@ -121,7 +121,7 @@ export class DeadlineListRenderer {
 
             ViewUtils.applyFileColor(this.plugin.app, card, task.file, this.plugin.settings.frontmatterColorKey);
 
-            this.taskRenderer.render(card, task, owner, this.plugin.settings);
+            this.taskRenderer.render(card, task, owner, this.plugin.settings, { topRight: 'deadline' });
             // TaskRenderer signature: render(container, task, view?, settings?)
             // View is used for refresh(). Passing null might be risky if checkbox change tries to refresh view.
             // But TaskRenderer's `handleCheckboxClick` uses `view.refresh()` if provided.

@@ -431,3 +431,19 @@
     border-left: 2px solid var(--background-modifier-border);
     margin-top: 4px;
 }
+
+/* ==========================================================================
+   9. CHILD NOTATION & COMPACT CARD
+   ========================================================================== */
+
+/* Child @notation label — small muted text after checkbox content */
+.task-card__child-notation {
+    font-size: 0.8em;
+    color: var(--text-muted);
+    margin-left: 0.4em;
+}
+
+/* Compact timeline card: suppress time label when card height is too short */
+.task-card--compact .task-card__time {
+    display: none;
+}

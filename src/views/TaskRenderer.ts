@@ -14,9 +14,11 @@ export class TaskRenderer {
         this.taskIndex = taskIndex;
     }
 
-    async render(container: HTMLElement, task: Task, component: Component, settings: TaskViewerSettings) {
-        // Time Display
-        if (task.startTime) {
+    async render(container: HTMLElement, task: Task, component: Component, settings: TaskViewerSettings, options?: { topRight?: 'time' | 'deadline' | 'none' }) {
+        // Top-right display: time (default), deadline date, or none
+        const topRight = options?.topRight ?? 'time';
+
+        if (topRight === 'time' && task.startTime) {
             const timeDisplay = container.createDiv('task-card__time');
             let timeText = task.startTime;
 
@@ -57,10 +59,6 @@ export class TaskRenderer {
                     timeText = `${startStr}>${endStr}`;
                 } else {
                     // Within visual day: Show time only
-                    // If it's next day but within visual day (e.g. 25:00), we still just show the time (01:00)
-                    // The user requested "01:00のように表示します" (Display like 01:00)
-
-                    // We need to extract just HH:mm from endDate
                     const endH = endDate.getHours().toString().padStart(2, '0');
                     const endMin = endDate.getMinutes().toString().padStart(2, '0');
                     const endStr = `${endH}:${endMin}`;
@@ -70,6 +68,9 @@ export class TaskRenderer {
             }
 
             timeDisplay.innerText = timeText;
+        } else if (topRight === 'deadline' && task.deadline) {
+            const timeDisplay = container.createDiv('task-card__time');
+            timeDisplay.innerText = task.deadline.split('T')[0];
         }
 
         const contentContainer = container.createDiv('task-card__content');
@@ -134,16 +135,37 @@ export class TaskRenderer {
                 childrenContainer.addClass('task-card__children--collapsed');
             }
 
-            // Render children
+            // Render children: extract @notation for checkbox lines before stripping
+            const checkboxNotations: (string | null)[] = [];
             const cleanChildren = task.childLines.map(childLine => {
-                const cleaned = childLine
+                if (/^\s*-\s*\[.\]/.test(childLine)) {
+                    const m = childLine.match(/@[\w\-:>T]+/);
+                    checkboxNotations.push(m ? m[0] : null);
+                }
+
+                let cleaned = childLine
                     .replace(/\s*@[\w\-:>T]+(?:\s*==>.*)?/g, '')
                     .trimEnd();
+
+                // Bare checkbox "- [ ]" with no content: append ZWS to force checkbox rendering
+                if (/^\s*-\s*\[.\]$/.test(cleaned)) {
+                    cleaned += ' \u200B';
+                }
                 return cleaned;
             });
 
             const childrenText = cleanChildren.join('\n');
             await MarkdownRenderer.render(this.app, childrenText, childrenContainer, task.file, component);
+
+            // Post-process: append @notation labels to rendered checkbox items
+            const childTaskListItems = childrenContainer.querySelectorAll('.task-list-item');
+            checkboxNotations.forEach((notation, i) => {
+                if (!notation || !childTaskListItems[i]) return;
+                const span = document.createElement('span');
+                span.className = 'task-card__child-notation';
+                span.textContent = notation;
+                childTaskListItems[i].appendChild(span);
+            });
 
             // Toggle click handler
             toggle.addEventListener('click', (e) => {
@@ -169,18 +191,37 @@ export class TaskRenderer {
             // Handle checkboxes in children container
             this.setupChildCheckboxHandlers(childrenContainer, task, 0, settings);
         } else {
-            // Original behavior: render everything together
+            // Render parent + children together: extract @notation for checkbox lines
+            const checkboxNotations: (string | null)[] = [];
             const cleanChildren = task.childLines.map(childLine => {
-                const cleaned = childLine
+                if (/^\s*-\s*\[.\]/.test(childLine)) {
+                    const m = childLine.match(/@[\w\-:>T]+/);
+                    checkboxNotations.push(m ? m[0] : null);
+                }
+
+                let cleaned = childLine
                     .replace(/\s*@[\w\-:>T]+(?:\s*==>.*)?/g, '')
                     .trimEnd();
+
+                if (/^\s*-\s*\[.\]$/.test(cleaned)) {
+                    cleaned += ' \u200B';
+                }
                 return '    ' + cleaned;
             });
 
             const fullText = [cleanParentLine, ...cleanChildren].join('\n');
 
-            // Use MarkdownRenderer
             await MarkdownRenderer.render(this.app, fullText, contentContainer, task.file, component);
+
+            // Post-process: append @notation labels (skip index 0 = parent)
+            const allTaskListItems = contentContainer.querySelectorAll('.task-list-item');
+            checkboxNotations.forEach((notation, i) => {
+                if (!notation || !allTaskListItems[i + 1]) return;
+                const span = document.createElement('span');
+                span.className = 'task-card__child-notation';
+                span.textContent = notation;
+                allTaskListItems[i + 1].appendChild(span);
+            });
         }
 
         // Handle Internal Links

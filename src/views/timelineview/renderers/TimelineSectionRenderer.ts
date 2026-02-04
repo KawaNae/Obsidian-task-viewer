@@ -172,11 +172,14 @@ export class TimelineSectionRenderer {
             const leftFraction = taskLayout.left / 100;
 
             el.style.top = `${(relativeStart * zoomLevel) + 1}px`;
-            el.style.height = `${(duration * zoomLevel) - 3}px`;
+            const heightPx = (duration * zoomLevel) - 3;
+            el.style.height = `${heightPx}px`;
             el.style.width = `calc((100% - 8px) * ${widthFraction})`;
             el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
             el.style.zIndex = String(taskLayout.zIndex);
             el.style.setProperty('--initial-height', `${duration * zoomLevel}px`);
+
+            if (heightPx < 48) el.addClass('task-card--compact');
 
             this.taskRenderer.render(el, task, owner, this.plugin.settings);
             this.menuHandler.addTaskContextMenu(el, task);
