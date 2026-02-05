@@ -209,6 +209,9 @@ export interface Task {
 
     // Validation warning - set during parse if task has formatting issues
     validationWarning?: string;
+
+    // frontmatter から解析されたタスクの場合に true (line === -1)
+    isFrontmatter?: boolean;
 }
 
 export interface FlowCommand {

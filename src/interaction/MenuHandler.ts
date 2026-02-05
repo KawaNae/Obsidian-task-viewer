@@ -249,6 +249,10 @@ export class MenuHandler {
             item.setTitle('Create Child Task')
                 .setIcon('plus')
                 .onClick(() => {
+                    if (task.line === -1) {
+                        new Notice('Frontmatter タスクは読み取り専用です。子タスクは追加できません。');
+                        return;
+                    }
                     new CreateTaskModal(this.app, async (result) => {
                         const taskLine = formatTaskLine(result);
                         const match = task.originalText.match(/^(\s*)/);

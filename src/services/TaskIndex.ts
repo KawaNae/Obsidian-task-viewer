@@ -5,6 +5,8 @@ import { TaskViewerSettings } from '../types';
 import { TaskRepository } from './TaskRepository';
 import { TaskCommandExecutor } from './TaskCommandExecutor';
 import { DateUtils } from '../utils/DateUtils';
+import { FrontmatterTaskParser } from './parsers/FrontmatterTaskParser';
+import { WikiLinkResolver } from './WikiLinkResolver';
 
 export interface ValidationError {
     file: string;
@@ -58,6 +60,7 @@ export class TaskIndex {
                 console.log(`[🔄SYNC] vault.modify: ${file.path}, isLocal=${isLocal}`);
 
                 await this.queueScan(file, isLocal);
+                WikiLinkResolver.resolve(this.tasks, this.app, this.settings.excludedPaths);
                 this.notifyListeners();
             }
         });
@@ -75,7 +78,14 @@ export class TaskIndex {
 
         this.app.metadataCache.on('changed', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
-                // Metadata changed (e.g. frontmatter), notify listeners to re-render
+                if (!this.isExcluded(file.path)) {
+                    // frontmatter の変更がタスクフィールドに影響する可能性がある → rescan
+                    this.queueScan(file).then(() => {
+                        WikiLinkResolver.resolve(this.tasks, this.app, this.settings.excludedPaths);
+                        this.notifyListeners();
+                    });
+                }
+                // 即時notify: color・habit等の非タスクfrontmatter変更対応（既存動作）
                 this.notifyListeners();
             }
         });
@@ -192,8 +202,9 @@ export class TaskIndex {
             }
             await this.queueScan(file);
         }
+        WikiLinkResolver.resolve(this.tasks, this.app, this.settings.excludedPaths);
         this.notifyListeners();
-        // Fallback: Ensure isInitializing is false after explicit vault scan, 
+        // Fallback: Ensure isInitializing is false after explicit vault scan,
         // though onLayoutReady handles it too.
         this.isInitializing = false;
     }
@@ -347,8 +358,34 @@ export class TaskIndex {
             return extractedTasks;
         };
 
-        // Extract all tasks recursively
-        const allExtractedTasks = extractTasksFromLines(lines, 0);
+        // --- Frontmatter 境界検出 ---
+        let bodyStartIndex = 0;
+        let frontmatterObj: Record<string, any> | undefined;
+        if (lines.length > 0 && lines[0].trim() === '---') {
+            for (let i = 1; i < lines.length; i++) {
+                if (lines[i].trim() === '---') { bodyStartIndex = i + 1; break; }
+            }
+            if (bodyStartIndex > 0) {
+                frontmatterObj = this.app.metadataCache.getCache(file.path)?.frontmatter;
+            }
+        }
+        const bodyLines = lines.slice(bodyStartIndex);
+        const fmTask = FrontmatterTaskParser.parse(file.path, frontmatterObj, bodyLines);
+
+        // インライン タスク抽出（ボディ行のみ; baseLineNumber = bodyStartIndex で正確なタスクID）
+        // fmTask?.startDate を parentStartDate として渡し、時刻オンリーの子タスクに日付継承を適用
+        const allExtractedTasks = extractTasksFromLines(bodyLines, bodyStartIndex, fmTask?.startDate);
+
+        if (fmTask) {
+            // indent 0 かつ親未設定のボディタスクを frontmatter タスクの子にする
+            for (const bt of allExtractedTasks) {
+                if (!bt.parentId && bt.indent === 0) {
+                    bt.parentId = fmTask.id;
+                    fmTask.childIds.push(bt.id);
+                }
+            }
+            newTasks.push(fmTask);
+        }
         newTasks.push(...allExtractedTasks);
 
         // 2. Count Current Completions
@@ -523,6 +560,12 @@ export class TaskIndex {
             return;
         }
 
+        // frontmatterタスク (line === -1) は現時点で読み取り専用
+        if (task.line === -1) {
+            console.warn(`[TaskIndex] Frontmatter task ${taskId} is read-only (write-back not yet implemented)`);
+            return;
+        }
+
         // Mark as local edit before making file changes
         this.markLocalEdit(task.file);
 
@@ -562,6 +605,11 @@ export class TaskIndex {
         const task = this.tasks.get(taskId);
         if (!task) return;
 
+        if (task.line === -1) {
+            console.warn(`[TaskIndex] Frontmatter task ${taskId} is read-only (write-back not yet implemented)`);
+            return;
+        }
+
         // Mark as local edit before making file changes
         this.markLocalEdit(task.file);
 
@@ -576,6 +624,11 @@ export class TaskIndex {
         const task = this.tasks.get(taskId);
         if (!task) return;
 
+        if (task.line === -1) {
+            console.warn(`[TaskIndex] Frontmatter task ${taskId} is read-only (write-back not yet implemented)`);
+            return;
+        }
+
         // Mark as local edit before making file changes
         this.markLocalEdit(task.file);
 
@@ -585,6 +638,11 @@ export class TaskIndex {
     async duplicateTaskForWeek(taskId: string) {
         const task = this.tasks.get(taskId);
         if (!task) return;
+
+        if (task.line === -1) {
+            console.warn(`[TaskIndex] Frontmatter task ${taskId} is read-only (write-back not yet implemented)`);
+            return;
+        }
 
         // Mark as local edit before making file changes
         this.markLocalEdit(task.file);
