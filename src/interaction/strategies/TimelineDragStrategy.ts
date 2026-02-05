@@ -552,28 +552,17 @@ export class TimelineDragStrategy implements DragStrategy {
             const roundedStartMinutes = Math.round(totalStartMinutes);
             const roundedEndMinutes = Math.round(totalEndMinutes);
 
-            // Handle day wrapping
-            let finalStartDate = this.currentDayDate!;
-            let finalEndDate = this.currentDayDate!;
-            let finalStartMinutes = roundedStartMinutes;
-            let finalEndMinutes = roundedEndMinutes;
+            // Day offset from visual column date (same pattern as move mode)
+            const startDayOffset = Math.floor(roundedStartMinutes / 1440);
+            const endDayOffset = Math.floor(roundedEndMinutes / 1440);
 
-            // Day wrap for start time (>= 24:00)
-            if (finalStartMinutes >= 24 * 60) {
-                finalStartDate = DateUtils.addDays(this.currentDayDate!, 1);
-                finalStartMinutes -= 24 * 60;
-            }
+            const normalizedStartMinutes = ((roundedStartMinutes % 1440) + 1440) % 1440;
+            const normalizedEndMinutes = ((roundedEndMinutes % 1440) + 1440) % 1440;
 
-            // Day wrap for end time (>= 24:00)
-            if (finalEndMinutes >= 24 * 60) {
-                finalEndDate = DateUtils.addDays(finalStartDate, Math.floor(finalEndMinutes / (24 * 60)));
-                finalEndMinutes = finalEndMinutes % (24 * 60);
-            }
-
-            const newStartDate = finalStartDate;
-            const newStartTime = DateUtils.minutesToTime(finalStartMinutes);
-            const newEndDate = finalEndDate;
-            const newEndTime = DateUtils.minutesToTime(finalEndMinutes);
+            const newStartDate = DateUtils.addDays(this.currentDayDate!, startDayOffset);
+            const newStartTime = DateUtils.minutesToTime(normalizedStartMinutes);
+            const newEndDate = DateUtils.addDays(this.currentDayDate!, endDayOffset);
+            const newEndTime = DateUtils.minutesToTime(normalizedEndMinutes);
 
             if (this.mode === 'resize-top') {
                 updates.startDate = newStartDate;

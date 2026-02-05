@@ -4,7 +4,7 @@ import { TaskRenderer } from '../../TaskRenderer';
 import { DateUtils } from '../../../utils/DateUtils';
 import { MenuHandler } from '../../../interaction/MenuHandler';
 import TaskViewerPlugin from '../../../main';
-import { CreateTaskModal } from '../../../modals/CreateTaskModal';
+import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { ViewUtils } from '../../ViewUtils';
 
 export class DeadlineListRenderer {
@@ -90,13 +90,13 @@ export class DeadlineListRenderer {
     }
 
     private handleCreateDeadlineTask() {
-        new CreateTaskModal(this.plugin.app, async (content) => {
-            const startHour = this.plugin.settings.startHour;
-            const today = DateUtils.getVisualDateOfNow(startHour);
-            const offset = this.plugin.settings.defaultDeadlineOffset || 0;
-            const deadline = DateUtils.addDays(today, offset);
+        const startHour = this.plugin.settings.startHour;
+        const today = DateUtils.getVisualDateOfNow(startHour);
+        const offset = this.plugin.settings.defaultDeadlineOffset || 0;
+        const deadline = DateUtils.addDays(today, offset);
 
-            const taskLine = `- [ ] ${content} @>>${deadline}`;
+        new CreateTaskModal(this.plugin.app, async (result) => {
+            const taskLine = formatTaskLine(result);
 
             const [y, m, d] = today.split('-').map(Number);
             const dateObj = new Date();
@@ -111,7 +111,7 @@ export class DeadlineListRenderer {
                 this.plugin.settings.dailyNoteHeader,
                 this.plugin.settings.dailyNoteHeaderLevel
             );
-        }).open();
+        }, { deadline }, { warnOnEmptyTask: true }).open();
     }
 
     private renderGroup(container: HTMLElement, title: string, tasks: Task[], className: string, owner: Component) {

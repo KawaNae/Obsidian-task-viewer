@@ -5,7 +5,6 @@ export type DateTimeType = 'start' | 'end' | 'deadline';
 export interface DateTimeValue {
     date: string | null;     // YYYY-MM-DD or null
     time: string | null;     // HH:mm or null
-    isFuture?: boolean;      // Only for 'start' type
 }
 
 export interface DateTimeModalOptions {
@@ -20,7 +19,6 @@ export class DateTimeInputModal extends Modal {
 
     private dateInput: HTMLInputElement;
     private timeInput: HTMLInputElement;
-    private futureCheckbox: HTMLInputElement | null = null;
     private errorEl: HTMLElement;
 
     constructor(
@@ -46,30 +44,12 @@ export class DateTimeInputModal extends Modal {
         const typeLabel = this.type.charAt(0).toUpperCase() + this.type.slice(1);
         contentEl.createEl('h3', { text: `Edit ${typeLabel}` });
 
-        // Future checkbox (Start only)
-        if (this.type === 'start') {
-            const futureContainer = contentEl.createDiv('datetime-input-modal__future');
-            const label = futureContainer.createEl('label');
-            this.futureCheckbox = label.createEl('input', { type: 'checkbox' });
-            this.futureCheckbox.checked = this.currentValue.isFuture || false;
-            label.appendText(' Future (no specific date)');
+        // Date + Time inputs in a horizontal row
+        const row = contentEl.createDiv('datetime-input-modal__row');
 
-            this.futureCheckbox.addEventListener('change', () => {
-                const isFuture = this.futureCheckbox!.checked;
-                this.dateInput.disabled = isFuture;
-                this.timeInput.disabled = isFuture;
-                if (isFuture) {
-                    this.dateInput.value = '';
-                    this.timeInput.value = '';
-                }
-                this.validateInputs();
-            });
-        }
-
-        // Date input (text)
-        const dateContainer = contentEl.createDiv('datetime-input-modal__field');
+        const dateContainer = row.createDiv('datetime-input-modal__field');
         const dateLabel = this.type === 'end' && this.options.hasStartDate
-            ? 'Date (optional if time-only)'
+            ? 'Date (optional)'
             : 'Date';
         dateContainer.createEl('label', { text: dateLabel });
         this.dateInput = dateContainer.createEl('input', {
@@ -78,23 +58,16 @@ export class DateTimeInputModal extends Modal {
             cls: 'datetime-input-modal__text-input'
         });
         this.dateInput.value = this.currentValue.date || '';
-        if (this.currentValue.isFuture) {
-            this.dateInput.disabled = true;
-        }
         this.dateInput.addEventListener('input', () => this.validateInputs());
 
-        // Time input (text)
-        const timeContainer = contentEl.createDiv('datetime-input-modal__field');
-        timeContainer.createEl('label', { text: 'Time (optional)' });
+        const timeContainer = row.createDiv('datetime-input-modal__field');
+        timeContainer.createEl('label', { text: 'Time' });
         this.timeInput = timeContainer.createEl('input', {
             type: 'text',
             placeholder: 'HH:mm',
             cls: 'datetime-input-modal__text-input'
         });
         this.timeInput.value = this.currentValue.time || '';
-        if (this.currentValue.isFuture) {
-            this.timeInput.disabled = true;
-        }
         this.timeInput.addEventListener('input', () => this.validateInputs());
 
         // Error message
@@ -107,7 +80,7 @@ export class DateTimeInputModal extends Modal {
                 .setButtonText('Clear')
                 .setWarning()
                 .onClick(() => {
-                    this.onSubmit({ date: null, time: null, isFuture: false });
+                    this.onSubmit({ date: null, time: null });
                     this.close();
                 }))
             .addButton(btn => btn
@@ -131,7 +104,6 @@ export class DateTimeInputModal extends Modal {
     }
 
     private validateInputs(): { valid: boolean; errorMessage: string } {
-        const isFuture = this.futureCheckbox?.checked || false;
         const dateValue = this.dateInput.value.trim();
         const timeValue = this.timeInput.value.trim();
 
@@ -139,11 +111,6 @@ export class DateTimeInputModal extends Modal {
         this.dateInput.removeClass('datetime-input-modal__input--invalid');
         this.timeInput.removeClass('datetime-input-modal__input--invalid');
         this.errorEl.style.display = 'none';
-
-        // If future is checked (Start only), no validation needed
-        if (isFuture) {
-            return { valid: true, errorMessage: '' };
-        }
 
         // Format validation
         if (dateValue && !this.isValidDate(dateValue)) {
@@ -161,8 +128,6 @@ export class DateTimeInputModal extends Modal {
         // Business rule validation based on type
         switch (this.type) {
             case 'start':
-                // Start: 日付のみ, 日付+時刻, Future, 空(Clear) のみ許可
-                // 時刻のみは不可
                 if (!dateValue && timeValue) {
                     this.timeInput.addClass('datetime-input-modal__input--invalid');
                     this.showError('Start requires a date if time is specified.');
@@ -171,7 +136,6 @@ export class DateTimeInputModal extends Modal {
                 break;
 
             case 'end':
-                // End: 日付のみ, 日付+時刻, 時刻のみ(startDateがある場合), 空(Clear)
                 if (!dateValue && timeValue && !this.options.hasStartDate) {
                     this.timeInput.addClass('datetime-input-modal__input--invalid');
                     this.showError('End time-only requires task to have a start date.');
@@ -180,8 +144,6 @@ export class DateTimeInputModal extends Modal {
                 break;
 
             case 'deadline':
-                // Deadline: 日付のみ, 日付+時刻, 空(Clear)
-                // 時刻のみは不可
                 if (!dateValue && timeValue) {
                     this.timeInput.addClass('datetime-input-modal__input--invalid');
                     this.showError('Deadline requires a date if time is specified.');
@@ -218,15 +180,10 @@ export class DateTimeInputModal extends Modal {
             return;
         }
 
-        const isFuture = this.futureCheckbox?.checked || false;
         const date = this.dateInput.value.trim() || null;
         const time = this.timeInput.value.trim() || null;
 
-        this.onSubmit({
-            date: isFuture ? null : date,
-            time: isFuture ? null : time,
-            isFuture: this.type === 'start' ? isFuture : undefined
-        });
+        this.onSubmit({ date, time });
         this.close();
     }
 

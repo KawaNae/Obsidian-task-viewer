@@ -7,7 +7,7 @@ import { TaskLayout } from '../../../services/TaskLayout';
 import { TaskIndex } from '../../../services/TaskIndex';
 import { TaskRenderer } from '../../TaskRenderer';
 import { HandleManager } from '../HandleManager';
-import { CreateTaskModal } from '../../../modals/CreateTaskModal';
+import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { shouldSplitTask, splitTaskAtBoundary, RenderableTask } from '../../../types';
 
 
@@ -281,10 +281,23 @@ export class TimelineSectionRenderer {
 
         // Open Modal
         new CreateTaskModal(this.plugin.app, async (result) => {
+            const taskLine = formatTaskLine(result);
+
             // date is the FILE date (visual column date)
-            // taskDate is the actual date for the task (@YYYY-MM-DD)
-            await this.taskIndex.addTaskToDailyNote(date, timeString, result, this.plugin.settings, taskDate);
-        }).open();
+            const [y, m, d] = date.split('-').map(Number);
+            const dateObj = new Date();
+            dateObj.setFullYear(y, m - 1, d);
+            dateObj.setHours(0, 0, 0, 0);
+
+            const { DailyNoteUtils } = await import('../../../utils/DailyNoteUtils');
+            await DailyNoteUtils.appendLineToDailyNote(
+                this.plugin.app,
+                dateObj,
+                taskLine,
+                this.plugin.settings.dailyNoteHeader,
+                this.plugin.settings.dailyNoteHeaderLevel
+            );
+        }, { startDate: taskDate, startTime: timeString }, { warnOnEmptyTask: true }).open();
     }
 
     /** Show context menu for empty space click */

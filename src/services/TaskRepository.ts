@@ -1,8 +1,6 @@
 import { App, TFile, TFolder } from 'obsidian';
 import { Task } from '../types';
 import { TaskParser } from './TaskParser';
-import { DailyNoteUtils } from '../utils/DailyNoteUtils';
-import { TaskViewerSettings } from '../types';
 
 export class TaskRepository {
     private app: App;
@@ -152,7 +150,14 @@ export class TaskRepository {
      * Uses multiple strategies: exact match, content + date match, fallback to stored line.
      */
     private findTaskLineNumber(lines: string[], task: Task): number {
-        // Strategy 1: Exact originalText match
+        // Strategy 0: Stored line number (O(1), correct when no line shift has occurred)
+        // Must run before Strategy 1 to avoid returning the first duplicate when
+        // multiple lines share the same originalText (e.g. inherited-date child tasks).
+        if (task.line >= 0 && task.line < lines.length && lines[task.line] === task.originalText) {
+            return task.line;
+        }
+
+        // Strategy 1: Exact originalText match (fallback for shifted lines)
         for (let i = 0; i < lines.length; i++) {
             if (lines[i] === task.originalText) {
                 return i;
@@ -329,26 +334,6 @@ export class TaskRepository {
 
             return lines.join('\n');
         });
-    }
-
-    async addTaskToDailyNote(fileDateStr: string, time: string, content: string, settings: TaskViewerSettings, taskDateStr?: string): Promise<void> {
-        // Fix timezone offset issue
-        const [y, m, d] = fileDateStr.split('-').map(Number);
-        const date = new Date();
-        date.setFullYear(y, m - 1, d);
-        date.setHours(0, 0, 0, 0);
-
-        // Use taskDateStr if provided, otherwise default to fileDateStr
-        const targetDateStr = taskDateStr || fileDateStr;
-        const taskLine = `- [ ] ${content} @${targetDateStr}T${time} `;
-
-        await DailyNoteUtils.appendLineToDailyNote(
-            this.app,
-            date,
-            taskLine,
-            settings.dailyNoteHeader,
-            settings.dailyNoteHeaderLevel
-        );
     }
 
     async insertRecurrenceForTask(task: Task, content: string, newTask?: Task): Promise<void> {

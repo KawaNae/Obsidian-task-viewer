@@ -249,10 +249,8 @@ export class TaskViewerParser implements ParserStrategy {
             startStr = `@${task.startDate}`;
             if (task.startTime) startStr += `T${task.startTime}`;
             hasDateBlock = true;
-        } else {
-
-            // Implicit Start (undefined startDate, not Future)
-            // e.g. D type or S-Timed with implicit date
+        } else if (task.startTime || task.endDate || task.endTime || task.deadline) {
+            // Implicit Start with content to format (D type, S-Timed with implicit date, etc.)
             startStr = '@';
             if (task.startTime) startStr += `T${task.startTime}`;
             hasDateBlock = true;

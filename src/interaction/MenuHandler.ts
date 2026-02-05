@@ -6,6 +6,7 @@ import { ConfirmModal } from '../modals/ConfirmModal';
 import { DateUtils } from '../utils/DateUtils';
 import { DateTimeInputModal, DateTimeValue, DateTimeModalOptions } from '../modals/DateTimeInputModal';
 import { InputModal } from '../modals/InputModal';
+import { CreateTaskModal, formatTaskLine } from '../modals/CreateTaskModal';
 
 export class MenuHandler {
     private app: App;
@@ -245,6 +246,23 @@ export class MenuHandler {
         const displayName = task.content.trim() || task.file.replace(/\.md$/, '').split('/').pop() || 'Untitled';
 
         menu.addItem((item) => {
+            item.setTitle('Create Child Task')
+                .setIcon('plus')
+                .onClick(() => {
+                    new CreateTaskModal(this.app, async (result) => {
+                        const taskLine = formatTaskLine(result);
+                        const match = task.originalText.match(/^(\s*)/);
+                        const parentIndent = match ? match[1] : '';
+                        const childIndent = parentIndent.includes('\t') ? parentIndent + '\t' : parentIndent + '    ';
+                        const childLine = childIndent + taskLine;
+
+                        const repository = this.plugin.getTaskRepository();
+                        await repository.insertLineAsFirstChild(task, childLine);
+                    }).open();
+                });
+        });
+
+        menu.addItem((item) => {
             item.setTitle('🍅 Open Pomodoro as Child')
                 .setIcon('timer')
                 .onClick(() => {
@@ -434,7 +452,6 @@ export class MenuHandler {
             time?: string;
             dateImplicit: boolean;
             timeImplicit: boolean;
-            isFuture?: boolean;
             isUnset?: boolean;
         };
 
