@@ -10,6 +10,26 @@ if you want to view the source, please visit the github repository of this plugi
 */
 `;
 
+const pad2 = (value) => String(value).padStart(2, "0");
+
+const formatBuildTime = (date) => {
+  const yyyy = date.getFullYear();
+  const mm = pad2(date.getMonth() + 1);
+  const dd = pad2(date.getDate());
+  const hh = pad2(date.getHours());
+  const min = pad2(date.getMinutes());
+
+  const offsetMin = -date.getTimezoneOffset();
+  const sign = offsetMin >= 0 ? "+" : "-";
+  const absOffset = Math.abs(offsetMin);
+  const offH = pad2(Math.floor(absOffset / 60));
+  const offM = pad2(absOffset % 60);
+
+  return `${yyyy}-${mm}-${dd}T${hh}:${min} (UTC${sign}${offH}:${offM})`;
+};
+
+const buildTime = formatBuildTime(new Date());
+
 const prod = process.argv[2] === "production";
 
 const vaultPath = process.env.OBSIDIAN_VAULT_PATH ?? "C:\\Obsidian\\Dev";
@@ -38,9 +58,7 @@ const copyStaticFiles = {
           '_timeline-date-header.css',
           '_timeline-allday.css',
           '_habits.css',
-
           '_timeline-drag.css',
-
           '_schedule.css',
           '_task-card.css',
           '_deadline.css',
@@ -89,6 +107,9 @@ const copyStaticFiles = {
 const context = await esbuild.context({
   banner: {
     js: banner,
+  },
+  define: {
+    __BUILD_TIME__: JSON.stringify(buildTime),
   },
   entryPoints: ["src/main.ts"],
   bundle: true,

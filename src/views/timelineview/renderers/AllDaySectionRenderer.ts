@@ -8,7 +8,7 @@ import { TaskIndex } from '../../../services/TaskIndex';
 import { TaskRenderer } from '../../TaskRenderer';
 import { HandleManager } from '../HandleManager';
 import { Task } from '../../../types';
-import { CreateTaskModal } from '../../../modals/CreateTaskModal';
+import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 
 export class AllDaySectionRenderer {
     constructor(
@@ -231,9 +231,8 @@ export class AllDaySectionRenderer {
 
     /** Create an all-day task for the specified date */
     private handleCreateTask(date: string) {
-        new CreateTaskModal(this.plugin.app, async (content) => {
-            // Create all-day task (S-All type: just date, no time)
-            const taskLine = `- [ ] ${content} @${date}`;
+        new CreateTaskModal(this.plugin.app, async (result) => {
+            const taskLine = formatTaskLine(result);
             const [y, m, d] = date.split('-').map(Number);
             const dateObj = new Date();
             dateObj.setFullYear(y, m - 1, d);
@@ -247,7 +246,7 @@ export class AllDaySectionRenderer {
                 this.plugin.settings.dailyNoteHeader,
                 this.plugin.settings.dailyNoteHeaderLevel
             );
-        }).open();
+        }, { startDate: date }, { warnOnEmptyTask: true }).open();
     }
 
     /** Open timer for daily note */

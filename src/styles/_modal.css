@@ -8,18 +8,13 @@
     margin-bottom: 16px;
 }
 
-.datetime-input-modal__future {
-    margin-bottom: 16px;
-}
-
-.datetime-input-modal__future label {
+.datetime-input-modal__row {
     display: flex;
-    align-items: center;
     gap: 8px;
-    cursor: pointer;
 }
 
 .datetime-input-modal__field {
+    flex: 1;
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -66,6 +61,76 @@
 /* Error message */
 .datetime-input-modal__error {
     color: var(--text-error);
+    font-size: 0.85em;
+    margin-bottom: 12px;
+}
+
+/* ======================================================
+   Create Task Modal Styles
+   ====================================================== */
+
+.create-task-modal__section-label {
+    margin-top: 16px;
+    margin-bottom: 4px;
+    font-size: 0.9em;
+    color: var(--text-muted);
+}
+
+.create-task-modal__date-row {
+    display: flex;
+    gap: 8px;
+}
+
+.create-task-modal__date-row__field {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.create-task-modal__date-row__field label {
+    font-size: 0.9em;
+    color: var(--text-muted);
+}
+
+.create-task-modal__text-input {
+    padding: 8px 12px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-s);
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 1em;
+    font-family: var(--font-monospace);
+    width: 100%;
+}
+
+.create-task-modal__text-input:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+.create-task-modal__text-input::placeholder {
+    color: var(--text-faint);
+}
+
+/* Invalid state */
+.create-task-modal__input--invalid {
+    border-color: var(--text-error) !important;
+    background-color: rgba(var(--color-red-rgb), 0.1);
+}
+
+/* Error message */
+.create-task-modal__error {
+    color: var(--text-error);
+    font-size: 0.85em;
+    margin-bottom: 12px;
+}
+
+/* Warning message */
+.create-task-modal__warning {
+    color: #c89000;
     font-size: 0.85em;
     margin-bottom: 12px;
 }

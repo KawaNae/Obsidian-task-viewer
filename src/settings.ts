@@ -21,6 +21,11 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             text: `Task Viewer v${this.plugin.manifest.version}`,
             cls: 'setting-item-description'
         });
+        const buildInfoEl = containerEl.createDiv('setting-item');
+        buildInfoEl.createSpan({
+            text: `Built: ${typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'unknown'}`,
+            cls: 'setting-item-description'
+        });
 
         containerEl.createEl('h3', { text: 'General', cls: 'setting-section-header' });
 

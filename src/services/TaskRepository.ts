@@ -1,8 +1,6 @@
 import { App, TFile, TFolder } from 'obsidian';
 import { Task } from '../types';
 import { TaskParser } from './TaskParser';
-import { DailyNoteUtils } from '../utils/DailyNoteUtils';
-import { TaskViewerSettings } from '../types';
 
 export class TaskRepository {
     private app: App;
@@ -336,26 +334,6 @@ export class TaskRepository {
 
             return lines.join('\n');
         });
-    }
-
-    async addTaskToDailyNote(fileDateStr: string, time: string, content: string, settings: TaskViewerSettings, taskDateStr?: string): Promise<void> {
-        // Fix timezone offset issue
-        const [y, m, d] = fileDateStr.split('-').map(Number);
-        const date = new Date();
-        date.setFullYear(y, m - 1, d);
-        date.setHours(0, 0, 0, 0);
-
-        // Use taskDateStr if provided, otherwise default to fileDateStr
-        const targetDateStr = taskDateStr || fileDateStr;
-        const taskLine = `- [ ] ${content} @${targetDateStr}T${time} `;
-
-        await DailyNoteUtils.appendLineToDailyNote(
-            this.app,
-            date,
-            taskLine,
-            settings.dailyNoteHeader,
-            settings.dailyNoteHeaderLevel
-        );
     }
 
     async insertRecurrenceForTask(task: Task, content: string, newTask?: Task): Promise<void> {
