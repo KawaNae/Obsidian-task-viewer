@@ -85,7 +85,7 @@ export class FrontmatterTaskParser {
             explicitEndTime: !!end.time,
             originalText: '',                   // frontmatterタスクに該当する単一行はない
             commands: [],                       // フローコマンドは frontmatter では未対応
-            isFrontmatter: true
+            parserId: 'frontmatter'
         };
     }
 

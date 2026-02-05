@@ -6,6 +6,12 @@ import { Task } from '../../types';
  */
 export interface ParserStrategy {
     /**
+     * Unique identifier for this parser.
+     * Examples: 'taskviewer', 'dataview', 'dayplanner', 'frontmatter'
+     */
+    readonly id: string;
+
+    /**
      * Parse a line of text into a Task object.
      */
     parse(line: string, filePath: string, lineNumber: number): Task | null;

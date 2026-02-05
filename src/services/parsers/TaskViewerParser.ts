@@ -6,6 +6,8 @@ import { ParserStrategy } from './ParserStrategy';
  * Supports: @start>end>deadline format with time support.
  */
 export class TaskViewerParser implements ParserStrategy {
+    readonly id = 'taskviewer';
+
     // Regex to match basic task structure: - [x] ...
     private static readonly BASIC_TASK_REGEX = /^(\s*)-\s*\[(.)]\s*(.*)$/;
 
@@ -141,24 +143,24 @@ export class TaskViewerParser implements ParserStrategy {
 
         // Validate task data during parse
         let validationWarning: string | undefined;
-        
+
         // Rule 1: Check for invalid same-day time range (endTime < startTime)
         if (date && startTime && endTime && endDate && date === endDate) {
             const [startH, startM] = startTime.split(':').map(Number);
             const [endH, endM] = endTime.split(':').map(Number);
             const startMinutes = startH * 60 + startM;
             const endMinutes = endH * 60 + endM;
-            
+
             if (endMinutes < startMinutes) {
                 validationWarning = `Invalid time range: end time (${endTime}) is before start time (${startTime}) on the same day. Use explicit end date for overnight tasks (e.g., @${date}T${startTime}>${endDate + ' next day'}T${endTime}).`;
             }
         }
-        
+
         // Rule 2: End time without start time
         if (endTime && !startTime) {
             validationWarning = `End time specified without start time.`;
         }
-        
+
         // Rule 3: Deadline must have a date
         if (deadline && !deadline.match(/\d{4}-\d{2}-\d{2}/)) {
             validationWarning = `Deadline must include a date (YYYY-MM-DD).`;

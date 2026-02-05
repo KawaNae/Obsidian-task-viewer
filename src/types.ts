@@ -210,8 +210,12 @@ export interface Task {
     // Validation warning - set during parse if task has formatting issues
     validationWarning?: string;
 
-    // frontmatter から解析されたタスクの場合に true (line === -1)
-    isFrontmatter?: boolean;
+    /**
+     * Parser identifier - indicates which parser created this task.
+     * Examples: 'taskviewer', 'frontmatter', 'dataview', 'dayplanner'
+     * @internal
+     */
+    parserId?: string;
 }
 
 export interface FlowCommand {
