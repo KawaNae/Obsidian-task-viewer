@@ -1,12 +1,13 @@
-import { App, TFile, WorkspaceLeaf, MarkdownView } from 'obsidian';
-import { Task } from '../types';
-import { TaskParser } from './TaskParser';
-import { TaskViewerSettings } from '../types';
+import { App, TFile } from 'obsidian';
+import type { Task, TaskViewerSettings } from '../types';
 import { TaskRepository } from './TaskRepository';
 import { TaskCommandExecutor } from './TaskCommandExecutor';
-import { DateUtils } from '../utils/DateUtils';
-import { FrontmatterTaskBuilder } from './parsers/file/FrontmatterTaskBuilder';
 import { WikiLinkResolver } from './WikiLinkResolver';
+import { TaskStore } from './task-management/TaskStore';
+import { TaskScanner } from './task-management/TaskScanner';
+import { TaskValidator } from './task-management/TaskValidator';
+import { SyncDetector } from './task-management/SyncDetector';
+import { EditorObserver } from './task-management/EditorObserver';
 
 export interface ValidationError {
     file: string;
@@ -15,514 +16,274 @@ export interface ValidationError {
     error: string;
 }
 
+/**
+ * TaskIndex - タスク管理の統括ファサードクラス
+ * 各種サービス（Store, Scanner, Validator, SyncDetector, EditorObserver）を統合
+ */
 export class TaskIndex {
-    private app: App;
-    private tasks: Map<string, Task> = new Map(); // ID -> Task
-    private listeners: ((taskId?: string, changes?: string[]) => void)[] = [];
-    private settings: TaskViewerSettings;
-    private validationErrors: ValidationError[] = [];
-
-    public getSettings(): TaskViewerSettings {
-        return this.settings;
-    }
-
-    // Services
+    private store: TaskStore;
+    private scanner: TaskScanner;
+    private validator: TaskValidator;
+    private syncDetector: SyncDetector;
+    private editorObserver: EditorObserver;
     private repository: TaskRepository;
     private commandExecutor: TaskCommandExecutor;
-    private isInitializing = true;
+    private settings: TaskViewerSettings;
 
-    // Sync detection: track local edits via active editor input events
-    // Local edit: User types in editor OR Plugin UI operation
-    // Sync: File modified without local interaction
-    private pendingLocalEdit: Map<string, boolean> = new Map();
-    private currentEditorEl: HTMLElement | null = null;
-    private editorListenerBound: ((e: InputEvent) => void) | null = null;
+    constructor(private app: App, settings: TaskViewerSettings) {
+        this.settings = settings;
 
-    async initialize() {
-        this.isInitializing = true;
-        // Wait for layout to be ready before initial scan
+        // サービスの初期化
+        this.store = new TaskStore(settings);
+        this.validator = new TaskValidator();
+        this.syncDetector = new SyncDetector();
+        this.repository = new TaskRepository(app);
+        this.commandExecutor = new TaskCommandExecutor(this.repository, this, app);
+        this.editorObserver = new EditorObserver(app, this.syncDetector);
+        this.scanner = new TaskScanner(
+            app, this.store, this.validator,
+            this.syncDetector, this.commandExecutor, settings
+        );
+    }
+
+    async initialize(): Promise<void> {
+        // レイアウト準備完了後に初回スキャン
         this.app.workspace.onLayoutReady(async () => {
-            await this.scanVault();
-            this.isInitializing = false;
+            await this.scanner.scanVault();
+            this.scanner.setInitializing(false);
         });
 
-        // Track user interactions to distinguish local edits from sync/programmatic changes
-        this.setupInteractionListeners();
+        // エディタ監視の開始
+        this.editorObserver.setupInteractionListeners();
 
+        // Vault イベントハンドラー
         this.app.vault.on('modify', async (file) => {
             if (file instanceof TFile && file.extension === 'md') {
-                // Check if this file had a verified local edit
-                const isLocal = this.pendingLocalEdit.get(file.path) || false;
-
-                // Clear the pending flag
-                this.pendingLocalEdit.delete(file.path);
+                const isLocal = this.syncDetector.isLocalEdit(file.path);
+                this.syncDetector.clearLocalEditFlag(file.path);
 
                 console.log(`[🔄SYNC] vault.modify: ${file.path}, isLocal=${isLocal}`);
 
-                await this.queueScan(file, isLocal);
-                WikiLinkResolver.resolve(this.tasks, this.app, this.settings.excludedPaths);
-                this.notifyListeners();
+                await this.scanner.queueScan(file, isLocal);
+                WikiLinkResolver.resolve(this.store.getTasksMap(), this.app, this.settings.excludedPaths);
+                this.store.notifyListeners();
             }
         });
 
-        // Note: editor-change event is no longer used for sync detection.
-        // Instead, we use active-leaf-change + beforeinput events on the editor element
-        // to reliably detect local edits.
-
         this.app.vault.on('delete', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
-                this.removeTasksForFile(file.path);
-                this.notifyListeners();
+                this.store.removeTasksByFile(file.path);
+                this.store.notifyListeners();
             }
         });
 
         this.app.vault.on('create', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
-                if (!this.isExcluded(file.path)) {
-                    this.queueScan(file).then(() => {
-                        WikiLinkResolver.resolve(this.tasks, this.app, this.settings.excludedPaths);
-                        this.notifyListeners();
-                    });
-                }
+                this.scanner.queueScan(file).then(() => {
+                    WikiLinkResolver.resolve(this.store.getTasksMap(), this.app, this.settings.excludedPaths);
+                    this.store.notifyListeners();
+                });
             }
         });
 
         this.app.metadataCache.on('changed', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
-                if (!this.isExcluded(file.path)) {
-                    // frontmatter の変更がタスクフィールドに影響する可能性がある → rescan
-                    this.queueScan(file).then(() => {
-                        WikiLinkResolver.resolve(this.tasks, this.app, this.settings.excludedPaths);
-                        this.notifyListeners();
-                    });
-                }
-                // 即時notify: color・habit等の非タスクfrontmatter変更対応（既存動作）
-                this.notifyListeners();
+                this.scanner.queueScan(file).then(() => {
+                    WikiLinkResolver.resolve(this.store.getTasksMap(), this.app, this.settings.excludedPaths);
+                    this.store.notifyListeners();
+                });
+                // 即時notify: color・habit等の非タスクfrontmatter変更対応
+                this.store.notifyListeners();
             }
         });
     }
 
-    constructor(app: App, settings: TaskViewerSettings) {
-        this.app = app;
+    // ===== 設定 =====
+
+    getSettings(): TaskViewerSettings {
+        return this.settings;
+    }
+
+    updateSettings(settings: TaskViewerSettings): void {
         this.settings = settings;
-        this.repository = new TaskRepository(app);
-        this.commandExecutor = new TaskCommandExecutor(this.repository, this, this.app);
+        this.store.updateSettings(settings);
+        this.scanner.updateSettings(settings);
+        // 除外ルールが変更された可能性があるため再スキャン
+        this.scanner.scanVault();
     }
 
-    public updateSettings(settings: TaskViewerSettings) {
-        this.settings = settings;
-        // Re-scan vault as exclusion rules might have changed
-        this.scanVault();
-    }
-
-    private isExcluded(filePath: string): boolean {
-        if (!this.settings.excludedPaths || this.settings.excludedPaths.length === 0) {
-            return false;
-        }
-        return this.settings.excludedPaths.some(excluded => filePath.startsWith(excluded));
-    }
-
+    // ===== データアクセス (TaskStoreへ委譲) =====
 
     getTasks(): Task[] {
-        return Array.from(this.tasks.values());
+        return this.store.getTasks();
     }
 
     getTask(taskId: string): Task | undefined {
-        return this.tasks.get(taskId);
-    }
-
-    getValidationErrors(): ValidationError[] {
-        return this.validationErrors;
+        return this.store.getTask(taskId);
     }
 
     getTasksForDate(date: string, startHour?: number): Task[] {
-        // Use visual date if startHour is provided, otherwise use actual today
-        const today = startHour !== undefined ?
-            DateUtils.getVisualDateOfNow(startHour) :
-            DateUtils.getToday();
-        return this.getTasks().filter(t => {
-            // Exclude D-type tasks (Deadline only, no start date/time)
-            // They belong to the Deadline List, not the daily schedule
-            if (!t.startDate && !t.startTime && t.deadline) {
-                return false;
-            }
-
-            const effectiveStart = t.startDate || today;
-            return effectiveStart === date;
-        });
+        return this.store.getTasksForDate(date, startHour);
     }
 
     getTasksForVisualDay(visualDate: string, startHour: number): Task[] {
-        // 1. Tasks from visualDate (startHour to 23:59)
-        const currentDayTasks = this.getTasksForDate(visualDate, startHour).filter(t => {
-            if (!t.startTime) return true; // All-day tasks belong to the date
-            const [h] = t.startTime.split(':').map(Number);
-            return h >= startHour;
-        });
-
-        // 2. Tasks from nextDay (00:00 to startHour - 1 min)
-        const nextDate = new Date(visualDate);
-        nextDate.setDate(nextDate.getDate() + 1);
-        const nextDateStr = nextDate.toISOString().split('T')[0];
-
-        const nextDayTasks = this.getTasksForDate(nextDateStr, startHour).filter(t => {
-            if (!t.startTime) return false; // All-day tasks of next day don't belong here
-            const [h] = t.startTime.split(':').map(Number);
-            return h < startHour;
-        });
-
-        return [...currentDayTasks, ...nextDayTasks];
+        return this.store.getTasksForVisualDay(visualDate, startHour);
     }
 
-    /**
-     * Get tasks that are purely Deadline tasks (D-type)
-     * No start date, no start time, but has deadline.
-     */
     getDeadlineTasks(): Task[] {
-        return this.getTasks().filter(t => !t.startDate && !t.startTime && t.deadline);
+        return this.store.getDeadlineTasks();
     }
+
+    getValidationErrors(): ValidationError[] {
+        return this.validator.getValidationErrors();
+    }
+
+    // ===== イベント管理 (TaskStoreへ委譲) =====
 
     onChange(callback: (taskId?: string, changes?: string[]) => void): () => void {
-        this.listeners.push(callback);
-        return () => {
-            this.listeners = this.listeners.filter(cb => cb !== callback);
-        };
+        return this.store.onChange(callback);
     }
 
-    private notifyListeners(taskId?: string, changes?: string[]) {
-        this.listeners.forEach(cb => cb(taskId, changes));
-    }
+    // ===== スキャン関連 (TaskScannerへ委譲) =====
 
-    private scanQueue: Map<string, Promise<void>> = new Map();
-    private processedCompletions: Map<string, number> = new Map(); // "file|date|content" -> count
-    private visitedFiles = new Set<string>();
-
-    private getTaskSignature(task: Task): string {
-        const cmdSig = task.commands ? task.commands.map(c => `${c.name}(${c.args.join(',')})`).join('') : '';
-        return `${task.file}|${task.startDate || 'no-date'}|${task.content}|${cmdSig}`;
-    }
-
-    private async scanVault() {
-        this.validationErrors = []; // Clear previous errors
-        const files = this.app.vault.getMarkdownFiles();
-
-        for (const file of files) {
-            if (this.isExcluded(file.path)) {
-                this.removeTasksForFile(file.path);
-                continue;
-            }
-            await this.queueScan(file);
-        }
-        WikiLinkResolver.resolve(this.tasks, this.app, this.settings.excludedPaths);
-        this.notifyListeners();
-        // Fallback: Ensure isInitializing is false after explicit vault scan,
-        // though onLayoutReady handles it too.
-        this.isInitializing = false;
-    }
-
-    public async requestScan(file: TFile): Promise<void> {
-        return this.queueScan(file);
-    }
-
-    private async queueScan(file: TFile, isLocal: boolean = false): Promise<void> {
-        if (this.isExcluded(file.path)) {
-            // Ensure no tasks remain for this excluded file
-            if (this.tasks.size > 0) { // Optimization: check if we have any tasks at all first
-                // We need to check if there are any tasks for this file to remove
-                // But removeTasksForFile iterates all tasks, which is fine but let's just do it
-                this.removeTasksForFile(file.path);
-                this.notifyListeners();
-            }
-            return;
-        }
-
-        // Simple queue mechanism: chain promises per file path
-        const previousScan = this.scanQueue.get(file.path) || Promise.resolve();
-
-        const currentScan = previousScan.then(async () => {
-            try {
-                await this.scanFile(file, isLocal);
-            } catch (error) {
-                console.error(`Error scanning file ${file.path}:`, error);
-            }
-        });
-
-        this.scanQueue.set(file.path, currentScan);
-        return currentScan;
-    }
-
-    private async scanFile(file: TFile, isLocalChange: boolean = false) {
-        // Double check: if layout is not ready, maybe skip? But queue handles ordering.
-        const content = await this.app.vault.read(file);
-        const lines = content.split('\n');
-
-        // 1. Parse all new tasks first (with recursive child extraction)
-        const newTasks: Task[] = [];
-
-        /**
-         * Recursively extract tasks from a range of lines.
-         * @param linesToProcess - Array of line strings to process
-         * @param baseLineNumber - The actual line number in the file for the first line
-         * @param parentStartDate - Parent task's startDate for inheritance (optional)
-         * @returns Array of extracted tasks
-         */
-        const extractTasksFromLines = (
-            linesToProcess: string[],
-            baseLineNumber: number,
-            parentStartDate?: string
-        ): Task[] => {
-            const extractedTasks: Task[] = [];
-
-            for (let i = 0; i < linesToProcess.length; i++) {
-                const line = linesToProcess[i];
-                const actualLineNumber = baseLineNumber + i;
-                const task = TaskParser.parse(line, file.path, actualLineNumber);
-
-                if (task) {
-                    // Inherit parent's startDate if child has time-only notation
-                    // (startTime exists but startDate is missing)
-                    if (parentStartDate && !task.startDate && task.startTime) {
-                        task.startDate = parentStartDate;
-                        task.startDateInherited = true;
-                    }
-                    // Also inherit for endDate if endTime exists but endDate is missing
-                    if (parentStartDate && !task.endDate && task.endTime) {
-                        task.endDate = parentStartDate;
-                    }
-
-                    // Set indent (leading whitespace count)
-                    const taskIndent = line.search(/\S|$/);
-                    task.indent = taskIndent;
-
-                    // Collect validation warnings (set during parse)
-                    if (task.validationWarning) {
-                        this.validationErrors.push({
-                            file: file.path,
-                            line: actualLineNumber + 1, // Display as 1-indexed
-                            taskId: task.id,
-                            error: task.validationWarning
-                        });
-                    }
-
-                    // Initialize child arrays
-                    task.childIds = [];
-
-                    // Look ahead for children (skip blank lines)
-                    const children: string[] = [];
-                    let j = i + 1;
-
-                    while (j < linesToProcess.length) {
-                        const nextLine = linesToProcess[j];
-
-                        // Stop at blank lines - they are not children
-                        if (nextLine.trim() === '') {
-                            break;
-                        }
-
-                        const nextIndent = nextLine.search(/\S|$/);
-                        if (nextIndent > taskIndent) {
-                            children.push(nextLine);
-                            j++;
-                        } else {
-                            break;
-                        }
-                    }
-
-                    // Normalize children indentation: remove base indent so they render correctly
-                    // Find the minimum indent of non-empty children
-                    const nonEmptyChildren = children.filter(c => c.trim() !== '');
-                    if (nonEmptyChildren.length > 0) {
-                        const minIndent = Math.min(...nonEmptyChildren.map(c => c.search(/\S|$/)));
-                        task.childLines = children.map(c => {
-                            if (c.trim() === '') return c;
-                            return c.substring(minIndent);
-                        });
-                    } else {
-                        task.childLines = children;
-                    }
-
-                    extractedTasks.push(task);
-
-                    // Recursively extract child tasks that have @ notation
-                    // Pass this task's startDate for inheritance
-                    if (children.length > 0) {
-                        const childLineNumber = actualLineNumber + 1;
-                        const childTasks = extractTasksFromLines(children, childLineNumber, task.startDate);
-
-                        // Set up parent-child relationships
-                        for (const childTask of childTasks) {
-                            // Only set parentId for direct children (indent diff = 1 level)
-                            if (childTask.indent === taskIndent + 4 || childTask.indent === taskIndent + 2) {
-                                childTask.parentId = task.id;
-                                task.childIds.push(childTask.id);
-                            }
-                        }
-
-                        extractedTasks.push(...childTasks);
-                    }
-
-                    // Skip consumed lines
-                    i = j - 1;
-                }
-            }
-
-            return extractedTasks;
-        };
-
-        // --- Frontmatter 境界検出 ---
-        let bodyStartIndex = 0;
-        let frontmatterObj: Record<string, any> | undefined;
-        if (lines.length > 0 && lines[0].trim() === '---') {
-            for (let i = 1; i < lines.length; i++) {
-                if (lines[i].trim() === '---') { bodyStartIndex = i + 1; break; }
-            }
-            if (bodyStartIndex > 0) {
-                frontmatterObj = this.app.metadataCache.getCache(file.path)?.frontmatter;
-            }
-        }
-        const bodyLines = lines.slice(bodyStartIndex);
-        const fmTask = FrontmatterTaskBuilder.parse(file.path, frontmatterObj, bodyLines);
-
-        // インライン タスク抽出（ボディ行のみ; baseLineNumber = bodyStartIndex で正確なタスクID）
-        // fmTask?.startDate を parentStartDate として渡し、時刻オンリーの子タスクに日付継承を適用
-        const allExtractedTasks = extractTasksFromLines(bodyLines, bodyStartIndex, fmTask?.startDate);
-
-        if (fmTask) {
-            // indent 0 かつ親未設定のボディタスクを frontmatter タスクの子にする
-            for (const bt of allExtractedTasks) {
-                if (!bt.parentId && bt.indent === 0) {
-                    bt.parentId = fmTask.id;
-                    fmTask.childIds.push(bt.id);
-                }
-            }
-            newTasks.push(fmTask);
-        }
-        newTasks.push(...allExtractedTasks);
-
-        // 2. Count Current Completions
-        const currentCounts = new Map<string, number>();
-        const doneTasks: Task[] = [];
-
-        for (const task of newTasks) {
-            // Check extended triggerable status (x, X, -, !)
-            if (TaskParser.isTriggerableStatus(task) && task.commands && task.commands.length > 0) {
-                const sig = this.getTaskSignature(task);
-                currentCounts.set(sig, (currentCounts.get(sig) || 0) + 1);
-                doneTasks.push(task);
-            }
-        }
-
-        // 3. Diff and Trigger
-        const tasksToTrigger: Task[] = [];
-        const checkedSignatures = new Set<string>();
-
-        let isFirstScan = false;
-        if (!this.visitedFiles.has(file.path)) {
-            this.visitedFiles.add(file.path);
-            isFirstScan = true;
-        }
-
-        // Sync detection logging
-        console.log(`[🔄SYNC] Scan: ${file.path}, isLocalChange=${isLocalChange}, isFirstScan=${isFirstScan}, isInitializing=${this.isInitializing}`);
-
-        if (!isLocalChange && !isFirstScan && !this.isInitializing) {
-            console.log(`[🔄SYNC] ⛔ Sync-driven change detected, skipping command: ${file.path}`);
-        }
-
-        for (const task of doneTasks) {
-            const sig = this.getTaskSignature(task);
-            if (checkedSignatures.has(sig)) continue; // Process each unique signature once per scan
-            checkedSignatures.add(sig);
-
-            const currentCount = currentCounts.get(sig) || 0;
-            const previousCount = this.processedCompletions.get(sig) || 0;
-
-            console.log(`[🔄SYNC] Task: ${task.content.substring(0, 30)}..., cur=${currentCount}, prev=${previousCount}, local=${isLocalChange}`);
-
-            if (currentCount > previousCount) {
-                // Number of done tasks increased! Trigger recurrence for the *difference*
-                const diff = currentCount - previousCount;
-
-                // Only trigger if:
-                // 1. NOT initializing
-                // 2. NOT the first scan of this file
-                // 3. IS a local change (not sync-driven)
-                if (!this.isInitializing && !isFirstScan && isLocalChange) {
-                    console.log(`[🔄SYNC] ✅ Executing command for: ${task.content.substring(0, 30)}...`);
-                    for (let k = 0; k < diff; k++) {
-                        tasksToTrigger.push(task);
-                    }
-                } else {
-                    console.log(`[TaskIndex] Skipping command - isInitializing=${this.isInitializing}, isFirstScan=${isFirstScan}, isLocalChange=${isLocalChange}`);
-                }
-            }
-        }
-
-        // 4. Update Memory
-        // Filter out entries for this file from processedCompletions
-        const prefix = `${file.path}|`;
-        for (const key of this.processedCompletions.keys()) {
-            if (key.startsWith(prefix)) {
-                this.processedCompletions.delete(key);
-            }
-        }
-
-        // Add new counts
-        for (const [sig, count] of currentCounts) {
-            this.processedCompletions.set(sig, count);
-        }
-
-        // 5. Update Index
-        // Clear old tasks for this file
-        this.removeTasksForFile(file.path);
-
-        // Add new tasks
-        for (const task of newTasks) {
-            this.tasks.set(task.id, task);
-        }
-
-        // 6. Execute Triggers
-        if (tasksToTrigger.length > 0) {
-            for (const task of tasksToTrigger) {
-                await this.commandExecutor.handleTaskCompletion(task);
-            }
-        }
-    }
-
-    private removeTasksForFile(filePath: string) {
-        for (const [id, task] of this.tasks) {
-            if (task.file === filePath) {
-                this.tasks.delete(id);
-            }
-        }
+    async requestScan(file: TFile): Promise<void> {
+        return this.scanner.requestScan(file);
     }
 
     async waitForScan(filePath: string): Promise<void> {
-        const promise = this.scanQueue.get(filePath);
-        if (promise) {
-            await promise;
+        return this.scanner.waitForScan(filePath);
+    }
+
+    // ===== CRUD操作 =====
+
+    async updateTask(taskId: string, updates: Partial<Task>): Promise<void> {
+        console.log(`[TaskIndex] updateTask called for ${taskId}`, updates);
+
+        // スプリットタスク処理（:before, :after）
+        if (taskId.includes(':before') || taskId.includes(':after')) {
+            const originalId = taskId.split(':')[0];
+            const segment = taskId.includes(':before') ? 'before' : 'after';
+            const originalTask = this.store.getTask(originalId);
+
+            if (!originalTask) {
+                console.warn(`[TaskIndex] Original task ${originalId} not found for split segment`);
+                return;
+            }
+
+            // セグメント更新を元のタスクフィールドにマッピング
+            if (segment === 'before') {
+                if (updates.startDate) originalTask.startDate = updates.startDate;
+                if (updates.startTime) originalTask.startTime = updates.startTime;
+                if (updates.endTime) {
+                    const splitTime = DateUtils.compareTimes(updates.endTime, this.settings.startHour) < 0
+                        ? updates.endTime
+                        : `23:59`;
+                    originalTask.startTime = originalTask.startTime || '00:00';
+                    originalTask.endTime = splitTime;
+                }
+            } else { // 'after'
+                if (updates.endDate) {
+                    originalTask.endDate = updates.endDate;
+                    if (!originalTask.endTime) originalTask.endTime = '23:59';
+                }
+                if (updates.endTime) originalTask.endTime = updates.endTime;
+            }
+
+            taskId = originalId;
+            updates = {
+                startDate: originalTask.startDate, startTime: originalTask.startTime,
+                endDate: originalTask.endDate, endTime: originalTask.endTime
+            };
+        }
+
+        const task = this.store.getTask(taskId);
+        if (!task) {
+            console.warn(`[TaskIndex] Task ${taskId} not found`);
+            return;
+        }
+
+        this.syncDetector.markLocalEdit(task.file);
+        Object.assign(task, updates);
+        this.store.notifyListeners(taskId, Object.keys(updates));
+
+        if (task.line === -1) {
+            await this.repository.updateFrontmatterTask(task, updates);
+        } else {
+            await this.repository.updateTaskInFile(task, { ...task, ...updates });
         }
     }
 
+    async deleteTask(taskId: string): Promise<void> {
+        const task = this.store.getTask(taskId);
+        if (!task) return;
+
+        this.syncDetector.markLocalEdit(task.file);
+
+        if (task.line === -1) {
+            await this.repository.deleteFrontmatterTask(task);
+        } else {
+            await this.repository.deleteTaskFromFile(task);
+        }
+
+        await this.scanner.waitForScan(task.file);
+    }
+
+    async duplicateTask(taskId: string): Promise<void> {
+        const task = this.store.getTask(taskId);
+        if (!task) return;
+
+        this.syncDetector.markLocalEdit(task.file);
+
+        if (task.line === -1) {
+            await this.repository.duplicateFrontmatterTask(task);
+        } else {
+            await this.repository.duplicateTaskInFile(task);
+        }
+
+        await this.scanner.waitForScan(task.file);
+    }
+
+    async duplicateTaskForWeek(taskId: string): Promise<void> {
+        const task = this.store.getTask(taskId);
+        if (!task) return;
+
+        this.syncDetector.markLocalEdit(task.file);
+
+        if (task.line === -1) {
+            await this.repository.duplicateFrontmatterTaskForWeek(task);
+        } else {
+            await this.repository.duplicateTaskForWeek(task);
+        }
+
+        await this.scanner.waitForScan(task.file);
+    }
+
+    async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
+        this.syncDetector.markLocalEdit(filePath);
+        await this.repository.updateLine(filePath, lineNumber, newContent);
+
+        const file = this.app.vault.getAbstractFileByPath(filePath);
+        if (file instanceof TFile) {
+            await this.scanner.waitForScan(filePath);
+        }
+    }
+
+    // ===== ヘルパー =====
+
     resolveTask(originalTask: Task): Task | undefined {
-        // Try to find the task in the current index
-        // 1. By ID (if stable or lucky)
-        let found = this.tasks.get(originalTask.id);
+        // 1. IDで検索
+        let found = this.store.getTask(originalTask.id);
         if (found &&
             found.content === originalTask.content &&
             found.file === originalTask.file &&
             found.line === originalTask.line &&
-            found.startDate === originalTask.startDate // Strict date check to prevent swapping identical tasks
-        ) {
+            found.startDate === originalTask.startDate) {
             return found;
         }
 
-        // 2. By Signature (File + Content)
-        for (const t of this.tasks.values()) {
+        // 2. シグネチャで検索（File + Content）
+        for (const t of this.store.getTasks()) {
             if (t.file === originalTask.file && t.content === originalTask.content) {
-                // Heuristic: Status should match the *completed* status?
-                // When we queue, status is 'done'. Index should have 'done' too.
-                // But check date too if possible.
                 if (t.startDate === originalTask.startDate) {
                     return t;
                 }
@@ -531,232 +292,15 @@ export class TaskIndex {
 
         return undefined;
     }
-
-    async updateTask(taskId: string, updates: Partial<Task>) {
-        console.log(`[TaskIndex] updateTask called for ${taskId}`, updates);
-
-        // Handle split task updates
-        // If taskId contains ":before" or ":after", extract original ID
-        if (taskId.includes(':before') || taskId.includes(':after')) {
-            const originalId = taskId.split(':')[0];
-            const segment = taskId.includes(':before') ? 'before' : 'after';
-
-            const originalTask = this.tasks.get(originalId);
-            if (!originalTask) {
-                console.warn(`[TaskIndex] Original task ${originalId} not found for split segment`);
-                return;
-            }
-
-            // Map segment updates to original task fields
-            const originalUpdates: Partial<Task> = {};
-            if (segment === 'before') {
-                // Before segment: only startDate/startTime can change
-                if (updates.startDate !== undefined) originalUpdates.startDate = updates.startDate;
-                if (updates.startTime !== undefined) originalUpdates.startTime = updates.startTime;
-            } else {
-                // After segment: only endDate/endTime can change
-                if (updates.endDate !== undefined) originalUpdates.endDate = updates.endDate;
-                if (updates.endTime !== undefined) originalUpdates.endTime = updates.endTime;
-            }
-
-            // Update original task
-            console.log(`[TaskIndex] Mapping split segment ${segment} update to original task ${originalId}`, originalUpdates);
-            await this.updateTask(originalId, originalUpdates);
-            return;
-        }
-
-        const task = this.tasks.get(taskId);
-        if (!task) {
-            console.warn(`[TaskIndex] Task ${taskId} not found in index`);
-            return;
-        }
-
-        // frontmatter タスク書き込みパス
-        if (task.line === -1) {
-            this.markLocalEdit(task.file);
-            Object.assign(task, updates);
-            this.notifyListeners(taskId, Object.keys(updates));
-            await this.repository.updateFrontmatterTask(task, updates);
-            return;
-        }
-
-        // Mark as local edit before making file changes
-        this.markLocalEdit(task.file);
-
-        // Optimistic Update
-        // If we are unchecking a task, we must eagerly decrement the processed count.
-        // "Unchecking": Transitioning from Triggerable -> Not Triggerable (Todo)
-
-        // Note: TaskParser.isTriggerableStatus checks the *current* task state (before update is applied to object fully?)
-        // Wait, `task` object is referencing the one in `this.tasks`. `updates` are partial.
-        // We need to check if it *was* triggerable before updates.
-        const wasTriggerable = TaskParser.isTriggerableStatus(task);
-
-        // Assuming updates.statusChar is ' ' means uncheck. 
-        const willBeTodo = updates.statusChar === ' ';
-
-        if (wasTriggerable && willBeTodo) {
-            const sig = this.getTaskSignature(task);
-            const currentCount = this.processedCompletions.get(sig) || 0;
-            if (currentCount > 0) {
-                this.processedCompletions.set(sig, currentCount - 1);
-                console.log(`[TaskIndex] Optimistic decrement for "${sig}" -> ${currentCount - 1}`);
-            }
-        }
-
-        Object.assign(task, updates);
-        this.notifyListeners(taskId, Object.keys(updates));
-
-        // Delegate to Repository
-        const updatedTask = { ...task, ...updates };
-        await this.repository.updateTaskInFile(task, updatedTask);
-    }
-    async updateLine(filePath: string, lineNumber: number, newContent: string) {
-        await this.repository.updateLine(filePath, lineNumber, newContent);
-    }
-
-    async deleteTask(taskId: string) {
-        const task = this.tasks.get(taskId);
-        if (!task) return;
-
-        if (task.line === -1) {
-            this.markLocalEdit(task.file);
-            this.tasks.delete(taskId);
-            this.notifyListeners();
-            await this.repository.deleteFrontmatterTask(task);
-            return;
-        }
-
-        // Mark as local edit before making file changes
-        this.markLocalEdit(task.file);
-
-        // Optimistic Update
-        this.tasks.delete(taskId);
-        this.notifyListeners();
-
-        await this.repository.deleteTaskFromFile(task);
-    }
-
-    async duplicateTask(taskId: string) {
-        const task = this.tasks.get(taskId);
-        if (!task) return;
-
-        if (task.line === -1) {
-            await this.repository.duplicateFrontmatterTask(task);
-            return;
-        }
-
-        // Mark as local edit before making file changes
-        this.markLocalEdit(task.file);
-
-        await this.repository.duplicateTaskInFile(task);
-    }
-
-    async duplicateTaskForWeek(taskId: string) {
-        const task = this.tasks.get(taskId);
-        if (!task) return;
-
-        if (task.line === -1) {
-            await this.repository.duplicateFrontmatterTaskForWeek(task);
-            return;
-        }
-
-        // Mark as local edit before making file changes
-        this.markLocalEdit(task.file);
-
-        await this.repository.duplicateTaskForWeek(task);
-    }
-
-    /**
-     * Mark a file as having a local edit.
-     * This should be called:
-     * 1. When user types in the active editor (via beforeinput event)
-     * 2. When plugin UI makes changes (e.g., updateTask, deleteTask)
-     */
-    private markLocalEdit(filePath: string): void {
-        this.pendingLocalEdit.set(filePath, true);
-        console.log(`[🔄SYNC] Marked local edit: ${filePath}`);
-    }
-
-    private setupInteractionListeners(): void {
-        // Create bound handler for editor input events
-        this.editorListenerBound = (e: InputEvent) => {
-            const filePath = this.app.workspace.getActiveFile()?.path;
-            if (filePath) {
-                this.markLocalEdit(filePath);
-            }
-        };
-
-        // Listen for active leaf changes to attach/detach editor listeners
-        this.app.workspace.on('active-leaf-change', (leaf: WorkspaceLeaf | null) => {
-            this.attachEditorListener(leaf);
-        });
-
-        // Attach to initially active leaf
-        const activeLeaf = this.app.workspace.activeLeaf;
-        if (activeLeaf) {
-            this.attachEditorListener(activeLeaf);
-        }
-    }
-
-    private attachEditorListener(leaf: WorkspaceLeaf | null): void {
-        // Remove listener from previous editor element
-        if (this.currentEditorEl && this.editorListenerBound) {
-            this.currentEditorEl.removeEventListener('beforeinput', this.editorListenerBound as EventListener);
-            this.currentEditorEl.removeEventListener('input', this.editorListenerBound as EventListener);
-            this.currentEditorEl = null;
-        }
-
-        if (!leaf) {
-            console.log(`[🔄SYNC] No leaf provided`);
-            return;
-        }
-
-        const view = leaf.view;
-        console.log(`[🔄SYNC] View type: ${view.getViewType()}`);
-        if (view.getViewType() !== 'markdown') return;
-
-        const markdownView = view as MarkdownView;
-        const editor = markdownView.editor;
-
-        // Try multiple ways to get the editable element
-        let editorEl: HTMLElement | null = null;
-
-        // Method 1: CodeMirror 6 via cm.dom
-        const cm6Dom = (editor as any).cm?.dom as HTMLElement | undefined;
-        if (cm6Dom) {
-            editorEl = cm6Dom;
-            console.log(`[🔄SYNC] Found editor via cm.dom`);
-        }
-
-        // Method 2: Find contenteditable element in the container
-        if (!editorEl) {
-            const containerEl = markdownView.containerEl;
-            const contentEditable = containerEl.querySelector('.cm-content[contenteditable="true"]') as HTMLElement;
-            if (contentEditable) {
-                editorEl = contentEditable;
-                console.log(`[🔄SYNC] Found editor via .cm-content`);
-            }
-        }
-
-        // Method 3: Use the container's editor area
-        if (!editorEl) {
-            const containerEl = markdownView.containerEl;
-            const editorArea = containerEl.querySelector('.markdown-source-view') as HTMLElement;
-            if (editorArea) {
-                editorEl = editorArea;
-                console.log(`[🔄SYNC] Found editor via .markdown-source-view`);
-            }
-        }
-
-        if (editorEl && this.editorListenerBound) {
-            // Use both beforeinput and input for better coverage
-            editorEl.addEventListener('beforeinput', this.editorListenerBound as EventListener);
-            editorEl.addEventListener('input', this.editorListenerBound as EventListener);
-            this.currentEditorEl = editorEl;
-            console.log(`[🔄SYNC] Attached editor listener for: ${this.app.workspace.getActiveFile()?.path || 'unknown'}`);
-        } else {
-            console.log(`[🔄SYNC] Could not find editor element. editor:`, editor);
-        }
-    }
 }
+
+// DateUtilsがないので、一時的なヘルパーを追加（本来はインポートすべき）
+const DateUtils = {
+    compareTimes(time1: string, time2: string | number): number {
+        const [h1, m1] = time1.split(':').map(Number);
+        const t2 = typeof time2 === 'number' ? time2 : parseInt(time2.split(':')[0]);
+        const minutes1 = h1 * 60 + m1;
+        const minutes2 = typeof time2 === 'number' ? t2 * 60 : parseInt(time2.split(':')[1]) + t2 * 60;
+        return minutes1 - minutes2;
+    }
+};
