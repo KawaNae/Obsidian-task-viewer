@@ -152,7 +152,14 @@ export class TaskRepository {
      * Uses multiple strategies: exact match, content + date match, fallback to stored line.
      */
     private findTaskLineNumber(lines: string[], task: Task): number {
-        // Strategy 1: Exact originalText match
+        // Strategy 0: Stored line number (O(1), correct when no line shift has occurred)
+        // Must run before Strategy 1 to avoid returning the first duplicate when
+        // multiple lines share the same originalText (e.g. inherited-date child tasks).
+        if (task.line >= 0 && task.line < lines.length && lines[task.line] === task.originalText) {
+            return task.line;
+        }
+
+        // Strategy 1: Exact originalText match (fallback for shifted lines)
         for (let i = 0; i < lines.length; i++) {
             if (lines[i] === task.originalText) {
                 return i;
