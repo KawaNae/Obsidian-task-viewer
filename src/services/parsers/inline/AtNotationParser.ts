@@ -1,12 +1,12 @@
-import { Task } from '../../types';
+import { Task } from '../../../types';
 import { ParserStrategy } from './ParserStrategy';
 
 /**
  * Task Viewer native notation parser.
  * Supports: @start>end>deadline format with time support.
  */
-export class TaskViewerParser implements ParserStrategy {
-    readonly id = 'taskviewer';
+export class AtNotationParser implements ParserStrategy {
+    readonly id = 'at-notation';
 
     // Regex to match basic task structure: - [x] ...
     private static readonly BASIC_TASK_REGEX = /^(\s*)-\s*\[(.)]\s*(.*)$/;
@@ -26,7 +26,7 @@ export class TaskViewerParser implements ParserStrategy {
         const taskPart = flowSplit[0];
         const flowPart = flowSplit[1] || '';
 
-        const match = taskPart.match(TaskViewerParser.BASIC_TASK_REGEX);
+        const match = taskPart.match(AtNotationParser.BASIC_TASK_REGEX);
         if (!match) {
             return null;
         }
@@ -204,9 +204,9 @@ export class TaskViewerParser implements ParserStrategy {
         let match;
 
         // Reset lastIndex because regex is global
-        TaskViewerParser.COMMAND_REGEX.lastIndex = 0;
+        AtNotationParser.COMMAND_REGEX.lastIndex = 0;
 
-        while ((match = TaskViewerParser.COMMAND_REGEX.exec(flowStr)) !== null) {
+        while ((match = AtNotationParser.COMMAND_REGEX.exec(flowStr)) !== null) {
             const name = match[1];
             const argsStr = match[2];
             const modifiersStr = match[3];
@@ -217,8 +217,8 @@ export class TaskViewerParser implements ParserStrategy {
             if (modifiersStr) {
                 let modMatch;
                 // Reset modifier regex
-                TaskViewerParser.MODIFIER_REGEX.lastIndex = 0;
-                while ((modMatch = TaskViewerParser.MODIFIER_REGEX.exec(modifiersStr)) !== null) {
+                AtNotationParser.MODIFIER_REGEX.lastIndex = 0;
+                while ((modMatch = AtNotationParser.MODIFIER_REGEX.exec(modifiersStr)) !== null) {
                     modifiers.push({
                         name: modMatch[1],
                         args: modMatch[2].split(',').map(s => s.trim()).filter(s => s !== '')

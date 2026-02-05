@@ -1,11 +1,11 @@
-import { Task } from '../../types';
+import { Task } from '../../../types';
 
 /**
  * Frontmatter からタスクを構築する静的ユーティリティ。
  * ParserStrategy ではない（frontmatter はファイルレベルの操作）。
  * TaskIndex.scanFile から呼び出される。
  */
-export class FrontmatterTaskParser {
+export class FrontmatterTaskBuilder {
 
     /**
      * frontmatter オブジェクトから Task を構築する。

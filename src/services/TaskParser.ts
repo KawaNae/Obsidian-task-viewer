@@ -1,7 +1,7 @@
 import { Task } from '../types';
-import { ParserStrategy } from './parsers/ParserStrategy';
-import { ParserChain } from './parsers/ParserChain';
-import { TaskViewerParser } from './parsers/TaskViewerParser';
+import { ParserStrategy } from './parsers/inline/ParserStrategy';
+import { ParserChain } from './parsers/inline/ParserChain';
+import { AtNotationParser } from './parsers/inline/AtNotationParser';
 
 /**
  * TaskParser facade - delegates to the active parser strategy.
@@ -9,19 +9,19 @@ import { TaskViewerParser } from './parsers/TaskViewerParser';
  * 
  * To support multiple parsers simultaneously:
  * ```
- * import { ParserChain } from './parsers/ParserChain';
- * import { TaskViewerParser } from './parsers/TaskViewerParser';
- * import { DataviewParser } from './parsers/DataviewParser';
+ * import { ParserChain } from './parsers/inline/ParserChain';
+ * import { AtNotationParser } from './parsers/inline/AtNotationParser';
+ * import { DataviewParser } from './parsers/inline/DataviewParser';
  * 
  * TaskParser.setStrategy(new ParserChain([
- *     new TaskViewerParser(),
+ *     new AtNotationParser(),
  *     new DataviewParser(),
  * ]));
  * ```
  */
 export class TaskParser {
     private static strategy: ParserStrategy = new ParserChain([
-        new TaskViewerParser()
+        new AtNotationParser()
     ]);
 
     /**

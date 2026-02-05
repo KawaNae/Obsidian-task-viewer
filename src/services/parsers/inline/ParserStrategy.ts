@@ -1,4 +1,4 @@
-import { Task } from '../../types';
+import { Task } from '../../../types';
 
 /**
  * Interface for task parser strategies.

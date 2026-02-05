@@ -5,7 +5,7 @@ import { TaskViewerSettings } from '../types';
 import { TaskRepository } from './TaskRepository';
 import { TaskCommandExecutor } from './TaskCommandExecutor';
 import { DateUtils } from '../utils/DateUtils';
-import { FrontmatterTaskParser } from './parsers/FrontmatterTaskParser';
+import { FrontmatterTaskBuilder } from './parsers/file/FrontmatterTaskBuilder';
 import { WikiLinkResolver } from './WikiLinkResolver';
 
 export interface ValidationError {
@@ -381,7 +381,7 @@ export class TaskIndex {
             }
         }
         const bodyLines = lines.slice(bodyStartIndex);
-        const fmTask = FrontmatterTaskParser.parse(file.path, frontmatterObj, bodyLines);
+        const fmTask = FrontmatterTaskBuilder.parse(file.path, frontmatterObj, bodyLines);
 
         // インライン タスク抽出（ボディ行のみ; baseLineNumber = bodyStartIndex で正確なタスクID）
         // fmTask?.startDate を parentStartDate として渡し、時刻オンリーの子タスクに日付継承を適用
