@@ -242,6 +242,7 @@ export interface TaskViewerSettings {
     excludedPaths: string[]; // Paths to exclude from task scanning
     defaultDeadlineOffset: number; // Default number of days from today for new deadline tasks (default: 0)
     upcomingDays: number; // Days from tomorrow to consider as "Upcoming" in deadline list (default: 7)
+    pastDaysToShow: number; // Number of past days to always show in timeline (default: 0)
     habits: HabitDefinition[]; // User-defined habit list (empty = feature invisible)
 }
 
@@ -258,5 +259,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     excludedPaths: [],
     defaultDeadlineOffset: 0,
     upcomingDays: 7,
+    pastDaysToShow: 0,
     habits: [],
 };

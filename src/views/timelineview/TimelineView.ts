@@ -114,7 +114,8 @@ export class TimelineView extends ItemView {
 
     async onOpen() {
         // Set initial startDate - will be re-evaluated in onChange when tasks are loaded
-        this.viewState.startDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        const initialToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        this.viewState.startDate = DateUtils.addDays(initialToday, -this.plugin.settings.pastDaysToShow);
 
         this.container = this.contentEl;
         this.container.empty();
@@ -181,9 +182,9 @@ export class TimelineView extends ItemView {
             if (!this.hasInitializedStartDate && this.taskIndex.getTasks().length > 0) {
                 this.hasInitializedStartDate = true;
                 const oldestOverdue = this.findOldestOverdueDate();
-                if (oldestOverdue) {
-                    this.viewState.startDate = oldestOverdue;
-                }
+                const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+                const pastDate = DateUtils.addDays(today, -this.plugin.settings.pastDaysToShow);
+                this.viewState.startDate = (oldestOverdue && oldestOverdue < pastDate) ? oldestOverdue : pastDate;
             }
 
             if (taskId && changes) {
@@ -242,7 +243,8 @@ export class TimelineView extends ItemView {
         // Re-evaluate startDate (Today button logic) for day boundary crossing or settings change
         const oldestOverdue = this.findOldestOverdueDate();
         const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-        this.viewState.startDate = oldestOverdue || today;
+        const pastDate = DateUtils.addDays(today, -this.plugin.settings.pastDaysToShow);
+        this.viewState.startDate = (oldestOverdue && oldestOverdue < pastDate) ? oldestOverdue : pastDate;
 
         this.render();
     }

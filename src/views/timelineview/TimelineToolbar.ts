@@ -70,7 +70,8 @@ export class TimelineToolbar {
             () => {
                 const oldestOverdueDate = this.findOldestOverdueDate();
                 const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-                this.viewState.startDate = oldestOverdueDate || today;
+                const pastDate = DateUtils.addDays(today, -this.plugin.settings.pastDaysToShow);
+                this.viewState.startDate = (oldestOverdueDate && oldestOverdueDate < pastDate) ? oldestOverdueDate : pastDate;
                 this.callbacks.onRender();
             }
         );

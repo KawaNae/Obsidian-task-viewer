@@ -22,35 +22,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             cls: 'setting-item-description'
         });
 
-        containerEl.createEl('h3', { text: 'Display', cls: 'setting-section-header' });
-
-        new Setting(containerEl)
-            .setName('Start Hour')
-            .setDesc('The hour when your day starts (0-23). Tasks before this hour will be shown in the previous day.')
-            .addText(text => text
-                .setPlaceholder('5')
-                .setValue(this.plugin.settings.startHour.toString())
-                .onChange(async (value) => {
-                    let hour = parseInt(value);
-                    if (isNaN(hour)) hour = 0;
-                    if (hour < 0) hour = 0;
-                    if (hour > 23) hour = 23;
-
-                    this.plugin.settings.startHour = hour;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Default Zoom Level')
-            .setDesc('The default zoom level for the timeline view (0.25 - 4.0).')
-            .addSlider(slider => slider
-                .setLimits(0.25, 4.0, 0.25)
-                .setValue(this.plugin.settings.zoomLevel)
-                .setDynamicTooltip()
-                .onChange(async (value) => {
-                    this.plugin.settings.zoomLevel = value;
-                    await this.plugin.saveSettings();
-                }));
+        containerEl.createEl('h3', { text: 'General', cls: 'setting-section-header' });
 
         new Setting(containerEl)
             .setName('Apply Custom Checkboxes Styles')
@@ -62,9 +34,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                     this.plugin.updateGlobalStyles();
                 }));
-
-        containerEl.createEl('h3', { text: 'Tasks', cls: 'setting-section-header' });
-
+        
         new Setting(containerEl)
             .setName('Complete Status Characters')
             .setDesc('Characters that represent completed tasks (comma or space separated, e.g., "x, X, -, !").')
@@ -91,6 +61,77 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     this.plugin.settings.frontmatterColorKey = value;
                     await this.plugin.saveSettings();
                 }));
+        
+        const excludedPathsSetting = new Setting(containerEl)
+            .setName('Excluded Paths')
+            .setDesc('Paths to exclude from task scanning (one per line). Files starting with these paths will be ignored.')
+            .addTextArea(text => text
+                .setPlaceholder('Templates/\nArchive/\nSecret.md')
+                .setValue(this.plugin.settings.excludedPaths.join('\n'))
+                .onChange(async (value) => {
+                    const paths = value.split('\n')
+                        .map(p => p.trim())
+                        .filter(p => p.length > 0);
+                    this.plugin.settings.excludedPaths = paths;
+                    await this.plugin.saveSettings();
+                }));
+
+        // Enhance the textarea for better visibility
+        const textarea = excludedPathsSetting.settingEl.querySelector('textarea');
+        if (textarea) {
+            textarea.rows = 10;
+            textarea.style.width = '100%';
+            textarea.style.minWidth = '300px';
+        }
+
+        containerEl.createEl('h3', { text: 'Timeline', cls: 'setting-section-header' });
+
+        new Setting(containerEl)
+            .setName('Start Hour')
+            .setDesc('The hour when your day starts (0-23). Tasks before this hour will be shown in the previous day.')
+            .addText(text => text
+                .setPlaceholder('5')
+                .setValue(this.plugin.settings.startHour.toString())
+                .onChange(async (value) => {
+                    let hour = parseInt(value);
+                    if (isNaN(hour)) hour = 0;
+                    if (hour < 0) hour = 0;
+                    if (hour > 23) hour = 23;
+
+                    this.plugin.settings.startHour = hour;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Past Days to Show')
+            .setDesc('Number of past days to always display in the timeline, even when there are no incomplete tasks on those days.')
+            .addText(text => {
+                text.inputEl.type = 'number';
+                text.inputEl.min = '0';
+                text
+                    .setPlaceholder('0')
+                    .setValue(this.plugin.settings.pastDaysToShow.toString())
+                    .onChange(async (value) => {
+                        let days = parseInt(value);
+                        if (isNaN(days) || days < 0) days = 0;
+                        this.plugin.settings.pastDaysToShow = days;
+                        await this.plugin.saveSettings();
+                    });
+            });
+
+        new Setting(containerEl)
+            .setName('Default Zoom Level')
+            .setDesc('The default zoom level for the timeline view (0.25 - 4.0).')
+            .addSlider(slider => slider
+                .setLimits(0.25, 4.0, 0.25)
+                .setValue(this.plugin.settings.zoomLevel)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.zoomLevel = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        containerEl.createEl('h3', { text: 'DeadlineList', cls: 'setting-section-header' });
 
         new Setting(containerEl)
             .setName('Default Deadline Offset')
@@ -143,28 +184,6 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        const excludedPathsSetting = new Setting(containerEl)
-            .setName('Excluded Paths')
-            .setDesc('Paths to exclude from task scanning (one per line). Files starting with these paths will be ignored.')
-            .addTextArea(text => text
-                .setPlaceholder('Templates/\nArchive/\nSecret.md')
-                .setValue(this.plugin.settings.excludedPaths.join('\n'))
-                .onChange(async (value) => {
-                    const paths = value.split('\n')
-                        .map(p => p.trim())
-                        .filter(p => p.length > 0);
-                    this.plugin.settings.excludedPaths = paths;
-                    await this.plugin.saveSettings();
-                }));
-
-        // Enhance the textarea for better visibility
-        const textarea = excludedPathsSetting.settingEl.querySelector('textarea');
-        if (textarea) {
-            textarea.rows = 10;
-            textarea.style.width = '100%';
-            textarea.style.minWidth = '300px';
-        }
-
         containerEl.createEl('h3', { text: 'Timer Widget', cls: 'setting-section-header' });
 
         new Setting(containerEl)
@@ -205,7 +224,6 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
         // --- Habit Tracker Section ---
         const habitHeader = containerEl.createDiv('setting-item');
-        habitHeader.createSpan({ text: 'Habit Tracker', cls: 'setting-item-name' });
         habitHeader.createSpan({ text: 'Define habits to track in your daily notes\' frontmatter.', cls: 'setting-item-description' });
 
         const habitsListContainer = containerEl.createDiv('habits-list-container');
