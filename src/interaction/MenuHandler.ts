@@ -249,18 +249,20 @@ export class MenuHandler {
             item.setTitle('Create Child Task')
                 .setIcon('plus')
                 .onClick(() => {
-                    if (task.line === -1) {
-                        new Notice('Frontmatter タスクは読み取り専用です。子タスクは追加できません。');
-                        return;
-                    }
                     new CreateTaskModal(this.app, async (result) => {
                         const taskLine = formatTaskLine(result);
+                        const repository = this.plugin.getTaskRepository();
+
+                        if (task.line === -1) {
+                            // frontmatter タスク: 閉じる---の次行に子タスク挿入
+                            await repository.insertLineAfterFrontmatter(task.file, taskLine);
+                            return;
+                        }
+
                         const match = task.originalText.match(/^(\s*)/);
                         const parentIndent = match ? match[1] : '';
                         const childIndent = parentIndent.includes('\t') ? parentIndent + '\t' : parentIndent + '    ';
                         const childLine = childIndent + taskLine;
-
-                        const repository = this.plugin.getTaskRepository();
                         await repository.insertLineAsFirstChild(task, childLine);
                     }).open();
                 });

@@ -1,6 +1,7 @@
 import { App, TFile, TFolder } from 'obsidian';
 import { Task } from '../types';
 import { TaskParser } from './TaskParser';
+import { DateUtils } from '../utils/DateUtils';
 
 export class TaskRepository {
     private app: App;
@@ -462,5 +463,247 @@ export class TaskRepository {
                 }
             }
         }
+    }
+
+    // ========================================
+    // Frontmatter タスク書き込み
+    // ========================================
+
+    /**
+     * Frontmatter タスクの日付・ステータス等を更新する。
+     * task オブジェクトは Object.assign で既に最新値に更新済み。
+     * updates には変更されたフィールドのキーのみが含まれる。
+     */
+    async updateFrontmatterTask(task: Task, updates: Partial<Task>): Promise<void> {
+        const fmUpdates: Record<string, string | null> = {};
+
+        if ('statusChar' in updates) {
+            // ' ' (todo) → キー削除; それ以外 → キー書き込み
+            fmUpdates['status'] = task.statusChar === ' ' ? null : task.statusChar;
+        }
+
+        if ('startDate' in updates || 'startTime' in updates) {
+            fmUpdates['start'] = this.formatFrontmatterDateTime(task.startDate, task.startTime);
+        }
+
+        if ('endDate' in updates || 'endTime' in updates) {
+            fmUpdates['end'] = this.formatFrontmatterDateTime(task.endDate, task.endTime);
+        }
+
+        if ('deadline' in updates) {
+            fmUpdates['deadline'] = task.deadline || null;
+        }
+
+        if ('content' in updates) {
+            fmUpdates['content'] = task.content || null;
+        }
+
+        if (Object.keys(fmUpdates).length > 0) {
+            await this.updateFrontmatterFields(task.file, fmUpdates);
+        }
+    }
+
+    /**
+     * Frontmatter タスクを削除する（タスク関連キーを除去のみ）。
+     * ファイル自体は削除しない。
+     */
+    async deleteFrontmatterTask(task: Task): Promise<void> {
+        await this.updateFrontmatterFields(task.file, {
+            start: null, end: null, deadline: null, status: null, content: null,
+        });
+    }
+
+    /**
+     * Frontmatter タスクを複製する（新規ファイル作成）。
+     * ファイル名: `Name.md` → `Name copy.md` → `Name copy 2.md` → ...
+     */
+    async duplicateFrontmatterTask(task: Task): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) return;
+
+        const content = await this.app.vault.read(file);
+        const newPath = this.generateCopyPath(file);
+        await this.ensureDirectoryExists(newPath);
+        await this.app.vault.create(newPath, content);
+    }
+
+    /**
+     * Frontmatter タスクを1週間分（7日間）複製。各コピーの日付を1日ずつシフト。
+     * ファイル名: 既存日付あり → 置換、なし → 末尾に追加
+     */
+    async duplicateFrontmatterTaskForWeek(task: Task): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) return;
+
+        const content = await this.app.vault.read(file);
+
+        for (let dayOffset = 1; dayOffset <= 7; dayOffset++) {
+            const shiftedContent = this.shiftFrontmatterDates(content, dayOffset);
+            const newPath = this.generateDatedPath(file, task, dayOffset);
+
+            if (!this.app.vault.getAbstractFileByPath(newPath)) {
+                await this.ensureDirectoryExists(newPath);
+                await this.app.vault.create(newPath, shiftedContent);
+            }
+        }
+    }
+
+    /**
+     * Frontmatter タスクの直後（閉じる---の次行）に子タスク行を挿入する。
+     */
+    async insertLineAfterFrontmatter(filePath: string, lineContent: string): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(filePath);
+        if (!(file instanceof TFile)) return;
+
+        await this.app.vault.process(file, (content) => {
+            const lines = content.split('\n');
+
+            if (lines[0]?.trim() !== '---') {
+                // frontmatter なし → ファイル先頭に挿入
+                lines.unshift(lineContent);
+                return lines.join('\n');
+            }
+
+            let fmEnd = -1;
+            for (let i = 1; i < lines.length; i++) {
+                if (lines[i].trim() === '---') { fmEnd = i; break; }
+            }
+            if (fmEnd < 0) {
+                lines.unshift(lineContent);
+                return lines.join('\n');
+            }
+
+            // 閉じる --- の次行に挿入
+            lines.splice(fmEnd + 1, 0, lineContent);
+            return lines.join('\n');
+        });
+    }
+
+    // --- Frontmatter helpers ---
+
+    /**
+     * frontmatter 内のキーを原子的に更新・追加・削除する。
+     * value: null → キー削除, '' → `key:` (YAML null), その他 → `key: value`
+     */
+    private async updateFrontmatterFields(filePath: string, updates: Record<string, string | null>): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(filePath);
+        if (!(file instanceof TFile)) return;
+
+        await this.app.vault.process(file, (content) => {
+            const lines = content.split('\n');
+
+            if (lines[0]?.trim() !== '---') return content;
+
+            let fmEnd = -1;
+            for (let i = 1; i < lines.length; i++) {
+                if (lines[i].trim() === '---') { fmEnd = i; break; }
+            }
+            if (fmEnd < 0) return content;
+
+            const pending = new Map(Object.entries(updates));
+
+            // 既存キーを走査して更新・削除
+            for (let i = 1; i < fmEnd; i++) {
+                const keyMatch = lines[i].match(/^(\w+)\s*:/);
+                if (!keyMatch) continue;
+
+                const key = keyMatch[1];
+                if (!pending.has(key)) continue;
+
+                const newValue = pending.get(key);
+                pending.delete(key);
+
+                if (newValue === null) {
+                    // キーを削除
+                    lines.splice(i, 1);
+                    fmEnd--;
+                    i--;
+                } else {
+                    lines[i] = newValue === '' ? `${key}:` : `${key}: ${newValue}`;
+                }
+            }
+
+            // 新規キーを閉じる --- の直前に追加
+            const newLines: string[] = [];
+            for (const [key, value] of pending) {
+                if (value !== null) {
+                    newLines.push(value === '' ? `${key}:` : `${key}: ${value}`);
+                }
+            }
+            if (newLines.length > 0) {
+                lines.splice(fmEnd, 0, ...newLines);
+            }
+
+            return lines.join('\n');
+        });
+    }
+
+    /** 日時 → frontmatter 値文字列。時刻オンリーは sexagesimal 回避のためquoted。 */
+    private formatFrontmatterDateTime(date?: string, time?: string): string | null {
+        if (date && time) return `${date}T${time}`;
+        if (date) return date;
+        if (time) return `"${time}"`;
+        return null;
+    }
+
+    /** `Name.md` → `Name copy.md` → `Name copy 2.md` → ... */
+    private generateCopyPath(file: TFile): string {
+        const dir = file.parent?.path || '';
+        const name = file.basename.replace(/\.md$/, '');
+        const prefix = dir ? `${dir}/` : '';
+
+        let candidate = `${prefix}${name} copy.md`;
+        if (!this.app.vault.getAbstractFileByPath(candidate)) return candidate;
+
+        for (let i = 2; i < 100; i++) {
+            candidate = `${prefix}${name} copy ${i}.md`;
+            if (!this.app.vault.getAbstractFileByPath(candidate)) return candidate;
+        }
+        return candidate;
+    }
+
+    /**
+     * 日付付きコピー先パスを生成する。
+     * ファイル名に既存の日付がある場合は置換、なければ末尾に追加。
+     */
+    private generateDatedPath(file: TFile, task: Task, dayOffset: number): string {
+        const dir = file.parent?.path || '';
+        const name = file.basename.replace(/\.md$/, '');
+        const baseDate = task.startDate || DateUtils.getToday();
+        const newDate = DateUtils.addDays(baseDate, dayOffset);
+        const prefix = dir ? `${dir}/` : '';
+
+        // ファイル名に既存の日付があれば置換
+        const dateRegex = /\d{4}-\d{2}-\d{2}/;
+        if (dateRegex.test(name)) {
+            return `${prefix}${name.replace(dateRegex, newDate)}.md`;
+        }
+        return `${prefix}${name} ${newDate}.md`;
+    }
+
+    /** frontmatter の日付キー (start/end/deadline) の日付部分を N日シフトする。 */
+    private shiftFrontmatterDates(content: string, dayOffset: number): string {
+        const lines = content.split('\n');
+        if (lines[0]?.trim() !== '---') return content;
+
+        let fmEnd = -1;
+        for (let i = 1; i < lines.length; i++) {
+            if (lines[i].trim() === '---') { fmEnd = i; break; }
+        }
+        if (fmEnd < 0) return content;
+
+        const dateKeys = new Set(['start', 'end', 'deadline']);
+        const dateRegex = /(\d{4}-\d{2}-\d{2})/;
+
+        for (let i = 1; i < fmEnd; i++) {
+            const keyMatch = lines[i].match(/^(\w+)\s*:/);
+            if (!keyMatch || !dateKeys.has(keyMatch[1])) continue;
+
+            lines[i] = lines[i].replace(dateRegex, (match) => {
+                return DateUtils.shiftDateString(match, dayOffset);
+            });
+        }
+
+        return lines.join('\n');
     }
 }

@@ -76,6 +76,17 @@ export class TaskIndex {
             }
         });
 
+        this.app.vault.on('create', (file) => {
+            if (file instanceof TFile && file.extension === 'md') {
+                if (!this.isExcluded(file.path)) {
+                    this.queueScan(file).then(() => {
+                        WikiLinkResolver.resolve(this.tasks, this.app, this.settings.excludedPaths);
+                        this.notifyListeners();
+                    });
+                }
+            }
+        });
+
         this.app.metadataCache.on('changed', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 if (!this.isExcluded(file.path)) {
@@ -560,9 +571,12 @@ export class TaskIndex {
             return;
         }
 
-        // frontmatterタスク (line === -1) は現時点で読み取り専用
+        // frontmatter タスク書き込みパス
         if (task.line === -1) {
-            console.warn(`[TaskIndex] Frontmatter task ${taskId} is read-only (write-back not yet implemented)`);
+            this.markLocalEdit(task.file);
+            Object.assign(task, updates);
+            this.notifyListeners(taskId, Object.keys(updates));
+            await this.repository.updateFrontmatterTask(task, updates);
             return;
         }
 
@@ -606,7 +620,10 @@ export class TaskIndex {
         if (!task) return;
 
         if (task.line === -1) {
-            console.warn(`[TaskIndex] Frontmatter task ${taskId} is read-only (write-back not yet implemented)`);
+            this.markLocalEdit(task.file);
+            this.tasks.delete(taskId);
+            this.notifyListeners();
+            await this.repository.deleteFrontmatterTask(task);
             return;
         }
 
@@ -625,7 +642,7 @@ export class TaskIndex {
         if (!task) return;
 
         if (task.line === -1) {
-            console.warn(`[TaskIndex] Frontmatter task ${taskId} is read-only (write-back not yet implemented)`);
+            await this.repository.duplicateFrontmatterTask(task);
             return;
         }
 
@@ -640,7 +657,7 @@ export class TaskIndex {
         if (!task) return;
 
         if (task.line === -1) {
-            console.warn(`[TaskIndex] Frontmatter task ${taskId} is read-only (write-back not yet implemented)`);
+            await this.repository.duplicateFrontmatterTaskForWeek(task);
             return;
         }
 
