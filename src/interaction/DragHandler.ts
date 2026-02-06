@@ -133,6 +133,8 @@ export class DragHandler implements DragContext {
         }
 
         if (this.currentStrategy) {
+            // ドラッグ開始：このファイルのスキャンを抑制
+            this.taskIndex.setDraggingFile(task.file);
             this.currentStrategy.onDown(e, task, taskEl, this);
         }
     }
@@ -147,6 +149,8 @@ export class DragHandler implements DragContext {
     private async onPointerUp(e: PointerEvent) {
         if (this.currentStrategy) {
             await this.currentStrategy.onUp(e, this);
+            // ドラッグ終了：フラグ解除＆最終レンダリングをトリガー
+            this.taskIndex.setDraggingFile(null);
         }
         this.currentStrategy = null;
     }

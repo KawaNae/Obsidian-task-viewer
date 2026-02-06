@@ -1,4 +1,4 @@
-import { App, MarkdownRenderer, Component, Menu } from 'obsidian';
+import { App, MarkdownRenderer, Component, Menu, Notice } from 'obsidian';
 import { Task, TaskViewerSettings, isCompleteStatusChar } from '../types';
 import { TaskIndex } from '../services/TaskIndex';
 import { DateUtils } from '../utils/DateUtils';
@@ -291,6 +291,14 @@ export class TaskRenderer {
                             const newChar = currentChar === ' ' ? 'x' : ' ';
                             childLine = childLine.replace(`[${currentChar}]`, `[${newChar}]`);
                         }
+
+                        // frontmatterタスクに対するガード
+                        if (task.line === -1) {
+                            console.warn('[TaskRenderer] frontmatterタスクの子チェックボックスは更新できません');
+                            new Notice('子タスクはファイル内で直接編集してください');
+                            return;
+                        }
+
                         const absoluteLineNumber = task.line + 1 + childLineIndex;
                         this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
                     }
@@ -350,6 +358,14 @@ export class TaskRenderer {
                         this.updateCheckboxDataTask(checkbox as HTMLElement, newChar);
                         childLine = childLine.replace(`[${currentChar}]`, `[${newChar}]`);
                     }
+
+                    // frontmatterタスクに対するガード
+                    if (task.line === -1) {
+                        console.warn('[TaskRenderer] frontmatterタスクの子チェックボックスは更新できません');
+                        new Notice('子タスクはファイル内で直接編集してください');
+                        return;
+                    }
+
                     const absoluteLineNumber = task.line + 1 + childLineIndex;
                     this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
                 }
@@ -424,6 +440,14 @@ export class TaskRenderer {
                             if (targetEl) {
                                 this.updateCheckboxDataTask(targetEl, opt.char);
                             }
+
+                            // frontmatterタスクに対するガード
+                            if (task.line === -1) {
+                                console.warn('[TaskRenderer] frontmatterタスクの子チェックボックスは更新できません');
+                                new Notice('子タスクはファイル内で直接編集してください');
+                                return;
+                            }
+
                             const absoluteLineNumber = task.line + 1 + childLineIndex;
                             await this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
                         }

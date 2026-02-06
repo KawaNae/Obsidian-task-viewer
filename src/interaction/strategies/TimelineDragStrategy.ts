@@ -461,29 +461,31 @@ export class TimelineDragStrategy implements DragStrategy {
 
         if (!this.dragTask || !this.dragEl || !this.currentDayDate || !this.ghostManager) return;
 
-        // Cleanup
+        // Cleanup highlight
         if (this.lastHighlighted) {
             this.lastHighlighted.removeClass('drag-over');
             this.lastHighlighted = null;
         }
 
-        this.ghostManager.clear();
+        // ゴーストマネージャーへの参照を保存（後でクリアするため）
+        const ghostManagerToClean = this.ghostManager;
         this.ghostManager = null;
         this.stopAutoScroll();
 
         this.dragEl.removeClass('is-dragging');
         this.dragEl.style.zIndex = '';
-        this.dragEl.removeClass('is-dragging');
-        this.dragEl.style.zIndex = '';
 
-        // Restore all hidden elements
-        this.hiddenElements.forEach(el => el.style.opacity = '');
+        // hiddenElements参照を保存（updateTask後に使用）
+        const elementsToRestore = [...this.hiddenElements];
+        const dragElToRestore = this.dragEl;
         this.hiddenElements = [];
 
-        this.dragEl.style.opacity = ''; // Restore visibility of main el just in case
-        this.currentContext = null;
+        // currentContext = null は updateTask 完了後に設定
+        // this.currentContext は後でクリアする
 
         if (!this.hasKeyMoved) {
+            // クリックのみの場合：ゴーストを即座にクリア
+            ghostManagerToClean.clear();
             context.onTaskClick(this.dragTask.id);
             this.dragTask = null;
             this.dragEl = null;
@@ -578,9 +580,45 @@ export class TimelineDragStrategy implements DragStrategy {
         }
 
         if (Object.keys(updates).length > 0) {
+            // 復元対象のタスクIDを保存（DOM要素参照ではなくIDで管理）
+            const taskIdToRestore = this.dragTask.id;
+            const containerRef = context.container;
+
             await context.taskIndex.updateTask(this.dragTask.id, updates);
+
+            // move/resize完了後も選択状態を維持
+            context.onTaskClick(taskIdToRestore);
+
+            // updateTask完了後、DOM更新完了を待ってから新しいDOM要素のopacity復元とゴーストクリア
+            // 二重RAFで2フレーム待つことで、レンダリング完了を確実に待つ
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    // 新しいDOM要素が表示されてからゴーストをクリア（ちらつき防止）
+                    ghostManagerToClean.clear();
+
+                    // 新しいDOMから要素を再取得（古い参照は無効）
+                    const selector = `.task-card[data-id="${taskIdToRestore}"], .task-card[data-split-original-id="${taskIdToRestore}"]`;
+                    const newElements = containerRef.querySelectorAll(selector);
+
+                    newElements.forEach(el => {
+                        if (el instanceof HTMLElement) {
+                            el.style.transition = 'none';
+                            el.style.opacity = '';
+                            // 次フレームでtransitionを復元
+                            requestAnimationFrame(() => {
+                                el.style.transition = '';
+                            });
+                        }
+                    });
+                });
+            });
+        } else {
+            // 更新がない場合はゴーストを即座にクリア
+            ghostManagerToClean.clear();
         }
 
+        // ここでcurrentContextをクリア
+        this.currentContext = null;
         this.dragTask = null;
         this.dragEl = null;
     }

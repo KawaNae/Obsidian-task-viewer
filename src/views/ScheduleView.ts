@@ -1,7 +1,7 @@
 import { ItemView, WorkspaceLeaf, Menu } from 'obsidian';
 import { TaskIndex } from '../services/TaskIndex';
 import { TaskRenderer } from './TaskRenderer';
-import { Task } from '../types';
+import { Task, shouldSplitTask, splitTaskAtBoundary, RenderableTask, isCompleteStatusChar } from '../types';
 import { MenuHandler } from '../interaction/MenuHandler';
 import { DateUtils } from '../utils/DateUtils';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
@@ -93,7 +93,9 @@ export class ScheduleView extends ItemView {
         filterBtn.onclick = (e) => {
             // Calculate relevant files (Past Incomplete + Future Any)
             const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+            const startHour = this.plugin.settings.startHour;
             const futureDates = new Set<string>();
+
             for (let i = 0; i < 14; i++) {
                 const d = new Date(today);
                 d.setDate(d.getDate() + i);
@@ -104,26 +106,46 @@ export class ScheduleView extends ItemView {
             const relevantFiles = new Set<string>();
 
             allTasks.forEach(task => {
-                const taskDate = task.startDate;
-                if (!taskDate) return;
+                // Only timed tasks
+                if (!task.startDate || !task.startTime) return;
 
-                const isLineCompleted = (char: string) => ['x', 'X', '!', '-'].includes(char);
-                const selfStatusChar = task.statusChar || ' ';
-                let isCompleted = isLineCompleted(selfStatusChar);
+                // Exclude all-day tasks
+                const isAllDay = DateUtils.isAllDayTask(
+                    task.startDate,
+                    task.startTime,
+                    task.endDate,
+                    task.endTime,
+                    startHour
+                );
+                if (isAllDay) return;
 
+                // Calculate visual date
+                const taskVisualDate = DateUtils.getVisualStartDate(
+                    task.startDate,
+                    task.startTime,
+                    startHour
+                );
+
+                // Use settings-based completion check
+                let isCompleted = isCompleteStatusChar(
+                    task.statusChar || ' ',
+                    this.plugin.settings.completeStatusChars
+                );
+
+                // Check child tasks
                 if (isCompleted && task.childLines.length > 0) {
                     for (const childLine of task.childLines) {
                         const match = childLine.match(/^\s*-\s*\[(.)\]/);
-                        if (match && !isLineCompleted(match[1])) {
+                        if (match && !isCompleteStatusChar(match[1], this.plugin.settings.completeStatusChars)) {
                             isCompleted = false;
                             break;
                         }
                     }
                 }
 
-                if (taskDate < today) {
+                if (taskVisualDate < today) {
                     if (!isCompleted) relevantFiles.add(task.file);
-                } else if (futureDates.has(taskDate)) {
+                } else if (futureDates.has(taskVisualDate)) {
                     relevantFiles.add(task.file);
                 }
             });
@@ -194,8 +216,18 @@ export class ScheduleView extends ItemView {
             tasks.forEach(task => {
                 const cardWrapper = taskList.createDiv('schedule-task-wrapper');
                 const card = cardWrapper.createDiv('task-card');
+
                 if (!task.startTime) {
                     card.addClass('task-card--allday');
+                }
+
+                // Add split task styling
+                const renderable = task as RenderableTask;
+                if (renderable.isSplit) {
+                    card.addClass('task-card--split');
+                    if (renderable.splitSegment) {
+                        card.addClass(`task-card--split-${renderable.splitSegment}`);
+                    }
                 }
 
                 // Apply color
@@ -207,10 +239,11 @@ export class ScheduleView extends ItemView {
         }
     }
 
-    private getTasksForSchedule(): { pastDates: string[], futureDates: string[], tasksByDate: Record<string, Task[]> } {
+    private getTasksForSchedule(): { pastDates: string[], futureDates: string[], tasksByDate: Record<string, RenderableTask[]> } {
         const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        const startHour = this.plugin.settings.startHour;
         const allTasks = this.taskIndex.getTasks();
-        const grouped: Record<string, Task[]> = {};
+        const grouped: Record<string, RenderableTask[]> = {};
         const pastDates: Set<string> = new Set();
 
         // Generate future dates (Today + 14 days)
@@ -222,55 +255,106 @@ export class ScheduleView extends ItemView {
         }
 
         // Helper to add task
-        const addTask = (date: string, task: Task) => {
+        const addTask = (date: string, task: RenderableTask) => {
             if (!grouped[date]) grouped[date] = [];
             grouped[date].push(task);
         };
 
         allTasks.forEach(task => {
-            const taskDate = task.startDate;
-            if (!taskDate) return;
+            // Only show timed tasks (Timeline column tasks)
+            if (!task.startDate || !task.startTime) return;
 
             // Filter by visible files
             if (!this.filterMenu.isFileVisible(task.file)) {
                 return;
             }
 
-            // Determine if task is "completed" based on user rules
-            // Completed: [x], [!], [-]
-            // Incomplete: [ ], [>], [?]
-            // AND all sub-tasks must be completed
-            const isLineCompleted = (char: string) => ['x', 'X', '!', '-'].includes(char);
+            // Exclude all-day tasks (24+ hours)
+            const isAllDay = DateUtils.isAllDayTask(
+                task.startDate,
+                task.startTime,
+                task.endDate,
+                task.endTime,
+                startHour
+            );
+            if (isAllDay) return;
 
-            const selfStatusChar = task.statusChar || ' ';
-            let isCompleted = isLineCompleted(selfStatusChar);
+            // Split tasks that cross visual day boundary
+            const renderableTasks: RenderableTask[] = [];
 
-            if (isCompleted && task.childLines.length > 0) {
-                for (const childLine of task.childLines) {
-                    // Check if line is a task
-                    const match = childLine.match(/^\s*-\s*\[(.)\]/);
-                    if (match) {
-                        const childStatus = match[1];
-                        if (!isLineCompleted(childStatus)) {
-                            isCompleted = false;
-                            break;
+            if (shouldSplitTask(task, startHour)) {
+                const [before, after] = splitTaskAtBoundary(task, startHour);
+
+                // Calculate visual dates for each segment
+                const beforeVisualDate = DateUtils.getVisualStartDate(
+                    before.startDate!,
+                    before.startTime!,
+                    startHour
+                );
+                const afterVisualDate = DateUtils.getVisualStartDate(
+                    after.startDate!,
+                    after.startTime!,
+                    startHour
+                );
+
+                renderableTasks.push({ ...before, visualDate: beforeVisualDate } as RenderableTask & { visualDate: string });
+                renderableTasks.push({ ...after, visualDate: afterVisualDate } as RenderableTask & { visualDate: string });
+            } else {
+                // No split needed: calculate visual date
+                const visualDate = DateUtils.getVisualStartDate(
+                    task.startDate,
+                    task.startTime,
+                    startHour
+                );
+
+                const renderable: RenderableTask = {
+                    ...task,
+                    id: task.id,
+                    originalTaskId: task.id,
+                    isSplit: false
+                };
+
+                renderableTasks.push({ ...renderable, visualDate } as RenderableTask & { visualDate: string });
+            }
+
+            // Determine completion status and add to appropriate date
+            renderableTasks.forEach(renderable => {
+                const visualDate = (renderable as any).visualDate;
+
+                // Use settings-based completion check
+                let isCompleted = isCompleteStatusChar(
+                    task.statusChar || ' ',
+                    this.plugin.settings.completeStatusChars
+                );
+
+                // Check child tasks
+                if (isCompleted && task.childLines.length > 0) {
+                    for (const childLine of task.childLines) {
+                        const match = childLine.match(/^\s*-\s*\[(.)\]/);
+                        if (match) {
+                            const childStatus = match[1];
+                            if (!isCompleteStatusChar(childStatus, this.plugin.settings.completeStatusChars)) {
+                                isCompleted = false;
+                                break;
+                            }
                         }
                     }
                 }
-            }
 
-            if (taskDate < today) {
-                // Past: Only incomplete
-                if (!isCompleted) {
-                    addTask(taskDate, task);
-                    pastDates.add(taskDate);
+                // Add to past or future
+                if (visualDate < today) {
+                    // Past: only incomplete tasks
+                    if (!isCompleted) {
+                        addTask(visualDate, renderable);
+                        pastDates.add(visualDate);
+                    }
+                } else {
+                    // Future: check if in range
+                    if (futureDates.includes(visualDate)) {
+                        addTask(visualDate, renderable);
+                    }
                 }
-            } else {
-                // Future: Check if in range
-                if (futureDates.includes(taskDate)) {
-                    addTask(taskDate, task);
-                }
-            }
+            });
         });
 
         return {

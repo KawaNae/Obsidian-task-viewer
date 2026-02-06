@@ -22,8 +22,8 @@ export class FrontmatterWriter {
         const fmUpdates: Record<string, string | null> = {};
 
         if ('statusChar' in updates) {
-            // ' ' (todo) → キー削除; それ以外 → キー書き込み
-            fmUpdates['status'] = task.statusChar === ' ' ? null : task.statusChar;
+            // ' ' (todo) → キー削除; それ以外 → エスケープしてキー書き込み
+            fmUpdates['status'] = task.statusChar === ' ' ? null : this.escapeStatusChar(task.statusChar);
         }
 
         if ('startDate' in updates || 'startTime' in updates) {
@@ -145,6 +145,15 @@ export class FrontmatterWriter {
 
             return lines.join('\n');
         });
+    }
+
+    /**
+     * 必要に応じてステータス文字をYAML用にエスケープする。
+     * YAML特殊文字: ? ! > - : などは引用符で囲む必要がある。
+     */
+    private escapeStatusChar(statusChar: string): string {
+        const needsQuoting = /[?!>:\-\[\]{}|&*#,]/.test(statusChar);
+        return needsQuoting ? `"${statusChar}"` : statusChar;
     }
 
     /** 日時 → frontmatter 値文字列。時刻オンリーは sexagesimal 回避のためquoted。 */

@@ -55,14 +55,56 @@ export class FrontmatterTaskBuilder {
                 : deadlineParsed.date;
         }
 
-        // childLines: ボディ行のインデントを正規化（extractTasksFromLines と同じアルゴリズム）
-        const nonEmpty = bodyLines.filter(l => l.trim() !== '');
+        // childLines: frontmatterタスク専用のロジック
+        // トップレベル（indent=0）のチェックボックスとその下のインデントされた内容を収集
+        const children: string[] = [];
+        let i = 0;
+
+        while (i < bodyLines.length) {
+            const line = bodyLines[i];
+            const indent = line.search(/\S|$/);
+
+            // トップレベル（indent=0）のチェックボックス行を見つける
+            if (indent === 0 && /^\s*-\s*\[.\]/.test(line)) {
+                children.push(line);
+                i++;
+
+                // この行の下のインデントされたコンテンツを収集
+                while (i < bodyLines.length) {
+                    const nextLine = bodyLines[i];
+
+                    // 空行 → このチェックボックスセクション終了
+                    if (nextLine.trim() === '') {
+                        break;
+                    }
+
+                    const nextIndent = nextLine.search(/\S|$/);
+                    if (nextIndent > 0) {
+                        // インデントされている → 子コンテンツ
+                        children.push(nextLine);
+                        i++;
+                    } else {
+                        // トップレベル → このセクション終了、外側のループで処理
+                        break;
+                    }
+                }
+            } else {
+                // 散文、画像、空行など → スキップ
+                i++;
+            }
+        }
+
+        // インデント正規化
+        const nonEmptyChildren = children.filter(c => c.trim() !== '');
         let childLines: string[];
-        if (nonEmpty.length > 0) {
-            const minIndent = Math.min(...nonEmpty.map(l => l.search(/\S|$/)));
-            childLines = bodyLines.map(l => l.trim() === '' ? l : l.substring(minIndent));
+        if (nonEmptyChildren.length > 0) {
+            const minIndent = Math.min(...nonEmptyChildren.map(c => c.search(/\S|$/)));
+            childLines = children.map(c => {
+                if (c.trim() === '') return c;
+                return c.substring(minIndent);
+            });
         } else {
-            childLines = [...bodyLines];
+            childLines = [];
         }
 
         return {

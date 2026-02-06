@@ -29,6 +29,7 @@ export class TaskIndex {
     private repository: TaskRepository;
     private commandExecutor: TaskCommandExecutor;
     private settings: TaskViewerSettings;
+    private draggingFilePath: string | null = null;  // ドラッグ中のファイルパス
 
     constructor(private app: App, settings: TaskViewerSettings) {
         this.settings = settings;
@@ -62,7 +63,11 @@ export class TaskIndex {
                 const isLocal = this.syncDetector.isLocalEdit(file.path);
                 this.syncDetector.clearLocalEditFlag(file.path);
 
-                console.log(`[🔄SYNC] vault.modify: ${file.path}, isLocal=${isLocal}`);
+                // ドラッグ中のファイルはスキャンをスキップ（古い値でストアが上書きされるのを防止）
+                if (this.draggingFilePath === file.path) {
+                    console.log(`[🔄SYNC] ⏸️ Skipping scan during drag: ${file.path}`);
+                    return;
+                }
 
                 await this.scanner.queueScan(file, isLocal);
                 WikiLinkResolver.resolve(this.store.getTasksMap(), this.app, this.settings.excludedPaths);
@@ -88,6 +93,10 @@ export class TaskIndex {
 
         this.app.metadataCache.on('changed', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
+                // ドラッグ中のファイルはスキャンをスキップ
+                if (this.draggingFilePath === file.path) {
+                    return;
+                }
                 this.scanner.queueScan(file).then(() => {
                     WikiLinkResolver.resolve(this.store.getTasksMap(), this.app, this.settings.excludedPaths);
                     this.store.notifyListeners();
@@ -96,6 +105,21 @@ export class TaskIndex {
                 this.store.notifyListeners();
             }
         });
+    }
+
+    // ===== ドラッグ制御 =====
+
+    /**
+     * ドラッグ中のファイルパスを設定する。
+     * 指定されたファイルのスキャンをスキップし、ストアの上書きを防止。
+     * null設定時に最終的なレンダリングをトリガーする。
+     */
+    setDraggingFile(filePath: string | null): void {
+        this.draggingFilePath = filePath;
+        if (filePath === null) {
+            // ドラッグ終了時に最終レンダリングをトリガー
+            this.store.notifyListeners();
+        }
     }
 
     // ===== 設定 =====
@@ -204,7 +228,10 @@ export class TaskIndex {
 
         this.syncDetector.markLocalEdit(task.file);
         Object.assign(task, updates);
-        this.store.notifyListeners(taskId, Object.keys(updates));
+        // ドラッグ中のファイルはnotifyをスキップ（ドラッグ終了時にsetDraggingFile(null)で一括通知）
+        if (this.draggingFilePath !== task.file) {
+            this.store.notifyListeners(taskId, Object.keys(updates));
+        }
 
         if (task.line === -1) {
             await this.repository.updateFrontmatterTask(task, updates);

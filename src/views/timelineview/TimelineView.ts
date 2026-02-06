@@ -188,8 +188,17 @@ export class TimelineView extends ItemView {
             }
 
             if (taskId && changes) {
-                // Check if we can do partial update
-                // Only content/status changes are safe for partial update (no layout change)
+                // 日付/時刻の変更は完全レンダリングが必要（位置変更）
+                const layoutKeys = ['startDate', 'startTime', 'endDate', 'endTime', 'deadline'];
+                const hasLayoutChange = changes.some(k => layoutKeys.includes(k));
+
+                if (hasLayoutChange) {
+                    // レイアウト変更の場合は完全レンダリング
+                    this.render();
+                    return;
+                }
+
+                // コンテンツ/ステータスの変更のみが部分更新で安全
                 const safeKeys = ['status', 'statusChar', 'content', 'childLines'];
                 const isSafe = changes.every(k => safeKeys.includes(k));
 

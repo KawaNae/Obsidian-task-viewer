@@ -67,8 +67,10 @@
 /* Habit name label */
 .habits-section__habit-label {
     color: var(--text-muted);
-    flex-shrink: 0;
-    max-width: 45%;
+    flex-shrink: 1;
+    flex-basis: auto;
+    max-width: 70%;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
 }
@@ -87,7 +89,7 @@
     border-radius: 3px;
     transition: background-color 0.15s ease;
     flex: 1;
-    min-width: 0;
+    min-width: 30px;
     overflow: hidden;
     text-overflow: ellipsis;
 }
@@ -106,6 +108,7 @@
     color: var(--text-muted);
     font-size: 0.85em;
     flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .habits-section__unit:not(.is-set) {
