@@ -508,7 +508,6 @@ export class TaskRenderer {
             return fmEndLine + 1 + bodyOffset;
         } else {
             // Inline task: children are offset from task.line
-            if (task.line === -1) return -1;
             return task.line + 1 + childLineIndex;
         }
     }

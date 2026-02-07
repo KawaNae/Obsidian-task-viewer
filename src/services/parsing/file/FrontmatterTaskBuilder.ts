@@ -113,7 +113,7 @@ export class FrontmatterTaskBuilder {
         return {
             id: `${filePath}:-1`,
             file: filePath,
-            line: -1,                           // sentinel: frontmatter ソース
+            line: -1,                           // frontmatter タスクには該当行なし（種別判定は parserId を使用）
             content,
             statusChar,
             indent: 0,

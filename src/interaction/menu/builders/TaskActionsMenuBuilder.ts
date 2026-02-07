@@ -45,8 +45,7 @@ export class TaskActionsMenuBuilder {
                         const taskLine = formatTaskLine(result);
                         const repository = this.plugin.getTaskRepository();
 
-                        if (task.line === -1) {
-                            // frontmatter task
+                        if (task.parserId === 'frontmatter') {
                             await repository.insertLineAfterFrontmatter(task.file, taskLine);
                             return;
                         }

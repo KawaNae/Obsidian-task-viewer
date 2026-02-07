@@ -40,7 +40,7 @@ export class TaskIndex {
         this.store = new TaskStore(settings);
         this.validator = new TaskValidator();
         this.syncDetector = new SyncDetector();
-        this.repository = new TaskRepository(app, settings);
+        this.repository = new TaskRepository(app);
         this.commandExecutor = new TaskCommandExecutor(this.repository, this, app);
         this.editorObserver = new EditorObserver(app, this.syncDetector);
         this.scanner = new TaskScanner(
@@ -266,7 +266,7 @@ export class TaskIndex {
             this.store.notifyListeners(taskId, Object.keys(updates));
         }
 
-        if (task.line === -1) {
+        if (task.parserId === 'frontmatter') {
             await this.repository.updateFrontmatterTask(task, updates);
         } else {
             await this.repository.updateTaskInFile(task, { ...task, ...updates });
@@ -279,7 +279,7 @@ export class TaskIndex {
 
         this.syncDetector.markLocalEdit(task.file);
 
-        if (task.line === -1) {
+        if (task.parserId === 'frontmatter') {
             await this.repository.deleteFrontmatterTask(task);
         } else {
             await this.repository.deleteTaskFromFile(task);
@@ -294,7 +294,7 @@ export class TaskIndex {
 
         this.syncDetector.markLocalEdit(task.file);
 
-        if (task.line === -1) {
+        if (task.parserId === 'frontmatter') {
             await this.repository.duplicateFrontmatterTask(task);
         } else {
             await this.repository.duplicateTaskInFile(task);
@@ -309,7 +309,7 @@ export class TaskIndex {
 
         this.syncDetector.markLocalEdit(task.file);
 
-        if (task.line === -1) {
+        if (task.parserId === 'frontmatter') {
             await this.repository.duplicateFrontmatterTaskForWeek(task);
         } else {
             await this.repository.duplicateTaskForWeek(task);

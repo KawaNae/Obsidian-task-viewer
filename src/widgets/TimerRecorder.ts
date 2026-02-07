@@ -48,7 +48,7 @@ export class TimerRecorder {
             const taskForInsert = {
                 file: timer.taskFile,
                 originalText: timer.taskOriginalText,
-                line: -1, // Will be looked up by originalText
+                line: -1, // 行番号不明 → findTaskLineNumber で originalText ベース検索を強制
             };
             await taskRepository.insertLineAsFirstChild(taskForInsert as any, childLine);
         } else if (timer.taskId.startsWith('daily-')) {
@@ -91,7 +91,7 @@ export class TimerRecorder {
             const taskForInsert = {
                 file: timer.taskFile,
                 originalText: timer.taskOriginalText,
-                line: -1, // Will be looked up by originalText
+                line: -1, // 行番号不明 → findTaskLineNumber で originalText ベース検索を強制
             };
             await taskRepository.insertLineAsFirstChild(taskForInsert as any, childLine);
         } else if (timer.taskId.startsWith('daily-')) {
