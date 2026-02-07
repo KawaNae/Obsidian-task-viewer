@@ -214,7 +214,9 @@ export class TaskIndex {
 
         // スプリットタスク処理（:before, :after）
         if (taskId.includes(':before') || taskId.includes(':after')) {
-            const originalId = taskId.split(':')[0];
+            // taskId形式: "filepath:lineNumber:before" or "filepath:lineNumber:after"
+            // 最後の :before / :after を除去して元のIDを取得
+            const originalId = taskId.replace(/:(?:before|after)$/, '');
             const segment = taskId.includes(':before') ? 'before' : 'after';
             const originalTask = this.store.getTask(originalId);
 
