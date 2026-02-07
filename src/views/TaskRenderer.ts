@@ -99,13 +99,14 @@ export class TaskRenderer {
         let cleanParentLine = `- [${statusChar}] ${overdueIcon}${task.content}`;
 
         // Append source file link
-        const fileName = task.file.replace(/\.md$/, '');
+        const filePath = task.file.replace(/\.md$/, '');
+        const fileName = task.file.split('/').pop()?.replace('.md', '') || task.file;
         const hasContent = cleanParentLine.replace(/^- \[[xX! -]\]\s*/, '').trim().length > 0;
 
         if (hasContent) {
-            cleanParentLine += ` : [[${fileName}]]`;
+            cleanParentLine += ` : [[${filePath}|${fileName}]]`;
         } else {
-            cleanParentLine += `[[${fileName}]]`;
+            cleanParentLine += `[[${filePath}|${fileName}]]`;
         }
 
         // Collapse threshold for children
