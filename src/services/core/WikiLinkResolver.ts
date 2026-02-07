@@ -18,6 +18,17 @@ export class WikiLinkResolver {
      */
     static resolve(tasks: Map<string, Task>, app: App, excludedPaths: string[]): void {
         for (const [parentId, parentTask] of tasks) {
+            // frontmatter タスク: wikiLinkTargets を使用（childLines は空）
+            if (parentTask.wikiLinkTargets && parentTask.wikiLinkTargets.length > 0) {
+                for (const linkName of parentTask.wikiLinkTargets) {
+                    const resolvedPath = this.resolveWikiLink(linkName, app, excludedPaths);
+                    if (!resolvedPath) continue;
+                    this.wireChild(parentTask, parentId, tasks, resolvedPath);
+                }
+                continue;
+            }
+
+            // inline タスク: childLines から wikilink パターンを検出
             if (!parentTask.childLines || parentTask.childLines.length === 0) continue;
 
             for (const line of parentTask.childLines) {
@@ -27,28 +38,34 @@ export class WikiLinkResolver {
                 const linkName = match[1].trim();
                 const resolvedPath = this.resolveWikiLink(linkName, app, excludedPaths);
                 if (!resolvedPath) continue;
-
-                // frontmatterタスクのIDは `${path}:-1`
-                const childTaskId = `${resolvedPath}:-1`;
-                const childTask = tasks.get(childTaskId);
-                if (!childTask) continue;
-
-                // 親子関係をワイア
-                childTask.parentId = parentId;
-                if (!parentTask.childIds.includes(childTaskId)) {
-                    parentTask.childIds.push(childTaskId);
-                }
-
-                // 日付継承: インライン子タスクと同じロジック
-                // 子が時刻のみ（日付なし）なら親の startDate を継承
-                if (parentTask.startDate && !childTask.startDate && childTask.startTime) {
-                    childTask.startDate = parentTask.startDate;
-                    childTask.startDateInherited = true;
-                }
-                if (parentTask.startDate && !childTask.endDate && childTask.endTime) {
-                    childTask.endDate = parentTask.startDate;
-                }
+                this.wireChild(parentTask, parentId, tasks, resolvedPath);
             }
+        }
+    }
+
+    /**
+     * 解決済みパスから子タスクを探し、親子関係をワイアする。
+     */
+    private static wireChild(
+        parentTask: Task, parentId: string,
+        tasks: Map<string, Task>, resolvedPath: string
+    ): void {
+        const childTaskId = `${resolvedPath}:-1`;
+        const childTask = tasks.get(childTaskId);
+        if (!childTask) return;
+
+        childTask.parentId = parentId;
+        if (!parentTask.childIds.includes(childTaskId)) {
+            parentTask.childIds.push(childTaskId);
+        }
+
+        // 日付継承: 子が時刻のみ（日付なし）なら親の startDate を継承
+        if (parentTask.startDate && !childTask.startDate && childTask.startTime) {
+            childTask.startDate = parentTask.startDate;
+            childTask.startDateInherited = true;
+        }
+        if (parentTask.startDate && !childTask.endDate && childTask.endTime) {
+            childTask.endDate = parentTask.startDate;
         }
     }
 

@@ -2,6 +2,7 @@ import { App, TFile } from 'obsidian';
 import type { Task } from '../../../types';
 import { FileOperations } from '../utils/FileOperations';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
+import { HeadingInserter } from '../../../utils/HeadingInserter';
 
 
 /**
@@ -59,25 +60,20 @@ export class FrontmatterWriter {
     }
 
     /**
-     * Frontmatter タスクの直後（閉じる---の次行）に子タスク行を挿入する。
+     * Frontmatter タスクファイルの指定見出し下に子タスク行を挿入する。
+     * 見出しが存在しない場合はファイル末尾に作成する。
      */
-    async insertLineAfterFrontmatter(filePath: string, lineContent: string): Promise<void> {
+    async insertLineAfterFrontmatter(
+        filePath: string,
+        lineContent: string,
+        header: string,
+        headerLevel: number
+    ): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return;
 
         await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-            const fmEnd = FrontmatterLineEditor.findEnd(lines);
-
-            if (fmEnd < 0) {
-                // frontmatter なし → ファイル先頭に挿入
-                lines.unshift(lineContent);
-                return lines.join('\n');
-            }
-
-            // 閉じる --- の次行に挿入
-            lines.splice(fmEnd + 1, 0, lineContent);
-            return lines.join('\n');
+            return HeadingInserter.insertUnderHeading(content, lineContent, header, headerLevel);
         });
     }
 

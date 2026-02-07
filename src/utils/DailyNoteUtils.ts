@@ -1,4 +1,5 @@
 import { App, TFile, moment } from 'obsidian';
+import { HeadingInserter } from './HeadingInserter';
 
 export class DailyNoteUtils {
     static getDailyNoteSettings(app: App) {
@@ -108,53 +109,7 @@ export class DailyNoteUtils {
         if (!file) return;
 
         await app.vault.process(file, (fileContent) => {
-            const lines = fileContent.split('\n');
-            const headerPrefix = '#'.repeat(headerLevel) + ' ';
-            const fullHeader = headerPrefix + header;
-
-            let headerIndex = -1;
-            for (let i = 0; i < lines.length; i++) {
-                if (lines[i].trim() === fullHeader) {
-                    headerIndex = i;
-                    break;
-                }
-            }
-
-            if (headerIndex !== -1) {
-                // Header exists - find end of section
-                let insertIndex = headerIndex + 1;
-                while (insertIndex < lines.length) {
-                    const currentLine = lines[insertIndex];
-                    if (currentLine.startsWith('#')) {
-                        const match = currentLine.match(/^(#+)\s/);
-                        if (match && match[1].length <= headerLevel) {
-                            break;
-                        }
-                    }
-                    insertIndex++;
-                }
-
-                // Skip trailing blank lines
-                let effectiveInsertIndex = insertIndex;
-                while (effectiveInsertIndex > headerIndex + 1) {
-                    if (lines[effectiveInsertIndex - 1].trim() === '') {
-                        effectiveInsertIndex--;
-                    } else {
-                        break;
-                    }
-                }
-
-                lines.splice(effectiveInsertIndex, 0, line);
-            } else {
-                // Header doesn't exist - create it
-                if (lines.length > 0 && lines[lines.length - 1].trim() !== '') {
-                    lines.push('');
-                }
-                lines.push(fullHeader);
-                lines.push(line);
-            }
-
-            return lines.join('\n');
+            return HeadingInserter.insertUnderHeading(fileContent, line, header, headerLevel);
         });
     }
 }

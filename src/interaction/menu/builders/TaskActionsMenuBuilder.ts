@@ -46,7 +46,11 @@ export class TaskActionsMenuBuilder {
                         const repository = this.plugin.getTaskRepository();
 
                         if (task.parserId === 'frontmatter') {
-                            await repository.insertLineAfterFrontmatter(task.file, taskLine);
+                            await repository.insertLineAfterFrontmatter(
+                                task.file, taskLine,
+                                this.plugin.settings.frontmatterTaskHeader,
+                                this.plugin.settings.frontmatterTaskHeaderLevel
+                            );
                             return;
                         }
 
@@ -69,7 +73,7 @@ export class TaskActionsMenuBuilder {
                 .setIcon('timer')
                 .onClick(() => {
                     const widget = this.plugin.getTimerWidget();
-                    widget.show(task.id, displayName, task.originalText, task.file);
+                    widget.show(task.id, displayName, task.originalText, task.file, 'child', task.parserId);
                 });
         });
     }
@@ -83,7 +87,7 @@ export class TaskActionsMenuBuilder {
                 .setIcon('clock')
                 .onClick(() => {
                     const widget = this.plugin.getTimerWidget();
-                    widget.showCountup(task.id, displayName, task.originalText, task.file);
+                    widget.showCountup(task.id, displayName, task.originalText, task.file, 'child', false, task.parserId);
                 });
         });
     }

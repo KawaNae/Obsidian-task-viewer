@@ -31,7 +31,7 @@ export class TimerWidget {
     /**
      * Show the widget and start a new timer for the given task
      */
-    show(taskId: string, taskName: string, taskOriginalText: string = '', taskFile: string = '', recordMode: 'child' | 'self' = 'child'): void {
+    show(taskId: string, taskName: string, taskOriginalText: string = '', taskFile: string = '', recordMode: 'child' | 'self' = 'child', parserId: string = 'at-notation'): void {
         // Create container if not exists
         if (!this.container) {
             this.createContainer();
@@ -64,6 +64,7 @@ export class TimerWidget {
             pausedElapsedTime: 0,
             autoRepeat: false,
             recordMode: recordMode,
+            parserId: parserId,
         };
 
         this.timers.set(taskId, timer);
@@ -75,7 +76,7 @@ export class TimerWidget {
      * @param recordMode 'child' = add child task, 'self' = update this task's start/end
      * @param autoStart if true, start the timer immediately
      */
-    showCountup(taskId: string, taskName: string, taskOriginalText: string = '', taskFile: string = '', recordMode: 'child' | 'self' = 'child', autoStart: boolean = false): void {
+    showCountup(taskId: string, taskName: string, taskOriginalText: string = '', taskFile: string = '', recordMode: 'child' | 'self' = 'child', autoStart: boolean = false, parserId: string = 'at-notation'): void {
         // Create container if not exists
         if (!this.container) {
             this.createContainer();
@@ -108,6 +109,7 @@ export class TimerWidget {
             pausedElapsedTime: 0,
             autoRepeat: false,
             recordMode: recordMode,
+            parserId: parserId,
         };
 
         this.timers.set(taskId, timer);

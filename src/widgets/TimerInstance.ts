@@ -25,4 +25,5 @@ export interface TimerInstance {
     pausedElapsedTime: number; // Accumulated elapsed time before pause (seconds)
     autoRepeat: boolean;       // Whether to auto-restart work after break
     recordMode: 'child' | 'self';  // 'child': add as child task, 'self': update this task's start/end
+    parserId: string;              // 'at-notation' | 'frontmatter' — determines write strategy
 }

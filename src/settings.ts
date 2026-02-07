@@ -203,6 +203,31 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
+        containerEl.createEl('h3', { text: 'Frontmatter Tasks', cls: 'setting-section-header' });
+
+        new Setting(containerEl)
+            .setName('Child Task Heading')
+            .setDesc('The heading under which new child tasks will be inserted in frontmatter task files.')
+            .addText(text => text
+                .setPlaceholder('Tasks')
+                .setValue(this.plugin.settings.frontmatterTaskHeader)
+                .onChange(async (value) => {
+                    this.plugin.settings.frontmatterTaskHeader = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Child Task Heading Level')
+            .setDesc('The level of the heading (1-6).')
+            .addSlider(slider => slider
+                .setLimits(1, 6, 1)
+                .setValue(this.plugin.settings.frontmatterTaskHeaderLevel)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.frontmatterTaskHeaderLevel = value;
+                    await this.plugin.saveSettings();
+                }));
+
         containerEl.createEl('h3', { text: 'Timer Widget', cls: 'setting-section-header' });
 
         new Setting(containerEl)

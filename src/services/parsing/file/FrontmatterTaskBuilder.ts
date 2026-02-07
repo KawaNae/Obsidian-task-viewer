@@ -55,59 +55,18 @@ export class FrontmatterTaskBuilder {
                 : deadlineParsed.date;
         }
 
-        // childLines: frontmatterタスク専用のロジック
-        // トップレベル（indent=0）のチェックボックスとその下のインデントされた内容を収集
-        const children: string[] = [];
-        const childBodyIndices: number[] = [];  // bodyLines 内の実際のインデックス
-        let i = 0;
+        // childLines: frontmatter タスクは body チェックボックスを収集しない。
+        // @notation タスクは TaskScanner が個別の Task として解析し childIds でリンクする。
+        // WikiLinkResolver 用に wikilink ターゲットのみ抽出する。
+        const childLines: string[] = [];
+        const childBodyIndices: number[] = [];
 
-        while (i < bodyLines.length) {
-            const line = bodyLines[i];
-            const indent = line.search(/\S|$/);
-
-            // トップレベル（indent=0）のチェックボックス行を見つける
-            if (indent === 0 && /^\s*-\s*\[.\]/.test(line)) {
-                children.push(line);
-                childBodyIndices.push(i);
-                i++;
-
-                // この行の下のインデントされたコンテンツを収集
-                while (i < bodyLines.length) {
-                    const nextLine = bodyLines[i];
-
-                    // 空行 → このチェックボックスセクション終了
-                    if (nextLine.trim() === '') {
-                        break;
-                    }
-
-                    const nextIndent = nextLine.search(/\S|$/);
-                    if (nextIndent > 0) {
-                        // インデントされている → 子コンテンツ
-                        children.push(nextLine);
-                        childBodyIndices.push(i);
-                        i++;
-                    } else {
-                        // トップレベル → このセクション終了、外側のループで処理
-                        break;
-                    }
-                }
-            } else {
-                // 散文、画像、空行など → スキップ
-                i++;
+        const wikiLinkTargets: string[] = [];
+        for (let i = 0; i < bodyLines.length; i++) {
+            const match = bodyLines[i].match(/^\s*-\s+\[\[([^\]]+)\]\]\s*$/);
+            if (match) {
+                wikiLinkTargets.push(match[1].trim());
             }
-        }
-
-        // インデント正規化
-        const nonEmptyChildren = children.filter(c => c.trim() !== '');
-        let childLines: string[];
-        if (nonEmptyChildren.length > 0) {
-            const minIndent = Math.min(...nonEmptyChildren.map(c => c.search(/\S|$/)));
-            childLines = children.map(c => {
-                if (c.trim() === '') return c;
-                return c.substring(minIndent);
-            });
-        } else {
-            childLines = [];
         }
 
         return {
@@ -129,6 +88,7 @@ export class FrontmatterTaskBuilder {
             explicitStartTime: !!start.time,
             explicitEndDate: !!end.date,
             explicitEndTime: !!end.time,
+            wikiLinkTargets,
             originalText: '',                   // frontmatterタスクに該当する単一行はない
             commands: [],                       // フローコマンドは frontmatter では未対応
             parserId: 'frontmatter'

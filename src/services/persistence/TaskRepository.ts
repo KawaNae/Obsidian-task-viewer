@@ -64,8 +64,8 @@ export class TaskRepository {
         return this.frontmatterWriter.deleteFrontmatterTask(task);
     }
 
-    async insertLineAfterFrontmatter(filePath: string, lineContent: string): Promise<void> {
-        return this.frontmatterWriter.insertLineAfterFrontmatter(filePath, lineContent);
+    async insertLineAfterFrontmatter(filePath: string, lineContent: string, header: string, headerLevel: number): Promise<void> {
+        return this.frontmatterWriter.insertLineAfterFrontmatter(filePath, lineContent, header, headerLevel);
     }
 
     // --- Task Cloning Operations ---
