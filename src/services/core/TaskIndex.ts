@@ -243,10 +243,12 @@ export class TaskIndex {
             }
 
             taskId = originalId;
-            updates = {
+            // 元のupdates（statusChar等）を保持しつつ日付/時刻を追加
+            const dateTimeUpdates = {
                 startDate: originalTask.startDate, startTime: originalTask.startTime,
                 endDate: originalTask.endDate, endTime: originalTask.endTime
             };
+            updates = { ...updates, ...dateTimeUpdates };
         }
 
         const task = this.store.getTask(taskId);

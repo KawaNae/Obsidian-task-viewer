@@ -12,6 +12,8 @@ import { TaskIndex } from '../../../services/core/TaskIndex';
 import { HabitTrackerRenderer } from './HabitTrackerRenderer';
 
 export class GridRenderer {
+    private isAllDayCollapsed: boolean = false;
+
     constructor(
         private container: HTMLElement,
         private viewState: ViewState,
@@ -110,9 +112,8 @@ export class GridRenderer {
         const axisCell = allDayRow.createDiv('allday-section__cell allday-section__axis');
 
         // Toggle button
-        // Toggle button
         const toggleBtn = axisCell.createEl('button', { cls: 'section-toggle-btn' });
-        setIcon(toggleBtn, 'minus');
+        setIcon(toggleBtn, this.isAllDayCollapsed ? 'plus' : 'minus');
         toggleBtn.setAttribute('aria-label', 'Toggle All Day section');
 
         // Label
@@ -124,15 +125,15 @@ export class GridRenderer {
 
         // Toggle functionality
         toggleBtn.addEventListener('click', () => {
-            const isCollapsed = allDayRow.hasClass('collapsed');
-            if (isCollapsed) {
-                allDayRow.removeClass('collapsed');
-                setIcon(toggleBtn, 'minus');
-            } else {
-                allDayRow.addClass('collapsed');
-                setIcon(toggleBtn, 'plus');
-            }
+            this.isAllDayCollapsed = !this.isAllDayCollapsed;
+            allDayRow.toggleClass('collapsed', this.isAllDayCollapsed);
+            setIcon(toggleBtn, this.isAllDayCollapsed ? 'plus' : 'minus');
         });
+
+        // Apply initial collapsed state
+        if (this.isAllDayCollapsed) {
+            allDayRow.addClass('collapsed');
+        }
 
         // Background Cells (Grid Lines)
         dates.forEach((date, i) => {

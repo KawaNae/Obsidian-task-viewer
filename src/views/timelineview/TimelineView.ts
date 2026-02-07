@@ -274,10 +274,6 @@ export class TimelineView extends ItemView {
             this.lastScrollTop = scrollArea.scrollTop;
         }
 
-        // Save toggle states
-        const allDayRow = this.container.querySelector('.all-day-row');
-        const wasAllDayCollapsed = allDayRow?.hasClass('collapsed') || false;
-
         this.container.empty();
 
         // Apply Zoom Level
@@ -369,16 +365,7 @@ export class TimelineView extends ItemView {
             newScrollArea.scrollTop = this.lastScrollTop;
         }
 
-        // Restore toggle states
-        const newAllDayRow = this.container.querySelector('.all-day-row');
-
-        if (wasAllDayCollapsed && newAllDayRow) {
-            newAllDayRow.addClass('collapsed');
-            const toggleBtn = newAllDayRow.querySelector('.section-toggle-btn');
-            if (toggleBtn) toggleBtn.setText('+');
-        }
-
-        // Restore selected task handles AFTER scroll/toggle restoration
+        // Restore selected task handles AFTER scroll restoration
         // Use requestAnimationFrame to ensure layout is complete
         const selectedTaskId = this.handleManager.getSelectedTaskId();
         if (selectedTaskId) {
