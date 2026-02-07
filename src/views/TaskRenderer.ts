@@ -196,7 +196,8 @@ export class TaskRenderer {
             });
 
             // Handle checkboxes in children container
-            this.setupChildCheckboxHandlers(childrenContainer, task, 0, settings);
+            const checkboxMap = this.getCheckboxChildLineIndices(task.childLines);
+            this.setupChildCheckboxHandlers(childrenContainer, task, checkboxMap, 0, settings);
         } else {
             // Render parent + children together: extract @notation for checkbox lines
             const checkboxNotations: (string | null)[] = [];
@@ -283,10 +284,13 @@ export class TaskRenderer {
 
         // For non-collapsed mode, also handle children checkboxes (old behavior)
         if (!shouldCollapse) {
+            const checkboxMap = this.getCheckboxChildLineIndices(task.childLines);
             const checkboxes = contentContainer.querySelectorAll('input[type="checkbox"]');
             checkboxes.forEach((checkbox, index) => {
-                if (index === 0) return; // Already handled above
-                const childLineIndex = index - 1;
+                if (index === 0) return; // Already handled above (parent checkbox)
+                const checkboxIndex = index - 1; // DOM checkbox index among children
+                const childLineIndex = checkboxMap[checkboxIndex];
+                if (childLineIndex === undefined) return;
 
                 checkbox.addEventListener('click', () => {
                     if (childLineIndex < task.childLines.length) {
@@ -302,7 +306,7 @@ export class TaskRenderer {
                         // Calculate child line number (supports both inline and frontmatter tasks)
                         const absoluteLineNumber = this.calculateChildLineNumber(task, childLineIndex);
                         if (absoluteLineNumber === -1) {
-                            console.warn('[TaskRenderer] 子タスクの行番号を特定できませんでした。フロントマタータスクの子タスクは更新できません。');
+                            console.warn('[TaskRenderer] 子タスクの行番号を特定できませんでした');
                             new Notice('子タスクの行番号を特定できませんでした。ファイル内で直接編集してください。');
                             return;
                         }
@@ -355,10 +359,11 @@ export class TaskRenderer {
     /**
      * Setup checkbox handlers for children in a collapsed container
      */
-    private setupChildCheckboxHandlers(container: HTMLElement, task: Task, startOffset: number, settings: TaskViewerSettings): void {
+    private setupChildCheckboxHandlers(container: HTMLElement, task: Task, checkboxMap: number[], startOffset: number, settings: TaskViewerSettings): void {
         const checkboxes = container.querySelectorAll('input[type="checkbox"]');
         checkboxes.forEach((checkbox, index) => {
-            const childLineIndex = startOffset + index;
+            const childLineIndex = checkboxMap[startOffset + index];
+            if (childLineIndex === undefined) return;
 
             checkbox.addEventListener('click', () => {
                 if (childLineIndex < task.childLines.length) {
@@ -367,6 +372,7 @@ export class TaskRenderer {
                     if (match) {
                         const currentChar = match[1];
                         const newChar = currentChar === ' ' ? 'x' : ' ';
+                        childLine = childLine.replace(`[${currentChar}]`, `[${newChar}]`);
                         this.updateCheckboxDataTask(checkbox as HTMLElement, newChar);
                     }
 
@@ -471,6 +477,21 @@ export class TaskRenderer {
         }
 
         menu.showAtPosition({ x: e.pageX, y: e.pageY });
+    }
+
+    /**
+     * Build a mapping from checkbox DOM index to childLines array index.
+     * Only lines matching `- [.]` produce checkboxes in rendered HTML,
+     * but childLines may also contain non-checkbox content (descriptions, bullets, etc.).
+     */
+    private getCheckboxChildLineIndices(childLines: string[]): number[] {
+        const indices: number[] = [];
+        childLines.forEach((line, i) => {
+            if (/^\s*-\s*\[.\]/.test(line)) {
+                indices.push(i);
+            }
+        });
+        return indices;
     }
 
     /**
