@@ -76,6 +76,8 @@ export class HabitTrackerRenderer {
      * Write a habit value to the daily note's frontmatter.
      * Auto-creates the daily note if it doesn't exist.
      * value === undefined/null/'' → delete the key.
+     *
+     * Uses vault.process() directly (NOT processFrontMatter) to avoid race conditions.
      */
     private async setHabitValue(date: string, habitName: string, value: any): Promise<void> {
         const [y, m, d] = date.split('-').map(Number);
@@ -87,17 +89,75 @@ export class HabitTrackerRenderer {
         }
         if (!file) return;
 
-        // @ts-ignore — processFrontMatter is available since Obsidian 1.0
-        await this.app.fileManager.processFrontMatter(file, (frontmatter: any) => {
-            if (value === undefined || value === null || value === '') {
-                delete frontmatter[habitName];
-            } else {
-                frontmatter[habitName] = value;
-            }
-        });
+        const keyOrderer = new FrontmatterKeyOrderer(this.plugin.settings);
 
-        // Post-process: reorder keys to match defined order
-        await this.reorderFrontmatterKeys(file);
+        await this.app.vault.process(file, (content) => {
+            const lines = content.split('\n');
+
+            // Parse frontmatter boundaries
+            if (lines[0]?.trim() !== '---') {
+                // No frontmatter: create one with habit key
+                if (value === undefined || value === null || value === '') return content;
+                const fmLine = typeof value === 'boolean' ? `${habitName}: ${value}` : `${habitName}: ${value}`;
+                return `---\n${fmLine}\n---\n${content}`;
+            }
+
+            let fmEnd = -1;
+            for (let i = 1; i < lines.length; i++) {
+                if (lines[i].trim() === '---') { fmEnd = i; break; }
+            }
+            if (fmEnd < 0) return content;
+
+            // PASS 1: Collect all frontmatter keys and values
+            const allFields: Map<string, string> = new Map();
+            const originalIndices: Map<string, number> = new Map();
+
+            let keyIndex = 0;
+            for (let i = 1; i < fmEnd; i++) {
+                const keyMatch = lines[i].match(/^(\w+)\s*:/);
+                if (!keyMatch) continue;
+
+                const key = keyMatch[1];
+                const colonIndex = lines[i].indexOf(':');
+                const val = lines[i].substring(colonIndex + 1).trim();
+                allFields.set(key, val || '');
+                originalIndices.set(key, keyIndex++);
+            }
+
+            // Apply habit update
+            if (value === undefined || value === null || value === '') {
+                allFields.delete(habitName);
+                originalIndices.delete(habitName);
+            } else {
+                const strValue = typeof value === 'boolean' ? String(value) : String(value);
+                allFields.set(habitName, strValue);
+                if (!originalIndices.has(habitName)) {
+                    originalIndices.set(habitName, keyIndex++);
+                }
+            }
+
+            // PASS 2: Sort keys and rebuild
+            const sortedKeys = keyOrderer.sortKeys(Array.from(allFields.keys()), originalIndices);
+
+            const newFrontmatterLines: string[] = [];
+            for (const key of sortedKeys) {
+                const val = allFields.get(key);
+                if (val === '') {
+                    newFrontmatterLines.push(`${key}:`);
+                } else {
+                    newFrontmatterLines.push(`${key}: ${val}`);
+                }
+            }
+
+            const newLines = [
+                lines[0],  // opening ---
+                ...newFrontmatterLines,
+                lines[fmEnd],  // closing ---
+                ...lines.slice(fmEnd + 1)
+            ];
+
+            return newLines.join('\n');
+        });
     }
 
     // ==================== Rendering ====================
@@ -212,64 +272,6 @@ export class HabitTrackerRenderer {
                     display.style.display = '';
                 }
             });
-        });
-    }
-
-    /**
-     * Reorder frontmatter keys after processFrontMatter writes.
-     * This ensures keys follow the defined order: task keys → habit keys → unknown keys
-     */
-    private async reorderFrontmatterKeys(file: TFile): Promise<void> {
-        const keyOrderer = new FrontmatterKeyOrderer(this.plugin.settings);
-
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-            if (lines[0]?.trim() !== '---') return content;
-
-            let fmEnd = -1;
-            for (let i = 1; i < lines.length; i++) {
-                if (lines[i].trim() === '---') { fmEnd = i; break; }
-            }
-            if (fmEnd < 0) return content;
-
-            // Collect all frontmatter keys and values
-            const allFields: Map<string, string> = new Map();
-            const originalIndices: Map<string, number> = new Map();
-
-            let keyIndex = 0;
-            for (let i = 1; i < fmEnd; i++) {
-                const keyMatch = lines[i].match(/^(\w+)\s*:/);
-                if (!keyMatch) continue;
-
-                const key = keyMatch[1];
-                const colonIndex = lines[i].indexOf(':');
-                const value = lines[i].substring(colonIndex + 1).trim();
-                allFields.set(key, value || '');
-                originalIndices.set(key, keyIndex++);
-            }
-
-            // Sort keys
-            const sortedKeys = keyOrderer.sortKeys(Array.from(allFields.keys()), originalIndices);
-
-            // Rebuild frontmatter
-            const newFrontmatterLines: string[] = [];
-            for (const key of sortedKeys) {
-                const value = allFields.get(key);
-                if (value === '') {
-                    newFrontmatterLines.push(`${key}:`);
-                } else {
-                    newFrontmatterLines.push(`${key}: ${value}`);
-                }
-            }
-
-            const newLines = [
-                lines[0],  // opening ---
-                ...newFrontmatterLines,
-                lines[fmEnd],  // closing ---
-                ...lines.slice(fmEnd + 1)
-            ];
-
-            return newLines.join('\n');
         });
     }
 }
