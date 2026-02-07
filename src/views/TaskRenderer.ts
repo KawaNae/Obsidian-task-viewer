@@ -99,7 +99,7 @@ export class TaskRenderer {
         let cleanParentLine = `- [${statusChar}] ${overdueIcon}${task.content}`;
 
         // Append source file link
-        const fileName = task.file.split('/').pop()?.replace('.md', '') || task.file;
+        const fileName = task.file.replace(/\.md$/, '');
         const hasContent = cleanParentLine.replace(/^- \[[xX! -]\]\s*/, '').trim().length > 0;
 
         if (hasContent) {
@@ -272,6 +272,11 @@ export class TaskRenderer {
                     e.stopPropagation();
                     this.showCheckboxStatusMenu(e as MouseEvent, task.id);
                 });
+
+                // Prevent touch event propagation to task card
+                mainCheckbox.addEventListener('touchstart', (e) => {
+                    e.stopPropagation();
+                });
             }
         }
 
@@ -311,6 +316,11 @@ export class TaskRenderer {
                         e.preventDefault();
                         e.stopPropagation();
                         this.showChildCheckboxStatusMenu(e as MouseEvent, task, childLineIndex);
+                    });
+
+                    // Prevent touch event propagation to task card
+                    checkbox.addEventListener('touchstart', (e) => {
+                        e.stopPropagation();
                     });
                 }
             });
@@ -378,6 +388,11 @@ export class TaskRenderer {
                     e.preventDefault();
                     e.stopPropagation();
                     this.showChildCheckboxStatusMenu(e as MouseEvent, task, childLineIndex);
+                });
+
+                // Prevent touch event propagation to task card
+                checkbox.addEventListener('touchstart', (e) => {
+                    e.stopPropagation();
                 });
             }
         });
