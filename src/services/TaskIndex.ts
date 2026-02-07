@@ -123,6 +123,19 @@ export class TaskIndex {
         }, this.NOTIFY_DEBOUNCE_MS);
     }
 
+    /**
+     * 即時通知（debounceなし）。
+     * ドラッグ完了後にDOMを即座に更新する必要がある場合に使用。
+     * 既存のdebounceタイマーはキャンセルして即座に実行する。
+     */
+    notifyImmediate(): void {
+        if (this.notifyDebounceTimer) {
+            clearTimeout(this.notifyDebounceTimer);
+            this.notifyDebounceTimer = null;
+        }
+        this.store.notifyListeners();
+    }
+
     // ===== ドラッグ制御 =====
 
     /**

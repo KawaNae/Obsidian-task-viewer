@@ -14,7 +14,6 @@ export class DragHandler implements DragContext {
     public onTaskClick: (taskId: string) => void;
 
     private currentStrategy: DragStrategy | null = null;
-    private dragTaskRef: Task | null = null;
     private currentDoc: Document;
     private getViewStartDateProvider: () => string;
 
@@ -111,8 +110,6 @@ export class DragHandler implements DragContext {
         const task = this.taskIndex.getTask(taskId);
         if (!task) return;
 
-        this.dragTaskRef = task;
-
         // Select Strategy based on handle type (move or resize)
         const handleTarget = e.target as HTMLElement;
         const isResizeHandle = handleTarget.closest('.task-card__handle--resize-top') ||
@@ -150,19 +147,17 @@ export class DragHandler implements DragContext {
         if (this.currentStrategy) {
             await this.currentStrategy.onUp(e, this);
 
-            // Wait for any pending scans triggered by vault.modify/metadataCache.changed
-            if (this.dragTaskRef) {
-                await this.taskIndex.waitForScan(this.dragTaskRef.file);
-            }
+            // 即座にDOMを再構築。cleanup()と同一JSフレーム内で実行されるため
+            // ブラウザがペイントする前に旧カードが新カードで置き換わる。
+            this.taskIndex.notifyImmediate();
 
-            // Clear the dragging flag and trigger final render in RAF
-            // This ensures metadataCache.changed events have completed before clearing
+            // draggingFilePathは遅延イベント(metadataCache.changed)を
+            // ブロックするためRAF内でクリア
             requestAnimationFrame(() => {
                 this.taskIndex.setDraggingFile(null);
             });
         }
         this.currentStrategy = null;
-        this.dragTaskRef = null;
     }
 
     /**
