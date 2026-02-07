@@ -1,6 +1,6 @@
 import { Component, Menu } from 'obsidian';
 import TaskViewerPlugin from '../../../main';
-import { MenuHandler } from '../../../interaction/MenuHandler';
+import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
 import { ViewUtils } from '../../ViewUtils';
 import { TaskLayout } from '../../../services/TaskLayout';
@@ -197,16 +197,21 @@ export class TimelineSectionRenderer {
 
         // Long Press (Touch)
         let touchTimer: NodeJS.Timeout | null = null;
+        let touchStartX: number = 0;
+        let touchStartY: number = 0;
         col.addEventListener('touchstart', (e) => {
             if (e.target === col && e.touches.length === 1) {
                 const touch = e.touches[0];
                 // Calculate offsetY relative to col
                 const rect = col.getBoundingClientRect();
                 const offsetY = touch.clientY - rect.top;
+                touchStartX = touch.clientX;
+                touchStartY = touch.clientY;
 
                 touchTimer = setTimeout(() => {
-                    this.handleCreateTaskTrigger(offsetY, date);
-                }, 500); // 500ms long press
+                    // Show context menu instead of directly opening modal
+                    this.showEmptySpaceMenu(touchStartX, touchStartY, offsetY, date);
+                }, this.plugin.settings.longPressThreshold);
             }
         });
 

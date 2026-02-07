@@ -1,9 +1,9 @@
-import { TaskIndex } from '../services/TaskIndex';
-import { Task } from '../types';
-import TaskViewerPlugin from '../main';
+import { TaskIndex } from '../../services/TaskIndex';
+import { Task } from '../../types';
+import TaskViewerPlugin from '../../main';
 import { DragStrategy, DragContext } from './DragStrategy';
-import { TimelineDragStrategy } from './strategies/TimelineDragStrategy';
-import { AllDayDragStrategy } from './strategies/AllDayDragStrategy';
+import { MoveStrategy } from './strategies/MoveStrategy';
+import { ResizeStrategy } from './strategies/ResizeStrategy';
 
 
 export class DragHandler implements DragContext {
@@ -14,6 +14,7 @@ export class DragHandler implements DragContext {
     public onTaskClick: (taskId: string) => void;
 
     private currentStrategy: DragStrategy | null = null;
+    private dragTaskRef: Task | null = null;
     private currentDoc: Document;
     private getViewStartDateProvider: () => string;
 
@@ -110,26 +111,25 @@ export class DragHandler implements DragContext {
         const task = this.taskIndex.getTask(taskId);
         if (!task) return;
 
-        // Select Strategy
-        // Determine if this is an AllDay task (either no startTime, or 24h+ duration with startTime)
-        const isAllDayTask = this.isAllDayTask(task);
+        this.dragTaskRef = task;
 
-        if (isAllDayTask) {
-            // AllDay/LongTerm tasks require handle to drag
-            if (!isFromHandle) {
-                // Not from handle: just select the task, don't start drag
-                this.onTaskClick(taskId);
-                return;
-            }
-            this.currentStrategy = new AllDayDragStrategy();
+        // Select Strategy based on handle type (move or resize)
+        const handleTarget = e.target as HTMLElement;
+        const isResizeHandle = handleTarget.closest('.task-card__handle--resize-top') ||
+            handleTarget.closest('.task-card__handle--resize-bottom') ||
+            handleTarget.closest('.task-card__handle--resize-left') ||
+            handleTarget.closest('.task-card__handle--resize-right');
+
+        // AllDay/Timeline両方でハンドルからのドラッグが必要
+        if (!isFromHandle) {
+            this.onTaskClick(taskId);
+            return;
+        }
+
+        if (isResizeHandle) {
+            this.currentStrategy = new ResizeStrategy();
         } else {
-            // Timeline tasks require handle to drag
-            if (!isFromHandle) {
-                // Not from handle: just select the task, don't start drag
-                this.onTaskClick(taskId);
-                return;
-            }
-            this.currentStrategy = new TimelineDragStrategy();
+            this.currentStrategy = new MoveStrategy();
         }
 
         if (this.currentStrategy) {
@@ -149,10 +149,20 @@ export class DragHandler implements DragContext {
     private async onPointerUp(e: PointerEvent) {
         if (this.currentStrategy) {
             await this.currentStrategy.onUp(e, this);
-            // ドラッグ終了：フラグ解除＆最終レンダリングをトリガー
-            this.taskIndex.setDraggingFile(null);
+
+            // Wait for any pending scans triggered by vault.modify/metadataCache.changed
+            if (this.dragTaskRef) {
+                await this.taskIndex.waitForScan(this.dragTaskRef.file);
+            }
+
+            // Clear the dragging flag and trigger final render in RAF
+            // This ensures metadataCache.changed events have completed before clearing
+            requestAnimationFrame(() => {
+                this.taskIndex.setDraggingFile(null);
+            });
         }
         this.currentStrategy = null;
+        this.dragTaskRef = null;
     }
 
     /**

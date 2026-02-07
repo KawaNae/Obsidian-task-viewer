@@ -5,7 +5,8 @@ import { Task } from '../../types';
  */
 export class TouchEventHandler {
     private longPressTimer: NodeJS.Timeout | null = null;
-    private longPressThreshold = 500; // ms
+
+    constructor(private getThreshold: () => number) { }
 
     /**
      * タスク要素にコンテキストメニューを追加
@@ -24,7 +25,7 @@ export class TouchEventHandler {
                     e.preventDefault();
                     onContextMenu(touch.clientX, touch.clientY, task);
                 }
-            }, this.longPressThreshold);
+            }, this.getThreshold());
         });
 
         el.addEventListener('touchend', (e) => {

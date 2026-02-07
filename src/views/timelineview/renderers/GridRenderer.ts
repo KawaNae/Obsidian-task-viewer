@@ -1,7 +1,7 @@
 import { Component, setIcon } from 'obsidian';
 import { ViewState, isCompleteStatusChar } from '../../../types';
 import TaskViewerPlugin from '../../../main';
-import { MenuHandler } from '../../../interaction/MenuHandler';
+import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
 import { HandleManager } from '../HandleManager';
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';

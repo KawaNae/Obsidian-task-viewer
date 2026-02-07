@@ -1,7 +1,7 @@
 import { Component, Menu } from 'obsidian';
 
 import TaskViewerPlugin from '../../../main';
-import { MenuHandler } from '../../../interaction/MenuHandler';
+import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
 import { ViewUtils } from '../../ViewUtils';
 import { TaskIndex } from '../../../services/TaskIndex';

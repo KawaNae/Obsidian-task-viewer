@@ -251,6 +251,8 @@ export interface TaskViewerSettings {
     upcomingDays: number; // Days from tomorrow to consider as "Upcoming" in deadline list (default: 7)
     pastDaysToShow: number; // Number of past days to always show in timeline (default: 0)
     habits: HabitDefinition[]; // User-defined habit list (empty = feature invisible)
+    // Interaction
+    longPressThreshold: number; // Long press duration in ms for touch context menu (default: 500)
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -268,4 +270,5 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     upcomingDays: 7,
     pastDaysToShow: 0,
     habits: [],
+    longPressThreshold: 400,
 };

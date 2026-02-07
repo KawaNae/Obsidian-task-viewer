@@ -39,7 +39,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                     this.plugin.updateGlobalStyles();
                 }));
-        
+
         new Setting(containerEl)
             .setName('Complete Status Characters')
             .setDesc('Characters that represent completed tasks (comma or space separated, e.g., "x, X, -, !").')
@@ -66,7 +66,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     this.plugin.settings.frontmatterColorKey = value;
                     await this.plugin.saveSettings();
                 }));
-        
+
         const excludedPathsSetting = new Setting(containerEl)
             .setName('Excluded Paths')
             .setDesc('Paths to exclude from task scanning (one per line). Files starting with these paths will be ignored.')
@@ -88,6 +88,20 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             textarea.style.width = '100%';
             textarea.style.minWidth = '300px';
         }
+
+        containerEl.createEl('h3', { text: 'Interaction', cls: 'setting-section-header' });
+
+        new Setting(containerEl)
+            .setName('Long Press Threshold')
+            .setDesc('Duration in milliseconds to trigger context menu on touch/stylus long press (100-2000). Lower values make it faster.')
+            .addSlider(slider => slider
+                .setLimits(100, 2000, 50)
+                .setValue(this.plugin.settings.longPressThreshold)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.longPressThreshold = value;
+                    await this.plugin.saveSettings();
+                }));
 
         containerEl.createEl('h3', { text: 'Timeline', cls: 'setting-section-header' });
 

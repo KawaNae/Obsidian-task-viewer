@@ -1,14 +1,14 @@
 import { App, Menu, Notice } from 'obsidian';
-import { Task } from '../types';
-import { TaskIndex } from '../services/TaskIndex';
-import TaskViewerPlugin from '../main';
-import { TouchEventHandler } from './menu/TouchEventHandler';
-import { PropertyCalculator } from './menu/PropertyCalculator';
-import { PropertyFormatter } from './menu/PropertyFormatter';
-import { PropertiesMenuBuilder } from './menu/builders/PropertiesMenuBuilder';
-import { TimerMenuBuilder } from './menu/builders/TimerMenuBuilder';
-import { MoveMenuBuilder } from './menu/builders/MoveMenuBuilder';
-import { TaskActionsMenuBuilder } from './menu/builders/TaskActionsMenuBuilder';
+import { Task } from '../../types';
+import { TaskIndex } from '../../services/TaskIndex';
+import TaskViewerPlugin from '../../main';
+import { TouchEventHandler } from './TouchEventHandler';
+import { PropertyCalculator } from './PropertyCalculator';
+import { PropertyFormatter } from './PropertyFormatter';
+import { PropertiesMenuBuilder } from './builders/PropertiesMenuBuilder';
+import { TimerMenuBuilder } from './builders/TimerMenuBuilder';
+import { MoveMenuBuilder } from './builders/MoveMenuBuilder';
+import { TaskActionsMenuBuilder } from './builders/TaskActionsMenuBuilder';
 
 /**
  * MenuHandler - タスクコンテキストメニューの統括ファサード
@@ -31,7 +31,7 @@ export class MenuHandler {
         private plugin: TaskViewerPlugin
     ) {
         // Initialize services
-        this.touchEventHandler = new TouchEventHandler();
+        this.touchEventHandler = new TouchEventHandler(() => this.plugin.settings.longPressThreshold);
         this.propertyCalculator = new PropertyCalculator();
         this.propertyFormatter = new PropertyFormatter();
 

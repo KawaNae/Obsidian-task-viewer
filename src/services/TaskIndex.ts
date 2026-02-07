@@ -30,6 +30,8 @@ export class TaskIndex {
     private commandExecutor: TaskCommandExecutor;
     private settings: TaskViewerSettings;
     private draggingFilePath: string | null = null;  // ドラッグ中のファイルパス
+    private notifyDebounceTimer: NodeJS.Timeout | null = null;
+    private readonly NOTIFY_DEBOUNCE_MS = 16; // 約1フレーム
 
     constructor(private app: App, settings: TaskViewerSettings) {
         this.settings = settings;
@@ -71,14 +73,14 @@ export class TaskIndex {
 
                 await this.scanner.queueScan(file, isLocal);
                 WikiLinkResolver.resolve(this.store.getTasksMap(), this.app, this.settings.excludedPaths);
-                this.store.notifyListeners();
+                this.debouncedNotify();
             }
         });
 
         this.app.vault.on('delete', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 this.store.removeTasksByFile(file.path);
-                this.store.notifyListeners();
+                this.debouncedNotify();
             }
         });
 
@@ -86,7 +88,7 @@ export class TaskIndex {
             if (file instanceof TFile && file.extension === 'md') {
                 this.scanner.queueScan(file).then(() => {
                     WikiLinkResolver.resolve(this.store.getTasksMap(), this.app, this.settings.excludedPaths);
-                    this.store.notifyListeners();
+                    this.debouncedNotify();
                 });
             }
         });
@@ -99,12 +101,26 @@ export class TaskIndex {
                 }
                 this.scanner.queueScan(file).then(() => {
                     WikiLinkResolver.resolve(this.store.getTasksMap(), this.app, this.settings.excludedPaths);
-                    this.store.notifyListeners();
+                    this.debouncedNotify();
                 });
-                // 即時notify: color・habit等の非タスクfrontmatter変更対応
-                this.store.notifyListeners();
             }
         });
+    }
+
+    // ===== 通知制御 =====
+
+    /**
+     * notifyListenersをdebounceで呼び出す。
+     * 短時間（16ms）の連続呼び出しを統合して不要な再レンダリングを削減。
+     */
+    private debouncedNotify(): void {
+        if (this.notifyDebounceTimer) {
+            clearTimeout(this.notifyDebounceTimer);
+        }
+        this.notifyDebounceTimer = setTimeout(() => {
+            this.store.notifyListeners();
+            this.notifyDebounceTimer = null;
+        }, this.NOTIFY_DEBOUNCE_MS);
     }
 
     // ===== ドラッグ制御 =====
@@ -118,7 +134,7 @@ export class TaskIndex {
         this.draggingFilePath = filePath;
         if (filePath === null) {
             // ドラッグ終了時に最終レンダリングをトリガー
-            this.store.notifyListeners();
+            this.debouncedNotify();
         }
     }
 

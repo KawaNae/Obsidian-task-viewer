@@ -2,8 +2,8 @@ import { ItemView, WorkspaceLeaf } from 'obsidian';
 import { TaskRenderer } from '../TaskRenderer';
 import { TaskIndex } from '../../services/TaskIndex';
 import { Task, ViewState, isCompleteStatusChar } from '../../types';
-import { DragHandler } from '../../interaction/DragHandler';
-import { MenuHandler } from '../../interaction/MenuHandler';
+import { DragHandler } from '../../interaction/drag/DragHandler';
+import { MenuHandler } from '../../interaction/menu/MenuHandler';
 
 import { DateUtils } from '../../utils/DateUtils';
 
@@ -305,9 +305,11 @@ export class TimelineView extends ItemView {
         }
 
         // Header
-        targetColumn.createEl('p', { text: 'Deadline List', attr: {
-            style: 'padding: 10px; border-bottom: 1px solid var(--background-modifier-border); margin: 0;font-size: 0.8em;color: var(--text-muted);'
-        } });
+        targetColumn.createEl('p', {
+            text: 'Deadline List', attr: {
+                style: 'padding: 10px; border-bottom: 1px solid var(--background-modifier-border); margin: 0;font-size: 0.8em;color: var(--text-muted);'
+            }
+        });
 
         const listContainer = targetColumn.createDiv({ cls: 'deadline-list-wrapper', attr: { style: 'flex: 1; overflow-y: auto; padding: 10px;' } });
 
