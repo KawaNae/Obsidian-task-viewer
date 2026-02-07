@@ -40,7 +40,7 @@ export class TaskIndex {
         this.store = new TaskStore(settings);
         this.validator = new TaskValidator();
         this.syncDetector = new SyncDetector();
-        this.repository = new TaskRepository(app);
+        this.repository = new TaskRepository(app, settings);
         this.commandExecutor = new TaskCommandExecutor(this.repository, this, app);
         this.editorObserver = new EditorObserver(app, this.syncDetector);
         this.scanner = new TaskScanner(

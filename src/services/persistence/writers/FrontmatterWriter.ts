@@ -1,6 +1,7 @@
 import { App, TFile } from 'obsidian';
-import type { Task } from '../../../types';
+import type { Task, TaskViewerSettings } from '../../../types';
 import { FileOperations } from '../utils/FileOperations';
+import { FrontmatterKeyOrderer } from '../utils/FrontmatterKeyOrderer';
 
 
 /**
@@ -8,10 +9,15 @@ import { FileOperations } from '../utils/FileOperations';
  * Frontmatterフィールドの更新、削除、挿入などの操作を提供
  */
 export class FrontmatterWriter {
+    private keyOrderer: FrontmatterKeyOrderer;
+
     constructor(
         private app: App,
-        private fileOps: FileOperations
-    ) { }
+        private fileOps: FileOperations,
+        private settings: TaskViewerSettings
+    ) {
+        this.keyOrderer = new FrontmatterKeyOrderer(settings);
+    }
 
     /**
      * Frontmatter タスクの日付・ステータス等を更新する。
@@ -93,6 +99,7 @@ export class FrontmatterWriter {
     /**
      * frontmatter 内のキーを原子的に更新・追加・削除する。
      * value: null → キー削除, '' → `key:` (YAML null), その他 → `key: value`
+     * キーは優先順位に従ってソートされる（task keys → habit keys → unknown keys）
      */
     private async updateFrontmatterFields(filePath: string, updates: Record<string, string | null>): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
@@ -109,41 +116,57 @@ export class FrontmatterWriter {
             }
             if (fmEnd < 0) return content;
 
-            const pending = new Map(Object.entries(updates));
+            // PASS 1: Collect all frontmatter keys and values
+            const allFields: Map<string, string | null> = new Map();
+            const originalIndices: Map<string, number> = new Map();
 
-            // 既存キーを走査して更新・削除
+            let keyIndex = 0;
             for (let i = 1; i < fmEnd; i++) {
                 const keyMatch = lines[i].match(/^(\w+)\s*:/);
                 if (!keyMatch) continue;
 
                 const key = keyMatch[1];
-                if (!pending.has(key)) continue;
+                const colonIndex = lines[i].indexOf(':');
+                const value = lines[i].substring(colonIndex + 1).trim();
+                allFields.set(key, value || '');
+                originalIndices.set(key, keyIndex++);  // Record original order
+            }
 
-                const newValue = pending.get(key);
-                pending.delete(key);
-
-                if (newValue === null) {
-                    // キーを削除
-                    lines.splice(i, 1);
-                    fmEnd--;
-                    i--;
+            // Apply updates
+            for (const [key, value] of Object.entries(updates)) {
+                if (value === null) {
+                    allFields.delete(key);
+                    originalIndices.delete(key);
                 } else {
-                    lines[i] = newValue === '' ? `${key}:` : `${key}: ${newValue}`;
+                    allFields.set(key, value);
+                    // New keys get appended (highest index)
+                    if (!originalIndices.has(key)) {
+                        originalIndices.set(key, keyIndex++);
+                    }
                 }
             }
 
-            // 新規キーを閉じる --- の直前に追加
-            const newLines: string[] = [];
-            for (const [key, value] of pending) {
-                if (value !== null) {
-                    newLines.push(value === '' ? `${key}:` : `${key}: ${value}`);
+            // PASS 2: Sort keys and rebuild
+            const sortedKeys = this.keyOrderer.sortKeys(Array.from(allFields.keys()), originalIndices);
+
+            const newFrontmatterLines: string[] = [];
+            for (const key of sortedKeys) {
+                const value = allFields.get(key);
+                if (value === '') {
+                    newFrontmatterLines.push(`${key}:`);
+                } else {
+                    newFrontmatterLines.push(`${key}: ${value}`);
                 }
             }
-            if (newLines.length > 0) {
-                lines.splice(fmEnd, 0, ...newLines);
-            }
 
-            return lines.join('\n');
+            const newLines = [
+                lines[0],  // opening ---
+                ...newFrontmatterLines,
+                lines[fmEnd],  // closing ---
+                ...lines.slice(fmEnd + 1)
+            ];
+
+            return newLines.join('\n');
         });
     }
 
