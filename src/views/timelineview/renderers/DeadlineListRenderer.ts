@@ -2,7 +2,7 @@ import { Component, Menu } from 'obsidian';
 import { Task, isCompleteStatusChar } from '../../../types';
 import { TaskRenderer } from '../../TaskRenderer';
 import { DateUtils } from '../../../utils/DateUtils';
-import { MenuHandler } from '../../../interaction/MenuHandler';
+import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import TaskViewerPlugin from '../../../main';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { ViewUtils } from '../../ViewUtils';
@@ -46,7 +46,7 @@ export class DeadlineListRenderer {
                 completed.push(task);
             } else if (deadlineDate < today) {
                 overdue.push(task);
-            } else if (deadlineDate > today && deadlineDate <= upcomingEnd) {
+            } else if (deadlineDate >= today && deadlineDate <= upcomingEnd) {
                 upcoming.push(task);
             } else {
                 notCompleted.push(task);

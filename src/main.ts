@@ -1,9 +1,9 @@
 import { Plugin, WorkspaceLeaf, setIcon } from 'obsidian';
-import { TaskIndex } from './services/TaskIndex';
+import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/ScheduleView';
 import { PomodoroView, VIEW_TYPE_POMODORO } from './views/PomodoroView';
-import { PomodoroService } from './services/PomodoroService';
+import { PomodoroService } from './services/execution/PomodoroService';
 import { TimerWidget } from './widgets/TimerWidget';
 import { TaskViewerSettings, DEFAULT_SETTINGS } from './types';
 import { TaskViewerSettingTab } from './settings';

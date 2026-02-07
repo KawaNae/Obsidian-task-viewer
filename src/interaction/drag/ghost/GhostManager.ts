@@ -1,4 +1,4 @@
-import { DateUtils } from '../utils/DateUtils';
+import { DateUtils } from '../../../utils/DateUtils';
 import { createGhostElement, removeGhostElement } from './GhostFactory';
 
 export interface GhostSegment {
@@ -46,7 +46,7 @@ export class GhostManager {
 
             if (dayCol) {
                 const rect = dayCol.getBoundingClientRect();
-                
+
                 // Account for border-top of day-timeline-column
                 // getBoundingClientRect() returns border-box coordinates (outside of border)
                 // but position: absolute children reference padding-box (inside of border)
@@ -67,7 +67,7 @@ export class GhostManager {
                 // --- Manage Split Classes and Inline Styles Dynamically ---
                 // Remove relevant classes inherited from sourceEl
                 ghost.classList.remove('task-card--split', 'task-card--split-before', 'task-card--split-after');
-                
+
                 // Reset split-related inline styles (GhostFactory sets these, which override CSS classes)
                 ghost.style.borderTop = '';
                 ghost.style.borderBottom = '';
@@ -78,9 +78,9 @@ export class GhostManager {
 
                 if (segments.length > 1) {
                     ghost.classList.add('task-card--split');
-                    
+
                     // Get accent color for dashed border
-                    const accentColor = getComputedStyle(sourceEl).getPropertyValue('--file-accent').trim() 
+                    const accentColor = getComputedStyle(sourceEl).getPropertyValue('--file-accent').trim()
                         || getComputedStyle(document.documentElement).getPropertyValue('--interactive-accent').trim()
                         || '#7c3aed';
 

@@ -8,7 +8,7 @@ import { App, Notice } from 'obsidian';
 import TaskViewerPlugin from '../main';
 import { TimerInstance } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
-import { TaskParser } from '../services/TaskParser';
+import { TaskParser } from '../services/parsing/TaskParser';
 import { Task } from '../types';
 
 export class TimerRecorder {
@@ -38,24 +38,7 @@ export class TimerRecorder {
         const taskObj = this.createTaskObject(label, startDateStr, startTimeStr, endDateStr, endTimeStr);
         const formattedLine = TaskParser.format(taskObj);
 
-        if (timer.taskOriginalText && timer.taskFile) {
-            // Use stored originalText for reliable lookup (avoids stale line number issues)
-            const childIndent = this.getChildIndent(timer.taskOriginalText);
-            const childLine = childIndent + formattedLine;
-            const taskRepository = this.plugin.getTaskRepository();
-
-            // Create a minimal task object with the info we need
-            const taskForInsert = {
-                file: timer.taskFile,
-                originalText: timer.taskOriginalText,
-                line: -1, // Will be looked up by originalText
-            };
-            await taskRepository.insertLineAsFirstChild(taskForInsert as any, childLine);
-        } else if (timer.taskId.startsWith('daily-')) {
-            // Daily note timer - add completed task directly to daily note
-            const dailyDate = timer.taskId.replace('daily-', '');
-            await this.addTimerRecordToDailyNote(dailyDate, formattedLine);
-        }
+        await this.insertChildRecord(timer, formattedLine);
 
         new Notice('🍅 Pomodoro recorded!');
     }
@@ -81,24 +64,7 @@ export class TimerRecorder {
         const taskObj = this.createTaskObject(label, startDateStr, startTimeStr, endDateStr, endTimeStr);
         const formattedLine = TaskParser.format(taskObj);
 
-        if (timer.taskOriginalText && timer.taskFile) {
-            // Use stored originalText for reliable lookup (avoids stale line number issues)
-            const childIndent = this.getChildIndent(timer.taskOriginalText);
-            const childLine = childIndent + formattedLine;
-            const taskRepository = this.plugin.getTaskRepository();
-
-            // Create a minimal task object with the info we need
-            const taskForInsert = {
-                file: timer.taskFile,
-                originalText: timer.taskOriginalText,
-                line: -1, // Will be looked up by originalText
-            };
-            await taskRepository.insertLineAsFirstChild(taskForInsert as any, childLine);
-        } else if (timer.taskId.startsWith('daily-')) {
-            // Daily note timer - add completed task directly to daily note
-            const dailyDate = timer.taskId.replace('daily-', '');
-            await this.addTimerRecordToDailyNote(dailyDate, formattedLine);
-        }
+        await this.insertChildRecord(timer, formattedLine);
 
         new Notice(`⏱️ Timer recorded! (${this.formatElapsedTime(timer.elapsedTime)})`);
     }
@@ -137,6 +103,39 @@ export class TimerRecorder {
         }
 
         new Notice(`⏱️ Task updated! (${this.formatElapsedTime(timer.elapsedTime)})`);
+    }
+
+    /**
+     * Insert a child record line for the given timer.
+     * Frontmatter tasks use heading-based insertion; inline tasks use originalText-based lookup.
+     */
+    private async insertChildRecord(timer: TimerInstance, formattedLine: string): Promise<void> {
+        if (timer.parserId === 'frontmatter' && timer.taskFile) {
+            // Frontmatter task: insert under configured heading
+            const taskRepository = this.plugin.getTaskRepository();
+            await taskRepository.insertLineAfterFrontmatter(
+                timer.taskFile,
+                formattedLine,
+                this.plugin.settings.frontmatterTaskHeader,
+                this.plugin.settings.frontmatterTaskHeaderLevel
+            );
+        } else if (timer.taskOriginalText && timer.taskFile) {
+            // Inline task: use originalText for reliable lookup
+            const childIndent = this.getChildIndent(timer.taskOriginalText);
+            const childLine = childIndent + formattedLine;
+            const taskRepository = this.plugin.getTaskRepository();
+
+            const taskForInsert = {
+                file: timer.taskFile,
+                originalText: timer.taskOriginalText,
+                line: -1, // 行番号不明 → findTaskLineNumber で originalText ベース検索を強制
+            };
+            await taskRepository.insertLineAsFirstChild(taskForInsert as any, childLine);
+        } else if (timer.taskId.startsWith('daily-')) {
+            // Daily note timer
+            const dailyDate = timer.taskId.replace('daily-', '');
+            await this.addTimerRecordToDailyNote(dailyDate, formattedLine);
+        }
     }
 
     /**
@@ -188,7 +187,9 @@ export class TimerRecorder {
             explicitEndTime: true,
             commands: [],
             originalText: '',
-            childLines: []
+            childLines: [],
+            childLineBodyOffsets: [],
+            parserId: 'at-notation'
         };
     }
 

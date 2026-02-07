@@ -1,11 +1,13 @@
-import { Task } from '../../types';
-import { ParserStrategy } from './ParserStrategy';
+import { Task } from '../../../types';
+import { ParserStrategy } from '../strategies/ParserStrategy';
 
 /**
  * Task Viewer native notation parser.
  * Supports: @start>end>deadline format with time support.
  */
-export class TaskViewerParser implements ParserStrategy {
+export class AtNotationParser implements ParserStrategy {
+    readonly id = 'at-notation';
+
     // Regex to match basic task structure: - [x] ...
     private static readonly BASIC_TASK_REGEX = /^(\s*)-\s*\[(.)]\s*(.*)$/;
 
@@ -24,7 +26,7 @@ export class TaskViewerParser implements ParserStrategy {
         const taskPart = flowSplit[0];
         const flowPart = flowSplit[1] || '';
 
-        const match = taskPart.match(TaskViewerParser.BASIC_TASK_REGEX);
+        const match = taskPart.match(AtNotationParser.BASIC_TASK_REGEX);
         if (!match) {
             return null;
         }
@@ -141,24 +143,24 @@ export class TaskViewerParser implements ParserStrategy {
 
         // Validate task data during parse
         let validationWarning: string | undefined;
-        
+
         // Rule 1: Check for invalid same-day time range (endTime < startTime)
         if (date && startTime && endTime && endDate && date === endDate) {
             const [startH, startM] = startTime.split(':').map(Number);
             const [endH, endM] = endTime.split(':').map(Number);
             const startMinutes = startH * 60 + startM;
             const endMinutes = endH * 60 + endM;
-            
+
             if (endMinutes < startMinutes) {
                 validationWarning = `Invalid time range: end time (${endTime}) is before start time (${startTime}) on the same day. Use explicit end date for overnight tasks (e.g., @${date}T${startTime}>${endDate + ' next day'}T${endTime}).`;
             }
         }
-        
+
         // Rule 2: End time without start time
         if (endTime && !startTime) {
             validationWarning = `End time specified without start time.`;
         }
-        
+
         // Rule 3: Deadline must have a date
         if (deadline && !deadline.match(/\d{4}-\d{2}-\d{2}/)) {
             validationWarning = `Deadline must include a date (YYYY-MM-DD).`;
@@ -184,6 +186,8 @@ export class TaskViewerParser implements ParserStrategy {
             commands,
             originalText: line,
             childLines: [],
+            childLineBodyOffsets: [],
+            parserId: this.id,
             validationWarning
         };
     }
@@ -202,9 +206,9 @@ export class TaskViewerParser implements ParserStrategy {
         let match;
 
         // Reset lastIndex because regex is global
-        TaskViewerParser.COMMAND_REGEX.lastIndex = 0;
+        AtNotationParser.COMMAND_REGEX.lastIndex = 0;
 
-        while ((match = TaskViewerParser.COMMAND_REGEX.exec(flowStr)) !== null) {
+        while ((match = AtNotationParser.COMMAND_REGEX.exec(flowStr)) !== null) {
             const name = match[1];
             const argsStr = match[2];
             const modifiersStr = match[3];
@@ -215,8 +219,8 @@ export class TaskViewerParser implements ParserStrategy {
             if (modifiersStr) {
                 let modMatch;
                 // Reset modifier regex
-                TaskViewerParser.MODIFIER_REGEX.lastIndex = 0;
-                while ((modMatch = TaskViewerParser.MODIFIER_REGEX.exec(modifiersStr)) !== null) {
+                AtNotationParser.MODIFIER_REGEX.lastIndex = 0;
+                while ((modMatch = AtNotationParser.MODIFIER_REGEX.exec(modifiersStr)) !== null) {
                     modifiers.push({
                         name: modMatch[1],
                         args: modMatch[2].split(',').map(s => s.trim()).filter(s => s !== '')

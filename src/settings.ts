@@ -39,7 +39,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                     this.plugin.updateGlobalStyles();
                 }));
-        
+
         new Setting(containerEl)
             .setName('Complete Status Characters')
             .setDesc('Characters that represent completed tasks (comma or space separated, e.g., "x, X, -, !").')
@@ -66,7 +66,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     this.plugin.settings.frontmatterColorKey = value;
                     await this.plugin.saveSettings();
                 }));
-        
+
         const excludedPathsSetting = new Setting(containerEl)
             .setName('Excluded Paths')
             .setDesc('Paths to exclude from task scanning (one per line). Files starting with these paths will be ignored.')
@@ -88,6 +88,20 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             textarea.style.width = '100%';
             textarea.style.minWidth = '300px';
         }
+
+        containerEl.createEl('h3', { text: 'Interaction', cls: 'setting-section-header' });
+
+        new Setting(containerEl)
+            .setName('Long Press Threshold')
+            .setDesc('Duration in milliseconds to trigger context menu on touch/stylus long press (100-2000). Lower values make it faster.')
+            .addSlider(slider => slider
+                .setLimits(100, 2000, 50)
+                .setValue(this.plugin.settings.longPressThreshold)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.longPressThreshold = value;
+                    await this.plugin.saveSettings();
+                }));
 
         containerEl.createEl('h3', { text: 'Timeline', cls: 'setting-section-header' });
 
@@ -153,7 +167,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Upcoming Days')
-            .setDesc('Number of days (from tomorrow) to show as "Upcoming" in the Deadline list. Set to 0 to hide the Upcoming group.')
+            .setDesc('Number of days (from today) to show as "Upcoming" in the Deadline list. Set to 0 to hide the Upcoming group.')
             .addText(text => text
                 .setPlaceholder('7')
                 .setValue(this.plugin.settings.upcomingDays.toString())
@@ -186,6 +200,31 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 .setDynamicTooltip()
                 .onChange(async (value) => {
                     this.plugin.settings.dailyNoteHeaderLevel = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        containerEl.createEl('h3', { text: 'Frontmatter Tasks', cls: 'setting-section-header' });
+
+        new Setting(containerEl)
+            .setName('Child Task Heading')
+            .setDesc('The heading under which new child tasks will be inserted in frontmatter task files.')
+            .addText(text => text
+                .setPlaceholder('Tasks')
+                .setValue(this.plugin.settings.frontmatterTaskHeader)
+                .onChange(async (value) => {
+                    this.plugin.settings.frontmatterTaskHeader = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Child Task Heading Level')
+            .setDesc('The level of the heading (1-6).')
+            .addSlider(slider => slider
+                .setLimits(1, 6, 1)
+                .setValue(this.plugin.settings.frontmatterTaskHeaderLevel)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.frontmatterTaskHeaderLevel = value;
                     await this.plugin.saveSettings();
                 }));
 

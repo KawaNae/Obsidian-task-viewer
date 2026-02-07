@@ -1,5 +1,5 @@
 import { Task, FlowCommand } from '../types';
-import { TaskRepository } from '../services/TaskRepository';
+import { TaskRepository } from '../services/persistence/TaskRepository';
 
 export interface CommandContext {
     repository: TaskRepository;

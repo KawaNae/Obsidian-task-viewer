@@ -1,14 +1,28 @@
-import { Task } from '../types';
-import { ParserStrategy } from './parsers/ParserStrategy';
-import { TaskViewerParser } from './parsers/TaskViewerParser';
+import { Task } from '../../types';
+import { ParserStrategy } from './strategies/ParserStrategy';
+import { ParserChain } from './strategies/ParserChain';
+import { AtNotationParser } from './inline/AtNotationParser';
 
 /**
  * TaskParser facade - delegates to the active parser strategy.
  * Currently uses TaskViewerParser by default.
- * Future: Can switch strategies to support Tasks plugin, Day Planner, etc.
+ * 
+ * To support multiple parsers simultaneously:
+ * ```
+ * import { ParserChain } from './parsers/inline/ParserChain';
+ * import { AtNotationParser } from './parsers/inline/AtNotationParser';
+ * import { DataviewParser } from './parsers/inline/DataviewParser';
+ * 
+ * TaskParser.setStrategy(new ParserChain([
+ *     new AtNotationParser(),
+ *     new DataviewParser(),
+ * ]));
+ * ```
  */
 export class TaskParser {
-    private static strategy: ParserStrategy = new TaskViewerParser();
+    private static strategy: ParserStrategy = new ParserChain([
+        new AtNotationParser()
+    ]);
 
     /**
      * Set a different parser strategy.

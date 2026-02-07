@@ -181,6 +181,7 @@ export interface Task {
     indent: number;         // Leading whitespace count (spaces)
     childIds: string[];     // IDs of direct child tasks (parsed as separate Tasks)
     childLines: string[];   // Raw child lines for display (normalized indentation)
+    childLineBodyOffsets: number[];   // bodyLines index for each childLine (frontmatter: actual offsets, inline: [])
 
     // Date/Time info
     startDate?: string;      // Renamed from date, YYYY-MM-DD (Optional for D/E types)
@@ -209,6 +210,15 @@ export interface Task {
 
     // Validation warning - set during parse if task has formatting issues
     validationWarning?: string;
+
+    /** Wikilink targets extracted from body (frontmatter tasks only). Used by WikiLinkResolver. */
+    wikiLinkTargets?: string[];
+
+    /**
+     * Parser identifier - indicates which parser created this task.
+     * Used for routing logic (e.g. calculateChildLineNumber).
+     */
+    parserId: string;
 }
 
 export interface FlowCommand {
@@ -241,9 +251,14 @@ export interface TaskViewerSettings {
     completeStatusChars: string[]; // Characters that represent completed tasks (default: ['x', '-', '!'])
     excludedPaths: string[]; // Paths to exclude from task scanning
     defaultDeadlineOffset: number; // Default number of days from today for new deadline tasks (default: 0)
-    upcomingDays: number; // Days from tomorrow to consider as "Upcoming" in deadline list (default: 7)
+    upcomingDays: number; // Days from today (inclusive) to consider as "Upcoming" in deadline list (default: 7)
     pastDaysToShow: number; // Number of past days to always show in timeline (default: 0)
     habits: HabitDefinition[]; // User-defined habit list (empty = feature invisible)
+    // Frontmatter Tasks
+    frontmatterTaskHeader: string;      // Header for child task insertion in frontmatter task files (default: "Tasks")
+    frontmatterTaskHeaderLevel: number; // Header level 1-6 (default: 2)
+    // Interaction
+    longPressThreshold: number; // Long press duration in ms for touch context menu (default: 500)
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -261,4 +276,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     upcomingDays: 7,
     pastDaysToShow: 0,
     habits: [],
+    frontmatterTaskHeader: 'Tasks',
+    frontmatterTaskHeaderLevel: 2,
+    longPressThreshold: 400,
 };

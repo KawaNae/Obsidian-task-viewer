@@ -1,6 +1,6 @@
 ﻿import { CommandStrategy, CommandContext, CommandResult } from './CommandStrategy';
 import { FlowCommand, Task } from '../types';
-import { TaskParser } from '../services/TaskParser';
+import { TaskParser } from '../services/parsing/TaskParser';
 import { RecurrenceUtils } from '../utils/RecurrenceUtils';
 import { DateUtils } from '../utils/DateUtils';
 

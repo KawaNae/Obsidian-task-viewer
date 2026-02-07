@@ -1,9 +1,9 @@
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import { TaskRenderer } from '../TaskRenderer';
-import { TaskIndex } from '../../services/TaskIndex';
+import { TaskIndex } from '../../services/core/TaskIndex';
 import { Task, ViewState, isCompleteStatusChar } from '../../types';
-import { DragHandler } from '../../interaction/DragHandler';
-import { MenuHandler } from '../../interaction/MenuHandler';
+import { DragHandler } from '../../interaction/drag/DragHandler';
+import { MenuHandler } from '../../interaction/menu/MenuHandler';
 
 import { DateUtils } from '../../utils/DateUtils';
 
@@ -188,8 +188,17 @@ export class TimelineView extends ItemView {
             }
 
             if (taskId && changes) {
-                // Check if we can do partial update
-                // Only content/status changes are safe for partial update (no layout change)
+                // 日付/時刻の変更は完全レンダリングが必要（位置変更）
+                const layoutKeys = ['startDate', 'startTime', 'endDate', 'endTime', 'deadline'];
+                const hasLayoutChange = changes.some(k => layoutKeys.includes(k));
+
+                if (hasLayoutChange) {
+                    // レイアウト変更の場合は完全レンダリング
+                    this.render();
+                    return;
+                }
+
+                // コンテンツ/ステータスの変更のみが部分更新で安全
                 const safeKeys = ['status', 'statusChar', 'content', 'childLines'];
                 const isSafe = changes.every(k => safeKeys.includes(k));
 
@@ -265,10 +274,6 @@ export class TimelineView extends ItemView {
             this.lastScrollTop = scrollArea.scrollTop;
         }
 
-        // Save toggle states
-        const allDayRow = this.container.querySelector('.all-day-row');
-        const wasAllDayCollapsed = allDayRow?.hasClass('collapsed') || false;
-
         this.container.empty();
 
         // Apply Zoom Level
@@ -296,9 +301,11 @@ export class TimelineView extends ItemView {
         }
 
         // Header
-        targetColumn.createEl('p', { text: 'Deadline List', attr: {
-            style: 'padding: 10px; border-bottom: 1px solid var(--background-modifier-border); margin: 0;font-size: 0.8em;color: var(--text-muted);'
-        } });
+        targetColumn.createEl('p', {
+            text: 'Deadline List', attr: {
+                style: 'padding: 10px; border-bottom: 1px solid var(--background-modifier-border); margin: 0;font-size: 0.8em;color: var(--text-muted);'
+            }
+        });
 
         const listContainer = targetColumn.createDiv({ cls: 'deadline-list-wrapper', attr: { style: 'flex: 1; overflow-y: auto; padding: 10px;' } });
 
@@ -358,16 +365,7 @@ export class TimelineView extends ItemView {
             newScrollArea.scrollTop = this.lastScrollTop;
         }
 
-        // Restore toggle states
-        const newAllDayRow = this.container.querySelector('.all-day-row');
-
-        if (wasAllDayCollapsed && newAllDayRow) {
-            newAllDayRow.addClass('collapsed');
-            const toggleBtn = newAllDayRow.querySelector('.section-toggle-btn');
-            if (toggleBtn) toggleBtn.setText('+');
-        }
-
-        // Restore selected task handles AFTER scroll/toggle restoration
+        // Restore selected task handles AFTER scroll restoration
         // Use requestAnimationFrame to ensure layout is complete
         const selectedTaskId = this.handleManager.getSelectedTaskId();
         if (selectedTaskId) {

@@ -1,6 +1,6 @@
 import { App, Modal, Setting } from 'obsidian';
 import { Task } from '../types';
-import { TaskParser } from '../services/TaskParser';
+import { TaskParser } from '../services/parsing/TaskParser';
 
 export interface CreateTaskResult {
     content: string;
@@ -35,7 +35,9 @@ export function formatTaskLine(result: CreateTaskResult): string {
         explicitEndDate: !!result.endDate,
         explicitEndTime: !!result.endTime,
         commands: [],
-        originalText: ''
+        originalText: '',
+        childLineBodyOffsets: [],
+        parserId: 'at-notation'
     };
     return TaskParser.format(task);
 }

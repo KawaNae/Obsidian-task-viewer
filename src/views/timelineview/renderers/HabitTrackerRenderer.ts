@@ -1,7 +1,8 @@
-import { App, setIcon } from 'obsidian';
+import { App, TFile, setIcon } from 'obsidian';
 import TaskViewerPlugin from '../../../main';
 import { HabitDefinition } from '../../../types';
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
+import { FrontmatterLineEditor } from '../../../services/persistence/utils/FrontmatterLineEditor';
 
 export class HabitTrackerRenderer {
     // Persists collapsed state across re-renders (same pattern as DeadlineListRenderer)
@@ -75,6 +76,8 @@ export class HabitTrackerRenderer {
      * Write a habit value to the daily note's frontmatter.
      * Auto-creates the daily note if it doesn't exist.
      * value === undefined/null/'' → delete the key.
+     *
+     * Uses vault.process() directly (NOT processFrontMatter) to avoid race conditions.
      */
     private async setHabitValue(date: string, habitName: string, value: any): Promise<void> {
         const [y, m, d] = date.split('-').map(Number);
@@ -86,13 +89,21 @@ export class HabitTrackerRenderer {
         }
         if (!file) return;
 
-        // @ts-ignore — processFrontMatter is available since Obsidian 1.0
-        await this.app.fileManager.processFrontMatter(file, (frontmatter: any) => {
-            if (value === undefined || value === null || value === '') {
-                delete frontmatter[habitName];
-            } else {
-                frontmatter[habitName] = value;
+        await this.app.vault.process(file, (content) => {
+            const lines = content.split('\n');
+            const fmEnd = FrontmatterLineEditor.findEnd(lines);
+
+            if (fmEnd < 0) {
+                // No frontmatter: create one with habit key
+                if (value === undefined || value === null || value === '') return content;
+                return `---\n${habitName}: ${value}\n---\n${content}`;
             }
+
+            const fmValue = (value === undefined || value === null || value === '')
+                ? null
+                : String(value);
+
+            return FrontmatterLineEditor.applyUpdates(lines, fmEnd, { [habitName]: fmValue });
         });
     }
 
