@@ -1,6 +1,6 @@
 import { App, Menu, Notice } from 'obsidian';
 import { Task } from '../../types';
-import { TaskIndex } from '../../services/TaskIndex';
+import { TaskIndex } from '../../services/core/TaskIndex';
 import TaskViewerPlugin from '../../main';
 import { TouchEventHandler } from './TouchEventHandler';
 import { PropertyCalculator } from './PropertyCalculator';

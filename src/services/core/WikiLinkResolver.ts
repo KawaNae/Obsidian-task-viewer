@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import { Task } from '../types';
+import { Task } from '../../types';
 
 /**
  * `- [[name]]` パターンのwikilink子タスクを解決し、親子関係をワイアーする。

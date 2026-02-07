@@ -1,4 +1,4 @@
-import type { ValidationError } from '../TaskIndex';
+import type { ValidationError } from './TaskIndex';
 
 /**
  * バリデーションエラーの管理クラス

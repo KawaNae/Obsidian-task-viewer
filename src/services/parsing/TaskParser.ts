@@ -1,7 +1,7 @@
-import { Task } from '../types';
-import { ParserStrategy } from './parsers/inline/ParserStrategy';
-import { ParserChain } from './parsers/inline/ParserChain';
-import { AtNotationParser } from './parsers/inline/AtNotationParser';
+import { Task } from '../../types';
+import { ParserStrategy } from './strategies/ParserStrategy';
+import { ParserChain } from './strategies/ParserChain';
+import { AtNotationParser } from './inline/AtNotationParser';
 
 /**
  * TaskParser facade - delegates to the active parser strategy.

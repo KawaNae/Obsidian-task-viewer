@@ -1,5 +1,5 @@
 import { ItemView, WorkspaceLeaf, Menu } from 'obsidian';
-import { TaskIndex } from '../services/TaskIndex';
+import { TaskIndex } from '../services/core/TaskIndex';
 import { TaskRenderer } from './TaskRenderer';
 import { Task, shouldSplitTask, splitTaskAtBoundary, RenderableTask, isCompleteStatusChar } from '../types';
 import { MenuHandler } from '../interaction/menu/MenuHandler';

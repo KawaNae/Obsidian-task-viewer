@@ -1,4 +1,4 @@
-import { TaskIndex } from '../../services/TaskIndex';
+import { TaskIndex } from '../../services/core/TaskIndex';
 import { Task } from '../../types';
 
 /**

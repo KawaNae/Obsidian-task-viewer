@@ -1,9 +1,9 @@
 import { App } from 'obsidian';
-import type { Task } from '../types';
-import { FileOperations } from './repository/utils/FileOperations';
-import { InlineTaskWriter } from './repository/writers/InlineTaskWriter';
-import { FrontmatterWriter } from './repository/writers/FrontmatterWriter';
-import { TaskCloner } from './repository/TaskCloner';
+import type { Task } from '../../types';
+import { FileOperations } from './utils/FileOperations';
+import { InlineTaskWriter } from './writers/InlineTaskWriter';
+import { FrontmatterWriter } from './writers/FrontmatterWriter';
+import { TaskCloner } from './TaskCloner';
 
 /**
  * TaskRepository - タスクのファイル操作を統括するファサードクラス

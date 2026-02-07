@@ -1,5 +1,5 @@
 import { Task } from '../../../types';
-import { ParserStrategy } from './ParserStrategy';
+import { ParserStrategy } from '../strategies/ParserStrategy';
 
 /**
  * Task Viewer native notation parser.

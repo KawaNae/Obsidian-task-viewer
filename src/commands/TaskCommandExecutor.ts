@@ -1,8 +1,8 @@
 import { App, TFile } from 'obsidian';
 import { Task } from '../types';
-import { TaskRepository } from './TaskRepository';
-import { TaskIndex } from './TaskIndex';
-import { TaskParser } from './TaskParser';
+import { TaskRepository } from '../services/persistence/TaskRepository';
+import { TaskIndex } from '../services/core/TaskIndex';
+import { TaskParser } from '../services/parsing/TaskParser';
 import { CommandStrategy } from '../commands/CommandStrategy';
 import { MoveCommand } from '../commands/MoveCommand';
 import { RepeatCommand, NextCommand } from '../commands/GenerationCommands';

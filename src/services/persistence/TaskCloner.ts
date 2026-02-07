@@ -1,6 +1,6 @@
 import { App, TFile } from 'obsidian';
 import type { Task } from '../../types';
-import { TaskParser } from '../TaskParser';
+import { TaskParser } from '../parsing/TaskParser';
 import { DateUtils } from '../../utils/DateUtils';
 import { FileOperations } from './utils/FileOperations';
 

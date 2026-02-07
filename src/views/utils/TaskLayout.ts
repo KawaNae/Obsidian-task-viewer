@@ -1,5 +1,5 @@
-import { Task } from '../types';
-import { DateUtils } from '../utils/DateUtils';
+import { Task } from '../../types';
+import { DateUtils } from '../../utils/DateUtils';
 
 export class TaskLayout {
     static calculateTaskLayout(tasks: Task[], date: string, startHour: number): Map<string, { width: number, left: number, zIndex: number }> {

@@ -7,7 +7,7 @@
 
 import { ItemView, WorkspaceLeaf, Notice, Menu, setIcon } from 'obsidian';
 import TaskViewerPlugin from '../main';
-import { PomodoroService, PomodoroState, PomodoroMode } from '../services/PomodoroService';
+import { PomodoroService, PomodoroState, PomodoroMode } from '../services/execution/PomodoroService';
 import { InputModal } from '../modals/InputModal';
 
 export const VIEW_TYPE_POMODORO = 'pomodoro-view';

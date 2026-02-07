@@ -1,6 +1,6 @@
 import { App, MarkdownRenderer, Component, Menu, Notice } from 'obsidian';
 import { Task, TaskViewerSettings, isCompleteStatusChar } from '../types';
-import { TaskIndex } from '../services/TaskIndex';
+import { TaskIndex } from '../services/core/TaskIndex';
 import { DateUtils } from '../utils/DateUtils';
 
 export class TaskRenderer {

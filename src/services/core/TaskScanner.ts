@@ -1,12 +1,12 @@
 import { App, TFile } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
-import { TaskParser } from '../TaskParser';
-import { FrontmatterTaskBuilder } from '../parsers/file/FrontmatterTaskBuilder';
-import { WikiLinkResolver } from '../WikiLinkResolver';
+import { TaskParser } from '../parsing/TaskParser';
+import { FrontmatterTaskBuilder } from '../parsing/file/FrontmatterTaskBuilder';
+import { WikiLinkResolver } from './WikiLinkResolver';
 import { TaskStore } from './TaskStore';
 import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
-import { TaskCommandExecutor } from '../TaskCommandExecutor';
+import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
 
 /**
  * タスクスキャナー - ファイルのスキャンとパース処理

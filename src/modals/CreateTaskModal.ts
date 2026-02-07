@@ -1,6 +1,6 @@
 import { App, Modal, Setting } from 'obsidian';
 import { Task } from '../types';
-import { TaskParser } from '../services/TaskParser';
+import { TaskParser } from '../services/parsing/TaskParser';
 
 export interface CreateTaskResult {
     content: string;

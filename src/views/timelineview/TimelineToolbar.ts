@@ -1,6 +1,6 @@
 import { App, setIcon } from 'obsidian';
 import { ViewState, isCompleteStatusChar } from '../../types';
-import { TaskIndex } from '../../services/TaskIndex';
+import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
 import TaskViewerPlugin from '../../main';
 import { FileFilterMenu, DateNavigator, ViewModeSelector, ZoomControls } from '../ViewUtils';

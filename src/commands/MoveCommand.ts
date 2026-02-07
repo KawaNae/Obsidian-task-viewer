@@ -1,6 +1,6 @@
 import { CommandStrategy, CommandContext, CommandResult } from './CommandStrategy';
 import { FlowCommand } from '../types';
-import { TaskParser } from '../services/TaskParser';
+import { TaskParser } from '../services/parsing/TaskParser';
 
 export class MoveCommand implements CommandStrategy {
     name = 'move';

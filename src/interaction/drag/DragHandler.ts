@@ -1,4 +1,4 @@
-import { TaskIndex } from '../../services/TaskIndex';
+import { TaskIndex } from '../../services/core/TaskIndex';
 import { Task } from '../../types';
 import TaskViewerPlugin from '../../main';
 import { DragStrategy, DragContext } from './DragStrategy';

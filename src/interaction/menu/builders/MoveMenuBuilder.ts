@@ -1,6 +1,6 @@
 import { Menu } from 'obsidian';
 import { Task } from '../../../types';
-import { TaskIndex } from '../../../services/TaskIndex';
+import { TaskIndex } from '../../../services/core/TaskIndex';
 import TaskViewerPlugin from '../../../main';
 
 /**

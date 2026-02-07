@@ -1,6 +1,6 @@
 import { App, Menu } from 'obsidian';
 import { Task } from '../../../types';
-import { TaskIndex } from '../../../services/TaskIndex';
+import { TaskIndex } from '../../../services/core/TaskIndex';
 import TaskViewerPlugin from '../../../main';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { ConfirmModal } from '../../../modals/ConfirmModal';

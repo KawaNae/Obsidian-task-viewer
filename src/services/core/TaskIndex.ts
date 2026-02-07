@@ -1,13 +1,13 @@
 import { App, TFile } from 'obsidian';
-import type { Task, TaskViewerSettings } from '../types';
-import { TaskRepository } from './TaskRepository';
-import { TaskCommandExecutor } from './TaskCommandExecutor';
+import type { Task, TaskViewerSettings } from '../../types';
+import { TaskRepository } from '../persistence/TaskRepository';
+import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
 import { WikiLinkResolver } from './WikiLinkResolver';
-import { TaskStore } from './task-management/TaskStore';
-import { TaskScanner } from './task-management/TaskScanner';
-import { TaskValidator } from './task-management/TaskValidator';
-import { SyncDetector } from './task-management/SyncDetector';
-import { EditorObserver } from './task-management/EditorObserver';
+import { TaskStore } from './TaskStore';
+import { TaskScanner } from './TaskScanner';
+import { TaskValidator } from './TaskValidator';
+import { SyncDetector } from './SyncDetector';
+import { EditorObserver } from './EditorObserver';
 
 export interface ValidationError {
     file: string;

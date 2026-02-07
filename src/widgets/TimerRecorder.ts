@@ -8,7 +8,7 @@ import { App, Notice } from 'obsidian';
 import TaskViewerPlugin from '../main';
 import { TimerInstance } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
-import { TaskParser } from '../services/TaskParser';
+import { TaskParser } from '../services/parsing/TaskParser';
 import { Task } from '../types';
 
 export class TimerRecorder {

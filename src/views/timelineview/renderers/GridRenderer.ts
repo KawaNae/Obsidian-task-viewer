@@ -8,7 +8,7 @@ import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 
 import { AllDaySectionRenderer } from './AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './TimelineSectionRenderer';
-import { TaskIndex } from '../../../services/TaskIndex';
+import { TaskIndex } from '../../../services/core/TaskIndex';
 import { HabitTrackerRenderer } from './HabitTrackerRenderer';
 
 export class GridRenderer {

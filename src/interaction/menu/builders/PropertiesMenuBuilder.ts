@@ -1,6 +1,6 @@
 import { App, Menu } from 'obsidian';
 import { Task } from '../../../types';
-import { TaskIndex } from '../../../services/TaskIndex';
+import { TaskIndex } from '../../../services/core/TaskIndex';
 import TaskViewerPlugin from '../../../main';
 import { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } from '../PropertyCalculator';
 import { PropertyFormatter } from '../PropertyFormatter';
