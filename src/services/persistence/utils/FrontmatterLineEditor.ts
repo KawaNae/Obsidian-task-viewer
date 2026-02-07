@@ -1,11 +1,11 @@
-import { FrontmatterKeyOrderer } from './FrontmatterKeyOrderer';
-
 /**
  * Frontmatter の行レベル編集ユーティリティ。
  * vault.process() コールバック内で使用する静的メソッドを提供。
  *
- * 共通パターン（境界検出・キーパース・再構築）を集約し、
- * FrontmatterWriter / HabitTrackerRenderer / TaskCloner の重複を解消する。
+ * 書き込みは surgical edit（外科的編集）方式:
+ * 対象キーの行のみを更新・削除・挿入し、他の行は一切触らない。
+ * これにより YAML 配列・ブロックスカラー等のマルチライン値や
+ * キー順序が意図せず破壊されるリスクを排除する。
  */
 export class FrontmatterLineEditor {
 
@@ -22,55 +22,63 @@ export class FrontmatterLineEditor {
     }
 
     /**
-     * frontmatter 内のキーと値を Map に収集する。
-     * @returns allFields: キー → 値, originalIndices: キー → 元の順序, nextKeyIndex: 次の追加キー用インデックス
+     * frontmatter 内でトップレベルキーの行範囲 [start, end) を返す。
+     * 継続行（配列項目・ブロックスカラー等）も含む。
+     * キーが存在しない場合は null。
      */
-    static parseFields(lines: string[], fmEnd: number): {
-        allFields: Map<string, string>;
-        originalIndices: Map<string, number>;
-        nextKeyIndex: number;
-    } {
-        const allFields = new Map<string, string>();
-        const originalIndices = new Map<string, number>();
-        let keyIndex = 0;
-
+    static findKeyRange(lines: string[], fmEnd: number, key: string): [number, number] | null {
         for (let i = 1; i < fmEnd; i++) {
             const keyMatch = lines[i].match(/^([^:\s]+)\s*:/);
-            if (!keyMatch) continue;
-
-            const key = keyMatch[1];
-            const colonIndex = lines[i].indexOf(':');
-            const value = lines[i].substring(colonIndex + 1).trim();
-            allFields.set(key, value || '');
-            originalIndices.set(key, keyIndex++);
+            if (keyMatch && keyMatch[1] === key) {
+                // キー行を発見。継続行の終端を探す
+                let end = i + 1;
+                while (end < fmEnd) {
+                    if (lines[end].match(/^([^:\s]+)\s*:/)) break; // 次のキー
+                    end++;
+                }
+                return [i, end];
+            }
         }
-
-        return { allFields, originalIndices, nextKeyIndex: keyIndex };
+        return null;
     }
 
     /**
-     * allFields と keyOrderer を使って frontmatter を再構築し、コンテンツ全体を返す。
+     * Surgical frontmatter edit:
+     * 指定キーのみを更新・削除・挿入する。他の行は一切変更しない。
+     *
+     * - value: null → キー削除（継続行含む）
+     * - value: string → キー更新（既存なら置換、なければ閉じ --- の直前に挿入）
+     *
+     * @returns 編集後のコンテンツ文字列
      */
-    static rebuild(
-        lines: string[],
-        fmEnd: number,
-        allFields: Map<string, string>,
-        originalIndices: Map<string, number>,
-        keyOrderer: FrontmatterKeyOrderer
-    ): string {
-        const sortedKeys = keyOrderer.sortKeys(Array.from(allFields.keys()), originalIndices);
+    static applyUpdates(lines: string[], fmEnd: number, updates: Record<string, string | null>): string {
+        const result = [...lines];
+        let currentFmEnd = fmEnd;
 
-        const fmLines: string[] = [];
-        for (const key of sortedKeys) {
-            const value = allFields.get(key);
-            fmLines.push(value === '' ? `${key}:` : `${key}: ${value}`);
+        for (const [key, value] of Object.entries(updates)) {
+            const range = this.findKeyRange(result, currentFmEnd, key);
+
+            if (value === null) {
+                // 削除: キー行 + 継続行を除去
+                if (range) {
+                    const count = range[1] - range[0];
+                    result.splice(range[0], count);
+                    currentFmEnd -= count;
+                }
+            } else if (range) {
+                // 更新: キー行 + 継続行を単一行に置換
+                const newLine = value === '' ? `${key}:` : `${key}: ${value}`;
+                const count = range[1] - range[0];
+                result.splice(range[0], count, newLine);
+                currentFmEnd -= (count - 1);
+            } else {
+                // 挿入: 閉じ --- の直前に追加
+                const newLine = value === '' ? `${key}:` : `${key}: ${value}`;
+                result.splice(currentFmEnd, 0, newLine);
+                currentFmEnd++;
+            }
         }
 
-        return [
-            lines[0],           // opening ---
-            ...fmLines,
-            lines[fmEnd],       // closing ---
-            ...lines.slice(fmEnd + 1)
-        ].join('\n');
+        return result.join('\n');
     }
 }

@@ -1,7 +1,6 @@
 import { App, TFile } from 'obsidian';
-import type { Task, TaskViewerSettings } from '../../../types';
+import type { Task } from '../../../types';
 import { FileOperations } from '../utils/FileOperations';
-import { FrontmatterKeyOrderer } from '../utils/FrontmatterKeyOrderer';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 
 
@@ -10,15 +9,10 @@ import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
  * Frontmatterフィールドの更新、削除、挿入などの操作を提供
  */
 export class FrontmatterWriter {
-    private keyOrderer: FrontmatterKeyOrderer;
-
     constructor(
         private app: App,
         private fileOps: FileOperations,
-        private settings: TaskViewerSettings
-    ) {
-        this.keyOrderer = new FrontmatterKeyOrderer(settings);
-    }
+    ) {}
 
     /**
      * Frontmatter タスクの日付・ステータス等を更新する。
@@ -90,9 +84,8 @@ export class FrontmatterWriter {
     // --- Frontmatter helpers ---
 
     /**
-     * frontmatter 内のキーを原子的に更新・追加・削除する。
-     * value: null → キー削除, '' → `key:` (YAML null), その他 → `key: value`
-     * キーは優先順位に従ってソートされる（task keys → habit keys → unknown keys）
+     * frontmatter 内のキーを surgical edit で更新・追加・削除する。
+     * 対象キーの行のみを操作し、他の行は一切触らない。
      */
     private async updateFrontmatterFields(filePath: string, updates: Record<string, string | null>): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
@@ -103,23 +96,7 @@ export class FrontmatterWriter {
             const fmEnd = FrontmatterLineEditor.findEnd(lines);
             if (fmEnd < 0) return content;
 
-            const { allFields, originalIndices, nextKeyIndex } = FrontmatterLineEditor.parseFields(lines, fmEnd);
-
-            // Apply updates
-            let keyIndex = nextKeyIndex;
-            for (const [key, value] of Object.entries(updates)) {
-                if (value === null) {
-                    allFields.delete(key);
-                    originalIndices.delete(key);
-                } else {
-                    allFields.set(key, value);
-                    if (!originalIndices.has(key)) {
-                        originalIndices.set(key, keyIndex++);
-                    }
-                }
-            }
-
-            return FrontmatterLineEditor.rebuild(lines, fmEnd, allFields, originalIndices, this.keyOrderer);
+            return FrontmatterLineEditor.applyUpdates(lines, fmEnd, updates);
         });
     }
 

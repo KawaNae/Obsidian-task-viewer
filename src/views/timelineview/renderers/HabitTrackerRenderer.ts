@@ -2,7 +2,6 @@ import { App, TFile, setIcon } from 'obsidian';
 import TaskViewerPlugin from '../../../main';
 import { HabitDefinition } from '../../../types';
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
-import { FrontmatterKeyOrderer } from '../../../services/persistence/utils/FrontmatterKeyOrderer';
 import { FrontmatterLineEditor } from '../../../services/persistence/utils/FrontmatterLineEditor';
 
 export class HabitTrackerRenderer {
@@ -90,8 +89,6 @@ export class HabitTrackerRenderer {
         }
         if (!file) return;
 
-        const keyOrderer = new FrontmatterKeyOrderer(this.plugin.settings);
-
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
             const fmEnd = FrontmatterLineEditor.findEnd(lines);
@@ -102,21 +99,11 @@ export class HabitTrackerRenderer {
                 return `---\n${habitName}: ${value}\n---\n${content}`;
             }
 
-            const { allFields, originalIndices, nextKeyIndex } = FrontmatterLineEditor.parseFields(lines, fmEnd);
+            const fmValue = (value === undefined || value === null || value === '')
+                ? null
+                : String(value);
 
-            // Apply habit update
-            let keyIndex = nextKeyIndex;
-            if (value === undefined || value === null || value === '') {
-                allFields.delete(habitName);
-                originalIndices.delete(habitName);
-            } else {
-                allFields.set(habitName, String(value));
-                if (!originalIndices.has(habitName)) {
-                    originalIndices.set(habitName, keyIndex++);
-                }
-            }
-
-            return FrontmatterLineEditor.rebuild(lines, fmEnd, allFields, originalIndices, keyOrderer);
+            return FrontmatterLineEditor.applyUpdates(lines, fmEnd, { [habitName]: fmValue });
         });
     }
 

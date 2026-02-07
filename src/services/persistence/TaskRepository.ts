@@ -1,5 +1,5 @@
 import { App } from 'obsidian';
-import type { Task, TaskViewerSettings } from '../../types';
+import type { Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
@@ -17,11 +17,10 @@ export class TaskRepository {
 
     constructor(
         private app: App,
-        private settings: TaskViewerSettings
     ) {
         this.fileOps = new FileOperations(app);
         this.inlineWriter = new InlineTaskWriter(app, this.fileOps);
-        this.frontmatterWriter = new FrontmatterWriter(app, this.fileOps, settings);
+        this.frontmatterWriter = new FrontmatterWriter(app, this.fileOps);
         this.cloner = new TaskCloner(app, this.fileOps);
     }
 
