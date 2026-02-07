@@ -122,7 +122,7 @@ export class FrontmatterWriter {
 
             let keyIndex = 0;
             for (let i = 1; i < fmEnd; i++) {
-                const keyMatch = lines[i].match(/^(\w+)\s*:/);
+                const keyMatch = lines[i].match(/^([^:\s]+)\s*:/);
                 if (!keyMatch) continue;
 
                 const key = keyMatch[1];

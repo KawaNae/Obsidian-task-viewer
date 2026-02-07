@@ -58,6 +58,7 @@ export class FrontmatterTaskBuilder {
         // childLines: frontmatterタスク専用のロジック
         // トップレベル（indent=0）のチェックボックスとその下のインデントされた内容を収集
         const children: string[] = [];
+        const childBodyIndices: number[] = [];  // bodyLines 内の実際のインデックス
         let i = 0;
 
         while (i < bodyLines.length) {
@@ -67,6 +68,7 @@ export class FrontmatterTaskBuilder {
             // トップレベル（indent=0）のチェックボックス行を見つける
             if (indent === 0 && /^\s*-\s*\[.\]/.test(line)) {
                 children.push(line);
+                childBodyIndices.push(i);
                 i++;
 
                 // この行の下のインデントされたコンテンツを収集
@@ -82,6 +84,7 @@ export class FrontmatterTaskBuilder {
                     if (nextIndent > 0) {
                         // インデントされている → 子コンテンツ
                         children.push(nextLine);
+                        childBodyIndices.push(i);
                         i++;
                     } else {
                         // トップレベル → このセクション終了、外側のループで処理
@@ -116,6 +119,7 @@ export class FrontmatterTaskBuilder {
             indent: 0,
             childIds: [],                       // scanFile で親子接続時に populated
             childLines,
+            childLineBodyOffsets: childBodyIndices,
             startDate: start.date,
             startTime: start.time,
             endDate: end.date,

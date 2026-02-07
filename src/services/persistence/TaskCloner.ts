@@ -219,7 +219,7 @@ export class TaskCloner {
         const dateRegex = /(\d{4}-\d{2}-\d{2})/;
 
         for (let i = 1; i < fmEnd; i++) {
-            const keyMatch = lines[i].match(/^(\w+)\s*:/);
+            const keyMatch = lines[i].match(/^([^:\s]+)\s*:/);
             if (!keyMatch || !dateKeys.has(keyMatch[1])) continue;
 
             lines[i] = lines[i].replace(dateRegex, (match) => {

@@ -1,4 +1,4 @@
-import { App, MarkdownRenderer, Component, Menu, Notice } from 'obsidian';
+import { App, MarkdownRenderer, Component, Menu, Notice, TFile } from 'obsidian';
 import { Task, TaskViewerSettings, isCompleteStatusChar } from '../types';
 import { TaskIndex } from '../services/core/TaskIndex';
 import { DateUtils } from '../utils/DateUtils';
@@ -296,16 +296,17 @@ export class TaskRenderer {
                             const currentChar = match[1];
                             const newChar = currentChar === ' ' ? 'x' : ' ';
                             childLine = childLine.replace(`[${currentChar}]`, `[${newChar}]`);
+                            this.updateCheckboxDataTask(checkbox as HTMLElement, newChar);
                         }
 
-                        // frontmatterタスクに対するガード
-                        if (task.line === -1) {
-                            console.warn('[TaskRenderer] frontmatterタスクの子チェックボックスは更新できません');
-                            new Notice('子タスクはファイル内で直接編集してください');
+                        // Calculate child line number (supports both inline and frontmatter tasks)
+                        const absoluteLineNumber = this.calculateChildLineNumber(task, childLineIndex);
+                        if (absoluteLineNumber === -1) {
+                            console.warn('[TaskRenderer] 子タスクの行番号を特定できませんでした。フロントマタータスクの子タスクは更新できません。');
+                            new Notice('子タスクの行番号を特定できませんでした。ファイル内で直接編集してください。');
                             return;
                         }
 
-                        const absoluteLineNumber = task.line + 1 + childLineIndex;
                         this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
                     }
                 });
@@ -367,17 +368,16 @@ export class TaskRenderer {
                         const currentChar = match[1];
                         const newChar = currentChar === ' ' ? 'x' : ' ';
                         this.updateCheckboxDataTask(checkbox as HTMLElement, newChar);
-                        childLine = childLine.replace(`[${currentChar}]`, `[${newChar}]`);
                     }
 
-                    // frontmatterタスクに対するガード
-                    if (task.line === -1) {
-                        console.warn('[TaskRenderer] frontmatterタスクの子チェックボックスは更新できません');
-                        new Notice('子タスクはファイル内で直接編集してください');
+                    // Calculate child line number (supports both inline and frontmatter tasks)
+                    const absoluteLineNumber = this.calculateChildLineNumber(task, childLineIndex);
+                    if (absoluteLineNumber === -1) {
+                        console.warn('[TaskRenderer] 子タスクの行番号を計算できません');
+                        new Notice('子タスクの行番号を特定できませんでした');
                         return;
                     }
 
-                    const absoluteLineNumber = task.line + 1 + childLineIndex;
                     this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
                 }
             });
@@ -444,7 +444,6 @@ export class TaskRenderer {
             { char: '-', label: '[-]' },
             { char: ' ', label: '[ ]' },
         ];
-
         for (const opt of statusOptions) {
             menu.addItem((item) => {
                 item.setTitle(opt.label)
@@ -457,14 +456,14 @@ export class TaskRenderer {
                                 this.updateCheckboxDataTask(targetEl, opt.char);
                             }
 
-                            // frontmatterタスクに対するガード
-                            if (task.line === -1) {
-                                console.warn('[TaskRenderer] frontmatterタスクの子チェックボックスは更新できません');
-                                new Notice('子タスクはファイル内で直接編集してください');
+                            // Calculate child line number (supports both inline and frontmatter tasks)
+                            const absoluteLineNumber = this.calculateChildLineNumber(task, childLineIndex);
+                            if (absoluteLineNumber === -1) {
+                                console.warn('[TaskRenderer] 子タスクの行番号を計算できません');
+                                new Notice('子タスクの行番号を特定できませんでした');
                                 return;
                             }
 
-                            const absoluteLineNumber = task.line + 1 + childLineIndex;
                             await this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
                         }
                     });
@@ -472,6 +471,37 @@ export class TaskRenderer {
         }
 
         menu.showAtPosition({ x: e.pageX, y: e.pageY });
+    }
+
+    /**
+     * Calculate the absolute line number for a child task.
+     * Supports both inline tasks (task.line + offset) and frontmatter tasks (after frontmatter end).
+     */
+    private calculateChildLineNumber(task: Task, childLineIndex: number): number {
+        if (task.parserId === 'frontmatter') {
+            // Frontmatter task: use recorded body offset (accounts for skipped non-task lines)
+            const fmEndLine = this.getFrontmatterEndLine(task.file);
+            if (fmEndLine === -1) return -1;
+            const bodyOffset = task.childLineBodyOffsets?.[childLineIndex];
+            if (bodyOffset === undefined) return -1;
+            return fmEndLine + 1 + bodyOffset;
+        } else {
+            // Inline task: children are offset from task.line
+            if (task.line === -1) return -1;
+            return task.line + 1 + childLineIndex;
+        }
+    }
+
+    /**
+     * Get the line number of the frontmatter closing tag (---) for a file.
+     * Returns -1 if no frontmatter or file not found.
+     */
+    private getFrontmatterEndLine(filePath: string): number {
+        const file = this.app.vault.getAbstractFileByPath(filePath);
+        if (!(file instanceof TFile)) return -1;
+
+        const cache = this.app.metadataCache.getFileCache(file);
+        return cache?.frontmatterPosition?.end?.line ?? -1;
     }
 
     /**
@@ -489,6 +519,6 @@ export class TaskRenderer {
         if (!dateMatch) return notation;
         const datePart = dateMatch[1];
         // If notation is exactly @YYYY-MM-DD, show as-is; otherwise truncate
-        return raw === datePart ? `@${datePart}` : `@${datePart}…`;
+        return raw === datePart ? `@${datePart} ` : `@${datePart}…`;
     }
 }
