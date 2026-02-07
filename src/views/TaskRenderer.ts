@@ -503,7 +503,7 @@ export class TaskRenderer {
             // Frontmatter task: use recorded body offset (accounts for skipped non-task lines)
             const fmEndLine = this.getFrontmatterEndLine(task.file);
             if (fmEndLine === -1) return -1;
-            const bodyOffset = task.childLineBodyOffsets?.[childLineIndex];
+            const bodyOffset = task.childLineBodyOffsets[childLineIndex];
             if (bodyOffset === undefined) return -1;
             return fmEndLine + 1 + bodyOffset;
         } else {

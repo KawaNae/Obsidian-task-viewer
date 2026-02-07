@@ -181,7 +181,7 @@ export interface Task {
     indent: number;         // Leading whitespace count (spaces)
     childIds: string[];     // IDs of direct child tasks (parsed as separate Tasks)
     childLines: string[];   // Raw child lines for display (normalized indentation)
-    childLineBodyOffsets?: number[];  // bodyLines index for each childLine (frontmatter tasks only)
+    childLineBodyOffsets: number[];   // bodyLines index for each childLine (frontmatter: actual offsets, inline: [])
 
     // Date/Time info
     startDate?: string;      // Renamed from date, YYYY-MM-DD (Optional for D/E types)
@@ -213,10 +213,9 @@ export interface Task {
 
     /**
      * Parser identifier - indicates which parser created this task.
-     * Examples: 'taskviewer', 'frontmatter', 'dataview', 'dayplanner'
-     * @internal
+     * Used for routing logic (e.g. calculateChildLineNumber).
      */
-    parserId?: string;
+    parserId: string;
 }
 
 export interface FlowCommand {

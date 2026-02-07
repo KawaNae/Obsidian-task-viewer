@@ -3,6 +3,7 @@ import TaskViewerPlugin from '../../../main';
 import { HabitDefinition } from '../../../types';
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { FrontmatterKeyOrderer } from '../../../services/persistence/utils/FrontmatterKeyOrderer';
+import { FrontmatterLineEditor } from '../../../services/persistence/utils/FrontmatterLineEditor';
 
 export class HabitTrackerRenderer {
     // Persists collapsed state across re-renders (same pattern as DeadlineListRenderer)
@@ -93,70 +94,29 @@ export class HabitTrackerRenderer {
 
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
+            const fmEnd = FrontmatterLineEditor.findEnd(lines);
 
-            // Parse frontmatter boundaries
-            if (lines[0]?.trim() !== '---') {
+            if (fmEnd < 0) {
                 // No frontmatter: create one with habit key
                 if (value === undefined || value === null || value === '') return content;
-                const fmLine = typeof value === 'boolean' ? `${habitName}: ${value}` : `${habitName}: ${value}`;
-                return `---\n${fmLine}\n---\n${content}`;
+                return `---\n${habitName}: ${value}\n---\n${content}`;
             }
 
-            let fmEnd = -1;
-            for (let i = 1; i < lines.length; i++) {
-                if (lines[i].trim() === '---') { fmEnd = i; break; }
-            }
-            if (fmEnd < 0) return content;
-
-            // PASS 1: Collect all frontmatter keys and values
-            const allFields: Map<string, string> = new Map();
-            const originalIndices: Map<string, number> = new Map();
-
-            let keyIndex = 0;
-            for (let i = 1; i < fmEnd; i++) {
-                const keyMatch = lines[i].match(/^([^:\s]+)\s*:/);
-                if (!keyMatch) continue;
-
-                const key = keyMatch[1];
-                const colonIndex = lines[i].indexOf(':');
-                const val = lines[i].substring(colonIndex + 1).trim();
-                allFields.set(key, val || '');
-                originalIndices.set(key, keyIndex++);
-            }
+            const { allFields, originalIndices, nextKeyIndex } = FrontmatterLineEditor.parseFields(lines, fmEnd);
 
             // Apply habit update
+            let keyIndex = nextKeyIndex;
             if (value === undefined || value === null || value === '') {
                 allFields.delete(habitName);
                 originalIndices.delete(habitName);
             } else {
-                const strValue = typeof value === 'boolean' ? String(value) : String(value);
-                allFields.set(habitName, strValue);
+                allFields.set(habitName, String(value));
                 if (!originalIndices.has(habitName)) {
                     originalIndices.set(habitName, keyIndex++);
                 }
             }
 
-            // PASS 2: Sort keys and rebuild
-            const sortedKeys = keyOrderer.sortKeys(Array.from(allFields.keys()), originalIndices);
-
-            const newFrontmatterLines: string[] = [];
-            for (const key of sortedKeys) {
-                const val = allFields.get(key);
-                if (val === '') {
-                    newFrontmatterLines.push(`${key}:`);
-                } else {
-                    newFrontmatterLines.push(`${key}: ${val}`);
-                }
-            }
-
-            const newLines = [
-                lines[0],  // opening ---
-                ...newFrontmatterLines,
-                lines[fmEnd],  // closing ---
-                ...lines.slice(fmEnd + 1)
-            ];
-
-            return newLines.join('\n');
+            return FrontmatterLineEditor.rebuild(lines, fmEnd, allFields, originalIndices, keyOrderer);
         });
     }
 

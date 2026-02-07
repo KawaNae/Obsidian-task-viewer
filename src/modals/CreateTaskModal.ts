@@ -35,7 +35,9 @@ export function formatTaskLine(result: CreateTaskResult): string {
         explicitEndDate: !!result.endDate,
         explicitEndTime: !!result.endTime,
         commands: [],
-        originalText: ''
+        originalText: '',
+        childLineBodyOffsets: [],
+        parserId: 'at-notation'
     };
     return TaskParser.format(task);
 }

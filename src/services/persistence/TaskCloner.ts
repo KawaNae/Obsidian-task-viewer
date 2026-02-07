@@ -3,6 +3,7 @@ import type { Task } from '../../types';
 import { TaskParser } from '../parsing/TaskParser';
 import { DateUtils } from '../../utils/DateUtils';
 import { FileOperations } from './utils/FileOperations';
+import { FrontmatterLineEditor } from './utils/FrontmatterLineEditor';
 
 
 /**
@@ -207,12 +208,7 @@ export class TaskCloner {
     /** frontmatter の日付キー (start/end/deadline) の日付部分を N日シフトする。 */
     private shiftFrontmatterDates(content: string, dayOffset: number): string {
         const lines = content.split('\n');
-        if (lines[0]?.trim() !== '---') return content;
-
-        let fmEnd = -1;
-        for (let i = 1; i < lines.length; i++) {
-            if (lines[i].trim() === '---') { fmEnd = i; break; }
-        }
+        const fmEnd = FrontmatterLineEditor.findEnd(lines);
         if (fmEnd < 0) return content;
 
         const dateKeys = new Set(['start', 'end', 'deadline']);

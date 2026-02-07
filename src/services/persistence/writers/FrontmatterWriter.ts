@@ -2,6 +2,7 @@ import { App, TFile } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../../types';
 import { FileOperations } from '../utils/FileOperations';
 import { FrontmatterKeyOrderer } from '../utils/FrontmatterKeyOrderer';
+import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 
 
 /**
@@ -72,18 +73,10 @@ export class FrontmatterWriter {
 
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
+            const fmEnd = FrontmatterLineEditor.findEnd(lines);
 
-            if (lines[0]?.trim() !== '---') {
-                // frontmatter なし → ファイル先頭に挿入
-                lines.unshift(lineContent);
-                return lines.join('\n');
-            }
-
-            let fmEnd = -1;
-            for (let i = 1; i < lines.length; i++) {
-                if (lines[i].trim() === '---') { fmEnd = i; break; }
-            }
             if (fmEnd < 0) {
+                // frontmatter なし → ファイル先頭に挿入
                 lines.unshift(lineContent);
                 return lines.join('\n');
             }
@@ -107,66 +100,26 @@ export class FrontmatterWriter {
 
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
-
-            if (lines[0]?.trim() !== '---') return content;
-
-            let fmEnd = -1;
-            for (let i = 1; i < lines.length; i++) {
-                if (lines[i].trim() === '---') { fmEnd = i; break; }
-            }
+            const fmEnd = FrontmatterLineEditor.findEnd(lines);
             if (fmEnd < 0) return content;
 
-            // PASS 1: Collect all frontmatter keys and values
-            const allFields: Map<string, string | null> = new Map();
-            const originalIndices: Map<string, number> = new Map();
-
-            let keyIndex = 0;
-            for (let i = 1; i < fmEnd; i++) {
-                const keyMatch = lines[i].match(/^([^:\s]+)\s*:/);
-                if (!keyMatch) continue;
-
-                const key = keyMatch[1];
-                const colonIndex = lines[i].indexOf(':');
-                const value = lines[i].substring(colonIndex + 1).trim();
-                allFields.set(key, value || '');
-                originalIndices.set(key, keyIndex++);  // Record original order
-            }
+            const { allFields, originalIndices, nextKeyIndex } = FrontmatterLineEditor.parseFields(lines, fmEnd);
 
             // Apply updates
+            let keyIndex = nextKeyIndex;
             for (const [key, value] of Object.entries(updates)) {
                 if (value === null) {
                     allFields.delete(key);
                     originalIndices.delete(key);
                 } else {
                     allFields.set(key, value);
-                    // New keys get appended (highest index)
                     if (!originalIndices.has(key)) {
                         originalIndices.set(key, keyIndex++);
                     }
                 }
             }
 
-            // PASS 2: Sort keys and rebuild
-            const sortedKeys = this.keyOrderer.sortKeys(Array.from(allFields.keys()), originalIndices);
-
-            const newFrontmatterLines: string[] = [];
-            for (const key of sortedKeys) {
-                const value = allFields.get(key);
-                if (value === '') {
-                    newFrontmatterLines.push(`${key}:`);
-                } else {
-                    newFrontmatterLines.push(`${key}: ${value}`);
-                }
-            }
-
-            const newLines = [
-                lines[0],  // opening ---
-                ...newFrontmatterLines,
-                lines[fmEnd],  // closing ---
-                ...lines.slice(fmEnd + 1)
-            ];
-
-            return newLines.join('\n');
+            return FrontmatterLineEditor.rebuild(lines, fmEnd, allFields, originalIndices, this.keyOrderer);
         });
     }
 

@@ -188,7 +188,9 @@ export class TimerRecorder {
             explicitEndTime: true,
             commands: [],
             originalText: '',
-            childLines: []
+            childLines: [],
+            childLineBodyOffsets: [],
+            parserId: 'at-notation'
         };
     }
 

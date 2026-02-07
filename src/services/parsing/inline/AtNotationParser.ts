@@ -186,6 +186,8 @@ export class AtNotationParser implements ParserStrategy {
             commands,
             originalText: line,
             childLines: [],
+            childLineBodyOffsets: [],
+            parserId: this.id,
             validationWarning
         };
     }
