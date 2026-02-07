@@ -46,7 +46,7 @@ export class DeadlineListRenderer {
                 completed.push(task);
             } else if (deadlineDate < today) {
                 overdue.push(task);
-            } else if (deadlineDate > today && deadlineDate <= upcomingEnd) {
+            } else if (deadlineDate >= today && deadlineDate <= upcomingEnd) {
                 upcoming.push(task);
             } else {
                 notCompleted.push(task);
