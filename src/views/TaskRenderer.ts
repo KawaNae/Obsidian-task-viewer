@@ -579,9 +579,10 @@ export class TaskRenderer {
         const COLLAPSE_THRESHOLD = 3;
         const shouldCollapse = childTasks.length >= COLLAPSE_THRESHOLD;
 
-        // Build markdown lines, @notation labels, and checkbox handler map
+        // Build markdown lines, @notation labels, checkbox flags, and handler map
         const childLines: string[] = [];
         const notations: (string | null)[] = [];
+        const isCheckboxLine: boolean[] = [];
         const checkboxHandlers: FmCheckboxHandler[] = [];
 
         for (const ct of childTasks) {
@@ -598,6 +599,7 @@ export class TaskRenderer {
                 const content = ct.content || '\u200B';
                 childLines.push(`- [${char}] ${content}`);
             }
+            isCheckboxLine.push(true); // task 型は常にチェックボックス
             checkboxHandlers.push({ type: 'task', taskId: ct.id });
 
             // 子タスク自身の子要素（階層構造）を追加
@@ -618,12 +620,15 @@ export class TaskRenderer {
                     const oChar = orphanTask.statusChar || ' ';
                     const oContent = orphanTask.content || '\u200B';
                     childLines.push(`    - [${oChar}] ${oContent}`);
+                    isCheckboxLine.push(true); // orphan 型は常にチェックボックス
                     checkboxHandlers.push({ type: 'task', taskId: orphanTask.id });
                     notations.push(this.buildNotationLabel(orphanTask));
                 } else {
                     childLines.push('    ' + ct.childLines[cli]);
+                    const isCb = /^\s*-\s+\[.\]/.test(ct.childLines[cli]);
+                    isCheckboxLine.push(isCb);
                     // childLine がチェックボックスなら handler 追加
-                    if (/^\s*-\s+\[.\]/.test(ct.childLines[cli])) {
+                    if (isCb) {
                         checkboxHandlers.push({ type: 'childLine', parentTask: ct, childLineIndex: cli });
                     }
                     notations.push(null);
@@ -636,6 +641,7 @@ export class TaskRenderer {
                 const gcChar = gc.statusChar || ' ';
                 const gcContent = gc.content || '\u200B';
                 childLines.push(`    - [${gcChar}] ${gcContent}`);
+                isCheckboxLine.push(true); // grandchild 型は常にチェックボックス
                 checkboxHandlers.push({ type: 'task', taskId: gc.id });
                 notations.push(this.buildNotationLabel(gc));
             }
@@ -658,7 +664,7 @@ export class TaskRenderer {
             }
 
             await MarkdownRenderer.render(this.app, childLines.join('\n'), childrenContainer, parentTask.file, component);
-            this.postProcessFmChildNotations(childrenContainer, notations, parentTask.startDate);
+            this.postProcessFmChildNotations(childrenContainer, notations, isCheckboxLine, parentTask.startDate);
 
             toggle.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -683,7 +689,7 @@ export class TaskRenderer {
             // Inline: render children directly below parent
             const childrenContainer = contentContainer.createDiv('task-card__children task-card__children--expanded');
             await MarkdownRenderer.render(this.app, childLines.join('\n'), childrenContainer, parentTask.file, component);
-            this.postProcessFmChildNotations(childrenContainer, notations, parentTask.startDate);
+            this.postProcessFmChildNotations(childrenContainer, notations, isCheckboxLine, parentTask.startDate);
             this.setupFmChildCheckboxHandlers(childrenContainer, checkboxHandlers, settings);
         }
     }
@@ -691,21 +697,32 @@ export class TaskRenderer {
     /**
      * Append @notation labels to rendered frontmatter child task items.
      */
-    private postProcessFmChildNotations(container: HTMLElement, notations: (string | null)[], parentStartDate?: string): void {
+    private postProcessFmChildNotations(
+        container: HTMLElement,
+        notations: (string | null)[],
+        isCheckboxLine: boolean[],
+        parentStartDate?: string
+    ): void {
         const items = container.querySelectorAll('.task-list-item');
-        notations.forEach((notation, i) => {
-            if (!notation || !items[i]) return;
-            const span = document.createElement('span');
-            span.className = 'task-card__child-notation';
-            span.textContent = this.formatChildNotation(notation, parentStartDate);
-            // ネスト ul がある場合はその前に挿入（appendChild だと ul の後ろに隠れる）
-            const nestedUl = items[i].querySelector(':scope > ul');
-            if (nestedUl) {
-                items[i].insertBefore(span, nestedUl);
-            } else {
-                items[i].appendChild(span);
+        // isCheckboxLine でチェックボックス行のみを .task-list-item にマッピング
+        let itemIndex = 0;
+        for (let i = 0; i < notations.length; i++) {
+            if (!isCheckboxLine[i]) continue; // 非チェックボックス行は .task-list-item を生成しない
+            if (itemIndex >= items.length) break;
+            const notation = notations[i];
+            if (notation) {
+                const span = document.createElement('span');
+                span.className = 'task-card__child-notation';
+                span.textContent = this.formatChildNotation(notation, parentStartDate);
+                const nestedUl = items[itemIndex].querySelector(':scope > ul');
+                if (nestedUl) {
+                    items[itemIndex].insertBefore(span, nestedUl);
+                } else {
+                    items[itemIndex].appendChild(span);
+                }
             }
-        });
+            itemIndex++;
+        }
     }
 
     /**

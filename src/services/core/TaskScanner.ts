@@ -206,7 +206,8 @@ export class TaskScanner {
                         // 親子関係を設定
                         for (const childTask of childTasks) {
                             // 直接の子のみparentIdを設定（インデント差が1レベル）
-                            if (childTask.indent === taskIndent + 4 || childTask.indent === taskIndent + 2) {
+                            // +1: タブ, +2: 2スペース（レガシー互換）, +4: 4スペース
+                            if (childTask.indent === taskIndent + 1 || childTask.indent === taskIndent + 2 || childTask.indent === taskIndent + 4) {
                                 childTask.parentId = task.id;
                                 task.childIds.push(childTask.id);
                             }
