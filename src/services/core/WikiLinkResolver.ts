@@ -17,13 +17,25 @@ export class WikiLinkResolver {
      * @param excludedPaths 除外パスリスト
      */
     static resolve(tasks: Map<string, Task>, app: App, excludedPaths: string[]): void {
+        // wikilink 子の body 行位置を追跡（ソート用）
+        const wikiChildLineMap = new Map<string, Map<string, number>>();
+
         for (const [parentId, parentTask] of tasks) {
             // frontmatter タスク: wikiLinkTargets を使用（childLines は空）
             if (parentTask.wikiLinkTargets && parentTask.wikiLinkTargets.length > 0) {
-                for (const linkName of parentTask.wikiLinkTargets) {
+                const childLineMap = new Map<string, number>();
+                for (let i = 0; i < parentTask.wikiLinkTargets.length; i++) {
+                    const linkName = parentTask.wikiLinkTargets[i];
+                    const bodyLine = parentTask.wikiLinkBodyLines?.[i];
                     const resolvedPath = this.resolveWikiLink(linkName, app, excludedPaths);
                     if (!resolvedPath) continue;
                     this.wireChild(parentTask, parentId, tasks, resolvedPath);
+                    if (bodyLine !== undefined) {
+                        childLineMap.set(`${resolvedPath}:-1`, bodyLine);
+                    }
+                }
+                if (childLineMap.size > 0) {
+                    wikiChildLineMap.set(parentId, childLineMap);
                 }
                 continue;
             }
@@ -41,6 +53,32 @@ export class WikiLinkResolver {
                 this.wireChild(parentTask, parentId, tasks, resolvedPath);
             }
         }
+
+        // frontmatter タスクの childIds をファイル内の出現順にソート
+        for (const [parentId, parentTask] of tasks) {
+            if (parentTask.parserId !== 'frontmatter' || parentTask.childIds.length <= 1) continue;
+            const childLineMap = wikiChildLineMap.get(parentId);
+            parentTask.childIds.sort((a, b) => {
+                const lineA = this.getChildBodyLine(a, childLineMap, tasks);
+                const lineB = this.getChildBodyLine(b, childLineMap, tasks);
+                return lineA - lineB;
+            });
+        }
+    }
+
+    /**
+     * childId からファイル内の出現行を取得（ソート用）
+     */
+    private static getChildBodyLine(
+        childId: string,
+        wikiLineMap: Map<string, number> | undefined,
+        tasks: Map<string, Task>
+    ): number {
+        const wikiLine = wikiLineMap?.get(childId);
+        if (wikiLine !== undefined) return wikiLine;
+        const child = tasks.get(childId);
+        if (child && child.line >= 0) return child.line;
+        return Infinity;
     }
 
     /**

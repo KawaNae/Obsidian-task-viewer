@@ -213,6 +213,8 @@ export interface Task {
 
     /** Wikilink targets extracted from body (frontmatter tasks only). Used by WikiLinkResolver. */
     wikiLinkTargets?: string[];
+    /** Absolute line numbers of wikilink references in the parent file (parallel to wikiLinkTargets). */
+    wikiLinkBodyLines?: number[];
 
     /**
      * Parser identifier - indicates which parser created this task.

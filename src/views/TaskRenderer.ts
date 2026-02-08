@@ -3,6 +3,16 @@ import { Task, TaskViewerSettings, isCompleteStatusChar } from '../types';
 import { TaskIndex } from '../services/core/TaskIndex';
 import { DateUtils } from '../utils/DateUtils';
 
+/** Checkbox handler for frontmatter child task rendering */
+type FmCheckboxHandler = {
+    type: 'task';
+    taskId: string;
+} | {
+    type: 'childLine';
+    parentTask: Task;
+    childLineIndex: number;
+};
+
 export class TaskRenderer {
     private app: App;
     private taskIndex: TaskIndex;
@@ -569,31 +579,66 @@ export class TaskRenderer {
         const COLLAPSE_THRESHOLD = 3;
         const shouldCollapse = childTasks.length >= COLLAPSE_THRESHOLD;
 
-        // Build markdown lines and @notation labels for each child
+        // Build markdown lines, @notation labels, and checkbox handler map
         const childLines: string[] = [];
         const notations: (string | null)[] = [];
+        const checkboxHandlers: FmCheckboxHandler[] = [];
+
         for (const ct of childTasks) {
             const char = ct.statusChar || ' ';
             // Build @notation from child's date/time
-            let notation: string | null = null;
-            if (ct.startDate || ct.startTime) {
-                const parts: string[] = [];
-                if (ct.startDate) parts.push(ct.startDate);
-                if (ct.startTime) parts.push(ct.startTime);
-                notation = '@' + parts.join('T');
-                if (ct.endDate || ct.endTime) {
-                    notation += '>';
-                    const endParts: string[] = [];
-                    if (ct.endDate) endParts.push(ct.endDate);
-                    if (ct.endTime) endParts.push(ct.endTime);
-                    notation += endParts.join('T');
-                }
-            }
+            const notation = this.buildNotationLabel(ct);
             notations.push(notation);
 
-            // Bare checkbox with no content: append ZWS
-            const content = ct.content || '\u200B';
-            childLines.push(`- [${char}] ${content}`);
+            if (ct.parserId === 'frontmatter' && ct.file !== parentTask.file) {
+                // wikilink 子 → 内部リンクとして描画
+                const linkName = ct.file.replace(/\.md$/, '');
+                childLines.push(`- [${char}] [[${linkName}]]`);
+            } else {
+                const content = ct.content || '\u200B';
+                childLines.push(`- [${char}] ${content}`);
+            }
+            checkboxHandlers.push({ type: 'task', taskId: ct.id });
+
+            // 子タスク自身の子要素（階層構造）を追加
+            // childIds に対応する行のみスキップ（行番号ベースで重複判定）
+            const childIdLineNums = new Set<number>();
+            for (const childId of ct.childIds) {
+                const child = this.taskIndex.getTask(childId);
+                if (child && child.line >= 0) childIdLineNums.add(child.line);
+            }
+            for (let cli = 0; cli < ct.childLines.length; cli++) {
+                const absLine = ct.line + 1 + cli;
+                if (childIdLineNums.has(absLine)) continue; // childIds で描画されるためスキップ
+
+                // indent不一致でchildIdsに未リンクだが、タスクストアに存在するオーファンタスクを検出
+                const orphanTask = this.taskIndex.getTask(`${ct.file}:${absLine}`);
+                if (orphanTask) {
+                    // タスクデータで描画（@notation グレー表示 + task型ハンドラ）
+                    const oChar = orphanTask.statusChar || ' ';
+                    const oContent = orphanTask.content || '\u200B';
+                    childLines.push(`    - [${oChar}] ${oContent}`);
+                    checkboxHandlers.push({ type: 'task', taskId: orphanTask.id });
+                    notations.push(this.buildNotationLabel(orphanTask));
+                } else {
+                    childLines.push('    ' + ct.childLines[cli]);
+                    // childLine がチェックボックスなら handler 追加
+                    if (/^\s*-\s+\[.\]/.test(ct.childLines[cli])) {
+                        checkboxHandlers.push({ type: 'childLine', parentTask: ct, childLineIndex: cli });
+                    }
+                    notations.push(null);
+                }
+            }
+            // childIds（@notation 孫タスク）
+            for (const grandchildId of ct.childIds) {
+                const gc = this.taskIndex.getTask(grandchildId);
+                if (!gc) continue;
+                const gcChar = gc.statusChar || ' ';
+                const gcContent = gc.content || '\u200B';
+                childLines.push(`    - [${gcChar}] ${gcContent}`);
+                checkboxHandlers.push({ type: 'task', taskId: gc.id });
+                notations.push(this.buildNotationLabel(gc));
+            }
         }
 
         if (shouldCollapse) {
@@ -633,13 +678,13 @@ export class TaskRenderer {
                 }
             });
 
-            this.setupFmChildCheckboxHandlers(childrenContainer, childTasks, settings);
+            this.setupFmChildCheckboxHandlers(childrenContainer, checkboxHandlers, settings);
         } else {
             // Inline: render children directly below parent
             const childrenContainer = contentContainer.createDiv('task-card__children task-card__children--expanded');
             await MarkdownRenderer.render(this.app, childLines.join('\n'), childrenContainer, parentTask.file, component);
             this.postProcessFmChildNotations(childrenContainer, notations, parentTask.startDate);
-            this.setupFmChildCheckboxHandlers(childrenContainer, childTasks, settings);
+            this.setupFmChildCheckboxHandlers(childrenContainer, checkboxHandlers, settings);
         }
     }
 
@@ -653,32 +698,72 @@ export class TaskRenderer {
             const span = document.createElement('span');
             span.className = 'task-card__child-notation';
             span.textContent = this.formatChildNotation(notation, parentStartDate);
-            items[i].appendChild(span);
+            // ネスト ul がある場合はその前に挿入（appendChild だと ul の後ろに隠れる）
+            const nestedUl = items[i].querySelector(':scope > ul');
+            if (nestedUl) {
+                items[i].insertBefore(span, nestedUl);
+            } else {
+                items[i].appendChild(span);
+            }
         });
     }
 
     /**
-     * Wire checkbox events for frontmatter child tasks.
-     * Uses taskIndex.updateTask() instead of updateLine().
+     * Build @notation label string from a task's date/time fields.
      */
-    private setupFmChildCheckboxHandlers(container: HTMLElement, childTasks: Task[], settings: TaskViewerSettings): void {
+    private buildNotationLabel(task: Task): string | null {
+        if (!task.startDate && !task.startTime) return null;
+        const parts: string[] = [];
+        if (task.startDate) parts.push(task.startDate);
+        if (task.startTime) parts.push(task.startTime);
+        let notation = '@' + parts.join('T');
+        if (task.endDate || task.endTime) {
+            notation += '>';
+            const endParts: string[] = [];
+            if (task.endDate) endParts.push(task.endDate);
+            if (task.endTime) endParts.push(task.endTime);
+            notation += endParts.join('T');
+        }
+        return notation;
+    }
+
+    /**
+     * Wire checkbox events for frontmatter child tasks (including grandchildren).
+     */
+    private setupFmChildCheckboxHandlers(
+        container: HTMLElement,
+        handlers: FmCheckboxHandler[],
+        settings: TaskViewerSettings
+    ): void {
         const checkboxes = container.querySelectorAll('input[type="checkbox"]');
         checkboxes.forEach((checkbox, index) => {
-            if (index >= childTasks.length) return;
-            const childTask = childTasks[index];
+            if (index >= handlers.length) return;
+            const handler = handlers[index];
 
             checkbox.addEventListener('click', () => {
                 const isChecked = (checkbox as HTMLInputElement).checked;
                 const newStatusChar = isChecked ? 'x' : ' ';
-                this.taskIndex.updateTask(childTask.id, { statusChar: newStatusChar });
+
+                if (handler.type === 'task') {
+                    this.taskIndex.updateTask(handler.taskId, { statusChar: newStatusChar });
+                } else {
+                    // childLine: use updateLine for direct file modification (same pattern as inline checkboxes)
+                    const childLine = handler.parentTask.childLines[handler.childLineIndex];
+                    const newLine = childLine.replace(
+                        /^(\s*-\s+\[).\]/,
+                        `$1${newStatusChar}]`
+                    );
+                    const absoluteLineNumber = handler.parentTask.line + 1 + handler.childLineIndex;
+                    this.taskIndex.updateLine(handler.parentTask.file, absoluteLineNumber, newLine);
+                }
             });
             checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
 
-            if (settings.applyGlobalStyles) {
+            if (settings.applyGlobalStyles && handler.type === 'task') {
                 checkbox.addEventListener('contextmenu', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    this.showCheckboxStatusMenu(e as MouseEvent, childTask.id);
+                    this.showCheckboxStatusMenu(e as MouseEvent, handler.taskId);
                 });
                 checkbox.addEventListener('touchstart', (e) => {
                     e.stopPropagation();

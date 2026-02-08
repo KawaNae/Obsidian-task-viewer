@@ -11,7 +11,7 @@ export class FrontmatterTaskBuilder {
      * frontmatter オブジェクトから Task を構築する。
      * タスク関連フィールド (start/end/deadline) がない場合は null を返す。
      */
-    static parse(filePath: string, frontmatter: Record<string, any> | undefined, bodyLines: string[]): Task | null {
+    static parse(filePath: string, frontmatter: Record<string, any> | undefined, bodyLines: string[], bodyStartIndex: number = 0): Task | null {
         if (!frontmatter) return null;
 
         // クイックゲート: start / end / deadline のいずれかのキーが存在するか
@@ -62,10 +62,12 @@ export class FrontmatterTaskBuilder {
         const childBodyIndices: number[] = [];
 
         const wikiLinkTargets: string[] = [];
+        const wikiLinkBodyLines: number[] = [];
         for (let i = 0; i < bodyLines.length; i++) {
             const match = bodyLines[i].match(/^\s*-\s+\[\[([^\]]+)\]\]\s*$/);
             if (match) {
                 wikiLinkTargets.push(match[1].trim());
+                wikiLinkBodyLines.push(bodyStartIndex + i);
             }
         }
 
@@ -89,6 +91,7 @@ export class FrontmatterTaskBuilder {
             explicitEndDate: !!end.date,
             explicitEndTime: !!end.time,
             wikiLinkTargets,
+            wikiLinkBodyLines,
             originalText: '',                   // frontmatterタスクに該当する単一行はない
             commands: [],                       // フローコマンドは frontmatter では未対応
             parserId: 'frontmatter'
