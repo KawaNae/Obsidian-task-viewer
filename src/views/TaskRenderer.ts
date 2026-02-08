@@ -122,6 +122,8 @@ export class TaskRenderer {
         // Collapse threshold for children
         const COLLAPSE_THRESHOLD = 3;
         const shouldCollapse = task.childLines.length >= COLLAPSE_THRESHOLD;
+        // ラベルにはチェックボックス行のみカウント（リスト・テキスト行を除外）
+        const childTaskCount = task.childLines.filter(cl => /^\s*-\s+\[.\]/.test(cl)).length;
 
         if (shouldCollapse) {
             // Render parent only first
@@ -138,11 +140,11 @@ export class TaskRenderer {
 
             // Set initial state based on saved state
             if (wasExpanded) {
-                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${task.childLines.length}件の子タスク`;
+                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${childTaskCount}件の子タスク`;
                 toggle.dataset.collapsed = 'false';
                 childrenContainer.addClass('task-card__children--expanded');
             } else {
-                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${task.childLines.length}件の子タスク`;
+                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${childTaskCount}件の子タスク`;
                 toggle.dataset.collapsed = 'true';
                 childrenContainer.addClass('task-card__children--collapsed');
             }
@@ -190,14 +192,14 @@ export class TaskRenderer {
                 const isCollapsed = toggle.dataset.collapsed === 'true';
                 if (isCollapsed) {
                     toggle.dataset.collapsed = 'false';
-                    toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${task.childLines.length}件の子タスク`;
+                    toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${childTaskCount}件の子タスク`;
                     childrenContainer.removeClass('task-card__children--collapsed');
                     childrenContainer.addClass('task-card__children--expanded');
                     // Save expanded state
                     this.expandedTaskIds.add(task.id);
                 } else {
                     toggle.dataset.collapsed = 'true';
-                    toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${task.childLines.length}件の子タスク`;
+                    toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${childTaskCount}件の子タスク`;
                     childrenContainer.removeClass('task-card__children--expanded');
                     childrenContainer.addClass('task-card__children--collapsed');
                     // Remove from expanded state
@@ -577,7 +579,12 @@ export class TaskRenderer {
         settings: TaskViewerSettings
     ): Promise<void> {
         const COLLAPSE_THRESHOLD = 3;
-        const shouldCollapse = childTasks.length >= COLLAPSE_THRESHOLD;
+        // 直接の子タスク数 + 各子の childLines 数で折りたたみ判定（ネスト込みの表示量ベース）
+        let totalRenderItems = childTasks.length;
+        for (const ct of childTasks) {
+            totalRenderItems += ct.childLines.length;
+        }
+        const shouldCollapse = totalRenderItems >= COLLAPSE_THRESHOLD;
 
         // Build markdown lines, @notation labels, checkbox flags, and handler map
         const childLines: string[] = [];
@@ -603,49 +610,64 @@ export class TaskRenderer {
             checkboxHandlers.push({ type: 'task', taskId: ct.id });
 
             // 子タスク自身の子要素（階層構造）を追加
-            // childIds に対応する行のみスキップ（行番号ベースで重複判定）
-            const childIdLineNums = new Set<number>();
+            // 単一パス: childLines をファイル順に走査し、childId タスクをその位置で描画
+            const childIdByLine = new Map<number, Task>();
             for (const childId of ct.childIds) {
                 const child = this.taskIndex.getTask(childId);
-                if (child && child.line >= 0) childIdLineNums.add(child.line);
+                if (child && child.line >= 0) childIdByLine.set(child.line, child);
             }
+            const renderedChildIds = new Set<string>();
+
             for (let cli = 0; cli < ct.childLines.length; cli++) {
                 const absLine = ct.line + 1 + cli;
-                if (childIdLineNums.has(absLine)) continue; // childIds で描画されるためスキップ
+                const childIdTask = childIdByLine.get(absLine);
 
-                // indent不一致でchildIdsに未リンクだが、タスクストアに存在するオーファンタスクを検出
-                const orphanTask = this.taskIndex.getTask(`${ct.file}:${absLine}`);
-                if (orphanTask) {
-                    // タスクデータで描画（@notation グレー表示 + task型ハンドラ）
-                    const oChar = orphanTask.statusChar || ' ';
-                    const oContent = orphanTask.content || '\u200B';
-                    childLines.push(`    - [${oChar}] ${oContent}`);
-                    isCheckboxLine.push(true); // orphan 型は常にチェックボックス
-                    checkboxHandlers.push({ type: 'task', taskId: orphanTask.id });
-                    notations.push(this.buildNotationLabel(orphanTask));
+                if (childIdTask) {
+                    // childId タスク: タスクデータから描画（正しい位置に挿入）
+                    const lineIndent = ct.childLines[cli].match(/^(\s*)/)?.[1] ?? '';
+                    const prefix = '    ' + lineIndent;
+                    childLines.push(`${prefix}- [${childIdTask.statusChar || ' '}] ${childIdTask.content || '\u200B'}`);
+                    isCheckboxLine.push(true);
+                    checkboxHandlers.push({ type: 'task', taskId: childIdTask.id });
+                    notations.push(this.buildNotationLabel(childIdTask));
+                    renderedChildIds.add(childIdTask.id);
                 } else {
-                    childLines.push('    ' + ct.childLines[cli]);
-                    const isCb = /^\s*-\s+\[.\]/.test(ct.childLines[cli]);
-                    isCheckboxLine.push(isCb);
-                    // childLine がチェックボックスなら handler 追加
-                    if (isCb) {
-                        checkboxHandlers.push({ type: 'childLine', parentTask: ct, childLineIndex: cli });
+                    // orphan チェック（childIds に未リンクだがタスクストアに存在）
+                    const orphanTask = this.taskIndex.getTask(`${ct.file}:${absLine}`);
+                    if (orphanTask) {
+                        const lineIndent = ct.childLines[cli].match(/^(\s*)/)?.[1] ?? '';
+                        const prefix = '    ' + lineIndent;
+                        childLines.push(`${prefix}- [${orphanTask.statusChar || ' '}] ${orphanTask.content || '\u200B'}`);
+                        isCheckboxLine.push(true);
+                        checkboxHandlers.push({ type: 'task', taskId: orphanTask.id });
+                        notations.push(this.buildNotationLabel(orphanTask));
+                    } else {
+                        // 通常の childLine テキスト
+                        childLines.push('    ' + ct.childLines[cli]);
+                        const isCb = /^\s*-\s+\[.\]/.test(ct.childLines[cli]);
+                        isCheckboxLine.push(isCb);
+                        if (isCb) {
+                            checkboxHandlers.push({ type: 'childLine', parentTask: ct, childLineIndex: cli });
+                        }
+                        notations.push(null);
                     }
-                    notations.push(null);
                 }
             }
-            // childIds（@notation 孫タスク）
-            for (const grandchildId of ct.childIds) {
-                const gc = this.taskIndex.getTask(grandchildId);
+
+            // フォールバック: childLines に出現しなかった childId タスクを末尾に追加
+            for (const childId of ct.childIds) {
+                if (renderedChildIds.has(childId)) continue;
+                const gc = this.taskIndex.getTask(childId);
                 if (!gc) continue;
-                const gcChar = gc.statusChar || ' ';
-                const gcContent = gc.content || '\u200B';
-                childLines.push(`    - [${gcChar}] ${gcContent}`);
-                isCheckboxLine.push(true); // grandchild 型は常にチェックボックス
+                childLines.push(`    - [${gc.statusChar || ' '}] ${gc.content || '\u200B'}`);
+                isCheckboxLine.push(true);
                 checkboxHandlers.push({ type: 'task', taskId: gc.id });
                 notations.push(this.buildNotationLabel(gc));
             }
         }
+
+        // ラベル用: 実際に描画されるチェックボックス数をカウント
+        const fmChildTaskCount = isCheckboxLine.filter(Boolean).length;
 
         if (shouldCollapse) {
             const wasExpanded = this.expandedTaskIds.has(parentTask.id + ':fm-children');
@@ -654,11 +676,11 @@ export class TaskRenderer {
             const childrenContainer = contentContainer.createDiv('task-card__children');
 
             if (wasExpanded) {
-                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${childTasks.length}件の子タスク`;
+                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${fmChildTaskCount}件の子タスク`;
                 toggle.dataset.collapsed = 'false';
                 childrenContainer.addClass('task-card__children--expanded');
             } else {
-                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${childTasks.length}件の子タスク`;
+                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${fmChildTaskCount}件の子タスク`;
                 toggle.dataset.collapsed = 'true';
                 childrenContainer.addClass('task-card__children--collapsed');
             }
@@ -671,13 +693,13 @@ export class TaskRenderer {
                 const isCollapsed = toggle.dataset.collapsed === 'true';
                 if (isCollapsed) {
                     toggle.dataset.collapsed = 'false';
-                    toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${childTasks.length}件の子タスク`;
+                    toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${fmChildTaskCount}件の子タスク`;
                     childrenContainer.removeClass('task-card__children--collapsed');
                     childrenContainer.addClass('task-card__children--expanded');
                     this.expandedTaskIds.add(parentTask.id + ':fm-children');
                 } else {
                     toggle.dataset.collapsed = 'true';
-                    toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${childTasks.length}件の子タスク`;
+                    toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${fmChildTaskCount}件の子タスク`;
                     childrenContainer.removeClass('task-card__children--expanded');
                     childrenContainer.addClass('task-card__children--collapsed');
                     this.expandedTaskIds.delete(parentTask.id + ':fm-children');
