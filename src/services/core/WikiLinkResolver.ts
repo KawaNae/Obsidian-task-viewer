@@ -40,12 +40,23 @@ export class WikiLinkResolver {
                 continue;
             }
 
-            // inline タスク: childLines から wikilink パターンを検出
+            // inline タスク: childLines から直接子の wikilink パターンのみ検出
             if (!parentTask.childLines || parentTask.childLines.length === 0) continue;
+
+            // childLines の最小リストインデントを求める（直接子のレベル）
+            let minChildIndent = Infinity;
+            for (const line of parentTask.childLines) {
+                const m = line.match(/^(\s*)-\s/);
+                if (m) minChildIndent = Math.min(minChildIndent, m[1].length);
+            }
 
             for (const line of parentTask.childLines) {
                 const match = line.match(this.WIKI_LINK_CHILD_REGEX);
                 if (!match) continue;
+
+                // 直接子のインデントレベルのみ処理（孫以降はスキップ）
+                const lineIndent = (line.match(/^(\s*)/)?.[1] ?? '').length;
+                if (lineIndent !== minChildIndent) continue;
 
                 const linkName = match[1].trim();
                 const resolvedPath = this.resolveWikiLink(linkName, app, excludedPaths);
@@ -83,16 +94,27 @@ export class WikiLinkResolver {
 
     /**
      * 解決済みパスから子タスクを探し、親子関係をワイアする。
+     * DAG制約: 自己参照・循環を禁止し、合流時は最初の親を優先する。
      */
     private static wireChild(
         parentTask: Task, parentId: string,
         tasks: Map<string, Task>, resolvedPath: string
     ): void {
         const childTaskId = `${resolvedPath}:-1`;
+
+        // 自己参照禁止
+        if (childTaskId === parentId) return;
+
         const childTask = tasks.get(childTaskId);
         if (!childTask) return;
 
-        childTask.parentId = parentId;
+        // 循環禁止: childTask のサブツリーに parentId が存在しないか確認
+        if (this.wouldCreateCycle(childTaskId, parentId, tasks)) return;
+
+        // DAG: parentId は最初の親のみ設定（合流時は上書きしない）
+        if (!childTask.parentId) {
+            childTask.parentId = parentId;
+        }
         if (!parentTask.childIds.includes(childTaskId)) {
             parentTask.childIds.push(childTaskId);
         }
@@ -105,6 +127,31 @@ export class WikiLinkResolver {
         if (parentTask.startDate && !childTask.endDate && childTask.endTime) {
             childTask.endDate = parentTask.startDate;
         }
+    }
+
+    /**
+     * childTaskId の childIds サブツリーをたどり、
+     * targetId に到達可能なら true（リンク追加でサイクルが形成される）。
+     */
+    private static wouldCreateCycle(
+        childTaskId: string, targetId: string,
+        tasks: Map<string, Task>, maxDepth: number = 50
+    ): boolean {
+        const visited = new Set<string>();
+        const stack = [childTaskId];
+        while (stack.length > 0 && visited.size < maxDepth) {
+            const current = stack.pop()!;
+            if (current === targetId) return true;
+            if (visited.has(current)) continue;
+            visited.add(current);
+            const task = tasks.get(current);
+            if (task) {
+                for (const cid of task.childIds) {
+                    stack.push(cid);
+                }
+            }
+        }
+        return false;
     }
 
     /**

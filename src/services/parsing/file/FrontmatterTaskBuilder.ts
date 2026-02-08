@@ -63,10 +63,18 @@ export class FrontmatterTaskBuilder {
 
         const wikiLinkTargets: string[] = [];
         const wikiLinkBodyLines: number[] = [];
+        // リスト項目の最小インデントを求め、トップレベルの wikilink のみ抽出
+        const listItemRegex = /^(\s*)-\s/;
+        let minListIndent = Infinity;
+        for (const line of bodyLines) {
+            const m = line.match(listItemRegex);
+            if (m) minListIndent = Math.min(minListIndent, m[1].length);
+        }
+        const wikiRegex = /^(\s*)-\s+\[\[([^\]]+)\]\]\s*$/;
         for (let i = 0; i < bodyLines.length; i++) {
-            const match = bodyLines[i].match(/^\s*-\s+\[\[([^\]]+)\]\]\s*$/);
-            if (match) {
-                wikiLinkTargets.push(match[1].trim());
+            const match = bodyLines[i].match(wikiRegex);
+            if (match && match[1].length === minListIndent) {
+                wikiLinkTargets.push(match[2].trim());
                 wikiLinkBodyLines.push(bodyStartIndex + i);
             }
         }

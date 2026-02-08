@@ -14,6 +14,9 @@ type FmCheckboxHandler = {
 };
 
 export class TaskRenderer {
+    /** 再帰展開の最大深度 */
+    private static readonly FM_MAX_RENDER_DEPTH = 10;
+
     private app: App;
     private taskIndex: TaskIndex;
     // Track which tasks have their children expanded (preserved across re-renders)
@@ -119,6 +122,21 @@ export class TaskRenderer {
             cleanParentLine += `[[${filePath}|${fileName}]]`;
         }
 
+        // Wikilink 子タスク事前検出: childIds から frontmatter タスクを解決
+        const childIdByLine = new Map<number, Task>();
+        for (const childId of task.childIds) {
+            const child = this.taskIndex.getTask(childId);
+            if (child && child.line >= 0) childIdByLine.set(child.line, child);
+        }
+        const wikiTaskByChildIdx = new Map<number, Task>();
+        for (let i = 0; i < task.childLines.length; i++) {
+            const wikiMatch = task.childLines[i].match(/^(\s*)-\s+\[\[([^\]]+)\]\]\s*$/);
+            if (!wikiMatch) continue;
+            const linkName = wikiMatch[2].trim();
+            const wikiTask = this.findWikiLinkChild(task, childIdByLine, linkName);
+            if (wikiTask) wikiTaskByChildIdx.set(i, wikiTask);
+        }
+
         // Collapse threshold for children
         const COLLAPSE_THRESHOLD = 3;
         const shouldCollapse = task.childLines.length >= COLLAPSE_THRESHOLD;
@@ -151,7 +169,16 @@ export class TaskRenderer {
 
             // Render children: extract @notation for checkbox lines before stripping
             const checkboxNotations: (string | null)[] = [];
-            const cleanChildren = task.childLines.map(childLine => {
+            const cleanChildren = task.childLines.map((childLine, idx) => {
+                // wikilink → checkbox 変換
+                const wikiTask = wikiTaskByChildIdx.get(idx);
+                if (wikiTask) {
+                    checkboxNotations.push(this.buildNotationLabel(wikiTask));
+                    const indent = (childLine.match(/^(\s*)/)?.[1]) ?? '';
+                    const linkName = childLine.match(/\[\[([^\]]+)\]\]/)?.[1] ?? '';
+                    return `${indent}- [${wikiTask.statusChar || ' '}] [[${linkName}]]`;
+                }
+
                 if (/^\s*-\s*\[.\]/.test(childLine)) {
                     const m = childLine.match(/@[\w\-:>T]+/);
                     checkboxNotations.push(m ? m[0] : null);
@@ -207,13 +234,22 @@ export class TaskRenderer {
                 }
             });
 
-            // Handle checkboxes in children container
-            const checkboxMap = this.getCheckboxChildLineIndices(task.childLines);
-            this.setupChildCheckboxHandlers(childrenContainer, task, checkboxMap, 0, settings);
+            // Handle checkboxes in children container (cleanChildren ベース: wikilink 変換後)
+            const checkboxMap = this.getCheckboxChildLineIndices(cleanChildren);
+            this.setupChildCheckboxHandlers(childrenContainer, task, checkboxMap, 0, settings, wikiTaskByChildIdx);
         } else {
             // Render parent + children together: extract @notation for checkbox lines
             const checkboxNotations: (string | null)[] = [];
-            const cleanChildren = task.childLines.map(childLine => {
+            const cleanChildren = task.childLines.map((childLine, idx) => {
+                // wikilink → checkbox 変換
+                const wikiTask = wikiTaskByChildIdx.get(idx);
+                if (wikiTask) {
+                    checkboxNotations.push(this.buildNotationLabel(wikiTask));
+                    const indent = (childLine.match(/^(\s*)/)?.[1]) ?? '';
+                    const linkName = childLine.match(/\[\[([^\]]+)\]\]/)?.[1] ?? '';
+                    return '    ' + `${indent}- [${wikiTask.statusChar || ' '}] [[${linkName}]]`;
+                }
+
                 if (/^\s*-\s*\[.\]/.test(childLine)) {
                     const m = childLine.match(/@[\w\-:>T]+/);
                     checkboxNotations.push(m ? m[0] : null);
@@ -253,6 +289,7 @@ export class TaskRenderer {
         if (task.parserId === 'frontmatter' && task.childIds.length > 0) {
             const childTasks: Task[] = [];
             for (const childId of task.childIds) {
+                if (childId === task.id) continue; // 防御: 自己参照スキップ
                 const ct = this.taskIndex.getTask(childId);
                 if (ct) childTasks.push(ct);
             }
@@ -306,15 +343,42 @@ export class TaskRenderer {
             }
         }
 
-        // For non-collapsed mode, also handle children checkboxes (old behavior)
+        // For non-collapsed mode, also handle children checkboxes
         if (!shouldCollapse) {
-            const checkboxMap = this.getCheckboxChildLineIndices(task.childLines);
+            // wikilink 変換後のチェックボックスマップ: 元のチェックボックス行 + wikilink 変換行
+            const checkboxMap: number[] = [];
+            task.childLines.forEach((line, i) => {
+                if (wikiTaskByChildIdx.has(i) || /^\s*-\s*\[.\]/.test(line)) {
+                    checkboxMap.push(i);
+                }
+            });
             const checkboxes = contentContainer.querySelectorAll('input[type="checkbox"]');
             checkboxes.forEach((checkbox, index) => {
                 if (index === 0) return; // Already handled above (parent checkbox)
                 const checkboxIndex = index - 1; // DOM checkbox index among children
                 const childLineIndex = checkboxMap[checkboxIndex];
                 if (childLineIndex === undefined) return;
+
+                // wikilink タスク → updateTask で frontmatter status を直接更新
+                const wikiTask = wikiTaskByChildIdx.get(childLineIndex);
+                if (wikiTask) {
+                    checkbox.addEventListener('click', () => {
+                        const isChecked = (checkbox as HTMLInputElement).checked;
+                        const newStatusChar = isChecked ? 'x' : ' ';
+                        this.updateCheckboxDataTask(checkbox as HTMLElement, newStatusChar);
+                        this.taskIndex.updateTask(wikiTask.id, { statusChar: newStatusChar });
+                    });
+                    checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
+                    if (settings.applyGlobalStyles) {
+                        checkbox.addEventListener('contextmenu', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            this.showCheckboxStatusMenu(e as MouseEvent, wikiTask.id);
+                        });
+                        checkbox.addEventListener('touchstart', (e) => e.stopPropagation());
+                    }
+                    return;
+                }
 
                 checkbox.addEventListener('click', () => {
                     if (childLineIndex < task.childLines.length) {
@@ -383,11 +447,32 @@ export class TaskRenderer {
     /**
      * Setup checkbox handlers for children in a collapsed container
      */
-    private setupChildCheckboxHandlers(container: HTMLElement, task: Task, checkboxMap: number[], startOffset: number, settings: TaskViewerSettings): void {
+    private setupChildCheckboxHandlers(container: HTMLElement, task: Task, checkboxMap: number[], startOffset: number, settings: TaskViewerSettings, wikiTaskByChildIdx?: Map<number, Task>): void {
         const checkboxes = container.querySelectorAll('input[type="checkbox"]');
         checkboxes.forEach((checkbox, index) => {
             const childLineIndex = checkboxMap[startOffset + index];
             if (childLineIndex === undefined) return;
+
+            // wikilink タスク → updateTask で frontmatter status を直接更新
+            const wikiTask = wikiTaskByChildIdx?.get(childLineIndex);
+            if (wikiTask) {
+                checkbox.addEventListener('click', () => {
+                    const isChecked = (checkbox as HTMLInputElement).checked;
+                    const newStatusChar = isChecked ? 'x' : ' ';
+                    this.updateCheckboxDataTask(checkbox as HTMLElement, newStatusChar);
+                    this.taskIndex.updateTask(wikiTask.id, { statusChar: newStatusChar });
+                });
+                checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
+                if (settings.applyGlobalStyles) {
+                    checkbox.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this.showCheckboxStatusMenu(e as MouseEvent, wikiTask.id);
+                    });
+                    checkbox.addEventListener('touchstart', (e) => e.stopPropagation());
+                }
+                return;
+            }
 
             checkbox.addEventListener('click', () => {
                 if (childLineIndex < task.childLines.length) {
@@ -642,28 +727,46 @@ export class TaskRenderer {
                         checkboxHandlers.push({ type: 'task', taskId: orphanTask.id });
                         notations.push(this.buildNotationLabel(orphanTask));
                     } else {
-                        // 通常の childLine テキスト
-                        childLines.push('    ' + ct.childLines[cli]);
-                        const isCb = /^\s*-\s+\[.\]/.test(ct.childLines[cli]);
-                        isCheckboxLine.push(isCb);
-                        if (isCb) {
-                            checkboxHandlers.push({ type: 'childLine', parentTask: ct, childLineIndex: cli });
+                        // wikilink パターン検出: childLines 内の [[name]] を対応する childId タスクとして描画
+                        const wikiMatch = ct.childLines[cli].match(/^\s*-\s+\[\[([^\]]+)\]\]\s*$/);
+                        const wikiChildTask = wikiMatch ? this.findWikiLinkChild(ct, childIdByLine, wikiMatch[1].trim()) : null;
+                        if (wikiChildTask) {
+                            const lineIndent = ct.childLines[cli].match(/^(\s*)/)?.[1] ?? '';
+                            const prefix = '    ' + lineIndent;
+                            const wikiLinkName = wikiChildTask.file.replace(/\.md$/, '');
+                            childLines.push(`${prefix}- [${wikiChildTask.statusChar || ' '}] [[${wikiLinkName}]]`);
+                            isCheckboxLine.push(true);
+                            checkboxHandlers.push({ type: 'task', taskId: wikiChildTask.id });
+                            notations.push(this.buildNotationLabel(wikiChildTask));
+                            renderedChildIds.add(wikiChildTask.id);
+                            // wikilink 子の子孫も再帰展開
+                            if (wikiChildTask.childIds.length > 0) {
+                                this.appendFmDescendants(
+                                    wikiChildTask, prefix + '    ', parentTask.id,
+                                    childLines, notations, isCheckboxLine, checkboxHandlers,
+                                    renderedChildIds
+                                );
+                            }
+                        } else {
+                            // 通常の childLine テキスト
+                            childLines.push('    ' + ct.childLines[cli]);
+                            const isCb = /^\s*-\s+\[.\]/.test(ct.childLines[cli]);
+                            isCheckboxLine.push(isCb);
+                            if (isCb) {
+                                checkboxHandlers.push({ type: 'childLine', parentTask: ct, childLineIndex: cli });
+                            }
+                            notations.push(null);
                         }
-                        notations.push(null);
                     }
                 }
             }
 
-            // フォールバック: childLines に出現しなかった childId タスクを末尾に追加
-            for (const childId of ct.childIds) {
-                if (renderedChildIds.has(childId)) continue;
-                const gc = this.taskIndex.getTask(childId);
-                if (!gc) continue;
-                childLines.push(`    - [${gc.statusChar || ' '}] ${gc.content || '\u200B'}`);
-                isCheckboxLine.push(true);
-                checkboxHandlers.push({ type: 'task', taskId: gc.id });
-                notations.push(this.buildNotationLabel(gc));
-            }
+            // 再帰展開: childLines に出現しなかった childId タスクとその子孫を深度制限付きで追加
+            this.appendFmDescendants(
+                ct, '    ', parentTask.id,
+                childLines, notations, isCheckboxLine, checkboxHandlers,
+                renderedChildIds
+            );
         }
 
         // ラベル用: 実際に描画されるチェックボックス数をカウント
@@ -713,6 +816,79 @@ export class TaskRenderer {
             await MarkdownRenderer.render(this.app, childLines.join('\n'), childrenContainer, parentTask.file, component);
             this.postProcessFmChildNotations(childrenContainer, notations, isCheckboxLine, parentTask.startDate);
             this.setupFmChildCheckboxHandlers(childrenContainer, checkboxHandlers, settings);
+        }
+    }
+
+    /**
+     * wikilink 子タスクを検索する。
+     * 親タスクの childIds → childIdByLine タスクの childIds の順で検索。
+     */
+    private findWikiLinkChild(parentTask: Task, childIdByLine: Map<number, Task>, linkName: string): Task | null {
+        const found = this.searchWikiChild(parentTask, linkName);
+        if (found) return found;
+
+        for (const task of childIdByLine.values()) {
+            const found = this.searchWikiChild(task, linkName);
+            if (found) return found;
+        }
+        return null;
+    }
+
+    private searchWikiChild(task: Task, linkName: string): Task | null {
+        for (const childId of task.childIds) {
+            const child = this.taskIndex.getTask(childId);
+            if (!child || child.parserId !== 'frontmatter') continue;
+            const baseName = child.file.replace(/\.md$/, '').split('/').pop() || '';
+            const fullPath = child.file.replace(/\.md$/, '');
+            if (linkName === baseName || linkName === fullPath || linkName === child.file) {
+                return child;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * タスクの childIds を再帰的にたどり、4つの並列配列に追加。
+     * visitedIds でサイクル防止、depth で深度制限。
+     */
+    private appendFmDescendants(
+        task: Task,
+        indent: string,
+        rootId: string,
+        childLines: string[],
+        notations: (string | null)[],
+        isCheckboxLine: boolean[],
+        checkboxHandlers: FmCheckboxHandler[],
+        visitedIds: Set<string>,
+        depth: number = 0
+    ): void {
+        if (depth >= TaskRenderer.FM_MAX_RENDER_DEPTH) return;
+
+        for (const childId of task.childIds) {
+            if (visitedIds.has(childId) || childId === rootId) continue;
+            visitedIds.add(childId);
+            const child = this.taskIndex.getTask(childId);
+            if (!child) continue;
+
+            const char = child.statusChar || ' ';
+            if (child.parserId === 'frontmatter' && child.file !== task.file) {
+                const linkName = child.file.replace(/\.md$/, '');
+                childLines.push(`${indent}- [${char}] [[${linkName}]]`);
+            } else {
+                childLines.push(`${indent}- [${char}] ${child.content || '\u200B'}`);
+            }
+            isCheckboxLine.push(true);
+            checkboxHandlers.push({ type: 'task', taskId: child.id });
+            notations.push(this.buildNotationLabel(child));
+
+            // 再帰: child の childIds も展開（depth + 1）
+            if (child.childIds.length > 0) {
+                this.appendFmDescendants(
+                    child, indent + '    ', rootId,
+                    childLines, notations, isCheckboxLine, checkboxHandlers,
+                    visitedIds, depth + 1
+                );
+            }
         }
     }
 
