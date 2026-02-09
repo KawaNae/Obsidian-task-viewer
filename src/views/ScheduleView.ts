@@ -1,7 +1,8 @@
 import { ItemView, WorkspaceLeaf, Menu } from 'obsidian';
 import { TaskIndex } from '../services/core/TaskIndex';
-import { TaskRenderer } from './taskcard/TaskCardRenderer';
-import { Task, shouldSplitTask, splitTaskAtBoundary, RenderableTask, isCompleteStatusChar } from '../types';
+import { TaskCardRenderer } from './taskcard/TaskCardRenderer';
+import { Task, isCompleteStatusChar } from '../types';
+import { shouldSplitTask, splitTaskAtBoundary, RenderableTask } from './utils/RenderableTaskUtils';
 import { MenuHandler } from '../interaction/menu/MenuHandler';
 import { DateUtils } from '../utils/DateUtils';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
@@ -13,7 +14,7 @@ export const VIEW_TYPE_SCHEDULE = 'schedule-view';
 export class ScheduleView extends ItemView {
     private taskIndex: TaskIndex;
     private plugin: TaskViewerPlugin;
-    private taskRenderer: TaskRenderer;
+    private taskRenderer: TaskCardRenderer;
     private menuHandler: MenuHandler;
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
@@ -23,7 +24,7 @@ export class ScheduleView extends ItemView {
         super(leaf);
         this.taskIndex = taskIndex;
         this.plugin = plugin;
-        this.taskRenderer = new TaskRenderer(this.app, this.taskIndex);
+        this.taskRenderer = new TaskCardRenderer(this.app, this.taskIndex);
     }
 
     getViewType() {

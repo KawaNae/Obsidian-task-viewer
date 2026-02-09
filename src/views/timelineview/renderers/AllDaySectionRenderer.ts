@@ -5,7 +5,7 @@ import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
 import { ViewUtils } from '../../ViewUtils';
 import { TaskIndex } from '../../../services/core/TaskIndex';
-import { TaskRenderer } from '../../taskcard/TaskCardRenderer';
+import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { HandleManager } from '../HandleManager';
 import { Task } from '../../../types';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
@@ -16,7 +16,7 @@ export class AllDaySectionRenderer {
         private plugin: TaskViewerPlugin,
         private menuHandler: MenuHandler,
         private handleManager: HandleManager,
-        private taskRenderer: TaskRenderer,
+        private taskRenderer: TaskCardRenderer,
         private getDaysToShow: () => number
     ) { }
 
@@ -134,7 +134,7 @@ export class AllDaySectionRenderer {
 
             ViewUtils.applyFileColor(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.color);
 
-            // Use TaskRenderer
+            // Use TaskCardRenderer
             this.taskRenderer.render(el, task, owner, this.plugin.settings, { topRight: 'none' });
 
             this.menuHandler.addTaskContextMenu(el, task);

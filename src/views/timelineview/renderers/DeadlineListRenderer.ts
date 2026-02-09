@@ -1,6 +1,6 @@
 import { Component, Menu } from 'obsidian';
 import { Task, isCompleteStatusChar } from '../../../types';
-import { TaskRenderer } from '../../taskcard/TaskCardRenderer';
+import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { DateUtils } from '../../../utils/DateUtils';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import TaskViewerPlugin from '../../../main';
@@ -12,7 +12,7 @@ export class DeadlineListRenderer {
     private collapsedGroups: Set<string> = new Set();
 
     constructor(
-        private taskRenderer: TaskRenderer,
+        private taskRenderer: TaskCardRenderer,
         private plugin: TaskViewerPlugin,
         private menuHandler: MenuHandler
     ) { }

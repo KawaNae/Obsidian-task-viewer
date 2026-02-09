@@ -1,5 +1,5 @@
 import { ItemView, WorkspaceLeaf } from 'obsidian';
-import { TaskRenderer } from '../taskcard/TaskCardRenderer';
+import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { Task, ViewState, isCompleteStatusChar } from '../../types';
 import { DragHandler } from '../../interaction/drag/DragHandler';
@@ -36,7 +36,7 @@ export class TimelineView extends ItemView {
     // ==================== Services & Handlers ====================
     private taskIndex: TaskIndex;
     private plugin: TaskViewerPlugin;
-    private taskRenderer: TaskRenderer;
+    private taskRenderer: TaskCardRenderer;
     private dragHandler: DragHandler;
     private menuHandler: MenuHandler;
     private handleManager: HandleManager;
@@ -72,7 +72,7 @@ export class TimelineView extends ItemView {
             showDeadlineList: true, // Default: show deadline list
             filterFiles: null
         };
-        this.taskRenderer = new TaskRenderer(this.app, this.taskIndex);
+        this.taskRenderer = new TaskCardRenderer(this.app, this.taskIndex);
     }
 
     getViewType() {

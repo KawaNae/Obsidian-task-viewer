@@ -5,10 +5,10 @@ import { DateUtils } from '../../../utils/DateUtils';
 import { ViewUtils } from '../../ViewUtils';
 import { TaskLayout } from '../../utils/TaskLayout';
 import { TaskIndex } from '../../../services/core/TaskIndex';
-import { TaskRenderer } from '../../taskcard/TaskCardRenderer';
+import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { HandleManager } from '../HandleManager';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
-import { shouldSplitTask, splitTaskAtBoundary, RenderableTask } from '../../../types';
+import { shouldSplitTask, splitTaskAtBoundary, RenderableTask } from '../../utils/RenderableTaskUtils';
 
 
 export class TimelineSectionRenderer {
@@ -17,7 +17,7 @@ export class TimelineSectionRenderer {
         private plugin: TaskViewerPlugin,
         private menuHandler: MenuHandler,
         private handleManager: HandleManager,
-        private taskRenderer: TaskRenderer
+        private taskRenderer: TaskCardRenderer
     ) { }
 
     public render(container: HTMLElement, date: string, owner: Component, visibleFiles: Set<string> | null) {

@@ -1,11 +1,19 @@
 import { App, Menu, Notice, TFile } from 'obsidian';
 import { Task, TaskViewerSettings } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
-import { ChildRenderItem, CheckboxHandler } from './ChildItemBuilder';
+import { ChildRenderItem } from './types';
+
+const STATUS_OPTIONS = [
+    { char: 'x', label: '[x]' },
+    { char: '!', label: '[!]' },
+    { char: '?', label: '[?]' },
+    { char: '>', label: '[>]' },
+    { char: '-', label: '[-]' },
+    { char: ' ', label: '[ ]' },
+] as const;
 
 /**
- * チェックボックスのイベントバインドを統一的に処理する。
- * task/childLine 両タイプのハンドラー、コンテキストメニュー、data-task 同期を含む。
+ * Wires checkbox interactions for parent and child items.
  */
 export class CheckboxWiring {
     constructor(
@@ -13,39 +21,14 @@ export class CheckboxWiring {
         private taskIndex: TaskIndex
     ) {}
 
-    /**
-     * ChildRenderItem[] に基づいてコンテナ内の全チェックボックスにイベントをバインドする。
-     * isCheckbox=true のアイテムのみ .task-list-item の input[type="checkbox"] にマッピング。
-     */
     wireChildCheckboxes(
         container: HTMLElement,
         items: ChildRenderItem[],
         settings: TaskViewerSettings
     ): void {
-        const checkboxes = container.querySelectorAll('input[type="checkbox"]');
-        let cbIndex = 0;
-
-        for (let i = 0; i < items.length; i++) {
-            if (!items[i].isCheckbox) continue;
-            if (cbIndex >= checkboxes.length) break;
-
-            const checkbox = checkboxes[cbIndex];
-            const handler = items[i].handler;
-            cbIndex++;
-
-            if (!handler) continue;
-
-            if (handler.type === 'task') {
-                this.wireTaskCheckbox(checkbox, handler.taskId, settings);
-            } else {
-                this.wireChildLineCheckbox(checkbox, handler.parentTask, handler.childLineIndex, settings);
-            }
-        }
+        this.wireChildCheckboxesWithOffset(container, items, settings, 0);
     }
 
-    /**
-     * 親タスクのチェックボックスにイベントをバインドする。
-     */
     wireParentCheckbox(
         checkbox: Element,
         taskId: string,
@@ -58,19 +41,20 @@ export class CheckboxWiring {
         });
         checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
 
-        if (settings.applyGlobalStyles) {
-            checkbox.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                this.showCheckboxStatusMenu(e as MouseEvent, taskId);
+        if (!settings.applyGlobalStyles) return;
+
+        checkbox.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.showStatusMenu(e as MouseEvent, async (statusChar) => {
+                await this.taskIndex.updateTask(taskId, { statusChar });
             });
-            checkbox.addEventListener('touchstart', (e) => e.stopPropagation());
-        }
+        });
+        checkbox.addEventListener('touchstart', (e) => e.stopPropagation());
     }
 
     /**
-     * 親チェックボックスをスキップして子チェックボックスにイベントをバインドする。
-     * non-collapsed inline パス用（親+子が同一コンテナで描画される場合）。
+     * Wires child checkboxes when parent checkbox occupies index 0 in DOM.
      */
     wireChildCheckboxesWithOffset(
         container: HTMLElement,
@@ -79,14 +63,16 @@ export class CheckboxWiring {
         checkboxOffset: number
     ): void {
         const checkboxes = container.querySelectorAll('input[type="checkbox"]');
-        let cbIndex = 0;
+        let checkboxIndex = 0;
+
         for (let i = 0; i < items.length; i++) {
             if (!items[i].isCheckbox) continue;
-            const domIdx = checkboxOffset + cbIndex;
-            cbIndex++;
-            if (domIdx >= checkboxes.length) break;
 
-            const checkbox = checkboxes[domIdx];
+            const domIndex = checkboxOffset + checkboxIndex;
+            checkboxIndex++;
+            if (domIndex >= checkboxes.length) break;
+
+            const checkbox = checkboxes[domIndex];
             const handler = items[i].handler;
             if (!handler) continue;
 
@@ -98,9 +84,11 @@ export class CheckboxWiring {
         }
     }
 
-    // --- Private ---
-
-    private wireTaskCheckbox(checkbox: Element, taskId: string, settings: TaskViewerSettings): void {
+    private wireTaskCheckbox(
+        checkbox: Element,
+        taskId: string,
+        settings: TaskViewerSettings
+    ): void {
         checkbox.addEventListener('click', () => {
             const isChecked = (checkbox as HTMLInputElement).checked;
             const newStatusChar = isChecked ? 'x' : ' ';
@@ -109,14 +97,16 @@ export class CheckboxWiring {
         });
         checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
 
-        if (settings.applyGlobalStyles) {
-            checkbox.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                this.showCheckboxStatusMenu(e as MouseEvent, taskId);
+        if (!settings.applyGlobalStyles) return;
+
+        checkbox.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.showStatusMenu(e as MouseEvent, async (statusChar) => {
+                await this.taskIndex.updateTask(taskId, { statusChar });
             });
-            checkbox.addEventListener('touchstart', (e) => e.stopPropagation());
-        }
+        });
+        checkbox.addEventListener('touchstart', (e) => e.stopPropagation());
     }
 
     private wireChildLineCheckbox(
@@ -125,37 +115,71 @@ export class CheckboxWiring {
         childLineIndex: number,
         settings: TaskViewerSettings
     ): void {
-        checkbox.addEventListener('click', () => {
-            if (childLineIndex < task.childLines.length) {
-                let childLine = task.childLines[childLineIndex];
-                const match = childLine.match(/\[(.)\]/);
-                if (match) {
-                    const currentChar = match[1];
-                    const newChar = currentChar === ' ' ? 'x' : ' ';
-                    childLine = childLine.replace(`[${currentChar}]`, `[${newChar}]`);
-                    this.updateCheckboxDataTask(checkbox as HTMLElement, newChar);
-                }
+        checkbox.addEventListener('click', async () => {
+            if (childLineIndex >= task.childLines.length) return;
 
-                const absoluteLineNumber = this.calculateChildLineNumber(task, childLineIndex);
-                if (absoluteLineNumber === -1) {
-                    console.warn('[CheckboxWiring] 子タスクの行番号を特定できませんでした');
-                    new Notice('子タスクの行番号を特定できませんでした。ファイル内で直接編集してください。');
-                    return;
-                }
+            let childLine = task.childLines[childLineIndex];
+            const match = childLine.match(/\[(.)\]/);
+            if (!match) return;
 
-                this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
+            const currentChar = match[1];
+            const newChar = currentChar === ' ' ? 'x' : ' ';
+            childLine = childLine.replace(`[${currentChar}]`, `[${newChar}]`);
+            this.updateCheckboxDataTask(checkbox as HTMLElement, newChar);
+
+            const absoluteLineNumber = this.resolveChildLineNumber(task, childLineIndex);
+            if (absoluteLineNumber === -1) {
+                console.warn('[CheckboxWiring] Failed to resolve child task line number.');
+                new Notice('子タスクの行番号を特定できませんでした。ファイルを開いて再実行してください。');
+                return;
             }
+
+            await this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
         });
         checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
 
-        if (settings.applyGlobalStyles) {
-            checkbox.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                this.showChildCheckboxStatusMenu(e as MouseEvent, task, childLineIndex);
+        if (!settings.applyGlobalStyles) return;
+
+        checkbox.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const targetEl = e.target as HTMLElement | null;
+            this.showStatusMenu(e as MouseEvent, async (statusChar) => {
+                if (childLineIndex >= task.childLines.length) return;
+
+                let childLine = task.childLines[childLineIndex];
+                childLine = childLine.replace(/\[(.)\]/, `[${statusChar}]`);
+                if (targetEl) {
+                    this.updateCheckboxDataTask(targetEl, statusChar);
+                }
+
+                const absoluteLineNumber = this.resolveChildLineNumber(task, childLineIndex);
+                if (absoluteLineNumber === -1) {
+                    console.warn('[CheckboxWiring] Failed to resolve child task line number for status update.');
+                    new Notice('子タスクの行番号を特定できませんでした。');
+                    return;
+                }
+
+                await this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
             });
-            checkbox.addEventListener('touchstart', (e) => e.stopPropagation());
+        });
+        checkbox.addEventListener('touchstart', (e) => e.stopPropagation());
+    }
+
+    private showStatusMenu(e: MouseEvent, onSelect: (statusChar: string) => Promise<void>): void {
+        const menu = new Menu();
+
+        for (const option of STATUS_OPTIONS) {
+            menu.addItem((item) => {
+                item
+                    .setTitle(option.label)
+                    .onClick(async () => {
+                        await onSelect(option.char);
+                    });
+            });
         }
+
+        menu.showAtPosition({ x: e.pageX, y: e.pageY });
     }
 
     private updateCheckboxDataTask(el: HTMLElement, newChar: string): void {
@@ -172,6 +196,7 @@ export class CheckboxWiring {
                 input.removeAttribute('data-task');
             }
         }
+
         if (listItem) {
             if (value) {
                 listItem.setAttribute('data-task', value);
@@ -181,82 +206,20 @@ export class CheckboxWiring {
         }
     }
 
-    private showCheckboxStatusMenu(e: MouseEvent, taskId: string): void {
-        const menu = new Menu();
-        const statusOptions = [
-            { char: 'x', label: '[x]' },
-            { char: '!', label: '[!]' },
-            { char: '?', label: '[?]' },
-            { char: '>', label: '[>]' },
-            { char: '-', label: '[-]' },
-            { char: ' ', label: '[ ]' },
-        ];
-
-        for (const opt of statusOptions) {
-            menu.addItem((item) => {
-                item.setTitle(opt.label)
-                    .onClick(async () => {
-                        await this.taskIndex.updateTask(taskId, { statusChar: opt.char });
-                    });
-            });
-        }
-
-        menu.showAtPosition({ x: e.pageX, y: e.pageY });
-    }
-
-    private showChildCheckboxStatusMenu(e: MouseEvent, task: Task, childLineIndex: number): void {
-        const menu = new Menu();
-        const targetEl = e.target as HTMLElement | null;
-        const statusOptions = [
-            { char: 'x', label: '[x]' },
-            { char: '!', label: '[!]' },
-            { char: '?', label: '[?]' },
-            { char: '>', label: '[>]' },
-            { char: '-', label: '[-]' },
-            { char: ' ', label: '[ ]' },
-        ];
-
-        for (const opt of statusOptions) {
-            menu.addItem((item) => {
-                item.setTitle(opt.label)
-                    .onClick(async () => {
-                        if (childLineIndex < task.childLines.length) {
-                            let childLine = task.childLines[childLineIndex];
-                            childLine = childLine.replace(/\[(.)\]/, `[${opt.char}]`);
-                            if (targetEl) {
-                                this.updateCheckboxDataTask(targetEl, opt.char);
-                            }
-
-                            const absoluteLineNumber = this.calculateChildLineNumber(task, childLineIndex);
-                            if (absoluteLineNumber === -1) {
-                                console.warn('[CheckboxWiring] 子タスクの行番号を計算できません');
-                                new Notice('子タスクの行番号を特定できませんでした');
-                                return;
-                            }
-
-                            await this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
-                        }
-                    });
-            });
-        }
-
-        menu.showAtPosition({ x: e.pageX, y: e.pageY });
-    }
-
-    private calculateChildLineNumber(task: Task, childLineIndex: number): number {
+    private resolveChildLineNumber(task: Task, childLineIndex: number): number {
         if (task.parserId === 'frontmatter') {
             const bodyOffset = task.childLineBodyOffsets[childLineIndex];
             if (bodyOffset === undefined) return -1;
+
             const fmEndLine = this.getFrontmatterEndLine(task.file);
-            // 新フォーマット: childLineBodyOffsets は絶対行番号。
-            // 旧フォーマット/防御: frontmatter終端以下の値は相対オフセットとして扱う。
+            // New frontmatter parser stores absolute lines. Keep legacy fallback for old offsets.
             if (fmEndLine !== -1 && bodyOffset <= fmEndLine) {
                 return fmEndLine + 1 + bodyOffset;
             }
             return bodyOffset;
-        } else {
-            return task.line + 1 + childLineIndex;
         }
+
+        return task.line + 1 + childLineIndex;
     }
 
     private getFrontmatterEndLine(filePath: string): number {
