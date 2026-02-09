@@ -181,7 +181,7 @@ export interface Task {
     indent: number;         // Leading whitespace count (spaces)
     childIds: string[];     // IDs of direct child tasks (parsed as separate Tasks)
     childLines: string[];   // Raw child lines for display (normalized indentation)
-    childLineBodyOffsets: number[];   // bodyLines index for each childLine (frontmatter: actual offsets, inline: [])
+    childLineBodyOffsets: number[];   // childLine absolute line numbers (frontmatter) / empty for inline
 
     // Date/Time info
     startDate?: string;      // Renamed from date, YYYY-MM-DD (Optional for D/E types)
@@ -203,6 +203,10 @@ export interface Task {
 
     // Original text for reconstruction
     originalText: string;
+    // Markdown block ID (e.g. ^abc123), used for stable line resolution
+    blockId?: string;
+    // Stable timer target identifier shared by inline(frontmatter key / blockId)
+    timerTargetId?: string;
     recurrence?: string;    // @repeat(...) content
 
     // Flow Commands
@@ -213,6 +217,8 @@ export interface Task {
 
     /** Wikilink targets extracted from body (frontmatter tasks only). Used by WikiLinkResolver. */
     wikiLinkTargets?: string[];
+    /** Absolute line numbers of wikilink references in the parent file (parallel to wikiLinkTargets). */
+    wikiLinkBodyLines?: number[];
 
     /**
      * Parser identifier - indicates which parser created this task.
@@ -239,10 +245,88 @@ export interface ViewState {
     filterFiles: string[] | null; // Persisted file filter (null = all visible)
 }
 
+export interface FrontmatterTaskKeys {
+    start: string;
+    end: string;
+    deadline: string;
+    status: string;
+    content: string;
+    timerTargetId: string;
+    color: string;
+}
+
+export const DEFAULT_FRONTMATTER_TASK_KEYS: FrontmatterTaskKeys = {
+    start: 'tv-start',
+    end: 'tv-end',
+    deadline: 'tv-deadline',
+    status: 'tv-status',
+    content: 'tv-content',
+    timerTargetId: 'tv-timer-target-id',
+    color: 'tv-color',
+};
+
+export function normalizeFrontmatterTaskKeys(value: unknown): FrontmatterTaskKeys {
+    const source = (value && typeof value === 'object')
+        ? value as Partial<Record<keyof FrontmatterTaskKeys, unknown>>
+        : {};
+
+    const normalize = (key: keyof FrontmatterTaskKeys): string => {
+        const raw = source[key];
+        if (typeof raw !== 'string') {
+            return DEFAULT_FRONTMATTER_TASK_KEYS[key];
+        }
+
+        const trimmed = raw.trim();
+        return trimmed.length > 0 ? trimmed : DEFAULT_FRONTMATTER_TASK_KEYS[key];
+    };
+
+    return {
+        start: normalize('start'),
+        end: normalize('end'),
+        deadline: normalize('deadline'),
+        status: normalize('status'),
+        content: normalize('content'),
+        timerTargetId: normalize('timerTargetId'),
+        color: normalize('color'),
+    };
+}
+
+export function validateFrontmatterTaskKeys(keys: FrontmatterTaskKeys): string | null {
+    const names: Array<keyof FrontmatterTaskKeys> = [
+        'start',
+        'end',
+        'deadline',
+        'status',
+        'content',
+        'timerTargetId',
+        'color',
+    ];
+
+    const normalizedValues = new Map<keyof FrontmatterTaskKeys, string>();
+    for (const name of names) {
+        const value = keys[name].trim();
+        if (!value) {
+            return 'Frontmatter keys cannot be empty.';
+        }
+        normalizedValues.set(name, value);
+    }
+
+    const seen = new Set<string>();
+    for (const name of names) {
+        const value = normalizedValues.get(name)!;
+        if (seen.has(value)) {
+            return `Frontmatter keys must be unique. Duplicate: "${value}".`;
+        }
+        seen.add(value);
+    }
+
+    return null;
+}
+
 export interface TaskViewerSettings {
     startHour: number;      // 0-23
     applyGlobalStyles: boolean; // Whether to apply checkbox styles globally
-    frontmatterColorKey: string; // Key to look for in frontmatter for color
+    frontmatterTaskKeys: FrontmatterTaskKeys; // Frontmatter keys for task metadata
     zoomLevel: number;      // 0.25 - 4.0 (default 1.0)
     dailyNoteHeader: string; // Header to add tasks under (default: "Tasks")
     dailyNoteHeaderLevel: number; // Header level (default: 2)
@@ -264,7 +348,7 @@ export interface TaskViewerSettings {
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
     startHour: 5,
     applyGlobalStyles: false,
-    frontmatterColorKey: 'color',
+    frontmatterTaskKeys: { ...DEFAULT_FRONTMATTER_TASK_KEYS },
     zoomLevel: 1.0,
     dailyNoteHeader: 'Tasks',
     dailyNoteHeaderLevel: 2,

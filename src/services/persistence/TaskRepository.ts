@@ -1,9 +1,10 @@
-import { App } from 'obsidian';
-import type { Task } from '../../types';
+import { App, TFile } from 'obsidian';
+import type { FrontmatterTaskKeys, Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner } from './TaskCloner';
+import { TaskConverter } from './TaskConverter';
 
 /**
  * TaskRepository - タスクのファイル操作を統括するファサードクラス
@@ -14,6 +15,7 @@ export class TaskRepository {
     private inlineWriter: InlineTaskWriter;
     private frontmatterWriter: FrontmatterWriter;
     private cloner: TaskCloner;
+    private converter: TaskConverter;
 
     constructor(
         private app: App,
@@ -22,6 +24,7 @@ export class TaskRepository {
         this.inlineWriter = new InlineTaskWriter(app, this.fileOps);
         this.frontmatterWriter = new FrontmatterWriter(app, this.fileOps);
         this.cloner = new TaskCloner(app, this.fileOps);
+        this.converter = new TaskConverter(app, this.fileOps);
     }
 
     // --- Inline Task Operations ---
@@ -56,12 +59,16 @@ export class TaskRepository {
 
     // --- Frontmatter Task Operations ---
 
-    async updateFrontmatterTask(task: Task, updates: Partial<Task>): Promise<void> {
-        return this.frontmatterWriter.updateFrontmatterTask(task, updates);
+    async updateFrontmatterTask(
+        task: Task,
+        updates: Partial<Task>,
+        frontmatterKeys: FrontmatterTaskKeys
+    ): Promise<void> {
+        return this.frontmatterWriter.updateFrontmatterTask(task, updates, frontmatterKeys);
     }
 
-    async deleteFrontmatterTask(task: Task): Promise<void> {
-        return this.frontmatterWriter.deleteFrontmatterTask(task);
+    async deleteFrontmatterTask(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
+        return this.frontmatterWriter.deleteFrontmatterTask(task, frontmatterKeys);
     }
 
     async insertLineAfterFrontmatter(filePath: string, lineContent: string, header: string, headerLevel: number): Promise<void> {
@@ -82,11 +89,57 @@ export class TaskRepository {
         return this.cloner.duplicateFrontmatterTask(task);
     }
 
-    async duplicateFrontmatterTaskForWeek(task: Task): Promise<void> {
-        return this.cloner.duplicateFrontmatterTaskForWeek(task);
+    async duplicateFrontmatterTaskForWeek(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
+        return this.cloner.duplicateFrontmatterTaskForWeek(task, frontmatterKeys);
     }
 
     async insertRecurrenceForTask(task: Task, content: string, newTask?: Task): Promise<void> {
         return this.cloner.insertRecurrenceForTask(task, content, newTask);
+    }
+
+    // --- Task Conversion Operations ---
+
+    async createFrontmatterTaskFile(
+        task: Task,
+        headerName: string,
+        headerLevel: number,
+        sourceFileColor?: string,
+        frontmatterKeys?: FrontmatterTaskKeys
+    ): Promise<string> {
+        return this.converter.convertToFrontmatterTask(
+            task,
+            headerName,
+            headerLevel,
+            sourceFileColor,
+            frontmatterKeys
+        );
+    }
+
+    /**
+     * タスク行 + childLines を wikilink に置き換える。
+     */
+    async replaceInlineTaskWithWikilink(task: Task, targetPath: string): Promise<void> {
+        const fileName = targetPath.split('/').pop()?.replace(/\.md$/, '') || 'task';
+        const wikilinkLine = `- [[${fileName}]]`;
+
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) return;
+
+        await this.app.vault.process(file, (content) => {
+            const lines = content.split('\n');
+            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
+            if (currentLine < 0 || currentLine >= lines.length) return content;
+
+            // 元のインデントを保持
+            const originalIndent = lines[currentLine].match(/^(\s*)/)?.[1] || '';
+
+            // childLines を収集して削除範囲を決定
+            const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
+
+            // task + children を wikilink に置き換え
+            lines.splice(currentLine, 1 + childrenLines.length, originalIndent + wikilinkLine);
+
+            return lines.join('\n');
+        });
     }
 }

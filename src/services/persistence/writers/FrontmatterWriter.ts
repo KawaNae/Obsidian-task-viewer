@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import type { Task } from '../../../types';
+import type { FrontmatterTaskKeys, Task } from '../../../types';
 import { FileOperations } from '../utils/FileOperations';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 import { HeadingInserter } from '../../../utils/HeadingInserter';
@@ -20,28 +20,32 @@ export class FrontmatterWriter {
      * task オブジェクトは Object.assign で既に最新値に更新済み。
      * updates には変更されたフィールドのキーのみが含まれる。
      */
-    async updateFrontmatterTask(task: Task, updates: Partial<Task>): Promise<void> {
+    async updateFrontmatterTask(
+        task: Task,
+        updates: Partial<Task>,
+        frontmatterKeys: FrontmatterTaskKeys
+    ): Promise<void> {
         const fmUpdates: Record<string, string | null> = {};
 
         if ('statusChar' in updates) {
             // ' ' (todo) → キー削除; それ以外 → エスケープしてキー書き込み
-            fmUpdates['status'] = task.statusChar === ' ' ? null : this.escapeStatusChar(task.statusChar);
+            fmUpdates[frontmatterKeys.status] = task.statusChar === ' ' ? null : this.escapeStatusChar(task.statusChar);
         }
 
         if ('startDate' in updates || 'startTime' in updates) {
-            fmUpdates['start'] = this.formatFrontmatterDateTime(task.startDate, task.startTime);
+            fmUpdates[frontmatterKeys.start] = this.formatFrontmatterDateTime(task.startDate, task.startTime);
         }
 
         if ('endDate' in updates || 'endTime' in updates) {
-            fmUpdates['end'] = this.formatFrontmatterDateTime(task.endDate, task.endTime);
+            fmUpdates[frontmatterKeys.end] = this.formatFrontmatterDateTime(task.endDate, task.endTime);
         }
 
         if ('deadline' in updates) {
-            fmUpdates['deadline'] = task.deadline || null;
+            fmUpdates[frontmatterKeys.deadline] = task.deadline || null;
         }
 
         if ('content' in updates) {
-            fmUpdates['content'] = task.content || null;
+            fmUpdates[frontmatterKeys.content] = task.content || null;
         }
 
         if (Object.keys(fmUpdates).length > 0) {
@@ -53,9 +57,13 @@ export class FrontmatterWriter {
      * Frontmatter タスクを削除する（タスク関連キーを除去のみ）。
      * ファイル自体は削除しない。
      */
-    async deleteFrontmatterTask(task: Task): Promise<void> {
+    async deleteFrontmatterTask(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
         await this.updateFrontmatterFields(task.file, {
-            start: null, end: null, deadline: null, status: null, content: null,
+            [frontmatterKeys.start]: null,
+            [frontmatterKeys.end]: null,
+            [frontmatterKeys.deadline]: null,
+            [frontmatterKeys.status]: null,
+            [frontmatterKeys.content]: null,
         });
     }
 

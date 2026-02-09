@@ -1,6 +1,6 @@
 /**
  * Timer Recorder
- * 
+ *
  * Handles saving timer records to tasks or daily notes.
  */
 
@@ -30,11 +30,9 @@ export class TimerRecorder {
         const endDateStr = this.formatDate(endTime);
         const endTimeStr = this.formatTime(endTime);
 
-        // Use 🍅 + custom label if provided
         const customText = timer.customLabel.trim();
         const label = customText ? `🍅 ${customText}` : '🍅';
 
-        // Create Task object and use Parser to format
         const taskObj = this.createTaskObject(label, startDateStr, startTimeStr, endDateStr, endTimeStr);
         const formattedLine = TaskParser.format(taskObj);
 
@@ -47,7 +45,6 @@ export class TimerRecorder {
      * Record a completed Countup timer session
      */
     async addCountupRecord(timer: TimerInstance): Promise<void> {
-        // Calculate start and end times based on elapsed time
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - timer.elapsedTime * 1000);
 
@@ -56,11 +53,9 @@ export class TimerRecorder {
         const endDateStr = this.formatDate(endTime);
         const endTimeStr = this.formatTime(endTime);
 
-        // Use ⏱️ + custom label if provided
         const customText = timer.customLabel.trim();
         const label = customText ? `⏱️ ${customText}` : '⏱️';
 
-        // Create Task object and use Parser to format
         const taskObj = this.createTaskObject(label, startDateStr, startTimeStr, endDateStr, endTimeStr);
         const formattedLine = TaskParser.format(taskObj);
 
@@ -71,10 +66,9 @@ export class TimerRecorder {
 
     /**
      * Update the task's start/end times directly (for 'self' recordMode)
-     * This converts the task to SE-Timed type
+     * This converts the task to SE-Timed type.
      */
     async updateTaskDirectly(timer: TimerInstance): Promise<void> {
-        // Calculate start and end times based on elapsed time
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - timer.elapsedTime * 1000);
 
@@ -85,21 +79,24 @@ export class TimerRecorder {
 
         if (timer.taskId) {
             const taskIndex = this.plugin.getTaskIndex();
+            const task = timer.parserId === 'frontmatter'
+                ? this.resolveFrontmatterTask(timer)
+                : this.resolveInlineTask(timer);
 
-            const task = taskIndex.getTask(timer.taskId);
-            if (task) {
-                const content = task.content.startsWith('⏱️') ? task.content : `⏱️ ${task.content}`;
-                // Always pass complete data - Parser handles abbreviation
-                await taskIndex.updateTask(timer.taskId, {
-                    content,
-                    startDate: startDateStr,
-                    startTime: startTimeStr,
-                    endDate: endDateStr,
-                    endTime: endTimeStr,
-
-                    statusChar: 'x' // Auto-complete when timer stops
-                });
+            if (!task) {
+                new Notice('Timer target task was not found. It may have been deleted, moved, or renamed.');
+                return;
             }
+
+            const content = task.content.startsWith('⏱️') ? task.content : `⏱️ ${task.content}`;
+            await taskIndex.updateTask(task.id, {
+                content,
+                startDate: startDateStr,
+                startTime: startTimeStr,
+                endDate: endDateStr,
+                endTime: endTimeStr,
+                statusChar: 'x'
+            });
         }
 
         new Notice(`⏱️ Task updated! (${this.formatElapsedTime(timer.elapsedTime)})`);
@@ -107,35 +104,42 @@ export class TimerRecorder {
 
     /**
      * Insert a child record line for the given timer.
-     * Frontmatter tasks use heading-based insertion; inline tasks use originalText-based lookup.
+     * Frontmatter/inline both resolve target with timerTargetId first.
      */
     private async insertChildRecord(timer: TimerInstance, formattedLine: string): Promise<void> {
-        if (timer.parserId === 'frontmatter' && timer.taskFile) {
-            // Frontmatter task: insert under configured heading
+        if (timer.taskId.startsWith('daily-')) {
+            const dailyDate = timer.taskId.replace('daily-', '');
+            await this.addTimerRecordToDailyNote(dailyDate, formattedLine);
+            return;
+        }
+
+        if (timer.parserId === 'frontmatter') {
+            const frontmatterTask = this.resolveFrontmatterTask(timer);
+            if (!frontmatterTask) {
+                new Notice('Timer target task was not found. It may have been deleted, moved, or renamed.');
+                return;
+            }
+
             const taskRepository = this.plugin.getTaskRepository();
             await taskRepository.insertLineAfterFrontmatter(
-                timer.taskFile,
+                frontmatterTask.file,
                 formattedLine,
                 this.plugin.settings.frontmatterTaskHeader,
                 this.plugin.settings.frontmatterTaskHeaderLevel
             );
-        } else if (timer.taskOriginalText && timer.taskFile) {
-            // Inline task: use originalText for reliable lookup
-            const childIndent = this.getChildIndent(timer.taskOriginalText);
-            const childLine = childIndent + formattedLine;
-            const taskRepository = this.plugin.getTaskRepository();
-
-            const taskForInsert = {
-                file: timer.taskFile,
-                originalText: timer.taskOriginalText,
-                line: -1, // 行番号不明 → findTaskLineNumber で originalText ベース検索を強制
-            };
-            await taskRepository.insertLineAsFirstChild(taskForInsert as any, childLine);
-        } else if (timer.taskId.startsWith('daily-')) {
-            // Daily note timer
-            const dailyDate = timer.taskId.replace('daily-', '');
-            await this.addTimerRecordToDailyNote(dailyDate, formattedLine);
+            return;
         }
+
+        const inlineTask = this.resolveInlineTask(timer);
+        if (!inlineTask) {
+            new Notice('Timer target task was not found. It may have been deleted, moved, or renamed.');
+            return;
+        }
+
+        const childIndent = this.getChildIndent(inlineTask.originalText);
+        const childLine = childIndent + formattedLine;
+        const taskRepository = this.plugin.getTaskRepository();
+        await taskRepository.insertLineAsFirstChild(inlineTask, childLine);
     }
 
     /**
@@ -180,7 +184,6 @@ export class TimerRecorder {
             endDate,
             endTime,
             deadline: undefined,
-
             explicitStartDate: true,
             explicitStartTime: true,
             explicitEndDate: true,
@@ -193,7 +196,6 @@ export class TimerRecorder {
         };
     }
 
-    // Utility methods
     private formatDate(d: Date): string {
         const year = d.getFullYear();
         const month = (d.getMonth() + 1).toString().padStart(2, '0');
@@ -216,29 +218,105 @@ export class TimerRecorder {
      * Detects whether tabs or spaces are used and adds one level.
      */
     private getChildIndent(originalText: string): string {
-        // Extract the actual leading whitespace from parent
         const match = originalText.match(/^(\s*)/);
         const parentIndent = match ? match[1] : '';
 
-        // Detect indentation style: tabs or spaces
         if (parentIndent.includes('\t')) {
-            // Tab-based: add one tab
             return parentIndent + '\t';
-        } else {
-            // Space-based: detect unit size (commonly 2 or 4)
-            // Look for the first list marker to detect indent unit
-            const listMatch = originalText.match(/^(\s*)-/);
-            if (listMatch) {
-                const existingIndent = listMatch[1];
-                // If parent has no indent, use 4 spaces as default
-                if (existingIndent.length === 0) {
-                    return '    ';
-                }
-                // Otherwise use same unit as parent's indent
-                return parentIndent + existingIndent.substring(0, Math.max(2, existingIndent.length)) || '    ';
-            }
-            // Default: parent indent + 4 spaces
-            return parentIndent + '    ';
         }
+
+        const listMatch = originalText.match(/^(\s*)-/);
+        if (listMatch) {
+            const existingIndent = listMatch[1];
+            if (existingIndent.length === 0) {
+                return '    ';
+            }
+            return parentIndent + (existingIndent.substring(0, Math.max(2, existingIndent.length)) || '    ');
+        }
+
+        return parentIndent + '    ';
+    }
+
+    private resolveInlineTask(timer: TimerInstance): Task | undefined {
+        const taskIndex = this.plugin.getTaskIndex();
+        const allTasks = taskIndex.getTasks();
+
+        if (timer.timerTargetId) {
+            const byTargetInFile = timer.taskFile
+                ? allTasks.find((task) =>
+                    task.parserId === 'at-notation'
+                    && task.file === timer.taskFile
+                    && (task.timerTargetId === timer.timerTargetId || task.blockId === timer.timerTargetId)
+                )
+                : undefined;
+            if (byTargetInFile) {
+                return byTargetInFile;
+            }
+
+            const byTarget = allTasks.find((task) =>
+                task.parserId === 'at-notation'
+                && (task.timerTargetId === timer.timerTargetId || task.blockId === timer.timerTargetId)
+            );
+            if (byTarget) {
+                return byTarget;
+            }
+        }
+
+        const byId = taskIndex.getTask(timer.taskId);
+        if (byId && byId.parserId === 'at-notation') {
+            if (!timer.taskFile || byId.file === timer.taskFile) {
+                return byId;
+            }
+        }
+
+        if (timer.taskOriginalText && timer.taskFile) {
+            const byOriginalText = allTasks.find((task) =>
+                task.parserId === 'at-notation'
+                && task.file === timer.taskFile
+                && task.originalText === timer.taskOriginalText
+            );
+            if (byOriginalText) {
+                return byOriginalText;
+            }
+        }
+
+        return undefined;
+    }
+
+    private resolveFrontmatterTask(timer: TimerInstance): Task | undefined {
+        const taskIndex = this.plugin.getTaskIndex();
+        const allTasks = taskIndex.getTasks();
+
+        if (timer.timerTargetId) {
+            const byTargetInFile = timer.taskFile
+                ? allTasks.find((task) =>
+                    task.parserId === 'frontmatter'
+                    && task.file === timer.taskFile
+                    && task.timerTargetId === timer.timerTargetId
+                )
+                : undefined;
+            if (byTargetInFile) {
+                return byTargetInFile;
+            }
+
+            const byTarget = allTasks.find((task) =>
+                task.parserId === 'frontmatter'
+                && task.timerTargetId === timer.timerTargetId
+            );
+            if (byTarget) {
+                return byTarget;
+            }
+        }
+
+        const byId = taskIndex.getTask(timer.taskId);
+        if (byId && byId.parserId === 'frontmatter') {
+            return byId;
+        }
+
+        if (!timer.taskFile) {
+            return undefined;
+        }
+
+        return allTasks.find((task) => task.parserId === 'frontmatter' && task.file === timer.taskFile);
     }
 }

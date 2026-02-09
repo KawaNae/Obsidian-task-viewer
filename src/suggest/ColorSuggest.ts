@@ -16,13 +16,14 @@ export class ColorSuggest extends EditorSuggest<string> {
 
     onTrigger(cursor: EditorPosition, editor: Editor, file: TFile): EditorSuggestTriggerInfo | null {
         const line = editor.getLine(cursor.line);
-        const colorKey = this.plugin.settings.frontmatterColorKey;
+        const colorKey = this.plugin.settings.frontmatterTaskKeys.color;
+        const escapedColorKey = colorKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
         // Regex to capture:
         // 1. The key (exact match)
         // 2. The separator (colon + whitespace)
         // 3. The value (rest of the line)
-        const regex = new RegExp(`^(${colorKey})(\\s*:\\s*)(.*)$`);
+        const regex = new RegExp(`^(${escapedColorKey})(\\s*:\\s*)(.*)$`);
         const match = line.match(regex);
 
         if (match) {
@@ -70,7 +71,7 @@ export class ColorSuggest extends EditorSuggest<string> {
 
     selectSuggestion(value: string, evt: MouseEvent | KeyboardEvent): void {
         if (this.context) {
-            const colorKey = this.plugin.settings.frontmatterColorKey;
+            const colorKey = this.plugin.settings.frontmatterTaskKeys.color;
             // Replace the whole value part
             const newValue = `${colorKey}: ${value}`;
             this.context.editor.setLine(this.context.start.line, newValue);

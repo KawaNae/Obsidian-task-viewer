@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import { App, TFile, Notice } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
@@ -8,6 +8,7 @@ import { TaskScanner } from './TaskScanner';
 import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { EditorObserver } from './EditorObserver';
+import { InlineToFrontmatterConversionService } from '../execution/InlineToFrontmatterConversionService';
 
 export interface ValidationError {
     file: string;
@@ -27,6 +28,7 @@ export class TaskIndex {
     private syncDetector: SyncDetector;
     private editorObserver: EditorObserver;
     private repository: TaskRepository;
+    private inlineToFrontmatterConversionService: InlineToFrontmatterConversionService;
     private commandExecutor: TaskCommandExecutor;
     private settings: TaskViewerSettings;
     private draggingFilePath: string | null = null;  // ドラッグ中のファイルパス
@@ -41,6 +43,7 @@ export class TaskIndex {
         this.validator = new TaskValidator();
         this.syncDetector = new SyncDetector();
         this.repository = new TaskRepository(app);
+        this.inlineToFrontmatterConversionService = new InlineToFrontmatterConversionService(app, this.repository);
         this.commandExecutor = new TaskCommandExecutor(this.repository, this, app);
         this.editorObserver = new EditorObserver(app, this.syncDetector);
         this.scanner = new TaskScanner(
@@ -267,7 +270,7 @@ export class TaskIndex {
         }
 
         if (task.parserId === 'frontmatter') {
-            await this.repository.updateFrontmatterTask(task, updates);
+            await this.repository.updateFrontmatterTask(task, updates, this.settings.frontmatterTaskKeys);
         } else {
             await this.repository.updateTaskInFile(task, { ...task, ...updates });
         }
@@ -280,7 +283,7 @@ export class TaskIndex {
         this.syncDetector.markLocalEdit(task.file);
 
         if (task.parserId === 'frontmatter') {
-            await this.repository.deleteFrontmatterTask(task);
+            await this.repository.deleteFrontmatterTask(task, this.settings.frontmatterTaskKeys);
         } else {
             await this.repository.deleteTaskFromFile(task);
         }
@@ -303,6 +306,41 @@ export class TaskIndex {
         await this.scanner.waitForScan(task.file);
     }
 
+    /**
+     * inline タスクを frontmatter タスクファイルに変換。
+     * ソースファイル + 新ファイルの両方を再スキャン。
+     */
+    async convertToFrontmatterTask(taskId: string): Promise<void> {
+        const task = this.store.getTask(taskId);
+        if (!task) return;
+
+        // inline タスクのみ変換可能
+        if (task.parserId !== 'at-notation') {
+            new Notice('Only inline tasks can be converted to frontmatter tasks');
+            return;
+        }
+
+        this.syncDetector.markLocalEdit(task.file);
+
+        try {
+            const newPath = await this.inlineToFrontmatterConversionService.convertInlineTaskToFrontmatter(
+                task,
+                this.settings.frontmatterTaskHeader,
+                this.settings.frontmatterTaskHeaderLevel,
+                this.settings.frontmatterTaskKeys
+            );
+
+            // ソースファイル再スキャン (wikilink が追加される)
+            await this.scanner.waitForScan(task.file);
+            await this.scanner.waitForScan(newPath);
+
+            new Notice('Task converted to frontmatter file');
+        } catch (error) {
+            console.error('[TaskIndex] Failed to convert task:', error);
+            new Notice('Failed to convert task: ' + (error as Error).message);
+        }
+    }
+
     async duplicateTaskForWeek(taskId: string): Promise<void> {
         const task = this.store.getTask(taskId);
         if (!task) return;
@@ -310,7 +348,7 @@ export class TaskIndex {
         this.syncDetector.markLocalEdit(task.file);
 
         if (task.parserId === 'frontmatter') {
-            await this.repository.duplicateFrontmatterTaskForWeek(task);
+            await this.repository.duplicateFrontmatterTaskForWeek(task, this.settings.frontmatterTaskKeys);
         } else {
             await this.repository.duplicateTaskForWeek(task);
         }

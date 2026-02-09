@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import type { Task } from '../../types';
+import type { FrontmatterTaskKeys, Task } from '../../types';
 import { TaskParser } from '../parsing/TaskParser';
 import { DateUtils } from '../../utils/DateUtils';
 import { FileOperations } from './utils/FileOperations';
@@ -113,14 +113,14 @@ export class TaskCloner {
      * Frontmatter タスクを1週間分（7日間）複製。各コピーの日付を1日ずつシフト。
      * ファイル名: 既存日付あり → 置換、なし → 末尾に追加
      */
-    async duplicateFrontmatterTaskForWeek(task: Task): Promise<void> {
+    async duplicateFrontmatterTaskForWeek(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;
 
         const content = await this.app.vault.read(file);
 
         for (let dayOffset = 1; dayOffset <= 7; dayOffset++) {
-            const shiftedContent = this.shiftFrontmatterDates(content, dayOffset);
+            const shiftedContent = this.shiftFrontmatterDates(content, dayOffset, frontmatterKeys);
             const newPath = this.generateDatedPath(file, task, dayOffset);
 
             if (!this.app.vault.getAbstractFileByPath(newPath)) {
@@ -206,12 +206,16 @@ export class TaskCloner {
     }
 
     /** frontmatter の日付キー (start/end/deadline) の日付部分を N日シフトする。 */
-    private shiftFrontmatterDates(content: string, dayOffset: number): string {
+    private shiftFrontmatterDates(content: string, dayOffset: number, frontmatterKeys: FrontmatterTaskKeys): string {
         const lines = content.split('\n');
         const fmEnd = FrontmatterLineEditor.findEnd(lines);
         if (fmEnd < 0) return content;
 
-        const dateKeys = new Set(['start', 'end', 'deadline']);
+        const dateKeys = new Set([
+            frontmatterKeys.start,
+            frontmatterKeys.end,
+            frontmatterKeys.deadline,
+        ]);
         const dateRegex = /(\d{4}-\d{2}-\d{2})/;
 
         for (let i = 1; i < fmEnd; i++) {

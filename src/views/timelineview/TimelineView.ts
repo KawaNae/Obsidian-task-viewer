@@ -137,7 +137,7 @@ export class TimelineView extends ItemView {
             {
                 onRender: () => this.render(),
                 onStateChange: () => { },
-                getFileColor: (filePath) => ViewUtils.getFileColor(this.app, filePath, this.plugin.settings.frontmatterColorKey),
+                getFileColor: (filePath) => ViewUtils.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color),
                 getDatesToShow: () => this.getDatesToShow()
             }
         );
@@ -426,7 +426,7 @@ export class TimelineView extends ItemView {
 
     /** Gets the custom color for a file from its frontmatter. */
     private getFileColor(filePath: string): string | null {
-        return ViewUtils.getFileColor(this.app, filePath, this.plugin.settings.frontmatterColorKey);
+        return ViewUtils.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color);
     }
 
 

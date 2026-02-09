@@ -30,6 +30,12 @@ export class TaskActionsMenuBuilder {
         // File operations
         this.addOpenInEditorItem(menu, task);
         this.addDuplicateSubmenu(menu, task);
+
+        // Convert to frontmatter (inline タスクのみ)
+        if (task.parserId === 'at-notation') {
+            this.addConvertToFrontmatterItem(menu, task);
+        }
+
         this.addDeleteItem(menu, task);
     }
 
@@ -73,7 +79,15 @@ export class TaskActionsMenuBuilder {
                 .setIcon('timer')
                 .onClick(() => {
                     const widget = this.plugin.getTimerWidget();
-                    widget.show(task.id, displayName, task.originalText, task.file, 'child', task.parserId);
+                    widget.show(
+                        task.id,
+                        displayName,
+                        task.originalText,
+                        task.file,
+                        'child',
+                        task.parserId,
+                        task.timerTargetId ?? task.blockId
+                    );
                 });
         });
     }
@@ -87,7 +101,16 @@ export class TaskActionsMenuBuilder {
                 .setIcon('clock')
                 .onClick(() => {
                     const widget = this.plugin.getTimerWidget();
-                    widget.showCountup(task.id, displayName, task.originalText, task.file, 'child', false, task.parserId);
+                    widget.showCountup(
+                        task.id,
+                        displayName,
+                        task.originalText,
+                        task.file,
+                        'child',
+                        false,
+                        task.parserId,
+                        task.timerTargetId ?? task.blockId
+                    );
                 });
         });
     }
@@ -136,6 +159,19 @@ export class TaskActionsMenuBuilder {
     /**
      * "Delete"項目を追加
      */
+    /**
+     * "Convert to Frontmatter Task" メニュー項目を追加
+     */
+    private addConvertToFrontmatterItem(menu: Menu, task: Task): void {
+        menu.addItem((item) => {
+            item.setTitle('Convert to Frontmatter Task')
+                .setIcon('file-plus')
+                .onClick(async () => {
+                    await this.taskIndex.convertToFrontmatterTask(task.id);
+                });
+        });
+    }
+
     private addDeleteItem(menu: Menu, task: Task): void {
         menu.addItem((item) => {
             item.setTitle('Delete')

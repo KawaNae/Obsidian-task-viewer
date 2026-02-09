@@ -149,7 +149,7 @@ export class DeadlineListRenderer {
         tasks.forEach(task => {
             const card = listEl.createDiv('task-card task-card--deadline');
 
-            ViewUtils.applyFileColor(this.plugin.app, card, task.file, this.plugin.settings.frontmatterColorKey);
+            ViewUtils.applyFileColor(this.plugin.app, card, task.file, this.plugin.settings.frontmatterTaskKeys.color);
 
             this.taskRenderer.render(card, task, owner, this.plugin.settings, { topRight: 'deadline' });
 

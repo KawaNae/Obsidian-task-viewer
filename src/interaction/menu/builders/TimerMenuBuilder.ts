@@ -22,7 +22,16 @@ export class TimerMenuBuilder {
                 .onClick(() => {
                     const widget = this.plugin.getTimerWidget();
                     // recordMode: 'self' = update this task directly, autoStart: true
-                    widget.showCountup(task.id, displayName, task.originalText, task.file, 'self', true, task.parserId);
+                    widget.showCountup(
+                        task.id,
+                        displayName,
+                        task.originalText,
+                        task.file,
+                        'self',
+                        true,
+                        task.parserId,
+                        task.timerTargetId ?? task.blockId
+                    );
                 });
         });
     }

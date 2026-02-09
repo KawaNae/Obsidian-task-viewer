@@ -17,23 +17,46 @@ export class WikiLinkResolver {
      * @param excludedPaths 除外パスリスト
      */
     static resolve(tasks: Map<string, Task>, app: App, excludedPaths: string[]): void {
+        // wikilink 子の body 行位置を追跡（ソート用）
+        const wikiChildLineMap = new Map<string, Map<string, number>>();
+
         for (const [parentId, parentTask] of tasks) {
             // frontmatter タスク: wikiLinkTargets を使用（childLines は空）
             if (parentTask.wikiLinkTargets && parentTask.wikiLinkTargets.length > 0) {
-                for (const linkName of parentTask.wikiLinkTargets) {
+                const childLineMap = new Map<string, number>();
+                for (let i = 0; i < parentTask.wikiLinkTargets.length; i++) {
+                    const linkName = parentTask.wikiLinkTargets[i];
+                    const bodyLine = parentTask.wikiLinkBodyLines?.[i];
                     const resolvedPath = this.resolveWikiLink(linkName, app, excludedPaths);
                     if (!resolvedPath) continue;
                     this.wireChild(parentTask, parentId, tasks, resolvedPath);
+                    if (bodyLine !== undefined) {
+                        childLineMap.set(`${resolvedPath}:-1`, bodyLine);
+                    }
+                }
+                if (childLineMap.size > 0) {
+                    wikiChildLineMap.set(parentId, childLineMap);
                 }
                 continue;
             }
 
-            // inline タスク: childLines から wikilink パターンを検出
+            // inline タスク: childLines から直接子の wikilink パターンのみ検出
             if (!parentTask.childLines || parentTask.childLines.length === 0) continue;
+
+            // childLines の最小リストインデントを求める（直接子のレベル）
+            let minChildIndent = Infinity;
+            for (const line of parentTask.childLines) {
+                const m = line.match(/^(\s*)-\s/);
+                if (m) minChildIndent = Math.min(minChildIndent, m[1].length);
+            }
 
             for (const line of parentTask.childLines) {
                 const match = line.match(this.WIKI_LINK_CHILD_REGEX);
                 if (!match) continue;
+
+                // 直接子のインデントレベルのみ処理（孫以降はスキップ）
+                const lineIndent = (line.match(/^(\s*)/)?.[1] ?? '').length;
+                if (lineIndent !== minChildIndent) continue;
 
                 const linkName = match[1].trim();
                 const resolvedPath = this.resolveWikiLink(linkName, app, excludedPaths);
@@ -41,20 +64,57 @@ export class WikiLinkResolver {
                 this.wireChild(parentTask, parentId, tasks, resolvedPath);
             }
         }
+
+        // frontmatter タスクの childIds をファイル内の出現順にソート
+        for (const [parentId, parentTask] of tasks) {
+            if (parentTask.parserId !== 'frontmatter' || parentTask.childIds.length <= 1) continue;
+            const childLineMap = wikiChildLineMap.get(parentId);
+            parentTask.childIds.sort((a, b) => {
+                const lineA = this.getChildBodyLine(a, childLineMap, tasks);
+                const lineB = this.getChildBodyLine(b, childLineMap, tasks);
+                return lineA - lineB;
+            });
+        }
+    }
+
+    /**
+     * childId からファイル内の出現行を取得（ソート用）
+     */
+    private static getChildBodyLine(
+        childId: string,
+        wikiLineMap: Map<string, number> | undefined,
+        tasks: Map<string, Task>
+    ): number {
+        const wikiLine = wikiLineMap?.get(childId);
+        if (wikiLine !== undefined) return wikiLine;
+        const child = tasks.get(childId);
+        if (child && child.line >= 0) return child.line;
+        return Infinity;
     }
 
     /**
      * 解決済みパスから子タスクを探し、親子関係をワイアする。
+     * DAG制約: 自己参照・循環を禁止し、合流時は最初の親を優先する。
      */
     private static wireChild(
         parentTask: Task, parentId: string,
         tasks: Map<string, Task>, resolvedPath: string
     ): void {
         const childTaskId = `${resolvedPath}:-1`;
+
+        // 自己参照禁止
+        if (childTaskId === parentId) return;
+
         const childTask = tasks.get(childTaskId);
         if (!childTask) return;
 
-        childTask.parentId = parentId;
+        // 循環禁止: childTask のサブツリーに parentId が存在しないか確認
+        if (this.wouldCreateCycle(childTaskId, parentId, tasks)) return;
+
+        // DAG: parentId は最初の親のみ設定（合流時は上書きしない）
+        if (!childTask.parentId) {
+            childTask.parentId = parentId;
+        }
         if (!parentTask.childIds.includes(childTaskId)) {
             parentTask.childIds.push(childTaskId);
         }
@@ -67,6 +127,31 @@ export class WikiLinkResolver {
         if (parentTask.startDate && !childTask.endDate && childTask.endTime) {
             childTask.endDate = parentTask.startDate;
         }
+    }
+
+    /**
+     * childTaskId の childIds サブツリーをたどり、
+     * targetId に到達可能なら true（リンク追加でサイクルが形成される）。
+     */
+    private static wouldCreateCycle(
+        childTaskId: string, targetId: string,
+        tasks: Map<string, Task>, maxDepth: number = 50
+    ): boolean {
+        const visited = new Set<string>();
+        const stack = [childTaskId];
+        while (stack.length > 0 && visited.size < maxDepth) {
+            const current = stack.pop()!;
+            if (current === targetId) return true;
+            if (visited.has(current)) continue;
+            visited.add(current);
+            const task = tasks.get(current);
+            if (task) {
+                for (const cid of task.childIds) {
+                    stack.push(cid);
+                }
+            }
+        }
+        return false;
     }
 
     /**

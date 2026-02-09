@@ -1,53 +1,61 @@
-import { Task } from '../../../types';
+import { FrontmatterTaskKeys, Task } from '../../../types';
 
 /**
- * Frontmatter からタスクを構築する静的ユーティリティ。
- * ParserStrategy ではない（frontmatter はファイルレベルの操作）。
- * TaskIndex.scanFile から呼び出される。
+ * Builds a frontmatter-backed Task from metadata cache data.
  */
 export class FrontmatterTaskBuilder {
-
     /**
-     * frontmatter オブジェクトから Task を構築する。
-     * タスク関連フィールド (start/end/deadline) がない場合は null を返す。
+     * Parse frontmatter object and body lines into a Task.
+     * Returns null when required task date fields are not present.
      */
-    static parse(filePath: string, frontmatter: Record<string, any> | undefined, bodyLines: string[]): Task | null {
+    static parse(
+        filePath: string,
+        frontmatter: Record<string, any> | undefined,
+        bodyLines: string[],
+        bodyStartIndex: number = 0,
+        frontmatterKeys: FrontmatterTaskKeys,
+        frontmatterTaskHeader: string,
+        frontmatterTaskHeaderLevel: number
+    ): Task | null {
         if (!frontmatter) return null;
 
-        // クイックゲート: start / end / deadline のいずれかのキーが存在するか
-        if (!('start' in frontmatter) && !('end' in frontmatter) && !('deadline' in frontmatter)) {
+        if (
+            !(frontmatterKeys.start in frontmatter)
+            && !(frontmatterKeys.end in frontmatter)
+            && !(frontmatterKeys.deadline in frontmatter)
+        ) {
             return null;
         }
 
-        // 各フィールドのパース
-        const startNorm = this.normalizeYamlDate(frontmatter['start']);
+        const startNorm = this.normalizeYamlDate(frontmatter[frontmatterKeys.start]);
         const start = this.parseDateTimeField(startNorm);
 
-        const endNorm = this.normalizeYamlDate(frontmatter['end']);
+        const endNorm = this.normalizeYamlDate(frontmatter[frontmatterKeys.end]);
         const end = this.parseDateTimeField(endNorm);
 
-        const deadlineNorm = this.normalizeYamlDate(frontmatter['deadline']);
+        const deadlineNorm = this.normalizeYamlDate(frontmatter[frontmatterKeys.deadline]);
         const deadlineParsed = this.parseDateTimeField(deadlineNorm);
 
-        // インライン記法と同様: 日付・時刻フィールドが1つもなければタスクではない
         if (!start.date && !start.time && !end.date && !end.time && !deadlineParsed.date) {
             return null;
         }
 
-        // status: null/undefined/'' → ' '(todo); それ以外は最初の文字を使う
-        const rawStatus = frontmatter['status'];
+        const rawStatus = frontmatter[frontmatterKeys.status];
         const statusChar = (rawStatus === null || rawStatus === undefined || String(rawStatus).trim() === '')
             ? ' '
             : String(rawStatus).trim()[0];
 
-        // content: 空の場合はファイル名（拡張子なし）を使う
-        const rawContent = frontmatter['content'];
+        const rawContent = frontmatter[frontmatterKeys.content];
         const fileName = filePath.split('/').pop()?.replace(/\.md$/, '') || '';
         const content = (rawContent != null && String(rawContent).trim() !== '')
             ? String(rawContent).trim()
             : fileName;
 
-        // deadline: YYYY-MM-DD または YYYY-MM-DDThh:mm で保存（インライン と同じ）
+        const rawTimerTargetId = frontmatter[frontmatterKeys.timerTargetId];
+        const timerTargetId = (rawTimerTargetId == null || String(rawTimerTargetId).trim() === '')
+            ? undefined
+            : String(rawTimerTargetId).trim();
+
         let deadline: string | undefined;
         if (deadlineParsed.date) {
             deadline = deadlineParsed.time
@@ -55,28 +63,47 @@ export class FrontmatterTaskBuilder {
                 : deadlineParsed.date;
         }
 
-        // childLines: frontmatter タスクは body チェックボックスを収集しない。
-        // @notation タスクは TaskScanner が個別の Task として解析し childIds でリンクする。
-        // WikiLinkResolver 用に wikilink ターゲットのみ抽出する。
         const childLines: string[] = [];
         const childBodyIndices: number[] = [];
 
         const wikiLinkTargets: string[] = [];
-        for (let i = 0; i < bodyLines.length; i++) {
-            const match = bodyLines[i].match(/^\s*-\s+\[\[([^\]]+)\]\]\s*$/);
-            if (match) {
-                wikiLinkTargets.push(match[1].trim());
+        const wikiLinkBodyLines: number[] = [];
+
+        const section = this.findHeaderSection(
+            bodyLines,
+            frontmatterTaskHeader,
+            frontmatterTaskHeaderLevel
+        );
+        if (section) {
+            const block = this.collectFirstContiguousListBlock(
+                bodyLines,
+                section.start,
+                section.end
+            );
+            const wikiRegex = /^\s*(?:[-*+]|\d+[.)])\s+\[\[([^\]]+)\]\]\s*$/;
+
+            for (const relIndex of block.lineIndices) {
+                const line = bodyLines[relIndex];
+                const absoluteLine = bodyStartIndex + relIndex;
+                childLines.push(line);
+                childBodyIndices.push(absoluteLine);
+
+                const wikiMatch = line.match(wikiRegex);
+                if (wikiMatch) {
+                    wikiLinkTargets.push(wikiMatch[1].trim());
+                    wikiLinkBodyLines.push(absoluteLine);
+                }
             }
         }
 
         return {
             id: `${filePath}:-1`,
             file: filePath,
-            line: -1,                           // frontmatter タスクには該当行なし（種別判定は parserId を使用）
+            line: -1,
             content,
             statusChar,
             indent: 0,
-            childIds: [],                       // scanFile で親子接続時に populated
+            childIds: [],
             childLines,
             childLineBodyOffsets: childBodyIndices,
             startDate: start.date,
@@ -89,26 +116,21 @@ export class FrontmatterTaskBuilder {
             explicitEndDate: !!end.date,
             explicitEndTime: !!end.time,
             wikiLinkTargets,
-            originalText: '',                   // frontmatterタスクに該当する単一行はない
-            commands: [],                       // フローコマンドは frontmatter では未対応
+            wikiLinkBodyLines,
+            originalText: '',
+            commands: [],
+            timerTargetId,
             parserId: 'frontmatter'
         };
     }
 
     /**
-     * YAML パーサーによる型変換のエッジケースを正規化する。
-     * js-yaml (YAML 1.1 デフォルト) の動作:
-     *   - `2026-02-10` → Date オブジェクト
-     *   - `2026-02-10T14:00` → Date オブジェクト
-     *   - `14:00` → 数値 840 (sexagesimal: 14*60+0)
-     *   - `start:` (値なし) → null
+     * Normalize YAML scalar values emitted by metadata cache.
      */
     static normalizeYamlDate(value: unknown): string | null {
         if (value === null || value === undefined) return null;
 
         if (value instanceof Date) {
-            // toISOString() は UTC に変換するため使わない（日付がずれる）
-            // ローカル時間のコンポーネントを直接取得する
             const y = value.getFullYear();
             const m = (value.getMonth() + 1).toString().padStart(2, '0');
             const d = value.getDate().toString().padStart(2, '0');
@@ -121,8 +143,6 @@ export class FrontmatterTaskBuilder {
         }
 
         if (typeof value === 'number') {
-            // YAML 1.1: `14:00` は sexagesimal で 840 になる
-            // 0〜1439 の範囲なら時刻として解釈する
             if (value >= 0 && value < 1440) {
                 const hours = Math.floor(value / 60);
                 const minutes = value % 60;
@@ -136,13 +156,11 @@ export class FrontmatterTaskBuilder {
             return trimmed.length > 0 ? trimmed : null;
         }
 
-        // その他の型はfallback
         return String(value).trim() || null;
     }
 
     /**
-     * 正規化された日時文字列を date と time に分割する。
-     * TaskViewerParser.parseDateTime (line 192) と同じ正規表現を使用し、動作の一貫性を保つ。
+     * Extract date/time fragments from a normalized field.
      */
     static parseDateTimeField(normalized: string | null): { date?: string; time?: string } {
         if (!normalized) return {};
@@ -152,5 +170,79 @@ export class FrontmatterTaskBuilder {
             date: dateMatch ? dateMatch[1] : undefined,
             time: timeMatch ? timeMatch[1] : undefined
         };
+    }
+
+    private static findHeaderSection(
+        bodyLines: string[],
+        headerName: string,
+        headerLevel: number
+    ): { start: number; end: number } | null {
+        const expected = headerName.trim();
+        if (!expected || headerLevel < 1 || headerLevel > 6) return null;
+
+        let start = -1;
+        for (let i = 0; i < bodyLines.length; i++) {
+            const header = this.parseHeaderLine(bodyLines[i]);
+            if (!header) continue;
+            if (header.level === headerLevel && header.text.trim() === expected) {
+                start = i + 1;
+                break;
+            }
+        }
+        if (start < 0) return null;
+
+        let end = bodyLines.length;
+        for (let i = start; i < bodyLines.length; i++) {
+            const header = this.parseHeaderLine(bodyLines[i]);
+            if (!header) continue;
+            if (header.level <= headerLevel) {
+                end = i;
+                break;
+            }
+        }
+
+        return { start, end };
+    }
+
+    private static parseHeaderLine(line: string): { level: number; text: string } | null {
+        const match = line.match(/^(#{1,6})\s+(.*)$/);
+        if (!match) return null;
+        return { level: match[1].length, text: match[2] };
+    }
+
+    private static collectFirstContiguousListBlock(
+        bodyLines: string[],
+        sectionStart: number,
+        sectionEnd: number
+    ): { lineIndices: number[] } {
+        const lineIndices: number[] = [];
+        const listRegex = /^(\s*)(?:[-*+]|\d+[.)])\s+/;
+
+        let firstRootIndex = -1;
+        let rootIndent = 0;
+
+        for (let i = sectionStart; i < sectionEnd; i++) {
+            const listMatch = bodyLines[i].match(listRegex);
+            if (!listMatch) continue;
+            firstRootIndex = i;
+            rootIndent = listMatch[1].length;
+            break;
+        }
+        if (firstRootIndex < 0) return { lineIndices };
+
+        for (let i = firstRootIndex; i < sectionEnd; i++) {
+            const line = bodyLines[i];
+            if (line.trim() === '') break;
+
+            const listMatch = line.match(listRegex);
+            const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+
+            if (indent <= rootIndent && !listMatch) break;
+            if (indent < rootIndent) break;
+
+            lineIndices.push(i);
+        }
+
+        return { lineIndices };
     }
 }

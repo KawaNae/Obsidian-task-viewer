@@ -206,7 +206,8 @@ export class TaskScanner {
                         // 親子関係を設定
                         for (const childTask of childTasks) {
                             // 直接の子のみparentIdを設定（インデント差が1レベル）
-                            if (childTask.indent === taskIndent + 4 || childTask.indent === taskIndent + 2) {
+                            // +1: タブ, +2: 2スペース（レガシー互換）, +4: 4スペース
+                            if (childTask.indent === taskIndent + 1 || childTask.indent === taskIndent + 2 || childTask.indent === taskIndent + 4) {
                                 childTask.parentId = task.id;
                                 task.childIds.push(childTask.id);
                             }
@@ -235,15 +236,24 @@ export class TaskScanner {
             }
         }
         const bodyLines = lines.slice(bodyStartIndex);
-        const fmTask = FrontmatterTaskBuilder.parse(file.path, frontmatterObj, bodyLines);
+        const fmTask = FrontmatterTaskBuilder.parse(
+            file.path,
+            frontmatterObj,
+            bodyLines,
+            bodyStartIndex,
+            this.settings.frontmatterTaskKeys,
+            this.settings.frontmatterTaskHeader,
+            this.settings.frontmatterTaskHeaderLevel
+        );
 
         // インラインタスク抽出（ボディ行のみ）
         const allExtractedTasks = extractTasksFromLines(bodyLines, bodyStartIndex, fmTask?.startDate);
 
         if (fmTask) {
-            // indent 0かつ親未設定のボディタスクをfrontmatterタスクの子にする
+            // frontmatter の childLine 範囲に含まれるボディタスクを frontmatter タスクの子にする
+            const childLineSet = new Set<number>(fmTask.childLineBodyOffsets);
             for (const bt of allExtractedTasks) {
-                if (!bt.parentId && bt.indent === 0) {
+                if (!bt.parentId && childLineSet.has(bt.line)) {
                     bt.parentId = fmTask.id;
                     fmTask.childIds.push(bt.id);
                 }
