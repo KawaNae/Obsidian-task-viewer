@@ -13,7 +13,9 @@ export class FrontmatterTaskBuilder {
         frontmatter: Record<string, any> | undefined,
         bodyLines: string[],
         bodyStartIndex: number = 0,
-        frontmatterKeys: FrontmatterTaskKeys
+        frontmatterKeys: FrontmatterTaskKeys,
+        frontmatterTaskHeader: string,
+        frontmatterTaskHeaderLevel: number
     ): Task | null {
         if (!frontmatter) return null;
 
@@ -67,19 +69,30 @@ export class FrontmatterTaskBuilder {
         const wikiLinkTargets: string[] = [];
         const wikiLinkBodyLines: number[] = [];
 
-        const listItemRegex = /^(\s*)-\s/;
-        let minListIndent = Infinity;
-        for (const line of bodyLines) {
-            const m = line.match(listItemRegex);
-            if (m) minListIndent = Math.min(minListIndent, m[1].length);
-        }
+        const section = this.findHeaderSection(
+            bodyLines,
+            frontmatterTaskHeader,
+            frontmatterTaskHeaderLevel
+        );
+        if (section) {
+            const block = this.collectFirstContiguousListBlock(
+                bodyLines,
+                section.start,
+                section.end
+            );
+            const wikiRegex = /^\s*(?:[-*+]|\d+[.)])\s+\[\[([^\]]+)\]\]\s*$/;
 
-        const wikiRegex = /^(\s*)-\s+\[\[([^\]]+)\]\]\s*$/;
-        for (let i = 0; i < bodyLines.length; i++) {
-            const match = bodyLines[i].match(wikiRegex);
-            if (match && match[1].length === minListIndent) {
-                wikiLinkTargets.push(match[2].trim());
-                wikiLinkBodyLines.push(bodyStartIndex + i);
+            for (const relIndex of block.lineIndices) {
+                const line = bodyLines[relIndex];
+                const absoluteLine = bodyStartIndex + relIndex;
+                childLines.push(line);
+                childBodyIndices.push(absoluteLine);
+
+                const wikiMatch = line.match(wikiRegex);
+                if (wikiMatch) {
+                    wikiLinkTargets.push(wikiMatch[1].trim());
+                    wikiLinkBodyLines.push(absoluteLine);
+                }
             }
         }
 
@@ -157,5 +170,79 @@ export class FrontmatterTaskBuilder {
             date: dateMatch ? dateMatch[1] : undefined,
             time: timeMatch ? timeMatch[1] : undefined
         };
+    }
+
+    private static findHeaderSection(
+        bodyLines: string[],
+        headerName: string,
+        headerLevel: number
+    ): { start: number; end: number } | null {
+        const expected = headerName.trim();
+        if (!expected || headerLevel < 1 || headerLevel > 6) return null;
+
+        let start = -1;
+        for (let i = 0; i < bodyLines.length; i++) {
+            const header = this.parseHeaderLine(bodyLines[i]);
+            if (!header) continue;
+            if (header.level === headerLevel && header.text.trim() === expected) {
+                start = i + 1;
+                break;
+            }
+        }
+        if (start < 0) return null;
+
+        let end = bodyLines.length;
+        for (let i = start; i < bodyLines.length; i++) {
+            const header = this.parseHeaderLine(bodyLines[i]);
+            if (!header) continue;
+            if (header.level <= headerLevel) {
+                end = i;
+                break;
+            }
+        }
+
+        return { start, end };
+    }
+
+    private static parseHeaderLine(line: string): { level: number; text: string } | null {
+        const match = line.match(/^(#{1,6})\s+(.*)$/);
+        if (!match) return null;
+        return { level: match[1].length, text: match[2] };
+    }
+
+    private static collectFirstContiguousListBlock(
+        bodyLines: string[],
+        sectionStart: number,
+        sectionEnd: number
+    ): { lineIndices: number[] } {
+        const lineIndices: number[] = [];
+        const listRegex = /^(\s*)(?:[-*+]|\d+[.)])\s+/;
+
+        let firstRootIndex = -1;
+        let rootIndent = 0;
+
+        for (let i = sectionStart; i < sectionEnd; i++) {
+            const listMatch = bodyLines[i].match(listRegex);
+            if (!listMatch) continue;
+            firstRootIndex = i;
+            rootIndent = listMatch[1].length;
+            break;
+        }
+        if (firstRootIndex < 0) return { lineIndices };
+
+        for (let i = firstRootIndex; i < sectionEnd; i++) {
+            const line = bodyLines[i];
+            if (line.trim() === '') break;
+
+            const listMatch = line.match(listRegex);
+            const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+
+            if (indent <= rootIndent && !listMatch) break;
+            if (indent < rootIndent) break;
+
+            lineIndices.push(i);
+        }
+
+        return { lineIndices };
     }
 }

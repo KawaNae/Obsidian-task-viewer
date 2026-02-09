@@ -118,7 +118,27 @@ export class TaskRenderer {
         // Inline child tasks rendering
         const COLLAPSE_THRESHOLD = 3;
 
-        if (task.childLines.length > 0) {
+        if (task.parserId === 'frontmatter') {
+            // frontmatter は親 + frontmatter 子描画の単一路線（inline 分岐を通さない）
+            await MarkdownRenderer.render(this.app, cleanParentLine, contentContainer, task.file, component);
+
+            if (task.childIds.length > 0 || task.childLines.length > 0) {
+                const items = this.childItemBuilder.buildFrontmatterChildItems(task);
+                if (items.length > 0) {
+                    const fmShouldCollapse = items.length >= COLLAPSE_THRESHOLD;
+                    if (fmShouldCollapse) {
+                        await this.childSectionRenderer.renderCollapsed(
+                            contentContainer, items, this.expandedTaskIds,
+                            task.id + ':fm-children', task.file, component, settings, task.startDate
+                        );
+                    } else {
+                        await this.childSectionRenderer.renderExpanded(
+                            contentContainer, items, task.file, component, settings, task.startDate
+                        );
+                    }
+                }
+            }
+        } else if (task.childLines.length > 0) {
             // wikilink 展開後の実際の items 数で折りたたみ判定
             const items = this.childItemBuilder.buildInlineChildItems(task, '');
             if (items.length >= COLLAPSE_THRESHOLD) {
@@ -139,30 +159,6 @@ export class TaskRenderer {
         } else {
             // No inline children: render parent only
             await MarkdownRenderer.render(this.app, cleanParentLine, contentContainer, task.file, component);
-        }
-
-        // Frontmatter task: render child tasks from childIds
-        if (task.parserId === 'frontmatter' && task.childIds.length > 0) {
-            const childTasks: Task[] = [];
-            for (const childId of task.childIds) {
-                if (childId === task.id) continue; // 防御: 自己参照スキップ
-                const ct = this.taskIndex.getTask(childId);
-                if (ct) childTasks.push(ct);
-            }
-            if (childTasks.length > 0) {
-                const items = this.childItemBuilder.buildFrontmatterChildItems(task, childTasks);
-                const fmShouldCollapse = items.length >= COLLAPSE_THRESHOLD;
-                if (fmShouldCollapse) {
-                    await this.childSectionRenderer.renderCollapsed(
-                        contentContainer, items, this.expandedTaskIds,
-                        task.id + ':fm-children', task.file, component, settings, task.startDate
-                    );
-                } else {
-                    await this.childSectionRenderer.renderExpanded(
-                        contentContainer, items, task.file, component, settings, task.startDate
-                    );
-                }
-            }
         }
 
         // Handle Internal Links

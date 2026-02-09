@@ -78,19 +78,13 @@ export class ChildItemBuilder {
     }
 
     /**
-     * Frontmatter タスクの childIds → ChildRenderItem[]。
-     * 各子タスクを追加後、appendDescendants で childLines + childIds を再帰展開。
+     * Frontmatter タスクの子孫（childLines + childIds）を ChildRenderItem[] に変換。
+     * appendDescendants を親タスク起点で実行し、ファイル内順序を維持する。
      */
-    buildFrontmatterChildItems(parentTask: Task, childTasks: Task[]): ChildRenderItem[] {
+    buildFrontmatterChildItems(parentTask: Task): ChildRenderItem[] {
         const items: ChildRenderItem[] = [];
         const visitedIds = new Set<string>();
-
-        for (const ct of childTasks) {
-            visitedIds.add(ct.id);
-            items.push(this.createTaskItem(ct, '', parentTask.file));
-            this.appendDescendants(ct, '    ', parentTask.id, items, visitedIds, 0);
-        }
-
+        this.appendDescendants(parentTask, '', parentTask.id, items, visitedIds, 0);
         return items;
     }
 
@@ -117,10 +111,13 @@ export class ChildItemBuilder {
             if (child && child.line >= 0) childIdByLine.set(child.line, child);
         }
         const renderedChildIds = new Set<string>();
+        const consumedLineKeys = new Set<string>();
 
         // Phase 1: childLines をファイル順に走査
         for (let i = 0; i < task.childLines.length; i++) {
-            const absLine = task.line + 1 + i;
+            const absLine = this.resolveChildAbsoluteLine(task, i);
+            const lineKey = this.toLineKey(task.file, absLine);
+            if (consumedLineKeys.has(lineKey)) continue;
             const childIdTask = childIdByLine.get(absLine);
 
             if (childIdTask) {
@@ -135,12 +132,21 @@ export class ChildItemBuilder {
                     childIdTask, indent + '    ', rootId,
                     items, visitedIds, depth + 1
                 );
+                this.markTaskSubtreeLines(childIdTask, consumedLineKeys);
             } else {
                 // orphan チェック
                 const orphanTask = this.taskIndex.getTask(`${task.file}:${absLine}`);
                 if (orphanTask) {
+                    if (orphanTask.parentId && orphanTask.parentId !== task.id) {
+                        continue;
+                    }
+                    if (visitedIds.has(orphanTask.id) || orphanTask.id === rootId) {
+                        continue;
+                    }
                     items.push(this.createTaskItem(orphanTask, indent, task.file));
                     visitedIds.add(orphanTask.id);
+                    renderedChildIds.add(orphanTask.id);
+                    this.markTaskSubtreeLines(orphanTask, consumedLineKeys);
                 } else {
                     // wikilink パターン検出
                     const wikiMatch = task.childLines[i].match(/^\s*-\s+\[\[([^\]]+)\]\]\s*$/);
@@ -162,6 +168,7 @@ export class ChildItemBuilder {
                             wikiChildTask, indent + lineIndent + '    ', rootId,
                             items, visitedIds, depth + 1
                         );
+                        this.markTaskSubtreeLines(wikiChildTask, consumedLineKeys);
                     } else if (!wikiChildTask) {
                         // 通常の childLine テキスト
                         items.push(this.processChildLine(task.childLines[i], i, task, indent));
@@ -265,5 +272,38 @@ export class ChildItemBuilder {
             }
         }
         return null;
+    }
+
+    /**
+     * childLines の絶対行番号を解決する。
+     * - frontmatter: childLineBodyOffsets（絶対行）を優先
+     * - inline: task.line + 1 + index
+     */
+    private resolveChildAbsoluteLine(task: Task, childLineIndex: number): number {
+        const bodyOffset = task.childLineBodyOffsets?.[childLineIndex];
+        if (typeof bodyOffset === 'number' && bodyOffset >= 0) {
+            return bodyOffset;
+        }
+        return task.line + 1 + childLineIndex;
+    }
+
+    private toLineKey(file: string, line: number): string {
+        return `${file}:${line}`;
+    }
+
+    private markTaskSubtreeLines(task: Task, consumedLineKeys: Set<string>, depth: number = 0): void {
+        if (depth >= ChildItemBuilder.MAX_RENDER_DEPTH) return;
+        if (task.line >= 0) {
+            consumedLineKeys.add(this.toLineKey(task.file, task.line));
+        }
+        for (let i = 0; i < task.childLines.length; i++) {
+            const absLine = this.resolveChildAbsoluteLine(task, i);
+            consumedLineKeys.add(this.toLineKey(task.file, absLine));
+        }
+        for (const childId of task.childIds) {
+            const child = this.taskIndex.getTask(childId);
+            if (!child) continue;
+            this.markTaskSubtreeLines(child, consumedLineKeys, depth + 1);
+        }
     }
 }

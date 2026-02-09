@@ -181,7 +181,7 @@ export interface Task {
     indent: number;         // Leading whitespace count (spaces)
     childIds: string[];     // IDs of direct child tasks (parsed as separate Tasks)
     childLines: string[];   // Raw child lines for display (normalized indentation)
-    childLineBodyOffsets: number[];   // bodyLines index for each childLine (frontmatter: actual offsets, inline: [])
+    childLineBodyOffsets: number[];   // childLine absolute line numbers (frontmatter) / empty for inline
 
     // Date/Time info
     startDate?: string;      // Renamed from date, YYYY-MM-DD (Optional for D/E types)

@@ -94,6 +94,21 @@ graph TB
 | SD/S-All/ED/E/D | - | 常に>=24h | 長期タスク欄 |
 | S-Timed | あり | 常に1h | タイムライン欄 |
 
+### Frontmatter子要素の抽出・描画仕様（v0.13.1）
+
+frontmatterタスクの子要素は、`## Tasks`（設定可能）を仮想ルートとして扱います。
+
+1. `FrontmatterTaskBuilder.parse()` で、`frontmatterTaskHeader` と `frontmatterTaskHeaderLevel` を受け取り、該当見出しセクションを特定
+2. 見出し配下の最初のルートリスト行を起点に、最初の連続リストブロックのみ抽出
+3. 抽出結果を `Task.childLines` と `Task.childLineBodyOffsets`（絶対行番号）に格納
+4. `TaskScanner` は `childLineBodyOffsets` に含まれる行の未親タスクを `fmTask.childIds` に接続
+5. `TaskRenderer` では frontmatter を inline 経路で描画せず、frontmatter専用経路1本に統一（トグル二重描画防止）
+6. `ChildItemBuilder` は絶対行番号を優先し、既に展開済み子孫行をスキップして重複描画を防止
+
+補足:
+- `wikiLinkTargets` は同じ連続リストブロック由来のみ収集する
+- 見出しが存在しない場合、frontmatter子要素は空扱い
+
 ### 24時間境界の扱い
 
 - 期間が24時間以上（`>=24:00`）→ 長期タスク欄

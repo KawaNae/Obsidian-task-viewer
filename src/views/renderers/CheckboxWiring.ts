@@ -245,11 +245,15 @@ export class CheckboxWiring {
 
     private calculateChildLineNumber(task: Task, childLineIndex: number): number {
         if (task.parserId === 'frontmatter') {
-            const fmEndLine = this.getFrontmatterEndLine(task.file);
-            if (fmEndLine === -1) return -1;
             const bodyOffset = task.childLineBodyOffsets[childLineIndex];
             if (bodyOffset === undefined) return -1;
-            return fmEndLine + 1 + bodyOffset;
+            const fmEndLine = this.getFrontmatterEndLine(task.file);
+            // 新フォーマット: childLineBodyOffsets は絶対行番号。
+            // 旧フォーマット/防御: frontmatter終端以下の値は相対オフセットとして扱う。
+            if (fmEndLine !== -1 && bodyOffset <= fmEndLine) {
+                return fmEndLine + 1 + bodyOffset;
+            }
+            return bodyOffset;
         } else {
             return task.line + 1 + childLineIndex;
         }
