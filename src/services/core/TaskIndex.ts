@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import { App, TFile, Notice } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
@@ -301,6 +301,40 @@ export class TaskIndex {
         }
 
         await this.scanner.waitForScan(task.file);
+    }
+
+    /**
+     * inline タスクを frontmatter タスクファイルに変換。
+     * ソースファイル + 新ファイルの両方を再スキャン。
+     */
+    async convertToFrontmatterTask(taskId: string): Promise<void> {
+        const task = this.store.getTask(taskId);
+        if (!task) return;
+
+        // inline タスクのみ変換可能
+        if (task.parserId !== 'at-notation') {
+            new Notice('Only inline tasks can be converted to frontmatter tasks');
+            return;
+        }
+
+        this.syncDetector.markLocalEdit(task.file);
+
+        try {
+            await this.repository.convertInlineTaskToFrontmatter(
+                task,
+                this.settings.frontmatterTaskHeader,
+                this.settings.frontmatterTaskHeaderLevel,
+                this.settings.frontmatterColorKey
+            );
+
+            // ソースファイル再スキャン (wikilink が追加される)
+            await this.scanner.waitForScan(task.file);
+
+            new Notice('Task converted to frontmatter file');
+        } catch (error) {
+            console.error('[TaskIndex] Failed to convert task:', error);
+            new Notice('Failed to convert task: ' + (error as Error).message);
+        }
     }
 
     async duplicateTaskForWeek(taskId: string): Promise<void> {

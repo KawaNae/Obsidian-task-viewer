@@ -1,9 +1,10 @@
-import { App } from 'obsidian';
+import { App, TFile } from 'obsidian';
 import type { Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner } from './TaskCloner';
+import { TaskConverter } from './TaskConverter';
 
 /**
  * TaskRepository - タスクのファイル操作を統括するファサードクラス
@@ -14,6 +15,7 @@ export class TaskRepository {
     private inlineWriter: InlineTaskWriter;
     private frontmatterWriter: FrontmatterWriter;
     private cloner: TaskCloner;
+    private converter: TaskConverter;
 
     constructor(
         private app: App,
@@ -22,6 +24,7 @@ export class TaskRepository {
         this.inlineWriter = new InlineTaskWriter(app, this.fileOps);
         this.frontmatterWriter = new FrontmatterWriter(app, this.fileOps);
         this.cloner = new TaskCloner(app, this.fileOps);
+        this.converter = new TaskConverter(app, this.fileOps);
     }
 
     // --- Inline Task Operations ---
@@ -88,5 +91,62 @@ export class TaskRepository {
 
     async insertRecurrenceForTask(task: Task, content: string, newTask?: Task): Promise<void> {
         return this.cloner.insertRecurrenceForTask(task, content, newTask);
+    }
+
+    // --- Task Conversion Operations ---
+
+    /**
+     * inline タスクを frontmatter タスクファイルに変換。
+     * 新ファイル作成後、元タスクを wikilink に置き換える。
+     */
+    async convertInlineTaskToFrontmatter(
+        task: Task,
+        headerName: string,
+        headerLevel: number,
+        colorKey: string
+    ): Promise<void> {
+        // ソースファイルの color を読み取り
+        const sourceFile = this.app.vault.getAbstractFileByPath(task.file);
+        let sourceColor: string | undefined;
+        if (sourceFile instanceof TFile) {
+            const cache = this.app.metadataCache.getFileCache(sourceFile);
+            sourceColor = cache?.frontmatter?.[colorKey];
+        }
+
+        // 新ファイル作成
+        const newPath = await this.converter.convertToFrontmatterTask(
+            task, headerName, headerLevel, sourceColor, colorKey
+        );
+
+        // 元タスクを wikilink に置き換え
+        await this.replaceTaskWithWikilink(task, newPath);
+    }
+
+    /**
+     * タスク行 + childLines を wikilink に置き換える。
+     */
+    private async replaceTaskWithWikilink(task: Task, targetPath: string): Promise<void> {
+        const fileName = targetPath.split('/').pop()?.replace(/\.md$/, '') || 'task';
+        const wikilinkLine = `- [[${fileName}]]`;
+
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) return;
+
+        await this.app.vault.process(file, (content) => {
+            const lines = content.split('\n');
+            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
+            if (currentLine < 0 || currentLine >= lines.length) return content;
+
+            // 元のインデントを保持
+            const originalIndent = lines[currentLine].match(/^(\s*)/)?.[1] || '';
+
+            // childLines を収集して削除範囲を決定
+            const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
+
+            // task + children を wikilink に置き換え
+            lines.splice(currentLine, 1 + childrenLines.length, originalIndent + wikilinkLine);
+
+            return lines.join('\n');
+        });
     }
 }
