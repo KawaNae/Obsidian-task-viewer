@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf, setIcon } from 'obsidian';
+import { Plugin, WorkspaceLeaf, setIcon, TFile } from 'obsidian';
 import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/ScheduleView';
@@ -42,6 +42,11 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Initialize Timer Widget
         this.timerWidget = new TimerWidget(this.app, this);
+
+        this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
+            if (!(file instanceof TFile) || file.extension !== 'md') return;
+            this.timerWidget?.handleFileRename(oldPath, file.path);
+        }));
 
         // Register View
         this.registerView(

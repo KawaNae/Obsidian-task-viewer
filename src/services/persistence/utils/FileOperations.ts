@@ -56,6 +56,16 @@ export class FileOperations {
      * Uses multiple strategies: exact match, content + date match, fallback to stored line.
      */
     findTaskLineNumber(lines: string[], task: Task): number {
+        // Strategy -1: Resolve by block ID (most stable against content edits).
+        if (task.blockId) {
+            const blockIdRegex = new RegExp(`\\s\\^${task.blockId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`);
+            for (let i = 0; i < lines.length; i++) {
+                if (blockIdRegex.test(lines[i])) {
+                    return i;
+                }
+            }
+        }
+
         // Strategy 0: Stored line number (O(1), correct when no line shift has occurred)
         // Must run before Strategy 1 to avoid returning the first duplicate when
         // multiple lines share the same originalText (e.g. inherited-date child tasks).
@@ -72,18 +82,19 @@ export class FileOperations {
 
         // Strategy 2: Match by content and date notation (more resilient)
         // Build a pattern: contains task content AND @ date notation
-        const escapedContent = task.content.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const content = task.content || '';
+        const escapedContent = content.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const datePattern = task.startDate ? `@${task.startDate}` : (task.deadline ? `@` : null);
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
 
             // Must be a task line (checkbox), contain the content, and match approx indent
-            if (line.includes(`] ${task.content}`) || line.match(new RegExp(`\\]\\s+${escapedContent}`))) {
+            if (content && (line.includes(`] ${content}`) || line.match(new RegExp(`\\]\\s+${escapedContent}`)))) {
                 // Verify it has similar characteristics
                 if (datePattern && line.includes(datePattern)) {
                     return i;
-                } else if (!datePattern && line.includes(task.content)) {
+                } else if (!datePattern && line.includes(content)) {
                     return i;
                 }
             }

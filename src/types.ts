@@ -203,6 +203,10 @@ export interface Task {
 
     // Original text for reconstruction
     originalText: string;
+    // Markdown block ID (e.g. ^abc123), used for stable line resolution
+    blockId?: string;
+    // Stable timer target identifier shared by inline(frontmatter key / blockId)
+    timerTargetId?: string;
     recurrence?: string;    // @repeat(...) content
 
     // Flow Commands

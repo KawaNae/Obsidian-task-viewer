@@ -1,4 +1,5 @@
 import { Task } from '../../../types';
+import { FRONTMATTER_TIMER_TARGET_KEY } from '../../../utils/TimerTargetIdUtils';
 
 /**
  * Frontmatter からタスクを構築する静的ユーティリティ。
@@ -46,6 +47,11 @@ export class FrontmatterTaskBuilder {
         const content = (rawContent != null && String(rawContent).trim() !== '')
             ? String(rawContent).trim()
             : fileName;
+
+        const rawTimerTargetId = frontmatter[FRONTMATTER_TIMER_TARGET_KEY];
+        const timerTargetId = (rawTimerTargetId == null || String(rawTimerTargetId).trim() === '')
+            ? undefined
+            : String(rawTimerTargetId).trim();
 
         // deadline: YYYY-MM-DD または YYYY-MM-DDThh:mm で保存（インライン と同じ）
         let deadline: string | undefined;
@@ -100,8 +106,9 @@ export class FrontmatterTaskBuilder {
             explicitEndTime: !!end.time,
             wikiLinkTargets,
             wikiLinkBodyLines,
-            originalText: '',                   // frontmatterタスクに該当する単一行はない
-            commands: [],                       // フローコマンドは frontmatter では未対応
+            originalText: '',                   // frontmatter task has no single original line
+            commands: [],                       // flow commands are not used for frontmatter tasks
+            timerTargetId,
             parserId: 'frontmatter'
         };
     }

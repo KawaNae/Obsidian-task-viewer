@@ -79,7 +79,15 @@ export class TaskActionsMenuBuilder {
                 .setIcon('timer')
                 .onClick(() => {
                     const widget = this.plugin.getTimerWidget();
-                    widget.show(task.id, displayName, task.originalText, task.file, 'child', task.parserId);
+                    widget.show(
+                        task.id,
+                        displayName,
+                        task.originalText,
+                        task.file,
+                        'child',
+                        task.parserId,
+                        task.timerTargetId ?? task.blockId
+                    );
                 });
         });
     }
@@ -93,7 +101,16 @@ export class TaskActionsMenuBuilder {
                 .setIcon('clock')
                 .onClick(() => {
                     const widget = this.plugin.getTimerWidget();
-                    widget.showCountup(task.id, displayName, task.originalText, task.file, 'child', false, task.parserId);
+                    widget.showCountup(
+                        task.id,
+                        displayName,
+                        task.originalText,
+                        task.file,
+                        'child',
+                        false,
+                        task.parserId,
+                        task.timerTargetId ?? task.blockId
+                    );
                 });
         });
     }

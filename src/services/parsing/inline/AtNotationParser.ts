@@ -1,5 +1,6 @@
 import { Task } from '../../../types';
 import { ParserStrategy } from '../strategies/ParserStrategy';
+import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
 
 /**
  * Task Viewer native notation parser.
@@ -21,8 +22,22 @@ export class AtNotationParser implements ParserStrategy {
     private static readonly MODIFIER_REGEX = /\.([a-zA-Z0-9_]+)\((.*?)\)/g;
 
     parse(line: string, filePath: string, lineNumber: number): Task | null {
+        // Extract trailing block ID (^id) before parsing task structure.
+        // Keep original line unchanged in task.originalText.
+        let lineForParse = line;
+        let blockId: string | undefined;
+        let timerTargetId: string | undefined;
+        const blockIdMatch = lineForParse.match(/\s\^([A-Za-z0-9-]+)\s*$/);
+        if (blockIdMatch) {
+            blockId = blockIdMatch[1];
+            if (isTimerTargetId(blockId)) {
+                timerTargetId = blockId;
+            }
+            lineForParse = lineForParse.slice(0, blockIdMatch.index).trimEnd();
+        }
+
         // 1. Split Flow (==>)
-        const flowSplit = line.split(/==>(.+)/);
+        const flowSplit = lineForParse.split(/==>(.+)/);
         const taskPart = flowSplit[0];
         const flowPart = flowSplit[1] || '';
 
@@ -188,6 +203,8 @@ export class AtNotationParser implements ParserStrategy {
             childLines: [],
             childLineBodyOffsets: [],
             parserId: this.id,
+            blockId,
+            timerTargetId,
             validationWarning
         };
     }
@@ -314,7 +331,8 @@ export class AtNotationParser implements ParserStrategy {
             flowStr = ` ==> ${cmdStrs.join(' ')}`;
         }
 
-        return `- [${statusChar}] ${task.content}${metaStr}${flowStr}`;
+        const blockIdStr = task.blockId ? ` ^${task.blockId}` : '';
+        return `- [${statusChar}] ${task.content}${metaStr}${flowStr}${blockIdStr}`;
     }
 
     isTriggerableStatus(task: Task): boolean {
