@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import { Task } from '../../types';
+import { DEFAULT_FRONTMATTER_TASK_KEYS, FrontmatterTaskKeys, Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 
 /**
@@ -20,10 +20,10 @@ export class TaskConverter {
         headerName: string,
         headerLevel: number,
         sourceFileColor?: string,
-        colorKey: string = 'color'
+        frontmatterKeys: FrontmatterTaskKeys = DEFAULT_FRONTMATTER_TASK_KEYS
     ): Promise<string> {
         const filePath = this.generateFilePath(task);
-        const frontmatter = this.buildFrontmatterContent(task, sourceFileColor, colorKey);
+        const frontmatter = this.buildFrontmatterContent(task, sourceFileColor, frontmatterKeys);
         const body = this.buildBodyContent(task, headerName, headerLevel);
         const content = frontmatter + body;
 
@@ -76,37 +76,37 @@ export class TaskConverter {
     /**
      * Frontmatter YAML を構築。
      */
-    private buildFrontmatterContent(task: Task, color?: string, colorKey: string = 'color'): string {
+    private buildFrontmatterContent(task: Task, color?: string, frontmatterKeys: FrontmatterTaskKeys = DEFAULT_FRONTMATTER_TASK_KEYS): string {
         const lines = ['---'];
 
         // start
         const startValue = this.formatDateTime(task.startDate, task.startTime);
         if (startValue) {
-            lines.push(`start: ${startValue}`);
+            lines.push(`${frontmatterKeys.start}: ${startValue}`);
         }
 
         // end
         const endValue = this.formatDateTime(task.endDate, task.endTime);
         if (endValue) {
-            lines.push(`end: ${endValue}`);
+            lines.push(`${frontmatterKeys.end}: ${endValue}`);
         }
 
         // deadline
         if (task.deadline) {
-            lines.push(`deadline: ${task.deadline}`);
+            lines.push(`${frontmatterKeys.deadline}: ${task.deadline}`);
         }
 
         // content
-        lines.push(`content: ${task.content}`);
+        lines.push(`${frontmatterKeys.content}: ${task.content}`);
 
         // status (デフォルトの ' ' は省略)
         if (task.statusChar && task.statusChar !== ' ') {
-            lines.push(`status: ${task.statusChar}`);
+            lines.push(`${frontmatterKeys.status}: ${task.statusChar}`);
         }
 
         // color (ソースファイルから継承、存在する場合のみ)
         if (color) {
-            lines.push(`${colorKey}: "${this.escapeForDoubleQuotedYaml(color)}"`);
+            lines.push(`${frontmatterKeys.color}: "${this.escapeForDoubleQuotedYaml(color)}"`);
         }
 
         lines.push('---');

@@ -49,7 +49,7 @@ export class PropertyColorSuggest extends AbstractInputSuggest<string> {
             return;
         }
 
-        const colorKey = this.plugin.settings.frontmatterColorKey;
+        const colorKey = this.plugin.settings.frontmatterTaskKeys.color;
         // @ts-ignore - processFrontMatter
         await this.plugin.app.fileManager.processFrontMatter(activeFile, (frontmatter: any) => {
             frontmatter[colorKey] = value;

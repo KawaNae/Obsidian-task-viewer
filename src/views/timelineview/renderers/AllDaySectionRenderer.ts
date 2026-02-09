@@ -132,7 +132,7 @@ export class AllDaySectionRenderer {
             if (task.startDateInherited) el.addClass('task-card--inherited');
             el.dataset.id = task.id;
 
-            ViewUtils.applyFileColor(this.plugin.app, el, task.file, this.plugin.settings.frontmatterColorKey);
+            ViewUtils.applyFileColor(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.color);
 
             // Use TaskRenderer
             this.taskRenderer.render(el, task, owner, this.plugin.settings, { topRight: 'none' });

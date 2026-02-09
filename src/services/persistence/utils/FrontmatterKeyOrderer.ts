@@ -2,14 +2,17 @@ import type { TaskViewerSettings } from '../../../types';
 
 /**
  * Utility class for ordering frontmatter keys in a consistent manner.
- * - Task keys (status, content, start, end, deadline) follow a fixed order
+ * - Task keys (status, content, start, end, deadline) follow settings-defined order
  * - Habit keys follow settings.habits order
  * - Unknown keys preserve their original order
  */
 export class FrontmatterKeyOrderer {
-    private static readonly TASK_KEY_ORDER = ['status', 'content', 'start', 'end', 'deadline'];
-
     constructor(private settings: TaskViewerSettings) {}
+
+    private getTaskKeyOrder(): string[] {
+        const keys = this.settings.frontmatterTaskKeys;
+        return [keys.status, keys.content, keys.start, keys.end, keys.deadline];
+    }
 
     /**
      * Returns the priority of a key for sorting.
@@ -17,7 +20,7 @@ export class FrontmatterKeyOrderer {
      */
     private getKeyPriority(key: string): number {
         // Task keys: priority 0-4
-        const taskIndex = FrontmatterKeyOrderer.TASK_KEY_ORDER.indexOf(key);
+        const taskIndex = this.getTaskKeyOrder().indexOf(key);
         if (taskIndex !== -1) return taskIndex;
 
         // Habit keys: priority 100 + index in settings.habits

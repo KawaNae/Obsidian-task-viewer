@@ -270,7 +270,7 @@ export class TaskIndex {
         }
 
         if (task.parserId === 'frontmatter') {
-            await this.repository.updateFrontmatterTask(task, updates);
+            await this.repository.updateFrontmatterTask(task, updates, this.settings.frontmatterTaskKeys);
         } else {
             await this.repository.updateTaskInFile(task, { ...task, ...updates });
         }
@@ -283,7 +283,7 @@ export class TaskIndex {
         this.syncDetector.markLocalEdit(task.file);
 
         if (task.parserId === 'frontmatter') {
-            await this.repository.deleteFrontmatterTask(task);
+            await this.repository.deleteFrontmatterTask(task, this.settings.frontmatterTaskKeys);
         } else {
             await this.repository.deleteTaskFromFile(task);
         }
@@ -327,7 +327,7 @@ export class TaskIndex {
                 task,
                 this.settings.frontmatterTaskHeader,
                 this.settings.frontmatterTaskHeaderLevel,
-                this.settings.frontmatterColorKey
+                this.settings.frontmatterTaskKeys
             );
 
             // ソースファイル再スキャン (wikilink が追加される)
@@ -348,7 +348,7 @@ export class TaskIndex {
         this.syncDetector.markLocalEdit(task.file);
 
         if (task.parserId === 'frontmatter') {
-            await this.repository.duplicateFrontmatterTaskForWeek(task);
+            await this.repository.duplicateFrontmatterTaskForWeek(task, this.settings.frontmatterTaskKeys);
         } else {
             await this.repository.duplicateTaskForWeek(task);
         }

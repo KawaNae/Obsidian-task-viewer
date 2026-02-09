@@ -5,7 +5,13 @@ import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/ScheduleView';
 import { PomodoroView, VIEW_TYPE_POMODORO } from './views/PomodoroView';
 import { PomodoroService } from './services/execution/PomodoroService';
 import { TimerWidget } from './widgets/TimerWidget';
-import { TaskViewerSettings, DEFAULT_SETTINGS } from './types';
+import {
+    TaskViewerSettings,
+    DEFAULT_SETTINGS,
+    DEFAULT_FRONTMATTER_TASK_KEYS,
+    normalizeFrontmatterTaskKeys,
+    validateFrontmatterTaskKeys,
+} from './types';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/ColorSuggest';
 import { PropertyColorSuggest } from './suggest/PropertyColorSuggest';
@@ -119,7 +125,20 @@ export default class TaskViewerPlugin extends Plugin {
     }
 
     async loadSettings() {
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        const raw = await this.loadData();
+        const merged = Object.assign({}, DEFAULT_SETTINGS, raw) as TaskViewerSettings & {
+            frontmatterTaskKeys?: unknown;
+        };
+
+        const normalizedFrontmatterKeys = normalizeFrontmatterTaskKeys(merged.frontmatterTaskKeys);
+        const keysValidationError = validateFrontmatterTaskKeys(normalizedFrontmatterKeys);
+
+        this.settings = {
+            ...merged,
+            frontmatterTaskKeys: keysValidationError
+                ? { ...DEFAULT_FRONTMATTER_TASK_KEYS }
+                : normalizedFrontmatterKeys,
+        };
     }
 
     async saveSettings() {
@@ -248,7 +267,7 @@ export default class TaskViewerPlugin extends Plugin {
      * Attach PropertyColorSuggest to timeline-color property value inputs
      */
     private attachPropertyColorSuggests(): void {
-        const colorKey = this.settings.frontmatterColorKey;
+        const colorKey = this.settings.frontmatterTaskKeys.color;
 
         // Find all property key inputs
         const keyInputs = document.querySelectorAll('.metadata-property-key-input');
@@ -318,7 +337,7 @@ export default class TaskViewerPlugin extends Plugin {
                 return;
             }
 
-            const colorKey = this.settings.frontmatterColorKey;
+            const colorKey = this.settings.frontmatterTaskKeys.color;
             // @ts-ignore - processFrontMatter
             await this.app.fileManager.processFrontMatter(activeFile, (frontmatter: any) => {
                 frontmatter[colorKey] = colorInput.value;

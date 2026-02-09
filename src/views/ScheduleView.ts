@@ -365,10 +365,10 @@ export class ScheduleView extends ItemView {
     }
 
     private getFileColor(filePath: string): string | null {
-        return ViewUtils.getFileColor(this.app, filePath, this.plugin.settings.frontmatterColorKey);
+        return ViewUtils.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color);
     }
 
     private applyTaskColor(el: HTMLElement, filePath: string) {
-        ViewUtils.applyFileColor(this.app, el, filePath, this.plugin.settings.frontmatterColorKey);
+        ViewUtils.applyFileColor(this.app, el, filePath, this.plugin.settings.frontmatterTaskKeys.color);
     }
 }

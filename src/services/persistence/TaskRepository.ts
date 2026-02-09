@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import type { Task } from '../../types';
+import type { FrontmatterTaskKeys, Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
@@ -59,12 +59,16 @@ export class TaskRepository {
 
     // --- Frontmatter Task Operations ---
 
-    async updateFrontmatterTask(task: Task, updates: Partial<Task>): Promise<void> {
-        return this.frontmatterWriter.updateFrontmatterTask(task, updates);
+    async updateFrontmatterTask(
+        task: Task,
+        updates: Partial<Task>,
+        frontmatterKeys: FrontmatterTaskKeys
+    ): Promise<void> {
+        return this.frontmatterWriter.updateFrontmatterTask(task, updates, frontmatterKeys);
     }
 
-    async deleteFrontmatterTask(task: Task): Promise<void> {
-        return this.frontmatterWriter.deleteFrontmatterTask(task);
+    async deleteFrontmatterTask(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
+        return this.frontmatterWriter.deleteFrontmatterTask(task, frontmatterKeys);
     }
 
     async insertLineAfterFrontmatter(filePath: string, lineContent: string, header: string, headerLevel: number): Promise<void> {
@@ -85,8 +89,8 @@ export class TaskRepository {
         return this.cloner.duplicateFrontmatterTask(task);
     }
 
-    async duplicateFrontmatterTaskForWeek(task: Task): Promise<void> {
-        return this.cloner.duplicateFrontmatterTaskForWeek(task);
+    async duplicateFrontmatterTaskForWeek(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
+        return this.cloner.duplicateFrontmatterTaskForWeek(task, frontmatterKeys);
     }
 
     async insertRecurrenceForTask(task: Task, content: string, newTask?: Task): Promise<void> {
@@ -100,14 +104,14 @@ export class TaskRepository {
         headerName: string,
         headerLevel: number,
         sourceFileColor?: string,
-        colorKey: string = 'color'
+        frontmatterKeys?: FrontmatterTaskKeys
     ): Promise<string> {
         return this.converter.convertToFrontmatterTask(
             task,
             headerName,
             headerLevel,
             sourceFileColor,
-            colorKey
+            frontmatterKeys
         );
     }
 

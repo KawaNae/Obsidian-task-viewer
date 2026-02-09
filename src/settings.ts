@@ -1,6 +1,6 @@
-import { App, PluginSettingTab, Setting } from 'obsidian';
+import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import TaskViewerPlugin from './main';
-import { HabitType } from './types';
+import { FrontmatterTaskKeys, HabitType, validateFrontmatterTaskKeys } from './types';
 
 export class TaskViewerSettingTab extends PluginSettingTab {
     plugin: TaskViewerPlugin;
@@ -53,17 +53,6 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                         .filter(c => c.length > 0);
 
                     this.plugin.settings.completeStatusChars = chars.length > 0 ? chars : ['x', 'X', '-', '!'];
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Frontmatter Color Key')
-            .setDesc('The key to look for in the file\'s frontmatter to determine the task color (e.g. "color" or "timeline-color").')
-            .addText(text => text
-                .setPlaceholder('color')
-                .setValue(this.plugin.settings.frontmatterColorKey)
-                .onChange(async (value) => {
-                    this.plugin.settings.frontmatterColorKey = value;
                     await this.plugin.saveSettings();
                 }));
 
@@ -205,6 +194,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
         containerEl.createEl('h3', { text: 'Frontmatter Tasks', cls: 'setting-section-header' });
 
+        this.addFrontmatterTaskKeySettings(containerEl);
+
         new Setting(containerEl)
             .setName('Child Task Heading')
             .setDesc('The heading under which new child tasks will be inserted in frontmatter task files.')
@@ -284,6 +275,90 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     this.renderHabitsList(habitsListContainer);
                 })
             );
+    }
+
+    private addFrontmatterTaskKeySettings(containerEl: HTMLElement): void {
+        this.addFrontmatterTaskKeySetting(
+            containerEl,
+            'Start Key',
+            'Frontmatter key for task start date/time.',
+            'tv-start',
+            'start'
+        );
+        this.addFrontmatterTaskKeySetting(
+            containerEl,
+            'End Key',
+            'Frontmatter key for task end date/time.',
+            'tv-end',
+            'end'
+        );
+        this.addFrontmatterTaskKeySetting(
+            containerEl,
+            'Deadline Key',
+            'Frontmatter key for task deadline.',
+            'tv-deadline',
+            'deadline'
+        );
+        this.addFrontmatterTaskKeySetting(
+            containerEl,
+            'Status Key',
+            'Frontmatter key for task status character.',
+            'tv-status',
+            'status'
+        );
+        this.addFrontmatterTaskKeySetting(
+            containerEl,
+            'Content Key',
+            'Frontmatter key for task content.',
+            'tv-content',
+            'content'
+        );
+        this.addFrontmatterTaskKeySetting(
+            containerEl,
+            'Timer Target ID Key',
+            'Frontmatter key for timer target ID.',
+            'tv-timer-target-id',
+            'timerTargetId'
+        );
+        this.addFrontmatterTaskKeySetting(
+            containerEl,
+            'Color Key',
+            'Frontmatter key for task/file color.',
+            'tv-color',
+            'color'
+        );
+    }
+
+    private addFrontmatterTaskKeySetting(
+        containerEl: HTMLElement,
+        name: string,
+        description: string,
+        placeholder: string,
+        key: keyof FrontmatterTaskKeys
+    ): void {
+        new Setting(containerEl)
+            .setName(name)
+            .setDesc(description)
+            .addText((text) => {
+                text.setPlaceholder(placeholder);
+                text.setValue(this.plugin.settings.frontmatterTaskKeys[key]);
+                text.onChange(async (value) => {
+                    const nextKeys: FrontmatterTaskKeys = {
+                        ...this.plugin.settings.frontmatterTaskKeys,
+                        [key]: value.trim(),
+                    };
+
+                    const error = validateFrontmatterTaskKeys(nextKeys);
+                    if (error) {
+                        new Notice(error);
+                        text.setValue(this.plugin.settings.frontmatterTaskKeys[key]);
+                        return;
+                    }
+
+                    this.plugin.settings.frontmatterTaskKeys = nextKeys;
+                    await this.plugin.saveSettings();
+                });
+            });
     }
 
     private renderHabitsList(container: HTMLElement): void {

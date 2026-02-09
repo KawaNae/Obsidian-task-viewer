@@ -236,7 +236,13 @@ export class TaskScanner {
             }
         }
         const bodyLines = lines.slice(bodyStartIndex);
-        const fmTask = FrontmatterTaskBuilder.parse(file.path, frontmatterObj, bodyLines, bodyStartIndex);
+        const fmTask = FrontmatterTaskBuilder.parse(
+            file.path,
+            frontmatterObj,
+            bodyLines,
+            bodyStartIndex,
+            this.settings.frontmatterTaskKeys
+        );
 
         // インラインタスク抽出（ボディ行のみ）
         const allExtractedTasks = extractTasksFromLines(bodyLines, bodyStartIndex, fmTask?.startDate);

@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import type { Task } from '../../types';
+import type { FrontmatterTaskKeys, Task } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 
 /**
@@ -18,16 +18,16 @@ export class InlineToFrontmatterConversionService {
         task: Task,
         headerName: string,
         headerLevel: number,
-        colorKey: string,
+        frontmatterKeys: FrontmatterTaskKeys,
     ): Promise<string> {
-        const sourceColor = this.getSourceFileColor(task.file, colorKey);
+        const sourceColor = this.getSourceFileColor(task.file, frontmatterKeys.color);
 
         const newPath = await this.repository.createFrontmatterTaskFile(
             task,
             headerName,
             headerLevel,
             sourceColor,
-            colorKey,
+            frontmatterKeys,
         );
 
         await this.repository.replaceInlineTaskWithWikilink(task, newPath);

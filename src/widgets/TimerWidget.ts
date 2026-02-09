@@ -14,7 +14,6 @@ import { TimerRecorder } from './TimerRecorder';
 import { TimerProgressUI } from './TimerProgressUI';
 import { Task } from '../types';
 import {
-    FRONTMATTER_TIMER_TARGET_KEY,
     TIMER_TARGET_ID_PREFIX,
     isTimerTargetId
 } from '../utils/TimerTargetIdUtils';
@@ -794,9 +793,10 @@ export class TimerWidget {
 
         const newTargetId = this.generateTimerTargetId();
         try {
+            const timerTargetIdKey = this.plugin.settings.frontmatterTaskKeys.timerTargetId;
             // @ts-ignore - processFrontMatter is available in Obsidian API
             await this.app.fileManager.processFrontMatter(file, (frontmatter: any) => {
-                frontmatter[FRONTMATTER_TIMER_TARGET_KEY] = newTargetId;
+                frontmatter[timerTargetIdKey] = newTargetId;
             });
             await taskIndex.waitForScan(currentTask.file);
 
@@ -995,10 +995,11 @@ export class TimerWidget {
         if (!(file instanceof TFile)) return;
 
         try {
+            const timerTargetIdKey = this.plugin.settings.frontmatterTaskKeys.timerTargetId;
             // @ts-ignore - processFrontMatter is available in Obsidian API
             await this.app.fileManager.processFrontMatter(file, (frontmatter: any) => {
-                if (frontmatter?.[FRONTMATTER_TIMER_TARGET_KEY] === timer.timerTargetId) {
-                    delete frontmatter[FRONTMATTER_TIMER_TARGET_KEY];
+                if (frontmatter?.[timerTargetIdKey] === timer.timerTargetId) {
+                    delete frontmatter[timerTargetIdKey];
                 }
             });
             await this.plugin.getTaskIndex().waitForScan(targetPath);

@@ -82,11 +82,11 @@
 
 ```yaml
 ---
-start: 2026-02-05
-end: 2026-02-07
-deadline: 2026-02-10
-status: ' '
-content: プロジェクト名
+tv-start: 2026-02-05
+tv-end: 2026-02-07
+tv-deadline: 2026-02-10
+tv-status: ' '
+tv-content: プロジェクト名
 ---
 
 本文やサブタスクをここに記述
@@ -98,14 +98,14 @@ content: プロジェクト名
 
 | フィールド | 必須 | 説明 | 例 |
 |-----------|------|------|-----|
-| `start` | ○* | 開始日時 | `2026-02-05` または `2026-02-05T14:00` |
-| `end` | | 終了日時 | `2026-02-07` または `2026-02-07T18:00` |
-| `deadline` | | 締切日時 | `2026-02-10` または `2026-02-10T23:59` |
-| `status` | | タスクステータス（省略時は` `） | `x`, `-`, `!` など |
-| `content` | | タスク名（省略時はファイル名） | `プロジェクト名` |
+| `tv-start` | ○* | 開始日時 | `2026-02-05` または `2026-02-05T14:00` |
+| `tv-end` | | 終了日時 | `2026-02-07` または `2026-02-07T18:00` |
+| `tv-deadline` | | 締切日時 | `2026-02-10` または `2026-02-10T23:59` |
+| `tv-status` | | タスクステータス（省略時は` `） | `x`, `-`, `!` など |
+| `tv-content` | | タスク名（省略時はファイル名） | `プロジェクト名` |
 
 > [!NOTE]
-> `start`, `end`, `deadline`のいずれか1つは必須です。
+> `tv-start`, `tv-end`, `tv-deadline`のいずれか1つは必須です。
 
 > [!WARNING]
 > 時刻のみを記述する場合は、YAMLのsexagesimal記法を回避するため`"14:00"`のようにクォートで囲んでください。
@@ -115,10 +115,10 @@ content: プロジェクト名
 **プロジェクト管理**
 ```yaml
 ---
-start: 2026-02-01
-end: 2026-02-15
-deadline: 2026-02-20
-content: ウェブサイトリニューアル
+tv-start: 2026-02-01
+tv-end: 2026-02-15
+tv-deadline: 2026-02-20
+tv-content: ウェブサイトリニューアル
 ---
 
 ## サブタスク
@@ -130,8 +130,8 @@ content: ウェブサイトリニューアル
 **日次ノート**
 ```yaml
 ---
-start: 2026-02-05
-content: 2026-02-05の計画
+tv-start: 2026-02-05
+tv-content: 2026-02-05の計画
 ---
 
 ## タスク
@@ -231,7 +231,7 @@ content: 2026-02-05の計画
 | 設定項目 | 説明 | デフォルト |
 |---------|------|-----------|
 | Start Hour | 1日の開始時刻（0-23） | 5 |
-| Frontmatter Color Key | ファイルのfrontmatterから読み取る色キー | `color` |
+| Frontmatter Task Keys | Configurable frontmatter keys for task metadata | `tv-start` / `tv-end` / `tv-deadline` / `tv-status` / `tv-content` / `tv-timer-target-id` / `tv-color` |
 | Pomodoro Work Minutes | ポモドーロの作業時間 | 25 |
 | Complete Status Chars | 完了を示すステータス文字 | `['x', 'X', '-', '!']` |
 | Excluded Paths | スキャンから除外するパス | `[]` |
