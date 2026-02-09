@@ -1,6 +1,6 @@
 import { Component, Menu } from 'obsidian';
 import { Task, isCompleteStatusChar } from '../../../types';
-import { TaskRenderer } from '../../TaskRenderer';
+import { TaskRenderer } from '../../taskcard/TaskCardRenderer';
 import { DateUtils } from '../../../utils/DateUtils';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import TaskViewerPlugin from '../../../main';
