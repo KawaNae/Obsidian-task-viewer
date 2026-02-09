@@ -8,6 +8,7 @@ import { TaskScanner } from './TaskScanner';
 import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { EditorObserver } from './EditorObserver';
+import { InlineToFrontmatterConversionService } from '../execution/InlineToFrontmatterConversionService';
 
 export interface ValidationError {
     file: string;
@@ -27,6 +28,7 @@ export class TaskIndex {
     private syncDetector: SyncDetector;
     private editorObserver: EditorObserver;
     private repository: TaskRepository;
+    private inlineToFrontmatterConversionService: InlineToFrontmatterConversionService;
     private commandExecutor: TaskCommandExecutor;
     private settings: TaskViewerSettings;
     private draggingFilePath: string | null = null;  // ドラッグ中のファイルパス
@@ -41,6 +43,7 @@ export class TaskIndex {
         this.validator = new TaskValidator();
         this.syncDetector = new SyncDetector();
         this.repository = new TaskRepository(app);
+        this.inlineToFrontmatterConversionService = new InlineToFrontmatterConversionService(app, this.repository);
         this.commandExecutor = new TaskCommandExecutor(this.repository, this, app);
         this.editorObserver = new EditorObserver(app, this.syncDetector);
         this.scanner = new TaskScanner(
@@ -320,7 +323,7 @@ export class TaskIndex {
         this.syncDetector.markLocalEdit(task.file);
 
         try {
-            await this.repository.convertInlineTaskToFrontmatter(
+            const newPath = await this.inlineToFrontmatterConversionService.convertInlineTaskToFrontmatter(
                 task,
                 this.settings.frontmatterTaskHeader,
                 this.settings.frontmatterTaskHeaderLevel,
@@ -329,6 +332,7 @@ export class TaskIndex {
 
             // ソースファイル再スキャン (wikilink が追加される)
             await this.scanner.waitForScan(task.file);
+            await this.scanner.waitForScan(newPath);
 
             new Notice('Task converted to frontmatter file');
         } catch (error) {

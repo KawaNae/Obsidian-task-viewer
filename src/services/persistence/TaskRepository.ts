@@ -95,37 +95,26 @@ export class TaskRepository {
 
     // --- Task Conversion Operations ---
 
-    /**
-     * inline タスクを frontmatter タスクファイルに変換。
-     * 新ファイル作成後、元タスクを wikilink に置き換える。
-     */
-    async convertInlineTaskToFrontmatter(
+    async createFrontmatterTaskFile(
         task: Task,
         headerName: string,
         headerLevel: number,
-        colorKey: string
-    ): Promise<void> {
-        // ソースファイルの color を読み取り
-        const sourceFile = this.app.vault.getAbstractFileByPath(task.file);
-        let sourceColor: string | undefined;
-        if (sourceFile instanceof TFile) {
-            const cache = this.app.metadataCache.getFileCache(sourceFile);
-            sourceColor = cache?.frontmatter?.[colorKey];
-        }
-
-        // 新ファイル作成
-        const newPath = await this.converter.convertToFrontmatterTask(
-            task, headerName, headerLevel, sourceColor, colorKey
+        sourceFileColor?: string,
+        colorKey: string = 'color'
+    ): Promise<string> {
+        return this.converter.convertToFrontmatterTask(
+            task,
+            headerName,
+            headerLevel,
+            sourceFileColor,
+            colorKey
         );
-
-        // 元タスクを wikilink に置き換え
-        await this.replaceTaskWithWikilink(task, newPath);
     }
 
     /**
      * タスク行 + childLines を wikilink に置き換える。
      */
-    private async replaceTaskWithWikilink(task: Task, targetPath: string): Promise<void> {
+    async replaceInlineTaskWithWikilink(task: Task, targetPath: string): Promise<void> {
         const fileName = targetPath.split('/').pop()?.replace(/\.md$/, '') || 'task';
         const wikilinkLine = `- [[${fileName}]]`;
 
