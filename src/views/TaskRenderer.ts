@@ -117,23 +117,25 @@ export class TaskRenderer {
 
         // Inline child tasks rendering
         const COLLAPSE_THRESHOLD = 3;
-        const shouldCollapse = task.childLines.length >= COLLAPSE_THRESHOLD;
 
-        if (task.childLines.length > 0 && shouldCollapse) {
-            // Collapsed: render parent alone, then children in collapsible container
-            await MarkdownRenderer.render(this.app, cleanParentLine, contentContainer, task.file, component);
+        if (task.childLines.length > 0) {
+            // wikilink 展開後の実際の items 数で折りたたみ判定
             const items = this.childItemBuilder.buildInlineChildItems(task, '');
-            await this.childSectionRenderer.renderCollapsed(
-                contentContainer, items, this.expandedTaskIds, task.id,
-                task.file, component, settings, task.startDate
-            );
-        } else if (task.childLines.length > 0) {
-            // Non-collapsed: render parent + children together
-            const items = this.childItemBuilder.buildInlineChildItems(task, '    ');
-            await this.childSectionRenderer.renderParentWithChildren(
-                contentContainer, cleanParentLine, items,
-                task.file, component, settings, task.startDate
-            );
+            if (items.length >= COLLAPSE_THRESHOLD) {
+                // Collapsed: render parent alone, then children in collapsible container
+                await MarkdownRenderer.render(this.app, cleanParentLine, contentContainer, task.file, component);
+                await this.childSectionRenderer.renderCollapsed(
+                    contentContainer, items, this.expandedTaskIds, task.id,
+                    task.file, component, settings, task.startDate
+                );
+            } else {
+                // Non-collapsed: render parent + children together (indent needed)
+                const indentedItems = this.childItemBuilder.buildInlineChildItems(task, '    ');
+                await this.childSectionRenderer.renderParentWithChildren(
+                    contentContainer, cleanParentLine, indentedItems,
+                    task.file, component, settings, task.startDate
+                );
+            }
         } else {
             // No inline children: render parent only
             await MarkdownRenderer.render(this.app, cleanParentLine, contentContainer, task.file, component);

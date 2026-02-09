@@ -64,13 +64,11 @@ export class ChildItemBuilder {
                     isCheckbox: true,
                     handler: { type: 'task', taskId: wikiTask.id }
                 });
-                // wikilink 子の子孫を再帰展開
-                if (wikiTask.childIds.length > 0) {
-                    this.appendDescendants(
-                        wikiTask, indent + lineIndent + '    ', task.id,
-                        items, visitedIds, 0
-                    );
-                }
+                // wikilink 子の子孫を再帰展開（childLines + childIds）
+                this.appendDescendants(
+                    wikiTask, indent + lineIndent + '    ', task.id,
+                    items, visitedIds, 0
+                );
             } else {
                 items.push(this.processChildLine(childLine, idx, task, indent));
             }
@@ -81,115 +79,25 @@ export class ChildItemBuilder {
 
     /**
      * Frontmatter タスクの childIds → ChildRenderItem[]。
-     * single-pass でファイル順に走査し、childId/orphan/wikilink を検出。
+     * 各子タスクを追加後、appendDescendants で childLines + childIds を再帰展開。
      */
     buildFrontmatterChildItems(parentTask: Task, childTasks: Task[]): ChildRenderItem[] {
         const items: ChildRenderItem[] = [];
+        const visitedIds = new Set<string>();
 
         for (const ct of childTasks) {
-            const char = ct.statusChar || ' ';
-
-            if (ct.parserId === 'frontmatter' && ct.file !== parentTask.file) {
-                const linkName = ct.file.replace(/\.md$/, '');
-                items.push({
-                    markdown: `- [${char}] [[${linkName}]]`,
-                    notation: NotationUtils.buildNotationLabel(ct),
-                    isCheckbox: true,
-                    handler: { type: 'task', taskId: ct.id }
-                });
-            } else {
-                items.push({
-                    markdown: `- [${char}] ${ct.content || '\u200B'}`,
-                    notation: NotationUtils.buildNotationLabel(ct),
-                    isCheckbox: true,
-                    handler: { type: 'task', taskId: ct.id }
-                });
-            }
-
-            // single-pass: ct の childLines をファイル順に走査
-            const childIdByLine = new Map<number, Task>();
-            for (const childId of ct.childIds) {
-                const child = this.taskIndex.getTask(childId);
-                if (child && child.line >= 0) childIdByLine.set(child.line, child);
-            }
-            const renderedChildIds = new Set<string>();
-
-            for (let cli = 0; cli < ct.childLines.length; cli++) {
-                const absLine = ct.line + 1 + cli;
-                const childIdTask = childIdByLine.get(absLine);
-
-                if (childIdTask) {
-                    const lineIndent = ct.childLines[cli].match(/^(\s*)/)?.[1] ?? '';
-                    const prefix = '    ' + lineIndent;
-                    items.push({
-                        markdown: `${prefix}- [${childIdTask.statusChar || ' '}] ${childIdTask.content || '\u200B'}`,
-                        notation: NotationUtils.buildNotationLabel(childIdTask),
-                        isCheckbox: true,
-                        handler: { type: 'task', taskId: childIdTask.id }
-                    });
-                    renderedChildIds.add(childIdTask.id);
-                } else {
-                    const orphanTask = this.taskIndex.getTask(`${ct.file}:${absLine}`);
-                    if (orphanTask) {
-                        const lineIndent = ct.childLines[cli].match(/^(\s*)/)?.[1] ?? '';
-                        const prefix = '    ' + lineIndent;
-                        items.push({
-                            markdown: `${prefix}- [${orphanTask.statusChar || ' '}] ${orphanTask.content || '\u200B'}`,
-                            notation: NotationUtils.buildNotationLabel(orphanTask),
-                            isCheckbox: true,
-                            handler: { type: 'task', taskId: orphanTask.id }
-                        });
-                    } else {
-                        // wikilink パターン検出
-                        const wikiMatch = ct.childLines[cli].match(/^\s*-\s+\[\[([^\]]+)\]\]\s*$/);
-                        const wikiChildTask = wikiMatch
-                            ? this.findWikiLinkChild(ct, childIdByLine, wikiMatch[1].trim())
-                            : null;
-                        if (wikiChildTask) {
-                            const lineIndent = ct.childLines[cli].match(/^(\s*)/)?.[1] ?? '';
-                            const prefix = '    ' + lineIndent;
-                            const wikiLinkName = wikiChildTask.file.replace(/\.md$/, '');
-                            items.push({
-                                markdown: `${prefix}- [${wikiChildTask.statusChar || ' '}] [[${wikiLinkName}]]`,
-                                notation: NotationUtils.buildNotationLabel(wikiChildTask),
-                                isCheckbox: true,
-                                handler: { type: 'task', taskId: wikiChildTask.id }
-                            });
-                            renderedChildIds.add(wikiChildTask.id);
-                            if (wikiChildTask.childIds.length > 0) {
-                                this.appendDescendants(
-                                    wikiChildTask, prefix + '    ', parentTask.id,
-                                    items, renderedChildIds
-                                );
-                            }
-                        } else {
-                            // 通常の childLine テキスト
-                            const isCb = /^\s*-\s+\[.\]/.test(ct.childLines[cli]);
-                            items.push({
-                                markdown: '    ' + ct.childLines[cli],
-                                notation: null,
-                                isCheckbox: isCb,
-                                handler: isCb
-                                    ? { type: 'childLine', parentTask: ct, childLineIndex: cli }
-                                    : null
-                            });
-                        }
-                    }
-                }
-            }
-
-            // 残りの childIds を再帰展開
-            this.appendDescendants(
-                ct, '    ', parentTask.id,
-                items, renderedChildIds
-            );
+            visitedIds.add(ct.id);
+            items.push(this.createTaskItem(ct, '', parentTask.file));
+            this.appendDescendants(ct, '    ', parentTask.id, items, visitedIds, 0);
         }
 
         return items;
     }
 
     /**
-     * タスクの childIds を再帰的に ChildRenderItem[] に追加。
+     * タスクの childLines + childIds を再帰的に ChildRenderItem[] に追加。
+     * Phase 1: childLines をファイル順に走査（childIdTask/orphan/wikilink/plain text）
+     * Phase 2: childLines に出現しなかった残りの childIds を追加
      * visitedIds でサイクル防止、depth で深度制限。
      */
     private appendDescendants(
@@ -202,37 +110,102 @@ export class ChildItemBuilder {
     ): void {
         if (depth >= ChildItemBuilder.MAX_RENDER_DEPTH) return;
 
+        // childIdByLine: この task の childIds を行番号でマップ
+        const childIdByLine = new Map<number, Task>();
         for (const childId of task.childIds) {
-            if (visitedIds.has(childId) || childId === rootId) continue;
+            const child = this.taskIndex.getTask(childId);
+            if (child && child.line >= 0) childIdByLine.set(child.line, child);
+        }
+        const renderedChildIds = new Set<string>();
+
+        // Phase 1: childLines をファイル順に走査
+        for (let i = 0; i < task.childLines.length; i++) {
+            const absLine = task.line + 1 + i;
+            const childIdTask = childIdByLine.get(absLine);
+
+            if (childIdTask) {
+                if (visitedIds.has(childIdTask.id) || childIdTask.id === rootId) {
+                    renderedChildIds.add(childIdTask.id);
+                    continue;
+                }
+                visitedIds.add(childIdTask.id);
+                renderedChildIds.add(childIdTask.id);
+                items.push(this.createTaskItem(childIdTask, indent, task.file));
+                this.appendDescendants(
+                    childIdTask, indent + '    ', rootId,
+                    items, visitedIds, depth + 1
+                );
+            } else {
+                // orphan チェック
+                const orphanTask = this.taskIndex.getTask(`${task.file}:${absLine}`);
+                if (orphanTask) {
+                    items.push(this.createTaskItem(orphanTask, indent, task.file));
+                    visitedIds.add(orphanTask.id);
+                } else {
+                    // wikilink パターン検出
+                    const wikiMatch = task.childLines[i].match(/^\s*-\s+\[\[([^\]]+)\]\]\s*$/);
+                    const wikiChildTask = wikiMatch
+                        ? this.findWikiLinkChild(task, childIdByLine, wikiMatch[1].trim())
+                        : null;
+                    if (wikiChildTask && !visitedIds.has(wikiChildTask.id) && wikiChildTask.id !== rootId) {
+                        visitedIds.add(wikiChildTask.id);
+                        renderedChildIds.add(wikiChildTask.id);
+                        const lineIndent = task.childLines[i].match(/^(\s*)/)?.[1] ?? '';
+                        const wikiLinkName = wikiChildTask.file.replace(/\.md$/, '');
+                        items.push({
+                            markdown: `${indent}${lineIndent}- [${wikiChildTask.statusChar || ' '}] [[${wikiLinkName}]]`,
+                            notation: NotationUtils.buildNotationLabel(wikiChildTask),
+                            isCheckbox: true,
+                            handler: { type: 'task', taskId: wikiChildTask.id }
+                        });
+                        this.appendDescendants(
+                            wikiChildTask, indent + lineIndent + '    ', rootId,
+                            items, visitedIds, depth + 1
+                        );
+                    } else if (!wikiChildTask) {
+                        // 通常の childLine テキスト
+                        items.push(this.processChildLine(task.childLines[i], i, task, indent));
+                    }
+                }
+            }
+        }
+
+        // Phase 2: childLines に出現しなかった残りの childIds
+        for (const childId of task.childIds) {
+            if (renderedChildIds.has(childId) || visitedIds.has(childId) || childId === rootId) continue;
             visitedIds.add(childId);
             const child = this.taskIndex.getTask(childId);
             if (!child) continue;
 
-            const char = child.statusChar || ' ';
-            if (child.parserId === 'frontmatter' && child.file !== task.file) {
-                const linkName = child.file.replace(/\.md$/, '');
-                items.push({
-                    markdown: `${indent}- [${char}] [[${linkName}]]`,
-                    notation: NotationUtils.buildNotationLabel(child),
-                    isCheckbox: true,
-                    handler: { type: 'task', taskId: child.id }
-                });
-            } else {
-                items.push({
-                    markdown: `${indent}- [${char}] ${child.content || '\u200B'}`,
-                    notation: NotationUtils.buildNotationLabel(child),
-                    isCheckbox: true,
-                    handler: { type: 'task', taskId: child.id }
-                });
-            }
-
-            if (child.childIds.length > 0) {
-                this.appendDescendants(
-                    child, indent + '    ', rootId,
-                    items, visitedIds, depth + 1
-                );
-            }
+            items.push(this.createTaskItem(child, indent, task.file));
+            this.appendDescendants(
+                child, indent + '    ', rootId,
+                items, visitedIds, depth + 1
+            );
         }
+    }
+
+    /**
+     * タスク → ChildRenderItem 変換。
+     * frontmatter タスクが contextFile と異なるファイルの場合は wikilink 形式で描画。
+     */
+    private createTaskItem(task: Task, indent: string, contextFile: string): ChildRenderItem {
+        const char = task.statusChar || ' ';
+        if (task.parserId === 'frontmatter' && task.file !== contextFile) {
+            const linkName = task.file.replace(/\.md$/, '');
+            return {
+                markdown: `${indent}- [${char}] [[${linkName}]]`,
+                notation: NotationUtils.buildNotationLabel(task),
+                isCheckbox: true,
+                handler: { type: 'task', taskId: task.id }
+            };
+        }
+        return {
+            markdown: `${indent}- [${char}] ${task.content || '\u200B'}`,
+            notation: NotationUtils.buildNotationLabel(task),
+            isCheckbox: true,
+            handler: { type: 'task', taskId: task.id }
+        };
     }
 
     /**
