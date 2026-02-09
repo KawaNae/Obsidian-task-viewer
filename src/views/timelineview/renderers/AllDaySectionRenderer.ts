@@ -5,7 +5,7 @@ import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
 import { ViewUtils } from '../../ViewUtils';
 import { TaskIndex } from '../../../services/core/TaskIndex';
-import { TaskRenderer } from '../../TaskRenderer';
+import { TaskRenderer } from '../../taskcard/TaskCardRenderer';
 import { HandleManager } from '../HandleManager';
 import { Task } from '../../../types';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';

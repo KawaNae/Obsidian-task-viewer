@@ -1,5 +1,5 @@
 import { ItemView, WorkspaceLeaf } from 'obsidian';
-import { TaskRenderer } from '../TaskRenderer';
+import { TaskRenderer } from '../taskcard/TaskCardRenderer';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { Task, ViewState, isCompleteStatusChar } from '../../types';
 import { DragHandler } from '../../interaction/drag/DragHandler';

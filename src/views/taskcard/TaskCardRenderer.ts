@@ -1,10 +1,10 @@
 import { App, MarkdownRenderer, Component } from 'obsidian';
-import { Task, TaskViewerSettings, isCompleteStatusChar } from '../types';
-import { TaskIndex } from '../services/core/TaskIndex';
-import { DateUtils } from '../utils/DateUtils';
-import { ChildItemBuilder } from './renderers/ChildItemBuilder';
-import { ChildSectionRenderer } from './renderers/ChildSectionRenderer';
-import { CheckboxWiring } from './renderers/CheckboxWiring';
+import { Task, TaskViewerSettings, isCompleteStatusChar } from '../../types';
+import { TaskIndex } from '../../services/core/TaskIndex';
+import { DateUtils } from '../../utils/DateUtils';
+import { ChildItemBuilder } from './ChildItemBuilder';
+import { ChildSectionRenderer } from './ChildSectionRenderer';
+import { CheckboxWiring } from './CheckboxWiring';
 
 export class TaskRenderer {
     private app: App;
