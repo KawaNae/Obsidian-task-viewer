@@ -6,88 +6,103 @@ import { ChildItemBuilder } from './ChildItemBuilder';
 import { ChildSectionRenderer } from './ChildSectionRenderer';
 import { CheckboxWiring } from './CheckboxWiring';
 
-export class TaskRenderer {
-    private app: App;
-    private taskIndex: TaskIndex;
-    // Track which tasks have their children expanded (preserved across re-renders)
+export class TaskCardRenderer {
+    private static readonly COLLAPSE_THRESHOLD = 3;
+
     private expandedTaskIds: Set<string> = new Set();
     private childItemBuilder: ChildItemBuilder;
     private childSectionRenderer: ChildSectionRenderer;
     private checkboxWiring: CheckboxWiring;
 
-    constructor(app: App, taskIndex: TaskIndex) {
-        this.app = app;
-        this.taskIndex = taskIndex;
+    constructor(private app: App, taskIndex: TaskIndex) {
         this.checkboxWiring = new CheckboxWiring(app, taskIndex);
         this.childItemBuilder = new ChildItemBuilder(taskIndex);
         this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring);
     }
 
-    async render(container: HTMLElement, task: Task, component: Component, settings: TaskViewerSettings, options?: { topRight?: 'time' | 'deadline' | 'none' }) {
-        // Top-right display: time (default), deadline date, or none
+    async render(
+        container: HTMLElement,
+        task: Task,
+        component: Component,
+        settings: TaskViewerSettings,
+        options?: { topRight?: 'time' | 'deadline' | 'none' }
+    ): Promise<void> {
         const topRight = options?.topRight ?? 'time';
+        this.renderTopRightMeta(container, task, settings, topRight);
 
+        const contentContainer = container.createDiv('task-card__content');
+        const parentMarkdown = this.buildParentMarkdown(task, settings);
+
+        if (task.parserId === 'frontmatter') {
+            await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
+            await this.renderFrontmatterChildren(contentContainer, task, component, settings);
+        } else if (task.childLines.length > 0) {
+            await this.renderInlineChildren(contentContainer, task, component, settings, parentMarkdown);
+        } else {
+            await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
+        }
+
+        this.bindInternalLinks(contentContainer, task);
+        this.bindParentCheckbox(contentContainer, task.id, settings);
+    }
+
+    private renderTopRightMeta(
+        container: HTMLElement,
+        task: Task,
+        settings: TaskViewerSettings,
+        topRight: 'time' | 'deadline' | 'none'
+    ): void {
         if (topRight === 'time' && task.startTime) {
             const timeDisplay = container.createDiv('task-card__time');
             let timeText = task.startTime;
 
             if (task.endTime) {
-                // Parse dates to compare with visual day boundary
                 const startDate = new Date(`${task.startDate}T${task.startTime}`);
                 let endDate: Date;
 
                 if (task.endTime.includes('T')) {
-                    // Full ISO format
                     endDate = new Date(task.endTime);
                 } else {
-                    // Simple HH:mm format
                     endDate = new Date(`${task.startDate}T${task.endTime}`);
-                    // Handle overnight times (if end time is earlier than start time, assume next day)
                     if (endDate < startDate) {
                         endDate.setDate(endDate.getDate() + 1);
                     }
                 }
 
-                // Calculate Visual Day Limit
-                // The limit is the next day at startHour
                 const limitDate = new Date(`${task.startDate}T${settings.startHour.toString().padStart(2, '0')}:00`);
                 limitDate.setDate(limitDate.getDate() + 1);
 
                 if (endDate > limitDate) {
-                    // Exceeds visual day: Show full range
                     const startStr = `${task.startDate}T${task.startTime}`;
-
                     const endY = endDate.getFullYear();
                     const endM = (endDate.getMonth() + 1).toString().padStart(2, '0');
                     const endD = endDate.getDate().toString().padStart(2, '0');
                     const endH = endDate.getHours().toString().padStart(2, '0');
                     const endMin = endDate.getMinutes().toString().padStart(2, '0');
                     const endStr = `${endY}-${endM}-${endD}T${endH}:${endMin}`;
-
                     timeText = `${startStr}>${endStr}`;
                 } else {
-                    // Within visual day: Show time only
                     const endH = endDate.getHours().toString().padStart(2, '0');
                     const endMin = endDate.getMinutes().toString().padStart(2, '0');
                     const endStr = `${endH}:${endMin}`;
-
                     timeText = `${task.startTime}>${endStr}`;
                 }
             }
 
             timeDisplay.innerText = timeText;
-        } else if (topRight === 'deadline' && task.deadline) {
+            return;
+        }
+
+        if (topRight === 'deadline' && task.deadline) {
             const timeDisplay = container.createDiv('task-card__time');
             const parts = task.deadline.split('T');
             timeDisplay.innerText = parts[1] ? `${parts[0]} ${parts[1]}` : parts[0];
         }
+    }
 
-        const contentContainer = container.createDiv('task-card__content');
-
-        // Construct parent task line
+    private buildParentMarkdown(task: Task, settings: TaskViewerSettings): string {
         const statusChar = task.statusChar || ' ';
 
-        // Check if task is overdue and add warning icon
         let overdueIcon = '';
         if (!isCompleteStatusChar(task.statusChar, settings.completeStatusChars)) {
             if (task.deadline && DateUtils.isPastDeadline(task.deadline, settings.startHour)) {
@@ -102,68 +117,99 @@ export class TaskRenderer {
             }
         }
 
-        let cleanParentLine = `- [${statusChar}] ${overdueIcon}${task.content}`;
+        let parentLine = `- [${statusChar}] ${overdueIcon}${task.content}`;
 
-        // Append source file link
         const filePath = task.file.replace(/\.md$/, '');
         const fileName = task.file.split('/').pop()?.replace('.md', '') || task.file;
-        const hasContent = cleanParentLine.replace(/^- \[[xX! -]\]\s*/, '').trim().length > 0;
+        const hasContent = parentLine.replace(/^- \[[xX! -]\]\s*/, '').trim().length > 0;
 
         if (hasContent) {
-            cleanParentLine += ` : [[${filePath}|${fileName}]]`;
+            parentLine += ` : [[${filePath}|${fileName}]]`;
         } else {
-            cleanParentLine += `[[${filePath}|${fileName}]]`;
+            parentLine += `[[${filePath}|${fileName}]]`;
         }
 
-        // Inline child tasks rendering
-        const COLLAPSE_THRESHOLD = 3;
+        return parentLine;
+    }
 
-        if (task.parserId === 'frontmatter') {
-            // frontmatter は親 + frontmatter 子描画の単一路線（inline 分岐を通さない）
-            await MarkdownRenderer.render(this.app, cleanParentLine, contentContainer, task.file, component);
-
-            if (task.childIds.length > 0 || task.childLines.length > 0) {
-                const items = this.childItemBuilder.buildFrontmatterChildItems(task);
-                if (items.length > 0) {
-                    const fmShouldCollapse = items.length >= COLLAPSE_THRESHOLD;
-                    if (fmShouldCollapse) {
-                        await this.childSectionRenderer.renderCollapsed(
-                            contentContainer, items, this.expandedTaskIds,
-                            task.id + ':fm-children', task.file, component, settings, task.startDate
-                        );
-                    } else {
-                        await this.childSectionRenderer.renderExpanded(
-                            contentContainer, items, task.file, component, settings, task.startDate
-                        );
-                    }
-                }
-            }
-        } else if (task.childLines.length > 0) {
-            // wikilink 展開後の実際の items 数で折りたたみ判定
-            const items = this.childItemBuilder.buildInlineChildItems(task, '');
-            if (items.length >= COLLAPSE_THRESHOLD) {
-                // Collapsed: render parent alone, then children in collapsible container
-                await MarkdownRenderer.render(this.app, cleanParentLine, contentContainer, task.file, component);
-                await this.childSectionRenderer.renderCollapsed(
-                    contentContainer, items, this.expandedTaskIds, task.id,
-                    task.file, component, settings, task.startDate
-                );
-            } else {
-                // Non-collapsed: render parent + children together (indent needed)
-                const indentedItems = this.childItemBuilder.buildInlineChildItems(task, '    ');
-                await this.childSectionRenderer.renderParentWithChildren(
-                    contentContainer, cleanParentLine, indentedItems,
-                    task.file, component, settings, task.startDate
-                );
-            }
-        } else {
-            // No inline children: render parent only
-            await MarkdownRenderer.render(this.app, cleanParentLine, contentContainer, task.file, component);
+    private async renderInlineChildren(
+        contentContainer: HTMLElement,
+        task: Task,
+        component: Component,
+        settings: TaskViewerSettings,
+        parentMarkdown: string
+    ): Promise<void> {
+        const items = this.childItemBuilder.buildInlineChildItems(task, '');
+        if (items.length >= TaskCardRenderer.COLLAPSE_THRESHOLD) {
+            await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
+            await this.childSectionRenderer.renderCollapsed(
+                contentContainer,
+                items,
+                this.expandedTaskIds,
+                task.id,
+                task.file,
+                component,
+                settings,
+                task.startDate
+            );
+            return;
         }
 
-        // Handle Internal Links
+        const indentedItems = this.childItemBuilder.buildInlineChildItems(task, '    ');
+        await this.childSectionRenderer.renderParentWithChildren(
+            contentContainer,
+            parentMarkdown,
+            indentedItems,
+            task.file,
+            component,
+            settings,
+            task.startDate
+        );
+    }
+
+    private async renderFrontmatterChildren(
+        contentContainer: HTMLElement,
+        task: Task,
+        component: Component,
+        settings: TaskViewerSettings
+    ): Promise<void> {
+        if (task.childIds.length === 0 && task.childLines.length === 0) {
+            return;
+        }
+
+        const items = this.childItemBuilder.buildFrontmatterChildItems(task);
+        if (items.length === 0) {
+            return;
+        }
+
+        const shouldCollapse = items.length >= TaskCardRenderer.COLLAPSE_THRESHOLD;
+        if (shouldCollapse) {
+            await this.childSectionRenderer.renderCollapsed(
+                contentContainer,
+                items,
+                this.expandedTaskIds,
+                `${task.id}:fm-children`,
+                task.file,
+                component,
+                settings,
+                task.startDate
+            );
+            return;
+        }
+
+        await this.childSectionRenderer.renderExpanded(
+            contentContainer,
+            items,
+            task.file,
+            component,
+            settings,
+            task.startDate
+        );
+    }
+
+    private bindInternalLinks(contentContainer: HTMLElement, task: Task): void {
         const internalLinks = contentContainer.querySelectorAll('a.internal-link');
-        internalLinks.forEach(link => {
+        internalLinks.forEach((link) => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -176,11 +222,16 @@ export class TaskRenderer {
                 e.stopPropagation();
             });
         });
+    }
 
-        // Handle parent checkbox
+    private bindParentCheckbox(
+        contentContainer: HTMLElement,
+        taskId: string,
+        settings: TaskViewerSettings
+    ): void {
         const mainCheckbox = contentContainer.querySelector(':scope > ul > li > input[type="checkbox"]');
         if (mainCheckbox) {
-            this.checkboxWiring.wireParentCheckbox(mainCheckbox, task.id, settings);
+            this.checkboxWiring.wireParentCheckbox(mainCheckbox, taskId, settings);
         }
     }
 }

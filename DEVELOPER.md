@@ -1,5 +1,42 @@
 # Developer Documentation
 
+## Task Card Rendering Architecture (v0.13.1+)
+
+### Module layout
+
+```
+src/views/taskcard/
+  TaskCardRenderer.ts      # Orchestrator for one task card
+  ChildItemBuilder.ts      # Task/childLines -> ChildRenderItem[]
+  ChildSectionRenderer.ts  # Child markdown/toggle rendering
+  CheckboxWiring.ts        # Parent/child checkbox interaction and status menu
+  NotationUtils.ts         # @notation label formatting helpers
+  types.ts                 # ChildRenderItem / CheckboxHandler (taskcard-local types)
+```
+
+### Responsibility boundaries
+
+1. `TaskCardRenderer` is the entry point used by Timeline/Schedule renderers.
+2. `TaskCardRenderer` keeps frontmatter child rendering on a single path:
+   parent render -> frontmatter child section render (no inline child branch).
+3. `ChildSectionRenderer` owns child markdown render pipeline and notation injection.
+4. `CheckboxWiring` owns all checkbox event binding and line-resolution logic.
+5. `ChildItemBuilder` owns descendant expansion order and duplicate suppression.
+
+### Frontmatter child rendering rule
+
+1. Frontmatter cards must show a single child toggle set per card.
+2. Child ordering follows file order from `childLines` first, then remaining `childIds`.
+3. Duplicate line rendering is prevented with consumed line keys (`file:line`).
+4. Checkbox updates for frontmatter child lines use absolute body line offsets.
+
+### Shared type policy
+
+1. `src/types.ts` is reserved for cross-layer models/settings only.
+2. View-only split helpers moved to `src/views/utils/RenderableTaskUtils.ts`.
+3. `RenderableTask`, `shouldSplitTask`, and `splitTaskAtBoundary` must be imported from `src/views/utils/RenderableTaskUtils.ts`.
+4. Task-card-local render helper types are defined in `src/views/taskcard/types.ts`.
+
 開発者向けのドキュメントです。実装の詳細、アーキテクチャ、コーディング規約などを記載しています。
 
 ---
@@ -102,7 +139,7 @@ frontmatterタスクの子要素は、`## Tasks`（設定可能）を仮想ル�
 2. 見出し配下の最初のルートリスト行を起点に、最初の連続リストブロックのみ抽出
 3. 抽出結果を `Task.childLines` と `Task.childLineBodyOffsets`（絶対行番号）に格納
 4. `TaskScanner` は `childLineBodyOffsets` に含まれる行の未親タスクを `fmTask.childIds` に接続
-5. `TaskRenderer` では frontmatter を inline 経路で描画せず、frontmatter専用経路1本に統一（トグル二重描画防止）
+5. `TaskCardRenderer` では frontmatter を inline 経路で描画せず、frontmatter専用経路1本に統一（トグル二重描画防止）
 6. `ChildItemBuilder` は絶対行番号を優先し、既に展開済み子孫行をスキップして重複描画を防止
 
 補足:
