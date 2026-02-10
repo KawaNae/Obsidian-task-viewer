@@ -4,7 +4,7 @@
     width: 100%;
     overflow-y: auto;
     padding: 20px;
-    background-color: var(--background-primary);
+    background-color: var(--tv-bg-app);
 }
 
 .schedule-container {
@@ -24,16 +24,16 @@
 
 /* Past Date Emphasis: Red Text in Header */
 .schedule-date-section.is-past .schedule-date-header {
-    color: var(--text-error);
-    border-bottom-color: var(--text-error);
+    color: var(--tv-text-danger);
+    border-bottom-color: var(--tv-text-danger);
 }
 
 .schedule-date-header {
     margin: 0;
     padding-bottom: 5px;
-    border-bottom: 2px solid var(--background-modifier-border);
+    border-bottom: 2px solid var(--tv-border);
     /* Gray divider */
-    color: var(--text-normal);
+    color: var(--tv-text);
     font-weight: bold;
     cursor: pointer;
 }
@@ -50,7 +50,7 @@
 .schedule-empty-card {
     height: 40px;
     /* Fixed height for visual placeholder */
-    border: 2px dashed var(--background-modifier-border);
+    border: 2px dashed var(--tv-border);
     border-radius: 6px;
     /* No text content, just visual */
 }

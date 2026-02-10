@@ -1,4 +1,4 @@
-import { App } from 'obsidian';
+import { App, setIcon } from 'obsidian';
 import { ColorUtils } from '../utils/ColorUtils';
 
 /**
@@ -164,14 +164,23 @@ export class DateNavigator {
         onNavigate: (days: number) => void,
         onToday: () => void
     ): void {
-        const prevBtn = toolbar.createEl('button', { text: '<', cls: 'view-toolbar__btn--icon' });
+        const prevBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(prevBtn, 'chevron-left');
+        prevBtn.setAttribute('aria-label', 'Previous day');
+        prevBtn.setAttribute('title', 'Previous day');
         prevBtn.onclick = () => onNavigate(-1);
 
-        const nextBtn = toolbar.createEl('button', { text: '>', cls: 'view-toolbar__btn--icon' });
-        nextBtn.onclick = () => onNavigate(1);
-
-        const todayBtn = toolbar.createEl('button', { text: 'Today', cls: 'view-toolbar__btn--text' });
+        const todayBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon view-toolbar__btn--today' });
+        setIcon(todayBtn, 'circle');
+        todayBtn.setAttribute('aria-label', 'Today');
+        todayBtn.setAttribute('title', 'Today');
         todayBtn.onclick = () => onToday();
+
+        const nextBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(nextBtn, 'chevron-right');
+        nextBtn.setAttribute('aria-label', 'Next day');
+        nextBtn.setAttribute('title', 'Next day');
+        nextBtn.onclick = () => onNavigate(1);
     }
 }
 
@@ -190,10 +199,18 @@ export class ViewModeSelector {
             return 'Week';
         };
 
-        const button = toolbar.createEl('button', {
-            text: getLabel(currentValue),
-            cls: 'view-toolbar__btn--text'
-        });
+        const button = toolbar.createEl('button', { cls: 'view-toolbar__btn--range' });
+        const iconEl = button.createSpan('view-toolbar__btn-icon');
+        const labelEl = button.createSpan({ cls: 'view-toolbar__btn-label' });
+        setIcon(iconEl, 'chevrons-up-down');
+
+        const applyModeLabel = (value: number) => {
+            const label = getLabel(value);
+            labelEl.setText(label);
+            button.setAttribute('aria-label', `View mode: ${label}`);
+            button.setAttribute('title', `View mode: ${label}`);
+        };
+        applyModeLabel(currentValue);
 
         button.onclick = (e) => {
             const { Menu } = require('obsidian');
@@ -204,7 +221,7 @@ export class ViewModeSelector {
                     .setChecked(currentValue === 1)
                     .onClick(() => {
                         onChange(1);
-                        button.setText('1 Day');
+                        applyModeLabel(1);
                     });
             });
 
@@ -213,7 +230,7 @@ export class ViewModeSelector {
                     .setChecked(currentValue === 3)
                     .onClick(() => {
                         onChange(3);
-                        button.setText('3 Days');
+                        applyModeLabel(3);
                     });
             });
 
@@ -222,7 +239,7 @@ export class ViewModeSelector {
                     .setChecked(currentValue === 7)
                     .onClick(() => {
                         onChange(7);
-                        button.setText('Week');
+                        applyModeLabel(7);
                     });
             });
 
@@ -247,8 +264,10 @@ export class ZoomControls {
         onZoomChange: (newZoom: number) => Promise<void>
     ): void {
         const zoomContainer = toolbar.createDiv('view-toolbar__zoom-controls');
-
-        const zoomOutBtn = zoomContainer.createEl('button', { text: '-', cls: 'view-toolbar__btn--icon' });
+        const zoomOutBtn = zoomContainer.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(zoomOutBtn, 'minus');
+        zoomOutBtn.setAttribute('aria-label', 'Zoom out');
+        zoomOutBtn.setAttribute('title', 'Zoom out');
         zoomOutBtn.onclick = async () => {
             let newZoom = currentZoom - 0.25;
             if (newZoom < 0.25) newZoom = 0.25;
@@ -260,7 +279,10 @@ export class ZoomControls {
             text: `${Math.round(currentZoom * 100)}%`
         });
 
-        const zoomInBtn = zoomContainer.createEl('button', { text: '+', cls: 'view-toolbar__btn--icon' });
+        const zoomInBtn = zoomContainer.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(zoomInBtn, 'plus');
+        zoomInBtn.setAttribute('aria-label', 'Zoom in');
+        zoomInBtn.setAttribute('title', 'Zoom in');
         zoomInBtn.onclick = async () => {
             let newZoom = currentZoom + 0.25;
             if (newZoom > 4.0) newZoom = 4.0;

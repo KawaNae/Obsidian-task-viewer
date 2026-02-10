@@ -8,8 +8,42 @@
 .view-toolbar {
     padding: var(--toolbar-padding, 8px);
     display: flex;
+    align-items: center;
     gap: var(--toolbar-gap, 8px);
     overflow-x: auto;
+    background-color: var(--tv-bg-panel);
+    border-bottom: 1px solid var(--tv-border);
+}
+
+.view-toolbar button {
+    appearance: none;
+    -webkit-appearance: none;
+    border: 1px solid transparent;
+    border-radius: var(--tv-radius-s);
+    background: transparent;
+    color: var(--tv-text-muted);
+    box-shadow: none;
+    transition:
+        background-color 120ms ease,
+        border-color 120ms ease,
+        color 120ms ease;
+}
+
+.view-toolbar button:hover {
+    background-color: var(--tv-bg-hover);
+    border-color: var(--tv-border);
+    color: var(--tv-text);
+}
+
+.view-toolbar button:focus-visible {
+    outline: 2px solid rgba(var(--tv-accent-rgb), 0.35);
+    outline-offset: 1px;
+}
+
+.view-toolbar button.is-active {
+    background-color: var(--tv-bg-hover);
+    border-color: var(--tv-border);
+    color: var(--tv-text);
 }
 
 /* Zoom Controls */
@@ -22,7 +56,8 @@
 .view-toolbar__label {
     min-width: 40px;
     text-align: center;
-    margin-top: 2px;
+    color: var(--tv-text-muted);
+    font-size: 0.85em;
 }
 
 /* Toolbar Buttons (iPad Fix & Sizing) */
@@ -45,4 +80,52 @@
     cursor: pointer;
     /* remove padding for ipad */
     padding: 0 12px !important;
+}
+
+.view-toolbar__btn--today svg {
+    width: 12px;
+    height: 12px;
+}
+
+.view-toolbar__btn--range {
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px !important;
+    color: var(--tv-text);
+    font-size: 0.9em;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.view-toolbar__btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--tv-text-muted);
+    width: 14px;
+    height: 14px;
+}
+
+.view-toolbar__btn-icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+.view-toolbar__btn-label {
+    line-height: 1;
+}
+
+.view-toolbar__btn--sidebar-toggle {
+    margin-left: auto;
+}
+
+.sidebar-toggle-button-icon {
+    flex-shrink: 0;
+}
+
+.sidebar-toggle-button-icon svg {
+    width: 16px;
+    height: 16px;
 }

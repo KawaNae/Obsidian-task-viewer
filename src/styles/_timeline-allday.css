@@ -6,7 +6,7 @@
 
 /* AllDay Section Container */
 .allday-section {
-    background-color: var(--background-primary);
+    background-color: var(--tv-bg-app);
     flex-shrink: 0;
     overflow-y: visible;
     position: relative;
@@ -27,8 +27,8 @@
 
 /* AllDay Cell */
 .allday-section__cell {
-    border-right: 1px solid var(--background-modifier-border);
-    border-bottom: 2px solid var(--background-modifier-border);
+    border-right: 1px solid var(--tv-border);
+    border-bottom: 2px solid var(--tv-border);
     min-height: var(--allday-min-height);
     position: relative;
     padding: 3px 0 2px 0;
@@ -44,19 +44,31 @@
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
+    cursor: pointer;
     gap: 2px;
     padding-top: 4px;
-    border-left: 1px solid var(--background-modifier-border);
-    border-right: 1px solid var(--background-modifier-border);
-    border-bottom: 2px solid var(--background-modifier-border);
-    background-color: var(--background-secondary);
+    border-left: 1px solid var(--tv-border);
+    border-right: 1px solid var(--tv-border);
+    border-bottom: 2px solid var(--tv-border);
+    background-color: var(--tv-bg-panel);
+}
+
+.allday-section__axis:focus-visible {
+    outline: 2px solid rgba(var(--tv-accent-rgb), 0.35);
+    outline-offset: -2px;
+}
+
+.allday-section__axis:hover .section-toggle-btn {
+    background-color: var(--tv-bg-hover);
+    border-color: var(--tv-border);
+    color: var(--tv-text);
 }
 
 .allday-section__label {
     writing-mode: vertical-rl;
     text-orientation: mixed;
     font-size: 0.8em;
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
     padding-bottom: 6px;
 }
 
@@ -70,7 +82,7 @@
 
 /* Maintain right border for the last cell */
 .allday-section.collapsed .allday-section__cell.is-last-cell {
-    border-right: 1px solid var(--background-modifier-border);
+    border-right: 1px solid var(--tv-border);
 }
 
 .allday-section.collapsed .allday-section__axis {
@@ -97,7 +109,7 @@
     top: 0;
     bottom: 0;
     padding: 6px 12px;
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
     font-size: 0.85em;
     opacity: 0.6;
     display: flex;

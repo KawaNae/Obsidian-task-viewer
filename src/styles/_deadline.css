@@ -12,17 +12,17 @@
     user-select: none;
     font-size: 0.85em;
     font-weight: 600;
-    color: var(--text-normal);
+    color: var(--tv-text);
 }
 
 .deadline-group-header:hover {
-    color: var(--text-accent);
+    color: var(--tv-text-accent);
 }
 
 /* Toggle arrow icon */
 .deadline-group-toggle {
     font-size: 0.7em;
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
     min-width: 10px;
     text-align: center;
 }
@@ -34,7 +34,7 @@
 
 /* Task count badge */
 .deadline-count {
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
     font-weight: 400;
 }
 
@@ -48,13 +48,13 @@
    ========================================================================== */
 
 .deadline-group.is-overdue .deadline-group-title {
-    color: var(--text-error);
+    color: var(--tv-text-danger);
 }
 
 .deadline-group.is-upcoming .deadline-group-title {
-    color: var(--text-warning, var(--text-accent));
+    color: var(--tv-text-warning);
 }
 
 .deadline-group.is-completed .deadline-group-title {
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
 }

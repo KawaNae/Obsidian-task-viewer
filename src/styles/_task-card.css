@@ -16,15 +16,16 @@
     flex-direction: column;
     padding: var(--task-card-padding);
     margin-bottom: var(--task-card-gap);
+    outline: 1px solid var(--tv-border);
 
     /* Typography */
     font-size: var(--task-card-font-size);
-    color: var(--text-normal);
+    color: var(--tv-text);
 
     /* Visual */
-    background-color: var(--interactive-normal);
+    background-color: var(--tv-bg-card);
     border-radius: var(--task-card-border-radius);
-    box-shadow: -2px 0 4px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 4px 10px var(--tv-shadow-strong);
 
     /* Misc */
     scrollbar-width: none;
@@ -105,8 +106,8 @@
 .task-card--inherited::before {
     background-color: transparent;
     background-image: linear-gradient(to bottom,
-            var(--file-accent, var(--interactive-accent)) 0,
-            var(--file-accent, var(--interactive-accent)) 4px,
+            var(--file-accent, var(--tv-accent)) 0,
+            var(--file-accent, var(--tv-accent)) 4px,
             transparent 4px,
             transparent 8px);
     background-size: var(--task-card-accent-width) 8px;
@@ -124,7 +125,7 @@
 /* Before segment - Cut is at the bottom */
 .task-card--split-before {
     /* Dashed border at the bottom to indicate continuation */
-    border-bottom: 2px dashed var(--file-accent, var(--interactive-accent));
+    border-bottom: 2px dashed var(--file-accent, var(--tv-accent));
     /* Square off bottom corners */
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
@@ -138,7 +139,7 @@
 /* After segment - Cut is at the top */
 .task-card--split-after {
     /* Dashed border at the top to indicate continuation */
-    border-top: 2px dashed var(--file-accent, var(--interactive-accent));
+    border-top: 2px dashed var(--file-accent, var(--tv-accent));
     /* Square off top corners */
     border-top-left-radius: 0;
     border-top-right-radius: 0;
@@ -168,8 +169,8 @@
     z-index: var(--z-task-card-drag-ghost);
     pointer-events: none;
     opacity: 0.8;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    border-radius: var(--radius-s);
+    box-shadow: 0 4px 12px var(--tv-ghost-shadow);
+    border-radius: var(--tv-radius-s);
     transition: opacity 0.15s ease;
 }
 
@@ -185,7 +186,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    border: 2px solid var(--file-accent, var(--interactive-accent));
+    border: 2px solid var(--file-accent, var(--tv-accent));
     border-radius: var(--task-card-border-radius);
     pointer-events: none;
     z-index: 5;
@@ -239,12 +240,12 @@
 }
 
 .task-card__content a {
-    color: var(--file-accent, var(--link-color));
+    color: var(--file-accent, var(--tv-link));
     text-decoration: none;
 }
 
 .task-card__content a:hover {
-    color: var(--file-accent-hover, var(--link-color-hover));
+    color: var(--file-accent-hover, var(--tv-link-hover));
     text-decoration: underline;
 }
 
@@ -253,9 +254,9 @@
     position: absolute;
     top: 2px;
     right: 6px;
-    font-family: var(--font-monospace);
+    font-family: var(--tv-font-mono);
     font-size: 0.75em;
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
     background-color: transparent;
     opacity: 0.8;
     pointer-events: none;
@@ -327,18 +328,18 @@
     font-family: monospace;
     font-size: 14px;
     line-height: 1;
-    color: var(--text-muted);
-    background-color: var(--background-primary);
-    border: 1px solid var(--background-modifier-border);
+    color: var(--tv-text-muted);
+    background-color: var(--tv-bg-app);
+    border: 1px solid var(--tv-border);
     border-radius: 4px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 4px var(--tv-shadow-medium);
     cursor: pointer;
     touch-action: none;
 }
 
 .task-card__handle-btn:hover {
-    color: var(--text-normal);
-    background-color: var(--background-secondary);
+    color: var(--tv-text);
+    background-color: var(--tv-bg-panel);
 }
 
 .task-card__handle-btn--resize {
@@ -378,7 +379,7 @@
     left: 0;
     right: 0;
     height: 0;
-    border-bottom: 2px dashed var(--text-muted);
+    border-bottom: 2px dashed var(--tv-text-muted);
     transform: translateY(-50%);
 }
 
@@ -391,7 +392,7 @@
     height: 0;
     border-top: 5px solid transparent;
     border-bottom: 5px solid transparent;
-    border-left: 8px solid var(--text-muted);
+    border-left: 8px solid var(--tv-text-muted);
     transform: translateY(-50%);
 }
 
@@ -405,15 +406,15 @@
 
 .task-card__children-toggle {
     cursor: pointer;
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
     font-size: 0.85em;
     padding: 4px 0 2px 1.5em;
     user-select: none;
 }
 
 .task-card__children-toggle:hover {
-    color: var(--text-normal);
-    background-color: var(--background-modifier-hover);
+    color: var(--tv-text);
+    background-color: var(--tv-bg-hover);
 }
 
 .task-card__children-toggle-icon {
@@ -429,7 +430,6 @@
 /* Expanded state */
 .task-card__children--expanded {
     display: block;
-    border-left: 2px solid var(--background-modifier-border);
     margin-top: 4px;
 }
 
@@ -440,7 +440,7 @@
 /* Child @notation label — small muted text after checkbox content */
 .task-card__child-notation {
     font-size: 0.8em;
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
     margin-left: 0.4em;
 }
 

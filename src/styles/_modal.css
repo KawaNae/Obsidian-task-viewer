@@ -23,24 +23,24 @@
 
 .datetime-input-modal__field label {
     font-size: 0.9em;
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
 }
 
 .datetime-input-modal__text-input {
     padding: 8px 12px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: var(--radius-s);
-    background-color: var(--background-primary);
-    color: var(--text-normal);
+    border: 1px solid var(--tv-border);
+    border-radius: var(--tv-radius-s);
+    background-color: var(--tv-bg-app);
+    color: var(--tv-text);
     font-size: 1em;
-    font-family: var(--font-monospace);
+    font-family: var(--tv-font-mono);
     width: 100%;
 }
 
 .datetime-input-modal__text-input:focus {
     outline: none;
-    border-color: var(--interactive-accent);
-    box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+    border-color: var(--tv-accent);
+    box-shadow: 0 0 0 2px var(--tv-accent-hover);
 }
 
 .datetime-input-modal__text-input:disabled {
@@ -49,18 +49,18 @@
 }
 
 .datetime-input-modal__text-input::placeholder {
-    color: var(--text-faint);
+    color: var(--tv-text-faint);
 }
 
 /* Invalid state */
 .datetime-input-modal__input--invalid {
-    border-color: var(--text-error) !important;
-    background-color: rgba(var(--color-red-rgb), 0.1);
+    border-color: var(--tv-text-danger) !important;
+    background-color: var(--tv-danger-bg-subtle);
 }
 
 /* Error message */
 .datetime-input-modal__error {
-    color: var(--text-error);
+    color: var(--tv-text-danger);
     font-size: 0.85em;
     margin-bottom: 12px;
 }
@@ -73,7 +73,7 @@
     margin-top: 16px;
     margin-bottom: 4px;
     font-size: 0.9em;
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
 }
 
 .create-task-modal__date-row {
@@ -91,46 +91,46 @@
 
 .create-task-modal__date-row__field label {
     font-size: 0.9em;
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
 }
 
 .create-task-modal__text-input {
     padding: 8px 12px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: var(--radius-s);
-    background-color: var(--background-primary);
-    color: var(--text-normal);
+    border: 1px solid var(--tv-border);
+    border-radius: var(--tv-radius-s);
+    background-color: var(--tv-bg-app);
+    color: var(--tv-text);
     font-size: 1em;
-    font-family: var(--font-monospace);
+    font-family: var(--tv-font-mono);
     width: 100%;
 }
 
 .create-task-modal__text-input:focus {
     outline: none;
-    border-color: var(--interactive-accent);
-    box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+    border-color: var(--tv-accent);
+    box-shadow: 0 0 0 2px var(--tv-accent-hover);
 }
 
 .create-task-modal__text-input::placeholder {
-    color: var(--text-faint);
+    color: var(--tv-text-faint);
 }
 
 /* Invalid state */
 .create-task-modal__input--invalid {
-    border-color: var(--text-error) !important;
-    background-color: rgba(var(--color-red-rgb), 0.1);
+    border-color: var(--tv-text-danger) !important;
+    background-color: var(--tv-danger-bg-subtle);
 }
 
 /* Error message */
 .create-task-modal__error {
-    color: var(--text-error);
+    color: var(--tv-text-danger);
     font-size: 0.85em;
     margin-bottom: 12px;
 }
 
 /* Warning message */
 .create-task-modal__warning {
-    color: #c89000;
+    color: var(--tv-text-warning);
     font-size: 0.85em;
     margin-bottom: 12px;
 }

@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, Menu } from 'obsidian';
+import { ItemView, WorkspaceLeaf, Menu, setIcon } from 'obsidian';
 import { TaskIndex } from '../services/core/TaskIndex';
 import { TaskCardRenderer } from './taskcard/TaskCardRenderer';
 import { Task, isCompleteStatusChar } from '../types';
@@ -90,7 +90,10 @@ export class ScheduleView extends ItemView {
         const toolbar = this.container.createDiv('view-toolbar');
 
         // Filter Button
-        const filterBtn = toolbar.createEl('button', { text: 'Filter' });
+        const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(filterBtn, 'filter');
+        filterBtn.setAttribute('aria-label', 'Filter');
+        filterBtn.setAttribute('title', 'Filter');
         filterBtn.onclick = (e) => {
             // Calculate relevant files (Past Incomplete + Future Any)
             const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);

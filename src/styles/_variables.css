@@ -1,4 +1,9 @@
-/* Variables */
+/* ========================================================================== */
+/* Design Tokens */
+/* - :root => theme-independent constants (layout/size/z-index) */
+/* - body  => single-layer tv tokens mapped from Obsidian theme vars */
+/* ========================================================================== */
+
 :root {
     /* Layout */
     --hour-height: 60px;
@@ -11,15 +16,11 @@
     --task-card-border-radius: 4px;
     --task-card-accent-width: 4px;
     --task-card-font-size: 0.9em;
-    --task-card-gap: 3px;
+    --task-card-gap: 5px;
 
     /* Indentation */
     --list-indent-top: 1.9em;
     --list-indent-nested: 1.5em;
-
-    /* Checkbox Colors */
-    --checkbox-question: #A99400;
-    --checkbox-important: #e73c4c;
 
     /* Handles */
     --handle-size: 24px;
@@ -32,31 +33,107 @@
 
     /* Z-Index Layers */
     --z-negative: -1;
-    /* Spacer elements */
     --z-base: 0;
-    /* Grid cells */
     --z-task-card: 1;
-    /* Task cards base */
     --z-current-time-indicator: 15;
-    /* .current-time-indicator */
     --z-task-card-handle: 20;
-    /* .task-card__handle */
     --z-task-card-allday: 25;
-    /* .task-card--allday */
     --z-allday-cell-drag-over: 50;
-    /* .allday-section__cell.drag-over */
     --z-timer-widget: 65;
-    /* Timer widget */
     --z-task-card-allday-handle: 100;
-    /* .task-card--allday .task-card__handle */
     --z-task-card-future-handle: 100;
-    /* .task-card--future .task-card__handle */
     --z-task-card-selected: 200;
-    /* .task-card.selected */
     --z-overlay: 1000;
-    /* General overlay */
     --z-task-card-drag-ghost: 9999;
-    /* .task-card--drag-ghost */
     --z-ghost-factory: 2147483647;
-    /* GhostFactory max */
+}
+
+body {
+    /* Base tokens from Obsidian */
+    --tv-bg-primary: var(--background-primary);
+    --tv-bg-secondary: var(--background-secondary);
+    --tv-bg-secondary-alt: var(--background-secondary-alt);
+    --tv-bg-hover: var(--background-modifier-hover);
+    --tv-bg-input: var(--background-modifier-form-field);
+
+    --tv-interactive-normal: var(--interactive-normal);
+
+    --tv-border: var(--background-modifier-border);
+    --tv-border-error: var(--background-modifier-error);
+
+    --tv-text: var(--text-normal);
+    --tv-text-muted: var(--text-muted);
+    --tv-text-faint: var(--text-faint);
+    --tv-text-accent: var(--text-accent);
+    --tv-text-on-accent: var(--text-on-accent);
+    --tv-text-danger: var(--text-error);
+    --tv-text-warning: var(--text-warning, var(--text-accent));
+    --tv-text-success: var(--text-success, var(--color-green));
+
+    --tv-link: var(--link-color);
+    --tv-link-hover: var(--link-color-hover);
+
+    --tv-accent: var(--interactive-accent);
+    --tv-accent-hover: var(--interactive-accent-hover);
+    --tv-accent-rgb: var(--interactive-accent-rgb);
+
+    --tv-danger-rgb: var(--background-modifier-error-rgb, var(--color-red-rgb));
+
+    --tv-font-mono: var(--font-monospace);
+    --tv-font-ui: var(--font-interface);
+    --tv-radius-s: var(--radius-s);
+
+    /* Role tokens */
+    --tv-bg-app: var(--tv-bg-primary);
+    --tv-bg-panel: var(--tv-bg-secondary);
+    --tv-bg-panel-alt: var(--tv-bg-secondary-alt);
+    --tv-bg-card: var(--tv-bg-secondary);
+
+    --tv-bg-widget: var(--tv-bg-primary);
+    --tv-bg-widget-header: var(--tv-bg-primary);
+    --tv-bg-widget-button: var(--tv-bg-secondary);
+
+    --tv-shadow-rgb: var(--mono-rgb-100);
+    --tv-shadow-a-card: 0.25;
+    --tv-shadow-a-strong: 0.3;
+    --tv-shadow-a-medium: 0.2;
+    --tv-shadow-a-light: 0.15;
+
+    --tv-shadow-card: rgba(var(--tv-shadow-rgb), var(--tv-shadow-a-card));
+    --tv-shadow-strong: rgba(var(--tv-shadow-rgb), var(--tv-shadow-a-strong));
+    --tv-shadow-medium: rgba(var(--tv-shadow-rgb), var(--tv-shadow-a-medium));
+    --tv-shadow-light: rgba(var(--tv-shadow-rgb), var(--tv-shadow-a-light));
+
+    --tv-danger-bg-subtle: rgba(var(--tv-danger-rgb), 0.1);
+    --tv-danger-bg-soft: rgba(var(--tv-danger-rgb), 0.2);
+    --tv-danger-bg-soft-hover: rgba(var(--tv-danger-rgb), 0.3);
+
+    --tv-checkbox-marker: var(--checkbox-marker-color);
+    --tv-checkbox-done-bg: var(--checklist-done-color);
+    --tv-checkbox-question: var(--tv-text-warning);
+    --tv-checkbox-important: var(--tv-text-danger);
+
+    --tv-drop-outline: var(--tv-accent);
+    --tv-drop-glow-strong: rgba(var(--tv-accent-rgb), 0.3);
+    --tv-drop-glow-light: rgba(var(--tv-accent-rgb), 0.2);
+
+    --tv-ghost-shadow: var(--tv-shadow-strong);
+}
+
+body.theme-light {
+    --tv-bg-card: var(--tv-bg-primary);
+    --tv-shadow-rgb: var(--mono-rgb-100);
+    --tv-shadow-a-card: 0.16;
+    --tv-shadow-a-strong: 0.2;
+    --tv-shadow-a-medium: 0.15;
+    --tv-shadow-a-light: 0.1;
+}
+
+body.theme-dark {
+    --tv-bg-card: var(--tv-bg-secondary-alt);
+    --tv-shadow-rgb: var(--mono-rgb-0);
+    --tv-shadow-a-card: 0.35;
+    --tv-shadow-a-strong: 0.4;
+    --tv-shadow-a-medium: 0.28;
+    --tv-shadow-a-light: 0.22;
 }

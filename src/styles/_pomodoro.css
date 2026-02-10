@@ -9,8 +9,8 @@
     align-items: center;
     justify-content: center;
     background: linear-gradient(135deg,
-            var(--background-primary) 0%,
-            var(--background-secondary) 100%);
+            var(--tv-bg-app) 0%,
+            var(--tv-bg-panel) 100%);
     overflow: hidden;
     padding: 0 !important;
     position: relative;
@@ -43,7 +43,7 @@
     background: transparent;
     border: none;
     font-size: 1.2rem;
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
     cursor: pointer;
     padding: 8px;
     opacity: 0.6;
@@ -56,7 +56,7 @@
 
 .pomodoro-view__task-label {
     font-size: clamp(0.75rem, 2.5vw, 1rem);
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
     text-align: center;
     padding: 4px 12px;
     max-width: 100%;
@@ -69,7 +69,7 @@
 .pomodoro-view__title {
     font-size: clamp(1rem, 4vw, 1.5rem);
     font-weight: 600;
-    color: var(--text-normal);
+    color: var(--tv-text);
     text-align: center;
 }
 
@@ -91,7 +91,7 @@
 
 .pomodoro-view__progress-ring-bg {
     fill: none;
-    stroke: var(--background-modifier-border);
+    stroke: var(--tv-border);
 }
 
 .pomodoro-view__progress-ring-progress {
@@ -101,15 +101,15 @@
 }
 
 .pomodoro-view__progress-ring-progress--work {
-    stroke: var(--color-red);
+    stroke: var(--tv-text-danger);
 }
 
 .pomodoro-view__progress-ring-progress--break {
-    stroke: var(--color-green);
+    stroke: var(--tv-text-success);
 }
 
 .pomodoro-view__progress-ring-progress--idle {
-    stroke: var(--interactive-accent);
+    stroke: var(--tv-accent);
 }
 
 .pomodoro-view__time-display {
@@ -120,7 +120,7 @@
     font-size: min(2.5rem, 25cqw);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-    color: var(--text-normal);
+    color: var(--tv-text);
 }
 
 /* Container query for progress container */
@@ -147,30 +147,30 @@
 
 .pomodoro-view__btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 12px var(--tv-shadow-light);
 }
 
 .pomodoro-view__btn--primary {
-    background: var(--interactive-accent);
-    color: var(--text-on-accent);
+    background: var(--tv-accent);
+    color: var(--tv-text-on-accent);
 }
 
 .pomodoro-view__btn--primary:hover {
-    background: var(--interactive-accent-hover);
+    background: var(--tv-accent-hover);
 }
 
 .pomodoro-view__btn--secondary {
-    background: var(--background-modifier-border);
-    color: var(--text-normal);
+    background: var(--tv-border);
+    color: var(--tv-text);
 }
 
 .pomodoro-view__btn--secondary:hover {
-    background: var(--background-modifier-hover);
+    background: var(--tv-bg-hover);
 }
 
 .pomodoro-view__btn--danger {
-    background: var(--background-modifier-error);
-    color: var(--text-on-accent);
+    background: var(--tv-border-error);
+    color: var(--tv-text-on-accent);
 }
 
 .pomodoro-view__btn--danger:hover {
@@ -186,21 +186,21 @@
 }
 
 .input-modal__label {
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
     font-size: 0.9rem;
 }
 
 .input-modal__input {
     width: 100%;
     padding: 8px 12px;
-    border: 1px solid var(--background-modifier-border);
+    border: 1px solid var(--tv-border);
     border-radius: 4px;
-    background: var(--background-primary);
-    color: var(--text-normal);
+    background: var(--tv-bg-app);
+    color: var(--tv-text);
     font-size: 1rem;
 }
 
 .input-modal__input:focus {
     outline: none;
-    border-color: var(--interactive-accent);
+    border-color: var(--tv-accent);
 }

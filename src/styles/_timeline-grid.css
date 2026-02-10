@@ -11,7 +11,7 @@
     /* display: flex;  <-- removed, managed by inner layout */
     /* flex-direction: column; */
     overflow: hidden;
-    background-color: var(--background-primary);
+    background-color: var(--tv-bg-app);
     position: relative;
     padding: 0 !important;
     /* Ensure no padding interferes with full height */
@@ -28,15 +28,18 @@
 
 .timeline-view__main {
     flex: 1;
+    min-width: 0;
     position: relative;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     transition: margin-right 0.3s ease;
+    border-right: 0;
 }
 
 .timeline-view__main--sidebar-open {
     margin-right: 300px;
+    border-right: 1px solid var(--tv-border);
 }
 
 .timeline-view__sidebar {
@@ -45,16 +48,30 @@
     top: 0;
     bottom: 0;
     width: 300px;
-    border-left: 1px solid var(--background-modifier-border);
+    border-left: 0;
     display: flex;
     flex-direction: column;
-    background-color: var(--background-secondary);
+    background-color: var(--tv-bg-panel);
     transition: transform 0.3s ease;
     overflow: hidden;
 }
 
 .timeline-view__sidebar--hidden {
     transform: translateX(100%);
+}
+
+.timeline-view__sidebar-header {
+    padding: 10px;
+    margin: 0;
+    font-size: 0.8em;
+    color: var(--tv-text-muted);
+    border-bottom: 1px solid var(--tv-border);
+}
+
+.timeline-view__sidebar-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
 }
 
 /* Timeline Grid Container (Flex Column of Rows) */
@@ -91,11 +108,11 @@
 
 /* Time Axis Column */
 .time-axis-column {
-    background-color: var(--background-secondary);
-    border-top: 1px solid var(--background-modifier-border);
-    border-left: 1px solid var(--background-modifier-border);
-    border-right: 1px solid var(--background-modifier-border);
-    border-bottom: 1px solid var(--background-modifier-border);
+    background-color: var(--tv-bg-panel);
+    border-top: 1px solid var(--tv-border);
+    border-left: 1px solid var(--tv-border);
+    border-right: 1px solid var(--tv-border);
+    border-bottom: 1px solid var(--tv-border);
     position: relative;
     height: calc(24 * var(--hour-height));
 }
@@ -105,7 +122,7 @@
     width: 100%;
     text-align: center;
     font-size: 0.8em;
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
     transform: translateY(0);
     margin-top: 2px;
 }
@@ -113,16 +130,16 @@
 /* Day Column (Timeline) */
 .day-timeline-column {
     position: relative;
-    border-top: 1px solid var(--background-modifier-border);
-    border-right: 1px solid var(--background-modifier-border);
-    border-bottom: 1px solid var(--background-modifier-border);
+    border-top: 1px solid var(--tv-border);
+    border-right: 1px solid var(--tv-border);
+    border-bottom: 1px solid var(--tv-border);
     height: calc(24 * var(--hour-height));
     background:
         repeating-linear-gradient(to bottom,
             transparent,
             transparent calc(var(--hour-height) - 1px),
-            var(--background-modifier-border) calc(var(--hour-height) - 1px),
-            var(--background-modifier-border) var(--hour-height));
+            var(--tv-border) calc(var(--hour-height) - 1px),
+            var(--tv-border) var(--hour-height));
 }
 
 /* Current Time Indicator */
@@ -130,31 +147,46 @@
     position: absolute;
     width: 100%;
     height: 2px;
-    background-color: var(--interactive-accent);
+    background-color: var(--tv-accent);
     z-index: var(--z-current-time-indicator);
     pointer-events: none;
 }
 
 /* Section Toggle Button (Shared) */
-.section-toggle-btn {
-    cursor: pointer;
-    /* font-size: 12px; removed for icon */
-    width: 20px;
-    height: 20px;
-    display: flex;
+.timeline-view button.section-toggle-btn {
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     margin: 2px;
-    /* remove padding for ipad */
     padding: 0 !important;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 1px solid transparent !important;
+    border-radius: var(--tv-radius-s);
+    background: transparent !important;
+    color: var(--tv-text-muted);
+    box-shadow: none;
+    cursor: pointer;
+    transition:
+        background-color 120ms ease,
+        border-color 120ms ease,
+        color 120ms ease;
 }
 
-.section-toggle-btn svg {
+.timeline-view button.section-toggle-btn svg {
     width: 12px;
     height: 12px;
 }
 
-.section-toggle-btn:hover {
-    background-color: var(--background-modifier-hover);
-    color: var(--text-normal);
+.timeline-view button.section-toggle-btn:hover {
+    background-color: var(--tv-bg-hover);
+    border-color: var(--tv-border);
+    color: var(--tv-text);
+}
+
+.timeline-view button.section-toggle-btn:focus-visible {
+    outline: 2px solid rgba(var(--tv-accent-rgb), 0.35);
+    outline-offset: 1px;
 }

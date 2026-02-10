@@ -110,11 +110,14 @@ export class GridRenderer {
 
         // Time Axis All-Day (with toggle button)
         const axisCell = allDayRow.createDiv('allday-section__cell allday-section__axis');
+        axisCell.setAttribute('role', 'button');
+        axisCell.setAttribute('tabindex', '0');
+        axisCell.setAttribute('aria-label', 'Toggle All Day section');
 
         // Toggle button
         const toggleBtn = axisCell.createEl('button', { cls: 'section-toggle-btn' });
-        setIcon(toggleBtn, this.isAllDayCollapsed ? 'plus' : 'minus');
-        toggleBtn.setAttribute('aria-label', 'Toggle All Day section');
+        toggleBtn.tabIndex = -1;
+        toggleBtn.setAttribute('aria-hidden', 'true');
 
         // Label
         const axisLabel = axisCell.createEl('span', { cls: 'allday-section__label' });
@@ -123,17 +126,32 @@ export class GridRenderer {
         axisCell.style.gridColumn = '1';
         axisCell.style.gridRow = '1 / span 50'; // Span all implicit rows
 
-        // Toggle functionality
-        toggleBtn.addEventListener('click', () => {
-            this.isAllDayCollapsed = !this.isAllDayCollapsed;
-            allDayRow.toggleClass('collapsed', this.isAllDayCollapsed);
+        const applyAllDayCollapsedState = () => {
             setIcon(toggleBtn, this.isAllDayCollapsed ? 'plus' : 'minus');
+            allDayRow.toggleClass('collapsed', this.isAllDayCollapsed);
+            axisCell.setAttribute('aria-expanded', (!this.isAllDayCollapsed).toString());
+            axisCell.setAttribute('title', this.isAllDayCollapsed ? 'Expand All Day' : 'Collapse All Day');
+        };
+
+        const toggleAllDayCollapsed = () => {
+            this.isAllDayCollapsed = !this.isAllDayCollapsed;
+            applyAllDayCollapsedState();
+        };
+
+        // Toggle functionality
+        axisCell.addEventListener('click', () => {
+            toggleAllDayCollapsed();
+        });
+
+        axisCell.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleAllDayCollapsed();
+            }
         });
 
         // Apply initial collapsed state
-        if (this.isAllDayCollapsed) {
-            allDayRow.addClass('collapsed');
-        }
+        applyAllDayCollapsedState();
 
         // Background Cells (Grid Lines)
         dates.forEach((date, i) => {

@@ -357,3 +357,14 @@ npm run build
 ## ライセンス
 
 MIT License
+
+---
+
+## Style Token Rules (v0.13.1+)
+
+1. Do not reference Obsidian theme variables directly outside `src/styles/_variables.css`.
+2. `:root` is reserved for theme-independent constants (size, spacing, z-index).
+3. Use `body` in `src/styles/_variables.css` as the single mapping layer from Obsidian vars to `--tv-*`.
+4. Component/style files must use only `--tv-*` tokens.
+5. Keep token design effectively single-layer; only keep `theme-light`/`theme-dark` overrides for app/card background and shadow strength.
+6. Drag-and-drop visuals must separate drop-zone tokens (`--tv-drop-*`) from drag-ghost tokens (`--tv-ghost-*`).

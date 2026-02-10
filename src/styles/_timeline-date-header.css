@@ -5,14 +5,14 @@
 
 /* Date Header Row */
 .date-header {
-    background-color: var(--background-secondary);
+    background-color: var(--tv-bg-panel);
     flex-shrink: 0;
     overflow-y: hidden;
 }
 
 .date-header__cell {
-    border-right: 1px solid var(--background-modifier-border);
-    border-bottom: 1px solid var(--background-modifier-border);
+    border-right: 1px solid var(--tv-border);
+    border-bottom: 1px solid var(--tv-border);
     padding: 2px;
     text-align: center;
     font-weight: bold;
@@ -50,12 +50,12 @@
 
 /* First cell (axis) - add left border */
 .date-header__cell:first-child {
-    border-left: 1px solid var(--background-modifier-border);
+    border-left: 1px solid var(--tv-border);
 }
 
 .date-header__cell:hover {
-    background-color: var(--background-modifier-hover);
-    color: var(--text-normal);
+    background-color: var(--tv-bg-hover);
+    color: var(--tv-text);
     text-decoration: underline;
 }
 
@@ -72,7 +72,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: var(--interactive-accent);
+    background-color: var(--tv-accent);
     opacity: 0.9;
     z-index: var(--z-negative);
     pointer-events: none;
@@ -84,9 +84,9 @@
 
 /* Date with overdue incomplete tasks - warning text color */
 .date-header__cell.has-overdue {
-    color: var(--color-orange);
+    color: var(--tv-text-warning);
 }
 
 .date-header__cell.has-overdue:hover {
-    color: var(--color-orange);
+    color: var(--tv-text-warning);
 }
