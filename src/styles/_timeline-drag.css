@@ -5,29 +5,29 @@
 
 /* AllDay Section Drag Over */
 .allday-section.drag-over {
-    background-color: var(--background-modifier-hover);
+    background-color: var(--tv-bg-hover);
 }
 
 .allday-section__cell.drag-over {
-    outline: 2px dashed var(--interactive-accent);
+    outline: 2px dashed var(--tv-drop-outline);
     outline-offset: -2px;
-    box-shadow: inset 0 0 10px rgba(var(--interactive-accent-rgb), 0.3);
+    box-shadow: inset 0 0 10px var(--tv-drop-glow-strong);
     z-index: var(--z-allday-cell-drag-over) !important;
 }
 
 /* Timeline Column Drag Over */
 .day-timeline-column.drag-over {
-    outline: 2px dashed var(--interactive-accent);
+    outline: 2px dashed var(--tv-drop-outline);
     outline-offset: -2px;
-    box-shadow: inset 0 0 10px rgba(var(--interactive-accent-rgb), 0.2);
+    box-shadow: inset 0 0 10px var(--tv-drop-glow-light);
 }
 
 /* Future Section Drag Over */
 .future-section.drag-over,
 .future-section__content.drag-over,
 .future-section__list.drag-over {
-    outline: 2px dashed var(--interactive-accent);
+    outline: 2px dashed var(--tv-drop-outline);
     outline-offset: -2px;
-    box-shadow: inset 0 0 10px rgba(var(--interactive-accent-rgb), 0.2);
+    box-shadow: inset 0 0 10px var(--tv-drop-glow-light);
 }
 

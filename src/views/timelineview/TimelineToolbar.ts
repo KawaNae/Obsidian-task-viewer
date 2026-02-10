@@ -134,7 +134,10 @@ export class TimelineToolbar {
     }
 
     private renderFilterButton(toolbar: HTMLElement): void {
-        const filterBtn = toolbar.createEl('button', { text: 'Filter', cls: 'view-toolbar__btn--text' });
+        const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(filterBtn, 'filter');
+        filterBtn.setAttribute('aria-label', 'Filter');
+        filterBtn.setAttribute('title', 'Filter');
         filterBtn.onclick = (e) => {
             const dates = this.callbacks.getDatesToShow();
             const allTasksInView = dates.flatMap(date =>
@@ -164,23 +167,35 @@ export class TimelineToolbar {
     }
 
     private renderSidebarToggle(toolbar: HTMLElement): void {
-        const toggleBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(toggleBtn, 'sidebar-right');
-        toggleBtn.setAttribute('aria-label', 'Toggle Deadline List');
-
-        if (this.viewState.showDeadlineList) {
-            toggleBtn.addClass('is-active');
-        }
+        const toggleBtn = toolbar.createEl('button', {
+            cls: 'view-toolbar__btn--icon view-toolbar__btn--sidebar-toggle sidebar-toggle-button-icon'
+        });
+        this.updateSidebarToggleButton(toggleBtn);
 
         toggleBtn.onclick = () => {
             this.viewState.showDeadlineList = !this.viewState.showDeadlineList;
-            if (this.viewState.showDeadlineList) {
-                toggleBtn.addClass('is-active');
-            } else {
-                toggleBtn.removeClass('is-active');
-            }
+            this.updateSidebarToggleButton(toggleBtn);
             this.callbacks.onToggleDeadlineList?.();
         };
+    }
+
+    private updateSidebarToggleButton(toggleBtn: HTMLElement): void {
+        const isOpen = this.viewState.showDeadlineList;
+        const primaryIcon = isOpen ? 'panel-right-open' : 'panel-right-close';
+        const fallbackIcon = isOpen ? 'sidebar-right' : 'sidebar-left';
+
+        setIcon(toggleBtn, primaryIcon);
+        if (!toggleBtn.querySelector('svg')) {
+            setIcon(toggleBtn, fallbackIcon);
+        }
+
+        toggleBtn.classList.toggle('is-open', isOpen);
+        toggleBtn.classList.toggle('is-closed', !isOpen);
+        toggleBtn.classList.toggle('is-active', isOpen);
+
+        const label = isOpen ? 'Hide Deadline List' : 'Show Deadline List';
+        toggleBtn.setAttribute('aria-label', label);
+        toggleBtn.setAttribute('title', label);
     }
 
     private navigateDate(days: number): void {

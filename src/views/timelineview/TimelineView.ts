@@ -301,13 +301,9 @@ export class TimelineView extends ItemView {
         }
 
         // Header
-        targetColumn.createEl('p', {
-            text: 'Deadline List', attr: {
-                style: 'padding: 10px; border-bottom: 1px solid var(--background-modifier-border); margin: 0;font-size: 0.8em;color: var(--text-muted);'
-            }
-        });
+        targetColumn.createEl('p', { cls: 'timeline-view__sidebar-header', text: 'Deadline List' });
 
-        const listContainer = targetColumn.createDiv({ cls: 'deadline-list-wrapper', attr: { style: 'flex: 1; overflow-y: auto; padding: 10px;' } });
+        const listContainer = targetColumn.createDiv('timeline-view__sidebar-body deadline-list-wrapper');
 
         const deadlineTasks = this.taskIndex.getDeadlineTasks();
         const visibleFiles = this.viewState.filterFiles ? new Set(this.viewState.filterFiles) : null;

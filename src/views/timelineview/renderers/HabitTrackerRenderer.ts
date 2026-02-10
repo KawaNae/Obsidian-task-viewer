@@ -24,23 +24,41 @@ export class HabitTrackerRenderer {
 
         // Axis cell (column 1): toggle button + vertical "Habits" label
         const axisCell = container.createDiv('habits-section__cell habits-section__axis');
+        axisCell.setAttribute('role', 'button');
+        axisCell.setAttribute('tabindex', '0');
+        axisCell.setAttribute('aria-label', 'Toggle Habits section');
 
         const toggleBtn = axisCell.createEl('button', { cls: 'section-toggle-btn' });
-        setIcon(toggleBtn, this.isCollapsed ? 'plus' : 'minus');
-        toggleBtn.setAttribute('aria-label', 'Toggle Habits section');
+        toggleBtn.tabIndex = -1;
+        toggleBtn.setAttribute('aria-hidden', 'true');
 
         axisCell.createEl('span', { cls: 'habits-section__label', text: 'Habits' });
 
-        toggleBtn.addEventListener('click', () => {
-            this.isCollapsed = !this.isCollapsed;
+        const applyCollapsedState = () => {
             container.toggleClass('collapsed', this.isCollapsed);
             setIcon(toggleBtn, this.isCollapsed ? 'plus' : 'minus');
+            axisCell.setAttribute('aria-expanded', (!this.isCollapsed).toString());
+            axisCell.setAttribute('title', this.isCollapsed ? 'Expand Habits' : 'Collapse Habits');
+        };
+
+        const toggleCollapsed = () => {
+            this.isCollapsed = !this.isCollapsed;
+            applyCollapsedState();
+        };
+
+        axisCell.addEventListener('click', () => {
+            toggleCollapsed();
+        });
+
+        axisCell.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleCollapsed();
+            }
         });
 
         // Apply initial collapsed state
-        if (this.isCollapsed) {
-            container.addClass('collapsed');
-        }
+        applyCollapsedState();
 
         // Per-date cells
         dates.forEach((date, i) => {

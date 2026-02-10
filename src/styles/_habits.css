@@ -6,7 +6,7 @@
 
 /* Habits Section Container (the grid row) */
 .habits-section {
-    background-color: var(--background-primary);
+    background-color: var(--tv-bg-app);
     flex-shrink: 0;
     overflow-y: visible;
     position: relative;
@@ -18,12 +18,24 @@
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
+    cursor: pointer;
     gap: 2px;
     padding-top: 4px;
-    border-left: 1px solid var(--background-modifier-border);
-    border-right: 1px solid var(--background-modifier-border);
-    border-bottom: 2px solid var(--background-modifier-border);
-    background-color: var(--background-secondary);
+    border-left: 1px solid var(--tv-border);
+    border-right: 1px solid var(--tv-border);
+    border-bottom: 2px solid var(--tv-border);
+    background-color: var(--tv-bg-panel);
+}
+
+.habits-section__axis:focus-visible {
+    outline: 2px solid rgba(var(--tv-accent-rgb), 0.35);
+    outline-offset: -2px;
+}
+
+.habits-section__axis:hover .section-toggle-btn {
+    background-color: var(--tv-bg-hover);
+    border-color: var(--tv-border);
+    color: var(--tv-text);
 }
 
 /* Vertical label in axis */
@@ -31,14 +43,14 @@
     writing-mode: vertical-rl;
     text-orientation: mixed;
     font-size: 0.8em;
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
     padding-bottom: 6px;
 }
 
 /* Each date column cell */
 .habits-section__cell {
-    border-right: 1px solid var(--background-modifier-border);
-    border-bottom: 2px solid var(--background-modifier-border);
+    border-right: 1px solid var(--tv-border);
+    border-bottom: 2px solid var(--tv-border);
     min-height: 40px;
     padding: 3px 6px;
     display: flex;
@@ -66,7 +78,7 @@
 
 /* Habit name label */
 .habits-section__habit-label {
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
     flex-shrink: 1;
     flex-basis: auto;
     max-width: 70%;
@@ -84,7 +96,7 @@
 /* Number / string value display (before inline edit) */
 .habits-section__value-display {
     cursor: pointer;
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
     padding: 1px 4px;
     border-radius: 3px;
     transition: background-color 0.15s ease;
@@ -95,17 +107,17 @@
 }
 
 .habits-section__value-display:hover {
-    background-color: var(--background-modifier-hover);
-    color: var(--text-normal);
+    background-color: var(--tv-bg-hover);
+    color: var(--tv-text);
 }
 
 .habits-section__value-display.is-set {
-    color: var(--text-normal);
+    color: var(--tv-text);
 }
 
 /* Unit suffix label (e.g. "kg", "min") — value が未設定なら非表示 */
 .habits-section__unit {
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
     font-size: 0.85em;
     flex-shrink: 0;
     white-space: nowrap;
@@ -125,27 +137,28 @@
     height: auto;
     font-size: inherit;
     padding: 0 3px;
-    border: 1px solid var(--background-modifier-border);
+    border: 1px solid var(--tv-border);
     border-radius: 3px;
-    background-color: var(--background-primary);
-    color: var(--text-normal);
+    background-color: var(--tv-bg-app);
+    color: var(--tv-text);
     outline: none;
 }
 
 .habits-section .habits-section__input:focus {
-    border-color: var(--interactive-accent);
+    border-color: var(--tv-accent);
 }
 
 /* --- Collapsed State --- */
 .habits-section.collapsed .habits-section__axis {
     min-height: 36px;
+    border-right: 1px solid var(--tv-border);
 }
 
 .habits-section.collapsed .habits-section__label {
     display: none;
 }
 
-.habits-section.collapsed .habits-section__cell {
+.habits-section.collapsed .habits-section__cell:not(.habits-section__axis) {
     min-height: 36px;
     border-right: none;
     justify-content: center;
@@ -153,7 +166,7 @@
 
 /* Restore right border on last cell when collapsed */
 .habits-section.collapsed .habits-section__cell.is-last-cell {
-    border-right: 1px solid var(--background-modifier-border);
+    border-right: 1px solid var(--tv-border);
 }
 
 /* Hide all habit rows when collapsed */
@@ -169,7 +182,7 @@
     top: 0;
     bottom: 0;
     padding: 6px 12px;
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
     font-size: 0.85em;
     opacity: 0.6;
     display: flex;
