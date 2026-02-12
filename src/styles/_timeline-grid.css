@@ -8,18 +8,23 @@
 /* Timeline View Container */
 .timeline-view {
     height: 100%;
-    /* display: flex;  <-- removed, managed by inner layout */
-    /* flex-direction: column; */
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
     position: relative;
     padding: 0 !important;
     /* Ensure no padding interferes with full height */
 }
 
+.timeline-view__toolbar-host {
+    flex-shrink: 0;
+}
+
 /* 2-Column Layout Wrapper */
 .timeline-view__layout {
     display: flex;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     width: 100%;
     overflow: hidden;
     position: relative;

@@ -291,7 +291,10 @@ export class TimelineView extends ItemView {
         const scrollbarWidth = this.measureScrollbarWidth();
         this.container.style.setProperty('--scrollbar-width-actual', `${scrollbarWidth}px`);
 
-        // Initialize 2-Column Layout
+        // Toolbar host (top row)
+        const toolbarHost = this.container.createDiv('timeline-view__toolbar-host');
+
+        // Initialize 2-Column Layout (bottom row)
         const layoutContainer = this.container.createDiv('timeline-view__layout');
 
         // Main Column (Timeline, AllDay)
@@ -330,12 +333,9 @@ export class TimelineView extends ItemView {
 
         this.targetColumnEl = targetColumn;
 
-        // Render Toolbar (into execution column)
-        // We probably want toolbar in execution column OR above both.
-        // Current design: Toolbar is part of timeline view functionality.
-        // Let's put it in execution column for now as verified in plan.
+        // Render Toolbar (above both columns)
         this.toolbar = new TimelineToolbar(
-            executionColumn,
+            toolbarHost,
             this.app,
             this.viewState,
             this.plugin,
