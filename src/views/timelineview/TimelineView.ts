@@ -286,6 +286,7 @@ export class TimelineView extends ItemView {
     }
 
     private render() {
+        this.applyResponsiveLayoutMode();
 
         // Save scroll position
         const scrollArea = this.container.querySelector('.timeline-scroll-area');
@@ -308,17 +309,27 @@ export class TimelineView extends ItemView {
 
         // Initialize 2-Column Layout (bottom row)
         const layoutContainer = this.container.createDiv('timeline-view__layout');
+        const isDeadlineListOpen = this.viewState.showDeadlineList;
 
         // Main Column (Timeline, AllDay)
         const executionColumn = layoutContainer.createDiv('timeline-view__main');
+        if (isDeadlineListOpen) {
+            executionColumn.addClass('timeline-view__main--sidebar-open');
+        }
         this.executionColumnEl = executionColumn;
 
         const backdrop = layoutContainer.createDiv('timeline-view__sidebar-backdrop');
+        if (isDeadlineListOpen) {
+            backdrop.addClass('timeline-view__sidebar-backdrop--visible');
+        }
         backdrop.addEventListener('click', () => this.closeDeadlineList());
         this.sidebarBackdropEl = backdrop;
 
         // Sidebar Column (Deadline List)
         const targetColumn = layoutContainer.createDiv('timeline-view__sidebar');
+        if (!isDeadlineListOpen) {
+            targetColumn.addClass('timeline-view__sidebar--hidden');
+        }
 
         const sidebarHeader = targetColumn.createDiv('timeline-view__sidebar-header');
         sidebarHeader.createEl('p', { cls: 'timeline-view__sidebar-title', text: 'Deadline List' });
