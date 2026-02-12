@@ -98,23 +98,21 @@
     padding: 10px;
 }
 
-@media (max-width: 768px) {
-    .timeline-view__main--sidebar-open {
-        margin-right: 0;
-        border-right: 0;
-    }
+.timeline-view.timeline-view--mobile-layout .timeline-view__main--sidebar-open {
+    margin-right: 0;
+    border-right: 0;
+}
 
-    .timeline-view__sidebar {
-        width: min(92vw, 360px);
-        border-left: 1px solid var(--tv-border);
-        box-shadow: -8px 0 24px var(--tv-shadow-medium);
-        z-index: var(--z-overlay);
-    }
+.timeline-view.timeline-view--mobile-layout .timeline-view__sidebar {
+    width: min(92vw, 360px);
+    border-left: 1px solid var(--tv-border);
+    box-shadow: -8px 0 24px var(--tv-shadow-medium);
+    z-index: var(--z-overlay);
+}
 
-    .timeline-view__sidebar-backdrop--visible {
-        opacity: 1;
-        pointer-events: auto;
-    }
+.timeline-view.timeline-view--mobile-layout .timeline-view__sidebar-backdrop--visible {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 /* Timeline Grid Container (Flex Column of Rows) */

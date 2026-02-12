@@ -33,6 +33,7 @@ export const VIEW_TYPE_TIMELINE = 'timeline-view';
  * - Task Creation: addCreateTaskListeners, handleCreateTaskTrigger
  */
 export class TimelineView extends ItemView {
+    private static readonly DEADLINE_OVERLAY_BREAKPOINT_PX = 768;
     // ==================== Services & Handlers ====================
     private taskIndex: TaskIndex;
     private plugin: TaskViewerPlugin;
@@ -60,6 +61,7 @@ export class TimelineView extends ItemView {
     private targetColumnEl: HTMLElement | null = null;
     private executionColumnEl: HTMLElement | null = null;
     private sidebarBackdropEl: HTMLElement | null = null;
+    private layoutResizeObserver: ResizeObserver | null = null;
 
     // ==================== Lifecycle ====================
 
@@ -121,6 +123,12 @@ export class TimelineView extends ItemView {
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('timeline-view');
+        this.applyResponsiveLayoutMode();
+        this.layoutResizeObserver = new ResizeObserver(() => {
+            this.applyResponsiveLayoutMode();
+            this.applyDeadlineListVisibility();
+        });
+        this.layoutResizeObserver.observe(this.container);
 
         // Initialize MenuHandler
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
@@ -248,6 +256,10 @@ export class TimelineView extends ItemView {
         this.dragHandler.destroy();
         if (this.unsubscribe) {
             this.unsubscribe();
+        }
+        if (this.layoutResizeObserver) {
+            this.layoutResizeObserver.disconnect();
+            this.layoutResizeObserver = null;
         }
         if (this.currentTimeInterval) {
             window.clearInterval(this.currentTimeInterval);
@@ -397,6 +409,7 @@ export class TimelineView extends ItemView {
     }
 
     private applyDeadlineListVisibility(): void {
+        this.applyResponsiveLayoutMode();
         const isOpen = this.viewState.showDeadlineList;
 
         if (this.targetColumnEl) {
@@ -410,6 +423,14 @@ export class TimelineView extends ItemView {
         }
 
         this.toolbar?.syncSidebarToggleState();
+    }
+
+    private applyResponsiveLayoutMode(): void {
+        if (!this.container) {
+            return;
+        }
+        const isNarrowLayout = this.container.clientWidth <= TimelineView.DEADLINE_OVERLAY_BREAKPOINT_PX;
+        this.container.classList.toggle('timeline-view--mobile-layout', isNarrowLayout);
     }
 
     private closeDeadlineList(): void {
