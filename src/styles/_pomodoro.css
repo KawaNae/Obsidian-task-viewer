@@ -9,8 +9,8 @@
     align-items: center;
     justify-content: center;
     background: linear-gradient(135deg,
-            var(--tv-bg-app) 0%,
-            var(--tv-bg-panel) 100%);
+            var(--tv-bg-pomodoro-start) 0%,
+            var(--tv-bg-pomodoro-end) 100%);
     overflow: hidden;
     padding: 0 !important;
     position: relative;
@@ -195,7 +195,7 @@
     padding: 8px 12px;
     border: 1px solid var(--tv-border);
     border-radius: 4px;
-    background: var(--tv-bg-app);
+    background: var(--tv-bg-input);
     color: var(--tv-text);
     font-size: 1rem;
 }

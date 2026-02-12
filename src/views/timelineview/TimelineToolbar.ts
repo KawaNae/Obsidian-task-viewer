@@ -19,6 +19,7 @@ export interface ToolbarCallbacks {
  */
 export class TimelineToolbar {
     private filterMenu = new FileFilterMenu();
+    private sidebarToggleBtn: HTMLElement | null = null;
 
     constructor(
         private container: HTMLElement,
@@ -34,6 +35,15 @@ export class TimelineToolbar {
      */
     getVisibleFiles(): Set<string> | null {
         return this.filterMenu.getVisibleFiles();
+    }
+
+    /**
+     * Synchronizes the sidebar toggle button state with current viewState.
+     */
+    syncSidebarToggleState(): void {
+        if (this.sidebarToggleBtn) {
+            this.updateSidebarToggleButton(this.sidebarToggleBtn);
+        }
     }
 
     /**
@@ -170,6 +180,7 @@ export class TimelineToolbar {
         const toggleBtn = toolbar.createEl('button', {
             cls: 'view-toolbar__btn--icon view-toolbar__btn--sidebar-toggle sidebar-toggle-button-icon'
         });
+        this.sidebarToggleBtn = toggleBtn;
         this.updateSidebarToggleButton(toggleBtn);
 
         toggleBtn.onclick = () => {

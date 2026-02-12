@@ -126,15 +126,36 @@ export default class TaskViewerPlugin extends Plugin {
 
     async loadSettings() {
         const raw = await this.loadData();
-        const merged = Object.assign({}, DEFAULT_SETTINGS, raw) as TaskViewerSettings & {
+        const rawObject = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {};
+        const merged = Object.assign({}, DEFAULT_SETTINGS, rawObject) as TaskViewerSettings & {
             frontmatterTaskKeys?: unknown;
         };
+        const hasExpandCompletedKey = Object.prototype.hasOwnProperty.call(rawObject, 'expandCompletedInDeadlineList');
+        const hasLegacyShowCompletedKey = Object.prototype.hasOwnProperty.call(rawObject, 'showCompletedInDeadlineList');
+        const resolveExpandCompletedInDeadlineList = (): boolean => {
+            if (hasExpandCompletedKey) {
+                const rawValue = rawObject.expandCompletedInDeadlineList;
+                return typeof rawValue === 'boolean'
+                    ? rawValue
+                    : DEFAULT_SETTINGS.expandCompletedInDeadlineList;
+            }
+            if (hasLegacyShowCompletedKey) {
+                const rawValue = rawObject.showCompletedInDeadlineList;
+                return typeof rawValue === 'boolean'
+                    ? rawValue
+                    : DEFAULT_SETTINGS.expandCompletedInDeadlineList;
+            }
+            return DEFAULT_SETTINGS.expandCompletedInDeadlineList;
+        };
+        const sanitizedMerged = { ...merged } as TaskViewerSettings & Record<string, unknown>;
+        delete sanitizedMerged.showCompletedInDeadlineList;
 
         const normalizedFrontmatterKeys = normalizeFrontmatterTaskKeys(merged.frontmatterTaskKeys);
         const keysValidationError = validateFrontmatterTaskKeys(normalizedFrontmatterKeys);
 
         this.settings = {
-            ...merged,
+            ...sanitizedMerged,
+            expandCompletedInDeadlineList: resolveExpandCompletedInDeadlineList(),
             frontmatterTaskKeys: keysValidationError
                 ? { ...DEFAULT_FRONTMATTER_TASK_KEYS }
                 : normalizedFrontmatterKeys,

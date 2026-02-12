@@ -33,6 +33,7 @@ export const VIEW_TYPE_TIMELINE = 'timeline-view';
  * - Task Creation: addCreateTaskListeners, handleCreateTaskTrigger
  */
 export class TimelineView extends ItemView {
+    private static readonly DEADLINE_OVERLAY_BREAKPOINT_PX = 768;
     // ==================== Services & Handlers ====================
     private taskIndex: TaskIndex;
     private plugin: TaskViewerPlugin;
@@ -59,6 +60,8 @@ export class TimelineView extends ItemView {
     private hasInitializedStartDate: boolean = false;
     private targetColumnEl: HTMLElement | null = null;
     private executionColumnEl: HTMLElement | null = null;
+    private sidebarBackdropEl: HTMLElement | null = null;
+    private layoutResizeObserver: ResizeObserver | null = null;
 
     // ==================== Lifecycle ====================
 
@@ -120,6 +123,12 @@ export class TimelineView extends ItemView {
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('timeline-view');
+        this.applyResponsiveLayoutMode();
+        this.layoutResizeObserver = new ResizeObserver(() => {
+            this.applyResponsiveLayoutMode();
+            this.applyDeadlineListVisibility();
+        });
+        this.layoutResizeObserver.observe(this.container);
 
         // Initialize MenuHandler
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
@@ -227,6 +236,12 @@ export class TimelineView extends ItemView {
         this.registerDomEvent(win, 'resize', () => {
             this.handleManager.updatePositions();
         });
+        this.registerDomEvent(win, 'keydown', (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && this.viewState.showDeadlineList) {
+                event.preventDefault();
+                this.closeDeadlineList();
+            }
+        });
 
         // Start Current Time Interval
         this.currentTimeInterval = window.setInterval(() => {
@@ -241,6 +256,10 @@ export class TimelineView extends ItemView {
         this.dragHandler.destroy();
         if (this.unsubscribe) {
             this.unsubscribe();
+        }
+        if (this.layoutResizeObserver) {
+            this.layoutResizeObserver.disconnect();
+            this.layoutResizeObserver = null;
         }
         if (this.currentTimeInterval) {
             window.clearInterval(this.currentTimeInterval);
@@ -284,24 +303,25 @@ export class TimelineView extends ItemView {
         const scrollbarWidth = this.measureScrollbarWidth();
         this.container.style.setProperty('--scrollbar-width-actual', `${scrollbarWidth}px`);
 
-        // Initialize 2-Column Layout
+        // Toolbar host (top row)
+        const toolbarHost = this.container.createDiv('timeline-view__toolbar-host');
+
+        // Initialize 2-Column Layout (bottom row)
         const layoutContainer = this.container.createDiv('timeline-view__layout');
 
         // Main Column (Timeline, AllDay)
         const executionColumn = layoutContainer.createDiv('timeline-view__main');
-        if (this.viewState.showDeadlineList) {
-            executionColumn.addClass('timeline-view__main--sidebar-open');
-        }
         this.executionColumnEl = executionColumn;
+
+        const backdrop = layoutContainer.createDiv('timeline-view__sidebar-backdrop');
+        backdrop.addEventListener('click', () => this.closeDeadlineList());
+        this.sidebarBackdropEl = backdrop;
 
         // Sidebar Column (Deadline List)
         const targetColumn = layoutContainer.createDiv('timeline-view__sidebar');
-        if (!this.viewState.showDeadlineList) {
-            targetColumn.addClass('timeline-view__sidebar--hidden');
-        }
 
-        // Header
-        targetColumn.createEl('p', { cls: 'timeline-view__sidebar-header', text: 'Deadline List' });
+        const sidebarHeader = targetColumn.createDiv('timeline-view__sidebar-header');
+        sidebarHeader.createEl('p', { cls: 'timeline-view__sidebar-title', text: 'Deadline List' });
 
         const listContainer = targetColumn.createDiv('timeline-view__sidebar-body deadline-list-wrapper');
 
@@ -311,12 +331,9 @@ export class TimelineView extends ItemView {
 
         this.targetColumnEl = targetColumn;
 
-        // Render Toolbar (into execution column)
-        // We probably want toolbar in execution column OR above both.
-        // Current design: Toolbar is part of timeline view functionality.
-        // Let's put it in execution column for now as verified in plan.
+        // Render Toolbar (above both columns)
         this.toolbar = new TimelineToolbar(
-            executionColumn,
+            toolbarHost,
             this.app,
             this.viewState,
             this.plugin,
@@ -329,16 +346,12 @@ export class TimelineView extends ItemView {
                 getFileColor: (file) => this.getFileColor(file),
                 getDatesToShow: () => this.getDatesToShow(),
                 onToggleDeadlineList: () => {
-                    if (this.targetColumnEl) {
-                        this.targetColumnEl.classList.toggle('timeline-view__sidebar--hidden', !this.viewState.showDeadlineList);
-                    }
-                    if (this.executionColumnEl) {
-                        this.executionColumnEl.classList.toggle('timeline-view__main--sidebar-open', this.viewState.showDeadlineList);
-                    }
+                    this.applyDeadlineListVisibility();
                 }
             }
         );
         this.toolbar.render();
+        this.applyDeadlineListVisibility();
 
         // Use GridRenderer (render into execution column)
         this.gridRenderer.render(
@@ -393,6 +406,39 @@ export class TimelineView extends ItemView {
         document.body.removeChild(outer);
 
         return scrollbarWidth;
+    }
+
+    private applyDeadlineListVisibility(): void {
+        this.applyResponsiveLayoutMode();
+        const isOpen = this.viewState.showDeadlineList;
+
+        if (this.targetColumnEl) {
+            this.targetColumnEl.classList.toggle('timeline-view__sidebar--hidden', !isOpen);
+        }
+        if (this.executionColumnEl) {
+            this.executionColumnEl.classList.toggle('timeline-view__main--sidebar-open', isOpen);
+        }
+        if (this.sidebarBackdropEl) {
+            this.sidebarBackdropEl.classList.toggle('timeline-view__sidebar-backdrop--visible', isOpen);
+        }
+
+        this.toolbar?.syncSidebarToggleState();
+    }
+
+    private applyResponsiveLayoutMode(): void {
+        if (!this.container) {
+            return;
+        }
+        const isNarrowLayout = this.container.clientWidth <= TimelineView.DEADLINE_OVERLAY_BREAKPOINT_PX;
+        this.container.classList.toggle('timeline-view--mobile-layout', isNarrowLayout);
+    }
+
+    private closeDeadlineList(): void {
+        if (!this.viewState.showDeadlineList) {
+            return;
+        }
+        this.viewState.showDeadlineList = false;
+        this.applyDeadlineListVisibility();
     }
 
     // ==================== Grid & Layout ====================

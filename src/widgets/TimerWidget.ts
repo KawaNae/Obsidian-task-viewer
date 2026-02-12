@@ -5,7 +5,7 @@
  * アコーディオン形式で個別にトグル可能。
  */
 
-import { App, setIcon, Notice, Menu, TFile } from 'obsidian';
+import { App, setIcon, Notice, Menu, TFile, FileSystemAdapter } from 'obsidian';
 import TaskViewerPlugin from '../main';
 import { AudioUtils } from '../utils/AudioUtils';
 import { InputModal } from '../modals/InputModal';
@@ -42,14 +42,17 @@ interface PersistedTimer {
 }
 
 interface PersistedTimerState {
-    version: 2;
+    version: 3;
     ownerDeviceId: string;
+    vaultFingerprint: string;
     updatedAtMs: number;
     timers: PersistedTimer[];
 }
 
 export class TimerWidget {
-    private static readonly STORAGE_KEY = 'task-viewer.active-timers.v2';
+    private static readonly STORAGE_VERSION = 3;
+    private static readonly STORAGE_KEY_PREFIX = 'task-viewer.active-timers';
+    private static readonly LEGACY_STORAGE_KEY = 'task-viewer.active-timers.v2';
     private static readonly DEVICE_ID_KEY = 'task-viewer.device-id.v1';
 
     private app: App;
@@ -60,12 +63,15 @@ export class TimerWidget {
     private dragOffset = { x: 0, y: 0 };
     private recorder: TimerRecorder;
     private readonly deviceId: string;
+    private readonly vaultFingerprint: string;
 
     constructor(app: App, plugin: TaskViewerPlugin) {
         this.app = app;
         this.plugin = plugin;
         this.recorder = new TimerRecorder(app, plugin);
         this.deviceId = this.getOrCreateDeviceId();
+        this.vaultFingerprint = this.resolveVaultFingerprint();
+        this.cleanupLegacyStorage();
         this.restoreTimersFromStorage();
     }
 
@@ -916,6 +922,35 @@ export class TimerWidget {
         }
     }
 
+    private resolveVaultFingerprint(): string {
+        const adapter = this.app.vault.adapter;
+        const basePath = adapter instanceof FileSystemAdapter ? adapter.getBasePath() : '';
+        const fallbackName = this.app.vault.getName();
+        const rawIdentity = basePath && basePath.trim() ? basePath : fallbackName;
+        const normalizedIdentity = (rawIdentity || 'unknown-vault').trim().toLowerCase();
+        return this.hashToHex(normalizedIdentity);
+    }
+
+    private hashToHex(raw: string): string {
+        let hash = 5381;
+        for (let i = 0; i < raw.length; i++) {
+            hash = ((hash << 5) + hash) + raw.charCodeAt(i);
+        }
+        return (hash >>> 0).toString(16).padStart(8, '0');
+    }
+
+    private getStorageKey(): string {
+        return `${TimerWidget.STORAGE_KEY_PREFIX}.v${TimerWidget.STORAGE_VERSION}:${this.vaultFingerprint}`;
+    }
+
+    private cleanupLegacyStorage(): void {
+        try {
+            window.localStorage.removeItem(TimerWidget.LEGACY_STORAGE_KEY);
+        } catch {
+            // noop
+        }
+    }
+
     private generateStableId(prefix: string): string {
         if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
             return `${prefix}-${crypto.randomUUID()}`;
@@ -1009,36 +1044,44 @@ export class TimerWidget {
     }
 
     private persistTimersToStorage(): void {
+        const storageKey = this.getStorageKey();
         try {
             if (this.timers.size === 0) {
-                window.localStorage.removeItem(TimerWidget.STORAGE_KEY);
+                window.localStorage.removeItem(storageKey);
                 return;
             }
 
             const payload: PersistedTimerState = {
-                version: 2,
+                version: TimerWidget.STORAGE_VERSION,
                 ownerDeviceId: this.deviceId,
+                vaultFingerprint: this.vaultFingerprint,
                 updatedAtMs: Date.now(),
                 timers: Array.from(this.timers.values()).map((timer) => this.toPersistedTimer(timer))
             };
 
-            window.localStorage.setItem(TimerWidget.STORAGE_KEY, JSON.stringify(payload));
+            window.localStorage.setItem(storageKey, JSON.stringify(payload));
         } catch (error) {
             console.error('[TimerWidget] Failed to persist timers:', error);
         }
     }
 
     private restoreTimersFromStorage(): void {
+        const storageKey = this.getStorageKey();
         try {
-            const raw = window.localStorage.getItem(TimerWidget.STORAGE_KEY);
+            const raw = window.localStorage.getItem(storageKey);
             if (!raw) return;
 
             const parsed = JSON.parse(raw) as PersistedTimerState;
-            if (!parsed || parsed.version !== 2) {
-                window.localStorage.removeItem(TimerWidget.STORAGE_KEY);
+            if (
+                !parsed
+                || parsed.version !== TimerWidget.STORAGE_VERSION
+                || parsed.vaultFingerprint !== this.vaultFingerprint
+                || !Array.isArray(parsed.timers)
+            ) {
+                window.localStorage.removeItem(storageKey);
                 return;
             }
-            if (parsed.ownerDeviceId !== this.deviceId || !Array.isArray(parsed.timers)) {
+            if (parsed.ownerDeviceId !== this.deviceId) {
                 return;
             }
 
@@ -1075,6 +1118,7 @@ export class TimerWidget {
 
             this.render();
         } catch (error) {
+            window.localStorage.removeItem(storageKey);
             console.error('[TimerWidget] Failed to restore timers:', error);
         }
     }

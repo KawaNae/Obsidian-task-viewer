@@ -10,6 +10,8 @@ import { ViewUtils } from '../../ViewUtils';
 export class DeadlineListRenderer {
     // Preserve collapsed state across re-renders
     private collapsedGroups: Set<string> = new Set();
+    private touchedGroups: Set<string> = new Set();
+    private hydratedGroups: Set<string> = new Set();
 
     constructor(
         private taskRenderer: TaskCardRenderer,
@@ -20,11 +22,13 @@ export class DeadlineListRenderer {
     public render(container: HTMLElement, tasks: Task[], owner: Component, visibleFiles: Set<string> | null) {
         container.empty();
         container.addClass('deadline-list-container');
+        this.hydratedGroups.clear();
 
         const settings = this.plugin.settings;
         const startHour = settings.startHour;
         const today = DateUtils.getVisualDateOfNow(startHour);
         const upcomingEnd = DateUtils.addDays(today, settings.upcomingDays);
+        const completedDefaultCollapsed = !settings.expandCompletedInDeadlineList;
 
         // Apply file filter
         if (visibleFiles) {
@@ -41,8 +45,9 @@ export class DeadlineListRenderer {
             if (!task.deadline) return;
 
             const deadlineDate = task.deadline.split('T')[0];
+            const isCompleted = isCompleteStatusChar(task.statusChar, settings.completeStatusChars);
 
-            if (isCompleteStatusChar(task.statusChar, settings.completeStatusChars)) {
+            if (isCompleted) {
                 completed.push(task);
             } else if (deadlineDate < today) {
                 overdue.push(task);
@@ -67,7 +72,10 @@ export class DeadlineListRenderer {
         this.renderGroup(container, 'Overdue', overdue, 'is-overdue', owner);
         this.renderGroup(container, 'Upcoming', upcoming, 'is-upcoming', owner);
         this.renderGroup(container, 'Not completed', notCompleted, 'is-not-completed', owner);
-        this.renderGroup(container, 'Completed', completed, 'is-completed', owner);
+        this.renderGroup(container, 'Completed', completed, 'is-completed', owner, {
+            defaultCollapsed: completedDefaultCollapsed,
+            lazyHydrate: true
+        });
 
         // Context menu for empty space
         container.addEventListener('contextmenu', (event) => {
@@ -114,10 +122,24 @@ export class DeadlineListRenderer {
         }, { deadline }, { warnOnEmptyTask: true }).open();
     }
 
-    private renderGroup(container: HTMLElement, title: string, tasks: Task[], className: string, owner: Component) {
+    private renderGroup(
+        container: HTMLElement,
+        title: string,
+        tasks: Task[],
+        className: string,
+        owner: Component,
+        options?: {
+            defaultCollapsed?: boolean;
+            lazyHydrate?: boolean;
+        }
+    ) {
         if (tasks.length === 0) return;
 
-        const isCollapsed = this.collapsedGroups.has(title);
+        const defaultCollapsed = options?.defaultCollapsed ?? false;
+        const isCollapsed = this.touchedGroups.has(title)
+            ? this.collapsedGroups.has(title)
+            : defaultCollapsed;
+        const lazyHydrate = options?.lazyHydrate === true;
 
         const groupEl = container.createDiv(`deadline-group ${className}`);
         if (isCollapsed) {
@@ -130,22 +152,37 @@ export class DeadlineListRenderer {
         header.createSpan({ text: title, cls: 'deadline-group-title' });
         header.createSpan({ text: ` (${tasks.length})`, cls: 'deadline-count' });
 
+        // Task list
+        const listEl = groupEl.createDiv('deadline-group-list');
+        if (!(lazyHydrate && isCollapsed)) {
+            this.renderTasksIntoList(listEl, tasks, owner);
+            if (lazyHydrate) {
+                this.hydratedGroups.add(title);
+            }
+        }
+
         // Toggle click handler
         header.addEventListener('click', () => {
-            if (this.collapsedGroups.has(title)) {
+            const currentlyCollapsed = groupEl.classList.contains('deadline-group--collapsed');
+            this.touchedGroups.add(title);
+
+            if (currentlyCollapsed) {
                 this.collapsedGroups.delete(title);
                 groupEl.removeClass('deadline-group--collapsed');
                 toggle.textContent = '▼';
+                if (lazyHydrate && !this.hydratedGroups.has(title)) {
+                    this.renderTasksIntoList(listEl, tasks, owner);
+                    this.hydratedGroups.add(title);
+                }
             } else {
                 this.collapsedGroups.add(title);
                 groupEl.addClass('deadline-group--collapsed');
                 toggle.textContent = '▶';
             }
         });
+    }
 
-        // Task list
-        const listEl = groupEl.createDiv('deadline-group-list');
-
+    private renderTasksIntoList(listEl: HTMLElement, tasks: Task[], owner: Component): void {
         tasks.forEach(task => {
             const card = listEl.createDiv('task-card task-card--deadline');
 

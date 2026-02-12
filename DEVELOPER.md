@@ -262,8 +262,7 @@ src/styles/
 ├── _timeline-date-header.css # 日付ヘッダー
 ├── _timeline-allday.css    # 終日タスク欄
 ├── _timeline-drag.css      # ドラッグ関連スタイル
-├── _schedule.css           # スケジュールビュー
-└── _deprecated.css         # 非推奨・未使用スタイル（検証用）
+└── _schedule.css           # スケジュールビュー
 ```
 
 ---

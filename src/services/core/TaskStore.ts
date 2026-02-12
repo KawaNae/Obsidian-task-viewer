@@ -70,10 +70,10 @@ export class TaskStore {
     }
 
     /**
-     * Deadline専用タスク（D-type）を取得
+     * deadlineを持つ全タスクを取得
      */
     getDeadlineTasks(): Task[] {
-        return this.getTasks().filter(t => !t.startDate && !t.startTime && t.deadline);
+        return this.getTasks().filter(t => !!t.deadline);
     }
 
     // ===== 内部操作 =====

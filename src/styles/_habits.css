@@ -6,7 +6,7 @@
 
 /* Habits Section Container (the grid row) */
 .habits-section {
-    background-color: var(--tv-bg-app);
+    background-color: var(--tv-bg-habits);
     flex-shrink: 0;
     overflow-y: visible;
     position: relative;
@@ -24,7 +24,7 @@
     border-left: 1px solid var(--tv-border);
     border-right: 1px solid var(--tv-border);
     border-bottom: 2px solid var(--tv-border);
-    background-color: var(--tv-bg-panel);
+    background-color: var(--tv-bg-axis);
 }
 
 .habits-section__axis:focus-visible {
@@ -139,7 +139,7 @@
     padding: 0 3px;
     border: 1px solid var(--tv-border);
     border-radius: 3px;
-    background-color: var(--tv-bg-app);
+    background-color: var(--tv-bg-input);
     color: var(--tv-text);
     outline: none;
 }

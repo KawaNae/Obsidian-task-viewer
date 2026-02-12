@@ -5,7 +5,7 @@
 
 /* Date Header Row */
 .date-header {
-    background-color: var(--tv-bg-panel);
+    background-color: var(--tv-bg-date-header);
     flex-shrink: 0;
     overflow-y: hidden;
 }

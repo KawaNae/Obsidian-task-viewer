@@ -11,7 +11,6 @@
     align-items: center;
     gap: var(--toolbar-gap, 8px);
     overflow-x: auto;
-    background-color: var(--tv-bg-panel);
     border-bottom: 1px solid var(--tv-border);
 }
 

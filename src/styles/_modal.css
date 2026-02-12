@@ -30,7 +30,7 @@
     padding: 8px 12px;
     border: 1px solid var(--tv-border);
     border-radius: var(--tv-radius-s);
-    background-color: var(--tv-bg-app);
+    background-color: var(--tv-bg-input);
     color: var(--tv-text);
     font-size: 1em;
     font-family: var(--tv-font-mono);
@@ -98,7 +98,7 @@
     padding: 8px 12px;
     border: 1px solid var(--tv-border);
     border-radius: var(--tv-radius-s);
-    background-color: var(--tv-bg-app);
+    background-color: var(--tv-bg-input);
     color: var(--tv-text);
     font-size: 1em;
     font-family: var(--tv-font-mono);

@@ -167,6 +167,16 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
+        new Setting(containerEl)
+            .setName('Expand Completed Group by Default')
+            .setDesc('If enabled, the Completed group starts expanded in the Deadline list.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.expandCompletedInDeadlineList)
+                .onChange(async (value) => {
+                    this.plugin.settings.expandCompletedInDeadlineList = value;
+                    await this.plugin.saveSettings();
+                }));
+
         containerEl.createEl('h3', { text: 'Daily Notes', cls: 'setting-section-header' });
 
         new Setting(containerEl)
