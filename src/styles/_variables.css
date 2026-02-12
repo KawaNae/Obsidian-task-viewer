@@ -85,13 +85,13 @@ body {
 
     /* Role tokens */
     --tv-bg-app: var(--tv-bg-primary);
+    --tv-bg-toolbar: var(--tv-bg-primary);
     --tv-bg-panel: var(--tv-bg-secondary);
     --tv-bg-panel-alt: var(--tv-bg-secondary-alt);
     --tv-bg-card: var(--tv-bg-secondary);
 
     --tv-bg-widget: var(--tv-bg-primary);
     --tv-bg-widget-header: var(--tv-bg-primary);
-    --tv-bg-widget-button: var(--tv-bg-secondary);
 
     --tv-shadow-rgb: var(--mono-rgb-100);
     --tv-shadow-a-card: 0.25;

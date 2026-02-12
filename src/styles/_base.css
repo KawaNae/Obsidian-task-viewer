@@ -3,7 +3,8 @@
     box-sizing: border-box;
 }
 
-/* Hide Obsidian View Header for Timeline View */
+/* Hide Obsidian View Header for Timeline View 
 .workspace-leaf-content[data-type="timeline-view"] .view-header {
     display: none !important;
 }
+*/

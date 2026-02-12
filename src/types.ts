@@ -186,6 +186,7 @@ export interface TaskViewerSettings {
     excludedPaths: string[];
     defaultDeadlineOffset: number;
     upcomingDays: number;
+    expandCompletedInDeadlineList: boolean;
     pastDaysToShow: number;
     habits: HabitDefinition[];
     frontmatterTaskHeader: string;
@@ -206,6 +207,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     excludedPaths: [],
     defaultDeadlineOffset: 0,
     upcomingDays: 7,
+    expandCompletedInDeadlineList: false,
     pastDaysToShow: 0,
     habits: [],
     frontmatterTaskHeader: 'Tasks',
