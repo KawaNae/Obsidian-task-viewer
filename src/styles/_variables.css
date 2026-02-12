@@ -84,14 +84,23 @@ body {
     --tv-radius-s: var(--radius-s);
 
     /* Role tokens */
-    --tv-bg-app: var(--tv-bg-primary);
-    --tv-bg-toolbar: var(--tv-bg-primary);
-    --tv-bg-panel: var(--tv-bg-secondary);
-    --tv-bg-panel-alt: var(--tv-bg-secondary-alt);
+    --tv-bg-habits: var(--tv-bg-primary);
+    --tv-bg-allday: var(--tv-bg-primary);
+    --tv-bg-timeline: var(--tv-bg-primary);
+
+    --tv-bg-axis: var(--tv-bg-secondary);
+    --tv-bg-date-header: var(--tv-bg-secondary);
+
+    --tv-bg-deadline-list: var(--tv-bg-secondary);
+
     --tv-bg-card: var(--tv-bg-secondary);
+    --tv-bg-task-handle: var(--tv-bg-primary);
+    --tv-bg-task-handle-hover: var(--tv-bg-secondary);
 
     --tv-bg-widget: var(--tv-bg-primary);
     --tv-bg-widget-header: var(--tv-bg-primary);
+    --tv-bg-pomodoro-start: var(--tv-bg-primary);
+    --tv-bg-pomodoro-end: var(--tv-bg-secondary);
 
     --tv-shadow-rgb: var(--mono-rgb-100);
     --tv-shadow-a-card: 0.25;

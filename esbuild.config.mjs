@@ -66,8 +66,7 @@ const copyStaticFiles = {
           '_toolbar.css',
           '_pomodoro.css',
           '_timer-widget.css',
-          '_modal.css',
-          '_deprecated.css'
+          '_modal.css'
         ];
 
         const cssFilesSet = new Set(cssFiles);

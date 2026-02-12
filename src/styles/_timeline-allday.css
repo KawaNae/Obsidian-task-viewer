@@ -6,7 +6,7 @@
 
 /* AllDay Section Container */
 .allday-section {
-    background-color: var(--tv-bg-app);
+    background-color: var(--tv-bg-allday);
     flex-shrink: 0;
     overflow-y: visible;
     position: relative;
@@ -50,7 +50,7 @@
     border-left: 1px solid var(--tv-border);
     border-right: 1px solid var(--tv-border);
     border-bottom: 2px solid var(--tv-border);
-    background-color: var(--tv-bg-panel);
+    background-color: var(--tv-bg-axis);
 }
 
 .allday-section__axis:focus-visible {

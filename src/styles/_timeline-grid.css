@@ -11,7 +11,6 @@
     /* display: flex;  <-- removed, managed by inner layout */
     /* flex-direction: column; */
     overflow: hidden;
-    background-color: var(--tv-bg-app);
     position: relative;
     padding: 0 !important;
     /* Ensure no padding interferes with full height */
@@ -51,7 +50,7 @@
     border-left: 0;
     display: flex;
     flex-direction: column;
-    background-color: var(--tv-bg-panel);
+    background-color: var(--tv-bg-deadline-list);
     transition: transform 0.3s ease;
     overflow: hidden;
     z-index: var(--z-base);
@@ -146,6 +145,7 @@
     /* Firefox */
     -ms-overflow-style: none;
     /* IE/Edge */
+    background-color: var(--tv-bg-timeline);
 }
 
 /* Webkit browsers (Chrome, Safari, Obsidian) */
@@ -155,7 +155,7 @@
 
 /* Time Axis Column */
 .time-axis-column {
-    background-color: var(--tv-bg-panel);
+    background-color: var(--tv-bg-axis);
     border-top: 1px solid var(--tv-border);
     border-left: 1px solid var(--tv-border);
     border-right: 1px solid var(--tv-border);

@@ -329,7 +329,7 @@
     font-size: 14px;
     line-height: 1;
     color: var(--tv-text-muted);
-    background-color: var(--tv-bg-app);
+    background-color: var(--tv-bg-task-handle);
     border: 1px solid var(--tv-border);
     border-radius: 4px;
     box-shadow: 0 2px 4px var(--tv-shadow-medium);
@@ -339,7 +339,7 @@
 
 .task-card__handle-btn:hover {
     color: var(--tv-text);
-    background-color: var(--tv-bg-panel);
+    background-color: var(--tv-bg-task-handle-hover);
 }
 
 .task-card__handle-btn--resize {
