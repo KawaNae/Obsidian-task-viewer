@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
+import { ItemView, WorkspaceLeaf } from 'obsidian';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { Task, ViewState, isCompleteStatusChar } from '../../types';
@@ -310,20 +310,6 @@ export class TimelineView extends ItemView {
 
         const sidebarHeader = targetColumn.createDiv('timeline-view__sidebar-header');
         sidebarHeader.createEl('p', { cls: 'timeline-view__sidebar-title', text: 'Deadline List' });
-        const closeBtn = sidebarHeader.createEl('button', {
-            cls: 'timeline-view__sidebar-close view-toolbar__btn--icon',
-            attr: {
-                'aria-label': 'Close Deadline List',
-                'title': 'Close Deadline List',
-                'type': 'button'
-            }
-        });
-        setIcon(closeBtn, 'x');
-        closeBtn.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            this.closeDeadlineList();
-        });
 
         const listContainer = targetColumn.createDiv('timeline-view__sidebar-body deadline-list-wrapper');
 
