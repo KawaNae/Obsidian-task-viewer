@@ -10,7 +10,7 @@ export interface ToolbarCallbacks {
     onStateChange: () => void;
     getFileColor: (filePath: string) => string | null;
     getDatesToShow: () => string[];
-    onToggleDeadlineList?: () => void;
+    onRequestDeadlineListToggle: (nextOpen: boolean, source: 'toolbar' | 'backdrop' | 'escape') => void;
 }
 
 /**
@@ -184,9 +184,8 @@ export class TimelineToolbar {
         this.updateSidebarToggleButton(toggleBtn);
 
         toggleBtn.onclick = () => {
-            this.viewState.showDeadlineList = !this.viewState.showDeadlineList;
-            this.updateSidebarToggleButton(toggleBtn);
-            this.callbacks.onToggleDeadlineList?.();
+            const nextOpen = !this.viewState.showDeadlineList;
+            this.callbacks.onRequestDeadlineListToggle(nextOpen, 'toolbar');
         };
     }
 
