@@ -7,7 +7,3 @@
 body:not(.is-phone) .workspace-leaf-content[data-type="timeline-view"] .view-header {
     display: none !important;
 }
-
-body.is-phone .workspace-leaf-content[data-type="timeline-view"] .view-header {
-    display: flex !important;
-}
