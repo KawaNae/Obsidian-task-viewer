@@ -178,7 +178,13 @@ export class TaskIndex {
         this.scanner.updateSettings(settings);
         this.aiIndexService.updateSettings();
         // 除外ルールが変更された可能性があるため再スキャン
-        this.scanner.scanVault();
+        this.scanner.scanVault()
+            .then(async () => {
+                await this.aiIndexService.rebuildAll();
+            })
+            .catch((error) => {
+                console.error('[TaskIndex] Failed to rescan vault after settings update:', error);
+            });
     }
 
     // ===== データアクセス (TaskStoreへ委譲) =====

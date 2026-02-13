@@ -41,8 +41,9 @@ export class AiIndexService {
             this.clearPending();
             return;
         }
-
-        void this.rebuildAll();
+        // 設定変更直後は TaskIndex 側で scanVault 後に rebuildAll を呼ぶ。
+        // ここで即 rebuild すると scan 前の古いストアでインデックスを作る可能性がある。
+        this.clearPending();
     }
 
     schedulePath(path: string): void {
