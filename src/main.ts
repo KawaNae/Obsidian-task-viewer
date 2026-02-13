@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf, setIcon, TFile } from 'obsidian';
+import { Notice, Plugin, WorkspaceLeaf, setIcon, TFile } from 'obsidian';
 import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/ScheduleView';
@@ -12,6 +12,7 @@ import {
     normalizeFrontmatterTaskKeys,
     validateFrontmatterTaskKeys,
 } from './types';
+import { normalizeAiIndexSettings } from './services/aiindex/AiIndexSettings';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/ColorSuggest';
 import { PropertyColorSuggest } from './suggest/PropertyColorSuggest';
@@ -108,6 +109,49 @@ export default class TaskViewerPlugin extends Plugin {
             }
         });
 
+        this.addCommand({
+            id: 'task-viewer-rebuild-ai-index',
+            name: 'Task Viewer: Rebuild AI Index',
+            callback: async () => {
+                try {
+                    await this.taskIndex.rebuildAiIndex();
+                    new Notice('Task Viewer: AI index rebuilt.');
+                } catch (error) {
+                    console.error('[TaskViewer] Failed to rebuild AI index:', error);
+                    new Notice('Task Viewer: failed to rebuild AI index.');
+                }
+            }
+        });
+
+        this.addCommand({
+            id: 'task-viewer-toggle-ai-index',
+            name: 'Task Viewer: Toggle AI Index',
+            callback: async () => {
+                this.settings.aiIndex.enabled = !this.settings.aiIndex.enabled;
+                await this.saveSettings();
+
+                if (this.settings.aiIndex.enabled) {
+                    await this.taskIndex.rebuildAiIndex();
+                    new Notice('Task Viewer: AI index enabled.');
+                } else {
+                    new Notice('Task Viewer: AI index disabled.');
+                }
+            }
+        });
+
+        this.addCommand({
+            id: 'task-viewer-open-ai-index-file',
+            name: 'Task Viewer: Open AI Index File',
+            callback: async () => {
+                try {
+                    await this.taskIndex.openAiIndexFile();
+                } catch (error) {
+                    console.error('[TaskViewer] Failed to open AI index file:', error);
+                    new Notice('Task Viewer: failed to open AI index file.');
+                }
+            }
+        });
+
         // Register Settings Tab
         this.addSettingTab(new TaskViewerSettingTab(this.app, this));
 
@@ -129,6 +173,7 @@ export default class TaskViewerPlugin extends Plugin {
         const rawObject = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {};
         const merged = Object.assign({}, DEFAULT_SETTINGS, rawObject) as TaskViewerSettings & {
             frontmatterTaskKeys?: unknown;
+            aiIndex?: unknown;
         };
         const hasExpandCompletedKey = Object.prototype.hasOwnProperty.call(rawObject, 'expandCompletedInDeadlineList');
         const hasLegacyShowCompletedKey = Object.prototype.hasOwnProperty.call(rawObject, 'showCompletedInDeadlineList');
@@ -152,6 +197,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         const normalizedFrontmatterKeys = normalizeFrontmatterTaskKeys(merged.frontmatterTaskKeys);
         const keysValidationError = validateFrontmatterTaskKeys(normalizedFrontmatterKeys);
+        const normalizedAiIndexSettings = normalizeAiIndexSettings(merged.aiIndex);
 
         this.settings = {
             ...sanitizedMerged,
@@ -159,6 +205,7 @@ export default class TaskViewerPlugin extends Plugin {
             frontmatterTaskKeys: keysValidationError
                 ? { ...DEFAULT_FRONTMATTER_TASK_KEYS }
                 : normalizedFrontmatterKeys,
+            aiIndex: normalizedAiIndexSettings,
         };
     }
 

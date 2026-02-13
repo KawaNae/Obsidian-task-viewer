@@ -9,6 +9,7 @@ import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { EditorObserver } from './EditorObserver';
 import { InlineToFrontmatterConversionService } from '../execution/InlineToFrontmatterConversionService';
+import { AiIndexService } from '../aiindex/AiIndexService';
 
 export interface ValidationError {
     file: string;
@@ -30,6 +31,7 @@ export class TaskIndex {
     private repository: TaskRepository;
     private inlineToFrontmatterConversionService: InlineToFrontmatterConversionService;
     private commandExecutor: TaskCommandExecutor;
+    private aiIndexService: AiIndexService;
     private settings: TaskViewerSettings;
     private draggingFilePath: string | null = null;  // ドラッグ中のファイルパス
     private notifyDebounceTimer: NodeJS.Timeout | null = null;
@@ -50,6 +52,11 @@ export class TaskIndex {
             app, this.store, this.validator,
             this.syncDetector, this.commandExecutor, settings
         );
+        this.aiIndexService = new AiIndexService(
+            app,
+            () => this.store.getTasks(),
+            () => this.settings
+        );
     }
 
     async initialize(): Promise<void> {
@@ -57,6 +64,7 @@ export class TaskIndex {
         this.app.workspace.onLayoutReady(async () => {
             await this.scanner.scanVault();
             this.scanner.setInitializing(false);
+            await this.aiIndexService.rebuildAll();
         });
 
         // エディタ監視の開始
@@ -77,6 +85,7 @@ export class TaskIndex {
                 await this.scanner.queueScan(file, isLocal);
                 WikiLinkResolver.resolve(this.store.getTasksMap(), this.app, this.settings.excludedPaths);
                 this.debouncedNotify();
+                this.aiIndexService.schedulePath(file.path);
             }
         });
 
@@ -84,6 +93,7 @@ export class TaskIndex {
             if (file instanceof TFile && file.extension === 'md') {
                 this.store.removeTasksByFile(file.path);
                 this.debouncedNotify();
+                this.aiIndexService.scheduleDeletePath(file.path);
             }
         });
 
@@ -92,6 +102,7 @@ export class TaskIndex {
                 this.scanner.queueScan(file).then(() => {
                     WikiLinkResolver.resolve(this.store.getTasksMap(), this.app, this.settings.excludedPaths);
                     this.debouncedNotify();
+                    this.aiIndexService.schedulePath(file.path);
                 });
             }
         });
@@ -105,6 +116,7 @@ export class TaskIndex {
                 this.scanner.queueScan(file).then(() => {
                     WikiLinkResolver.resolve(this.store.getTasksMap(), this.app, this.settings.excludedPaths);
                     this.debouncedNotify();
+                    this.aiIndexService.schedulePath(file.path);
                 });
             }
         });
@@ -164,6 +176,7 @@ export class TaskIndex {
         this.settings = settings;
         this.store.updateSettings(settings);
         this.scanner.updateSettings(settings);
+        this.aiIndexService.updateSettings();
         // 除外ルールが変更された可能性があるため再スキャン
         this.scanner.scanVault();
     }
@@ -208,6 +221,14 @@ export class TaskIndex {
 
     async waitForScan(filePath: string): Promise<void> {
         return this.scanner.waitForScan(filePath);
+    }
+
+    async rebuildAiIndex(): Promise<void> {
+        await this.aiIndexService.rebuildAll();
+    }
+
+    async openAiIndexFile(): Promise<void> {
+        await this.aiIndexService.openIndexFile();
     }
 
     // ===== CRUD操作 =====

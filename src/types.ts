@@ -1,3 +1,6 @@
+import { DEFAULT_AI_INDEX_SETTINGS } from './services/aiindex/AiIndexSettings';
+import type { AiIndexSettings } from './services/aiindex/AiIndexSettings';
+
 /**
  * Returns true when statusChar is considered completed by settings.
  */
@@ -176,6 +179,7 @@ export function validateFrontmatterTaskKeys(keys: FrontmatterTaskKeys): string |
 export interface TaskViewerSettings {
     startHour: number;
     applyGlobalStyles: boolean;
+    aiIndex: AiIndexSettings;
     frontmatterTaskKeys: FrontmatterTaskKeys;
     zoomLevel: number;
     dailyNoteHeader: string;
@@ -197,6 +201,7 @@ export interface TaskViewerSettings {
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
     startHour: 5,
     applyGlobalStyles: false,
+    aiIndex: { ...DEFAULT_AI_INDEX_SETTINGS },
     frontmatterTaskKeys: { ...DEFAULT_FRONTMATTER_TASK_KEYS },
     zoomLevel: 1.0,
     dailyNoteHeader: 'Tasks',

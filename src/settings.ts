@@ -1,6 +1,7 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import TaskViewerPlugin from './main';
 import { FrontmatterTaskKeys, HabitType, validateFrontmatterTaskKeys } from './types';
+import { normalizeAiIndexSettings } from './services/aiindex/AiIndexSettings';
 
 export class TaskViewerSettingTab extends PluginSettingTab {
     plugin: TaskViewerPlugin;
@@ -77,6 +78,74 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             textarea.style.width = '100%';
             textarea.style.minWidth = '300px';
         }
+
+        containerEl.createEl('h3', { text: 'AI Index', cls: 'setting-section-header' });
+
+        new Setting(containerEl)
+            .setName('Enable AI Index')
+            .setDesc('Generate and keep a task index file for AI/search tooling.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.aiIndex.enabled)
+                .onChange(async (value) => {
+                    this.plugin.settings.aiIndex.enabled = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('AI Index Output Path')
+            .setDesc('Vault-relative output path for NDJSON index.')
+            .addText(text => text
+                .setPlaceholder('.obsidian/plugins/obsidian-task-viewer/ai-task-index.ndjson')
+                .setValue(this.plugin.settings.aiIndex.outputPath)
+                .onChange(async (value) => {
+                    const normalized = normalizeAiIndexSettings({
+                        ...this.plugin.settings.aiIndex,
+                        outputPath: value
+                    });
+                    this.plugin.settings.aiIndex.outputPath = normalized.outputPath;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('AI Index Debounce (ms)')
+            .setDesc('Debounce duration for path-level incremental index updates.')
+            .addSlider(slider => slider
+                .setLimits(100, 5000, 100)
+                .setValue(this.plugin.settings.aiIndex.debounceMs)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    const normalized = normalizeAiIndexSettings({
+                        ...this.plugin.settings.aiIndex,
+                        debounceMs: value
+                    });
+                    this.plugin.settings.aiIndex.debounceMs = normalized.debounceMs;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('AI Index Parsers')
+            .setDesc('Comma-separated parsers to include. Supported: inline, frontmatter.')
+            .addText(text => text
+                .setPlaceholder('inline, frontmatter')
+                .setValue(this.plugin.settings.aiIndex.includeParsers.join(', '))
+                .onChange(async (value) => {
+                    const normalized = normalizeAiIndexSettings({
+                        ...this.plugin.settings.aiIndex,
+                        includeParsers: value.split(',').map((item) => item.trim())
+                    });
+                    this.plugin.settings.aiIndex.includeParsers = normalized.includeParsers;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Include Completed Tasks In AI Index')
+            .setDesc('Include done/cancelled/exception tasks in generated AI index.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.aiIndex.includeDone)
+                .onChange(async (value) => {
+                    this.plugin.settings.aiIndex.includeDone = value;
+                    await this.plugin.saveSettings();
+                }));
 
         containerEl.createEl('h3', { text: 'Interaction', cls: 'setting-section-header' });
 
