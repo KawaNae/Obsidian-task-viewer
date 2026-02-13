@@ -94,17 +94,50 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName('AI Index Output Path')
             .setDesc('Vault-relative output path for NDJSON index.')
-            .addText(text => text
-                .setPlaceholder('.obsidian/plugins/obsidian-task-viewer/ai-task-index.ndjson')
-                .setValue(this.plugin.settings.aiIndex.outputPath)
-                .onChange(async (value) => {
+            .addText(text => {
+                let draftPath = this.plugin.settings.aiIndex.outputPath;
+                let isSaving = false;
+
+                const commitPath = async (): Promise<void> => {
+                    if (isSaving) return;
                     const normalized = normalizeAiIndexSettings({
                         ...this.plugin.settings.aiIndex,
-                        outputPath: value
+                        outputPath: draftPath
                     });
-                    this.plugin.settings.aiIndex.outputPath = normalized.outputPath;
-                    await this.plugin.saveSettings();
-                }));
+
+                    text.setValue(normalized.outputPath);
+
+                    if (normalized.outputPath === this.plugin.settings.aiIndex.outputPath) {
+                        return;
+                    }
+
+                    isSaving = true;
+                    try {
+                        this.plugin.settings.aiIndex.outputPath = normalized.outputPath;
+                        await this.plugin.saveSettings();
+                    } finally {
+                        isSaving = false;
+                    }
+                };
+
+                text
+                    .setPlaceholder('.obsidian/plugins/obsidian-task-viewer/ai-task-index.ndjson')
+                    .setValue(this.plugin.settings.aiIndex.outputPath)
+                    .onChange((value) => {
+                        draftPath = value;
+                    });
+
+                text.inputEl.addEventListener('blur', () => {
+                    void commitPath();
+                });
+
+                text.inputEl.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        text.inputEl.blur();
+                    }
+                });
+            });
 
         new Setting(containerEl)
             .setName('AI Index Debounce (ms)')
