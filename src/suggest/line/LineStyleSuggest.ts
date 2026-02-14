@@ -1,5 +1,5 @@
 import { App, Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo, TFile } from 'obsidian';
-import TaskViewerPlugin from '../main';
+import TaskViewerPlugin from '../../main';
 import { filterLineStyles, renderLineStyleSuggestion } from './lineStyleUtils';
 
 /**
@@ -68,4 +68,3 @@ export class LineStyleSuggest extends EditorSuggest<string> {
         this.context.editor.setLine(this.context.start.line, `${linestyleKey}: ${value}`);
     }
 }
-

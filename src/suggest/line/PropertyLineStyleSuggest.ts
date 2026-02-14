@@ -4,7 +4,7 @@
  */
 
 import { App, AbstractInputSuggest } from 'obsidian';
-import TaskViewerPlugin from '../main';
+import TaskViewerPlugin from '../../main';
 import { filterLineStyles, renderLineStyleSuggestion } from './lineStyleUtils';
 
 export class PropertyLineStyleSuggest extends AbstractInputSuggest<string> {
@@ -57,4 +57,3 @@ export class PropertyLineStyleSuggest extends AbstractInputSuggest<string> {
         this.syncValue(value);
     }
 }
-

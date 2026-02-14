@@ -4,7 +4,7 @@
  */
 
 import { App, AbstractInputSuggest } from 'obsidian';
-import TaskViewerPlugin from '../main';
+import TaskViewerPlugin from '../../main';
 import { filterColors, renderColorSuggestion } from './colorUtils';
 
 export class PropertyColorSuggest extends AbstractInputSuggest<string> {

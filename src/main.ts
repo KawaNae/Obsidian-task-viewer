@@ -14,10 +14,10 @@ import {
 } from './types';
 import { normalizeAiIndexSettings } from './services/aiindex/AiIndexSettings';
 import { TaskViewerSettingTab } from './settings';
-import { ColorSuggest } from './suggest/ColorSuggest';
-import { PropertyColorSuggest } from './suggest/PropertyColorSuggest';
-import { LineStyleSuggest } from './suggest/LineStyleSuggest';
-import { PropertyLineStyleSuggest } from './suggest/PropertyLineStyleSuggest';
+import { ColorSuggest } from './suggest/color/ColorSuggest';
+import { PropertyColorSuggest } from './suggest/color/PropertyColorSuggest';
+import { LineStyleSuggest } from './suggest/line/LineStyleSuggest';
+import { PropertyLineStyleSuggest } from './suggest/line/PropertyLineStyleSuggest';
 import { DateUtils } from './utils/DateUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
 
