@@ -1,5 +1,6 @@
 import { DateUtils } from '../../../utils/DateUtils';
 import { createGhostElement, removeGhostElement } from './GhostFactory';
+import { toDisplayHeightPx, toDisplayTopPx } from '../../../utils/TimelineCardPosition';
 
 export interface GhostSegment {
     date: string;       // YYYY-MM-DD
@@ -54,13 +55,12 @@ export class GhostManager {
                 const computedStyle = window.getComputedStyle(dayCol);
                 const borderTop = parseFloat(computedStyle.borderTopWidth || '0');
 
-                // Position relative to viewport since ghosts are fixed/absolute
-                // If createGhostElement uses 'fixed', we add rect.left/top
-                // Apply CSS offsets to match TimelineSectionRenderer: top +1, height -3
+                // Position relative to viewport since ghosts are fixed/absolute.
+                // seg.top/seg.height are logical values and converted to display values here.
                 ghost.style.left = `${rect.left + 4}px`; // +4px for padding/margin adjustment
-                ghost.style.top = `${rect.top + borderTop + seg.top + 1}px`; // +borderTop for box model + 1px CSS offset
+                ghost.style.top = `${rect.top + borderTop + toDisplayTopPx(seg.top)}px`;
                 ghost.style.width = `${rect.width - 8}px`; // -8px for padding
-                ghost.style.height = `${seg.height - 3}px`; // -3px CSS offset
+                ghost.style.height = `${toDisplayHeightPx(seg.height)}px`;
                 ghost.style.opacity = '0.8';
                 ghost.style.display = 'block';
 

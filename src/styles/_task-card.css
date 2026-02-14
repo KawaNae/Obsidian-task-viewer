@@ -16,7 +16,6 @@
     flex-direction: column;
     padding: var(--task-card-padding);
     margin-bottom: var(--task-card-gap);
-    outline: 1px solid var(--tv-border);
 
     /* Typography */
     font-size: var(--task-card-font-size);
@@ -25,7 +24,7 @@
     /* Visual */
     background-color: var(--tv-bg-card);
     border-radius: var(--task-card-border-radius);
-    box-shadow: 0 4px 10px var(--tv-shadow-strong);
+    box-shadow: 0 4px 10px 3px var(--tv-shadow-strong);
 
     /* Misc */
     scrollbar-width: none;

@@ -4,6 +4,7 @@ import { Task } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
 import { GhostManager, GhostSegment } from '../ghost/GhostManager';
 import { createGhostElement, removeGhostElement } from '../ghost/GhostFactory';
+import { toLogicalHeightPx, toLogicalTopPx } from '../../../utils/TimelineCardPosition';
 
 /**
  * 移動操作を処理するドラッグストラテジー。
@@ -109,9 +110,8 @@ export class MoveStrategy extends BaseDragStrategy {
     private initTimelineMove(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
         this.ghostManager = new GhostManager(context.container);
 
-        const rect = el.getBoundingClientRect();
-        this.initialTop = parseInt(el.style.top || '0');
-        this.initialHeight = parseInt(el.style.height || '0');
+        this.initialTop = toLogicalTopPx(parseFloat(el.style.top || '0'));
+        this.initialHeight = toLogicalHeightPx(parseFloat(el.style.height || '0'));
 
         const dayCol = el.closest('.day-timeline-column') as HTMLElement;
         this.currentDayDate = dayCol ? dayCol.dataset.date || null : (task.startDate || null);

@@ -2,6 +2,12 @@ import { BaseDragStrategy } from './BaseDragStrategy';
 import { DragContext } from '../DragStrategy';
 import { Task } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
+import {
+    toDisplayHeightPx,
+    toDisplayTopPx,
+    toLogicalHeightPx,
+    toLogicalTopPx
+} from '../../../utils/TimelineCardPosition';
 
 /**
  * リサイズ操作を処理するドラッグストラテジー。
@@ -115,12 +121,10 @@ export class ResizeStrategy extends BaseDragStrategy {
     // ========== Timeline Resize ==========
 
     private initTimelineResize(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
-        this.initialTop = parseInt(el.style.top || '0');
-        this.initialHeight = parseInt(el.style.height || '0');
+        this.initialTop = toLogicalTopPx(parseFloat(el.style.top || '0'));
+        this.initialHeight = toLogicalHeightPx(parseFloat(el.style.height || '0'));
 
-        const logicalTop = this.initialTop - 1;
-        const logicalHeight = this.initialHeight + 3;
-        this.initialBottom = logicalTop + logicalHeight;
+        this.initialBottom = this.initialTop + this.initialHeight;
 
         const dayCol = el.closest('.day-timeline-column') as HTMLElement;
         this.currentDayDate = dayCol?.dataset.date || task.startDate || null;
@@ -144,17 +148,17 @@ export class ResizeStrategy extends BaseDragStrategy {
         const snappedMouseY = Math.round(yInContainer / snapPixels) * snapPixels;
 
         if (this.resizeDirection === 'bottom') {
-            const logicalTop = this.initialTop - 1;
-            const newHeight = Math.max(snapPixels, snappedMouseY - logicalTop);
-            this.dragEl.style.height = `${newHeight - 3}px`;
+            const logicalTop = this.initialTop;
+            const newLogicalHeight = Math.max(snapPixels, snappedMouseY - logicalTop);
+            this.dragEl.style.height = `${toDisplayHeightPx(newLogicalHeight)}px`;
         } else if (this.resizeDirection === 'top') {
             const currentBottom = this.initialBottom;
             const newTop = snappedMouseY;
-            const clampedHeight = Math.max(snapPixels, currentBottom - newTop);
-            const finalTop = currentBottom - clampedHeight;
+            const clampedLogicalHeight = Math.max(snapPixels, currentBottom - newTop);
+            const finalLogicalTop = currentBottom - clampedLogicalHeight;
 
-            this.dragEl.style.top = `${finalTop + 1}px`;
-            this.dragEl.style.height = `${clampedHeight - 3}px`;
+            this.dragEl.style.top = `${toDisplayTopPx(finalLogicalTop)}px`;
+            this.dragEl.style.height = `${toDisplayHeightPx(clampedLogicalHeight)}px`;
         }
     }
 
@@ -175,10 +179,10 @@ export class ResizeStrategy extends BaseDragStrategy {
         const startHour = context.plugin.settings.startHour;
         const startHourMinutes = startHour * 60;
 
-        const diffTop = parseInt(this.dragEl.style.top || '0');
-        const logicalTop = diffTop - 1;
-        const height = parseInt(this.dragEl.style.height || '0');
-        const logicalHeight = height + 3;
+        const diffTop = parseFloat(this.dragEl.style.top || '0');
+        const logicalTop = toLogicalTopPx(diffTop);
+        const height = parseFloat(this.dragEl.style.height || '0');
+        const logicalHeight = toLogicalHeightPx(height);
 
         const totalStartMinutes = startHourMinutes + (logicalTop / zoomLevel);
         const totalEndMinutes = totalStartMinutes + (logicalHeight / zoomLevel);
