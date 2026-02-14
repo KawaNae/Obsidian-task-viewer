@@ -23,6 +23,9 @@ export class TaskNormalizer {
                 pathBucket = new Map<string, NormalizedTask>();
                 byPath.set(normalized.sourcePath, pathBucket);
             }
+            if (pathBucket.has(normalized.id)) {
+                console.warn(`[TaskNormalizer] Duplicate task ID in ${normalized.sourcePath}: ${normalized.id}`);
+            }
             pathBucket.set(normalized.id, normalized);
         }
 

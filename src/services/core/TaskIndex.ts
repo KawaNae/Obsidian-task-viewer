@@ -176,15 +176,20 @@ export class TaskIndex {
         this.settings = settings;
         this.store.updateSettings(settings);
         this.scanner.updateSettings(settings);
-        this.aiIndexService.updateSettings();
-        // 除外ルールが変更された可能性があるため再スキャン
-        this.scanner.scanVault()
-            .then(async () => {
-                await this.aiIndexService.rebuildAll();
-            })
+        this.aiIndexService.updateSettings()
+            .then(() => this.scanner.scanVault())
+            .then(() => this.aiIndexService.rebuildAll())
             .catch((error) => {
                 console.error('[TaskIndex] Failed to rescan vault after settings update:', error);
             });
+    }
+
+    dispose(): void {
+        if (this.notifyDebounceTimer) {
+            clearTimeout(this.notifyDebounceTimer);
+            this.notifyDebounceTimer = null;
+        }
+        this.aiIndexService.dispose();
     }
 
     // ===== データアクセス (TaskStoreへ委譲) =====

@@ -34,7 +34,7 @@ export class AiIndexService {
         this.configSignature = this.buildConfigSignature(this.getSettings());
     }
 
-    updateSettings(): void {
+    async updateSettings(): Promise<void> {
         const settings = this.getSettings();
         const nextSignature = this.buildConfigSignature(settings);
         if (nextSignature === this.configSignature) {
@@ -44,12 +44,14 @@ export class AiIndexService {
         this.configSignature = nextSignature;
         this.clearPending();
         if (!settings.aiIndex.enabled) {
-            void this.outputManager.dispose();
+            await this.outputManager.dispose();
             return;
         }
-        void this.syncOutputPath().catch((error) => {
+        try {
+            await this.syncOutputPath();
+        } catch (error) {
             console.error('[AiIndexService] Failed to reinitialize AI index output path:', error);
-        });
+        }
     }
 
     schedulePath(path: string): void {
@@ -95,6 +97,12 @@ export class AiIndexService {
         const outputPath = await this.getOutputPath();
         const file = await this.writer.ensureIndexFile(outputPath);
         await this.app.workspace.getLeaf(true).openFile(file);
+    }
+
+    dispose(): void {
+        this.clearPending();
+        this.initialized = false;
+        void this.outputManager.dispose();
     }
 
     private scheduleFlush(): void {
@@ -253,6 +261,7 @@ export class AiIndexService {
     }
 
     private buildIndexHash(tasks: NormalizedTask[]): string {
+        // Keep parity with path hash shape (`id:contentHash`) and hash via TaskNormalizer.
         const raw = tasks
             .map((task) => `${task.id}:${task.contentHash}`)
             .join('|');

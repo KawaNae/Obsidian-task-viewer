@@ -52,15 +52,7 @@ export class AiIndexOutputManager {
         return this.currentPath;
     }
 
-    getMetaPath(): string {
-        const outputPath = this.getCurrentPath();
-        return outputPath.endsWith('.ndjson')
-            ? `${outputPath.slice(0, -'.ndjson'.length)}.meta.json`
-            : `${outputPath}.meta.json`;
-    }
-
     isInitialized(): boolean {
         return this.initialized;
     }
 }
-

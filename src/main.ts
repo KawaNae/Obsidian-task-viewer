@@ -303,6 +303,7 @@ export default class TaskViewerPlugin extends Plugin {
 
     onunload() {
         console.log('Unloading Task Viewer Plugin');
+        this.taskIndex?.dispose();
         document.body.classList.remove('task-viewer-global-styles');
         this.pomodoroService?.destroy();
         this.timerWidget?.destroy();

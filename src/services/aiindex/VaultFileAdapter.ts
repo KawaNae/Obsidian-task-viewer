@@ -132,7 +132,12 @@ export class VaultFileAdapter {
                 try {
                     await adapter.rename(bakPath, path);
                 } catch (rollbackError) {
-                    console.error('[VaultFileAdapter] Failed to rollback AI index backup:', rollbackError);
+                    console.error(
+                        '[VaultFileAdapter] Rollback failed after write error. Original error:',
+                        error,
+                        'Rollback error:',
+                        rollbackError
+                    );
                 }
             }
             throw error;
@@ -188,4 +193,3 @@ export class VaultFileAdapter {
         });
     }
 }
-

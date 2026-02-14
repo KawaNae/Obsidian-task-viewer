@@ -33,6 +33,13 @@ export class AiIndexWriter {
             ? `${lines.join('\n')}\n`
             : '';
 
+        if (lines.length === 0 && tasks.length > 0) {
+            return {
+                skippedRows: tasks.length,
+                serializationError: serializationError ?? 'All tasks failed to serialize; index file was not overwritten.',
+            };
+        }
+
         await this.atomicWrite(outputPath, ndjson);
 
         const nextMeta: AiIndexMeta = {
