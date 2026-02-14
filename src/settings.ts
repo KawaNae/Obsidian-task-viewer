@@ -85,32 +85,38 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
         containerEl.createEl('h3', { text: 'AI Index', cls: 'setting-section-header' });
 
-        new Setting(containerEl)
-            .setName('Enable AI Index')
-            .setDesc('Generate and keep a task index file for AI/search tooling.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.aiIndex.enabled)
-                .onChange(async (value) => {
-                    this.plugin.settings.aiIndex.enabled = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        let customFolderInputEl: HTMLInputElement | null = null;
+        let fileNameSetting: Setting | null = null;
+        let outputToPluginFolderSetting: Setting | null = null;
         let customFolderSetting: Setting | null = null;
         let resolvedPathSetting: Setting | null = null;
+        let debounceSetting: Setting | null = null;
+        let parsersSetting: Setting | null = null;
+        let includeDoneSetting: Setting | null = null;
+        let customFolderInputEl: HTMLInputElement | null = null;
 
-        const updateResolvedPathUi = () => {
+        const syncAiIndexUiState = () => {
             const effectivePath = resolveAiIndexOutputPath(this.plugin.settings.aiIndex);
+            const isAiEnabled = this.plugin.settings.aiIndex.enabled;
             const isPluginFolderMode = this.plugin.settings.aiIndex.outputToPluginFolder;
 
+            fileNameSetting?.setDisabled(!isAiEnabled);
+            outputToPluginFolderSetting?.setDisabled(!isAiEnabled);
+            customFolderSetting?.setDisabled(!isAiEnabled);
+            resolvedPathSetting?.setDisabled(!isAiEnabled);
+            debounceSetting?.setDisabled(!isAiEnabled);
+            parsersSetting?.setDisabled(!isAiEnabled);
+            includeDoneSetting?.setDisabled(!isAiEnabled);
+
             if (customFolderInputEl) {
-                customFolderInputEl.disabled = isPluginFolderMode;
+                customFolderInputEl.disabled = !isAiEnabled || isPluginFolderMode;
             }
 
             if (customFolderSetting) {
-                customFolderSetting.setDesc(isPluginFolderMode
-                    ? `Disabled while plugin-folder output is enabled. Effective output: ${effectivePath}`
-                    : `Vault-relative output folder for AI index (folder only). Effective output: ${effectivePath}`);
+                customFolderSetting.setDesc(!isAiEnabled
+                    ? `AI index is disabled. Effective output: ${effectivePath}`
+                    : isPluginFolderMode
+                        ? `Disabled while plugin-folder output is enabled. Effective output: ${effectivePath}`
+                        : `Vault-relative output folder for AI index (folder only). Effective output: ${effectivePath}`);
             }
 
             if (resolvedPathSetting) {
@@ -119,6 +125,17 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         };
 
         new Setting(containerEl)
+            .setName('Enable AI Index')
+            .setDesc('Generate and keep a task index file for AI/search tooling.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.aiIndex.enabled)
+                .onChange(async (value) => {
+                    this.plugin.settings.aiIndex.enabled = value;
+                    await this.plugin.saveSettings();
+                    syncAiIndexUiState();
+                }));
+
+        fileNameSetting = new Setting(containerEl)
             .setName('AI Index File Name')
             .setDesc('Output file name for AI index. ".ndjson" is auto-appended if missing.')
             .addText(text => {
@@ -135,7 +152,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     text.setValue(normalized.fileName);
 
                     if (normalized.fileName === this.plugin.settings.aiIndex.fileName) {
-                        updateResolvedPathUi();
+                        syncAiIndexUiState();
                         return;
                     }
 
@@ -145,7 +162,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                     } finally {
                         isSaving = false;
-                        updateResolvedPathUi();
+                        syncAiIndexUiState();
                     }
                 };
 
@@ -168,7 +185,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 });
             });
 
-        new Setting(containerEl)
+        outputToPluginFolderSetting = new Setting(containerEl)
             .setName('Output AI Index to Plugin Folder')
             .setDesc('If enabled, AI index is written under plugin folder.')
             .addToggle(toggle => toggle
@@ -180,7 +197,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     });
                     this.plugin.settings.aiIndex = normalized;
                     await this.plugin.saveSettings();
-                    updateResolvedPathUi();
+                    syncAiIndexUiState();
                 }));
 
         customFolderSetting = new Setting(containerEl)
@@ -199,7 +216,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     text.setValue(normalized.customOutputFolder);
 
                     if (normalized.customOutputFolder === this.plugin.settings.aiIndex.customOutputFolder) {
-                        updateResolvedPathUi();
+                        syncAiIndexUiState();
                         return;
                     }
 
@@ -209,7 +226,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                     } finally {
                         isSaving = false;
-                        updateResolvedPathUi();
+                        syncAiIndexUiState();
                     }
                 };
 
@@ -239,9 +256,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             .setName('Resolved AI Index Output Path')
             .setDesc(resolveAiIndexOutputPath(this.plugin.settings.aiIndex));
 
-        updateResolvedPathUi();
-
-        new Setting(containerEl)
+        debounceSetting = new Setting(containerEl)
             .setName('AI Index Debounce (ms)')
             .setDesc('Debounce duration for path-level incremental index updates.')
             .addSlider(slider => slider
@@ -257,7 +272,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        new Setting(containerEl)
+        parsersSetting = new Setting(containerEl)
             .setName('AI Index Parsers')
             .setDesc('Comma-separated parsers to include. Supported: inline, frontmatter.')
             .addText(text => text
@@ -272,7 +287,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        new Setting(containerEl)
+        includeDoneSetting = new Setting(containerEl)
             .setName('Include Completed Tasks In AI Index')
             .setDesc('Include done/cancelled/exception tasks in generated AI index.')
             .addToggle(toggle => toggle
@@ -281,6 +296,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     this.plugin.settings.aiIndex.includeDone = value;
                     await this.plugin.saveSettings();
                 }));
+
+        syncAiIndexUiState();
 
         containerEl.createEl('h3', { text: 'Interaction', cls: 'setting-section-header' });
 
