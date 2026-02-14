@@ -1,30 +1,37 @@
 import { App } from 'obsidian';
 import type { HoverLinkPayload, TaskLinkBindContext } from './types';
 
+type TaskLinkBindOptions = {
+    bindClick?: boolean;
+};
+
 export class TaskLinkInteractionManager {
     private boundLinks: WeakSet<HTMLElement> = new WeakSet();
 
     constructor(private app: App) { }
 
-    bind(container: HTMLElement, context: TaskLinkBindContext): void {
+    bind(container: HTMLElement, context: TaskLinkBindContext, options: TaskLinkBindOptions = {}): void {
+        const bindClick = options.bindClick ?? true;
         const internalLinks = container.querySelectorAll<HTMLElement>('a.internal-link[data-href]');
         internalLinks.forEach((linkEl) => {
-            this.bindLink(linkEl, context);
+            this.bindLink(linkEl, context, bindClick);
         });
     }
 
-    private bindLink(linkEl: HTMLElement, context: TaskLinkBindContext): void {
+    private bindLink(linkEl: HTMLElement, context: TaskLinkBindContext, bindClick: boolean): void {
         if (this.boundLinks.has(linkEl)) {
             return;
         }
         this.boundLinks.add(linkEl);
 
-        linkEl.addEventListener('click', (event: MouseEvent) => {
-            this.handleClick(event, linkEl, context);
-        });
-        linkEl.addEventListener('pointerdown', (event: PointerEvent) => {
-            event.stopPropagation();
-        });
+        if (bindClick) {
+            linkEl.addEventListener('click', (event: MouseEvent) => {
+                this.handleClick(event, linkEl, context);
+            });
+            linkEl.addEventListener('pointerdown', (event: PointerEvent) => {
+                event.stopPropagation();
+            });
+        }
         linkEl.addEventListener('mouseover', (event: MouseEvent) => {
             this.emitHoverLink(event, linkEl, context);
         });

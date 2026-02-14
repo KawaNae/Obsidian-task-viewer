@@ -28,26 +28,6 @@
     transition: background-color 0.2s ease;
 }
 
-.date-header__weekday {
-    margin-left: 4px;
-}
-
-.date-header__date--short {
-    display: none;
-}
-
-.date-header__cell.is-compact .date-header__weekday {
-    display: none;
-}
-
-.date-header__cell.is-narrow .date-header__date--full {
-    display: none;
-}
-
-.date-header__cell.is-narrow .date-header__date--short {
-    display: inline;
-}
-
 /* First cell (axis) - add left border */
 .date-header__cell:first-child {
     border-left: 1px solid var(--tv-border);
@@ -56,6 +36,23 @@
 .date-header__cell:hover {
     background-color: var(--tv-bg-hover);
     color: var(--tv-text);
+    text-decoration: underline;
+}
+
+.date-header__date-link {
+    color: inherit;
+    text-decoration: none;
+    font: inherit;
+    font-weight: inherit;
+    line-height: inherit;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    max-width: 100%;
+}
+
+.date-header__cell:hover .date-header__date-link,
+.date-header__date-link:hover {
     text-decoration: underline;
 }
 

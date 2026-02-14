@@ -25,6 +25,21 @@ export class DailyNoteUtils {
         return `${folder}${dateStr}.md`;
     }
 
+    static getDailyNoteLinkTarget(app: App, date: Date): string {
+        const settings = this.getDailyNoteSettings(app);
+        const path = this.getDailyNotePath(date, settings);
+        return path.replace(/\.md$/, '');
+    }
+
+    static getDailyNoteLabelForDate(app: App, date: Date): string {
+        const settings = this.getDailyNoteSettings(app);
+        return moment(date).format(settings.format);
+    }
+
+    static getWikiLinkForDate(app: App, date: Date): string {
+        return `[[${this.getDailyNoteLinkTarget(app, date)}]]`;
+    }
+
     static getDailyNote(app: App, date: Date): TFile | null {
         const settings = this.getDailyNoteSettings(app);
         const path = this.getDailyNotePath(date, settings);
