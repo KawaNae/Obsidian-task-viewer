@@ -60,6 +60,7 @@ const copyStaticFiles = {
           '_habits.css',
           '_timeline-drag.css',
           '_schedule.css',
+          '_calendar.css',
           '_task-card.css',
           '_deadline.css',
           '_checkboxes.css',

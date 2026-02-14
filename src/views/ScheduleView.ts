@@ -69,6 +69,10 @@ export class ScheduleView extends ItemView {
         }
     }
 
+    public refresh() {
+        this.render();
+    }
+
     private render() {
         this.container.empty();
 

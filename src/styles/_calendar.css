@@ -1,0 +1,198 @@
+/* ==========================================================================
+   Calendar View
+   ========================================================================== */
+
+.calendar-view-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    background: var(--tv-bg-primary);
+    padding: 0 !important;
+}
+
+.calendar-toolbar {
+    border-bottom: 1px solid var(--tv-border);
+}
+
+.calendar-month-label {
+    font-weight: 700;
+    font-size: 0.95em;
+    color: var(--tv-text);
+    min-width: 6.5em;
+    text-align: center;
+}
+
+.calendar-grid {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.calendar-weekday-header {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    background: var(--tv-bg-date-header);
+    border-bottom: 1px solid var(--tv-border);
+}
+
+.calendar-weekday-cell {
+    padding: 6px 4px;
+    text-align: center;
+    font-size: 0.8em;
+    font-weight: 700;
+    color: var(--tv-text-muted);
+    border-right: 1px solid var(--tv-border);
+}
+
+.calendar-weekday-cell:last-child {
+    border-right: none;
+}
+
+.calendar-grid__body {
+    flex: 1;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.calendar-week-row {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    min-height: 140px;
+    border-bottom: 1px solid var(--tv-border);
+}
+
+.calendar-date-cell {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border-right: 1px solid var(--tv-border);
+    background: var(--tv-bg-primary);
+    padding: 4px;
+}
+
+.calendar-date-cell:last-child {
+    border-right: none;
+}
+
+.calendar-date-cell.is-outside-month {
+    background: var(--tv-bg-secondary);
+    opacity: 0.72;
+}
+
+.calendar-date-cell.is-today {
+    background: rgba(var(--tv-accent-rgb), 0.12);
+}
+
+.calendar-date-header {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    min-height: 20px;
+    margin-bottom: 4px;
+    font-size: 0.82em;
+    font-weight: 700;
+    color: var(--tv-text-muted);
+}
+
+.calendar-date-cell.is-today .calendar-date-header {
+    color: var(--tv-text-accent);
+}
+
+.calendar-date-header .internal-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.calendar-date-header .internal-link:hover {
+    text-decoration: underline;
+}
+
+.calendar-task-list {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.calendar-task-wrapper {
+    min-width: 0;
+}
+
+.calendar-task-card {
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0;
+    margin-bottom: 0;
+    padding: 4px 3px 4px 7px;
+    font-size: 0.78em;
+    box-shadow: 0 2px 6px var(--tv-shadow-medium);
+}
+
+.calendar-task-card .task-card__content {
+    overflow: hidden;
+}
+
+.calendar-task-card .task-card__content ul,
+.calendar-task-card .task-card__content ol {
+    margin-block-start: 0.1em;
+    margin-block-end: 0.1em;
+}
+
+.calendar-more-button {
+    margin-top: 2px;
+    width: 100%;
+    border: 1px dashed var(--tv-border);
+    border-radius: var(--tv-radius-s);
+    background: var(--tv-bg-secondary);
+    color: var(--tv-text-muted);
+    font-size: 0.75em;
+    padding: 3px 6px;
+    cursor: pointer;
+}
+
+.calendar-more-button:hover {
+    background: var(--tv-bg-hover);
+    color: var(--tv-text);
+}
+
+.calendar-task-modal {
+    padding: 12px;
+}
+
+.calendar-task-modal h2 {
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+.calendar-modal-task-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: min(70vh, 640px);
+    overflow: auto;
+}
+
+.calendar-modal-task-wrapper .task-card {
+    position: relative !important;
+    width: 100% !important;
+    height: auto !important;
+}
+
+@media (max-width: 900px) {
+    .calendar-week-row {
+        min-height: 112px;
+    }
+
+    .calendar-task-card {
+        font-size: 0.72em;
+        padding: 3px 2px 3px 6px;
+    }
+}

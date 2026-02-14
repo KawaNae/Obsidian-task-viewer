@@ -3,7 +3,7 @@
     height: 100%;
     width: 100%;
     overflow-y: auto;
-    padding: 20px;
+    padding: 0 !important;
 }
 
 .schedule-container {

@@ -360,6 +360,42 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
+        containerEl.createEl('h3', { text: 'Calendar', cls: 'setting-section-header' });
+
+        new Setting(containerEl)
+            .setName('Week starts on')
+            .setDesc('Choose whether weeks start on Sunday or Monday in Calendar View.')
+            .addDropdown(dropdown => dropdown
+                .addOption('0', 'Sunday')
+                .addOption('1', 'Monday')
+                .setValue(String(this.plugin.settings.calendarWeekStartDay))
+                .onChange(async (value) => {
+                    this.plugin.settings.calendarWeekStartDay = value === '1' ? 1 : 0;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Max Tasks Per Cell')
+            .setDesc('Maximum number of tasks shown in each calendar day cell before showing "+N more".')
+            .addSlider(slider => slider
+                .setLimits(1, 10, 1)
+                .setValue(this.plugin.settings.calendarMaxTasksPerCell)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.calendarMaxTasksPerCell = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Show Completed Tasks')
+            .setDesc('Show completed tasks in Calendar View.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.calendarShowCompleted)
+                .onChange(async (value) => {
+                    this.plugin.settings.calendarShowCompleted = value;
+                    await this.plugin.saveSettings();
+                }));
+
         containerEl.createEl('h3', { text: 'DeadlineList', cls: 'setting-section-header' });
 
         new Setting(containerEl)

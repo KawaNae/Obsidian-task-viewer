@@ -2,6 +2,7 @@ import { Notice, Plugin, WorkspaceLeaf, setIcon, TFile } from 'obsidian';
 import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/ScheduleView';
+import { CalendarView, VIEW_TYPE_CALENDAR } from './views/CalendarView';
 import { PomodoroView, VIEW_TYPE_POMODORO } from './views/PomodoroView';
 import { PomodoroService } from './services/execution/PomodoroService';
 import { TimerWidget } from './widgets/TimerWidget';
@@ -79,6 +80,11 @@ export default class TaskViewerPlugin extends Plugin {
             (leaf) => new PomodoroView(leaf, this, this.pomodoroService)
         );
 
+        this.registerView(
+            VIEW_TYPE_CALENDAR,
+            (leaf) => new CalendarView(leaf, this.taskIndex, this)
+        );
+
         // Add Ribbon Icon
         this.addRibbonIcon('calendar-clock', 'Open Timeline', () => {
             this.activateView(VIEW_TYPE_TIMELINE);
@@ -90,6 +96,10 @@ export default class TaskViewerPlugin extends Plugin {
 
         this.addRibbonIcon('clock', 'Open Pomodoro Timer', () => {
             this.activateView(VIEW_TYPE_POMODORO);
+        });
+
+        this.addRibbonIcon('calendar', 'Open Calendar', () => {
+            this.activateView(VIEW_TYPE_CALENDAR);
         });
 
         // Add Command
@@ -114,6 +124,14 @@ export default class TaskViewerPlugin extends Plugin {
             name: 'Open Pomodoro Timer',
             callback: () => {
                 this.activateView(VIEW_TYPE_POMODORO);
+            }
+        });
+
+        this.addCommand({
+            id: 'open-calendar-view',
+            name: 'Open Calendar View',
+            callback: () => {
+                this.activateView(VIEW_TYPE_CALENDAR);
             }
         });
 
@@ -228,12 +246,7 @@ export default class TaskViewerPlugin extends Plugin {
             breakMinutes: this.settings.pomodoroBreakMinutes,
         });
 
-        // Refresh all Timeline Views
-        this.app.workspace.getLeavesOfType(VIEW_TYPE_TIMELINE).forEach(leaf => {
-            if (leaf.view instanceof TimelineView) {
-                leaf.view.refresh();
-            }
-        });
+        this.refreshAllViews();
     }
 
     updateGlobalStyles() {
@@ -278,8 +291,8 @@ export default class TaskViewerPlugin extends Plugin {
     /**
      * Refresh all task viewer views
      */
-    private refreshAllViews(): void {
-        [VIEW_TYPE_TIMELINE, VIEW_TYPE_SCHEDULE].forEach(viewType => {
+    public refreshAllViews(): void {
+        [VIEW_TYPE_TIMELINE, VIEW_TYPE_SCHEDULE, VIEW_TYPE_CALENDAR].forEach(viewType => {
             this.app.workspace.getLeavesOfType(viewType).forEach(leaf => {
                 (leaf.view as any).refresh?.();
             });

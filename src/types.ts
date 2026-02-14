@@ -200,6 +200,9 @@ export interface TaskViewerSettings {
     frontmatterTaskHeader: string;
     frontmatterTaskHeaderLevel: number;
     longPressThreshold: number;
+    calendarWeekStartDay: 0 | 1;
+    calendarMaxTasksPerCell: number;
+    calendarShowCompleted: boolean;
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -222,4 +225,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     frontmatterTaskHeader: 'Tasks',
     frontmatterTaskHeaderLevel: 2,
     longPressThreshold: 400,
+    calendarWeekStartDay: 0,
+    calendarMaxTasksPerCell: 3,
+    calendarShowCompleted: true,
 };
