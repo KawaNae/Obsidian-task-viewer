@@ -7,6 +7,7 @@ import { PropertyFormatter } from '../PropertyFormatter';
 import { InputModal } from '../../../modals/InputModal';
 import { DateTimeInputModal, DateTimeValue, DateTimeModalOptions } from '../../../modals/DateTimeInputModal';
 import { DateUtils } from '../../../utils/DateUtils';
+import { getTaskDisplayName } from '../../../utils/TaskContent';
 
 /**
  * Propertiesサブメニューの構築
@@ -43,7 +44,7 @@ export class PropertiesMenuBuilder {
      */
     private addNameItem(menu: Menu, task: Task): void {
         menu.addItem((sub) => {
-            const taskName = task.content.trim() || 'Untitled';
+            const taskName = getTaskDisplayName(task);
             sub.setTitle(`Name: ${taskName.substring(0, 20)}${taskName.length > 20 ? '...' : ''}`)
                 .setIcon('pencil')
                 .onClick(() => {

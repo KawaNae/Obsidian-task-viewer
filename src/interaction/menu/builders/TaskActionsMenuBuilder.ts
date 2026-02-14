@@ -4,6 +4,7 @@ import { TaskIndex } from '../../../services/core/TaskIndex';
 import TaskViewerPlugin from '../../../main';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { ConfirmModal } from '../../../modals/ConfirmModal';
+import { getTaskDisplayName } from '../../../utils/TaskContent';
 
 /**
  * Task操作メニューの構築
@@ -19,7 +20,7 @@ export class TaskActionsMenuBuilder {
      * Task操作メニューを追加
      */
     addTaskActions(menu: Menu, task: Task): void {
-        const displayName = task.content.trim() || task.file.replace(/\.md$/, '').split('/').pop() || 'Untitled';
+        const displayName = getTaskDisplayName(task);
 
         // Child task creation
         this.addCreateChildItem(menu, task);

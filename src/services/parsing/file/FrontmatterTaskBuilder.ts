@@ -46,10 +46,9 @@ export class FrontmatterTaskBuilder {
             : String(rawStatus).trim()[0];
 
         const rawContent = frontmatter[frontmatterKeys.content];
-        const fileName = filePath.split('/').pop()?.replace(/\.md$/, '') || '';
         const content = (rawContent != null && String(rawContent).trim() !== '')
             ? String(rawContent).trim()
-            : fileName;
+            : '';
 
         const rawTimerTargetId = frontmatter[frontmatterKeys.timerTargetId];
         const timerTargetId = (rawTimerTargetId == null || String(rawTimerTargetId).trim() === '')

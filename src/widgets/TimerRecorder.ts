@@ -10,6 +10,7 @@ import { TimerInstance } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { Task } from '../types';
+import { getTaskDisplayName } from '../utils/TaskContent';
 
 export class TimerRecorder {
     constructor(
@@ -88,7 +89,8 @@ export class TimerRecorder {
                 return;
             }
 
-            const content = task.content.startsWith('⏱️') ? task.content : `⏱️ ${task.content}`;
+            const displayName = getTaskDisplayName(task);
+            const content = displayName.startsWith('⏱️') ? displayName : `⏱️ ${displayName}`;
             await taskIndex.updateTask(task.id, {
                 content,
                 startDate: startDateStr,

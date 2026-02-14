@@ -37,6 +37,12 @@ src/views/taskcard/
 3. `RenderableTask`, `shouldSplitTask`, and `splitTaskAtBoundary` must be imported from `src/views/utils/RenderableTaskUtils.ts`.
 4. Task-card-local render helper types are defined in `src/views/taskcard/types.ts`.
 
+### Task content invariant
+
+1. `Task.content` stores raw user-provided content only.
+2. Frontmatter parser keeps `content` as empty string when `tv-content` is absent.
+3. UI fallback labels (file basename / `Untitled`) must be resolved in view helpers (`src/utils/TaskContent.ts`), not in parsers.
+
 開発者向けのドキュメントです。実装の詳細、アーキテクチャ、コーディング規約などを記載しています。
 
 ---

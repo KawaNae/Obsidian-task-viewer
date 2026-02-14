@@ -1,6 +1,7 @@
 import { Menu } from 'obsidian';
 import { Task } from '../../../types';
 import TaskViewerPlugin from '../../../main';
+import { getTaskDisplayName } from '../../../utils/TaskContent';
 
 /**
  * Timerメニューの構築
@@ -13,9 +14,7 @@ export class TimerMenuBuilder {
      */
     addTimerItem(menu: Menu, task: Task): void {
         menu.addItem((item) => {
-            const displayName = task.content.trim()
-                || task.file.replace(/\.md$/, '').split('/').pop()
-                || 'Untitled';
+            const displayName = getTaskDisplayName(task);
 
             item.setTitle('⏱️ Start Timer')
                 .setIcon('play')

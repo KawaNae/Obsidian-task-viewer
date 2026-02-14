@@ -2,6 +2,7 @@ import { App, MarkdownRenderer, Component } from 'obsidian';
 import { Task, TaskViewerSettings, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
+import { getFileBaseName, hasTaskContent, isContentMatchingBaseName } from '../../utils/TaskContent';
 import { ChildItemBuilder } from './ChildItemBuilder';
 import { ChildSectionRenderer } from './ChildSectionRenderer';
 import { CheckboxWiring } from './CheckboxWiring';
@@ -121,19 +122,16 @@ export class TaskCardRenderer {
             }
         }
 
-        let parentLine = `- [${statusChar}] ${overdueIcon}${task.content}`;
-
         const filePath = task.file.replace(/\.md$/, '');
-        const fileName = task.file.split('/').pop()?.replace('.md', '') || task.file;
-        const hasContent = parentLine.replace(/^- \[[xX! -]\]\s*/, '').trim().length > 0;
+        const fileBaseName = getFileBaseName(task.file) || filePath;
+        const fileLink = `[[${filePath}|${fileBaseName}]]`;
+        const shouldShowContent = hasTaskContent(task) && !isContentMatchingBaseName(task);
 
-        if (hasContent) {
-            parentLine += ` : [[${filePath}|${fileName}]]`;
-        } else {
-            parentLine += `[[${filePath}|${fileName}]]`;
+        if (shouldShowContent) {
+            return `- [${statusChar}] ${overdueIcon}${task.content} : ${fileLink}`;
         }
 
-        return parentLine;
+        return `- [${statusChar}] ${overdueIcon}${fileLink}`;
     }
 
     private async renderInlineChildren(
