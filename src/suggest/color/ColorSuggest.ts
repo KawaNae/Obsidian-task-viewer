@@ -1,5 +1,5 @@
 import { App, Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo, TFile } from 'obsidian';
-import TaskViewerPlugin from '../main';
+import TaskViewerPlugin from '../../main';
 import { filterColors, renderColorSuggestion } from './colorUtils';
 
 /**

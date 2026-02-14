@@ -1,13 +1,13 @@
 /**
- * PropertyColorSuggest - AbstractInputSuggest for Properties View
- * Provides color suggestions for timeline-color property in Properties View (contenteditable div)
+ * PropertyLineStyleSuggest - AbstractInputSuggest for Properties View.
+ * Provides line style suggestions for configured linestyle property in Properties View.
  */
 
 import { App, AbstractInputSuggest } from 'obsidian';
-import TaskViewerPlugin from '../main';
-import { filterColors, renderColorSuggestion } from './colorUtils';
+import TaskViewerPlugin from '../../main';
+import { filterLineStyles, renderLineStyleSuggestion } from './lineStyleUtils';
 
-export class PropertyColorSuggest extends AbstractInputSuggest<string> {
+export class PropertyLineStyleSuggest extends AbstractInputSuggest<string> {
     private plugin: TaskViewerPlugin;
     private valueEl: HTMLInputElement | HTMLDivElement;
 
@@ -18,15 +18,14 @@ export class PropertyColorSuggest extends AbstractInputSuggest<string> {
     }
 
     protected getSuggestions(query: string): string[] {
-        // Show limited colors when empty, otherwise show all matches
         if (query.trim() === '') {
-            return filterColors('', 20);
+            return filterLineStyles('', 20);
         }
-        return filterColors(query);
+        return filterLineStyles(query);
     }
 
     renderSuggestion(value: string, el: HTMLElement): void {
-        renderColorSuggestion(value, el);
+        renderLineStyleSuggestion(value, el);
     }
 
     selectSuggestion(value: string, evt: MouseEvent | KeyboardEvent): void {
@@ -49,15 +48,12 @@ export class PropertyColorSuggest extends AbstractInputSuggest<string> {
             return;
         }
 
-        const colorKey = this.plugin.settings.frontmatterTaskKeys.color;
+        const linestyleKey = this.plugin.settings.frontmatterTaskKeys.linestyle;
         // @ts-ignore - processFrontMatter
         await this.plugin.app.fileManager.processFrontMatter(activeFile, (frontmatter: any) => {
-            frontmatter[colorKey] = value;
+            frontmatter[linestyleKey] = value;
         });
 
         this.syncValue(value);
     }
 }
-
-
-

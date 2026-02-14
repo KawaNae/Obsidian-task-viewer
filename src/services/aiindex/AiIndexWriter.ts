@@ -1,5 +1,6 @@
 import { App, TFile } from 'obsidian';
 import type { AiIndexMeta, NormalizedTask } from './NormalizedTask';
+import { VaultFileAdapter } from './VaultFileAdapter';
 
 export interface AiIndexWriteResult {
     skippedRows: number;
@@ -7,7 +8,10 @@ export interface AiIndexWriteResult {
 }
 
 export class AiIndexWriter {
-    constructor(private app: App) { }
+    constructor(
+        private app: App,
+        private fileAdapter: VaultFileAdapter
+    ) { }
 
     async writeSnapshot(outputPath: string, tasks: NormalizedTask[], meta: AiIndexMeta): Promise<AiIndexWriteResult> {
         const lines: string[] = [];
@@ -28,6 +32,13 @@ export class AiIndexWriter {
         const ndjson = lines.length > 0
             ? `${lines.join('\n')}\n`
             : '';
+
+        if (lines.length === 0 && tasks.length > 0) {
+            return {
+                skippedRows: tasks.length,
+                serializationError: serializationError ?? 'All tasks failed to serialize; index file was not overwritten.',
+            };
+        }
 
         await this.atomicWrite(outputPath, ndjson);
 
@@ -55,8 +66,8 @@ export class AiIndexWriter {
             return existing;
         }
 
-        await this.ensureDirectoryExists(outputPath);
-        const alreadyExists = await this.app.vault.adapter.exists(outputPath);
+        await this.fileAdapter.ensureDirectory(outputPath);
+        const alreadyExists = await this.fileAdapter.exists(outputPath, { bypassCache: true });
         if (!alreadyExists) {
             return await this.app.vault.create(outputPath, '');
         }
@@ -66,7 +77,7 @@ export class AiIndexWriter {
             return file;
         }
 
-        const content = await this.app.vault.adapter.read(outputPath);
+        const content = await this.fileAdapter.read(outputPath);
         await this.app.vault.adapter.write(outputPath, content);
         const refreshed = this.app.vault.getAbstractFileByPath(outputPath);
         if (refreshed instanceof TFile) {
@@ -83,67 +94,10 @@ export class AiIndexWriter {
     }
 
     private async atomicWrite(path: string, content: string): Promise<void> {
-        await this.ensureDirectoryExists(path);
-
-        const tmpPath = `${path}.tmp`;
-        const bakPath = `${path}.bak`;
-        const adapter = this.app.vault.adapter;
-        const hasExisting = await adapter.exists(path);
-
-        await adapter.write(tmpPath, content);
-
-        try {
-            if (hasExisting) {
-                if (await adapter.exists(bakPath)) {
-                    await adapter.remove(bakPath);
-                }
-                await adapter.rename(path, bakPath);
-            }
-            await adapter.rename(tmpPath, path);
-        } catch (error) {
-            if (await adapter.exists(tmpPath)) {
-                await adapter.remove(tmpPath);
-            }
-            const hasCurrent = await adapter.exists(path);
-            if (hasExisting && !hasCurrent && await adapter.exists(bakPath)) {
-                await adapter.rename(bakPath, path);
-            }
-            throw error;
-        }
-
-        if (hasExisting && await adapter.exists(bakPath)) {
-            try {
-                await adapter.remove(bakPath);
-            } catch (error) {
-                console.warn('[AiIndexWriter] Failed to cleanup AI index backup:', error);
-            }
-        }
-    }
-
-    private async ensureDirectoryExists(filePath: string): Promise<void> {
-        const slashIndex = filePath.lastIndexOf('/');
-        if (slashIndex < 0) {
-            return;
-        }
-
-        const directory = filePath.substring(0, slashIndex);
-        if (directory.length === 0) {
-            return;
-        }
-
-        const adapter = this.app.vault.adapter;
-        const parts = directory.split('/').filter((part) => part.length > 0);
-        let current = '';
-
-        for (const part of parts) {
-            current = current.length > 0
-                ? `${current}/${part}`
-                : part;
-
-            const exists = await adapter.exists(current);
-            if (!exists) {
-                await adapter.mkdir(current);
-            }
-        }
+        await this.fileAdapter.writeAtomic(path, content, {
+            retries: 3,
+            retryDelayMs: 100,
+            createBackup: true,
+        });
     }
 }

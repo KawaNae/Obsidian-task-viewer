@@ -1,15 +1,26 @@
 import { Component, setIcon } from 'obsidian';
+import type { HoverParent } from 'obsidian';
 import { ViewState, isCompleteStatusChar } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
 import { HandleManager } from '../HandleManager';
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
+import { TaskLinkInteractionManager } from '../../taskcard/TaskLinkInteractionManager';
+import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../../constants/hover';
 
 import { AllDaySectionRenderer } from './AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './TimelineSectionRenderer';
 import { TaskIndex } from '../../../services/core/TaskIndex';
 import { HabitTrackerRenderer } from './HabitTrackerRenderer';
+
+type DateHeaderDisplayEntry = {
+    cell: HTMLElement;
+    linkEl: HTMLElement;
+    fullLabel: string;
+    mediumLabel: string;
+    shortLabel: string;
+};
 
 export class GridRenderer {
     private isAllDayCollapsed: boolean = false;
@@ -53,14 +64,40 @@ export class GridRenderer {
         const todayVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
 
         // Day Headers
-        const headerCells: HTMLElement[] = [];
+        const headerCells: DateHeaderDisplayEntry[] = [];
+        const dateLinkInteractionManager = new TaskLinkInteractionManager(this.plugin.app);
         dates.forEach(date => {
             const cell = headerRow.createDiv('date-header__cell');
             const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
-            cell.createEl('span', { cls: 'date-header__date date-header__date--full', text: date });
-            cell.createEl('span', { cls: 'date-header__date date-header__date--short', text: date.slice(5) });
-            cell.createEl('span', { cls: 'date-header__weekday', text: dayName });
-            headerCells.push(cell);
+
+            const dateObj = this.parseLocalDate(date);
+            const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(this.plugin.app, dateObj);
+            const linkLabel = DailyNoteUtils.getDailyNoteLabelForDate(this.plugin.app, dateObj);
+            const fullLabel = `${linkLabel} ${dayName}`;
+            const mediumLabel = linkLabel;
+            const shortLabel = date.slice(5);
+
+            const linkEl = cell.createEl('a', { cls: 'internal-link date-header__date-link', text: fullLabel });
+            linkEl.dataset.href = linkTarget;
+            linkEl.setAttribute('href', linkTarget);
+            linkEl.setAttribute('aria-label', `Open daily note: ${fullLabel}`);
+            linkEl.addEventListener('click', (event: MouseEvent) => {
+                event.preventDefault();
+            });
+
+            dateLinkInteractionManager.bind(cell, {
+                sourcePath: '',
+                hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+                hoverParent: owner as unknown as HoverParent,
+            }, { bindClick: false });
+
+            headerCells.push({
+                cell,
+                linkEl,
+                fullLabel,
+                mediumLabel,
+                shortLabel,
+            });
 
             // Highlight today's date
             if (date === todayVisualDate) {
@@ -80,12 +117,6 @@ export class GridRenderer {
 
             // Add click listener to open daily note
             cell.addEventListener('click', async () => {
-                const dateObj = new Date(date);
-                // Fix timezone offset for daily note creation
-                const [y, m, d] = date.split('-').map(Number);
-                dateObj.setFullYear(y, m - 1, d);
-                dateObj.setHours(0, 0, 0, 0);
-
                 let file = DailyNoteUtils.getDailyNote(this.plugin.app, dateObj);
                 if (!file) {
                     file = await DailyNoteUtils.createDailyNote(this.plugin.app, dateObj);
@@ -217,19 +248,42 @@ export class GridRenderer {
         }
     }
 
-    private applyDateHeaderCompactBehavior(cells: HTMLElement[]) {
+    private applyDateHeaderCompactBehavior(entries: DateHeaderDisplayEntry[]) {
         const compactThresholdPx = 120;
         const narrowThresholdPx = 90;
+        const entryMap = new Map<HTMLElement, DateHeaderDisplayEntry>();
+        entries.forEach((entry) => entryMap.set(entry.cell, entry));
+
         const observer = new ResizeObserver((entries) => {
             for (const entry of entries) {
                 const cell = entry.target as HTMLElement;
+                const displayEntry = entryMap.get(cell);
+                if (!displayEntry) {
+                    continue;
+                }
+
                 const isCompact = entry.contentRect.width < compactThresholdPx;
                 const isNarrow = entry.contentRect.width < narrowThresholdPx;
                 cell.toggleClass('is-compact', isCompact);
                 cell.toggleClass('is-narrow', isNarrow);
+
+                const nextLabel = isNarrow
+                    ? displayEntry.shortLabel
+                    : isCompact
+                        ? displayEntry.mediumLabel
+                        : displayEntry.fullLabel;
+
+                if (displayEntry.linkEl.textContent !== nextLabel) {
+                    displayEntry.linkEl.textContent = nextLabel;
+                }
             }
         });
-        cells.forEach((cell) => observer.observe(cell));
+        entries.forEach((entry) => observer.observe(entry.cell));
+    }
+
+    private parseLocalDate(date: string): Date {
+        const [year, month, day] = date.split('-').map(Number);
+        return new Date(year, month - 1, day, 0, 0, 0, 0);
     }
 
     public renderCurrentTimeIndicator() {

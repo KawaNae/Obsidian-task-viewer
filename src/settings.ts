@@ -558,6 +558,13 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             'tv-color',
             'color'
         );
+        this.addFrontmatterTaskKeySetting(
+            containerEl,
+            'Line Style Key',
+            'Frontmatter key for task border line style (solid/dashed/dotted/double/dashdotted).',
+            'tv-linestyle',
+            'linestyle'
+        );
     }
 
     private addFrontmatterTaskKeySetting(

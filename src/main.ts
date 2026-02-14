@@ -14,8 +14,10 @@ import {
 } from './types';
 import { normalizeAiIndexSettings } from './services/aiindex/AiIndexSettings';
 import { TaskViewerSettingTab } from './settings';
-import { ColorSuggest } from './suggest/ColorSuggest';
-import { PropertyColorSuggest } from './suggest/PropertyColorSuggest';
+import { ColorSuggest } from './suggest/color/ColorSuggest';
+import { PropertyColorSuggest } from './suggest/color/PropertyColorSuggest';
+import { LineStyleSuggest } from './suggest/line/LineStyleSuggest';
+import { PropertyLineStyleSuggest } from './suggest/line/PropertyLineStyleSuggest';
 import { DateUtils } from './utils/DateUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
 
@@ -163,6 +165,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Register Editor Suggest
         this.registerEditorSuggest(new ColorSuggest(this.app, this));
+        this.registerEditorSuggest(new LineStyleSuggest(this.app, this));
 
         // Apply global styles if enabled
         this.updateGlobalStyles();
@@ -303,6 +306,7 @@ export default class TaskViewerPlugin extends Plugin {
 
     onunload() {
         console.log('Unloading Task Viewer Plugin');
+        this.taskIndex?.dispose();
         document.body.classList.remove('task-viewer-global-styles');
         this.pomodoroService?.destroy();
         this.timerWidget?.destroy();
@@ -342,28 +346,39 @@ export default class TaskViewerPlugin extends Plugin {
      */
     private attachPropertyColorSuggests(): void {
         const colorKey = this.settings.frontmatterTaskKeys.color;
+        const linestyleKey = this.settings.frontmatterTaskKeys.linestyle;
 
         // Find all property key inputs
         const keyInputs = document.querySelectorAll('.metadata-property-key-input');
 
         keyInputs.forEach((keyInput) => {
             const input = keyInput as HTMLInputElement;
-            if (input.value === colorKey) {
-                // Find the corresponding value contenteditable div
-                const propertyContainer = input.closest('.metadata-property');
-                if (propertyContainer) {
-                    // The value field is a contenteditable div, not an input
-                    const valueDiv = propertyContainer.querySelector('.metadata-input-longtext[contenteditable="true"]') as HTMLDivElement;
-                    if (valueDiv && !this.attachedInputs.has(valueDiv)) {
-                        // Attach text suggest
-                        new PropertyColorSuggest(this.app, valueDiv, this);
-                        this.attachedInputs.add(valueDiv);
-
-                        // Add color picker icon
-                        this.addColorPickerIcon(propertyContainer as HTMLElement, valueDiv);
-                    }
-                }
+            const isColorKey = input.value === colorKey;
+            const isLineStyleKey = input.value === linestyleKey;
+            if (!isColorKey && !isLineStyleKey) {
+                return;
             }
+
+            // Find the corresponding value contenteditable div
+            const propertyContainer = input.closest('.metadata-property');
+            if (!propertyContainer) {
+                return;
+            }
+
+            // The value field is a contenteditable div, not an input
+            const valueDiv = propertyContainer.querySelector('.metadata-input-longtext[contenteditable="true"]') as HTMLDivElement;
+            if (!valueDiv || this.attachedInputs.has(valueDiv)) {
+                return;
+            }
+
+            if (isColorKey) {
+                new PropertyColorSuggest(this.app, valueDiv, this);
+                this.addColorPickerIcon(propertyContainer as HTMLElement, valueDiv);
+            } else {
+                new PropertyLineStyleSuggest(this.app, valueDiv, this);
+            }
+
+            this.attachedInputs.add(valueDiv);
         });
     }
 

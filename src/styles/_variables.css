@@ -14,7 +14,27 @@
     /* Task Card */
     --task-card-padding: 0.8em 2px 4px 8px;
     --task-card-border-radius: 4px;
-    --task-card-accent-width: 4px;
+
+    --task-card-accent-solid-width: 4px;
+    
+    --task-card-accent-dashed-width: 4px;
+    --task-card-accent-dashed-line: 9px;
+    --task-card-accent-dashed-gap: 10px;
+
+    --task-card-accent-dotted-width: 4px;
+    --task-card-accent-dotted-line: 4px;
+    --task-card-accent-dotted-gap: 4px;
+
+    --task-card-accent-double-left-width: 1px;
+    --task-card-accent-double-right-width: 1px;
+    --task-card-accent-double-gap: 2px;
+
+    --task-card-accent-dashdotted-width: 4px;
+    --task-card-accent-dashdotted-line1: 9px;
+    --task-card-accent-dashdotted-gap1: 6px;
+    --task-card-accent-dashdotted-line2: 4px;
+    --task-card-accent-dashdotted-gap2: 6px;
+
     --task-card-font-size: 0.9em;
     --task-card-gap: 5px;
 
@@ -133,13 +153,13 @@ body.theme-light {
     --tv-bg-card: var(--tv-bg-primary);
     --tv-shadow-rgb: var(--mono-rgb-100);
     --tv-shadow-a-card: 0.16;
-    --tv-shadow-a-strong: 0.2;
-    --tv-shadow-a-medium: 0.15;
-    --tv-shadow-a-light: 0.1;
+    --tv-shadow-a-strong: 0.1;
+    --tv-shadow-a-medium: 0.08;
+    --tv-shadow-a-light: 0.05;
 }
 
 body.theme-dark {
-    --tv-bg-card: var(--tv-bg-secondary-alt);
+    --tv-bg-card: var(--tv-border);
     --tv-shadow-rgb: var(--mono-rgb-0);
     --tv-shadow-a-card: 0.35;
     --tv-shadow-a-strong: 0.4;

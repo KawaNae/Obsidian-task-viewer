@@ -1,13 +1,16 @@
 import { App, Notice } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
-import { resolveAiIndexOutputPath } from './AiIndexSettings';
+import { AiIndexOutputManager } from './AiIndexOutputManager';
 import { AiIndexWriter } from './AiIndexWriter';
 import { type AiIndexMeta, type NormalizedTask } from './NormalizedTask';
 import { TaskNormalizer } from './TaskNormalizer';
+import { VaultFileAdapter } from './VaultFileAdapter';
 
 export class AiIndexService {
     private static readonly META_VERSION = 1;
 
+    private fileAdapter: VaultFileAdapter;
+    private outputManager: AiIndexOutputManager;
     private writer: AiIndexWriter;
     private normalizer: TaskNormalizer;
     private indexByPath: Map<string, NormalizedTask[]> = new Map();
@@ -24,12 +27,14 @@ export class AiIndexService {
         private getTasks: () => Task[],
         private getSettings: () => TaskViewerSettings
     ) {
-        this.writer = new AiIndexWriter(app);
+        this.fileAdapter = new VaultFileAdapter(app);
+        this.outputManager = new AiIndexOutputManager(this.fileAdapter);
+        this.writer = new AiIndexWriter(app, this.fileAdapter);
         this.normalizer = new TaskNormalizer();
         this.configSignature = this.buildConfigSignature(this.getSettings());
     }
 
-    updateSettings(): void {
+    async updateSettings(): Promise<void> {
         const settings = this.getSettings();
         const nextSignature = this.buildConfigSignature(settings);
         if (nextSignature === this.configSignature) {
@@ -37,13 +42,16 @@ export class AiIndexService {
         }
 
         this.configSignature = nextSignature;
+        this.clearPending();
         if (!settings.aiIndex.enabled) {
-            this.clearPending();
+            await this.outputManager.dispose();
             return;
         }
-        // 設定変更直後は TaskIndex 側で scanVault 後に rebuildAll を呼ぶ。
-        // ここで即 rebuild すると scan 前の古いストアでインデックスを作る可能性がある。
-        this.clearPending();
+        try {
+            await this.syncOutputPath();
+        } catch (error) {
+            console.error('[AiIndexService] Failed to reinitialize AI index output path:', error);
+        }
     }
 
     schedulePath(path: string): void {
@@ -86,9 +94,15 @@ export class AiIndexService {
     }
 
     async openIndexFile(): Promise<void> {
-        const outputPath = this.resolveOutputPath();
+        const outputPath = await this.getOutputPath();
         const file = await this.writer.ensureIndexFile(outputPath);
         await this.app.workspace.getLeaf(true).openFile(file);
+    }
+
+    dispose(): void {
+        this.clearPending();
+        this.initialized = false;
+        void this.outputManager.dispose();
     }
 
     private scheduleFlush(): void {
@@ -167,7 +181,6 @@ export class AiIndexService {
     }
 
     private async writeSnapshot(generatedAt: string): Promise<void> {
-        const outputPath = this.resolveOutputPath();
         const allTasks = this.collectAllTasks();
         const indexHash = this.buildIndexHash(allTasks);
         const pathHashesObject = this.toSortedPathHashObject(this.pathHashes);
@@ -182,7 +195,9 @@ export class AiIndexService {
             lastError: null,
         };
 
+        let outputPath: string | null = null;
         try {
+            outputPath = await this.getOutputPath();
             const result = await this.writer.writeSnapshot(outputPath, allTasks, baseMeta);
             if (result.serializationError) {
                 this.lastError = result.serializationError;
@@ -199,6 +214,9 @@ export class AiIndexService {
                 ...baseMeta,
                 lastError: this.lastError,
             };
+            if (!outputPath) {
+                return;
+            }
             try {
                 await this.writer.writeMeta(outputPath, errorMeta);
             } catch (metaError) {
@@ -230,11 +248,20 @@ export class AiIndexService {
         };
     }
 
-    private resolveOutputPath(): string {
-        return resolveAiIndexOutputPath(this.getSettings().aiIndex);
+    private async getOutputPath(): Promise<string> {
+        await this.syncOutputPath();
+        return this.outputManager.getCurrentPath();
+    }
+
+    private async syncOutputPath(): Promise<void> {
+        const transition = await this.outputManager.reinitialize(this.getSettings().aiIndex);
+        if (transition.pathChanged) {
+            console.info(`[AiIndexService] AI index output path changed: ${transition.oldPath} -> ${transition.newPath}`);
+        }
     }
 
     private buildIndexHash(tasks: NormalizedTask[]): string {
+        // Keep parity with path hash shape (`id:contentHash`) and hash via TaskNormalizer.
         const raw = tasks
             .map((task) => `${task.id}:${task.contentHash}`)
             .join('|');

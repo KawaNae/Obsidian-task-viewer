@@ -1,4 +1,5 @@
 import { ItemView, WorkspaceLeaf, Menu, setIcon } from 'obsidian';
+import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../services/core/TaskIndex';
 import { TaskCardRenderer } from './taskcard/TaskCardRenderer';
 import { Task, isCompleteStatusChar } from '../types';
@@ -9,6 +10,7 @@ import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import TaskViewerPlugin from '../main';
 import { ViewUtils, FileFilterMenu } from './ViewUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../constants/hover';
+import { TaskLinkInteractionManager } from './taskcard/TaskLinkInteractionManager';
 
 export const VIEW_TYPE_SCHEDULE = 'schedule-view';
 
@@ -17,6 +19,7 @@ export class ScheduleView extends ItemView {
     private plugin: TaskViewerPlugin;
     private taskRenderer: TaskCardRenderer;
     private menuHandler: MenuHandler;
+    private linkInteractionManager: TaskLinkInteractionManager;
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private filterMenu = new FileFilterMenu();
@@ -29,6 +32,7 @@ export class ScheduleView extends ItemView {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.leaf,
         });
+        this.linkInteractionManager = new TaskLinkInteractionManager(this.app);
     }
 
     getViewType() {
@@ -176,22 +180,28 @@ export class ScheduleView extends ItemView {
         }
 
         // Date Header with Day of Week
-        const dateObj = new Date(date);
+        const dateObj = this.parseLocalDate(date);
         const dayOfWeek = dateObj.toLocaleDateString('ja-JP', { weekday: 'short' });
-        const headerText = `${date} (${dayOfWeek})`;
 
         const header = dateSection.createEl('h3', { cls: 'schedule-date-header' });
-        header.setText(headerText);
+        const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(this.app, dateObj);
+        const linkLabel = DailyNoteUtils.getDailyNoteLabelForDate(this.app, dateObj);
+        const dateLink = header.createEl('a', { cls: 'internal-link', text: linkLabel });
+        dateLink.dataset.href = linkTarget;
+        dateLink.setAttribute('href', linkTarget);
+        dateLink.addEventListener('click', (event: MouseEvent) => {
+            event.preventDefault();
+        });
+        header.appendText(` (${dayOfWeek})`);
+
+        this.linkInteractionManager.bind(header, {
+            sourcePath: '',
+            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+            hoverParent: this.leaf as HoverParent,
+        }, { bindClick: false });
 
         // Add click listener to open daily note
         header.addEventListener('click', async () => {
-            const dateObj = new Date(date);
-            // Fix timezone offset for daily note creation
-            // date string is YYYY-MM-DD, we want local midnight for that date
-            const [y, m, d] = date.split('-').map(Number);
-            dateObj.setFullYear(y, m - 1, d);
-            dateObj.setHours(0, 0, 0, 0);
-
             let file = DailyNoteUtils.getDailyNote(this.app, dateObj);
             if (!file) {
                 file = await DailyNoteUtils.createDailyNote(this.app, dateObj);
@@ -240,6 +250,7 @@ export class ScheduleView extends ItemView {
 
                 // Apply color
                 this.applyTaskColor(card, task.file);
+                this.applyTaskLinestyle(card, task.file);
 
                 this.taskRenderer.render(card, task, this, this.plugin.settings);
                 this.menuHandler.addTaskContextMenu(card, task);
@@ -376,7 +387,20 @@ export class ScheduleView extends ItemView {
         return ViewUtils.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color);
     }
 
+    private getFileLinestyle(filePath: string): string {
+        return ViewUtils.getFileLinestyle(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.linestyle);
+    }
+
+    private parseLocalDate(date: string): Date {
+        const [year, month, day] = date.split('-').map(Number);
+        return new Date(year, month - 1, day, 0, 0, 0, 0);
+    }
+
     private applyTaskColor(el: HTMLElement, filePath: string) {
         ViewUtils.applyFileColor(this.app, el, filePath, this.plugin.settings.frontmatterTaskKeys.color);
+    }
+
+    private applyTaskLinestyle(el: HTMLElement, filePath: string) {
+        ViewUtils.applyTaskLinestyle(el, this.getFileLinestyle(filePath));
     }
 }

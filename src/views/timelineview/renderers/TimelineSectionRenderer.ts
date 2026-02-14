@@ -9,6 +9,7 @@ import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { HandleManager } from '../HandleManager';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { shouldSplitTask, splitTaskAtBoundary, RenderableTask } from '../../utils/RenderableTaskUtils';
+import { toDisplayHeightPx, toDisplayTopPx } from '../../../utils/TimelineCardPosition';
 
 
 export class TimelineSectionRenderer {
@@ -125,6 +126,7 @@ export class TimelineSectionRenderer {
 
             // Apply Color
             ViewUtils.applyFileColor(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.color);
+            ViewUtils.applyFileLinestyle(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
 
             // Calculate position
             let startMinutes = DateUtils.timeToMinutes(task.startTime);
@@ -171,9 +173,10 @@ export class TimelineSectionRenderer {
             const widthFraction = taskLayout.width / 100;
             const leftFraction = taskLayout.left / 100;
 
-            el.style.top = `${(relativeStart * zoomLevel) + 1}px`;
-            const heightPx = (duration * zoomLevel) - 3;
-            el.style.height = `${heightPx}px`;
+            const logicalTopPx = relativeStart * zoomLevel;
+            const logicalHeightPx = duration * zoomLevel;
+            el.style.top = `${toDisplayTopPx(logicalTopPx)}px`;
+            el.style.height = `${toDisplayHeightPx(logicalHeightPx)}px`;
             el.style.width = `calc((100% - 8px) * ${widthFraction})`;
             el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
             el.style.zIndex = String(taskLayout.zIndex);

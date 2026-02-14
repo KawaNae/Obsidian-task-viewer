@@ -6,6 +6,8 @@ import { ColorUtils } from '../utils/ColorUtils';
  * Contains common color-related logic used across TimelineView, ScheduleView, and KanbanView.
  */
 export class ViewUtils {
+    private static readonly VALID_LINE_STYLES = new Set(['solid', 'dashed', 'dotted', 'double', 'dashdotted']);
+
     /**
      * Gets the custom color for a file from its frontmatter.
      * @param app - Obsidian App instance
@@ -18,6 +20,27 @@ export class ViewUtils {
 
         const cache = app.metadataCache.getCache(filePath);
         return cache?.frontmatter?.[frontmatterKey] || null;
+    }
+
+    /**
+     * Gets the custom line style for a file from its frontmatter.
+     * Falls back to "solid" for missing or invalid values.
+     */
+    static getFileLinestyle(app: App, filePath: string, frontmatterKey: string | null): string {
+        if (!frontmatterKey) return 'solid';
+
+        const cache = app.metadataCache.getCache(filePath);
+        const value = cache?.frontmatter?.[frontmatterKey];
+        if (typeof value !== 'string') {
+            return 'solid';
+        }
+
+        const normalized = value.trim().toLowerCase();
+        if (!normalized) {
+            return 'solid';
+        }
+
+        return ViewUtils.VALID_LINE_STYLES.has(normalized) ? normalized : 'solid';
     }
 
     /**
@@ -47,6 +70,15 @@ export class ViewUtils {
     }
 
     /**
+     * Applies task accent line style to CSS variable.
+     */
+    static applyTaskLinestyle(el: HTMLElement, linestyle: string): void {
+        const normalized = ViewUtils.VALID_LINE_STYLES.has(linestyle) ? linestyle : 'solid';
+        el.style.setProperty('--file-linestyle', normalized);
+        el.dataset.fileLinestyle = normalized;
+    }
+
+    /**
      * Convenience method that combines getFileColor and applyTaskColor.
      * @param app - Obsidian App instance
      * @param el - The HTML element to style
@@ -56,6 +88,14 @@ export class ViewUtils {
     static applyFileColor(app: App, el: HTMLElement, filePath: string, frontmatterKey: string | null): void {
         const color = ViewUtils.getFileColor(app, filePath, frontmatterKey);
         ViewUtils.applyTaskColor(el, color);
+    }
+
+    /**
+     * Convenience method that combines getFileLinestyle and applyTaskLinestyle.
+     */
+    static applyFileLinestyle(app: App, el: HTMLElement, filePath: string, frontmatterKey: string | null): void {
+        const linestyle = ViewUtils.getFileLinestyle(app, filePath, frontmatterKey);
+        ViewUtils.applyTaskLinestyle(el, linestyle);
     }
 }
 

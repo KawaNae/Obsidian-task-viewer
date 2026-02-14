@@ -112,9 +112,7 @@ export function normalizeAiIndexFileName(value: unknown): string {
         ? trimmed
         : `${trimmed}.ndjson`;
 
-    return normalized.length > 0
-        ? normalized
-        : DEFAULT_AI_INDEX_SETTINGS.fileName;
+    return normalized;
 }
 
 export function normalizeAiIndexFolderPath(value: unknown): string {
@@ -194,33 +192,14 @@ function hasOwn(source: LegacyAiIndexSettings, key: keyof LegacyAiIndexSettings)
 }
 
 function isValidVaultRelativeFolderPath(path: string): boolean {
-    if (!path) {
-        return false;
-    }
-    if (path.startsWith('/')) {
-        return false;
-    }
-    if (path.startsWith('../')) {
-        return false;
-    }
-    if (path.includes(':')) {
-        return false;
-    }
-    if (path.toLowerCase().endsWith('.ndjson')) {
-        return false;
-    }
-
-    const parts = path.split('/');
-    for (const part of parts) {
-        if (!part || part === '..') {
-            return false;
-        }
-    }
-
-    return true;
+    return isValidVaultRelativePath(path) && !path.toLowerCase().endsWith('.ndjson');
 }
 
 function isValidVaultRelativeFilePath(path: string): boolean {
+    return isValidVaultRelativePath(path);
+}
+
+function isValidVaultRelativePath(path: string): boolean {
     if (!path) {
         return false;
     }

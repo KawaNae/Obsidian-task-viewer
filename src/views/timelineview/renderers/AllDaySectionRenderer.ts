@@ -133,6 +133,7 @@ export class AllDaySectionRenderer {
             el.dataset.id = task.id;
 
             ViewUtils.applyFileColor(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.color);
+            ViewUtils.applyFileLinestyle(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
 
             // Use TaskCardRenderer
             this.taskRenderer.render(el, task, owner, this.plugin.settings, { topRight: 'none' });
