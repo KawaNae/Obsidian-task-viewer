@@ -106,6 +106,7 @@ export interface FrontmatterTaskKeys {
     content: string;
     timerTargetId: string;
     color: string;
+    linestyle: string;
 }
 
 export const DEFAULT_FRONTMATTER_TASK_KEYS: FrontmatterTaskKeys = {
@@ -116,6 +117,7 @@ export const DEFAULT_FRONTMATTER_TASK_KEYS: FrontmatterTaskKeys = {
     content: 'tv-content',
     timerTargetId: 'tv-timer-target-id',
     color: 'tv-color',
+    linestyle: 'tv-linestyle',
 };
 
 export function normalizeFrontmatterTaskKeys(value: unknown): FrontmatterTaskKeys {
@@ -141,6 +143,7 @@ export function normalizeFrontmatterTaskKeys(value: unknown): FrontmatterTaskKey
         content: normalize('content'),
         timerTargetId: normalize('timerTargetId'),
         color: normalize('color'),
+        linestyle: normalize('linestyle'),
     };
 }
 
@@ -153,6 +156,7 @@ export function validateFrontmatterTaskKeys(keys: FrontmatterTaskKeys): string |
         'content',
         'timerTargetId',
         'color',
+        'linestyle',
     ];
 
     const normalizedValues = new Map<keyof FrontmatterTaskKeys, string>();

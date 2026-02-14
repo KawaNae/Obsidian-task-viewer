@@ -31,16 +31,71 @@
     scrollbar-width: none;
 }
 
-/* Accent Border - solid background for normal tasks */
+/* Accent Border */
 .task-card::before {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     bottom: 0;
-    width: var(--task-card-accent-width);
+    width: var(--task-card-accent-solid-width, 4px);
+    box-sizing: border-box;
     background-color: var(--file-accent, transparent);
     border-radius: 4px 0 0 4px;
+}
+
+/* Accent Border Variants by tv-linestyle */
+.task-card[data-file-linestyle='solid']::before {
+    width: var(--task-card-accent-solid-width, 4px);
+    background-color: var(--file-accent, transparent);
+    background-image: none;
+}
+
+.task-card[data-file-linestyle='dashed']::before {
+    width: var(--task-card-accent-dashed-width, 4px);
+    background-color: transparent;
+    background-image: repeating-linear-gradient(to bottom,
+            var(--file-accent, var(--tv-accent)) 0 var(--task-card-accent-dashed-line, 6px),
+            transparent var(--task-card-accent-dashed-line, 6px) calc(var(--task-card-accent-dashed-line, 6px) + var(--task-card-accent-dashed-gap, 4px)));
+    background-size: 100% calc(var(--task-card-accent-dashed-line, 6px) + var(--task-card-accent-dashed-gap, 4px));
+    background-repeat: repeat-y;
+}
+
+.task-card[data-file-linestyle='dotted']::before {
+    width: var(--task-card-accent-dotted-width, 4px);
+    background-color: transparent;
+    background-image: repeating-linear-gradient(to bottom,
+            var(--file-accent, var(--tv-accent)) 0 var(--task-card-accent-dotted-line, 6px),
+            transparent var(--task-card-accent-dotted-line, 6px) calc(var(--task-card-accent-dotted-line, 6px) + var(--task-card-accent-dotted-gap, 4px)));
+    background-size: 100% calc(var(--task-card-accent-dotted-line, 6px) + var(--task-card-accent-dotted-gap, 4px));
+    background-repeat: repeat-y;
+}
+
+.task-card[data-file-linestyle='double']::before {
+    width: calc(
+        var(--task-card-accent-double-left-width, 1px) +
+        var(--task-card-accent-double-gap, 2px) +
+        var(--task-card-accent-double-right-width, 1px)
+    );
+    background-color: transparent;
+    background-image: linear-gradient(to right,
+            var(--file-accent, var(--tv-accent)) 0 var(--task-card-accent-double-left-width, 1px),
+            transparent var(--task-card-accent-double-left-width, 1px) calc(var(--task-card-accent-double-left-width, 1px) + var(--task-card-accent-double-gap, 2px)),
+            var(--file-accent, var(--tv-accent)) calc(var(--task-card-accent-double-left-width, 1px) + var(--task-card-accent-double-gap, 2px)) calc(var(--task-card-accent-double-left-width, 1px) + var(--task-card-accent-double-gap, 2px) + var(--task-card-accent-double-right-width, 1px)));
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+}
+
+.task-card[data-file-linestyle='dashdotted']::before {
+    width: var(--task-card-accent-dashdotted-width, 4px);
+    background-color: transparent;
+    background-image: repeating-linear-gradient(to bottom,
+            var(--file-accent, var(--tv-accent)) 0 var(--task-card-accent-dashdotted-line1, 7px),
+            transparent var(--task-card-accent-dashdotted-line1, 7px) calc(var(--task-card-accent-dashdotted-line1, 7px) + var(--task-card-accent-dashdotted-gap1, 3px)),
+            var(--file-accent, var(--tv-accent)) calc(var(--task-card-accent-dashdotted-line1, 7px) + var(--task-card-accent-dashdotted-gap1, 3px)) calc(var(--task-card-accent-dashdotted-line1, 7px) + var(--task-card-accent-dashdotted-gap1, 3px) + var(--task-card-accent-dashdotted-line2, 2px)),
+            transparent calc(var(--task-card-accent-dashdotted-line1, 7px) + var(--task-card-accent-dashdotted-gap1, 3px) + var(--task-card-accent-dashdotted-line2, 2px)) calc(var(--task-card-accent-dashdotted-line1, 7px) + var(--task-card-accent-dashdotted-gap1, 3px) + var(--task-card-accent-dashdotted-line2, 2px) + var(--task-card-accent-dashdotted-gap2, 3px)));
+    background-size: 100% calc(var(--task-card-accent-dashdotted-line1, 7px) + var(--task-card-accent-dashdotted-gap1, 3px) + var(--task-card-accent-dashdotted-line2, 2px) + var(--task-card-accent-dashdotted-gap2, 3px));
+    background-repeat: repeat-y;
 }
 
 /* ==========================================================================
@@ -101,19 +156,7 @@
     overflow: visible;
 }
 
-/* Inherited Task Card - date inherited from parent (time-only notation) */
-/* Using background gradient for customizable dashed line, centered vertically */
-.task-card--inherited::before {
-    background-color: transparent;
-    background-image: linear-gradient(to bottom,
-            var(--file-accent, var(--tv-accent)) 0,
-            var(--file-accent, var(--tv-accent)) 4px,
-            transparent 4px,
-            transparent 8px);
-    background-size: var(--task-card-accent-width) 8px;
-    background-position: left center;
-    background-repeat: repeat-y;
-}
+/* Inherited Task Card - use the same accent border style as standard cards. */
 
 /* Split Task Cards - tasks that cross day boundary */
 .task-card--split {

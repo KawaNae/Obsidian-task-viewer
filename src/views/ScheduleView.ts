@@ -250,6 +250,7 @@ export class ScheduleView extends ItemView {
 
                 // Apply color
                 this.applyTaskColor(card, task.file);
+                this.applyTaskLinestyle(card, task.file);
 
                 this.taskRenderer.render(card, task, this, this.plugin.settings);
                 this.menuHandler.addTaskContextMenu(card, task);
@@ -386,6 +387,10 @@ export class ScheduleView extends ItemView {
         return ViewUtils.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color);
     }
 
+    private getFileLinestyle(filePath: string): string {
+        return ViewUtils.getFileLinestyle(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.linestyle);
+    }
+
     private parseLocalDate(date: string): Date {
         const [year, month, day] = date.split('-').map(Number);
         return new Date(year, month - 1, day, 0, 0, 0, 0);
@@ -393,5 +398,9 @@ export class ScheduleView extends ItemView {
 
     private applyTaskColor(el: HTMLElement, filePath: string) {
         ViewUtils.applyFileColor(this.app, el, filePath, this.plugin.settings.frontmatterTaskKeys.color);
+    }
+
+    private applyTaskLinestyle(el: HTMLElement, filePath: string) {
+        ViewUtils.applyTaskLinestyle(el, this.getFileLinestyle(filePath));
     }
 }
