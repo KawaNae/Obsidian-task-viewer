@@ -17,6 +17,7 @@ import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/ColorSuggest';
 import { PropertyColorSuggest } from './suggest/PropertyColorSuggest';
 import { DateUtils } from './utils/DateUtils';
+import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
@@ -56,6 +57,11 @@ export default class TaskViewerPlugin extends Plugin {
         }));
 
         // Register View
+        this.registerHoverLinkSource(TASK_VIEWER_HOVER_SOURCE_ID, {
+            display: TASK_VIEWER_HOVER_SOURCE_DISPLAY,
+            defaultMod: false,
+        });
+
         this.registerView(
             VIEW_TYPE_TIMELINE,
             (leaf) => new TimelineView(leaf, this.taskIndex, this)

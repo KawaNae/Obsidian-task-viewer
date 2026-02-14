@@ -1,7 +1,11 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import TaskViewerPlugin from './main';
 import { FrontmatterTaskKeys, HabitType, validateFrontmatterTaskKeys } from './types';
-import { normalizeAiIndexSettings } from './services/aiindex/AiIndexSettings';
+import {
+    DEFAULT_AI_INDEX_SETTINGS,
+    normalizeAiIndexSettings,
+    resolveAiIndexOutputPath,
+} from './services/aiindex/AiIndexSettings';
 
 export class TaskViewerSettingTab extends PluginSettingTab {
     plugin: TaskViewerPlugin;
@@ -91,44 +95,69 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
+        let customFolderInputEl: HTMLInputElement | null = null;
+        let customFolderSetting: Setting | null = null;
+        let resolvedPathSetting: Setting | null = null;
+
+        const updateResolvedPathUi = () => {
+            const effectivePath = resolveAiIndexOutputPath(this.plugin.settings.aiIndex);
+            const isPluginFolderMode = this.plugin.settings.aiIndex.outputToPluginFolder;
+
+            if (customFolderInputEl) {
+                customFolderInputEl.disabled = isPluginFolderMode;
+            }
+
+            if (customFolderSetting) {
+                customFolderSetting.setDesc(isPluginFolderMode
+                    ? `Disabled while plugin-folder output is enabled. Effective output: ${effectivePath}`
+                    : `Vault-relative output folder for AI index (folder only). Effective output: ${effectivePath}`);
+            }
+
+            if (resolvedPathSetting) {
+                resolvedPathSetting.setDesc(effectivePath);
+            }
+        };
+
         new Setting(containerEl)
-            .setName('AI Index Output Path')
-            .setDesc('Vault-relative output path for NDJSON index.')
+            .setName('AI Index File Name')
+            .setDesc('Output file name for AI index. ".ndjson" is auto-appended if missing.')
             .addText(text => {
-                let draftPath = this.plugin.settings.aiIndex.outputPath;
+                let draftFileName = this.plugin.settings.aiIndex.fileName;
                 let isSaving = false;
 
-                const commitPath = async (): Promise<void> => {
+                const commitFileName = async (): Promise<void> => {
                     if (isSaving) return;
                     const normalized = normalizeAiIndexSettings({
                         ...this.plugin.settings.aiIndex,
-                        outputPath: draftPath
+                        fileName: draftFileName,
                     });
 
-                    text.setValue(normalized.outputPath);
+                    text.setValue(normalized.fileName);
 
-                    if (normalized.outputPath === this.plugin.settings.aiIndex.outputPath) {
+                    if (normalized.fileName === this.plugin.settings.aiIndex.fileName) {
+                        updateResolvedPathUi();
                         return;
                     }
 
                     isSaving = true;
                     try {
-                        this.plugin.settings.aiIndex.outputPath = normalized.outputPath;
+                        this.plugin.settings.aiIndex = normalized;
                         await this.plugin.saveSettings();
                     } finally {
                         isSaving = false;
+                        updateResolvedPathUi();
                     }
                 };
 
                 text
-                    .setPlaceholder('.obsidian/plugins/obsidian-task-viewer/ai-task-index.ndjson')
-                    .setValue(this.plugin.settings.aiIndex.outputPath)
+                    .setPlaceholder(DEFAULT_AI_INDEX_SETTINGS.fileName)
+                    .setValue(this.plugin.settings.aiIndex.fileName)
                     .onChange((value) => {
-                        draftPath = value;
+                        draftFileName = value;
                     });
 
                 text.inputEl.addEventListener('blur', () => {
-                    void commitPath();
+                    void commitFileName();
                 });
 
                 text.inputEl.addEventListener('keydown', (event) => {
@@ -138,6 +167,79 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     }
                 });
             });
+
+        new Setting(containerEl)
+            .setName('Output AI Index to Plugin Folder')
+            .setDesc('If enabled, AI index is written under plugin folder.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.aiIndex.outputToPluginFolder)
+                .onChange(async (value) => {
+                    const normalized = normalizeAiIndexSettings({
+                        ...this.plugin.settings.aiIndex,
+                        outputToPluginFolder: value,
+                    });
+                    this.plugin.settings.aiIndex = normalized;
+                    await this.plugin.saveSettings();
+                    updateResolvedPathUi();
+                }));
+
+        customFolderSetting = new Setting(containerEl)
+            .setName('Custom AI Index Output Path')
+            .addText(text => {
+                let draftFolder = this.plugin.settings.aiIndex.customOutputFolder;
+                let isSaving = false;
+
+                const commitFolder = async (): Promise<void> => {
+                    if (isSaving) return;
+                    const normalized = normalizeAiIndexSettings({
+                        ...this.plugin.settings.aiIndex,
+                        customOutputFolder: draftFolder,
+                    });
+
+                    text.setValue(normalized.customOutputFolder);
+
+                    if (normalized.customOutputFolder === this.plugin.settings.aiIndex.customOutputFolder) {
+                        updateResolvedPathUi();
+                        return;
+                    }
+
+                    isSaving = true;
+                    try {
+                        this.plugin.settings.aiIndex = normalized;
+                        await this.plugin.saveSettings();
+                    } finally {
+                        isSaving = false;
+                        updateResolvedPathUi();
+                    }
+                };
+
+                text
+                    .setPlaceholder(DEFAULT_AI_INDEX_SETTINGS.customOutputFolder)
+                    .setValue(this.plugin.settings.aiIndex.customOutputFolder)
+                    .onChange((value) => {
+                        draftFolder = value;
+                    });
+
+                customFolderInputEl = text.inputEl;
+                text.inputEl.disabled = this.plugin.settings.aiIndex.outputToPluginFolder;
+
+                text.inputEl.addEventListener('blur', () => {
+                    void commitFolder();
+                });
+
+                text.inputEl.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        text.inputEl.blur();
+                    }
+                });
+            });
+
+        resolvedPathSetting = new Setting(containerEl)
+            .setName('Resolved AI Index Output Path')
+            .setDesc(resolveAiIndexOutputPath(this.plugin.settings.aiIndex));
+
+        updateResolvedPathUi();
 
         new Setting(containerEl)
             .setName('AI Index Debounce (ms)')

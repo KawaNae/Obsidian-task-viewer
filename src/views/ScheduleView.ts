@@ -8,6 +8,7 @@ import { DateUtils } from '../utils/DateUtils';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import TaskViewerPlugin from '../main';
 import { ViewUtils, FileFilterMenu } from './ViewUtils';
+import { TASK_VIEWER_HOVER_SOURCE_ID } from '../constants/hover';
 
 export const VIEW_TYPE_SCHEDULE = 'schedule-view';
 
@@ -24,7 +25,10 @@ export class ScheduleView extends ItemView {
         super(leaf);
         this.taskIndex = taskIndex;
         this.plugin = plugin;
-        this.taskRenderer = new TaskCardRenderer(this.app, this.taskIndex);
+        this.taskRenderer = new TaskCardRenderer(this.app, this.taskIndex, {
+            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+            getHoverParent: () => this.leaf,
+        });
     }
 
     getViewType() {

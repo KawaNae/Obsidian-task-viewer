@@ -17,6 +17,7 @@ import { AllDaySectionRenderer } from './renderers/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
 import { DeadlineListRenderer } from './renderers/DeadlineListRenderer';
 import { HabitTrackerRenderer } from './renderers/HabitTrackerRenderer';
+import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 
 
 export const VIEW_TYPE_TIMELINE = 'timeline-view';
@@ -89,7 +90,10 @@ export class TimelineView extends ItemView {
             showDeadlineList: true, // Default: show deadline list
             filterFiles: null
         };
-        this.taskRenderer = new TaskCardRenderer(this.app, this.taskIndex);
+        this.taskRenderer = new TaskCardRenderer(this.app, this.taskIndex, {
+            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+            getHoverParent: () => this.leaf,
+        });
     }
 
     getViewType() {
