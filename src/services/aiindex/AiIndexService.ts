@@ -1,6 +1,6 @@
-import { App, Notice, normalizePath } from 'obsidian';
+import { App, Notice } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
-import { DEFAULT_AI_INDEX_SETTINGS } from './AiIndexSettings';
+import { resolveAiIndexOutputPath } from './AiIndexSettings';
 import { AiIndexWriter } from './AiIndexWriter';
 import { type AiIndexMeta, type NormalizedTask } from './NormalizedTask';
 import { TaskNormalizer } from './TaskNormalizer';
@@ -231,20 +231,7 @@ export class AiIndexService {
     }
 
     private resolveOutputPath(): string {
-        const raw = this.getSettings().aiIndex.outputPath?.trim() || DEFAULT_AI_INDEX_SETTINGS.outputPath;
-        const normalized = normalizePath(raw);
-
-        if (!normalized || normalized.startsWith('/') || normalized.startsWith('../')) {
-            return DEFAULT_AI_INDEX_SETTINGS.outputPath;
-        }
-        if (normalized.includes(':')) {
-            return DEFAULT_AI_INDEX_SETTINGS.outputPath;
-        }
-        if (normalized.split('/').some((part) => part === '..')) {
-            return DEFAULT_AI_INDEX_SETTINGS.outputPath;
-        }
-
-        return normalized;
+        return resolveAiIndexOutputPath(this.getSettings().aiIndex);
     }
 
     private buildIndexHash(tasks: NormalizedTask[]): string {
@@ -277,7 +264,9 @@ export class AiIndexService {
         const completeChars = [...settings.completeStatusChars].sort();
         return JSON.stringify({
             enabled: settings.aiIndex.enabled,
-            outputPath: settings.aiIndex.outputPath,
+            fileName: settings.aiIndex.fileName,
+            outputToPluginFolder: settings.aiIndex.outputToPluginFolder,
+            customOutputFolder: settings.aiIndex.customOutputFolder,
             debounceMs: settings.aiIndex.debounceMs,
             includeParsers,
             includeDone: settings.aiIndex.includeDone,

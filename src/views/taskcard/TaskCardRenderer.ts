@@ -5,6 +5,8 @@ import { DateUtils } from '../../utils/DateUtils';
 import { ChildItemBuilder } from './ChildItemBuilder';
 import { ChildSectionRenderer } from './ChildSectionRenderer';
 import { CheckboxWiring } from './CheckboxWiring';
+import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
+import type { TaskCardLinkRuntime } from './types';
 
 export class TaskCardRenderer {
     private static readonly COLLAPSE_THRESHOLD = 3;
@@ -13,11 +15,13 @@ export class TaskCardRenderer {
     private childItemBuilder: ChildItemBuilder;
     private childSectionRenderer: ChildSectionRenderer;
     private checkboxWiring: CheckboxWiring;
+    private linkInteractionManager: TaskLinkInteractionManager;
 
-    constructor(private app: App, taskIndex: TaskIndex) {
+    constructor(private app: App, taskIndex: TaskIndex, private linkRuntime: TaskCardLinkRuntime) {
         this.checkboxWiring = new CheckboxWiring(app, taskIndex);
         this.childItemBuilder = new ChildItemBuilder(taskIndex);
         this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring);
+        this.linkInteractionManager = new TaskLinkInteractionManager(app);
     }
 
     async render(
@@ -42,7 +46,7 @@ export class TaskCardRenderer {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
         }
 
-        this.bindInternalLinks(contentContainer, task);
+        this.bindInternalLinks(contentContainer, task.file);
         this.bindParentCheckbox(contentContainer, task.id, settings);
     }
 
@@ -207,20 +211,11 @@ export class TaskCardRenderer {
         );
     }
 
-    private bindInternalLinks(contentContainer: HTMLElement, task: Task): void {
-        const internalLinks = contentContainer.querySelectorAll('a.internal-link');
-        internalLinks.forEach((link) => {
-            link.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                const target = (link as HTMLElement).dataset.href;
-                if (target) {
-                    this.app.workspace.openLinkText(target, task.file, true);
-                }
-            });
-            link.addEventListener('pointerdown', (e) => {
-                e.stopPropagation();
-            });
+    private bindInternalLinks(contentContainer: HTMLElement, sourcePath: string): void {
+        this.linkInteractionManager.bind(contentContainer, {
+            sourcePath,
+            hoverSource: this.linkRuntime.hoverSource,
+            hoverParent: this.linkRuntime.getHoverParent(),
         });
     }
 
