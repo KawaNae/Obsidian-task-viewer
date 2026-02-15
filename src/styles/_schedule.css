@@ -39,8 +39,24 @@
 }
 
 .schedule-timeline .date-header,
-.schedule-timeline .habits-section {
+.schedule-timeline .habits-section,
+.schedule-timeline .allday-section {
     overflow: hidden;
+}
+
+.schedule-sticky-row {
+    position: sticky;
+    margin: 0;
+}
+
+.schedule-timeline .allday-section::before {
+    display: none;
+    height: 0;
+}
+
+.schedule-timeline .allday-section__cell:not(.allday-section__axis) {
+    padding-left: 6px;
+    padding-right: 6px;
 }
 
 .schedule-timeline .date-header__cell:first-child {
@@ -121,6 +137,10 @@
     transition: transform 0.2s;
 }
 
+.collapse-icon-btn {
+    flex-shrink: 0;
+}
+
 .collapsible.collapsed .collapse-icon {
     transform: rotate(-90deg);
 }
@@ -157,7 +177,7 @@
 .schedule-timeline-main {
     position: relative;
     border-radius: 8px;
-    background-color: var(--tv-bg-muted);
+    background-color: var(--tv-bg-schedule-main);
     overflow: hidden;
 }
 

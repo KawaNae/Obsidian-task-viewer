@@ -122,6 +122,8 @@ body {
     --tv-bg-pomodoro-start: var(--tv-bg-primary);
     --tv-bg-pomodoro-end: var(--tv-bg-secondary);
 
+    --tv-bg-schedule-main: var(--tv-bg-primary);
+
     --tv-shadow-rgb: var(--mono-rgb-100);
     --tv-shadow-a-card: 0.25;
     --tv-shadow-a-strong: 0.3;
