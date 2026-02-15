@@ -11,6 +11,10 @@
     flex-shrink: 0;
 }
 
+.schedule-view__fixed-host {
+    flex-shrink: 0;
+}
+
 .schedule-view__body-scroll {
     flex: 1;
     min-height: 0;
@@ -29,41 +33,41 @@
 }
 
 .schedule-container {
-    max-width: 1000px;
     margin: 0 auto;
+    width: 100%;
 }
 
-.schedule-timeline {
+.schedule-fixed-rows {
     display: flex;
     flex-direction: column;
 }
 
-.schedule-timeline .date-header,
-.schedule-timeline .habits-section,
-.schedule-timeline .allday-section {
+.schedule-scroll-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.schedule-fixed-rows .date-header,
+.schedule-fixed-rows .habits-section,
+.schedule-fixed-rows .allday-section {
     overflow: hidden;
 }
 
-.schedule-sticky-row {
-    position: sticky;
-    margin: 0;
-}
-
-.schedule-timeline .allday-section::before {
+.schedule-fixed-rows .allday-section::before {
     display: none;
     height: 0;
 }
 
-.schedule-timeline .allday-section__cell:not(.allday-section__axis) {
+.schedule-fixed-rows .allday-section__cell:not(.allday-section__axis) {
     padding-left: 6px;
     padding-right: 6px;
 }
 
-.schedule-timeline .date-header__cell:first-child {
+.schedule-fixed-rows .date-header__cell:first-child {
     cursor: default;
 }
 
-.schedule-timeline .date-header__cell:first-child:hover {
+.schedule-fixed-rows .date-header__cell:first-child:hover {
     background-color: transparent;
     color: inherit;
     text-decoration: none;
@@ -193,7 +197,7 @@
 
 .timeline-hour-marker {
     position: absolute;
-    left: 10px;
+    left: 4px;
     right: 0;
 }
 
@@ -209,7 +213,7 @@
 
 .hour-line {
     position: absolute;
-    left: 76px;
+    left: calc(var(--schedule-axis-width) - 4px);
     right: 12px;
     height: 1px;
     background: var(--tv-border);
@@ -219,7 +223,7 @@
 
 .timeline-tasks-container {
     position: absolute;
-    left: 92px;
+    left: calc(var(--schedule-axis-width) + 12px);
     right: 12px;
     top: 0;
     height: 100%;
@@ -247,7 +251,7 @@
 
 .timeline-now-line {
     position: absolute;
-    left: 76px;
+    left: calc(var(--schedule-axis-width) - 4px);
     right: 12px;
     height: 2px;
     background-color: var(--tv-accent);

@@ -74,7 +74,6 @@ export class ScheduleView extends ItemView {
     private menuHandler: MenuHandler;
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
-    private stickyRowsObserver: ResizeObserver | null = null;
     private currentDate = '';
     private collapsedSections: Record<CollapsibleSectionKey, boolean> = {
         allDay: false,
@@ -153,11 +152,6 @@ export class ScheduleView extends ItemView {
     }
 
     async onClose(): Promise<void> {
-        if (this.stickyRowsObserver) {
-            this.stickyRowsObserver.disconnect();
-            this.stickyRowsObserver = null;
-        }
-
         if (this.unsubscribe) {
             this.unsubscribe();
             this.unsubscribe = null;
@@ -193,21 +187,20 @@ export class ScheduleView extends ItemView {
             return;
         }
 
-        if (this.stickyRowsObserver) {
-            this.stickyRowsObserver.disconnect();
-            this.stickyRowsObserver = null;
-        }
-
         this.container.empty();
         const toolbarHost = this.container.createDiv('schedule-view__toolbar-host');
         this.renderToolbar(toolbarHost);
 
-        const bodyScroll = this.container.createDiv('schedule-view__body-scroll');
-        const scheduleContainer = bodyScroll.createDiv('schedule-container');
         const tasks = this.getTasksForDate(this.currentDate);
         this.menuHandler.setViewStartDate(this.currentDate);
 
-        await this.renderDayTimeline(scheduleContainer, this.currentDate, tasks);
+        const fixedHost = this.container.createDiv('schedule-view__fixed-host');
+        const fixedContainer = fixedHost.createDiv('schedule-container schedule-fixed-rows');
+
+        const bodyScroll = this.container.createDiv('schedule-view__body-scroll schedule-body-scroll');
+        const bodyContainer = bodyScroll.createDiv('schedule-container schedule-scroll-content');
+
+        await this.renderDayTimeline(fixedContainer, bodyContainer, this.currentDate, tasks);
     }
 
     private renderToolbar(parent: HTMLElement): void {
@@ -243,32 +236,33 @@ export class ScheduleView extends ItemView {
         });
     }
 
-    private async renderDayTimeline(container: HTMLElement, date: string, tasks: RenderableTask[]): Promise<void> {
-        const timeline = container.createDiv('schedule-timeline');
-        this.renderDateHeader(timeline, date);
-        this.renderHabitsSection(timeline, date);
-
+    private async renderDayTimeline(
+        fixedContainer: HTMLElement,
+        bodyContainer: HTMLElement,
+        date: string,
+        tasks: RenderableTask[]
+    ): Promise<void> {
         const categorized = this.categorizeTasksBySection(tasks, date);
 
-        await this.renderAllDaySection(timeline, categorized.allDay);
+        this.renderDateHeader(fixedContainer, date);
+        this.renderHabitsSection(fixedContainer, date);
+        await this.renderAllDaySection(fixedContainer, categorized.allDay);
 
-        await this.renderTimelineMain(timeline, categorized.timed);
+        await this.renderTimelineMain(bodyContainer, categorized.timed);
 
         if (categorized.deadlines.length > 0) {
             await this.renderCollapsibleTaskSection(
-                timeline,
+                bodyContainer,
                 'schedule-deadline-section',
                 'Deadlines',
                 categorized.deadlines,
                 'deadlines'
             );
         }
-
-        this.setupStickyRows(timeline);
     }
 
     private renderDateHeader(container: HTMLElement, date: string): void {
-        const row = container.createDiv('timeline-row date-header schedule-sticky-row');
+        const row = container.createDiv('timeline-row date-header');
         row.style.gridTemplateColumns = this.getScheduleRowColumns();
         row.createDiv('date-header__cell').setText(' ');
 
@@ -321,13 +315,13 @@ export class ScheduleView extends ItemView {
         if (this.plugin.settings.habits.length === 0) {
             return;
         }
-        const row = container.createDiv('timeline-row habits-section schedule-sticky-row');
+        const row = container.createDiv('timeline-row habits-section');
         row.style.gridTemplateColumns = this.getScheduleRowColumns();
         this.habitRenderer.render(row, [date]);
     }
 
     private async renderAllDaySection(container: HTMLElement, tasks: RenderableTask[]): Promise<void> {
-        const row = container.createDiv('timeline-row allday-section schedule-sticky-row');
+        const row = container.createDiv('timeline-row allday-section');
         row.style.gridTemplateColumns = this.getScheduleRowColumns();
 
         const axisCell = row.createDiv('allday-section__cell allday-section__axis');
@@ -355,7 +349,6 @@ export class ScheduleView extends ItemView {
         const toggleCollapsed = () => {
             this.collapsedSections.allDay = !this.collapsedSections.allDay;
             applyCollapsedState();
-            this.updateStickyRowOffsets(container);
         };
 
         axisCell.addEventListener('click', () => {
@@ -377,42 +370,7 @@ export class ScheduleView extends ItemView {
     }
 
     private getScheduleRowColumns(): string {
-        return '80px minmax(0, 1fr)';
-    }
-
-    private setupStickyRows(timeline: HTMLElement): void {
-        if (this.stickyRowsObserver) {
-            this.stickyRowsObserver.disconnect();
-            this.stickyRowsObserver = null;
-        }
-
-        this.updateStickyRowOffsets(timeline);
-
-        const stickyRows = timeline.querySelectorAll<HTMLElement>('.schedule-sticky-row');
-        if (stickyRows.length === 0) {
-            return;
-        }
-
-        this.stickyRowsObserver = new ResizeObserver(() => {
-            this.updateStickyRowOffsets(timeline);
-        });
-
-        stickyRows.forEach((row) => {
-            this.stickyRowsObserver?.observe(row);
-        });
-    }
-
-    private updateStickyRowOffsets(timeline: HTMLElement): void {
-        const stickyRows = Array.from(timeline.querySelectorAll<HTMLElement>('.schedule-sticky-row'));
-        let topOffset = 0;
-        let zIndex = 40;
-
-        for (const row of stickyRows) {
-            row.style.top = `${topOffset}px`;
-            row.style.zIndex = String(zIndex);
-            topOffset += row.getBoundingClientRect().height;
-            zIndex -= 1;
-        }
+        return 'var(--schedule-axis-width) minmax(0, 1fr)';
     }
 
     private async renderCollapsibleTaskSection(
