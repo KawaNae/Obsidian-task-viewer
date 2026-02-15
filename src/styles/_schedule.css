@@ -1,39 +1,61 @@
-/* Schedule View Container */
 .schedule-view-container {
+    display: flex;
+    flex-direction: column;
     height: 100%;
     width: 100%;
-    overflow-y: auto;
+    overflow: hidden;
     padding: 0 !important;
 }
 
+.schedule-view__toolbar-host {
+    flex-shrink: 0;
+}
+
+.schedule-view__body-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.schedule-view__body-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.schedule-view-container .view-toolbar {
+    position: static;
+    background-color: transparent;
+}
+
+.schedule-date-label {
+    margin: 0 8px;
+    font-size: 1.05em;
+    font-weight: 700;
+}
+
 .schedule-container {
-    max-width: 800px;
+    max-width: 1000px;
     margin: 0 auto;
-    display: flex;
-    flex-direction: column;
+    padding: 7px;
 }
 
-.schedule-date-section {
+.schedule-timeline {
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    padding: 10px;
-    border-radius: 6px;
+    gap: 20px;
 }
 
-/* Past Date Emphasis: Red Text in Header */
-.schedule-date-section.is-past .schedule-date-header {
-    color: var(--tv-text-danger);
-    border-bottom-color: var(--tv-text-danger);
+.schedule-date-header-row {
+    padding: 2px 0;
 }
 
 .schedule-date-header {
     margin: 0;
-    padding-bottom: 5px;
+    padding-bottom: 6px;
     border-bottom: 2px solid var(--tv-border);
-    /* Gray divider */
     color: var(--tv-text);
-    font-weight: bold;
+    font-weight: 700;
     cursor: pointer;
 }
 
@@ -52,47 +74,146 @@
     text-decoration: underline;
 }
 
-.schedule-task-list {
+.schedule-section {
+    padding: 12px;
+    border-radius: 8px;
+    background-color: var(--tv-bg-muted);
+}
+
+.section-header {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--tv-text-muted);
+    font-size: 0.92em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    user-select: none;
+}
+
+.section-header:hover {
+    color: var(--tv-text);
+}
+
+.collapse-icon {
+    display: inline-block;
+    width: 1em;
+    transition: transform 0.2s;
+}
+
+.collapsible.collapsed .collapse-icon {
+    transform: rotate(-90deg);
+}
+
+.collapsible.collapsed > *:not(.section-header) {
+    display: none;
+}
+
+.schedule-section-tasks {
+    margin-top: 10px;
     display: flex;
     flex-direction: column;
+    gap: 8px;
 }
 
-.schedule-empty-card {
-    height: 40px;
-    /* Fixed height for visual placeholder */
-    border: 2px dashed var(--tv-border);
-    border-radius: 6px;
-    /* No text content, just visual */
-}
-
-.schedule-task-wrapper {
+.schedule-task-wrapper,
+.schedule-flow-task-wrapper {
     position: relative;
     display: flex;
     flex-direction: column;
-    padding: 0;
-    border: none;
-    margin: 0;
 }
 
-/* Task Card Overrides for Schedule View */
-/* Increase specificity to override .task-card.task-card--allday in _task-card.css */
 .schedule-view-container .schedule-task-wrapper .task-card {
-    /* Inherit relative from base .task-card */
+    position: relative;
     top: auto;
     left: auto;
     width: 100%;
     height: auto;
     min-height: auto;
     transform: none;
-
-    /* Rendering Fixes */
-    overflow: visible;
-    /* Prevent clipping issues */
-    box-shadow: none;
-    border-radius: var(--task-card-border-radius);
+    margin-bottom: 0;
 }
 
-/* Remove margin from the last card */
-.schedule-task-list>.schedule-task-wrapper:last-child .task-card {
-    margin-bottom: 0 !important;
+.schedule-timeline-main {
+    position: relative;
+    border-radius: 8px;
+    background-color: var(--tv-bg-muted);
+    overflow: hidden;
+}
+
+.timeline-markers {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 100%;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.timeline-hour-marker {
+    position: absolute;
+    left: 0;
+    right: 0;
+}
+
+.hour-label {
+    position: absolute;
+    left: 8px;
+    top: -10px;
+    font-size: 0.82em;
+    font-weight: 500;
+    color: var(--tv-text-muted);
+    font-family: var(--tv-font-mono);
+}
+
+.hour-line {
+    position: absolute;
+    left: 76px;
+    right: 12px;
+    height: 1px;
+    background: var(--tv-border);
+    /* Align grid-line phase with TimelineView so toDisplayTop/Height spacing matches. */
+    top: -1px;
+}
+
+.timeline-tasks-container {
+    position: absolute;
+    left: 92px;
+    right: 12px;
+    top: 0;
+    height: 100%;
+}
+
+.task-wrapper {
+    position: absolute;
+    box-sizing: border-box;
+    padding: 0 4px;
+}
+
+.schedule-flow-task-wrapper {
+    height: 100%;
+}
+
+.schedule-flow-task-wrapper .task-card {
+    position: relative;
+    height: 100%;
+    min-height: 0;
+    margin-bottom: 0;
+    overflow: hidden;
+    box-shadow: 0 2px 6px var(--tv-shadow-medium);
+    transition: filter 120ms ease;
+}
+
+.timeline-now-line {
+    position: absolute;
+    left: 76px;
+    right: 12px;
+    height: 2px;
+    background-color: var(--tv-accent);
+    z-index: 10;
+    pointer-events: none;
 }
