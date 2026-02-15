@@ -2,16 +2,17 @@ import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
 import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../services/core/TaskIndex';
 import { TaskCardRenderer } from './taskcard/TaskCardRenderer';
-import { Task } from '../types';
+import { Task, isCompleteStatusChar } from '../types';
 import { shouldSplitTask, splitTaskAtBoundary, RenderableTask } from './utils/RenderableTaskUtils';
 import { MenuHandler } from '../interaction/menu/MenuHandler';
 import { DateUtils } from '../utils/DateUtils';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import TaskViewerPlugin from '../main';
-import { ViewUtils, FileFilterMenu } from './ViewUtils';
+import { ViewUtils, FileFilterMenu, DateNavigator } from './ViewUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../constants/hover';
 import { TaskLinkInteractionManager } from './taskcard/TaskLinkInteractionManager';
 import { toDisplayHeightPx, toDisplayTopPx } from '../utils/TimelineCardPosition';
+import { HabitTrackerRenderer } from './timelineview/renderers/HabitTrackerRenderer';
 
 export const VIEW_TYPE_SCHEDULE = 'schedule-view';
 
@@ -67,6 +68,7 @@ export class ScheduleView extends ItemView {
     private readonly plugin: TaskViewerPlugin;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
+    private readonly habitRenderer: HabitTrackerRenderer;
     private readonly filterMenu = new FileFilterMenu();
 
     private menuHandler: MenuHandler;
@@ -87,6 +89,7 @@ export class ScheduleView extends ItemView {
             getHoverParent: () => this.leaf,
         });
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app);
+        this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
     }
 
     getViewType(): string {
@@ -198,31 +201,15 @@ export class ScheduleView extends ItemView {
 
     private renderToolbar(parent: HTMLElement): void {
         const toolbar = parent.createDiv('view-toolbar');
-
-        const prevBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(prevBtn, 'chevron-left');
-        prevBtn.setAttribute('aria-label', 'Previous day');
-        prevBtn.setAttribute('title', 'Previous day');
-        prevBtn.addEventListener('click', () => this.navigateDate(-1));
-
-        const dateLabel = toolbar.createSpan('schedule-date-label');
-        dateLabel.setText(this.formatDateLabel(this.currentDate));
-
-        const nextBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(nextBtn, 'chevron-right');
-        nextBtn.setAttribute('aria-label', 'Next day');
-        nextBtn.setAttribute('title', 'Next day');
-        nextBtn.addEventListener('click', () => this.navigateDate(1));
-
-        const todayBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon view-toolbar__btn--today' });
-        setIcon(todayBtn, 'circle');
-        todayBtn.setAttribute('aria-label', 'Today');
-        todayBtn.setAttribute('title', 'Today');
-        todayBtn.addEventListener('click', () => {
-            this.currentDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-            void this.app.workspace.requestSaveLayout();
-            void this.render();
-        });
+        DateNavigator.render(
+            toolbar,
+            (days) => this.navigateDate(days),
+            () => {
+                this.currentDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+                void this.app.workspace.requestSaveLayout();
+                void this.render();
+            }
+        );
 
         const spacer = toolbar.createDiv('view-toolbar__spacer');
         spacer.style.flex = '1';
@@ -248,6 +235,7 @@ export class ScheduleView extends ItemView {
     private async renderDayTimeline(container: HTMLElement, date: string, tasks: RenderableTask[]): Promise<void> {
         const timeline = container.createDiv('schedule-timeline');
         this.renderDateHeader(timeline, date);
+        this.renderHabitsSection(timeline, date);
 
         const categorized = this.categorizeTasksBySection(tasks, date);
 
@@ -275,24 +263,42 @@ export class ScheduleView extends ItemView {
     }
 
     private renderDateHeader(container: HTMLElement, date: string): void {
-        const row = container.createDiv('schedule-date-header-row');
-        const dateObj = this.parseLocalDate(date);
-        const dayOfWeek = dateObj.toLocaleDateString('ja-JP', { weekday: 'short' });
+        const row = container.createDiv('timeline-row date-header');
+        row.style.gridTemplateColumns = this.getScheduleRowColumns();
+        row.createDiv('date-header__cell').setText(' ');
 
-        const header = row.createEl('h3', { cls: 'schedule-date-header' });
+        const dateCell = row.createDiv('date-header__cell');
+        dateCell.dataset.date = date;
+
+        const dateObj = this.parseLocalDate(date);
+        const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
         const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(this.app, dateObj);
         const linkLabel = DailyNoteUtils.getDailyNoteLabelForDate(this.app, dateObj);
-
-        const dateLink = header.createEl('a', { cls: 'internal-link', text: linkLabel });
-        dateLink.dataset.href = linkTarget;
-        dateLink.setAttribute('href', linkTarget);
-        dateLink.addEventListener('click', (event: MouseEvent) => {
+        const fullLabel = `${linkLabel} ${dayName}`;
+        const linkEl = dateCell.createEl('a', { cls: 'internal-link date-header__date-link', text: fullLabel });
+        linkEl.dataset.href = linkTarget;
+        linkEl.setAttribute('href', linkTarget);
+        linkEl.setAttribute('aria-label', `Open daily note: ${fullLabel}`);
+        linkEl.addEventListener('click', (event: MouseEvent) => {
             event.preventDefault();
         });
-        header.appendText(` (${dayOfWeek})`);
+
+        const todayVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        if (date === todayVisualDate) {
+            dateCell.addClass('is-today');
+        }
+        if (date < todayVisualDate) {
+            const tasksForDate = this.taskIndex.getTasksForVisualDay(date, this.plugin.settings.startHour);
+            const hasOverdueTasks = tasksForDate.some((task) =>
+                !isCompleteStatusChar(task.statusChar, this.plugin.settings.completeStatusChars)
+            );
+            if (hasOverdueTasks) {
+                dateCell.addClass('has-overdue');
+            }
+        }
 
         this.linkInteractionManager.bind(
-            header,
+            dateCell,
             {
                 sourcePath: '',
                 hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
@@ -301,9 +307,22 @@ export class ScheduleView extends ItemView {
             { bindClick: false }
         );
 
-        header.addEventListener('click', () => {
+        dateCell.addEventListener('click', () => {
             void this.openOrCreateDailyNote(dateObj);
         });
+    }
+
+    private renderHabitsSection(container: HTMLElement, date: string): void {
+        if (this.plugin.settings.habits.length === 0) {
+            return;
+        }
+        const row = container.createDiv('timeline-row habits-section');
+        row.style.gridTemplateColumns = this.getScheduleRowColumns();
+        this.habitRenderer.render(row, [date]);
+    }
+
+    private getScheduleRowColumns(): string {
+        return '80px minmax(0, 1fr)';
     }
 
     private async renderCollapsibleTaskSection(
@@ -959,12 +978,6 @@ export class ScheduleView extends ItemView {
         this.currentDate = DateUtils.getLocalDateString(date);
         void this.app.workspace.requestSaveLayout();
         void this.render();
-    }
-
-    private formatDateLabel(dateStr: string): string {
-        const date = this.parseLocalDate(dateStr);
-        const weekday = date.toLocaleDateString('ja-JP', { weekday: 'short' });
-        return `${dateStr} (${weekday})`;
     }
 
     private isCurrentVisualDate(dateStr: string): boolean {
