@@ -11,7 +11,7 @@ import TaskViewerPlugin from '../main';
 import { ViewUtils, FileFilterMenu, DateNavigator } from './ViewUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../constants/hover';
 import { TaskLinkInteractionManager } from './taskcard/TaskLinkInteractionManager';
-import { toDisplayHeightPx, toDisplayTopPx } from '../utils/TimelineCardPosition';
+import { toDisplayHeightPx, toDisplayTopPx, toLogicalHeightPx } from '../utils/TimelineCardPosition';
 import { HabitTrackerRenderer } from './timelineview/renderers/HabitTrackerRenderer';
 
 export const VIEW_TYPE_SCHEDULE = 'schedule-view';
@@ -477,12 +477,13 @@ export class ScheduleView extends ItemView {
 
     private gapToHeight(minutes: number): number {
         if (minutes <= 0) {
-            return ScheduleView.MIN_GAP_HEIGHT_PX;
+            return toLogicalHeightPx(ScheduleView.MIN_GAP_HEIGHT_PX);
         }
 
         const scaledHeight = ScheduleView.MIN_GAP_HEIGHT_PX + (Math.sqrt(minutes) * 8);
-        const clamped = Math.min(ScheduleView.MAX_GAP_HEIGHT_PX, Math.round(scaledHeight));
-        return Math.max(ScheduleView.MIN_GAP_HEIGHT_PX, clamped);
+        const displayHeight = Math.min(ScheduleView.MAX_GAP_HEIGHT_PX, Math.round(scaledHeight));
+        const clampedDisplayHeight = Math.max(ScheduleView.MIN_GAP_HEIGHT_PX, displayHeight);
+        return toLogicalHeightPx(clampedDisplayHeight);
     }
 
     private renderTimeMarkers(container: HTMLElement, rows: GridRow[], tasks: TimedRenderableTask[]): void {
