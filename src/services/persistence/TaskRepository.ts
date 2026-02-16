@@ -82,12 +82,20 @@ export class TaskRepository {
         return this.cloner.duplicateTaskInFile(task);
     }
 
+    async duplicateTaskForTomorrow(task: Task): Promise<void> {
+        return this.cloner.duplicateTaskForTomorrow(task);
+    }
+
     async duplicateTaskForWeek(task: Task): Promise<void> {
         return this.cloner.duplicateTaskForWeek(task);
     }
 
     async duplicateFrontmatterTask(task: Task): Promise<void> {
         return this.cloner.duplicateFrontmatterTask(task);
+    }
+
+    async duplicateFrontmatterTaskForTomorrow(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
+        return this.cloner.duplicateFrontmatterTaskForTomorrow(task, frontmatterKeys);
     }
 
     async duplicateFrontmatterTaskForWeek(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {

@@ -417,6 +417,21 @@ export class TaskIndex {
         await this.scanner.waitForScan(task.file);
     }
 
+    async duplicateTaskForTomorrow(taskId: string): Promise<void> {
+        const task = this.store.getTask(taskId);
+        if (!task) return;
+
+        this.syncDetector.markLocalEdit(task.file);
+
+        if (task.parserId === 'frontmatter') {
+            await this.repository.duplicateFrontmatterTaskForTomorrow(task, this.settings.frontmatterTaskKeys);
+        } else {
+            await this.repository.duplicateTaskForTomorrow(task);
+        }
+
+        await this.scanner.waitForScan(task.file);
+    }
+
     async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
         this.syncDetector.markLocalEdit(filePath);
         await this.repository.updateLine(filePath, lineNumber, newContent);

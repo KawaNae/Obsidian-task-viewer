@@ -140,10 +140,18 @@ export class TaskActionsMenuBuilder {
                 .setSubmenu() as Menu;
 
             subMenu.addItem((sub) => {
-                sub.setTitle('Once')
+                sub.setTitle('In Place')
                     .setIcon('copy')
                     .onClick(async () => {
                         await this.taskIndex.duplicateTask(task.id);
+                    });
+            });
+
+            subMenu.addItem((sub) => {
+                sub.setTitle('For Tomorrow')
+                    .setIcon('calendar-plus')
+                    .onClick(async () => {
+                        await this.taskIndex.duplicateTaskForTomorrow(task.id);
                     });
             });
 

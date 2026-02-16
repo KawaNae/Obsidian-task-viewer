@@ -49,6 +49,41 @@ export class TaskCloner {
     }
 
     /**
+     * インラインタスクを翌日分として複製する。
+     * コピーの @start 日付を +1 日シフトする。
+     */
+    async duplicateTaskForTomorrow(task: Task): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) return;
+
+        const baseDate = task.startDate || DateUtils.getToday();
+
+        await this.app.vault.process(file, (content) => {
+            const lines = content.split('\n');
+
+            // Find current line using originalText
+            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
+            if (currentLine < 0 || currentLine >= lines.length) return content;
+
+            // Collect task line + children
+            const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
+            const taskLineToCopy = lines[currentLine];
+            const allLines = [taskLineToCopy, ...childrenLines];
+
+            // Strip block IDs
+            const cleaned = this.fileOps.stripBlockIds(allLines);
+
+            // Insert before task
+            const insertIndex = currentLine;
+            const newDate = DateUtils.addDays(baseDate, 1);
+            const shiftedLines = cleaned.map((line) => line.replace(/@\d{4}-\d{2}-\d{2}/, `@${newDate}`));
+            lines.splice(insertIndex, 0, ...shiftedLines);
+
+            return lines.join('\n');
+        });
+    }
+
+    /**
      * インラインタスクを1週間分（7日間）複製する。
      * 各コピーの @start 日付を1日ずつシフトする。
      */
@@ -108,6 +143,25 @@ export class TaskCloner {
         const newPath = this.generateCopyPath(file);
         await this.fileOps.ensureDirectoryExists(newPath);
         await this.app.vault.create(newPath, content);
+    }
+
+    /**
+     * Frontmatter タスクを翌日分として複製する。
+     * ファイル名: 既存日付あり → 置換、なし → 末尾に追加
+     */
+    async duplicateFrontmatterTaskForTomorrow(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) return;
+
+        const content = await this.app.vault.read(file);
+        const dayOffset = 1;
+        const shiftedContent = this.shiftFrontmatterDates(content, dayOffset, frontmatterKeys);
+        const newPath = this.generateDatedPath(file, task, dayOffset);
+
+        if (!this.app.vault.getAbstractFileByPath(newPath)) {
+            await this.fileOps.ensureDirectoryExists(newPath);
+            await this.app.vault.create(newPath, shiftedContent);
+        }
     }
 
     /**
