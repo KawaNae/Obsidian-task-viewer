@@ -2,6 +2,8 @@ import { Task } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { NotationUtils } from './NotationUtils';
 import { ChildRenderItem } from './types';
+import { getFileBaseName } from '../../utils/TaskContent';
+import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
 
 /**
  * Builds child render items for inline/frontmatter tasks.
@@ -44,9 +46,8 @@ export class ChildItemBuilder {
 
             if (wikiTask) {
                 const lineIndent = childLine.match(/^(\s*)/)?.[1] ?? '';
-                const linkName = childLine.match(/\[\[([^\]]+)\]\]/)?.[1] ?? '';
                 items.push({
-                    markdown: `${indent}${lineIndent}- [${wikiTask.statusChar || ' '}] [[${linkName}]]`,
+                    markdown: `${indent}${lineIndent}- [${wikiTask.statusChar || ' '}] ${this.formatWikiLink(wikiTask.file)}`,
                     notation: NotationUtils.buildNotationLabel(wikiTask),
                     isCheckbox: true,
                     handler: { type: 'task', taskId: wikiTask.id }
@@ -165,7 +166,8 @@ export class ChildItemBuilder {
                 continue;
             }
 
-            const orphanTask = this.taskIndex.getTask(`${task.file}:${absLine}`);
+            const orphanTaskId = TaskIdGenerator.generate('at-notation', task.file, `ln:${absLine + 1}`);
+            const orphanTask = this.taskIndex.getTask(orphanTaskId);
             if (orphanTask) {
                 if (orphanTask.parentId && orphanTask.parentId !== task.id) {
                     continue;
@@ -191,9 +193,8 @@ export class ChildItemBuilder {
                 renderedChildIds.add(wikiChildTask.id);
 
                 const lineIndent = task.childLines[i].match(/^(\s*)/)?.[1] ?? '';
-                const wikiLinkName = wikiChildTask.file.replace(/\.md$/, '');
                 items.push({
-                    markdown: `${indent}${lineIndent}- [${wikiChildTask.statusChar || ' '}] [[${wikiLinkName}]]`,
+                    markdown: `${indent}${lineIndent}- [${wikiChildTask.statusChar || ' '}] ${this.formatWikiLink(wikiChildTask.file)}`,
                     notation: NotationUtils.buildNotationLabel(wikiChildTask),
                     isCheckbox: true,
                     handler: { type: 'task', taskId: wikiChildTask.id }
@@ -252,9 +253,8 @@ export class ChildItemBuilder {
     private createTaskItem(task: Task, indent: string, contextFile: string): ChildRenderItem {
         const char = task.statusChar || ' ';
         if (task.parserId === 'frontmatter' && task.file !== contextFile) {
-            const linkName = task.file.replace(/\.md$/, '');
             return {
-                markdown: `${indent}- [${char}] [[${linkName}]]`,
+                markdown: `${indent}- [${char}] ${this.formatWikiLink(task.file)}`,
                 notation: NotationUtils.buildNotationLabel(task),
                 isCheckbox: true,
                 handler: { type: 'task', taskId: task.id }
@@ -318,18 +318,29 @@ export class ChildItemBuilder {
     }
 
     private searchWikiChild(task: Task, linkName: string): Task | null {
+        const target = this.extractWikiLinkTarget(linkName);
         for (const childId of task.childIds) {
             const child = this.taskIndex.getTask(childId);
             if (!child || child.parserId !== 'frontmatter') continue;
 
             const baseName = child.file.replace(/\.md$/, '').split('/').pop() || '';
             const fullPath = child.file.replace(/\.md$/, '');
-            if (linkName === baseName || linkName === fullPath || linkName === child.file) {
+            if (target === baseName || target === fullPath || target === child.file) {
                 return child;
             }
         }
 
         return null;
+    }
+
+    private formatWikiLink(filePath: string): string {
+        const target = filePath.replace(/\.md$/, '');
+        const alias = getFileBaseName(filePath) || target.split('/').pop() || target;
+        return `[[${target}|${alias}]]`;
+    }
+
+    private extractWikiLinkTarget(linkName: string): string {
+        return linkName.split('|')[0].trim();
     }
 
     /**

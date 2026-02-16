@@ -5,6 +5,7 @@ import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner } from './TaskCloner';
 import { TaskConverter } from './TaskConverter';
+import { getFileBaseName } from '../../utils/TaskContent';
 
 /**
  * TaskRepository - タスクのファイル操作を統括するファサードクラス
@@ -119,8 +120,9 @@ export class TaskRepository {
      * タスク行 + childLines を wikilink に置き換える。
      */
     async replaceInlineTaskWithWikilink(task: Task, targetPath: string): Promise<void> {
-        const fileName = targetPath.split('/').pop()?.replace(/\.md$/, '') || 'task';
-        const wikilinkLine = `- [[${fileName}]]`;
+        const linkTarget = targetPath.replace(/\.md$/, '');
+        const fileName = getFileBaseName(targetPath) || 'task';
+        const wikilinkLine = `- [[${linkTarget}|${fileName}]]`;
 
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;

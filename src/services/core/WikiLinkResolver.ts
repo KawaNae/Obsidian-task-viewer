@@ -165,26 +165,35 @@ export class WikiLinkResolver {
      * 各候補は excludedPaths チェックを通る必要がある。
      */
     private static resolveWikiLink(linkName: string, app: App, excludedPaths: string[]): string | null {
+        const target = this.extractWikiLinkTarget(linkName);
+        if (!target) {
+            return null;
+        }
+
         // 1. 完全パス一致
-        const exact = app.vault.getAbstractFileByPath(linkName);
+        const exact = app.vault.getAbstractFileByPath(target);
         if (exact instanceof TFile && !this.isExcluded(exact.path, excludedPaths)) {
             return exact.path;
         }
 
         // 2. .md 拡張子追加
-        const withExt = app.vault.getAbstractFileByPath(`${linkName}.md`);
+        const withExt = app.vault.getAbstractFileByPath(`${target}.md`);
         if (withExt instanceof TFile && !this.isExcluded(withExt.path, excludedPaths)) {
             return withExt.path;
         }
 
         // 3. basename で検索
         const files = app.vault.getMarkdownFiles();
-        const found = files.find(f => f.basename === linkName);
+        const found = files.find(f => f.basename === target);
         if (found && !this.isExcluded(found.path, excludedPaths)) {
             return found.path;
         }
 
         return null;
+    }
+
+    private static extractWikiLinkTarget(linkName: string): string {
+        return linkName.split('|')[0].trim();
     }
 
     private static isExcluded(filePath: string, excludedPaths: string[]): boolean {
