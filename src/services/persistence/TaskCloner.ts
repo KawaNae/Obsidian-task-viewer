@@ -40,8 +40,8 @@ export class TaskCloner {
             // Strip block IDs
             const cleaned = this.fileOps.stripBlockIds(allLines);
 
-            // Insert after task + children
-            const insertIndex = currentLine + 1 + childrenLines.length;
+            // Insert before task
+            const insertIndex = currentLine;
             lines.splice(insertIndex, 0, ...cleaned);
 
             return lines.join('\n');
@@ -73,11 +73,12 @@ export class TaskCloner {
             // Strip block IDs
             const cleaned = this.fileOps.stripBlockIds(allLines);
 
-            // Insert after task + children
-            const insertIndex = currentLine + 1 + childrenLines.length;
+            // Insert before task
+            const insertIndex = currentLine;
             const newLines: string[] = [];
 
-            for (let dayOffset = 1; dayOffset <= 7; dayOffset++) {
+            // Future-first order: +7 ... +1 so newer dates appear above older ones.
+            for (let dayOffset = 7; dayOffset >= 1; dayOffset--) {
                 const newDate = DateUtils.addDays(baseDate, dayOffset);
 
                 // Shift dates for each line
