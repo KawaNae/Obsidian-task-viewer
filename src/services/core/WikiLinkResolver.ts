@@ -1,5 +1,6 @@
 import { App, TFile } from 'obsidian';
 import { Task } from '../../types';
+import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
 
 /**
  * `- [[name]]` パターンのwikilink子タスクを解決し、親子関係をワイアーする。
@@ -29,9 +30,9 @@ export class WikiLinkResolver {
                     const bodyLine = parentTask.wikiLinkBodyLines?.[i];
                     const resolvedPath = this.resolveWikiLink(linkName, app, excludedPaths);
                     if (!resolvedPath) continue;
-                    this.wireChild(parentTask, parentId, tasks, resolvedPath);
-                    if (bodyLine !== undefined) {
-                        childLineMap.set(`${resolvedPath}:-1`, bodyLine);
+                    const childTaskId = this.wireChild(parentTask, parentId, tasks, resolvedPath);
+                    if (bodyLine !== undefined && childTaskId) {
+                        childLineMap.set(childTaskId, bodyLine);
                     }
                 }
                 if (childLineMap.size > 0) {
@@ -99,17 +100,16 @@ export class WikiLinkResolver {
     private static wireChild(
         parentTask: Task, parentId: string,
         tasks: Map<string, Task>, resolvedPath: string
-    ): void {
-        const childTaskId = `${resolvedPath}:-1`;
+    ): string | null {
+        const childTaskId = TaskIdGenerator.generate('frontmatter', resolvedPath, 'fm-root');
+        const childTask = tasks.get(childTaskId);
+        if (!childTask) return null;
 
         // 自己参照禁止
-        if (childTaskId === parentId) return;
-
-        const childTask = tasks.get(childTaskId);
-        if (!childTask) return;
+        if (childTaskId === parentId) return null;
 
         // 循環禁止: childTask のサブツリーに parentId が存在しないか確認
-        if (this.wouldCreateCycle(childTaskId, parentId, tasks)) return;
+        if (this.wouldCreateCycle(childTaskId, parentId, tasks)) return null;
 
         // DAG: parentId は最初の親のみ設定（合流時は上書きしない）
         if (!childTask.parentId) {
@@ -127,6 +127,8 @@ export class WikiLinkResolver {
         if (parentTask.startDate && !childTask.endDate && childTask.endTime) {
             childTask.endDate = parentTask.startDate;
         }
+
+        return childTaskId;
     }
 
     /**

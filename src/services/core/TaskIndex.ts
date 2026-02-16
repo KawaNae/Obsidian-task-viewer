@@ -10,6 +10,8 @@ import { SyncDetector } from './SyncDetector';
 import { EditorObserver } from './EditorObserver';
 import { InlineToFrontmatterConversionService } from '../execution/InlineToFrontmatterConversionService';
 import { AiIndexService } from '../aiindex/AiIndexService';
+import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
+import { DateUtils as CoreDateUtils } from '../../utils/DateUtils';
 
 export interface ValidationError {
     file: string;
@@ -247,16 +249,43 @@ export class TaskIndex {
     async updateTask(taskId: string, updates: Partial<Task>): Promise<void> {
         console.log(`[TaskIndex] updateTask called for ${taskId}`, updates);
 
-        // スプリットタスク処理（:before, :after）
-        if (taskId.includes(':before') || taskId.includes(':after')) {
-            // taskId形式: "filepath:lineNumber:before" or "filepath:lineNumber:after"
-            // 最後の :before / :after を除去して元のIDを取得
-            const originalId = taskId.replace(/:(?:before|after)$/, '');
-            const segment = taskId.includes(':before') ? 'before' : 'after';
+        // スプリットタスク処理（##seg:YYYY-MM-DD）
+        const segmentInfo = TaskIdGenerator.parseSegmentId(taskId);
+        if (segmentInfo) {
+            const originalId = segmentInfo.baseId;
             const originalTask = this.store.getTask(originalId);
 
             if (!originalTask) {
                 console.warn(`[TaskIndex] Original task ${originalId} not found for split segment`);
+                return;
+            }
+
+            if (!originalTask.startDate || !originalTask.startTime) {
+                console.warn(`[TaskIndex] Original task ${originalId} has no start date/time`);
+                return;
+            }
+
+            const originalVisualStartDate = CoreDateUtils.getVisualStartDate(
+                originalTask.startDate,
+                originalTask.startTime,
+                this.settings.startHour
+            );
+
+            let originalVisualEndDate = originalTask.endDate;
+            if (originalTask.endDate && originalTask.endTime) {
+                const [endH, endM] = originalTask.endTime.split(':').map(Number);
+                if (endH < this.settings.startHour || (endH === this.settings.startHour && endM === 0)) {
+                    originalVisualEndDate = CoreDateUtils.addDays(originalTask.endDate, -1);
+                }
+            }
+
+            let segment: 'before' | 'after' | null = null;
+            if (segmentInfo.segmentDate === originalVisualStartDate) {
+                segment = 'before';
+            } else if (segmentInfo.segmentDate === originalVisualEndDate) {
+                segment = 'after';
+            } else {
+                console.warn(`[TaskIndex] Unsupported split segment date: ${segmentInfo.segmentDate} for task ${originalId}`);
                 return;
             }
 
@@ -265,7 +294,7 @@ export class TaskIndex {
                 if (updates.startDate) originalTask.startDate = updates.startDate;
                 if (updates.startTime) originalTask.startTime = updates.startTime;
                 if (updates.endTime) {
-                    const splitTime = DateUtils.compareTimes(updates.endTime, this.settings.startHour) < 0
+                    const splitTime = TimeUtils.compareTimes(updates.endTime, this.settings.startHour) < 0
                         ? updates.endTime
                         : `23:59`;
                     originalTask.startTime = originalTask.startTime || '00:00';
@@ -424,8 +453,8 @@ export class TaskIndex {
     }
 }
 
-// DateUtilsがないので、一時的なヘルパーを追加（本来はインポートすべき）
-const DateUtils = {
+// 時刻比較専用ヘルパー
+const TimeUtils = {
     compareTimes(time1: string, time2: string | number): number {
         const [h1, m1] = time1.split(':').map(Number);
         const t2 = typeof time2 === 'number' ? time2 : parseInt(time2.split(':')[0]);

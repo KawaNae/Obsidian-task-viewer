@@ -1,5 +1,6 @@
 import type { Task } from '../../types';
 import type { NormalizedTask, NormalizedTaskStatus } from './NormalizedTask';
+import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
 
 export interface TaskNormalizerOptions {
     completeStatusChars: string[];
@@ -46,13 +47,20 @@ export class TaskNormalizer {
     }
 
     normalizeTask(task: Task, options: TaskNormalizerOptions): NormalizedTask | null {
-        const parser = this.normalizeParser(task.parserId);
+        const parsedTaskId = TaskIdGenerator.parse(task.id);
+        if (!parsedTaskId) {
+            console.warn(`[TaskNormalizer] Skipping task with unsupported id format: ${task.id}`);
+            return null;
+        }
+
+        const parser = this.normalizeParser(parsedTaskId.parserId);
         if (!options.includeParsers.has(parser)) {
             return null;
         }
 
         const sourceLine = task.line >= 0 ? task.line + 1 : null;
         const sourceCol = task.line >= 0 ? (task.indent + 1) : null;
+        const sourcePath = parsedTaskId.filePath;
 
         const start = this.composeDateTime(task.startDate, task.startTime);
         const end = this.composeDateTime(task.endDate, task.endTime);
@@ -69,12 +77,11 @@ export class TaskNormalizer {
         const raw = task.originalText && task.originalText.trim().length > 0
             ? task.originalText.trim()
             : this.buildFrontmatterRaw(task);
-        const anchor = this.resolveAnchor(task, parser, sourceLine);
-        const id = `tv1:${parser}:${task.file}:${anchor}`;
+        const id = TaskIdGenerator.generate(parser, sourcePath, parsedTaskId.anchor);
 
         const contentHash = this.hashToHex([
             parser,
-            task.file,
+            sourcePath,
             sourceLine === null ? '' : String(sourceLine),
             status,
             task.content,
@@ -92,7 +99,7 @@ export class TaskNormalizer {
             id,
             contentHash,
             parser,
-            sourcePath: task.file,
+            sourcePath,
             sourceLine,
             sourceCol,
             status,
@@ -130,19 +137,6 @@ export class TaskNormalizer {
 
     hashText(raw: string): string {
         return this.hashToHex(raw);
-    }
-
-    private resolveAnchor(task: Task, parser: string, sourceLine: number | null): string {
-        const blockId = task.blockId?.trim();
-        if (blockId) {
-            return `blk:${blockId}`;
-        }
-        if (parser === 'inline') {
-            return sourceLine !== null
-                ? `ln:${sourceLine}`
-                : 'ln:unknown';
-        }
-        return 'fm-root';
     }
 
     private resolveStatus(statusChar: string, completeStatusChars: string[]): NormalizedTaskStatus {

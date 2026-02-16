@@ -1,5 +1,6 @@
 import { Task } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
+import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
 
 /**
  * View-only task segment used by timeline/schedule rendering.
@@ -62,9 +63,12 @@ export function splitTaskAtBoundary(task: Task, startHour: number): [RenderableT
         boundaryDate = boundaryDateObj.toISOString().split('T')[0];
     }
 
+    const beforeSegmentDate = DateUtils.getVisualStartDate(task.startDate, task.startTime, startHour);
+    const afterSegmentDate = DateUtils.getVisualStartDate(boundaryDate, boundaryTime, startHour);
+
     const beforeSegment: RenderableTask = {
         ...task,
-        id: `${task.id}:before`,
+        id: TaskIdGenerator.makeSegmentId(task.id, beforeSegmentDate),
         originalTaskId: task.id,
         isSplit: true,
         splitSegment: 'before',
@@ -74,7 +78,7 @@ export function splitTaskAtBoundary(task: Task, startHour: number): [RenderableT
 
     const afterSegment: RenderableTask = {
         ...task,
-        id: `${task.id}:after`,
+        id: TaskIdGenerator.makeSegmentId(task.id, afterSegmentDate),
         originalTaskId: task.id,
         isSplit: true,
         splitSegment: 'after',

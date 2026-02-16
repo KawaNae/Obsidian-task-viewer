@@ -1,6 +1,7 @@
 import { Task } from '../../../types';
 import { ParserStrategy } from '../strategies/ParserStrategy';
 import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
+import { TaskIdGenerator } from '../../../utils/TaskIdGenerator';
 
 /**
  * Task Viewer native notation parser.
@@ -182,7 +183,16 @@ export class AtNotationParser implements ParserStrategy {
         }
 
         return {
-            id: `${filePath}:${lineNumber}`,
+            id: TaskIdGenerator.generate(
+                this.id,
+                filePath,
+                TaskIdGenerator.resolveAnchor({
+                    parserId: this.id,
+                    line: lineNumber,
+                    blockId,
+                    timerTargetId,
+                })
+            ),
             file: filePath,
             line: lineNumber,
             content: content.trim(),

@@ -1,4 +1,5 @@
 import { FrontmatterTaskKeys, Task } from '../../../types';
+import { TaskIdGenerator } from '../../../utils/TaskIdGenerator';
 
 /**
  * Builds a frontmatter-backed Task from metadata cache data.
@@ -96,7 +97,7 @@ export class FrontmatterTaskBuilder {
         }
 
         return {
-            id: `${filePath}:-1`,
+            id: TaskIdGenerator.generate('frontmatter', filePath, 'fm-root'),
             file: filePath,
             line: -1,
             content,

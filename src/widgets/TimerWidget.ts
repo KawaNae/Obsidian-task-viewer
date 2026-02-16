@@ -17,6 +17,7 @@ import {
     TIMER_TARGET_ID_PREFIX,
     isTimerTargetId
 } from '../utils/TimerTargetIdUtils';
+import { TaskIdGenerator } from '../utils/TaskIdGenerator';
 
 interface PersistedTimer {
     id: string;
@@ -683,8 +684,9 @@ export class TimerWidget {
                 changed = true;
             }
 
-            if (timer.taskId.startsWith(`${oldPath}:`)) {
-                timer.taskId = `${newPath}${timer.taskId.substring(oldPath.length)}`;
+            const renamedTaskId = TaskIdGenerator.renameFile(timer.taskId, oldPath, newPath);
+            if (renamedTaskId !== timer.taskId) {
+                timer.taskId = renamedTaskId;
                 changed = true;
             }
         }
@@ -1153,9 +1155,14 @@ export class TimerWidget {
             return null;
         }
 
+        const taskId = persisted.taskId;
+        if (!taskId.startsWith('daily-') && !TaskIdGenerator.parse(taskId)) {
+            return null;
+        }
+
         return {
             id: persisted.id,
-            taskId: persisted.taskId,
+            taskId,
             taskName: persisted.taskName || 'Untitled',
             taskOriginalText: persisted.taskOriginalText || '',
             taskFile: persisted.taskFile || '',
