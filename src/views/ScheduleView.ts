@@ -503,7 +503,8 @@ export class ScheduleView extends ItemView {
                 label.setText(row.time);
             }
 
-            marker.createDiv('hour-line');
+            const isHourBoundary = row.minute % 60 === 0;
+            marker.createDiv(isHourBoundary ? 'hour-line hour-line--major' : 'hour-line hour-line--minor');
         }
     }
 

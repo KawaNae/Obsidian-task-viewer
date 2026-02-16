@@ -216,9 +216,25 @@
     left: calc(var(--schedule-axis-width) - 4px);
     right: 12px;
     height: 1px;
-    background: var(--tv-border);
+    background-color: var(--tv-border);
     /* Align grid-line phase with TimelineView so toDisplayTop/Height spacing matches. */
     top: -1px;
+}
+
+.hour-line--major {
+    background-color: var(--tv-border);
+    background-image: none;
+}
+
+.hour-line--minor {
+    background-color: transparent;
+    background-image: repeating-linear-gradient(
+        to right,
+        var(--tv-border) 0,
+        var(--tv-border) 8px,
+        transparent 8px,
+        transparent 16px
+    );
 }
 
 .timeline-tasks-container {
