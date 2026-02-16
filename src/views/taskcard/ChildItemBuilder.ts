@@ -143,6 +143,8 @@ export class ChildItemBuilder {
             const absLine = this.resolveChildAbsoluteLine(task, i);
             const lineKey = this.toLineKey(task.file, absLine);
             if (consumedLineKeys.has(lineKey)) continue;
+            const lineIndent = task.childLines[i].match(/^(\s*)/)?.[1] ?? '';
+            const effectiveIndent = indent + lineIndent;
 
             const childIdTask = childIdByLine.get(absLine);
             if (childIdTask) {
@@ -153,10 +155,10 @@ export class ChildItemBuilder {
 
                 visitedIds.add(childIdTask.id);
                 renderedChildIds.add(childIdTask.id);
-                items.push(this.createTaskItem(childIdTask, indent, task.file));
+                items.push(this.createTaskItem(childIdTask, effectiveIndent, task.file));
                 this.appendDescendants(
                     childIdTask,
-                    indent + '    ',
+                    effectiveIndent + '    ',
                     rootId,
                     items,
                     visitedIds,
@@ -176,7 +178,7 @@ export class ChildItemBuilder {
                     continue;
                 }
 
-                items.push(this.createTaskItem(orphanTask, indent, task.file));
+                items.push(this.createTaskItem(orphanTask, effectiveIndent, task.file));
                 visitedIds.add(orphanTask.id);
                 renderedChildIds.add(orphanTask.id);
                 this.markTaskSubtreeLines(orphanTask, consumedLineKeys);

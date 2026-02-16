@@ -126,13 +126,51 @@ export class ChildSectionRenderer {
             span.className = 'task-card__child-notation';
             span.textContent = NotationUtils.formatChildNotation(notation, parentStartDate);
 
-            const targetItem = taskListItems[domIndex];
-            const nestedUl = targetItem.querySelector(':scope > ul');
-            if (nestedUl) {
-                targetItem.insertBefore(span, nestedUl);
+            const targetItem = taskListItems[domIndex] as HTMLElement;
+            const notationHost = this.findNotationHost(targetItem);
+
+            if (notationHost !== targetItem) {
+                notationHost.appendChild(span);
+                continue;
+            }
+
+            const nestedBoundary = this.findNestedBoundary(targetItem);
+            if (nestedBoundary) {
+                targetItem.insertBefore(span, nestedBoundary);
             } else {
                 targetItem.appendChild(span);
             }
         }
+    }
+
+    private findNotationHost(taskListItem: HTMLElement): HTMLElement {
+        const hostCandidates = [
+            ':scope > .task-list-item-description',
+            ':scope > p',
+            ':scope > label',
+        ];
+
+        for (const selector of hostCandidates) {
+            const host = taskListItem.querySelector<HTMLElement>(selector);
+            if (host) {
+                return host;
+            }
+        }
+
+        return taskListItem;
+    }
+
+    private findNestedBoundary(taskListItem: HTMLElement): HTMLElement | null {
+        for (const child of Array.from(taskListItem.children) as HTMLElement[]) {
+            if (child.matches('ul, ol')) {
+                return child;
+            }
+
+            if (child.querySelector('ul, ol')) {
+                return child;
+            }
+        }
+
+        return null;
     }
 }
