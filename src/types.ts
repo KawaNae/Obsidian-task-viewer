@@ -107,6 +107,7 @@ export interface FrontmatterTaskKeys {
     timerTargetId: string;
     color: string;
     linestyle: string;
+    ignore: string;
 }
 
 export const DEFAULT_FRONTMATTER_TASK_KEYS: FrontmatterTaskKeys = {
@@ -118,6 +119,7 @@ export const DEFAULT_FRONTMATTER_TASK_KEYS: FrontmatterTaskKeys = {
     timerTargetId: 'tv-timer-target-id',
     color: 'tv-color',
     linestyle: 'tv-linestyle',
+    ignore: 'tv-ignore',
 };
 
 export function normalizeFrontmatterTaskKeys(value: unknown): FrontmatterTaskKeys {
@@ -144,6 +146,7 @@ export function normalizeFrontmatterTaskKeys(value: unknown): FrontmatterTaskKey
         timerTargetId: normalize('timerTargetId'),
         color: normalize('color'),
         linestyle: normalize('linestyle'),
+        ignore: normalize('ignore'),
     };
 }
 
@@ -157,6 +160,7 @@ export function validateFrontmatterTaskKeys(keys: FrontmatterTaskKeys): string |
         'timerTargetId',
         'color',
         'linestyle',
+        'ignore',
     ];
 
     const normalizedValues = new Map<keyof FrontmatterTaskKeys, string>();
@@ -191,7 +195,6 @@ export interface TaskViewerSettings {
     pomodoroWorkMinutes: number;
     pomodoroBreakMinutes: number;
     completeStatusChars: string[];
-    excludedPaths: string[];
     defaultDeadlineOffset: number;
     upcomingDays: number;
     expandCompletedInDeadlineList: boolean;
@@ -216,7 +219,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     pomodoroWorkMinutes: 25,
     pomodoroBreakMinutes: 5,
     completeStatusChars: ['x', 'X', '-', '!'],
-    excludedPaths: [],
     defaultDeadlineOffset: 0,
     upcomingDays: 7,
     expandCompletedInDeadlineList: false,

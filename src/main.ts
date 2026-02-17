@@ -221,6 +221,7 @@ export default class TaskViewerPlugin extends Plugin {
         };
         const sanitizedMerged = { ...merged } as TaskViewerSettings & Record<string, unknown>;
         delete sanitizedMerged.showCompletedInDeadlineList;
+        delete sanitizedMerged.excludedPaths;
 
         const normalizedFrontmatterKeys = normalizeFrontmatterTaskKeys(merged.frontmatterTaskKeys);
         const keysValidationError = validateFrontmatterTaskKeys(normalizedFrontmatterKeys);

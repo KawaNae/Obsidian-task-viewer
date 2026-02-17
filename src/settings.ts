@@ -61,28 +61,6 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        const excludedPathsSetting = new Setting(containerEl)
-            .setName('Excluded Paths')
-            .setDesc('Paths to exclude from task scanning (one per line). Files starting with these paths will be ignored.')
-            .addTextArea(text => text
-                .setPlaceholder('Templates/\nArchive/\nSecret.md')
-                .setValue(this.plugin.settings.excludedPaths.join('\n'))
-                .onChange(async (value) => {
-                    const paths = value.split('\n')
-                        .map(p => p.trim())
-                        .filter(p => p.length > 0);
-                    this.plugin.settings.excludedPaths = paths;
-                    await this.plugin.saveSettings();
-                }));
-
-        // Enhance the textarea for better visibility
-        const textarea = excludedPathsSetting.settingEl.querySelector('textarea');
-        if (textarea) {
-            textarea.rows = 10;
-            textarea.style.width = '100%';
-            textarea.style.minWidth = '300px';
-        }
-
         containerEl.createEl('h3', { text: 'AI Index', cls: 'setting-section-header' });
 
         let fileNameSetting: Setting | null = null;
@@ -600,6 +578,13 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             'Frontmatter key for task border line style (solid/dashed/dotted/double/dashdotted).',
             'tv-linestyle',
             'linestyle'
+        );
+        this.addFrontmatterTaskKeySetting(
+            containerEl,
+            'Ignore Key',
+            'Frontmatter key for file-level ignore. When truthy, this file is fully skipped from scanning and AI index.',
+            'tv-ignore',
+            'ignore'
         );
     }
 

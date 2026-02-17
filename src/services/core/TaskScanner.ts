@@ -28,16 +28,6 @@ export class TaskScanner {
     ) { }
 
     /**
-     * 除外パス判定
-     */
-    private isExcluded(filePath: string): boolean {
-        if (!this.settings.excludedPaths || this.settings.excludedPaths.length === 0) {
-            return false;
-        }
-        return this.settings.excludedPaths.some(excluded => filePath.startsWith(excluded));
-    }
-
-    /**
      * タスクシグネチャ生成（重複検出用）
      */
     private getTaskSignature(task: Task): string {
@@ -53,13 +43,9 @@ export class TaskScanner {
         const files = this.app.vault.getMarkdownFiles();
 
         for (const file of files) {
-            if (this.isExcluded(file.path)) {
-                this.store.removeTasksByFile(file.path);
-                continue;
-            }
             await this.queueScan(file);
         }
-        WikiLinkResolver.resolve(this.store.getTasksMap(), this.app, this.settings.excludedPaths);
+        WikiLinkResolver.resolve(this.store.getTasksMap(), this.app);
         this.store.notifyListeners();
         this.isInitializing = false;
     }
@@ -75,12 +61,6 @@ export class TaskScanner {
      * スキャンをキューに追加
      */
     async queueScan(file: TFile, isLocal: boolean = false): Promise<void> {
-        if (this.isExcluded(file.path)) {
-            this.store.removeTasksByFile(file.path);
-            this.store.notifyListeners();
-            return;
-        }
-
         // シンプルなキューメカニズム: ファイルパスごとにプロミスをチェーン
         const previousScan = this.scanQueue.get(file.path) || Promise.resolve();
 
@@ -235,6 +215,13 @@ export class TaskScanner {
                 frontmatterObj = this.app.metadataCache.getCache(file.path)?.frontmatter;
             }
         }
+
+        if (this.isIgnoredByFrontmatter(frontmatterObj, lines, bodyStartIndex)) {
+            this.store.removeTasksByFile(file.path);
+            this.clearProcessedCompletionsForFile(file.path);
+            return;
+        }
+
         const bodyLines = lines.slice(bodyStartIndex);
         const fmTask = FrontmatterTaskBuilder.parse(
             file.path,
@@ -354,5 +341,62 @@ export class TaskScanner {
      */
     updateSettings(settings: TaskViewerSettings): void {
         this.settings = settings;
+    }
+
+    private clearProcessedCompletionsForFile(filePath: string): void {
+        const prefix = `${filePath}|`;
+        for (const key of this.processedCompletions.keys()) {
+            if (key.startsWith(prefix)) {
+                this.processedCompletions.delete(key);
+            }
+        }
+    }
+
+    private isIgnoredByFrontmatter(
+        frontmatterObj: Record<string, any> | undefined,
+        lines: string[],
+        bodyStartIndex: number
+    ): boolean {
+        const ignoreKey = this.settings.frontmatterTaskKeys.ignore;
+        const fromCache = frontmatterObj?.[ignoreKey];
+        if (this.isTruthyIgnoreValue(fromCache)) {
+            return true;
+        }
+
+        if (bodyStartIndex <= 0) {
+            return false;
+        }
+
+        const escapedKey = ignoreKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const keyLineRegex = new RegExp(`^${escapedKey}\\s*:\\s*(.*)$`);
+
+        for (let i = 1; i < bodyStartIndex - 1; i++) {
+            const line = lines[i];
+            const match = line.match(keyLineRegex);
+            if (!match) continue;
+            return this.isTruthyIgnoreValue(match[1]);
+        }
+
+        return false;
+    }
+
+    private isTruthyIgnoreValue(value: unknown): boolean {
+        if (value === true || value === 1) {
+            return true;
+        }
+        if (typeof value !== 'string') {
+            return false;
+        }
+
+        const normalized = value
+            .trim()
+            .replace(/^['"]|['"]$/g, '')
+            .replace(/\s+#.*$/, '')
+            .toLowerCase();
+
+        return normalized === 'true'
+            || normalized === 'yes'
+            || normalized === 'on'
+            || normalized === '1';
     }
 }
