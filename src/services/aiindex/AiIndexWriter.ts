@@ -13,7 +13,7 @@ export class AiIndexWriter {
         private fileAdapter: VaultFileAdapter
     ) { }
 
-    async writeSnapshot(outputPath: string, tasks: NormalizedTask[], meta: AiIndexMeta): Promise<AiIndexWriteResult> {
+    async writeSnapshot(outputPath: string, tasks: NormalizedTask[], meta: AiIndexMeta, createBackup: boolean): Promise<AiIndexWriteResult> {
         const lines: string[] = [];
         let skippedRows = 0;
         let serializationError: string | null = null;
@@ -40,7 +40,7 @@ export class AiIndexWriter {
             };
         }
 
-        await this.atomicWrite(outputPath, ndjson);
+        await this.atomicWrite(outputPath, ndjson, createBackup);
 
         const nextMeta: AiIndexMeta = {
             ...meta,
@@ -54,10 +54,18 @@ export class AiIndexWriter {
         };
     }
 
+    async writeSnapshotFromLines(outputPath: string, serializedLines: string[], meta: AiIndexMeta, createBackup: boolean): Promise<void> {
+        const ndjson = serializedLines.length > 0
+            ? `${serializedLines.join('\n')}\n`
+            : '';
+        await this.atomicWrite(outputPath, ndjson, createBackup);
+        await this.writeMeta(outputPath, meta);
+    }
+
     async writeMeta(outputPath: string, meta: AiIndexMeta): Promise<void> {
         const metaPath = this.getMetaPath(outputPath);
         const text = `${JSON.stringify(meta, null, 2)}\n`;
-        await this.atomicWrite(metaPath, text);
+        await this.atomicWrite(metaPath, text, true);
     }
 
     async ensureIndexFile(outputPath: string): Promise<TFile> {
@@ -93,11 +101,11 @@ export class AiIndexWriter {
             : `${outputPath}.meta.json`;
     }
 
-    private async atomicWrite(path: string, content: string): Promise<void> {
+    private async atomicWrite(path: string, content: string, createBackup: boolean): Promise<void> {
         await this.fileAdapter.writeAtomic(path, content, {
             retries: 3,
             retryDelayMs: 100,
-            createBackup: true,
+            createBackup,
         });
     }
 }

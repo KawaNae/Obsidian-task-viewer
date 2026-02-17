@@ -18,7 +18,12 @@ export class AiIndexOutputManager {
     async initialize(settings: AiIndexSettings): Promise<void> {
         const path = resolveAiIndexOutputPath(settings);
         await this.fileAdapter.ensureDirectory(path);
-        await this.fileAdapter.testWritability(path);
+        const probe = await this.fileAdapter.testWritability(path);
+        if (!probe.ok) {
+            console.warn(
+                `[AiIndexOutputManager] AI index probe write failed for "${path}" (retryable=${probe.retryable}): ${probe.message}`
+            );
+        }
         this.currentPath = path;
         this.initialized = true;
     }

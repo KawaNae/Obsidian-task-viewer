@@ -73,7 +73,8 @@
     text-decoration: none;
 }
 
-.schedule-view-container button.schedule-section__toggle {
+.schedule-view-container button.schedule-section__toggle,
+.schedule-view-container button.section-toggle-btn {
     width: 22px;
     height: 22px;
     display: inline-flex;
@@ -95,18 +96,21 @@
         color 120ms ease;
 }
 
-.schedule-view-container button.schedule-section__toggle svg {
+.schedule-view-container button.schedule-section__toggle svg,
+.schedule-view-container button.section-toggle-btn svg {
     width: 12px;
     height: 12px;
 }
 
-.schedule-view-container button.schedule-section__toggle:hover {
+.schedule-view-container button.schedule-section__toggle:hover,
+.schedule-view-container button.section-toggle-btn:hover {
     background-color: var(--tv-bg-hover);
     border-color: var(--tv-border);
     color: var(--tv-text);
 }
 
-.schedule-view-container button.schedule-section__toggle:focus-visible {
+.schedule-view-container button.schedule-section__toggle:focus-visible,
+.schedule-view-container button.section-toggle-btn:focus-visible {
     outline: 2px solid rgba(var(--tv-accent-rgb), 0.35);
     outline-offset: 1px;
 }
@@ -213,7 +217,7 @@
 
 .schedule-grid__line {
     position: absolute;
-    left: calc(var(--schedule-axis-width) - 4px);
+    left: calc(var(--schedule-time-axis-width) - 4px);
     right: 12px;
     height: 1px;
     background-color: var(--tv-border);
@@ -239,7 +243,7 @@
 
 .schedule-tasks {
     position: absolute;
-    left: calc(var(--schedule-axis-width) + 12px);
+    left: calc(var(--schedule-time-axis-width) + 12px);
     right: 12px;
     top: 0;
     height: 100%;

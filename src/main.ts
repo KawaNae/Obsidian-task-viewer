@@ -43,7 +43,7 @@ export default class TaskViewerPlugin extends Plugin {
         await this.loadSettings();
 
         // Initialize Services
-        this.taskIndex = new TaskIndex(this.app, this.settings);
+        this.taskIndex = new TaskIndex(this.app, this.settings, this.manifest.version);
         await this.taskIndex.initialize();
 
         this.pomodoroService = new PomodoroService({

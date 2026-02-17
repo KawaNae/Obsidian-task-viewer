@@ -39,7 +39,7 @@ export class TaskIndex {
     private notifyDebounceTimer: NodeJS.Timeout | null = null;
     private readonly NOTIFY_DEBOUNCE_MS = 16; // 約1フレーム
 
-    constructor(private app: App, settings: TaskViewerSettings) {
+    constructor(private app: App, settings: TaskViewerSettings, pluginVersion: string) {
         this.settings = settings;
 
         // サービスの初期化
@@ -57,7 +57,8 @@ export class TaskIndex {
         this.aiIndexService = new AiIndexService(
             app,
             () => this.store.getTasks(),
-            () => this.settings
+            () => this.settings,
+            pluginVersion
         );
     }
 

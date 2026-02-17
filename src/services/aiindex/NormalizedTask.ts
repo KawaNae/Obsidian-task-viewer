@@ -5,25 +5,19 @@ export interface NormalizedTask {
     contentHash: string;
     parser: string;
     sourcePath: string;
-    sourceLine: number | null;
-    sourceCol: number | null;
+    locator: string;
     status: NormalizedTaskStatus;
     content: string;
     start: string | null;
     end: string | null;
     deadline: string | null;
-    allDay: boolean;
-    durationMinutes: number | null;
-    project: string | null;
     tags: string[];
-    priority: string | null;
-    readOnly: boolean;
-    raw: string;
-    updatedAt: string;
+    raw?: string;
 }
 
 export interface AiIndexMeta {
     version: number;
+    pluginVersion: string;
     generatedAt: string;
     taskCount: number;
     fileCount: number;

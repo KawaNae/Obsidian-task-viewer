@@ -70,6 +70,9 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         let debounceSetting: Setting | null = null;
         let parsersSetting: Setting | null = null;
         let includeDoneSetting: Setting | null = null;
+        let includeRawSetting: Setting | null = null;
+        let keepDoneDaysSetting: Setting | null = null;
+        let createBackupSetting: Setting | null = null;
         let customFolderInputEl: HTMLInputElement | null = null;
 
         const syncAiIndexUiState = () => {
@@ -84,6 +87,9 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             debounceSetting?.setDisabled(!isAiEnabled);
             parsersSetting?.setDisabled(!isAiEnabled);
             includeDoneSetting?.setDisabled(!isAiEnabled);
+            includeRawSetting?.setDisabled(!isAiEnabled);
+            keepDoneDaysSetting?.setDisabled(!isAiEnabled);
+            createBackupSetting?.setDisabled(!isAiEnabled);
 
             if (customFolderInputEl) {
                 customFolderInputEl.disabled = !isAiEnabled || isPluginFolderMode;
@@ -272,6 +278,39 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.aiIndex.includeDone)
                 .onChange(async (value) => {
                     this.plugin.settings.aiIndex.includeDone = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        keepDoneDaysSetting = new Setting(containerEl)
+            .setName('Completed Task Retention (Days)')
+            .setDesc('Keep completed tasks for this many days (0 = unlimited). Tasks without dates are always kept.')
+            .addText(text => text
+                .setPlaceholder('0')
+                .setValue(String(this.plugin.settings.aiIndex.keepDoneDays))
+                .onChange(async (value) => {
+                    const parsed = parseInt(value, 10);
+                    const clamped = Number.isFinite(parsed) ? Math.max(0, Math.min(3650, parsed)) : 0;
+                    this.plugin.settings.aiIndex.keepDoneDays = clamped;
+                    await this.plugin.saveSettings();
+                }));
+
+        includeRawSetting = new Setting(containerEl)
+            .setName('Include Raw Field In AI Index')
+            .setDesc('Include the full original text (raw) for each task. Disabled saves ~30-40% file size.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.aiIndex.includeRaw)
+                .onChange(async (value) => {
+                    this.plugin.settings.aiIndex.includeRaw = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        createBackupSetting = new Setting(containerEl)
+            .setName('Create Backup on AI Index Write')
+            .setDesc('Create a .bak file before overwriting the AI index. Disabled reduces I/O.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.aiIndex.createBackup)
+                .onChange(async (value) => {
+                    this.plugin.settings.aiIndex.createBackup = value;
                     await this.plugin.saveSettings();
                 }));
 
