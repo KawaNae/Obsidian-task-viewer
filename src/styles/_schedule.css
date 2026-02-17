@@ -32,47 +32,48 @@
     background-color: transparent;
 }
 
-.schedule-container {
+.schedule-view__container {
     margin: 0 auto;
     width: 100%;
 }
 
-.schedule-fixed-rows {
+.schedule-view__fixed-rows {
     display: flex;
     flex-direction: column;
 }
 
-.schedule-scroll-content {
+.schedule-view__scroll-content {
     display: flex;
     flex-direction: column;
 }
 
-.schedule-fixed-rows .date-header,
-.schedule-fixed-rows .habits-section,
-.schedule-fixed-rows .allday-section {
+.schedule-view__fixed-rows .date-header,
+.schedule-view__fixed-rows .habits-section,
+.schedule-view__fixed-rows .allday-section {
     overflow: hidden;
 }
 
-.schedule-fixed-rows .allday-section::before {
+.schedule-view__fixed-rows .allday-section::before {
     display: none;
     height: 0;
 }
 
-.schedule-fixed-rows .allday-section__cell:not(.allday-section__axis) {
+.schedule-view__fixed-rows .allday-section__cell:not(.allday-section__axis) {
     padding-left: 6px;
     padding-right: 6px;
 }
 
-.schedule-fixed-rows .date-header__cell:first-child {
+.schedule-view__fixed-rows .date-header__cell:first-child {
     cursor: default;
 }
 
-.schedule-fixed-rows .date-header__cell:first-child:hover {
+.schedule-view__fixed-rows .date-header__cell:first-child:hover {
     background-color: transparent;
     color: inherit;
     text-decoration: none;
 }
 
+.schedule-view-container button.schedule-section__toggle,
 .schedule-view-container button.section-toggle-btn {
     width: 22px;
     height: 22px;
@@ -95,17 +96,20 @@
         color 120ms ease;
 }
 
+.schedule-view-container button.schedule-section__toggle svg,
 .schedule-view-container button.section-toggle-btn svg {
     width: 12px;
     height: 12px;
 }
 
+.schedule-view-container button.schedule-section__toggle:hover,
 .schedule-view-container button.section-toggle-btn:hover {
     background-color: var(--tv-bg-hover);
     border-color: var(--tv-border);
     color: var(--tv-text);
 }
 
+.schedule-view-container button.schedule-section__toggle:focus-visible,
 .schedule-view-container button.section-toggle-btn:focus-visible {
     outline: 2px solid rgba(var(--tv-accent-rgb), 0.35);
     outline-offset: 1px;
@@ -117,7 +121,7 @@
     background-color: var(--tv-bg-muted);
 }
 
-.section-header {
+.schedule-section__header {
     margin: 0;
     display: flex;
     align-items: center;
@@ -131,43 +135,43 @@
     user-select: none;
 }
 
-.section-header:hover {
+.schedule-section__header:hover {
     color: var(--tv-text);
 }
 
-.collapse-icon {
+.schedule-section__collapse-icon {
     display: inline-block;
     width: 1em;
     transition: transform 0.2s;
 }
 
-.collapse-icon-btn {
+.schedule-section__collapse-btn {
     flex-shrink: 0;
 }
 
-.collapsible.collapsed .collapse-icon {
+.schedule-section--collapsible.schedule-section--collapsed .schedule-section__collapse-icon {
     transform: rotate(-90deg);
 }
 
-.collapsible.collapsed > *:not(.section-header) {
+.schedule-section--collapsed > *:not(.schedule-section__header) {
     display: none;
 }
 
-.schedule-section-tasks {
+.schedule-section__tasks {
     margin-top: 10px;
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-.schedule-task-wrapper,
-.schedule-flow-task-wrapper {
+.schedule-section__task-wrap,
+.schedule-tasks__card-wrap {
     position: relative;
     display: flex;
     flex-direction: column;
 }
 
-.schedule-view-container .schedule-task-wrapper .task-card {
+.schedule-view-container .schedule-section__task-wrap .task-card {
     position: relative;
     top: auto;
     left: auto;
@@ -178,14 +182,14 @@
     margin-bottom: 0;
 }
 
-.schedule-timeline-main {
+.schedule-grid {
     position: relative;
     border-radius: 8px;
     background-color: var(--tv-bg-schedule-main);
     overflow: hidden;
 }
 
-.timeline-markers {
+.schedule-grid__markers {
     position: absolute;
     left: 0;
     right: 0;
@@ -195,13 +199,13 @@
     pointer-events: none;
 }
 
-.timeline-hour-marker {
+.schedule-grid__marker {
     position: absolute;
     left: 4px;
     right: 0;
 }
 
-.hour-label {
+.schedule-grid__label {
     position: absolute;
     left: 8px;
     top: -10px;
@@ -211,9 +215,9 @@
     font-family: var(--tv-font-mono);
 }
 
-.hour-line {
+.schedule-grid__line {
     position: absolute;
-    left: calc(var(--schedule-axis-width) - 4px);
+    left: calc(var(--schedule-time-axis-width) - 4px);
     right: 12px;
     height: 1px;
     background-color: var(--tv-border);
@@ -221,12 +225,12 @@
     top: -1px;
 }
 
-.hour-line--major {
+.schedule-grid__line--major {
     background-color: var(--tv-border);
     background-image: none;
 }
 
-.hour-line--minor {
+.schedule-grid__line--minor {
     background-color: transparent;
     background-image: repeating-linear-gradient(
         to right,
@@ -237,25 +241,25 @@
     );
 }
 
-.timeline-tasks-container {
+.schedule-tasks {
     position: absolute;
-    left: calc(var(--schedule-axis-width) + 12px);
+    left: calc(var(--schedule-time-axis-width) + 12px);
     right: 12px;
     top: 0;
     height: 100%;
 }
 
-.task-wrapper {
+.schedule-tasks__slot {
     position: absolute;
     box-sizing: border-box;
     padding: 0 4px;
 }
 
-.schedule-flow-task-wrapper {
+.schedule-tasks__card-wrap {
     height: 100%;
 }
 
-.schedule-flow-task-wrapper .task-card {
+.schedule-tasks__card-wrap .task-card {
     position: relative;
     height: 100%;
     min-height: 0;
@@ -265,7 +269,7 @@
     transition: filter 120ms ease;
 }
 
-.timeline-now-line {
+.schedule-grid__now-line {
     position: absolute;
     left: calc(var(--schedule-axis-width) - 4px);
     right: 12px;

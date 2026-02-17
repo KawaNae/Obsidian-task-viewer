@@ -1,52 +1,61 @@
 import type { Task } from '../../types';
 import type { NormalizedTask, NormalizedTaskStatus } from './NormalizedTask';
 import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
+import { getFileBaseName } from '../../utils/TaskContent';
 
 export interface TaskNormalizerOptions {
     completeStatusChars: string[];
     includeParsers: Set<string>;
     includeDone: boolean;
-    updatedAt: string;
+    includeRaw: boolean;
+    keepDoneDays: number;
+    snapshotAt: string;
+}
+
+interface NormalizedTaskEntry {
+    task: NormalizedTask;
+    sortLine: number | null;
 }
 
 export class TaskNormalizer {
     normalizeTasks(tasks: Task[], options: TaskNormalizerOptions): Map<string, NormalizedTask[]> {
-        const byPath = new Map<string, Map<string, NormalizedTask>>();
+        const byPath = new Map<string, Map<string, NormalizedTaskEntry>>();
 
         for (const task of tasks) {
-            const normalized = this.normalizeTask(task, options);
-            if (!normalized) {
+            const normalizedEntry = this.normalizeTask(task, options);
+            if (!normalizedEntry) {
                 continue;
             }
 
-            let pathBucket = byPath.get(normalized.sourcePath);
+            const normalizedTask = normalizedEntry.task;
+            let pathBucket = byPath.get(normalizedTask.sourcePath);
             if (!pathBucket) {
-                pathBucket = new Map<string, NormalizedTask>();
-                byPath.set(normalized.sourcePath, pathBucket);
+                pathBucket = new Map<string, NormalizedTaskEntry>();
+                byPath.set(normalizedTask.sourcePath, pathBucket);
             }
-            if (pathBucket.has(normalized.id)) {
-                console.warn(`[TaskNormalizer] Duplicate task ID in ${normalized.sourcePath}: ${normalized.id}`);
+            if (pathBucket.has(normalizedTask.id)) {
+                console.warn(`[TaskNormalizer] Duplicate task ID in ${normalizedTask.sourcePath}: ${normalizedTask.id}`);
             }
-            pathBucket.set(normalized.id, normalized);
+            pathBucket.set(normalizedTask.id, normalizedEntry);
         }
 
         const result = new Map<string, NormalizedTask[]>();
         for (const [path, entries] of byPath) {
             const tasksForPath = Array.from(entries.values()).sort((a, b) => {
-                const lineA = a.sourceLine ?? Number.MAX_SAFE_INTEGER;
-                const lineB = b.sourceLine ?? Number.MAX_SAFE_INTEGER;
+                const lineA = a.sortLine ?? Number.MAX_SAFE_INTEGER;
+                const lineB = b.sortLine ?? Number.MAX_SAFE_INTEGER;
                 if (lineA !== lineB) {
                     return lineA - lineB;
                 }
-                return a.id.localeCompare(b.id);
-            });
+                return a.task.id.localeCompare(b.task.id);
+            }).map((entry) => entry.task);
             result.set(path, tasksForPath);
         }
 
         return result;
     }
 
-    normalizeTask(task: Task, options: TaskNormalizerOptions): NormalizedTask | null {
+    normalizeTask(task: Task, options: TaskNormalizerOptions): NormalizedTaskEntry | null {
         const parsedTaskId = TaskIdGenerator.parse(task.id);
         if (!parsedTaskId) {
             console.warn(`[TaskNormalizer] Skipping task with unsupported id format: ${task.id}`);
@@ -58,9 +67,10 @@ export class TaskNormalizer {
             return null;
         }
 
-        const sourceLine = task.line >= 0 ? task.line + 1 : null;
-        const sourceCol = task.line >= 0 ? (task.indent + 1) : null;
+        const sortLine = task.line >= 0 ? task.line + 1 : null;
         const sourcePath = parsedTaskId.filePath;
+        const locator = parsedTaskId.anchor;
+        const effectiveContent = this.resolveEffectiveContent(task.content, parser, sourcePath);
 
         const start = this.composeDateTime(task.startDate, task.startTime);
         const end = this.composeDateTime(task.endDate, task.endTime);
@@ -70,10 +80,13 @@ export class TaskNormalizer {
         if (!options.includeDone && status !== 'todo' && status !== 'unknown') {
             return null;
         }
+        if (options.keepDoneDays > 0 && status !== 'todo' && status !== 'unknown') {
+            if (!this.isWithinRetention(task, options.keepDoneDays, options.snapshotAt)) {
+                return null;
+            }
+        }
 
-        const tags = this.extractTags(task.content);
-        const allDay = !task.startTime && !task.endTime;
-        const durationMinutes = this.computeDurationMinutes(start, end);
+        const tags = this.extractTags(effectiveContent);
         const raw = task.originalText && task.originalText.trim().length > 0
             ? task.originalText.trim()
             : this.buildFrontmatterRaw(task);
@@ -82,39 +95,36 @@ export class TaskNormalizer {
         const contentHash = this.hashToHex([
             parser,
             sourcePath,
-            sourceLine === null ? '' : String(sourceLine),
+            locator,
             status,
-            task.content,
+            effectiveContent,
             start ?? '',
             end ?? '',
             deadline ?? '',
-            allDay ? '1' : '0',
-            durationMinutes === null ? '' : String(durationMinutes),
             tags.slice().sort().join(','),
             '',
             raw,
         ].join('|'));
 
-        return {
+        const result: NormalizedTask = {
             id,
             contentHash,
             parser,
             sourcePath,
-            sourceLine,
-            sourceCol,
+            locator,
             status,
-            content: task.content,
+            content: effectiveContent,
             start,
             end,
             deadline,
-            allDay,
-            durationMinutes,
-            project: null,
             tags,
-            priority: null,
-            readOnly: parser !== 'inline' && parser !== 'frontmatter',
-            raw,
-            updatedAt: options.updatedAt,
+        };
+        if (options.includeRaw) {
+            result.raw = raw;
+        }
+        return {
+            task: result,
+            sortLine,
         };
     }
 
@@ -175,35 +185,15 @@ export class TaskNormalizer {
         return deadline.trim() || null;
     }
 
-    private computeDurationMinutes(start: string | null, end: string | null): number | null {
-        if (!start || !end) {
-            return null;
+    private resolveEffectiveContent(content: string, parser: string, sourcePath: string): string {
+        if (content.trim().length > 0) {
+            return content;
         }
-        if (start.startsWith('T') || end.startsWith('T')) {
-            return null;
+        if (parser !== 'inline' && parser !== 'frontmatter') {
+            return content;
         }
-
-        const startDate = this.parseLocalDate(start);
-        const endDate = this.parseLocalDate(end);
-        if (!startDate || !endDate) {
-            return null;
-        }
-
-        const diffMs = endDate.getTime() - startDate.getTime();
-        if (!Number.isFinite(diffMs) || diffMs < 0) {
-            return null;
-        }
-        return Math.round(diffMs / 60000);
-    }
-
-    private parseLocalDate(value: string): Date | null {
-        if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-            return new Date(`${value}T00:00:00`);
-        }
-        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) {
-            return new Date(`${value}:00`);
-        }
-        return null;
+        const baseName = getFileBaseName(sourcePath);
+        return baseName.length > 0 ? baseName : content;
     }
 
     private extractTags(content: string): string[] {
@@ -228,6 +218,22 @@ export class TaskNormalizer {
             `endTime=${task.endTime ?? ''}`,
             `deadline=${task.deadline ?? ''}`,
         ].join(';');
+    }
+
+    private isWithinRetention(task: Task, keepDays: number, snapshotAt: string): boolean {
+        const proxyDate = task.endDate ?? task.startDate ?? task.deadline;
+        if (!proxyDate) {
+            return true;
+        }
+        const dateOnly = proxyDate.slice(0, 10);
+        const cutoff = this.computeCutoffDate(keepDays, snapshotAt);
+        return dateOnly >= cutoff;
+    }
+
+    private computeCutoffDate(keepDays: number, snapshotAt: string): string {
+        const now = new Date(snapshotAt);
+        now.setDate(now.getDate() - keepDays);
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     }
 
     private hashToHex(raw: string): string {

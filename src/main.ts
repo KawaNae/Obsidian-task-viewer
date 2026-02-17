@@ -1,7 +1,7 @@
 import { Notice, Plugin, WorkspaceLeaf, setIcon, TFile } from 'obsidian';
 import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
-import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/ScheduleView';
+import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
 import { CalendarView, VIEW_TYPE_CALENDAR } from './views/CalendarView';
 import { PomodoroView, VIEW_TYPE_POMODORO } from './views/PomodoroView';
 import { PomodoroService } from './services/execution/PomodoroService';
@@ -43,7 +43,7 @@ export default class TaskViewerPlugin extends Plugin {
         await this.loadSettings();
 
         // Initialize Services
-        this.taskIndex = new TaskIndex(this.app, this.settings);
+        this.taskIndex = new TaskIndex(this.app, this.settings, this.manifest.version);
         await this.taskIndex.initialize();
 
         this.pomodoroService = new PomodoroService({
@@ -221,6 +221,7 @@ export default class TaskViewerPlugin extends Plugin {
         };
         const sanitizedMerged = { ...merged } as TaskViewerSettings & Record<string, unknown>;
         delete sanitizedMerged.showCompletedInDeadlineList;
+        delete sanitizedMerged.excludedPaths;
 
         const normalizedFrontmatterKeys = normalizeFrontmatterTaskKeys(merged.frontmatterTaskKeys);
         const keysValidationError = validateFrontmatterTaskKeys(normalizedFrontmatterKeys);

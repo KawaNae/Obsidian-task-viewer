@@ -39,7 +39,7 @@ export class TaskIndex {
     private notifyDebounceTimer: NodeJS.Timeout | null = null;
     private readonly NOTIFY_DEBOUNCE_MS = 16; // 約1フレーム
 
-    constructor(private app: App, settings: TaskViewerSettings) {
+    constructor(private app: App, settings: TaskViewerSettings, pluginVersion: string) {
         this.settings = settings;
 
         // サービスの初期化
@@ -57,7 +57,8 @@ export class TaskIndex {
         this.aiIndexService = new AiIndexService(
             app,
             () => this.store.getTasks(),
-            () => this.settings
+            () => this.settings,
+            pluginVersion
         );
     }
 
@@ -85,7 +86,7 @@ export class TaskIndex {
                 }
 
                 await this.scanner.queueScan(file, isLocal);
-                WikiLinkResolver.resolve(this.store.getTasksMap(), this.app, this.settings.excludedPaths);
+                WikiLinkResolver.resolve(this.store.getTasksMap(), this.app);
                 this.debouncedNotify();
                 this.aiIndexService.schedulePath(file.path);
             }
@@ -102,7 +103,7 @@ export class TaskIndex {
         this.app.vault.on('create', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 this.scanner.queueScan(file).then(() => {
-                    WikiLinkResolver.resolve(this.store.getTasksMap(), this.app, this.settings.excludedPaths);
+                    WikiLinkResolver.resolve(this.store.getTasksMap(), this.app);
                     this.debouncedNotify();
                     this.aiIndexService.schedulePath(file.path);
                 });
@@ -116,7 +117,7 @@ export class TaskIndex {
                     return;
                 }
                 this.scanner.queueScan(file).then(() => {
-                    WikiLinkResolver.resolve(this.store.getTasksMap(), this.app, this.settings.excludedPaths);
+                    WikiLinkResolver.resolve(this.store.getTasksMap(), this.app);
                     this.debouncedNotify();
                     this.aiIndexService.schedulePath(file.path);
                 });

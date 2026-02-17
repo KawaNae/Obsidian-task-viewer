@@ -15,9 +15,8 @@ export class WikiLinkResolver {
      * タスクMap全体をスキャンし、wikilink子タスクの親子関係を解決する。
      * @param tasks タスクインデックス (id → Task)
      * @param app Obsidian App インスタンス
-     * @param excludedPaths 除外パスリスト
      */
-    static resolve(tasks: Map<string, Task>, app: App, excludedPaths: string[]): void {
+    static resolve(tasks: Map<string, Task>, app: App): void {
         // wikilink 子の body 行位置を追跡（ソート用）
         const wikiChildLineMap = new Map<string, Map<string, number>>();
 
@@ -28,7 +27,7 @@ export class WikiLinkResolver {
                 for (let i = 0; i < parentTask.wikiLinkTargets.length; i++) {
                     const linkName = parentTask.wikiLinkTargets[i];
                     const bodyLine = parentTask.wikiLinkBodyLines?.[i];
-                    const resolvedPath = this.resolveWikiLink(linkName, app, excludedPaths);
+                    const resolvedPath = this.resolveWikiLink(linkName, app);
                     if (!resolvedPath) continue;
                     const childTaskId = this.wireChild(parentTask, parentId, tasks, resolvedPath);
                     if (bodyLine !== undefined && childTaskId) {
@@ -60,7 +59,7 @@ export class WikiLinkResolver {
                 if (lineIndent !== minChildIndent) continue;
 
                 const linkName = match[1].trim();
-                const resolvedPath = this.resolveWikiLink(linkName, app, excludedPaths);
+                const resolvedPath = this.resolveWikiLink(linkName, app);
                 if (!resolvedPath) continue;
                 this.wireChild(parentTask, parentId, tasks, resolvedPath);
             }
@@ -162,9 +161,9 @@ export class WikiLinkResolver {
      *   1. 完全パス一致 (linkName がすでに .md を含む場合)
      *   2. linkName + '.md'
      *   3. 全markdownファイルのbasenameで検索
-     * 各候補は excludedPaths チェックを通る必要がある。
+     * 各候補を順番に試して最初に解決できたパスを返す。
      */
-    private static resolveWikiLink(linkName: string, app: App, excludedPaths: string[]): string | null {
+    private static resolveWikiLink(linkName: string, app: App): string | null {
         const target = this.extractWikiLinkTarget(linkName);
         if (!target) {
             return null;
@@ -172,20 +171,20 @@ export class WikiLinkResolver {
 
         // 1. 完全パス一致
         const exact = app.vault.getAbstractFileByPath(target);
-        if (exact instanceof TFile && !this.isExcluded(exact.path, excludedPaths)) {
+        if (exact instanceof TFile) {
             return exact.path;
         }
 
         // 2. .md 拡張子追加
         const withExt = app.vault.getAbstractFileByPath(`${target}.md`);
-        if (withExt instanceof TFile && !this.isExcluded(withExt.path, excludedPaths)) {
+        if (withExt instanceof TFile) {
             return withExt.path;
         }
 
         // 3. basename で検索
         const files = app.vault.getMarkdownFiles();
         const found = files.find(f => f.basename === target);
-        if (found && !this.isExcluded(found.path, excludedPaths)) {
+        if (found) {
             return found.path;
         }
 
@@ -194,9 +193,5 @@ export class WikiLinkResolver {
 
     private static extractWikiLinkTarget(linkName: string): string {
         return linkName.split('|')[0].trim();
-    }
-
-    private static isExcluded(filePath: string, excludedPaths: string[]): boolean {
-        return excludedPaths.some(ep => filePath.startsWith(ep));
     }
 }

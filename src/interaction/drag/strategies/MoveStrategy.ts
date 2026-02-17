@@ -108,7 +108,8 @@ export class MoveStrategy extends BaseDragStrategy {
     // ========== Timeline Move ==========
 
     private initTimelineMove(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
-        this.ghostManager = new GhostManager(context.container);
+        this.scrollContainer = context.container.querySelector('.timeline-scroll-area') as HTMLElement;
+        this.ghostManager = new GhostManager(this.scrollContainer || context.container);
 
         this.initialTop = toLogicalTopPx(parseFloat(el.style.top || '0'));
         this.initialHeight = toLogicalHeightPx(parseFloat(el.style.height || '0'));
@@ -173,8 +174,6 @@ export class MoveStrategy extends BaseDragStrategy {
         } else {
             this.dragTimeOffset = mouseMinutes - visualStartMinutes;
         }
-
-        this.scrollContainer = context.container.querySelector('.timeline-scroll-area') as HTMLElement;
 
         // 分割タスクの全セグメントを非表示リストに追加
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;

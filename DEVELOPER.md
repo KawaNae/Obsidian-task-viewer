@@ -42,6 +42,9 @@ src/views/taskcard/
 1. `Task.content` stores raw user-provided content only.
 2. Frontmatter parser keeps `content` as empty string when `tv-content` is absent.
 3. UI fallback labels (file basename / `Untitled`) must be resolved in view helpers (`src/utils/TaskContent.ts`), not in parsers.
+4. AI Index resolves `content` at normalization time: when `Task.content` is empty for `inline`/`frontmatter`, it falls back to file basename for index output only.
+5. AI Index row-level `updatedAt` is removed; index freshness must be read from `ai-task-index.meta.json` (`generatedAt`).
+6. AI Index location is represented by `locator` (`ln:*`, `blk:*`, `tid:*`, `fm-root`); `sourceLine/sourceCol` are no longer exported.
 
 開発者向けのドキュメントです。実装の詳細、アーキテクチャ、コーディング規約などを記載しています。
 

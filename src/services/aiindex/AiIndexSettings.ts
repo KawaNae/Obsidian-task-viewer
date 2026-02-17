@@ -10,6 +10,9 @@ export interface AiIndexSettings {
     debounceMs: number;
     includeParsers: string[];
     includeDone: boolean;
+    includeRaw: boolean;
+    keepDoneDays: number;
+    createBackup: boolean;
 }
 
 type LegacyAiIndexSettings = Partial<AiIndexSettings> & {
@@ -24,6 +27,9 @@ export const DEFAULT_AI_INDEX_SETTINGS: AiIndexSettings = {
     debounceMs: 1000,
     includeParsers: ['inline', 'frontmatter'],
     includeDone: true,
+    includeRaw: false,
+    keepDoneDays: 0,
+    createBackup: false,
 };
 
 export function normalizeAiIndexSettings(value: unknown): AiIndexSettings {
@@ -47,6 +53,21 @@ export function normalizeAiIndexSettings(value: unknown): AiIndexSettings {
     const includeDone = typeof source.includeDone === 'boolean'
         ? source.includeDone
         : DEFAULT_AI_INDEX_SETTINGS.includeDone;
+
+    const includeRaw = typeof source.includeRaw === 'boolean'
+        ? source.includeRaw
+        : DEFAULT_AI_INDEX_SETTINGS.includeRaw;
+
+    const keepDoneDaysRaw = typeof source.keepDoneDays === 'number'
+        ? source.keepDoneDays
+        : Number(source.keepDoneDays);
+    const keepDoneDays = Number.isFinite(keepDoneDaysRaw)
+        ? Math.max(0, Math.min(3650, Math.round(keepDoneDaysRaw)))
+        : DEFAULT_AI_INDEX_SETTINGS.keepDoneDays;
+
+    const createBackup = typeof source.createBackup === 'boolean'
+        ? source.createBackup
+        : DEFAULT_AI_INDEX_SETTINGS.createBackup;
 
     const hasNewShape = hasOwn(source, 'fileName')
         || hasOwn(source, 'outputToPluginFolder')
@@ -77,6 +98,9 @@ export function normalizeAiIndexSettings(value: unknown): AiIndexSettings {
         debounceMs,
         includeParsers,
         includeDone,
+        includeRaw,
+        keepDoneDays,
+        createBackup,
     };
 }
 

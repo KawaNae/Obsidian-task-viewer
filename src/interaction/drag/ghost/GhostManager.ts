@@ -36,7 +36,12 @@ export class GhostManager {
             if (!ghost) {
                 // Create new ghost if doesn't exist
                 const doc = this.container.ownerDocument || document;
-                ghost = createGhostElement(sourceEl, doc, { useCloneNode: true, initiallyVisible: true });
+                ghost = createGhostElement(
+                    sourceEl,
+                    doc,
+                    { useCloneNode: true, initiallyVisible: true },
+                    this.container
+                );
                 this.ghosts.set(key, ghost);
             }
 
@@ -46,20 +51,16 @@ export class GhostManager {
             const dayCol = this.container.querySelector(`.day-timeline-column[data-date="${seg.date}"]`) as HTMLElement;
 
             if (dayCol) {
-                const rect = dayCol.getBoundingClientRect();
-
                 // Account for border-top of day-timeline-column
-                // getBoundingClientRect() returns border-box coordinates (outside of border)
-                // but position: absolute children reference padding-box (inside of border)
-                // Since ghosts use position: fixed, we need to add borderTop to match
+                // For absolute-positioned ghosts in scroll-area, use container-relative offsets.
                 const computedStyle = window.getComputedStyle(dayCol);
                 const borderTop = parseFloat(computedStyle.borderTopWidth || '0');
 
-                // Position relative to viewport since ghosts are fixed/absolute.
+                // Position relative to timeline-scroll-area.
                 // seg.top/seg.height are logical values and converted to display values here.
-                ghost.style.left = `${rect.left + 4}px`; // +4px for padding/margin adjustment
-                ghost.style.top = `${rect.top + borderTop + toDisplayTopPx(seg.top)}px`;
-                ghost.style.width = `${rect.width - 8}px`; // -8px for padding
+                ghost.style.left = `${dayCol.offsetLeft + 4}px`; // +4px for padding/margin adjustment
+                ghost.style.top = `${dayCol.offsetTop + borderTop + toDisplayTopPx(seg.top)}px`;
+                ghost.style.width = `${dayCol.offsetWidth - 8}px`; // -8px for padding
                 ghost.style.height = `${toDisplayHeightPx(seg.height)}px`;
                 ghost.style.opacity = '0.8';
                 ghost.style.display = 'block';

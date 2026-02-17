@@ -10,6 +10,10 @@ export interface ExistsOptions {
     bypassCache?: boolean;
 }
 
+export type ProbeResult =
+    | { ok: true }
+    | { ok: false; retryable: boolean; message: string };
+
 export class VaultFileAdapter {
     constructor(private app: App) { }
 
@@ -43,23 +47,48 @@ export class VaultFileAdapter {
         }
     }
 
-    async testWritability(filePath: string): Promise<void> {
+    async testWritability(filePath: string): Promise<ProbeResult> {
         await this.ensureDirectory(filePath);
 
         const directory = this.getDirectoryPath(filePath);
-        const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const probePath = directory
-            ? `${directory}/.ai-index-write-test-${stamp}.tmp`
-            : `.ai-index-write-test-${stamp}.tmp`;
+        const maxRetries = 3;
+        let lastError: unknown = null;
+        let lastRetryable = false;
 
         const adapter = this.app.vault.adapter;
-        try {
-            await adapter.write(probePath, '');
-        } finally {
-            if (await this.exists(probePath, { bypassCache: true })) {
-                await adapter.remove(probePath).catch(() => undefined);
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${attempt}`;
+            const probePath = directory
+                ? `${directory}/.ai-index-write-test-${stamp}.tmp`
+                : `.ai-index-write-test-${stamp}.tmp`;
+            try {
+                await adapter.write(probePath, '');
+                return { ok: true };
+            } catch (error) {
+                lastError = error;
+                lastRetryable = this.isRetryableError(error);
+                const isLastAttempt = attempt >= maxRetries;
+                if (!lastRetryable || isLastAttempt) {
+                    return {
+                        ok: false,
+                        retryable: lastRetryable,
+                        message: this.toErrorMessage(error),
+                    };
+                }
+                const delayMs = 100 * (2 ** attempt);
+                await this.sleep(delayMs);
+            } finally {
+                if (await this.exists(probePath, { bypassCache: true })) {
+                    await adapter.remove(probePath).catch(() => undefined);
+                }
             }
         }
+
+        return {
+            ok: false,
+            retryable: lastRetryable,
+            message: this.toErrorMessage(lastError),
+        };
     }
 
     async writeAtomic(path: string, content: string, options: WriteOptions = {}): Promise<void> {

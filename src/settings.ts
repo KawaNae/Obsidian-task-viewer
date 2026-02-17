@@ -61,28 +61,6 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        const excludedPathsSetting = new Setting(containerEl)
-            .setName('Excluded Paths')
-            .setDesc('Paths to exclude from task scanning (one per line). Files starting with these paths will be ignored.')
-            .addTextArea(text => text
-                .setPlaceholder('Templates/\nArchive/\nSecret.md')
-                .setValue(this.plugin.settings.excludedPaths.join('\n'))
-                .onChange(async (value) => {
-                    const paths = value.split('\n')
-                        .map(p => p.trim())
-                        .filter(p => p.length > 0);
-                    this.plugin.settings.excludedPaths = paths;
-                    await this.plugin.saveSettings();
-                }));
-
-        // Enhance the textarea for better visibility
-        const textarea = excludedPathsSetting.settingEl.querySelector('textarea');
-        if (textarea) {
-            textarea.rows = 10;
-            textarea.style.width = '100%';
-            textarea.style.minWidth = '300px';
-        }
-
         containerEl.createEl('h3', { text: 'AI Index', cls: 'setting-section-header' });
 
         let fileNameSetting: Setting | null = null;
@@ -92,6 +70,9 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         let debounceSetting: Setting | null = null;
         let parsersSetting: Setting | null = null;
         let includeDoneSetting: Setting | null = null;
+        let includeRawSetting: Setting | null = null;
+        let keepDoneDaysSetting: Setting | null = null;
+        let createBackupSetting: Setting | null = null;
         let customFolderInputEl: HTMLInputElement | null = null;
 
         const syncAiIndexUiState = () => {
@@ -106,6 +87,9 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             debounceSetting?.setDisabled(!isAiEnabled);
             parsersSetting?.setDisabled(!isAiEnabled);
             includeDoneSetting?.setDisabled(!isAiEnabled);
+            includeRawSetting?.setDisabled(!isAiEnabled);
+            keepDoneDaysSetting?.setDisabled(!isAiEnabled);
+            createBackupSetting?.setDisabled(!isAiEnabled);
 
             if (customFolderInputEl) {
                 customFolderInputEl.disabled = !isAiEnabled || isPluginFolderMode;
@@ -294,6 +278,39 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.aiIndex.includeDone)
                 .onChange(async (value) => {
                     this.plugin.settings.aiIndex.includeDone = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        keepDoneDaysSetting = new Setting(containerEl)
+            .setName('Completed Task Retention (Days)')
+            .setDesc('Keep completed tasks for this many days (0 = unlimited). Tasks without dates are always kept.')
+            .addText(text => text
+                .setPlaceholder('0')
+                .setValue(String(this.plugin.settings.aiIndex.keepDoneDays))
+                .onChange(async (value) => {
+                    const parsed = parseInt(value, 10);
+                    const clamped = Number.isFinite(parsed) ? Math.max(0, Math.min(3650, parsed)) : 0;
+                    this.plugin.settings.aiIndex.keepDoneDays = clamped;
+                    await this.plugin.saveSettings();
+                }));
+
+        includeRawSetting = new Setting(containerEl)
+            .setName('Include Raw Field In AI Index')
+            .setDesc('Include the full original text (raw) for each task. Disabled saves ~30-40% file size.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.aiIndex.includeRaw)
+                .onChange(async (value) => {
+                    this.plugin.settings.aiIndex.includeRaw = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        createBackupSetting = new Setting(containerEl)
+            .setName('Create Backup on AI Index Write')
+            .setDesc('Create a .bak file before overwriting the AI index. Disabled reduces I/O.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.aiIndex.createBackup)
+                .onChange(async (value) => {
+                    this.plugin.settings.aiIndex.createBackup = value;
                     await this.plugin.saveSettings();
                 }));
 
@@ -600,6 +617,13 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             'Frontmatter key for task border line style (solid/dashed/dotted/double/dashdotted).',
             'tv-linestyle',
             'linestyle'
+        );
+        this.addFrontmatterTaskKeySetting(
+            containerEl,
+            'Ignore Key',
+            'Frontmatter key for file-level ignore. When truthy, this file is fully skipped from scanning and AI index.',
+            'tv-ignore',
+            'ignore'
         );
     }
 

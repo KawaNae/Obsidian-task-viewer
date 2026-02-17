@@ -110,6 +110,9 @@ tv-content: プロジェクト名
 > [!WARNING]
 > 時刻のみを記述する場合は、YAMLのsexagesimal記法を回避するため`"14:00"`のようにクォートで囲んでください。
 
+> [!NOTE]
+> `tv-content` を省略した場合、UI表示ではファイル名フォールバックが使われ、AI Indexの`content`も basename で補完されます（inline/frontmatter）。
+
 #### 使用例
 
 **プロジェクト管理**
@@ -249,6 +252,29 @@ frontmatterタスクでは、子要素の表示範囲を次のように定義し
 | Pomodoro Work Minutes | ポモドーロの作業時間 | 25 |
 | Complete Status Chars | 完了を示すステータス文字 | `['x', 'X', '-', '!']` |
 | Excluded Paths | スキャンから除外するパス | `[]` |
+
+### AI Index 出力スキーマ（v6）
+
+AI Indexの1行（NDJSON）は、次のフィールドを持ちます。
+
+| フィールド | 説明 |
+|-----------|------|
+| `id` | 正規化タスクID |
+| `contentHash` | 差分検知用ハッシュ |
+| `parser` | `inline` / `frontmatter` など |
+| `sourcePath` | Vault相対パス |
+| `locator` | タスク位置アンカー（`ln:<number>` / `blk:<blockId>` / `tid:<timerTargetId>` / `fm-root`） |
+| `status` | `todo` / `done` / `cancelled` / `exception` / `unknown` |
+| `content` | タスク本文（inline/frontmatter で空の場合はファイル basename を補完） |
+| `start` | 開始日時（ISO形式または`null`） |
+| `end` | 終了日時（ISO形式または`null`） |
+| `deadline` | 締切日時（ISO形式または`null`） |
+| `tags` | `content`から抽出したタグ配列 |
+| `raw` | 元記法文字列（設定で有効時のみ） |
+
+更新時刻は行単位ではなく `ai-task-index.meta.json` の `generatedAt` を参照してください。
+
+`allDay`、`durationMinutes`、`readOnly` はv3で削除され、`updatedAt` はv4で削除され、`sourceLine/sourceCol` はv5で `locator` に統合され、v6で `content` 空値の basename 補完（inline/frontmatter限定）が追加されました。
 
 ---
 
