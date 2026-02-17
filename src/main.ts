@@ -1,7 +1,7 @@
 import { Notice, Plugin, WorkspaceLeaf, setIcon, TFile } from 'obsidian';
 import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
-import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/ScheduleView';
+import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
 import { CalendarView, VIEW_TYPE_CALENDAR } from './views/CalendarView';
 import { PomodoroView, VIEW_TYPE_POMODORO } from './views/PomodoroView';
 import { PomodoroService } from './services/execution/PomodoroService';
