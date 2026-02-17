@@ -20,7 +20,8 @@ export interface GhostOptions {
 export function createGhostElement(
     el: HTMLElement,
     doc: Document,
-    options: GhostOptions = {}
+    options: GhostOptions = {},
+    container?: HTMLElement
 ): HTMLElement {
     const { initiallyVisible = false, useCloneNode = false } = options;
 
@@ -41,8 +42,8 @@ export function createGhostElement(
     const rect = el.getBoundingClientRect();
 
     // 基本スタイル
-    ghost.style.position = 'fixed';
-    ghost.style.zIndex = '2147483647';
+    ghost.style.position = container ? 'absolute' : 'fixed';
+    ghost.style.zIndex = 'var(--z-task-card-drag-ghost, 9999)';
     ghost.style.pointerEvents = 'none';
     ghost.style.opacity = initiallyVisible ? '0.9' : '0';
     ghost.style.width = `${rect.width}px`;
@@ -80,7 +81,11 @@ export function createGhostElement(
     ghost.style.top = '-9999px';
 
     // DOMに追加
-    doc.body.appendChild(ghost);
+    if (container) {
+        container.appendChild(ghost);
+    } else {
+        doc.body.appendChild(ghost);
+    }
 
     return ghost;
 }
