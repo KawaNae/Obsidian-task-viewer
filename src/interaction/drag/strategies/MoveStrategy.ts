@@ -6,6 +6,14 @@ import { GhostManager, GhostSegment } from '../ghost/GhostManager';
 import { createGhostElement, removeGhostElement } from '../ghost/GhostFactory';
 import { toLogicalHeightPx, toLogicalTopPx } from '../../../utils/TimelineCardPosition';
 
+interface CalendarPointerTarget {
+    weekRow: HTMLElement;
+    weekStart: string;
+    col: number;
+    colWidth: number;
+    targetDate: string;
+}
+
 /**
  * 移動操作を処理するドラッグストラテジー。
  * TimelineとAllDay両方の移動操作を統一的に処理。
@@ -36,6 +44,7 @@ export class MoveStrategy extends BaseDragStrategy {
     private container: HTMLElement | null = null;
     private isOutsideSection: boolean = false;
     private refHeaderCell: HTMLElement | null = null;
+    private calendarPreviewGhosts: HTMLElement[] = [];
 
     // オートスクロール
     private autoScrollTimer: number | null = null;
@@ -345,40 +354,74 @@ export class MoveStrategy extends BaseDragStrategy {
 
         const doc = context.container.ownerDocument || document;
         this.ghostEl = createGhostElement(el, doc, { useCloneNode: true });
+        this.clearCalendarPreviewGhosts();
     }
 
-    private processCalendarMove(e: PointerEvent, _context: DragContext) {
+    private processCalendarMove(e: PointerEvent, context: DragContext) {
         if (!this.dragTask || !this.dragEl) return;
 
-        const deltaX = e.clientX - this.initialX;
-        const snapPixels = this.colWidth;
-        let dayDelta = Math.round(deltaX / snapPixels);
+        const sourceWeekRow = this.container as HTMLElement;
+        const target = this.resolveCalendarPointerTarget(e.clientX, e.clientY, context);
+        const sourceWeekStart = sourceWeekRow?.dataset.weekStart || context.getViewStartDate();
 
-        const minColOffset = 1 - this.startCol;
-        if (dayDelta < minColOffset) dayDelta = minColOffset;
-
-        const snappedDeltaX = dayDelta * snapPixels;
+        let dayDelta = Math.round((e.clientX - this.initialX) / this.colWidth);
+        if (target) {
+            dayDelta = DateUtils.getDiffDays(sourceWeekStart, target.weekStart) + target.col - this.startCol;
+            if (target.weekStart === sourceWeekStart) {
+                const minColOffset = 1 - this.startCol;
+                if (dayDelta < minColOffset) {
+                    dayDelta = minColOffset;
+                }
+            }
+        }
 
         if (this.ghostEl) {
             this.ghostEl.style.opacity = '0';
             this.ghostEl.style.left = '-9999px';
         }
 
-        this.dragEl.style.opacity = '';
-        this.dragEl.style.transform = `translateX(${snappedDeltaX}px)`;
+        if (target && target.weekStart !== sourceWeekStart) {
+            const movedStart = DateUtils.addDays(this.initialDate, dayDelta);
+            const movedEnd = DateUtils.addDays(this.initialEndDate, dayDelta);
+            this.updateCalendarSplitPreview(context, movedStart, movedEnd);
+            this.dragEl.style.opacity = '0.15';
+            this.dragEl.style.transform = '';
+        } else {
+            this.clearCalendarPreviewGhosts();
+            this.dragEl.style.opacity = '';
+            this.dragEl.style.transform = `translateX(${dayDelta * this.colWidth}px)`;
+        }
     }
 
     private async finishCalendarMove(e: PointerEvent, context: DragContext) {
         removeGhostElement(this.ghostEl);
         this.ghostEl = null;
+        this.clearCalendarPreviewGhosts();
+        if (this.dragEl) {
+            this.dragEl.style.opacity = '';
+            this.dragEl.style.transform = '';
+        }
 
         if (!this.dragTask || !this.dragEl) {
             this.cleanup();
             return;
         }
 
-        const deltaX = e.clientX - this.initialX;
-        const dayDelta = Math.round(deltaX / this.colWidth);
+        const sourceWeekRow = this.container as HTMLElement;
+        const sourceWeekStart = sourceWeekRow?.dataset.weekStart || context.getViewStartDate();
+        const target = this.resolveCalendarPointerTarget(e.clientX, e.clientY, context);
+
+        let dayDelta = Math.round((e.clientX - this.initialX) / this.colWidth);
+        if (target) {
+            dayDelta = DateUtils.getDiffDays(sourceWeekStart, target.weekStart) + target.col - this.startCol;
+            if (target.weekStart === sourceWeekStart) {
+                const minColOffset = 1 - this.startCol;
+                if (dayDelta < minColOffset) {
+                    dayDelta = minColOffset;
+                }
+            }
+        }
+
         if (dayDelta === 0) {
             this.cleanup();
             return;
@@ -637,8 +680,156 @@ export class MoveStrategy extends BaseDragStrategy {
         this.ghostManager?.clear();
         removeGhostElement(this.ghostEl);
         this.ghostEl = null;
+        this.clearCalendarPreviewGhosts();
         context.onTaskClick(taskId);
         this.cleanup();
+    }
+
+    private updateCalendarSplitPreview(context: DragContext, movedStart: string, movedEnd: string): void {
+        if (!this.dragEl) {
+            return;
+        }
+        this.clearCalendarPreviewGhosts();
+
+        const gridRow = this.extractGridRow(this.dragEl.style.gridRow);
+        const weekRows = this.getCalendarWeekRows(context);
+        if (weekRows.length === 0) {
+            return;
+        }
+
+        for (const weekRow of weekRows) {
+            const weekStart = weekRow.dataset.weekStart;
+            if (!weekStart) {
+                continue;
+            }
+
+            const weekEnd = DateUtils.addDays(weekStart, 6);
+            if (movedStart > weekEnd || movedEnd < weekStart) {
+                continue;
+            }
+
+            const segStart = movedStart < weekStart ? weekStart : movedStart;
+            const segEnd = movedEnd > weekEnd ? weekEnd : movedEnd;
+            const colStart = DateUtils.getDiffDays(weekStart, segStart) + 1;
+            const span = DateUtils.getDiffDays(segStart, segEnd) + 1;
+            if (colStart < 1 || span < 1) {
+                continue;
+            }
+
+            const continuesBefore = movedStart < weekStart;
+            const continuesAfter = movedEnd > weekEnd;
+            const preview = this.dragEl.cloneNode(true) as HTMLElement;
+            preview.querySelectorAll('.task-card__handle').forEach((handle) => handle.remove());
+            preview.removeClass('selected', 'is-dragging');
+            preview.removeClass('calendar-multiday-bar--head', 'calendar-multiday-bar--middle', 'calendar-multiday-bar--tail');
+            preview.addClass('calendar-task-card--drag-preview');
+            preview.style.gridColumn = `${colStart} / span ${span}`;
+            preview.style.gridRow = `${gridRow}`;
+            preview.style.transform = '';
+            preview.style.opacity = '';
+            preview.style.zIndex = '1001';
+            preview.style.pointerEvents = 'none';
+            if (continuesBefore && continuesAfter) {
+                preview.addClass('calendar-multiday-bar--middle');
+            } else if (continuesAfter) {
+                preview.addClass('calendar-multiday-bar--head');
+            } else if (continuesBefore) {
+                preview.addClass('calendar-multiday-bar--tail');
+            }
+
+            weekRow.appendChild(preview);
+            this.calendarPreviewGhosts.push(preview);
+        }
+    }
+
+    private clearCalendarPreviewGhosts(): void {
+        for (const ghost of this.calendarPreviewGhosts) {
+            ghost.remove();
+        }
+        this.calendarPreviewGhosts = [];
+    }
+
+    private extractGridRow(gridRowStyle: string): number {
+        const parsed = Number.parseInt(gridRowStyle, 10);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 2;
+    }
+
+    private getCalendarWeekRows(context: DragContext): HTMLElement[] {
+        return Array.from(context.container.querySelectorAll('.calendar-week-row'))
+            .filter((el): el is HTMLElement => el instanceof HTMLElement);
+    }
+
+    private findNearestCalendarWeekRow(clientY: number, context: DragContext): HTMLElement | null {
+        const rows = this.getCalendarWeekRows(context);
+        if (rows.length === 0) {
+            return null;
+        }
+
+        let nearest: HTMLElement | null = null;
+        let minDistance = Number.POSITIVE_INFINITY;
+
+        for (const row of rows) {
+            const rect = row.getBoundingClientRect();
+            let distance = 0;
+            if (clientY < rect.top) {
+                distance = rect.top - clientY;
+            } else if (clientY > rect.bottom) {
+                distance = clientY - rect.bottom;
+            }
+
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearest = row;
+            }
+        }
+
+        return nearest;
+    }
+
+    private resolveCalendarPointerTarget(clientX: number, clientY: number, context: DragContext): CalendarPointerTarget | null {
+        const doc = context.container.ownerDocument || document;
+        let elBelow: Element | null = null;
+
+        if (this.dragEl) {
+            const prevPointerEvents = this.dragEl.style.pointerEvents;
+            this.dragEl.style.pointerEvents = 'none';
+            elBelow = doc.elementFromPoint(clientX, clientY);
+            this.dragEl.style.pointerEvents = prevPointerEvents;
+        } else {
+            elBelow = doc.elementFromPoint(clientX, clientY);
+        }
+
+        let weekRow = elBelow?.closest('.calendar-week-row') as HTMLElement | null;
+        if (!weekRow) {
+            weekRow = this.findNearestCalendarWeekRow(clientY, context);
+        }
+        if (!weekRow) {
+            return null;
+        }
+
+        const weekStart = weekRow.dataset.weekStart;
+        if (!weekStart) {
+            return null;
+        }
+
+        const header = weekRow.querySelector('.calendar-date-header') as HTMLElement | null;
+        if (!header) {
+            return null;
+        }
+
+        const headerRect = header.getBoundingClientRect();
+        const colWidth = headerRect.width > 0 ? headerRect.width : this.colWidth || 100;
+        const rawCol = Math.round((clientX - headerRect.left) / colWidth) + 1;
+        const col = Math.min(7, Math.max(1, rawCol));
+        const targetDate = DateUtils.addDays(weekStart, col - 1);
+
+        return {
+            weekRow,
+            weekStart,
+            col,
+            colWidth,
+            targetDate,
+        };
     }
 
     protected cleanup(): void {
@@ -647,5 +838,6 @@ export class MoveStrategy extends BaseDragStrategy {
         this.lastDragResult = null;
         this.currentDayDate = null;
         this.container = null;
+        this.clearCalendarPreviewGhosts();
     }
 }

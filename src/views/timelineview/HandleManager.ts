@@ -118,6 +118,7 @@ export class HandleManager {
             existingHandles.forEach(h => h.remove());
 
 
+            const isCalendar = !!taskEl.closest('.calendar-week-row');
             const isAllDay = taskEl.classList.contains('task-card--allday');
 
             // Split checks
@@ -125,7 +126,27 @@ export class HandleManager {
             const isSplitAfter = taskEl.classList.contains('task-card--split-after');
 
             // --- Render Handles ---
-            if (isAllDay) {
+            if (isCalendar) {
+                const isMiddle = taskEl.classList.contains('calendar-multiday-bar--middle');
+                if (isMiddle) {
+                    return;
+                }
+
+                const isHead = taskEl.classList.contains('calendar-multiday-bar--head');
+                const isTail = taskEl.classList.contains('calendar-multiday-bar--tail');
+
+                // Left edge = start
+                if (!isTail) {
+                    this.createMoveHandle(taskEl, taskId, 'top-left');
+                    this.createResizeHandle(taskEl, taskId, 'left', '↔');
+                }
+
+                // Right edge = end
+                if (!isHead) {
+                    this.createMoveHandle(taskEl, taskId, 'top-right');
+                    this.createResizeHandle(taskEl, taskId, 'right', '↔');
+                }
+            } else if (isAllDay) {
                 // Left Resize Handle
                 this.createResizeHandle(taskEl, taskId, 'left', '↔');
                 // Right Resize Handle
@@ -188,7 +209,7 @@ export class HandleManager {
         handle.dataset.taskId = taskId;
     }
 
-    private createMoveHandle(taskEl: HTMLElement, taskId: string, position: 'top-right' | 'bottom-right'): void {
+    private createMoveHandle(taskEl: HTMLElement, taskId: string, position: 'top-right' | 'bottom-right' | 'top-left'): void {
         const container = taskEl.createDiv(`task-card__handle task-card__handle--move-${position}`);
         const handle = container.createDiv('task-card__handle-btn');
         handle.setText('::');

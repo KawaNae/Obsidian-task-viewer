@@ -356,6 +356,11 @@
     right: -12px;
 }
 
+.task-card__handle--move-top-left {
+    top: -12px;
+    left: -12px;
+}
+
 .task-card__handle--move-bottom-right {
     bottom: -12px;
     right: -12px;
