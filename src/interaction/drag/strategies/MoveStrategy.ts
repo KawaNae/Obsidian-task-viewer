@@ -57,6 +57,8 @@ export class MoveStrategy extends BaseDragStrategy {
 
         if (this.viewType === 'timeline') {
             this.initTimelineMove(e, task, el, context);
+        } else if (this.viewType === 'calendar') {
+            this.initCalendarMove(e, task, el, context);
         } else {
             this.initAllDayMove(e, task, el, context);
         }
@@ -82,6 +84,8 @@ export class MoveStrategy extends BaseDragStrategy {
             }
             this.processTimelineMove(e.clientX, e.clientY);
             this.checkAutoScroll(e.clientY);
+        } else if (this.viewType === 'calendar') {
+            this.processCalendarMove(e, context);
         } else {
             this.processAllDayMove(e, context);
         }
@@ -100,6 +104,8 @@ export class MoveStrategy extends BaseDragStrategy {
 
         if (this.viewType === 'timeline') {
             await this.finishTimelineMove(e, context);
+        } else if (this.viewType === 'calendar') {
+            await this.finishCalendarMove(e, context);
         } else {
             await this.finishAllDayMove(e, context);
         }
@@ -312,6 +318,80 @@ export class MoveStrategy extends BaseDragStrategy {
                 });
             });
         });
+
+        this.cleanup();
+    }
+
+    // ========== Calendar Move ==========
+
+    private initCalendarMove(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
+        this.container = (el.closest('.calendar-week-row') as HTMLElement) || context.container;
+
+        const headerCell = this.container?.querySelector('.calendar-date-header') as HTMLElement;
+        this.refHeaderCell = headerCell;
+        this.colWidth = headerCell?.getBoundingClientRect().width || 100;
+
+        const viewStartDate = context.getViewStartDate();
+        this.initialDate = task.startDate || viewStartDate || DateUtils.getToday();
+        this.initialEndDate = task.endDate || this.initialDate;
+        this.initialSpan = DateUtils.getDiffDays(this.initialDate, this.initialEndDate) + 1;
+
+        const gridCol = el.style.gridColumn;
+        const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
+        this.startCol = colMatch ? parseInt(colMatch[1]) : 1;
+        this.initialGridColumn = el.style.gridColumn;
+
+        el.style.zIndex = '1000';
+
+        const doc = context.container.ownerDocument || document;
+        this.ghostEl = createGhostElement(el, doc, { useCloneNode: true });
+    }
+
+    private processCalendarMove(e: PointerEvent, _context: DragContext) {
+        if (!this.dragTask || !this.dragEl) return;
+
+        const deltaX = e.clientX - this.initialX;
+        const snapPixels = this.colWidth;
+        let dayDelta = Math.round(deltaX / snapPixels);
+
+        const minColOffset = 1 - this.startCol;
+        if (dayDelta < minColOffset) dayDelta = minColOffset;
+
+        const snappedDeltaX = dayDelta * snapPixels;
+
+        if (this.ghostEl) {
+            this.ghostEl.style.opacity = '0';
+            this.ghostEl.style.left = '-9999px';
+        }
+
+        this.dragEl.style.opacity = '';
+        this.dragEl.style.transform = `translateX(${snappedDeltaX}px)`;
+    }
+
+    private async finishCalendarMove(e: PointerEvent, context: DragContext) {
+        removeGhostElement(this.ghostEl);
+        this.ghostEl = null;
+
+        if (!this.dragTask || !this.dragEl) {
+            this.cleanup();
+            return;
+        }
+
+        const deltaX = e.clientX - this.initialX;
+        const dayDelta = Math.round(deltaX / this.colWidth);
+        if (dayDelta === 0) {
+            this.cleanup();
+            return;
+        }
+
+        const newStart = DateUtils.addDays(this.initialDate, dayDelta);
+        const duration = DateUtils.getDiffDays(this.initialDate, this.initialEndDate);
+        const newEnd = DateUtils.addDays(newStart, duration);
+
+        const updates: Partial<Task> = this.buildAllDayMoveUpdates(newStart, newEnd);
+        if (Object.keys(updates).length > 0) {
+            await context.taskIndex.updateTask(this.dragTask.id, updates);
+        }
 
         this.cleanup();
     }

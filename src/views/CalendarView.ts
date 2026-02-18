@@ -7,12 +7,14 @@ import { Task, isCompleteStatusChar } from '../types';
 import { DateUtils } from '../utils/DateUtils';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { TaskIdGenerator } from '../utils/TaskIdGenerator';
+import { DragHandler } from '../interaction/drag/DragHandler';
 import TaskViewerPlugin from '../main';
 import { FileFilterMenu, ViewUtils } from './ViewUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../constants/hover';
 import { TaskLinkInteractionManager } from './taskcard/TaskLinkInteractionManager';
 import { CalendarTaskModal } from './CalendarTaskModal';
 import { VIEW_META_CALENDAR } from '../constants/viewRegistry';
+import { HandleManager } from './timelineview/HandleManager';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
 
@@ -33,6 +35,8 @@ export class CalendarView extends ItemView {
     private readonly filterMenu = new FileFilterMenu();
 
     private menuHandler: MenuHandler;
+    private dragHandler: DragHandler | null = null;
+    private handleManager: HandleManager | null = null;
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private currentMonth: Date;
@@ -101,6 +105,29 @@ export class CalendarView extends ItemView {
         this.container.addClass('calendar-view-container');
 
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
+        this.handleManager = new HandleManager(this.container, this.taskIndex);
+        this.dragHandler = new DragHandler(
+            this.container,
+            this.taskIndex,
+            this.plugin,
+            (taskId: string) => {
+                this.handleManager?.selectTask(taskId);
+            },
+            () => {
+                this.handleManager?.updatePositions();
+            },
+            () => this.getViewStartDateString()
+        );
+
+        this.container.addEventListener('click', (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            if (target.closest('.task-card__handle-btn')) {
+                return;
+            }
+            if (!target.closest('.task-card')) {
+                this.handleManager?.selectTask(null);
+            }
+        });
 
         await this.render();
 
@@ -110,6 +137,10 @@ export class CalendarView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        this.dragHandler?.destroy();
+        this.dragHandler = null;
+        this.handleManager = null;
+
         if (this.unsubscribe) {
             this.unsubscribe();
             this.unsubscribe = null;
@@ -159,6 +190,11 @@ export class CalendarView extends ItemView {
         }
 
         toolbar.dataset.range = `${rangeStartStr}:${rangeEndStr}`;
+
+        const selectedTaskId = this.handleManager?.getSelectedTaskId();
+        if (selectedTaskId) {
+            this.handleManager?.selectTask(selectedTaskId);
+        }
     }
 
     private renderToolbar(): HTMLElement {
@@ -599,6 +635,11 @@ export class CalendarView extends ItemView {
         });
 
         return Array.from(files).sort();
+    }
+
+    private getViewStartDateString(): string {
+        const { startDate } = this.getCalendarDateRange();
+        return DateUtils.getLocalDateString(startDate);
     }
 
     private getCalendarDateRange(): { startDate: Date; endDate: Date } {

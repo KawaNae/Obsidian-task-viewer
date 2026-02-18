@@ -71,6 +71,13 @@ export class ResizeStrategy extends BaseDragStrategy {
             }
 
             this.initTimelineResize(e, task, el, context);
+        } else if (this.viewType === 'calendar') {
+            if (target.closest('.task-card__handle--resize-left')) {
+                this.resizeDirection = 'left';
+            } else {
+                this.resizeDirection = 'right';
+            }
+            this.initCalendarResize(e, task, el, context);
         } else {
             if (target.closest('.task-card__handle--resize-left')) {
                 this.resizeDirection = 'left';
@@ -95,6 +102,8 @@ export class ResizeStrategy extends BaseDragStrategy {
 
         if (this.viewType === 'timeline') {
             this.processTimelineResize(e.clientX, e.clientY);
+        } else if (this.viewType === 'calendar') {
+            this.processCalendarResize(e);
         } else {
             this.processAllDayResize(e);
         }
@@ -113,6 +122,8 @@ export class ResizeStrategy extends BaseDragStrategy {
 
         if (this.viewType === 'timeline') {
             await this.finishTimelineResize(context);
+        } else if (this.viewType === 'calendar') {
+            await this.finishCalendarResize(context);
         } else {
             await this.finishAllDayResize(context);
         }
@@ -219,6 +230,91 @@ export class ResizeStrategy extends BaseDragStrategy {
             const taskIdToRestore = this.dragTask.id;
             await context.taskIndex.updateTask(this.dragTask.id, updates);
             this.restoreSelection(context, taskIdToRestore);
+        }
+
+        this.cleanup();
+    }
+
+    // ========== Calendar Resize ==========
+
+    private initCalendarResize(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
+        this.container = (el.closest('.calendar-week-row') as HTMLElement) || context.container;
+
+        const headerCell = this.container?.querySelector('.calendar-date-header') as HTMLElement;
+        this.refHeaderCell = headerCell;
+        this.colWidth = headerCell?.getBoundingClientRect().width || 100;
+
+        const viewStartDate = context.getViewStartDate();
+        this.initialDate = task.startDate || viewStartDate || DateUtils.getToday();
+        this.initialEndDate = task.endDate || this.initialDate;
+        this.initialSpan = DateUtils.getDiffDays(this.initialDate, this.initialEndDate) + 1;
+
+        const gridCol = el.style.gridColumn;
+        const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
+        this.startCol = colMatch ? parseInt(colMatch[1]) : 1;
+        this.initialGridColumn = el.style.gridColumn;
+    }
+
+    private processCalendarResize(e: PointerEvent) {
+        if (!this.dragEl || !this.refHeaderCell) return;
+
+        const baseX = this.refHeaderCell.getBoundingClientRect().left;
+
+        if (this.resizeDirection === 'right') {
+            const taskLeft = baseX + (this.startCol - 1) * this.colWidth;
+            const widthPx = e.clientX - taskLeft;
+            const newSpan = Math.max(1, Math.ceil(widthPx / this.colWidth));
+            this.dragEl.style.gridColumn = `${this.startCol} / span ${newSpan}`;
+        } else if (this.resizeDirection === 'left') {
+            const colIndex = Math.floor((e.clientX - baseX) / this.colWidth);
+            let targetStartCol = colIndex + 1;
+
+            const currentEndCol = this.startCol + this.initialSpan - 1;
+            targetStartCol = Math.min(targetStartCol, currentEndCol);
+            targetStartCol = Math.max(targetStartCol, 1);
+
+            const newSpan = Math.max(1, currentEndCol - targetStartCol + 1);
+            this.dragEl.style.gridColumn = `${targetStartCol} / span ${newSpan}`;
+        }
+    }
+
+    private async finishCalendarResize(context: DragContext) {
+        if (!this.dragTask || !this.dragEl) {
+            this.cleanup();
+            return;
+        }
+
+        const gridCol = this.dragEl.style.gridColumn;
+        const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
+        if (!colMatch) {
+            this.cleanup();
+            return;
+        }
+
+        const currentStartCol = parseInt(colMatch[1]);
+        const currentSpan = parseInt(colMatch[2]);
+        if (currentStartCol === this.startCol && currentSpan === this.initialSpan) {
+            this.cleanup();
+            return;
+        }
+
+        const updates: Partial<Task> = {};
+        if (this.resizeDirection === 'right') {
+            const spanDelta = currentSpan - this.initialSpan;
+            const newEnd = DateUtils.addDays(this.initialEndDate, spanDelta);
+            if (newEnd >= this.initialDate) {
+                updates.endDate = newEnd;
+            }
+        } else if (this.resizeDirection === 'left') {
+            const startColDelta = currentStartCol - this.startCol;
+            const newStart = DateUtils.addDays(this.initialDate, startColDelta);
+            if (newStart <= this.initialEndDate) {
+                updates.startDate = newStart;
+            }
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await context.taskIndex.updateTask(this.dragTask.id, updates);
         }
 
         this.cleanup();
