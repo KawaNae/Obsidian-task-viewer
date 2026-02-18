@@ -199,6 +199,19 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Start Properties View color suggest observer
         this.startPropertiesColorSuggest();
+
+        // Register URI handler: obsidian://task-viewer?view=timeline|calendar|schedule
+        this.registerObsidianProtocolHandler('task-viewer', (params) => {
+            const viewMap: Record<string, string> = {
+                timeline: VIEW_TYPE_TIMELINE,
+                calendar: VIEW_TYPE_CALENDAR,
+                schedule: VIEW_TYPE_SCHEDULE,
+            };
+            const viewType = viewMap[params.view];
+            if (viewType) {
+                this.activateView(viewType);
+            }
+        });
     }
 
     async loadSettings() {
