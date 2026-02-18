@@ -105,6 +105,64 @@
     width: 100%;
 }
 
+.create-task-modal__input-with-picker {
+    position: relative;
+}
+
+.create-task-modal__input-with-picker .create-task-modal__text-input {
+    padding-right: 36px;
+}
+
+.create-task-modal__picker-button {
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--tv-text-muted);
+    border-radius: var(--tv-radius-s);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.create-task-modal__picker-button .svg-icon {
+    width: 14px;
+    height: 14px;
+}
+
+.create-task-modal__picker-button:hover {
+    color: var(--tv-text);
+    background-color: var(--tv-bg-hover);
+}
+
+.create-task-modal__picker-button:focus-visible {
+    outline: 2px solid var(--tv-accent);
+    outline-offset: 1px;
+}
+
+/* Keep native picker capability but prevent theme input styles from affecting layout. */
+.create-task-modal__input-with-picker > input.create-task-modal__native-picker-input[type='date'],
+.create-task-modal__input-with-picker > input.create-task-modal__native-picker-input[type='time'] {
+    position: absolute !important;
+    top: 50% !important;
+    right: 8px !important;
+    width: 1px !important;
+    height: 1px !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    overflow: hidden !important;
+    clip-path: inset(50%) !important;
+}
+
 .create-task-modal__text-input:focus {
     outline: none;
     border-color: var(--tv-accent);
