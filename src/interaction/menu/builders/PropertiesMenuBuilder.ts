@@ -4,13 +4,14 @@ import { TaskIndex } from '../../../services/core/TaskIndex';
 import TaskViewerPlugin from '../../../main';
 import { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } from '../PropertyCalculator';
 import { PropertyFormatter } from '../PropertyFormatter';
-import { InputModal } from '../../../modals/InputModal';
-import { DateTimeInputModal, DateTimeValue, DateTimeModalOptions } from '../../../modals/DateTimeInputModal';
+import { CreateTaskModal, CreateTaskResult } from '../../../modals/CreateTaskModal';
 import { DateUtils } from '../../../utils/DateUtils';
 import { getTaskDisplayName } from '../../../utils/TaskContent';
 
+type ChangePropertiesFocusField = 'name' | 'start' | 'end' | 'deadline';
+
 /**
- * Propertiesサブメニューの構築
+ * Properties sub menu builder.
  */
 export class PropertiesMenuBuilder {
     constructor(
@@ -22,7 +23,7 @@ export class PropertiesMenuBuilder {
     ) { }
 
     /**
-     * Propertiesサブメニューを構築
+     * Build Properties submenu.
      */
     buildPropertiesSubmenu(menu: Menu, task: Task, viewStartDate: string | null): void {
         menu.addItem((item) => {
@@ -31,16 +32,18 @@ export class PropertiesMenuBuilder {
                 .setIcon('settings')
                 .setSubmenu() as Menu;
 
-            this.addNameItem(subMenu, task);
+            // Requested order:
+            // status / file / --- / name / start / end / deadline / --- / length
             this.addStatusItem(subMenu, task);
             this.addFileItem(subMenu, task);
             subMenu.addSeparator();
+            this.addNameItem(subMenu, task);
             this.addPropertyItems(subMenu, task, viewStartDate);
         });
     }
 
     /**
-     * Task Name項目を追加
+     * Add Name item.
      */
     private addNameItem(menu: Menu, task: Task): void {
         menu.addItem((sub) => {
@@ -48,21 +51,13 @@ export class PropertiesMenuBuilder {
             sub.setTitle(`Name: ${taskName.substring(0, 20)}${taskName.length > 20 ? '...' : ''}`)
                 .setIcon('pencil')
                 .onClick(() => {
-                    new InputModal(
-                        this.app,
-                        'Edit Task Name',
-                        'Task Name',
-                        task.content,
-                        async (value) => {
-                            await this.taskIndex.updateTask(task.id, { content: value });
-                        }
-                    ).open();
+                    this.openChangePropertiesModal(task, 'name');
                 });
         });
     }
 
     /**
-     * Status項目を追加
+     * Add Status item.
      */
     private addStatusItem(menu: Menu, task: Task): void {
         menu.addItem((sub) => {
@@ -99,7 +94,7 @@ export class PropertiesMenuBuilder {
     }
 
     /**
-     * File項目を追加
+     * Add File item.
      */
     private addFileItem(menu: Menu, task: Task): void {
         menu.addItem((sub) => {
@@ -112,7 +107,7 @@ export class PropertiesMenuBuilder {
     }
 
     /**
-     * プロパティ項目（Start, End, Deadline, Length）を追加
+     * Add Start, End, Deadline, Length items.
      */
     private addPropertyItems(menu: Menu, task: Task, viewStartDate: string | null): void {
         const context: PropertyCalculationContext = {
@@ -121,125 +116,100 @@ export class PropertiesMenuBuilder {
             viewStartDate
         };
 
-        // Calculate properties
         const startParts = this.propertyCalculator.calculateStart(context);
         const endParts = this.propertyCalculator.calculateEnd(context);
         const deadlineParts = this.propertyCalculator.calculateDeadline(task);
 
-        // Add menu items
         this.addStartItem(menu, task, startParts);
-        this.addEndItem(menu, task, endParts, context);
+        this.addEndItem(menu, task, endParts);
         this.addDeadlineItem(menu, task, deadlineParts);
         menu.addSeparator();
         this.addLengthItem(menu, task, context);
     }
 
     /**
-     * Start項目を追加
+     * Add Start item.
      */
     private addStartItem(menu: Menu, task: Task, parts: CalculatedProperty): void {
         menu.addItem((item) => {
             item.setTitle(this.propertyFormatter.createPropertyTitle('Start: ', parts))
                 .setIcon('play')
                 .onClick(() => {
-                    const currentValue: DateTimeValue = {
-                        date: task.startDate || null,
-                        time: task.startTime || null
-                    };
-                    new DateTimeInputModal(this.app, 'start', currentValue, async (value) => {
-                        const newProps: Partial<Task> = {};
-                        newProps.startDate = value.date || undefined;
-                        newProps.startTime = value.time || undefined;
-                        await this.taskIndex.updateTask(task.id, newProps);
-                    }).open();
+                    this.openChangePropertiesModal(task, 'start');
                 });
         });
     }
 
     /**
-     * End項目を追加
+     * Add End item.
      */
-    private addEndItem(menu: Menu, task: Task, parts: CalculatedProperty, context: PropertyCalculationContext): void {
+    private addEndItem(menu: Menu, task: Task, parts: CalculatedProperty): void {
         menu.addItem((item) => {
             item.setTitle(this.propertyFormatter.createPropertyTitle('End: ', parts))
                 .setIcon('square')
                 .onClick(() => {
-                    const currentValue: DateTimeValue = {
-                        date: task.endDate || null,
-                        time: task.endTime || null
-                    };
-                    const options: DateTimeModalOptions = {
-                        hasStartDate: !!task.startDate
-                    };
-                    new DateTimeInputModal(this.app, 'end', currentValue, async (value) => {
-                        if (value.date === null && value.time === null) {
-                            // Clear both
-                            await this.taskIndex.updateTask(task.id, {
-                                endDate: undefined,
-                                endTime: undefined
-                            });
-                        } else if (value.date === null && value.time !== null) {
-                            // Time-only: inherit date from start
-                            await this.taskIndex.updateTask(task.id, {
-                                endDate: task.startDate,
-                                endTime: value.time
-                            });
-                        } else {
-                            await this.taskIndex.updateTask(task.id, {
-                                endDate: value.date || undefined,
-                                endTime: value.time || undefined
-                            });
-                        }
-                    }, options).open();
+                    this.openChangePropertiesModal(task, 'end');
                 });
         });
     }
 
     /**
-     * Deadline項目を追加
+     * Add Deadline item.
      */
     private addDeadlineItem(menu: Menu, task: Task, parts: CalculatedProperty): void {
         menu.addItem((item) => {
             item.setTitle(this.propertyFormatter.createPropertyTitle('Deadline: ', parts))
                 .setIcon('alert-circle')
                 .onClick(() => {
-                    // Parse deadline
-                    let deadlineDate: string | null = null;
-                    let deadlineTime: string | null = null;
-                    if (task.deadline) {
-                        if (task.deadline.includes('T')) {
-                            const splitParts = task.deadline.split('T');
-                            deadlineDate = splitParts[0];
-                            deadlineTime = splitParts[1];
-                        } else {
-                            deadlineDate = task.deadline;
-                        }
-                    }
-
-                    const currentValue: DateTimeValue = {
-                        date: deadlineDate,
-                        time: deadlineTime
-                    };
-                    new DateTimeInputModal(this.app, 'deadline', currentValue, async (value) => {
-                        if (value.date === null) {
-                            await this.taskIndex.updateTask(task.id, {
-                                deadline: undefined
-                            });
-                        } else {
-                            const newDeadline = value.time
-                                ? `${value.date}T${value.time}`
-                                : value.date;
-                            await this.taskIndex.updateTask(task.id, {
-                                deadline: newDeadline
-                            });
-                        }
-                    }).open();
+                    this.openChangePropertiesModal(task, 'deadline');
                 });
         });
     }
 
+    private openChangePropertiesModal(task: Task, focusField: ChangePropertiesFocusField): void {
+        const initialValues: Partial<CreateTaskResult> = {
+            content: task.content ?? '',
+            startDate: task.startDate,
+            startTime: task.startTime,
+            endDate: task.endDate,
+            endTime: task.endTime,
+            deadline: task.deadline,
+        };
+
+        new CreateTaskModal(
+            this.app,
+            async (result) => {
+                await this.taskIndex.updateTask(task.id, this.buildTaskUpdatesFromResult(result));
+            },
+            initialValues,
+            {
+                title: 'Change Properties',
+                submitLabel: 'Save',
+                focusField,
+            }
+        ).open();
+    }
+
+    private buildTaskUpdatesFromResult(result: CreateTaskResult): Partial<Task> {
+        const startDate = result.startDate?.trim() || undefined;
+        const startTime = result.startTime?.trim() || undefined;
+        const endTime = result.endTime?.trim() || undefined;
+        const explicitEndDate = result.endDate?.trim() || undefined;
+        const endDate = !explicitEndDate && endTime ? startDate : explicitEndDate;
+        const deadline = result.deadline?.trim() || undefined;
+
+        return {
+            content: result.content ?? '',
+            startDate,
+            startTime,
+            endDate,
+            endTime,
+            deadline,
+        };
+    }
+
     /**
-     * Length (Duration)項目を追加
+     * Add Length (Duration) item.
      */
     private addLengthItem(menu: Menu, task: Task, context: PropertyCalculationContext): void {
         const { startHour, viewStartDate } = context;

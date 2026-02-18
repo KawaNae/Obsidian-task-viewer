@@ -45,6 +45,12 @@ export function formatTaskLine(result: CreateTaskResult): string {
 export interface CreateTaskModalOptions {
     /** Show a warning when task name and all date fields are empty (task won't appear in viewer) */
     warnOnEmptyTask?: boolean;
+    /** Modal title text */
+    title?: string;
+    /** Submit button label */
+    submitLabel?: string;
+    /** Initial focus field */
+    focusField?: 'name' | 'start' | 'end' | 'deadline';
 }
 
 export class CreateTaskModal extends Modal {
@@ -60,6 +66,7 @@ export class CreateTaskModal extends Modal {
     private deadlineTimeInput: HTMLInputElement;
     private errorEl: HTMLElement;
     private warningEl: HTMLElement;
+    private nameInput: HTMLInputElement;
 
     constructor(app: App, onSubmit: (result: CreateTaskResult) => void, initialValues: Partial<CreateTaskResult> = {}, options: CreateTaskModalOptions = {}) {
         super(app);
@@ -71,12 +78,13 @@ export class CreateTaskModal extends Modal {
     onOpen() {
         const { contentEl } = this;
 
-        contentEl.createEl('h2', { text: 'Create New Task' });
+        contentEl.createEl('h2', { text: this.options.title ?? 'Create New Task' });
 
         // --- Task Name ---
         new Setting(contentEl)
             .setName('Task Name')
             .addText((text) => {
+                text.setValue(this.result.content ?? '');
                 text.onChange((value) => {
                     this.result.content = value;
                     this.validateInputs();
@@ -84,6 +92,7 @@ export class CreateTaskModal extends Modal {
                 text.inputEl.addEventListener('keydown', (e: KeyboardEvent) => {
                     if (e.key === 'Enter') this.submit();
                 });
+                this.nameInput = text.inputEl;
             });
 
         // --- Start ---
@@ -119,14 +128,19 @@ export class CreateTaskModal extends Modal {
         new Setting(contentEl)
             .addButton((btn) =>
                 btn
-                    .setButtonText('Create')
+                    .setButtonText(this.options.submitLabel ?? 'Create')
                     .setCta()
                     .onClick(() => this.submit()));
 
-        // Focus on task name input
+        // Focus target field
         setTimeout(() => {
-            const input = contentEl.querySelector('input[type="text"]') as HTMLInputElement;
-            if (input) input.focus();
+            const focusField = this.options.focusField ?? 'name';
+            const focusTarget =
+                focusField === 'start' ? this.startDateInput
+                    : focusField === 'end' ? this.endDateInput
+                        : focusField === 'deadline' ? this.deadlineDateInput
+                            : this.nameInput;
+            focusTarget?.focus();
         }, 50);
     }
 
