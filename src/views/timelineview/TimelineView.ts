@@ -18,9 +18,9 @@ import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
 import { DeadlineListRenderer } from './renderers/DeadlineListRenderer';
 import { HabitTrackerRenderer } from './renderers/HabitTrackerRenderer';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
+import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 
-
-export const VIEW_TYPE_TIMELINE = 'timeline-view';
+export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
 
 type DeadlineListToggleSource =
     | 'toolbar'
@@ -101,11 +101,11 @@ export class TimelineView extends ItemView {
     }
 
     getDisplayText() {
-        return 'Timeline View';
+        return VIEW_META_TIMELINE.displayText;
     }
 
     getIcon() {
-        return 'calendar-with-checkmark';
+        return VIEW_META_TIMELINE.icon;
     }
 
     async setState(state: any, result: any): Promise<void> {

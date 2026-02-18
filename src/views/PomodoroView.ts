@@ -9,8 +9,9 @@ import { ItemView, WorkspaceLeaf, Notice, Menu, setIcon } from 'obsidian';
 import TaskViewerPlugin from '../main';
 import { PomodoroService, PomodoroState, PomodoroMode } from '../services/execution/PomodoroService';
 import { InputModal } from '../modals/InputModal';
+import { VIEW_META_POMODORO } from '../constants/viewRegistry';
 
-export const VIEW_TYPE_POMODORO = 'pomodoro-view';
+export const VIEW_TYPE_POMODORO = VIEW_META_POMODORO.type;
 
 export class PomodoroView extends ItemView {
     private plugin: TaskViewerPlugin;
@@ -29,11 +30,11 @@ export class PomodoroView extends ItemView {
     }
 
     getDisplayText(): string {
-        return 'Pomodoro Timer';
+        return VIEW_META_POMODORO.displayText;
     }
 
     getIcon(): string {
-        return 'clock';
+        return VIEW_META_POMODORO.icon;
     }
 
     async onOpen(): Promise<void> {

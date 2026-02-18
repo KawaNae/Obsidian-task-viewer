@@ -12,8 +12,9 @@ import { FileFilterMenu, ViewUtils } from './ViewUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../constants/hover';
 import { TaskLinkInteractionManager } from './taskcard/TaskLinkInteractionManager';
 import { CalendarTaskModal } from './CalendarTaskModal';
+import { VIEW_META_CALENDAR } from '../constants/viewRegistry';
 
-export const VIEW_TYPE_CALENDAR = 'calendar-view';
+export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
 
 interface CalendarTaskEntry {
     task: Task;
@@ -53,11 +54,11 @@ export class CalendarView extends ItemView {
     }
 
     getDisplayText(): string {
-        return 'Calendar View';
+        return VIEW_META_CALENDAR.displayText;
     }
 
     getIcon(): string {
-        return 'calendar';
+        return VIEW_META_CALENDAR.icon;
     }
 
     async setState(state: any, result: any): Promise<void> {
