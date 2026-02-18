@@ -1,4 +1,4 @@
-import { App, Modal, Setting, setIcon } from 'obsidian';
+import { App, Modal, Platform, Setting, setIcon } from 'obsidian';
 import { Task } from '../types';
 import { TaskParser } from '../services/parsing/TaskParser';
 
@@ -75,6 +75,19 @@ export class CreateTaskModal extends Modal {
         this.options = options;
     }
 
+    /**
+     * On mobile, defer open() by one frame so any context menu can finish closing
+     * before the modal DOM is inserted. Without this, the menu overlay remains
+     * visible behind the modal on Android/iOS.
+     */
+    open(): void {
+        if (Platform.isMobile) {
+            requestAnimationFrame(() => super.open());
+        } else {
+            super.open();
+        }
+    }
+
     onOpen() {
         const { contentEl } = this;
 
@@ -132,16 +145,19 @@ export class CreateTaskModal extends Modal {
                     .setCta()
                     .onClick(() => this.submit()));
 
-        // Focus target field
-        setTimeout(() => {
-            const focusField = this.options.focusField ?? 'name';
-            const focusTarget =
-                focusField === 'start' ? this.startDateInput
-                    : focusField === 'end' ? this.endDateInput
-                        : focusField === 'deadline' ? this.deadlineDateInput
-                            : this.nameInput;
-            focusTarget?.focus();
-        }, 50);
+        // Focus target field — skip on mobile to prevent the touch keyboard from
+        // popping up automatically when the modal opens.
+        if (!Platform.isMobile) {
+            setTimeout(() => {
+                const focusField = this.options.focusField ?? 'name';
+                const focusTarget =
+                    focusField === 'start' ? this.startDateInput
+                        : focusField === 'end' ? this.endDateInput
+                            : focusField === 'deadline' ? this.deadlineDateInput
+                                : this.nameInput;
+                focusTarget?.focus();
+            }, 50);
+        }
     }
 
     private renderDateTimeSection(
