@@ -104,6 +104,12 @@
 /* Timeline View: Absolute Positioning for time-based placement */
 .timeline-view .task-card {
     position: absolute;
+    overflow: visible;
+}
+
+/* Timeline View: allow short cards to overflow content downward */
+.timeline-view .task-card__content {
+    overflow: visible;
 }
 
 /* Timeline View: AllDay needs relative (Grid-based) */
