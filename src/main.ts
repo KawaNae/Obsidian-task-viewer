@@ -21,6 +21,7 @@ import { LineStyleSuggest } from './suggest/line/LineStyleSuggest';
 import { PropertyLineStyleSuggest } from './suggest/line/PropertyLineStyleSuggest';
 import { DateUtils } from './utils/DateUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
+import { getViewMeta } from './constants/viewRegistry';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
@@ -85,27 +86,32 @@ export default class TaskViewerPlugin extends Plugin {
             (leaf) => new CalendarView(leaf, this.taskIndex, this)
         );
 
+        const timelineViewMeta = getViewMeta(VIEW_TYPE_TIMELINE);
+        const scheduleViewMeta = getViewMeta(VIEW_TYPE_SCHEDULE);
+        const pomodoroViewMeta = getViewMeta(VIEW_TYPE_POMODORO);
+        const calendarViewMeta = getViewMeta(VIEW_TYPE_CALENDAR);
+
         // Add Ribbon Icon
-        this.addRibbonIcon('calendar-clock', 'Open Timeline', () => {
+        this.addRibbonIcon(timelineViewMeta.icon, timelineViewMeta.ribbonTitle, () => {
             this.activateView(VIEW_TYPE_TIMELINE);
         });
 
-        this.addRibbonIcon('calendar-days', 'Open Schedule', () => {
+        this.addRibbonIcon(scheduleViewMeta.icon, scheduleViewMeta.ribbonTitle, () => {
             this.activateView(VIEW_TYPE_SCHEDULE);
         });
 
-        this.addRibbonIcon('clock', 'Open Pomodoro Timer', () => {
+        this.addRibbonIcon(pomodoroViewMeta.icon, pomodoroViewMeta.ribbonTitle, () => {
             this.activateView(VIEW_TYPE_POMODORO);
         });
 
-        this.addRibbonIcon('calendar', 'Open Calendar', () => {
+        this.addRibbonIcon(calendarViewMeta.icon, calendarViewMeta.ribbonTitle, () => {
             this.activateView(VIEW_TYPE_CALENDAR);
         });
 
         // Add Command
         this.addCommand({
             id: 'open-timeline-view',
-            name: 'Open Timeline View',
+            name: timelineViewMeta.commandName,
             callback: () => {
                 this.activateView(VIEW_TYPE_TIMELINE);
             }
@@ -113,7 +119,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         this.addCommand({
             id: 'open-schedule-view',
-            name: 'Open Schedule View',
+            name: scheduleViewMeta.commandName,
             callback: () => {
                 this.activateView(VIEW_TYPE_SCHEDULE);
             }
@@ -121,7 +127,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         this.addCommand({
             id: 'open-pomodoro-view',
-            name: 'Open Pomodoro Timer',
+            name: pomodoroViewMeta.commandName,
             callback: () => {
                 this.activateView(VIEW_TYPE_POMODORO);
             }
@@ -129,7 +135,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         this.addCommand({
             id: 'open-calendar-view',
-            name: 'Open Calendar View',
+            name: calendarViewMeta.commandName,
             callback: () => {
                 this.activateView(VIEW_TYPE_CALENDAR);
             }

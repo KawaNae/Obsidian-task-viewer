@@ -1,4 +1,4 @@
-import { App, Modal, Setting } from 'obsidian';
+import { App, Modal, Setting, setIcon } from 'obsidian';
 import { Task } from '../types';
 import { TaskParser } from '../services/parsing/TaskParser';
 
@@ -45,6 +45,12 @@ export function formatTaskLine(result: CreateTaskResult): string {
 export interface CreateTaskModalOptions {
     /** Show a warning when task name and all date fields are empty (task won't appear in viewer) */
     warnOnEmptyTask?: boolean;
+    /** Modal title text */
+    title?: string;
+    /** Submit button label */
+    submitLabel?: string;
+    /** Initial focus field */
+    focusField?: 'name' | 'start' | 'end' | 'deadline';
 }
 
 export class CreateTaskModal extends Modal {
@@ -60,6 +66,7 @@ export class CreateTaskModal extends Modal {
     private deadlineTimeInput: HTMLInputElement;
     private errorEl: HTMLElement;
     private warningEl: HTMLElement;
+    private nameInput: HTMLInputElement;
 
     constructor(app: App, onSubmit: (result: CreateTaskResult) => void, initialValues: Partial<CreateTaskResult> = {}, options: CreateTaskModalOptions = {}) {
         super(app);
@@ -71,12 +78,13 @@ export class CreateTaskModal extends Modal {
     onOpen() {
         const { contentEl } = this;
 
-        contentEl.createEl('h2', { text: 'Create New Task' });
+        contentEl.createEl('h2', { text: this.options.title ?? 'Create New Task' });
 
         // --- Task Name ---
         new Setting(contentEl)
             .setName('Task Name')
             .addText((text) => {
+                text.setValue(this.result.content ?? '');
                 text.onChange((value) => {
                     this.result.content = value;
                     this.validateInputs();
@@ -84,6 +92,7 @@ export class CreateTaskModal extends Modal {
                 text.inputEl.addEventListener('keydown', (e: KeyboardEvent) => {
                     if (e.key === 'Enter') this.submit();
                 });
+                this.nameInput = text.inputEl;
             });
 
         // --- Start ---
@@ -119,14 +128,19 @@ export class CreateTaskModal extends Modal {
         new Setting(contentEl)
             .addButton((btn) =>
                 btn
-                    .setButtonText('Create')
+                    .setButtonText(this.options.submitLabel ?? 'Create')
                     .setCta()
                     .onClick(() => this.submit()));
 
-        // Focus on task name input
+        // Focus target field
         setTimeout(() => {
-            const input = contentEl.querySelector('input[type="text"]') as HTMLInputElement;
-            if (input) input.focus();
+            const focusField = this.options.focusField ?? 'name';
+            const focusTarget =
+                focusField === 'start' ? this.startDateInput
+                    : focusField === 'end' ? this.endDateInput
+                        : focusField === 'deadline' ? this.deadlineDateInput
+                            : this.nameInput;
+            focusTarget?.focus();
         }, 50);
     }
 
@@ -144,22 +158,22 @@ export class CreateTaskModal extends Modal {
         // Date field
         const dateDiv = row.createDiv({ cls: 'create-task-modal__date-row__field' });
         dateDiv.createEl('label', { text: 'Date' });
-        const dateInput = dateDiv.createEl('input', {
-            type: 'text',
-            placeholder: 'YYYY-MM-DD',
-            cls: 'create-task-modal__text-input'
-        });
-        dateInput.value = initialDate || '';
+        const dateInput = this.createPickerTextInput(
+            dateDiv,
+            'date',
+            'YYYY-MM-DD',
+            initialDate || ''
+        );
 
         // Time field
         const timeDiv = row.createDiv({ cls: 'create-task-modal__date-row__field' });
         timeDiv.createEl('label', { text: 'Time' });
-        const timeInput = timeDiv.createEl('input', {
-            type: 'text',
-            placeholder: 'HH:mm',
-            cls: 'create-task-modal__text-input'
-        });
-        timeInput.value = initialTime || '';
+        const timeInput = this.createPickerTextInput(
+            timeDiv,
+            'time',
+            'HH:mm',
+            initialTime || ''
+        );
 
         // Store refs
         if (section === 'start') { this.startDateInput = dateInput; this.startTimeInput = timeInput; }
@@ -182,6 +196,80 @@ export class CreateTaskModal extends Modal {
         timeInput.addEventListener('input', update);
         dateInput.addEventListener('keydown', (e: KeyboardEvent) => { if (e.key === 'Enter') this.submit(); });
         timeInput.addEventListener('keydown', (e: KeyboardEvent) => { if (e.key === 'Enter') this.submit(); });
+    }
+
+    private createPickerTextInput(
+        container: HTMLElement,
+        pickerType: 'date' | 'time',
+        placeholder: string,
+        initialValue: string
+    ): HTMLInputElement {
+        const wrapper = container.createDiv({ cls: 'create-task-modal__input-with-picker' });
+
+        const textInput = wrapper.createEl('input', {
+            type: 'text',
+            placeholder,
+            cls: 'create-task-modal__text-input'
+        });
+        textInput.value = initialValue;
+
+        const pickerButton = wrapper.createEl('button', {
+            cls: 'create-task-modal__picker-button'
+        });
+        pickerButton.type = 'button';
+        pickerButton.setAttribute(
+            'aria-label',
+            pickerType === 'date' ? 'Open date picker' : 'Open time picker'
+        );
+        setIcon(pickerButton, pickerType === 'date' ? 'calendar' : 'clock');
+
+        const nativePickerInput = wrapper.createEl('input', {
+            cls: 'create-task-modal__native-picker-input'
+        });
+        nativePickerInput.type = pickerType;
+        if (pickerType === 'time') {
+            nativePickerInput.step = '60';
+        }
+
+        const syncNativeValueFromText = () => {
+            const value = textInput.value.trim();
+            if (pickerType === 'date') {
+                nativePickerInput.value = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';
+                return;
+            }
+            nativePickerInput.value = /^\d{2}:\d{2}$/.test(value) ? value : '';
+        };
+
+        pickerButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            syncNativeValueFromText();
+            this.tryOpenNativePicker(nativePickerInput);
+        });
+
+        nativePickerInput.addEventListener('change', () => {
+            if (!nativePickerInput.value) {
+                return;
+            }
+            textInput.value = nativePickerInput.value;
+            textInput.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+
+        return textInput;
+    }
+
+    private tryOpenNativePicker(input: HTMLInputElement): void {
+        const picker = input as HTMLInputElement & { showPicker?: () => void };
+        try {
+            if (typeof picker.showPicker === 'function') {
+                picker.showPicker();
+                return;
+            }
+            input.focus();
+            input.click();
+        } catch {
+            input.focus();
+            input.click();
+        }
     }
 
     private validateInputs(): boolean {

@@ -6,13 +6,26 @@ import { TaskCardRenderer } from './taskcard/TaskCardRenderer';
 import { Task, isCompleteStatusChar } from '../types';
 import { DateUtils } from '../utils/DateUtils';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
+import { TaskIdGenerator } from '../utils/TaskIdGenerator';
+import { DragHandler } from '../interaction/drag/DragHandler';
 import TaskViewerPlugin from '../main';
 import { FileFilterMenu, ViewUtils } from './ViewUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../constants/hover';
 import { TaskLinkInteractionManager } from './taskcard/TaskLinkInteractionManager';
 import { CalendarTaskModal } from './CalendarTaskModal';
+import { VIEW_META_CALENDAR } from '../constants/viewRegistry';
+import { HandleManager } from './timelineview/HandleManager';
 
-export const VIEW_TYPE_CALENDAR = 'calendar-view';
+export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
+
+interface CalendarTaskEntry {
+    task: Task;
+    segmentId: string;
+    colStart: number;
+    span: number;
+    continuesBefore: boolean;
+    continuesAfter: boolean;
+}
 
 export class CalendarView extends ItemView {
     private readonly taskIndex: TaskIndex;
@@ -22,6 +35,8 @@ export class CalendarView extends ItemView {
     private readonly filterMenu = new FileFilterMenu();
 
     private menuHandler: MenuHandler;
+    private dragHandler: DragHandler | null = null;
+    private handleManager: HandleManager | null = null;
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private currentMonth: Date;
@@ -43,11 +58,11 @@ export class CalendarView extends ItemView {
     }
 
     getDisplayText(): string {
-        return 'Calendar View';
+        return VIEW_META_CALENDAR.displayText;
     }
 
     getIcon(): string {
-        return 'calendar';
+        return VIEW_META_CALENDAR.icon;
     }
 
     async setState(state: any, result: any): Promise<void> {
@@ -90,6 +105,29 @@ export class CalendarView extends ItemView {
         this.container.addClass('calendar-view-container');
 
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
+        this.handleManager = new HandleManager(this.container, this.taskIndex);
+        this.dragHandler = new DragHandler(
+            this.container,
+            this.taskIndex,
+            this.plugin,
+            (taskId: string) => {
+                this.handleManager?.selectTask(taskId);
+            },
+            () => {
+                this.handleManager?.updatePositions();
+            },
+            () => this.getViewStartDateString()
+        );
+
+        this.container.addEventListener('click', (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            if (target.closest('.task-card__handle-btn')) {
+                return;
+            }
+            if (!target.closest('.task-card')) {
+                this.handleManager?.selectTask(null);
+            }
+        });
 
         await this.render();
 
@@ -99,6 +137,10 @@ export class CalendarView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        this.dragHandler?.destroy();
+        this.dragHandler = null;
+        this.handleManager = null;
+
         if (this.unsubscribe) {
             this.unsubscribe();
             this.unsubscribe = null;
@@ -126,22 +168,33 @@ export class CalendarView extends ItemView {
         const rangeEndStr = DateUtils.getLocalDateString(endDate);
         this.menuHandler.setViewStartDate(rangeStartStr);
 
-        const tasksByDate = this.getTasksByDate(rangeStartStr, rangeEndStr);
+        const allVisibleTasks = this.getVisibleTasksInRange(rangeStartStr, rangeEndStr);
         const body = calendarHost.createDiv('calendar-grid__body');
 
         let cursor = new Date(startDate);
         while (cursor <= endDate) {
             const weekRow = body.createDiv('calendar-week-row');
+            const weekStartStr = DateUtils.getLocalDateString(cursor);
+            weekRow.dataset.weekStart = weekStartStr;
+            const weekDates: string[] = [];
+
             for (let i = 0; i < 7; i++) {
                 const cellDate = new Date(cursor);
                 const dateKey = DateUtils.getLocalDateString(cellDate);
-                const tasks = tasksByDate.get(dateKey) ?? [];
-                await this.renderDateCell(weekRow, cellDate, tasks);
+                weekDates.push(dateKey);
+                this.renderDateHeader(weekRow, cellDate, i + 1);
                 cursor.setDate(cursor.getDate() + 1);
             }
+
+            await this.renderWeekTasks(weekRow, weekDates, allVisibleTasks);
         }
 
         toolbar.dataset.range = `${rangeStartStr}:${rangeEndStr}`;
+
+        const selectedTaskId = this.handleManager?.getSelectedTaskId();
+        if (selectedTaskId) {
+            this.handleManager?.selectTask(selectedTaskId);
+        }
     }
 
     private renderToolbar(): HTMLElement {
@@ -208,19 +261,24 @@ export class CalendarView extends ItemView {
         });
     }
 
-    private async renderDateCell(row: HTMLElement, date: Date, tasks: Task[]): Promise<void> {
-        const cell = row.createDiv('calendar-date-cell');
+    private renderDateHeader(weekRow: HTMLElement, date: Date, colIndex: number): void {
+        const header = weekRow.createDiv('calendar-date-header');
         const dateKey = DateUtils.getLocalDateString(date);
         const todayKey = DateUtils.getLocalDateString(new Date());
 
-        if (date.getFullYear() !== this.currentMonth.getFullYear() || date.getMonth() !== this.currentMonth.getMonth()) {
-            cell.addClass('is-outside-month');
-        }
-        if (dateKey === todayKey) {
-            cell.addClass('is-today');
+        header.style.gridColumn = `${colIndex}`;
+        header.style.gridRow = '1';
+        if (colIndex === 7) {
+            header.addClass('is-last-col');
         }
 
-        const header = cell.createDiv('calendar-date-header');
+        if (date.getFullYear() !== this.currentMonth.getFullYear() || date.getMonth() !== this.currentMonth.getMonth()) {
+            header.addClass('is-outside-month');
+        }
+        if (dateKey === todayKey) {
+            header.addClass('is-today');
+        }
+
         const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(this.app, date);
         const dateLink = header.createEl('a', {
             cls: 'internal-link',
@@ -241,29 +299,95 @@ export class CalendarView extends ItemView {
         header.addEventListener('click', () => {
             void this.openOrCreateDailyNote(date);
         });
+    }
 
-        const taskList = cell.createDiv('calendar-task-list');
-        if (tasks.length === 0) {
+    private async renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: Task[]): Promise<void> {
+        const entries = this.collectWeekTaskEntries(weekDates, allTasks);
+        if (entries.length === 0) {
             return;
         }
 
-        const maxTasks = Math.max(1, this.plugin.settings.calendarMaxTasksPerCell);
-        const visibleTasks = tasks.slice(0, maxTasks);
-        const renderPromises = visibleTasks.map((task) => this.renderTaskCard(taskList, task));
-        await Promise.all(renderPromises);
+        const maxTasksPerCell = Math.max(1, this.plugin.settings.calendarMaxTasksPerCell);
+        const shownCountByDate = new Map<string, number>();
+        const hiddenTasksByDate = new Map<string, Task[]>();
+        weekDates.forEach((dateKey) => {
+            shownCountByDate.set(dateKey, 0);
+            hiddenTasksByDate.set(dateKey, []);
+        });
 
-        if (tasks.length > maxTasks) {
-            const hiddenCount = tasks.length - maxTasks;
-            const moreBtn = taskList.createEl('button', {
+        const tasksByDate = this.buildWeekTasksByDate(weekDates, entries);
+        const tracks: number[] = [];
+        let maxTrackIndex = -1;
+
+        for (const entry of entries) {
+            const coveredDates = weekDates.slice(entry.colStart - 1, entry.colStart - 1 + entry.span);
+            const canRender = coveredDates.every((dateKey) => (shownCountByDate.get(dateKey) ?? 0) < maxTasksPerCell);
+
+            if (!canRender) {
+                for (const dateKey of coveredDates) {
+                    hiddenTasksByDate.get(dateKey)?.push(entry.task);
+                }
+                continue;
+            }
+
+            let trackIndex = -1;
+            for (let i = 0; i < tracks.length; i++) {
+                if (entry.colStart > tracks[i]) {
+                    trackIndex = i;
+                    break;
+                }
+            }
+
+            if (trackIndex === -1) {
+                trackIndex = tracks.length;
+                tracks.push(entry.colStart + entry.span - 1);
+            } else {
+                tracks[trackIndex] = entry.colStart + entry.span - 1;
+            }
+
+            const gridRow = trackIndex + 2;
+            maxTrackIndex = Math.max(maxTrackIndex, trackIndex);
+            await this.renderGridTask(weekRow, entry, gridRow);
+
+            for (const dateKey of coveredDates) {
+                shownCountByDate.set(dateKey, (shownCountByDate.get(dateKey) ?? 0) + 1);
+            }
+        }
+
+        const moreRow = Math.max(2, maxTrackIndex + 3);
+        for (let index = 0; index < weekDates.length; index++) {
+            const dateKey = weekDates[index];
+            const hiddenTasks = hiddenTasksByDate.get(dateKey) ?? [];
+            if (hiddenTasks.length === 0) {
+                continue;
+            }
+
+            const dedupedHiddenTasks: Task[] = [];
+            const seenTaskIds = new Set<string>();
+            for (const task of hiddenTasks) {
+                if (!seenTaskIds.has(task.id)) {
+                    dedupedHiddenTasks.push(task);
+                    seenTaskIds.add(task.id);
+                }
+            }
+
+            if (dedupedHiddenTasks.length === 0) {
+                continue;
+            }
+
+            const moreBtn = weekRow.createEl('button', {
                 cls: 'calendar-more-button',
-                text: `+${hiddenCount} more`,
+                text: `+${dedupedHiddenTasks.length} more`,
             });
+            moreBtn.style.gridColumn = `${index + 1}`;
+            moreBtn.style.gridRow = `${moreRow}`;
             moreBtn.addEventListener('click', (event: MouseEvent) => {
                 event.preventDefault();
                 event.stopPropagation();
+                const tasksForDate = tasksByDate.get(dateKey) ?? dedupedHiddenTasks;
                 new CalendarTaskModal(
                     this.app,
-                    tasks,
+                    tasksForDate,
                     dateKey,
                     this.taskRenderer,
                     this,
@@ -274,54 +398,118 @@ export class CalendarView extends ItemView {
         }
     }
 
-    private async renderTaskCard(taskList: HTMLElement, task: Task): Promise<void> {
-        const wrapper = taskList.createDiv('calendar-task-wrapper');
-        const card = wrapper.createDiv('task-card');
-        card.addClass('calendar-task-card');
-
-        if (!task.startTime) {
-            card.addClass('task-card--allday');
+    private buildWeekTasksByDate(weekDates: string[], entries: CalendarTaskEntry[]): Map<string, Task[]> {
+        const tasksByDate = new Map<string, Task[]>();
+        const seenByDate = new Map<string, Set<string>>();
+        for (const dateKey of weekDates) {
+            tasksByDate.set(dateKey, []);
+            seenByDate.set(dateKey, new Set<string>());
         }
 
-        ViewUtils.applyFileColor(this.app, card, task.file, this.plugin.settings.frontmatterTaskKeys.color);
-        ViewUtils.applyFileLinestyle(this.app, card, task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
-        this.menuHandler.addTaskContextMenu(card, task);
-        await this.taskRenderer.render(card, task, this, this.plugin.settings);
-    }
-
-    private getTasksByDate(rangeStart: string, rangeEnd: string): Map<string, Task[]> {
-        const tasksByDate = new Map<string, Task[]>();
-        const allTasks = this.taskIndex.getTasks();
-
-        allTasks.forEach((task) => {
-            if (!this.plugin.settings.calendarShowCompleted && this.isTaskCompleted(task)) {
-                return;
-            }
-            if (!this.filterMenu.isFileVisible(task.file)) {
-                return;
-            }
-
-            const dates = this.getCalendarDatesForTask(task, rangeStart, rangeEnd);
-            dates.forEach((dateStr) => {
-                const bucket = tasksByDate.get(dateStr);
-                if (bucket) {
-                    bucket.push(task);
-                } else {
-                    tasksByDate.set(dateStr, [task]);
+        for (const entry of entries) {
+            const colEnd = entry.colStart + entry.span - 1;
+            for (let col = entry.colStart; col <= colEnd; col++) {
+                const dateKey = weekDates[col - 1];
+                if (!dateKey) {
+                    continue;
                 }
-            });
-        });
-
-        for (const [date, tasks] of tasksByDate.entries()) {
-            tasksByDate.set(date, this.sortTasksForCalendar(tasks));
+                const seen = seenByDate.get(dateKey);
+                if (!seen || seen.has(entry.task.id)) {
+                    continue;
+                }
+                seen.add(entry.task.id);
+                tasksByDate.get(dateKey)?.push(entry.task);
+            }
         }
 
         return tasksByDate;
     }
 
-    private getCalendarDatesForTask(task: Task, rangeStart: string, rangeEnd: string): string[] {
+    private collectWeekTaskEntries(weekDates: string[], allTasks: Task[]): CalendarTaskEntry[] {
+        if (weekDates.length !== 7) {
+            return [];
+        }
+
+        const weekStart = weekDates[0];
+        const weekEnd = weekDates[6];
+        const entries: CalendarTaskEntry[] = [];
+
+        for (const task of allTasks) {
+            const { effectiveStart, effectiveEnd } = this.getTaskDateRange(task);
+            if (!effectiveStart) {
+                continue;
+            }
+
+            const taskEnd = effectiveEnd || effectiveStart;
+            if (effectiveStart > weekEnd || taskEnd < weekStart) {
+                continue;
+            }
+
+            const clippedStart = effectiveStart < weekStart ? weekStart : effectiveStart;
+            const clippedEnd = taskEnd > weekEnd ? weekEnd : taskEnd;
+
+            const colStart = weekDates.indexOf(clippedStart) + 1;
+            const colEnd = weekDates.indexOf(clippedEnd) + 1;
+            const span = colEnd - colStart + 1;
+            if (colStart < 1 || span < 1) {
+                continue;
+            }
+
+            const isMultiday = this.isMultiDayTask(task);
+            const isSplit = isMultiday && (effectiveStart < weekStart || taskEnd > weekEnd);
+            const segmentId = isSplit
+                ? TaskIdGenerator.makeSegmentId(task.id, clippedStart)
+                : task.id;
+
+            entries.push({
+                task,
+                segmentId,
+                colStart,
+                span,
+                continuesBefore: isMultiday && effectiveStart < weekStart,
+                continuesAfter: isMultiday && taskEnd > weekEnd,
+            });
+        }
+
+        entries.sort((a, b) => {
+            if (a.colStart !== b.colStart) return a.colStart - b.colStart;
+            if (a.span !== b.span) return b.span - a.span;
+            const fileDiff = a.task.file.localeCompare(b.task.file);
+            if (fileDiff !== 0) return fileDiff;
+            if (a.task.line !== b.task.line) return a.task.line - b.task.line;
+            return a.task.id.localeCompare(b.task.id);
+        });
+
+        return entries;
+    }
+
+    private getVisibleTasksInRange(rangeStart: string, rangeEnd: string): Task[] {
+        const allTasks = this.taskIndex.getTasks();
+        return allTasks.filter((task) => {
+            if (!this.plugin.settings.calendarShowCompleted && this.isTaskCompleted(task)) {
+                return false;
+            }
+            if (!this.filterMenu.isFileVisible(task.file)) {
+                return false;
+            }
+
+            const { effectiveStart, effectiveEnd } = this.getTaskDateRange(task);
+            if (!effectiveStart) {
+                return false;
+            }
+            const taskEnd = effectiveEnd || effectiveStart;
+            return effectiveStart <= rangeEnd && taskEnd >= rangeStart;
+        });
+    }
+
+    private getTaskDateRange(task: Task): { effectiveStart: string | null; effectiveEnd: string | null } {
         if (task.startDate) {
             if (task.startTime) {
+                const visualDate = DateUtils.getVisualStartDate(
+                    task.startDate,
+                    task.startTime,
+                    this.plugin.settings.startHour
+                );
                 const isAllDay = DateUtils.isAllDayTask(
                     task.startDate,
                     task.startTime,
@@ -331,102 +519,84 @@ export class CalendarView extends ItemView {
                 );
 
                 if (isAllDay && task.endDate && task.endDate >= task.startDate) {
-                    return this.collectDateRange(task.startDate, task.endDate, rangeStart, rangeEnd);
+                    return { effectiveStart: task.startDate, effectiveEnd: task.endDate };
                 }
-
-                const visualDate = DateUtils.getVisualStartDate(
-                    task.startDate,
-                    task.startTime,
-                    this.plugin.settings.startHour
-                );
-                if (visualDate >= rangeStart && visualDate <= rangeEnd) {
-                    return [visualDate];
-                }
-                return [];
+                return { effectiveStart: visualDate, effectiveEnd: visualDate };
             }
 
-            if (task.endDate && task.endDate >= task.startDate) {
-                return this.collectDateRange(task.startDate, task.endDate, rangeStart, rangeEnd);
-            }
-
-            if (task.startDate >= rangeStart && task.startDate <= rangeEnd) {
-                return [task.startDate];
-            }
-            return [];
+            const effectiveEnd = task.endDate && task.endDate >= task.startDate
+                ? task.endDate
+                : task.startDate;
+            return { effectiveStart: task.startDate, effectiveEnd };
         }
 
         if (task.deadline) {
             const deadlineDate = task.deadline.split('T')[0];
-            if (deadlineDate >= rangeStart && deadlineDate <= rangeEnd) {
-                return [deadlineDate];
-            }
+            return { effectiveStart: deadlineDate, effectiveEnd: deadlineDate };
         }
 
-        return [];
+        return { effectiveStart: null, effectiveEnd: null };
     }
 
-    private collectDateRange(start: string, end: string, rangeStart: string, rangeEnd: string): string[] {
-        const clippedStart = start < rangeStart ? rangeStart : start;
-        const clippedEnd = end > rangeEnd ? rangeEnd : end;
-        if (clippedStart > clippedEnd) {
-            return [];
+    private isMultiDayTask(task: Task): boolean {
+        if (!task.startDate) {
+            return false;
+        }
+        if (task.startTime) {
+            return DateUtils.isAllDayTask(
+                task.startDate,
+                task.startTime,
+                task.endDate,
+                task.endTime,
+                this.plugin.settings.startHour
+            ) && !!task.endDate && task.endDate > task.startDate;
         }
 
-        const dates: string[] = [];
-        let cursor = this.parseLocalDate(clippedStart);
-        const endDate = this.parseLocalDate(clippedEnd);
-        while (cursor <= endDate) {
-            dates.push(DateUtils.getLocalDateString(cursor));
-            cursor.setDate(cursor.getDate() + 1);
-        }
-        return dates;
+        return !!task.endDate && task.endDate > task.startDate;
     }
 
-    private sortTasksForCalendar(tasks: Task[]): Task[] {
-        const startHour = this.plugin.settings.startHour;
+    private async renderGridTask(weekRow: HTMLElement, entry: CalendarTaskEntry, gridRow: number): Promise<void> {
+        const isMultiday = this.isMultiDayTask(entry.task);
 
-        return tasks.slice().sort((a, b) => {
-            const priorityDiff = this.getCalendarPriority(a, startHour) - this.getCalendarPriority(b, startHour);
-            if (priorityDiff !== 0) return priorityDiff;
+        if (isMultiday) {
+            const barEl = weekRow.createDiv('task-card calendar-task-card calendar-multiday-bar');
+            barEl.dataset.id = entry.segmentId;
+            barEl.addClass('task-card--allday');
+            barEl.addClass('task-card--multi-day');
+            if (entry.continuesBefore || entry.continuesAfter) {
+                barEl.dataset.splitOriginalId = entry.task.id;
+            }
+            barEl.style.gridColumn = `${entry.colStart} / span ${entry.span}`;
+            barEl.style.gridRow = `${gridRow}`;
 
-            if (a.startTime && b.startTime) {
-                const timeDiff = a.startTime.localeCompare(b.startTime);
-                if (timeDiff !== 0) return timeDiff;
+            if (entry.continuesBefore && entry.continuesAfter) {
+                barEl.addClass('calendar-multiday-bar--middle');
+            } else if (entry.continuesAfter) {
+                barEl.addClass('calendar-multiday-bar--head');
+            } else if (entry.continuesBefore) {
+                barEl.addClass('calendar-multiday-bar--tail');
             }
 
-            const aDeadline = a.deadline || '';
-            const bDeadline = b.deadline || '';
-            if (aDeadline && bDeadline) {
-                const deadlineDiff = aDeadline.localeCompare(bDeadline);
-                if (deadlineDiff !== 0) return deadlineDiff;
-            }
+            ViewUtils.applyFileColor(this.app, barEl, entry.task.file, this.plugin.settings.frontmatterTaskKeys.color);
+            ViewUtils.applyFileLinestyle(this.app, barEl, entry.task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
 
-            const fileDiff = a.file.localeCompare(b.file);
-            if (fileDiff !== 0) return fileDiff;
-
-            return a.line - b.line;
-        });
-    }
-
-    private getCalendarPriority(task: Task, startHour: number): number {
-        if (task.startDate) {
-            if (task.startTime) {
-                return DateUtils.isAllDayTask(task.startDate, task.startTime, task.endDate, task.endTime, startHour)
-                    ? 1
-                    : 2;
-            }
-
-            if (task.endDate && task.endDate > task.startDate) {
-                return 1;
-            }
-            return 3;
+            this.menuHandler.addTaskContextMenu(barEl, entry.task);
+            await this.taskRenderer.render(barEl, entry.task, this, this.plugin.settings, { topRight: 'none' });
+            return;
         }
 
-        if (task.deadline) {
-            return 4;
+        const card = weekRow.createDiv('task-card calendar-task-card');
+        card.dataset.id = entry.task.id;
+        if (!entry.task.startTime) {
+            card.addClass('task-card--allday');
         }
+        card.style.gridColumn = `${entry.colStart} / span ${entry.span}`;
+        card.style.gridRow = `${gridRow}`;
 
-        return 5;
+        ViewUtils.applyFileColor(this.app, card, entry.task.file, this.plugin.settings.frontmatterTaskKeys.color);
+        ViewUtils.applyFileLinestyle(this.app, card, entry.task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
+        this.menuHandler.addTaskContextMenu(card, entry.task);
+        await this.taskRenderer.render(card, entry.task, this, this.plugin.settings);
     }
 
     private isTaskCompleted(task: Task): boolean {
@@ -454,13 +624,22 @@ export class CalendarView extends ItemView {
             if (!this.plugin.settings.calendarShowCompleted && this.isTaskCompleted(task)) {
                 return;
             }
-            const dates = this.getCalendarDatesForTask(task, rangeStart, rangeEnd);
-            if (dates.length > 0) {
+            const { effectiveStart, effectiveEnd } = this.getTaskDateRange(task);
+            if (!effectiveStart) {
+                return;
+            }
+            const taskEnd = effectiveEnd || effectiveStart;
+            if (effectiveStart <= rangeEnd && taskEnd >= rangeStart) {
                 files.add(task.file);
             }
         });
 
         return Array.from(files).sort();
+    }
+
+    private getViewStartDateString(): string {
+        const { startDate } = this.getCalendarDateRange();
+        return DateUtils.getLocalDateString(startDate);
     }
 
     private getCalendarDateRange(): { startDate: Date; endDate: Date } {
@@ -512,11 +691,6 @@ export class CalendarView extends ItemView {
         const year = date.getFullYear();
         const month = (date.getMonth() + 1).toString().padStart(2, '0');
         return `${year}-${month}`;
-    }
-
-    private parseLocalDate(dateStr: string): Date {
-        const [y, m, d] = dateStr.split('-').map(Number);
-        return new Date(y, m - 1, d, 0, 0, 0, 0);
     }
 
     private async openOrCreateDailyNote(date: Date): Promise<void> {

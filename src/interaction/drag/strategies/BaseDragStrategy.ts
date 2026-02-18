@@ -16,7 +16,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
     protected currentContext: DragContext | null = null;
 
     // ビュータイプ（Timeline or AllDay）
-    protected viewType: 'timeline' | 'allday' = 'timeline';
+    protected viewType: 'timeline' | 'allday' | 'calendar' = 'timeline';
 
     // 初期位置
     protected initialX: number = 0;
@@ -67,7 +67,10 @@ export abstract class BaseDragStrategy implements DragStrategy {
     /**
      * ビュータイプを判定する（要素の親コンテナから）
      */
-    protected determineViewType(el: HTMLElement): 'timeline' | 'allday' {
+    protected determineViewType(el: HTMLElement): 'timeline' | 'allday' | 'calendar' {
+        if (el.closest('.calendar-week-row')) {
+            return 'calendar';
+        }
         if (el.closest('.day-timeline-column')) {
             return 'timeline';
         }

@@ -19,8 +19,9 @@ import { ScheduleOverlapLayout } from './utils/ScheduleOverlapLayout';
 import { ScheduleGridRenderer } from './renderers/ScheduleGridRenderer';
 import { ScheduleTaskRenderer } from './renderers/ScheduleTaskRenderer';
 import { ScheduleSectionRenderer } from './renderers/ScheduleSectionRenderer';
+import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 
-export const VIEW_TYPE_SCHEDULE = 'schedule-view';
+export const VIEW_TYPE_SCHEDULE = VIEW_META_SCHEDULE.type;
 
 export class ScheduleView extends ItemView {
     private static readonly HOURS_PER_DAY = 24;
@@ -98,11 +99,11 @@ export class ScheduleView extends ItemView {
     }
 
     getDisplayText(): string {
-        return 'Schedule View';
+        return VIEW_META_SCHEDULE.displayText;
     }
 
     getIcon(): string {
-        return 'calendar-days';
+        return VIEW_META_SCHEDULE.icon;
     }
 
     async setState(state: any, result: any): Promise<void> {
