@@ -75,19 +75,6 @@ export class CreateTaskModal extends Modal {
         this.options = options;
     }
 
-    /**
-     * On mobile, defer open() by one frame so any context menu can finish closing
-     * before the modal DOM is inserted. Without this, the menu overlay remains
-     * visible behind the modal on Android/iOS.
-     */
-    open(): void {
-        if (Platform.isMobile) {
-            requestAnimationFrame(() => super.open());
-        } else {
-            super.open();
-        }
-    }
-
     onOpen() {
         const { contentEl } = this;
 
