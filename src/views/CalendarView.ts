@@ -12,7 +12,6 @@ import TaskViewerPlugin from '../main';
 import { FileFilterMenu, ViewUtils } from './ViewUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../constants/hover';
 import { TaskLinkInteractionManager } from './taskcard/TaskLinkInteractionManager';
-import { CalendarTaskModal } from './CalendarTaskModal';
 import { VIEW_META_CALENDAR } from '../constants/viewRegistry';
 import { HandleManager } from './timelineview/HandleManager';
 
@@ -39,7 +38,9 @@ export class CalendarView extends ItemView {
     private handleManager: HandleManager | null = null;
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
-    private currentMonth: Date;
+    private windowStart: string;
+    private navigateWeekDebounceTimer: number | null = null;
+    private pendingWeekOffset: number = 0;
 
     constructor(leaf: WorkspaceLeaf, taskIndex: TaskIndex, plugin: TaskViewerPlugin) {
         super(leaf);
@@ -50,7 +51,10 @@ export class CalendarView extends ItemView {
             getHoverParent: () => this.leaf,
         });
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app);
-        this.currentMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
+        this.windowStart = DateUtils.getLocalDateString(weekStart);
     }
 
     getViewType(): string {
@@ -66,13 +70,22 @@ export class CalendarView extends ItemView {
     }
 
     async setState(state: any, result: any): Promise<void> {
-        if (state && typeof state.monthKey === 'string') {
+        if (state && typeof state.windowStart === 'string') {
+            const parsedWindowStart = this.parseLocalDateString(state.windowStart);
+            if (parsedWindowStart) {
+                const weekStart = this.getWeekStart(parsedWindowStart, this.plugin.settings.calendarWeekStartDay);
+                this.windowStart = DateUtils.getLocalDateString(weekStart);
+            }
+        } else if (state && typeof state.monthKey === 'string') {
+            // Backward compatibility for older saved layout state.
             const monthMatch = state.monthKey.match(/^(\d{4})-(\d{2})$/);
             if (monthMatch) {
                 const year = Number(monthMatch[1]);
                 const month = Number(monthMatch[2]);
                 if (month >= 1 && month <= 12) {
-                    this.currentMonth = new Date(year, month - 1, 1);
+                    const monthStart = new Date(year, month - 1, 1);
+                    const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
+                    this.windowStart = DateUtils.getLocalDateString(weekStart);
                 }
             }
         }
@@ -94,7 +107,7 @@ export class CalendarView extends ItemView {
     getState(): Record<string, unknown> {
         const visibleFiles = this.filterMenu.getVisibleFiles();
         return {
-            monthKey: this.getMonthKey(this.currentMonth),
+            windowStart: this.windowStart,
             filterFiles: visibleFiles ? Array.from(visibleFiles).sort() : null,
         };
     }
@@ -137,6 +150,12 @@ export class CalendarView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        if (this.navigateWeekDebounceTimer !== null) {
+            window.clearTimeout(this.navigateWeekDebounceTimer);
+            this.navigateWeekDebounceTimer = null;
+            this.pendingWeekOffset = 0;
+        }
+
         this.dragHandler?.destroy();
         this.dragHandler = null;
         this.handleManager = null;
@@ -156,6 +175,11 @@ export class CalendarView extends ItemView {
             return;
         }
 
+        const normalizedWindowStart = this.getNormalizedWindowStart(this.windowStart);
+        if (normalizedWindowStart !== this.windowStart) {
+            this.windowStart = normalizedWindowStart;
+        }
+
         this.container.empty();
 
         const toolbar = this.renderToolbar();
@@ -170,6 +194,22 @@ export class CalendarView extends ItemView {
 
         const allVisibleTasks = this.getVisibleTasksInRange(rangeStartStr, rangeEndStr);
         const body = calendarHost.createDiv('calendar-grid__body');
+        const referenceMonth = this.getReferenceMonth();
+
+        body.addEventListener('wheel', (e: WheelEvent) => {
+            if (e.deltaY === 0) {
+                return;
+            }
+
+            const atTop = body.scrollTop <= 0;
+            const atBottom = body.scrollTop >= body.scrollHeight - body.clientHeight - 1;
+            const noScroll = body.scrollHeight <= body.clientHeight + 1;
+
+            if (noScroll || (e.deltaY < 0 && atTop) || (e.deltaY > 0 && atBottom)) {
+                e.preventDefault();
+                this.navigateWeekDebounced(e.deltaY > 0 ? 1 : -1);
+            }
+        }, { passive: false });
 
         let cursor = new Date(startDate);
         while (cursor <= endDate) {
@@ -182,7 +222,7 @@ export class CalendarView extends ItemView {
                 const cellDate = new Date(cursor);
                 const dateKey = DateUtils.getLocalDateString(cellDate);
                 weekDates.push(dateKey);
-                this.renderDateHeader(weekRow, cellDate, i + 1);
+                this.renderDateHeader(weekRow, cellDate, i + 1, referenceMonth);
                 cursor.setDate(cursor.getDate() + 1);
             }
 
@@ -208,18 +248,18 @@ export class CalendarView extends ItemView {
 
         const prevBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(prevBtn, 'chevron-left');
-        prevBtn.setAttribute('aria-label', 'Previous month');
-        prevBtn.setAttribute('title', 'Previous month');
-        prevBtn.addEventListener('click', () => this.navigateMonth(-1));
+        prevBtn.setAttribute('aria-label', 'Previous week');
+        prevBtn.setAttribute('title', 'Previous week');
+        prevBtn.addEventListener('click', () => this.navigateWeek(-1));
 
         const monthLabel = toolbar.createSpan({ cls: 'calendar-month-label' });
-        monthLabel.setText(this.formatMonthLabel(this.currentMonth));
+        monthLabel.setText(this.formatWindowLabel());
 
         const nextBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(nextBtn, 'chevron-right');
-        nextBtn.setAttribute('aria-label', 'Next month');
-        nextBtn.setAttribute('title', 'Next month');
-        nextBtn.addEventListener('click', () => this.navigateMonth(1));
+        nextBtn.setAttribute('aria-label', 'Next week');
+        nextBtn.setAttribute('title', 'Next week');
+        nextBtn.addEventListener('click', () => this.navigateWeek(1));
 
         const todayBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon view-toolbar__btn--today' });
         setIcon(todayBtn, 'circle');
@@ -227,7 +267,9 @@ export class CalendarView extends ItemView {
         todayBtn.setAttribute('title', 'Today');
         todayBtn.addEventListener('click', () => {
             const today = new Date();
-            this.currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+            const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
+            this.windowStart = DateUtils.getLocalDateString(weekStart);
             void this.app.workspace.requestSaveLayout();
             void this.render();
         });
@@ -267,7 +309,7 @@ export class CalendarView extends ItemView {
         });
     }
 
-    private renderDateHeader(weekRow: HTMLElement, date: Date, colIndex: number): void {
+    private renderDateHeader(weekRow: HTMLElement, date: Date, colIndex: number, referenceMonth: { year: number; month: number }): void {
         const header = weekRow.createDiv('calendar-date-header');
         const dateKey = DateUtils.getLocalDateString(date);
         const todayKey = DateUtils.getLocalDateString(new Date());
@@ -278,7 +320,7 @@ export class CalendarView extends ItemView {
             header.addClass('is-last-col');
         }
 
-        if (date.getFullYear() !== this.currentMonth.getFullYear() || date.getMonth() !== this.currentMonth.getMonth()) {
+        if (date.getFullYear() !== referenceMonth.year || date.getMonth() !== referenceMonth.month) {
             header.addClass('is-outside-month');
         }
         if (dateKey === todayKey) {
@@ -313,29 +355,9 @@ export class CalendarView extends ItemView {
             return;
         }
 
-        const maxTasksPerCell = Math.max(1, this.plugin.settings.calendarMaxTasksPerCell);
-        const shownCountByDate = new Map<string, number>();
-        const hiddenTasksByDate = new Map<string, Task[]>();
-        weekDates.forEach((dateKey) => {
-            shownCountByDate.set(dateKey, 0);
-            hiddenTasksByDate.set(dateKey, []);
-        });
-
-        const tasksByDate = this.buildWeekTasksByDate(weekDates, entries);
         const tracks: number[] = [];
-        let maxTrackIndex = -1;
 
         for (const entry of entries) {
-            const coveredDates = weekDates.slice(entry.colStart - 1, entry.colStart - 1 + entry.span);
-            const canRender = coveredDates.every((dateKey) => (shownCountByDate.get(dateKey) ?? 0) < maxTasksPerCell);
-
-            if (!canRender) {
-                for (const dateKey of coveredDates) {
-                    hiddenTasksByDate.get(dateKey)?.push(entry.task);
-                }
-                continue;
-            }
-
             let trackIndex = -1;
             for (let i = 0; i < tracks.length; i++) {
                 if (entry.colStart > tracks[i]) {
@@ -352,83 +374,8 @@ export class CalendarView extends ItemView {
             }
 
             const gridRow = trackIndex + 2;
-            maxTrackIndex = Math.max(maxTrackIndex, trackIndex);
             await this.renderGridTask(weekRow, entry, gridRow);
-
-            for (const dateKey of coveredDates) {
-                shownCountByDate.set(dateKey, (shownCountByDate.get(dateKey) ?? 0) + 1);
-            }
         }
-
-        const moreRow = Math.max(2, maxTrackIndex + 3);
-        for (let index = 0; index < weekDates.length; index++) {
-            const dateKey = weekDates[index];
-            const hiddenTasks = hiddenTasksByDate.get(dateKey) ?? [];
-            if (hiddenTasks.length === 0) {
-                continue;
-            }
-
-            const dedupedHiddenTasks: Task[] = [];
-            const seenTaskIds = new Set<string>();
-            for (const task of hiddenTasks) {
-                if (!seenTaskIds.has(task.id)) {
-                    dedupedHiddenTasks.push(task);
-                    seenTaskIds.add(task.id);
-                }
-            }
-
-            if (dedupedHiddenTasks.length === 0) {
-                continue;
-            }
-
-            const moreBtn = weekRow.createEl('button', {
-                cls: 'calendar-more-button',
-                text: `+${dedupedHiddenTasks.length} more`,
-            });
-            moreBtn.style.gridColumn = `${index + 1}`;
-            moreBtn.style.gridRow = `${moreRow}`;
-            moreBtn.addEventListener('click', (event: MouseEvent) => {
-                event.preventDefault();
-                event.stopPropagation();
-                const tasksForDate = tasksByDate.get(dateKey) ?? dedupedHiddenTasks;
-                new CalendarTaskModal(
-                    this.app,
-                    tasksForDate,
-                    dateKey,
-                    this.taskRenderer,
-                    this,
-                    this.plugin.settings,
-                    this.menuHandler
-                ).open();
-            });
-        }
-    }
-
-    private buildWeekTasksByDate(weekDates: string[], entries: CalendarTaskEntry[]): Map<string, Task[]> {
-        const tasksByDate = new Map<string, Task[]>();
-        const seenByDate = new Map<string, Set<string>>();
-        for (const dateKey of weekDates) {
-            tasksByDate.set(dateKey, []);
-            seenByDate.set(dateKey, new Set<string>());
-        }
-
-        for (const entry of entries) {
-            const colEnd = entry.colStart + entry.span - 1;
-            for (let col = entry.colStart; col <= colEnd; col++) {
-                const dateKey = weekDates[col - 1];
-                if (!dateKey) {
-                    continue;
-                }
-                const seen = seenByDate.get(dateKey);
-                if (!seen || seen.has(entry.task.id)) {
-                    continue;
-                }
-                seen.add(entry.task.id);
-                tasksByDate.get(dateKey)?.push(entry.task);
-            }
-        }
-
-        return tasksByDate;
     }
 
     private collectWeekTaskEntries(weekDates: string[], allTasks: Task[]): CalendarTaskEntry[] {
@@ -534,11 +481,6 @@ export class CalendarView extends ItemView {
                 ? task.endDate
                 : task.startDate;
             return { effectiveStart: task.startDate, effectiveEnd };
-        }
-
-        if (task.deadline) {
-            const deadlineDate = task.deadline.split('T')[0];
-            return { effectiveStart: deadlineDate, effectiveEnd: deadlineDate };
         }
 
         return { effectiveStart: null, effectiveEnd: null };
@@ -649,10 +591,11 @@ export class CalendarView extends ItemView {
     }
 
     private getCalendarDateRange(): { startDate: Date; endDate: Date } {
-        const monthStart = new Date(this.currentMonth.getFullYear(), this.currentMonth.getMonth(), 1);
-        const monthEnd = new Date(this.currentMonth.getFullYear(), this.currentMonth.getMonth() + 1, 0);
-        const startDate = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
-        const endDate = this.getWeekEnd(monthEnd, this.plugin.settings.calendarWeekStartDay);
+        const parsedStart = this.parseLocalDateString(this.windowStart);
+        const fallbackStart = this.getWeekStart(new Date(), this.plugin.settings.calendarWeekStartDay);
+        const startDate = this.getWeekStart(parsedStart ?? fallbackStart, this.plugin.settings.calendarWeekStartDay);
+        const endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 41);
         return { startDate, endDate };
     }
 
@@ -660,13 +603,6 @@ export class CalendarView extends ItemView {
         const day = date.getDay();
         const diff = (day - weekStartDay + 7) % 7;
         return new Date(date.getFullYear(), date.getMonth(), date.getDate() - diff);
-    }
-
-    private getWeekEnd(date: Date, weekStartDay: 0 | 1): Date {
-        const day = date.getDay();
-        const weekEndDay = (weekStartDay + 6) % 7;
-        const diff = (weekEndDay - day + 7) % 7;
-        return new Date(date.getFullYear(), date.getMonth(), date.getDate() + diff);
     }
 
     private getWeekdayNames(): string[] {
@@ -677,26 +613,71 @@ export class CalendarView extends ItemView {
         return labels;
     }
 
-    private formatMonthLabel(date: Date): string {
+    private formatWindowLabel(): string {
+        const midDate = this.parseLocalDateString(DateUtils.addDays(this.windowStart, 20));
+        const fallback = this.parseLocalDateString(this.windowStart) ?? new Date();
+        const date = midDate ?? fallback;
         const year = date.getFullYear();
         const month = (date.getMonth() + 1).toString().padStart(2, '0');
         return `${year}-${month}`;
     }
 
-    private navigateMonth(offset: number): void {
-        this.currentMonth = new Date(
-            this.currentMonth.getFullYear(),
-            this.currentMonth.getMonth() + offset,
-            1
-        );
+    private getReferenceMonth(): { year: number; month: number } {
+        const midDate = this.parseLocalDateString(DateUtils.addDays(this.windowStart, 20));
+        const fallback = this.parseLocalDateString(this.windowStart) ?? new Date();
+        const date = midDate ?? fallback;
+        return { year: date.getFullYear(), month: date.getMonth() };
+    }
+
+    private navigateWeek(offset: number): void {
+        this.windowStart = DateUtils.addDays(this.windowStart, offset * 7);
         void this.app.workspace.requestSaveLayout();
         void this.render();
     }
 
-    private getMonthKey(date: Date): string {
-        const year = date.getFullYear();
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        return `${year}-${month}`;
+    private navigateWeekDebounced(offset: number): void {
+        this.pendingWeekOffset = offset;
+        if (this.navigateWeekDebounceTimer !== null) {
+            window.clearTimeout(this.navigateWeekDebounceTimer);
+        }
+        this.navigateWeekDebounceTimer = window.setTimeout(() => {
+            this.navigateWeekDebounceTimer = null;
+            const nextOffset = this.pendingWeekOffset;
+            this.pendingWeekOffset = 0;
+            this.navigateWeek(nextOffset);
+        }, 200);
+    }
+
+    private parseLocalDateString(value: string): Date | null {
+        const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) {
+            return null;
+        }
+
+        const year = Number(match[1]);
+        const month = Number(match[2]);
+        const day = Number(match[3]);
+        if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+            return null;
+        }
+
+        const parsed = new Date(year, month - 1, day);
+        if (
+            parsed.getFullYear() !== year ||
+            parsed.getMonth() !== month - 1 ||
+            parsed.getDate() !== day
+        ) {
+            return null;
+        }
+
+        return parsed;
+    }
+
+    private getNormalizedWindowStart(value: string): string {
+        const parsed = this.parseLocalDateString(value);
+        const baseDate = parsed ?? new Date();
+        const weekStart = this.getWeekStart(baseDate, this.plugin.settings.calendarWeekStartDay);
+        return DateUtils.getLocalDateString(weekStart);
     }
 
     private async openOrCreateDailyNote(date: Date): Promise<void> {

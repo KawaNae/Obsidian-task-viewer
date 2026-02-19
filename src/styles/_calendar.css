@@ -188,24 +188,6 @@
     margin-block-end: 0.1em;
 }
 
-.calendar-more-button {
-    margin: 1px 2px;
-    width: auto;
-    justify-self: stretch;
-    border: 1px dashed var(--tv-border);
-    border-radius: var(--tv-radius-s);
-    background: var(--tv-bg-secondary);
-    color: var(--tv-text-muted);
-    font-size: 0.75em;
-    padding: 3px 6px;
-    cursor: pointer;
-}
-
-.calendar-more-button:hover {
-    background: var(--tv-bg-hover);
-    color: var(--tv-text);
-}
-
 .calendar-task-modal {
     padding: 12px;
 }
