@@ -367,9 +367,9 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Default Zoom Level')
-            .setDesc('The default zoom level for the timeline view (0.25 - 4.0).')
+            .setDesc('The default zoom level for the timeline view (0.25 - 10.0).')
             .addSlider(slider => slider
-                .setLimits(0.25, 4.0, 0.25)
+                .setLimits(0.25, 10.0, 0.25)
                 .setValue(this.plugin.settings.zoomLevel)
                 .setDynamicTooltip()
                 .onChange(async (value) => {

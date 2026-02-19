@@ -325,7 +325,7 @@ export class ZoomControls {
         zoomInBtn.setAttribute('title', 'Zoom in');
         zoomInBtn.onclick = async () => {
             let newZoom = currentZoom + 0.25;
-            if (newZoom > 4.0) newZoom = 4.0;
+            if (newZoom > 10.0) newZoom = 10.0;
             await onZoomChange(newZoom);
         };
     }

@@ -77,6 +77,12 @@ export class TimelineView extends ItemView {
     private executionColumnEl: HTMLElement | null = null;
     private sidebarBackdropEl: HTMLElement | null = null;
     private layoutResizeObserver: ResizeObserver | null = null;
+    // ==================== Pinch zoom state ====================
+    private pinchInitialDistance: number = 0;
+    private pinchInitialZoom: number = 1;
+    private pinchInitialMidY: number = 0;
+    private pinchInitialScrollTop: number = 0;
+    private isPinching: boolean = false;
 
     // ==================== Lifecycle ====================
 
@@ -280,7 +286,7 @@ export class TimelineView extends ItemView {
             e.preventDefault();
             const delta = e.deltaY < 0 ? 0.25 : -0.25;
             const oldZoom = this.plugin.settings.zoomLevel;
-            const newZoom = Math.min(4.0, Math.max(0.25, oldZoom + delta));
+            const newZoom = Math.min(10.0, Math.max(0.25, oldZoom + delta));
             if (newZoom === oldZoom) return;
 
             // Keep the time under cursor stable during zoom when cursor is over scroll area.
@@ -304,6 +310,65 @@ export class TimelineView extends ItemView {
             // Avoid refreshAllViews() during wheel zoom; persist settings only.
             void this.plugin.saveData(this.plugin.settings);
         }, { passive: false });
+
+        // Pinch zoom (touch devices)
+        this.registerDomEvent(this.container, 'touchstart', (e: TouchEvent) => {
+            if (e.touches.length !== 2) return;
+            this.isPinching = true;
+            this.pinchInitialDistance = this.getTouchDistance(e.touches);
+            this.pinchInitialZoom = this.plugin.settings.zoomLevel;
+
+            // Capture initial midpoint and scrollTop so scroll correction uses absolute values
+            // instead of accumulating per-frame rounding errors.
+            const scrollArea = this.container.querySelector('.timeline-scroll-area') as HTMLElement | null;
+            if (scrollArea) {
+                const rect = scrollArea.getBoundingClientRect();
+                this.pinchInitialMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+                this.pinchInitialScrollTop = scrollArea.scrollTop;
+            }
+        }, { passive: true });
+
+        this.registerDomEvent(this.container, 'touchmove', (e: TouchEvent) => {
+            if (!this.isPinching || e.touches.length !== 2) return;
+            e.preventDefault();
+
+            const currentDistance = this.getTouchDistance(e.touches);
+            if (this.pinchInitialDistance <= 0) return;
+            const scale = currentDistance / this.pinchInitialDistance;
+            const oldZoom = this.plugin.settings.zoomLevel;
+            const newZoom = Math.min(10.0, Math.max(0.25, this.pinchInitialZoom * scale));
+            if (newZoom === oldZoom) return;
+
+            // Compute scrollTop from initial values (absolute), not from previous frame (relative).
+            // This avoids rounding-error accumulation across frames.
+            const scrollArea = this.container.querySelector('.timeline-scroll-area') as HTMLElement | null;
+            if (scrollArea) {
+                const midY = this.pinchInitialMidY;
+                if (midY >= 0 && midY <= scrollArea.clientHeight) {
+                    scrollArea.scrollTop = (this.pinchInitialScrollTop + midY) * (newZoom / this.pinchInitialZoom) - midY;
+                }
+            }
+
+            this.plugin.settings.zoomLevel = newZoom;
+            this.container.style.setProperty('--hour-height', `${60 * newZoom}px`);
+            const zoomLabel = this.container.querySelector('.view-toolbar__zoom-controls .view-toolbar__label');
+            if (zoomLabel) {
+                zoomLabel.textContent = `${Math.round(newZoom * 100)}%`;
+            }
+        }, { passive: false });
+
+        this.registerDomEvent(this.container, 'touchend', (e: TouchEvent) => {
+            if (!this.isPinching) return;
+            if (e.touches.length < 2) {
+                this.isPinching = false;
+                void this.plugin.saveData(this.plugin.settings);
+            }
+        });
+        this.registerDomEvent(this.container, 'touchcancel', () => {
+            if (!this.isPinching) return;
+            this.isPinching = false;
+            void this.plugin.saveData(this.plugin.settings);
+        });
 
         // Start Current Time Interval
         this.currentTimeInterval = window.setInterval(() => {
@@ -474,6 +539,12 @@ export class TimelineView extends ItemView {
         document.body.removeChild(outer);
 
         return scrollbarWidth;
+    }
+
+    private getTouchDistance(touches: TouchList): number {
+        const dx = touches[0].clientX - touches[1].clientX;
+        const dy = touches[0].clientY - touches[1].clientY;
+        return Math.sqrt(dx * dx + dy * dy);
     }
 
     private applyResponsiveLayoutMode(): void {
