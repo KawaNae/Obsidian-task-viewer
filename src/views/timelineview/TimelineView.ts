@@ -72,6 +72,7 @@ export class TimelineView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private currentTimeInterval: number | null = null;
     private lastScrollTop: number = 0;
+    private pendingScrollTop: number | null = null;
     private hasInitializedStartDate: boolean = false;
     private targetColumnEl: HTMLElement | null = null;
     private executionColumnEl: HTMLElement | null = null;
@@ -279,8 +280,22 @@ export class TimelineView extends ItemView {
             if (!e.ctrlKey) return;
             e.preventDefault();
             const delta = e.deltaY < 0 ? 0.25 : -0.25;
-            const newZoom = Math.min(4.0, Math.max(0.25, this.plugin.settings.zoomLevel + delta));
-            if (newZoom === this.plugin.settings.zoomLevel) return;
+            const oldZoom = this.plugin.settings.zoomLevel;
+            const newZoom = Math.min(4.0, Math.max(0.25, oldZoom + delta));
+            if (newZoom === oldZoom) return;
+
+            // Keep the time under cursor stable during zoom when cursor is over scroll area.
+            const scrollArea = this.container.querySelector('.timeline-scroll-area') as HTMLElement | null;
+            if (scrollArea) {
+                const rect = scrollArea.getBoundingClientRect();
+                const cursorY = e.clientY - rect.top;
+                const isCursorInsideScrollArea = cursorY >= 0 && cursorY <= rect.height;
+                if (isCursorInsideScrollArea) {
+                    const oldScrollTop = scrollArea.scrollTop;
+                    this.pendingScrollTop = (oldScrollTop + cursorY) * (newZoom / oldZoom) - cursorY;
+                }
+            }
+
             this.plugin.settings.zoomLevel = newZoom;
             this.plugin.saveSettings();
             this.render();
@@ -419,8 +434,12 @@ export class TimelineView extends ItemView {
 
         // Restore scroll position
         const newScrollArea = this.container.querySelector('.timeline-scroll-area');
-        if (newScrollArea && this.lastScrollTop > 0) {
-            newScrollArea.scrollTop = this.lastScrollTop;
+        if (newScrollArea) {
+            const targetScroll = this.pendingScrollTop ?? this.lastScrollTop;
+            if (targetScroll > 0) {
+                newScrollArea.scrollTop = targetScroll;
+            }
+            this.pendingScrollTop = null;
         }
 
         // Restore selected task handles AFTER scroll restoration
