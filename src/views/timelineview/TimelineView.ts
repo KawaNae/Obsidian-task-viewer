@@ -301,7 +301,8 @@ export class TimelineView extends ItemView {
             if (zoomLabel) {
                 zoomLabel.textContent = `${Math.round(newZoom * 100)}%`;
             }
-            this.plugin.saveSettings();
+            // Avoid refreshAllViews() during wheel zoom; persist settings only.
+            void this.plugin.saveData(this.plugin.settings);
         }, { passive: false });
 
         // Start Current Time Interval
