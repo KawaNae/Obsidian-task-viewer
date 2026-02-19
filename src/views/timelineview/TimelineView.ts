@@ -77,7 +77,6 @@ export class TimelineView extends ItemView {
     private executionColumnEl: HTMLElement | null = null;
     private sidebarBackdropEl: HTMLElement | null = null;
     private layoutResizeObserver: ResizeObserver | null = null;
-    private zoomDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     // ==================== Lifecycle ====================
 
@@ -275,22 +274,6 @@ export class TimelineView extends ItemView {
             }
         });
 
-        // Ctrl+wheel zoom (debounced render + save)
-        this.registerDomEvent(this.container, 'wheel', (e: WheelEvent) => {
-            if (!e.ctrlKey) return;
-            e.preventDefault();
-            const delta = e.deltaY < 0 ? 0.25 : -0.25;
-            const newZoom = Math.min(4.0, Math.max(0.25, this.plugin.settings.zoomLevel + delta));
-            if (newZoom === this.plugin.settings.zoomLevel) return;
-            this.plugin.settings.zoomLevel = newZoom;
-            this.container.style.setProperty('--hour-height', `${60 * newZoom}px`);
-            if (this.zoomDebounceTimer) clearTimeout(this.zoomDebounceTimer);
-            this.zoomDebounceTimer = setTimeout(() => {
-                this.zoomDebounceTimer = null;
-                this.plugin.saveSettings();
-                this.render();
-            }, 150);
-        }, { passive: false });
 
         // Start Current Time Interval
         this.currentTimeInterval = window.setInterval(() => {
