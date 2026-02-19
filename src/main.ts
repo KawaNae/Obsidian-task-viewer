@@ -3,6 +3,7 @@ import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
 import { CalendarView, VIEW_TYPE_CALENDAR } from './views/CalendarView';
+import { MiniCalendarView, VIEW_TYPE_MINI_CALENDAR } from './views/MiniCalendarView';
 import { PomodoroView, VIEW_TYPE_POMODORO } from './views/PomodoroView';
 import { PomodoroService } from './services/execution/PomodoroService';
 import { TimerWidget } from './widgets/TimerWidget';
@@ -86,10 +87,16 @@ export default class TaskViewerPlugin extends Plugin {
             (leaf) => new CalendarView(leaf, this.taskIndex, this)
         );
 
+        this.registerView(
+            VIEW_TYPE_MINI_CALENDAR,
+            (leaf) => new MiniCalendarView(leaf, this.taskIndex, this)
+        );
+
         const timelineViewMeta = getViewMeta(VIEW_TYPE_TIMELINE);
         const scheduleViewMeta = getViewMeta(VIEW_TYPE_SCHEDULE);
         const pomodoroViewMeta = getViewMeta(VIEW_TYPE_POMODORO);
         const calendarViewMeta = getViewMeta(VIEW_TYPE_CALENDAR);
+        const miniCalendarViewMeta = getViewMeta(VIEW_TYPE_MINI_CALENDAR);
 
         // Add Ribbon Icon
         this.addRibbonIcon(timelineViewMeta.icon, timelineViewMeta.ribbonTitle, () => {
@@ -106,6 +113,10 @@ export default class TaskViewerPlugin extends Plugin {
 
         this.addRibbonIcon(calendarViewMeta.icon, calendarViewMeta.ribbonTitle, () => {
             this.activateView(VIEW_TYPE_CALENDAR);
+        });
+
+        this.addRibbonIcon(miniCalendarViewMeta.icon, miniCalendarViewMeta.ribbonTitle, () => {
+            this.activateView(VIEW_TYPE_MINI_CALENDAR);
         });
 
         // Add Command
@@ -138,6 +149,14 @@ export default class TaskViewerPlugin extends Plugin {
             name: calendarViewMeta.commandName,
             callback: () => {
                 this.activateView(VIEW_TYPE_CALENDAR);
+            }
+        });
+
+        this.addCommand({
+            id: 'open-mini-calendar-view',
+            name: miniCalendarViewMeta.commandName,
+            callback: () => {
+                this.activateView(VIEW_TYPE_MINI_CALENDAR);
             }
         });
 
@@ -206,6 +225,7 @@ export default class TaskViewerPlugin extends Plugin {
                 timeline: VIEW_TYPE_TIMELINE,
                 calendar: VIEW_TYPE_CALENDAR,
                 schedule: VIEW_TYPE_SCHEDULE,
+                'mini-calendar': VIEW_TYPE_MINI_CALENDAR,
             };
             const viewType = viewMap[params.view];
             if (viewType) {
@@ -312,7 +332,7 @@ export default class TaskViewerPlugin extends Plugin {
      * Refresh all task viewer views
      */
     public refreshAllViews(): void {
-        [VIEW_TYPE_TIMELINE, VIEW_TYPE_SCHEDULE, VIEW_TYPE_CALENDAR].forEach(viewType => {
+        [VIEW_TYPE_TIMELINE, VIEW_TYPE_SCHEDULE, VIEW_TYPE_CALENDAR, VIEW_TYPE_MINI_CALENDAR].forEach(viewType => {
             this.app.workspace.getLeavesOfType(viewType).forEach(leaf => {
                 (leaf.view as any).refresh?.();
             });

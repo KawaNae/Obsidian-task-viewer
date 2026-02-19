@@ -1,4 +1,4 @@
-export type ViewType = 'timeline-view' | 'schedule-view' | 'pomodoro-view' | 'calendar-view';
+export type ViewType = 'timeline-view' | 'schedule-view' | 'pomodoro-view' | 'calendar-view' | 'mini-calendar-view';
 
 export type ViewMeta = {
     type: ViewType;
@@ -40,11 +40,20 @@ export const VIEW_META_CALENDAR: ViewMeta = {
     commandName: 'Open Calendar View',
 };
 
+export const VIEW_META_MINI_CALENDAR: ViewMeta = {
+    type: 'mini-calendar-view',
+    displayText: 'Mini Calendar',
+    icon: 'calendar-days',
+    ribbonTitle: 'Open Mini Calendar',
+    commandName: 'Open Mini Calendar View',
+};
+
 export const VIEW_REGISTRY: Readonly<Record<ViewType, ViewMeta>> = {
     'timeline-view': VIEW_META_TIMELINE,
     'schedule-view': VIEW_META_SCHEDULE,
     'pomodoro-view': VIEW_META_POMODORO,
     'calendar-view': VIEW_META_CALENDAR,
+    'mini-calendar-view': VIEW_META_MINI_CALENDAR,
 };
 
 export function getViewMeta(viewType: string): ViewMeta {

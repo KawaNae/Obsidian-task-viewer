@@ -1,0 +1,124 @@
+/* ==========================================================================
+   Mini Calendar View
+   ========================================================================== */
+
+.mini-calendar-view {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    padding: 12px !important;
+}
+
+.mini-calendar-toolbar {
+    gap: 4px;
+}
+
+.mini-calendar-month-label {
+    font-size: 0.9em;
+    font-weight: 700;
+    color: var(--tv-text);
+    min-width: 7.5em;
+    text-align: center;
+}
+
+.mini-calendar-toolbar__today {
+    min-width: 3.6em;
+}
+
+.mini-calendar-grid {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.mini-calendar-weekday-header {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.mini-calendar-weekday-cell {
+    text-align: center;
+    font-size: 0.72em;
+    font-weight: 700;
+    color: var(--tv-text-muted);
+    padding: 4px 2px;
+}
+
+.mini-calendar-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.mini-calendar-week {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    min-height: 0;
+    flex: 1;
+}
+
+.mini-calendar-week:last-child {
+    border-bottom: none;
+}
+
+.mini-calendar-cell {
+    min-width: 0;
+}
+
+.mini-calendar-cell:last-child {
+    border-right: none;
+}
+
+.mini-calendar-cell__link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    width: 100%;
+    height: 100%;
+    min-height: 34px;
+    color: var(--tv-text);
+    text-decoration: none;
+    border-radius: var(--tv-radius-s);
+    padding: 4px 2px;
+}
+
+.mini-calendar-cell__link:hover {
+    background: var(--tv-bg-hover);
+}
+
+.mini-calendar-cell__date {
+    font-size: 0.82em;
+    line-height: 1;
+}
+
+.mini-calendar-cell.is-outside-month .mini-calendar-cell__link {
+    opacity: 0.56;
+}
+
+.mini-calendar-cell.is-today .mini-calendar-cell__link {
+    background: rgba(var(--tv-accent-rgb), 0.16);
+    color: var(--tv-text-accent);
+}
+
+.mini-calendar-cell__indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    box-sizing: border-box;
+}
+
+.mini-calendar-cell__indicator--incomplete {
+    border: 1.5px solid var(--tv-text);
+    background: transparent;
+}
+
+.mini-calendar-cell__indicator--complete {
+    border: 1px solid var(--tv-text);
+    background: var(--tv-text);
+}
