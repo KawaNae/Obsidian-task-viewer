@@ -115,25 +115,35 @@
 
 .create-task-modal__picker-button {
     position: absolute;
-    top: 50%;
-    right: 6px;
-    transform: translateY(-50%);
-    width: 24px;
-    height: 24px;
+    top: 0;
+    right: 0;
+    width: 36px;
+    height: 100%;
     padding: 0;
     border: none;
     background: transparent;
     color: var(--tv-text-muted);
-    border-radius: var(--tv-radius-s);
+    border-radius: 0 var(--tv-radius-s) var(--tv-radius-s) 0;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
 }
 
+.create-task-modal__picker-button::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 4px;
+    bottom: 4px;
+    width: 1px;
+    background-color: var(--tv-text-muted);
+}
+
 .create-task-modal__picker-button .svg-icon {
     width: 14px;
     height: 14px;
+    flex-shrink: 0;
 }
 
 .create-task-modal__picker-button:hover {
@@ -146,21 +156,22 @@
     outline-offset: 1px;
 }
 
-/* Keep native picker capability but prevent theme input styles from affecting layout. */
+/* Native picker input: overlay on the picker button area, invisible but tappable.
+   iOS Safari requires the input to be physically interactive for the native picker to open.
+   pointer-events stays at default (auto) so taps reach the input directly. */
 .create-task-modal__input-with-picker > input.create-task-modal__native-picker-input[type='date'],
 .create-task-modal__input-with-picker > input.create-task-modal__native-picker-input[type='time'] {
     position: absolute !important;
-    top: 50% !important;
-    right: 8px !important;
-    width: 1px !important;
-    height: 1px !important;
+    top: 0 !important;
+    right: 0 !important;
+    width: 36px !important;
+    height: 100% !important;
     opacity: 0 !important;
-    pointer-events: none !important;
+    cursor: pointer !important;
     margin: 0 !important;
     padding: 0 !important;
     border: 0 !important;
-    overflow: hidden !important;
-    clip-path: inset(50%) !important;
+    z-index: 1;
 }
 
 .create-task-modal__text-input:focus {

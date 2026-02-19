@@ -48,6 +48,7 @@ export class TaskActionsMenuBuilder {
             item.setTitle('Create Child Task')
                 .setIcon('plus')
                 .onClick(() => {
+                    menu.close();
                     new CreateTaskModal(this.app, async (result) => {
                         const taskLine = formatTaskLine(result);
                         const repository = this.plugin.getTaskRepository();
@@ -187,6 +188,7 @@ export class TaskActionsMenuBuilder {
                 .setIcon('trash')
                 .setWarning(true)
                 .onClick(async () => {
+                    menu.close();
                     new ConfirmModal(
                         this.app,
                         'Delete Task',

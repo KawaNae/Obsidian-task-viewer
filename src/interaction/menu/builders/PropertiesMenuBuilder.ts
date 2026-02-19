@@ -32,26 +32,33 @@ export class PropertiesMenuBuilder {
                 .setIcon('settings')
                 .setSubmenu() as Menu;
 
+            // Closure that closes the root menu before opening a modal.
+            // On mobile, Obsidian menus stay open until explicitly closed.
+            const openModal = (focusField: ChangePropertiesFocusField) => {
+                menu.close();
+                this.openChangePropertiesModal(task, focusField);
+            };
+
             // Requested order:
             // status / file / --- / name / start / end / deadline / --- / length
             this.addStatusItem(subMenu, task);
             this.addFileItem(subMenu, task);
             subMenu.addSeparator();
-            this.addNameItem(subMenu, task);
-            this.addPropertyItems(subMenu, task, viewStartDate);
+            this.addNameItem(subMenu, task, openModal);
+            this.addPropertyItems(subMenu, task, viewStartDate, openModal);
         });
     }
 
     /**
      * Add Name item.
      */
-    private addNameItem(menu: Menu, task: Task): void {
+    private addNameItem(menu: Menu, task: Task, openModal: (focusField: ChangePropertiesFocusField) => void): void {
         menu.addItem((sub) => {
             const taskName = getTaskDisplayName(task);
             sub.setTitle(`Name: ${taskName.substring(0, 20)}${taskName.length > 20 ? '...' : ''}`)
                 .setIcon('pencil')
                 .onClick(() => {
-                    this.openChangePropertiesModal(task, 'name');
+                    openModal('name');
                 });
         });
     }
@@ -109,7 +116,7 @@ export class PropertiesMenuBuilder {
     /**
      * Add Start, End, Deadline, Length items.
      */
-    private addPropertyItems(menu: Menu, task: Task, viewStartDate: string | null): void {
+    private addPropertyItems(menu: Menu, task: Task, viewStartDate: string | null, openModal: (focusField: ChangePropertiesFocusField) => void): void {
         const context: PropertyCalculationContext = {
             task,
             startHour: this.plugin.settings.startHour,
@@ -120,9 +127,9 @@ export class PropertiesMenuBuilder {
         const endParts = this.propertyCalculator.calculateEnd(context);
         const deadlineParts = this.propertyCalculator.calculateDeadline(task);
 
-        this.addStartItem(menu, task, startParts);
-        this.addEndItem(menu, task, endParts);
-        this.addDeadlineItem(menu, task, deadlineParts);
+        this.addStartItem(menu, task, startParts, openModal);
+        this.addEndItem(menu, task, endParts, openModal);
+        this.addDeadlineItem(menu, task, deadlineParts, openModal);
         menu.addSeparator();
         this.addLengthItem(menu, task, context);
     }
@@ -130,12 +137,12 @@ export class PropertiesMenuBuilder {
     /**
      * Add Start item.
      */
-    private addStartItem(menu: Menu, task: Task, parts: CalculatedProperty): void {
+    private addStartItem(menu: Menu, task: Task, parts: CalculatedProperty, openModal: (focusField: ChangePropertiesFocusField) => void): void {
         menu.addItem((item) => {
             item.setTitle(this.propertyFormatter.createPropertyTitle('Start: ', parts))
                 .setIcon('play')
                 .onClick(() => {
-                    this.openChangePropertiesModal(task, 'start');
+                    openModal('start');
                 });
         });
     }
@@ -143,12 +150,12 @@ export class PropertiesMenuBuilder {
     /**
      * Add End item.
      */
-    private addEndItem(menu: Menu, task: Task, parts: CalculatedProperty): void {
+    private addEndItem(menu: Menu, task: Task, parts: CalculatedProperty, openModal: (focusField: ChangePropertiesFocusField) => void): void {
         menu.addItem((item) => {
             item.setTitle(this.propertyFormatter.createPropertyTitle('End: ', parts))
                 .setIcon('square')
                 .onClick(() => {
-                    this.openChangePropertiesModal(task, 'end');
+                    openModal('end');
                 });
         });
     }
@@ -156,12 +163,12 @@ export class PropertiesMenuBuilder {
     /**
      * Add Deadline item.
      */
-    private addDeadlineItem(menu: Menu, task: Task, parts: CalculatedProperty): void {
+    private addDeadlineItem(menu: Menu, task: Task, parts: CalculatedProperty, openModal: (focusField: ChangePropertiesFocusField) => void): void {
         menu.addItem((item) => {
             item.setTitle(this.propertyFormatter.createPropertyTitle('Deadline: ', parts))
                 .setIcon('alert-circle')
                 .onClick(() => {
-                    this.openChangePropertiesModal(task, 'deadline');
+                    openModal('deadline');
                 });
         });
     }

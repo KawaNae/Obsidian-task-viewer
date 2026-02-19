@@ -186,6 +186,12 @@ export class CalendarView extends ItemView {
                 cursor.setDate(cursor.getDate() + 1);
             }
 
+            // Add column separators (columns 1-6, skip last column).
+            for (let i = 1; i <= 6; i++) {
+                const separator = weekRow.createDiv('calendar-col-separator');
+                separator.style.left = `calc(${i} / 7 * 100%)`;
+            }
+
             await this.renderWeekTasks(weekRow, weekDates, allVisibleTasks);
         }
 

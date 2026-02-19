@@ -132,16 +132,6 @@ export class CreateTaskModal extends Modal {
                     .setCta()
                     .onClick(() => this.submit()));
 
-        // Focus target field
-        setTimeout(() => {
-            const focusField = this.options.focusField ?? 'name';
-            const focusTarget =
-                focusField === 'start' ? this.startDateInput
-                    : focusField === 'end' ? this.endDateInput
-                        : focusField === 'deadline' ? this.deadlineDateInput
-                            : this.nameInput;
-            focusTarget?.focus();
-        }, 50);
     }
 
     private renderDateTimeSection(
@@ -213,16 +203,19 @@ export class CreateTaskModal extends Modal {
         });
         textInput.value = initialValue;
 
-        const pickerButton = wrapper.createEl('button', {
+        // Visual icon button (non-interactive, sits behind the native input overlay)
+        const pickerButton = wrapper.createDiv({
             cls: 'create-task-modal__picker-button'
         });
-        pickerButton.type = 'button';
         pickerButton.setAttribute(
-            'aria-label',
-            pickerType === 'date' ? 'Open date picker' : 'Open time picker'
+            'aria-hidden',
+            'true'
         );
         setIcon(pickerButton, pickerType === 'date' ? 'calendar' : 'clock');
 
+        // Native picker input: overlays the icon button area, transparent but tappable.
+        // On iOS Safari, showPicker() doesn't work for date/time inputs (WebKit Bug #261703).
+        // Instead, the native input directly receives taps and opens the platform picker.
         const nativePickerInput = wrapper.createEl('input', {
             cls: 'create-task-modal__native-picker-input'
         });
@@ -230,7 +223,12 @@ export class CreateTaskModal extends Modal {
         if (pickerType === 'time') {
             nativePickerInput.step = '60';
         }
+        nativePickerInput.setAttribute(
+            'aria-label',
+            pickerType === 'date' ? 'Open date picker' : 'Open time picker'
+        );
 
+        // Sync text input value → native input before picker opens
         const syncNativeValueFromText = () => {
             const value = textInput.value.trim();
             if (pickerType === 'date') {
@@ -240,12 +238,13 @@ export class CreateTaskModal extends Modal {
             nativePickerInput.value = /^\d{2}:\d{2}$/.test(value) ? value : '';
         };
 
-        pickerButton.addEventListener('click', (event) => {
-            event.preventDefault();
-            syncNativeValueFromText();
-            this.tryOpenNativePicker(nativePickerInput);
-        });
+        // Keep native input in sync when text changes
+        textInput.addEventListener('input', syncNativeValueFromText);
 
+        // Sync before the picker opens (focus = about to show picker on some platforms)
+        nativePickerInput.addEventListener('focus', syncNativeValueFromText);
+
+        // When the user picks a value from the native picker, update the text input
         nativePickerInput.addEventListener('change', () => {
             if (!nativePickerInput.value) {
                 return;
@@ -255,21 +254,6 @@ export class CreateTaskModal extends Modal {
         });
 
         return textInput;
-    }
-
-    private tryOpenNativePicker(input: HTMLInputElement): void {
-        const picker = input as HTMLInputElement & { showPicker?: () => void };
-        try {
-            if (typeof picker.showPicker === 'function') {
-                picker.showPicker();
-                return;
-            }
-            input.focus();
-            input.click();
-        } catch {
-            input.focus();
-            input.click();
-        }
     }
 
     private validateInputs(): boolean {

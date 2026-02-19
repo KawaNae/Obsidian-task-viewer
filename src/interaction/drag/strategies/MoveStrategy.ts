@@ -4,7 +4,6 @@ import { Task } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
 import { GhostManager, GhostSegment } from '../ghost/GhostManager';
 import { createGhostElement, removeGhostElement } from '../ghost/GhostFactory';
-import { toLogicalHeightPx, toLogicalTopPx } from '../../../utils/TimelineCardPosition';
 
 interface CalendarPointerTarget {
     weekRow: HTMLElement;
@@ -37,6 +36,7 @@ export class MoveStrategy extends BaseDragStrategy {
     // AllDay固有
     private colWidth: number = 0;
     private startCol: number = 0;
+    private grabCol: number = 0;
     private initialSpan: number = 0;
     private initialDate: string = '';
     private initialEndDate: string = '';
@@ -94,6 +94,9 @@ export class MoveStrategy extends BaseDragStrategy {
             this.processTimelineMove(e.clientX, e.clientY);
             this.checkAutoScroll(e.clientY);
         } else if (this.viewType === 'calendar') {
+            if (this.hiddenElements.length > 0) {
+                this.hiddenElements.forEach(el => el.style.opacity = '0');
+            }
             this.processCalendarMove(e, context);
         } else {
             this.processAllDayMove(e, context);
@@ -126,13 +129,15 @@ export class MoveStrategy extends BaseDragStrategy {
         this.scrollContainer = context.container.querySelector('.timeline-scroll-area') as HTMLElement;
         this.ghostManager = new GhostManager(this.scrollContainer || context.container);
 
-        this.initialTop = toLogicalTopPx(parseFloat(el.style.top || '0'));
-        this.initialHeight = toLogicalHeightPx(parseFloat(el.style.height || '0'));
+        const zoomLevel = context.plugin.settings.zoomLevel;
+        const startMinutes = Number.parseFloat(el.style.getPropertyValue('--start-minutes') || '0');
+        const durationMinutes = Number.parseFloat(el.style.getPropertyValue('--duration-minutes') || '0');
+        this.initialTop = Number.isFinite(startMinutes) ? startMinutes * zoomLevel : 0;
+        this.initialHeight = Number.isFinite(durationMinutes) ? durationMinutes * zoomLevel : 0;
 
         const dayCol = el.closest('.day-timeline-column') as HTMLElement;
         this.currentDayDate = dayCol ? dayCol.dataset.date || null : (task.startDate || null);
 
-        const zoomLevel = context.plugin.settings.zoomLevel;
         const startHour = context.plugin.settings.startHour;
         const startHourMinutes = startHour * 60;
 
@@ -348,13 +353,28 @@ export class MoveStrategy extends BaseDragStrategy {
         const gridCol = el.style.gridColumn;
         const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
         this.startCol = colMatch ? parseInt(colMatch[1]) : 1;
+        this.grabCol = this.startCol;
         this.initialGridColumn = el.style.gridColumn;
+
+        if (headerCell && this.colWidth > 0) {
+            const headerRect = headerCell.getBoundingClientRect();
+            const rawGrabCol = Math.round((e.clientX - headerRect.left) / this.colWidth) + 1;
+            this.grabCol = Math.min(7, Math.max(1, rawGrabCol));
+        }
 
         el.style.zIndex = '1000';
 
         const doc = context.container.ownerDocument || document;
         this.ghostEl = createGhostElement(el, doc, { useCloneNode: true });
         this.clearCalendarPreviewGhosts();
+
+        const originalId = (task as any).originalTaskId || task.id;
+        const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
+        context.container.querySelectorAll(selector).forEach(segment => {
+            if (segment instanceof HTMLElement) {
+                this.hiddenElements.push(segment);
+            }
+        });
     }
 
     private processCalendarMove(e: PointerEvent, context: DragContext) {
@@ -366,7 +386,7 @@ export class MoveStrategy extends BaseDragStrategy {
 
         let dayDelta = Math.round((e.clientX - this.initialX) / this.colWidth);
         if (target) {
-            dayDelta = DateUtils.getDiffDays(sourceWeekStart, target.weekStart) + target.col - this.startCol;
+            dayDelta = DateUtils.getDiffDays(sourceWeekStart, target.weekStart) + target.col - this.grabCol;
             if (target.weekStart === sourceWeekStart) {
                 const minColOffset = 1 - this.startCol;
                 if (dayDelta < minColOffset) {
@@ -380,23 +400,17 @@ export class MoveStrategy extends BaseDragStrategy {
             this.ghostEl.style.left = '-9999px';
         }
 
-        if (target && target.weekStart !== sourceWeekStart) {
-            const movedStart = DateUtils.addDays(this.initialDate, dayDelta);
-            const movedEnd = DateUtils.addDays(this.initialEndDate, dayDelta);
-            this.updateCalendarSplitPreview(context, movedStart, movedEnd);
-            this.dragEl.style.opacity = '0.15';
-            this.dragEl.style.transform = '';
-        } else {
-            this.clearCalendarPreviewGhosts();
-            this.dragEl.style.opacity = '';
-            this.dragEl.style.transform = `translateX(${dayDelta * this.colWidth}px)`;
-        }
+        const movedStart = DateUtils.addDays(this.initialDate, dayDelta);
+        const movedEnd = DateUtils.addDays(this.initialEndDate, dayDelta);
+        this.updateCalendarSplitPreview(context, movedStart, movedEnd);
+        this.dragEl.style.transform = '';
     }
 
     private async finishCalendarMove(e: PointerEvent, context: DragContext) {
         removeGhostElement(this.ghostEl);
         this.ghostEl = null;
         this.clearCalendarPreviewGhosts();
+        this.hiddenElements.forEach(el => el.style.opacity = '');
         if (this.dragEl) {
             this.dragEl.style.opacity = '';
             this.dragEl.style.transform = '';
@@ -413,7 +427,7 @@ export class MoveStrategy extends BaseDragStrategy {
 
         let dayDelta = Math.round((e.clientX - this.initialX) / this.colWidth);
         if (target) {
-            dayDelta = DateUtils.getDiffDays(sourceWeekStart, target.weekStart) + target.col - this.startCol;
+            dayDelta = DateUtils.getDiffDays(sourceWeekStart, target.weekStart) + target.col - this.grabCol;
             if (target.weekStart === sourceWeekStart) {
                 const minColOffset = 1 - this.startCol;
                 if (dayDelta < minColOffset) {

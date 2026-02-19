@@ -58,11 +58,22 @@
 }
 
 .calendar-week-row {
+    position: relative;
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
     align-content: start;
     min-height: 140px;
     border-bottom: 1px solid var(--tv-border);
+}
+
+.calendar-col-separator {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--tv-border);
+    pointer-events: none;
+    z-index: 0;
 }
 
 .calendar-multiday-bar {
@@ -110,12 +121,7 @@
     font-size: 0.82em;
     font-weight: 700;
     color: var(--tv-text-muted);
-    border-right: 1px solid var(--tv-border);
     background: var(--tv-bg-primary);
-}
-
-.calendar-date-header.is-last-col {
-    border-right: none;
 }
 
 .calendar-date-header.is-outside-month {
