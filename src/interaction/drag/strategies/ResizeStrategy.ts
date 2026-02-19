@@ -42,6 +42,7 @@ export class ResizeStrategy extends BaseDragStrategy {
     private initialGridColumn: string = '';
     private container: HTMLElement | null = null;
     private refHeaderCell: HTMLElement | null = null;
+    private hiddenElements: HTMLElement[] = [];
     private calendarPreviewGhosts: HTMLElement[] = [];
     private calendarPreviewTargetDate: string | null = null;
 
@@ -259,7 +260,8 @@ export class ResizeStrategy extends BaseDragStrategy {
 
         const headerCell = this.container?.querySelector('.calendar-date-header') as HTMLElement;
         this.refHeaderCell = headerCell;
-        this.colWidth = headerCell?.getBoundingClientRect().width || 100;
+        const weekRect = this.container?.getBoundingClientRect();
+        this.colWidth = weekRect && weekRect.width > 0 ? weekRect.width / 7 : 100;
 
         const viewStartDate = context.getViewStartDate();
         this.initialDate = task.startDate || viewStartDate || DateUtils.getToday();
@@ -271,7 +273,16 @@ export class ResizeStrategy extends BaseDragStrategy {
         this.initialSpan = colMatch ? parseInt(colMatch[2]) : 1;
         this.initialGridColumn = el.style.gridColumn;
         this.calendarPreviewTargetDate = null;
+        this.hiddenElements = [];
         this.clearCalendarPreviewGhosts();
+
+        const originalId = (task as any).originalTaskId || task.id;
+        const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
+        context.container.querySelectorAll(selector).forEach(segment => {
+            if (segment instanceof HTMLElement) {
+                this.hiddenElements.push(segment);
+            }
+        });
     }
 
     private processCalendarResize(e: PointerEvent, context: DragContext) {
@@ -291,11 +302,13 @@ export class ResizeStrategy extends BaseDragStrategy {
             this.calendarPreviewTargetDate = boundedEnd;
 
             if (crossWeek) {
+                this.hiddenElements.forEach(el => el.style.opacity = '0');
                 this.dragEl.style.opacity = '0.15';
                 this.updateCalendarResizeSplitPreview(context, this.initialDate, boundedEnd);
                 return;
             }
 
+            this.hiddenElements.forEach(el => el.style.opacity = '');
             this.clearCalendarPreviewGhosts();
             this.dragEl.style.opacity = '';
             const newSpan = Math.max(1, target.col - this.startCol + 1);
@@ -305,11 +318,13 @@ export class ResizeStrategy extends BaseDragStrategy {
             this.calendarPreviewTargetDate = boundedStart;
 
             if (crossWeek) {
+                this.hiddenElements.forEach(el => el.style.opacity = '0');
                 this.dragEl.style.opacity = '0.15';
                 this.updateCalendarResizeSplitPreview(context, boundedStart, this.initialEndDate);
                 return;
             }
 
+            this.hiddenElements.forEach(el => el.style.opacity = '');
             this.clearCalendarPreviewGhosts();
             this.dragEl.style.opacity = '';
             const currentEndCol = this.startCol + this.initialSpan - 1;
@@ -323,6 +338,7 @@ export class ResizeStrategy extends BaseDragStrategy {
 
     private async finishCalendarResize(e: PointerEvent, context: DragContext) {
         this.clearCalendarPreviewGhosts();
+        this.hiddenElements.forEach(el => el.style.opacity = '');
         if (this.dragEl) {
             this.dragEl.style.opacity = '';
         }
@@ -603,14 +619,9 @@ export class ResizeStrategy extends BaseDragStrategy {
             return null;
         }
 
-        const header = weekRow.querySelector('.calendar-date-header') as HTMLElement | null;
-        if (!header) {
-            return null;
-        }
-
-        const headerRect = header.getBoundingClientRect();
-        const colWidth = headerRect.width > 0 ? headerRect.width : this.colWidth || 100;
-        const rawCol = Math.round((clientX - headerRect.left) / colWidth) + 1;
+        const weekRect = weekRow.getBoundingClientRect();
+        const colWidth = weekRect.width > 0 ? weekRect.width / 7 : this.colWidth || 100;
+        const rawCol = Math.floor((clientX - weekRect.left) / colWidth) + 1;
         const col = Math.min(7, Math.max(1, rawCol));
         const targetDate = DateUtils.addDays(weekStart, col - 1);
 
@@ -627,6 +638,7 @@ export class ResizeStrategy extends BaseDragStrategy {
         super.cleanup();
         this.currentDayDate = null;
         this.container = null;
+        this.hiddenElements = [];
         this.calendarPreviewTargetDate = null;
         this.clearCalendarPreviewGhosts();
     }

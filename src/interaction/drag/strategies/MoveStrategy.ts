@@ -343,7 +343,8 @@ export class MoveStrategy extends BaseDragStrategy {
 
         const headerCell = this.container?.querySelector('.calendar-date-header') as HTMLElement;
         this.refHeaderCell = headerCell;
-        this.colWidth = headerCell?.getBoundingClientRect().width || 100;
+        const weekRect = this.container?.getBoundingClientRect();
+        this.colWidth = weekRect && weekRect.width > 0 ? weekRect.width / 7 : 100;
 
         const viewStartDate = context.getViewStartDate();
         this.initialDate = task.startDate || viewStartDate || DateUtils.getToday();
@@ -356,9 +357,8 @@ export class MoveStrategy extends BaseDragStrategy {
         this.grabCol = this.startCol;
         this.initialGridColumn = el.style.gridColumn;
 
-        if (headerCell && this.colWidth > 0) {
-            const headerRect = headerCell.getBoundingClientRect();
-            const rawGrabCol = Math.round((e.clientX - headerRect.left) / this.colWidth) + 1;
+        if (weekRect && this.colWidth > 0) {
+            const rawGrabCol = Math.floor((e.clientX - weekRect.left) / this.colWidth) + 1;
             this.grabCol = Math.min(7, Math.max(1, rawGrabCol));
         }
 
@@ -387,12 +387,6 @@ export class MoveStrategy extends BaseDragStrategy {
         let dayDelta = Math.round((e.clientX - this.initialX) / this.colWidth);
         if (target) {
             dayDelta = DateUtils.getDiffDays(sourceWeekStart, target.weekStart) + target.col - this.grabCol;
-            if (target.weekStart === sourceWeekStart) {
-                const minColOffset = 1 - this.startCol;
-                if (dayDelta < minColOffset) {
-                    dayDelta = minColOffset;
-                }
-            }
         }
 
         if (this.ghostEl) {
@@ -428,12 +422,6 @@ export class MoveStrategy extends BaseDragStrategy {
         let dayDelta = Math.round((e.clientX - this.initialX) / this.colWidth);
         if (target) {
             dayDelta = DateUtils.getDiffDays(sourceWeekStart, target.weekStart) + target.col - this.grabCol;
-            if (target.weekStart === sourceWeekStart) {
-                const minColOffset = 1 - this.startCol;
-                if (dayDelta < minColOffset) {
-                    dayDelta = minColOffset;
-                }
-            }
         }
 
         if (dayDelta === 0) {
@@ -826,14 +814,9 @@ export class MoveStrategy extends BaseDragStrategy {
             return null;
         }
 
-        const header = weekRow.querySelector('.calendar-date-header') as HTMLElement | null;
-        if (!header) {
-            return null;
-        }
-
-        const headerRect = header.getBoundingClientRect();
-        const colWidth = headerRect.width > 0 ? headerRect.width : this.colWidth || 100;
-        const rawCol = Math.round((clientX - headerRect.left) / colWidth) + 1;
+        const weekRect = weekRow.getBoundingClientRect();
+        const colWidth = weekRect.width > 0 ? weekRect.width / 7 : this.colWidth || 100;
+        const rawCol = Math.floor((clientX - weekRect.left) / colWidth) + 1;
         const col = Math.min(7, Math.max(1, rawCol));
         const targetDate = DateUtils.addDays(weekStart, col - 1);
 

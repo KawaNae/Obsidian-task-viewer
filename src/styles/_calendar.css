@@ -159,6 +159,19 @@
 .calendar-task-card--drag-preview {
     pointer-events: none !important;
     opacity: 0.82;
+    z-index: 10;
+}
+
+.calendar-task-card--drag-preview::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 2px solid var(--file-accent, var(--tv-accent));
+    border-radius: var(--task-card-border-radius);
+    pointer-events: none;
 }
 
 .calendar-task-card--drag-preview .task-card__handle {
