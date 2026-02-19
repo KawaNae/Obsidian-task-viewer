@@ -354,13 +354,14 @@ export class MoveStrategy extends BaseDragStrategy {
         const gridCol = el.style.gridColumn;
         const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
         this.startCol = colMatch ? parseInt(colMatch[1]) : 1;
-        this.grabCol = this.startCol;
-        this.initialGridColumn = el.style.gridColumn;
-
-        if (weekRect && this.colWidth > 0) {
-            const rawGrabCol = Math.floor((e.clientX - weekRect.left) / this.colWidth) + 1;
-            this.grabCol = Math.min(7, Math.max(1, rawGrabCol));
+        const span = colMatch ? parseInt(colMatch[2]) : 1;
+        const target = e.target as HTMLElement;
+        if (target.closest('.task-card__handle--move-top-right')) {
+            this.grabCol = this.startCol + span - 1;
+        } else {
+            this.grabCol = this.startCol;
         }
+        this.initialGridColumn = el.style.gridColumn;
 
         el.style.zIndex = '1000';
 
