@@ -4,7 +4,6 @@ import { Task } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
 import { GhostManager, GhostSegment } from '../ghost/GhostManager';
 import { createGhostElement, removeGhostElement } from '../ghost/GhostFactory';
-import { toLogicalHeightPx, toLogicalTopPx } from '../../../utils/TimelineCardPosition';
 
 interface CalendarPointerTarget {
     weekRow: HTMLElement;
@@ -126,13 +125,15 @@ export class MoveStrategy extends BaseDragStrategy {
         this.scrollContainer = context.container.querySelector('.timeline-scroll-area') as HTMLElement;
         this.ghostManager = new GhostManager(this.scrollContainer || context.container);
 
-        this.initialTop = toLogicalTopPx(parseFloat(el.style.top || '0'));
-        this.initialHeight = toLogicalHeightPx(parseFloat(el.style.height || '0'));
+        const zoomLevel = context.plugin.settings.zoomLevel;
+        const startMinutes = Number.parseFloat(el.style.getPropertyValue('--start-minutes') || '0');
+        const durationMinutes = Number.parseFloat(el.style.getPropertyValue('--duration-minutes') || '0');
+        this.initialTop = Number.isFinite(startMinutes) ? startMinutes * zoomLevel : 0;
+        this.initialHeight = Number.isFinite(durationMinutes) ? durationMinutes * zoomLevel : 0;
 
         const dayCol = el.closest('.day-timeline-column') as HTMLElement;
         this.currentDayDate = dayCol ? dayCol.dataset.date || null : (task.startDate || null);
 
-        const zoomLevel = context.plugin.settings.zoomLevel;
         const startHour = context.plugin.settings.startHour;
         const startHourMinutes = startHour * 60;
 

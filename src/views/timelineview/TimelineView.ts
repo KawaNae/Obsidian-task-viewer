@@ -72,7 +72,6 @@ export class TimelineView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private currentTimeInterval: number | null = null;
     private lastScrollTop: number = 0;
-    private pendingScrollTop: number | null = null;
     private hasInitializedStartDate: boolean = false;
     private targetColumnEl: HTMLElement | null = null;
     private executionColumnEl: HTMLElement | null = null;
@@ -292,13 +291,17 @@ export class TimelineView extends ItemView {
                 const isCursorInsideScrollArea = cursorY >= 0 && cursorY <= rect.height;
                 if (isCursorInsideScrollArea) {
                     const oldScrollTop = scrollArea.scrollTop;
-                    this.pendingScrollTop = (oldScrollTop + cursorY) * (newZoom / oldZoom) - cursorY;
+                    scrollArea.scrollTop = (oldScrollTop + cursorY) * (newZoom / oldZoom) - cursorY;
                 }
             }
 
             this.plugin.settings.zoomLevel = newZoom;
+            this.container.style.setProperty('--hour-height', `${60 * newZoom}px`);
+            const zoomLabel = this.container.querySelector('.view-toolbar__zoom-controls .view-toolbar__label');
+            if (zoomLabel) {
+                zoomLabel.textContent = `${Math.round(newZoom * 100)}%`;
+            }
             this.plugin.saveSettings();
-            this.render();
         }, { passive: false });
 
         // Start Current Time Interval
@@ -434,12 +437,8 @@ export class TimelineView extends ItemView {
 
         // Restore scroll position
         const newScrollArea = this.container.querySelector('.timeline-scroll-area');
-        if (newScrollArea) {
-            const targetScroll = this.pendingScrollTop ?? this.lastScrollTop;
-            if (targetScroll > 0) {
-                newScrollArea.scrollTop = targetScroll;
-            }
-            this.pendingScrollTop = null;
+        if (newScrollArea && this.lastScrollTop > 0) {
+            newScrollArea.scrollTop = this.lastScrollTop;
         }
 
         // Restore selected task handles AFTER scroll restoration

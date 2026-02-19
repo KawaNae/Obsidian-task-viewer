@@ -142,8 +142,11 @@ export class ResizeStrategy extends BaseDragStrategy {
     // ========== Timeline Resize ==========
 
     private initTimelineResize(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
-        this.initialTop = toLogicalTopPx(parseFloat(el.style.top || '0'));
-        this.initialHeight = toLogicalHeightPx(parseFloat(el.style.height || '0'));
+        const zoomLevel = context.plugin.settings.zoomLevel;
+        const startMinutes = Number.parseFloat(el.style.getPropertyValue('--start-minutes') || '0');
+        const durationMinutes = Number.parseFloat(el.style.getPropertyValue('--duration-minutes') || '0');
+        this.initialTop = Number.isFinite(startMinutes) ? startMinutes * zoomLevel : 0;
+        this.initialHeight = Number.isFinite(durationMinutes) ? durationMinutes * zoomLevel : 0;
 
         this.initialBottom = this.initialTop + this.initialHeight;
 
@@ -200,10 +203,14 @@ export class ResizeStrategy extends BaseDragStrategy {
         const startHour = context.plugin.settings.startHour;
         const startHourMinutes = startHour * 60;
 
-        const diffTop = parseFloat(this.dragEl.style.top || '0');
-        const logicalTop = toLogicalTopPx(diffTop);
-        const height = parseFloat(this.dragEl.style.height || '0');
-        const logicalHeight = toLogicalHeightPx(height);
+        const hasInlineTop = this.dragEl.style.top.length > 0;
+        const logicalTop = hasInlineTop
+            ? toLogicalTopPx(parseFloat(this.dragEl.style.top))
+            : this.initialTop;
+        const hasInlineHeight = this.dragEl.style.height.length > 0;
+        const logicalHeight = hasInlineHeight
+            ? toLogicalHeightPx(parseFloat(this.dragEl.style.height))
+            : this.initialHeight;
 
         const totalStartMinutes = startHourMinutes + (logicalTop / zoomLevel);
         const totalEndMinutes = totalStartMinutes + (logicalHeight / zoomLevel);

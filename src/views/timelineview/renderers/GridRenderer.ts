@@ -234,11 +234,10 @@ export class GridRenderer {
 
     private renderTimeLabels(container: HTMLElement) {
         const startHour = this.plugin.settings.startHour;
-        const zoomLevel = this.plugin.settings.zoomLevel;
 
         for (let i = 0; i < 24; i++) {
             const label = container.createDiv('time-label');
-            label.style.top = `${i * 60 * zoomLevel}px`;
+            label.style.setProperty('--label-hour', String(i));
 
             // Display hour adjusted by startHour
             let displayHour = startHour + i;
@@ -311,8 +310,7 @@ export class GridRenderer {
 
         if (dayCol) {
             const indicator = dayCol.createDiv({ cls: 'current-time-indicator' });
-            const zoomLevel = this.plugin.settings.zoomLevel;
-            indicator.style.top = `${minutesFromStart * zoomLevel}px`;
+            indicator.style.setProperty('--indicator-minutes', String(minutesFromStart));
         }
     }
 }

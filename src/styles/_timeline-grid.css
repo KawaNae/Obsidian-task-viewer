@@ -175,6 +175,7 @@
 
 .time-label {
     position: absolute;
+    top: calc(var(--label-hour, 0) * var(--hour-height));
     width: 100%;
     text-align: center;
     font-size: 0.8em;
@@ -201,6 +202,7 @@
 /* Current Time Indicator */
 .current-time-indicator {
     position: absolute;
+    top: calc(var(--indicator-minutes, 0) * var(--hour-height) / 60);
     width: 100%;
     height: 2px;
     background-color: var(--tv-accent);

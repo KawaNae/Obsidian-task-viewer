@@ -106,6 +106,12 @@
     position: absolute;
 }
 
+/* Timeline View timed tasks: derive placement from logical minutes and --hour-height */
+.timeline-view .day-timeline-column > .task-card {
+    top: calc(var(--start-minutes, 0) * var(--hour-height) / 60 + 1px);
+    height: max(0px, calc(var(--duration-minutes, 0) * var(--hour-height) / 60 - 3px));
+}
+
 /* Timeline View: AllDay needs relative (Grid-based) */
 .timeline-view .task-card.task-card--allday {
     position: relative;

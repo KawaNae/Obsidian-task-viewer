@@ -9,7 +9,6 @@ import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { HandleManager } from '../HandleManager';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { shouldSplitTask, splitTaskAtBoundary, RenderableTask } from '../../utils/RenderableTaskUtils';
-import { toDisplayHeightPx, toDisplayTopPx } from '../../../utils/TimelineCardPosition';
 
 
 export class TimelineSectionRenderer {
@@ -23,7 +22,6 @@ export class TimelineSectionRenderer {
 
     public render(container: HTMLElement, date: string, owner: Component, visibleFiles: Set<string> | null) {
         const startHour = this.plugin.settings.startHour;
-        const zoomLevel = this.plugin.settings.zoomLevel;
 
         // Get all tasks and filter for those that should appear in this timeline column
         let tasks = this.taskIndex.getTasks().filter(t => {
@@ -173,14 +171,11 @@ export class TimelineSectionRenderer {
             const widthFraction = taskLayout.width / 100;
             const leftFraction = taskLayout.left / 100;
 
-            const logicalTopPx = relativeStart * zoomLevel;
-            const logicalHeightPx = duration * zoomLevel;
-            el.style.top = `${toDisplayTopPx(logicalTopPx)}px`;
-            el.style.height = `${toDisplayHeightPx(logicalHeightPx)}px`;
+            el.style.setProperty('--start-minutes', String(relativeStart));
+            el.style.setProperty('--duration-minutes', String(duration));
             el.style.width = `calc((100% - 8px) * ${widthFraction})`;
             el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
             el.style.zIndex = String(taskLayout.zIndex);
-            el.style.setProperty('--initial-height', `${duration * zoomLevel}px`);
 
             this.taskRenderer.render(el, task, owner, this.plugin.settings);
             this.menuHandler.addTaskContextMenu(el, task);
