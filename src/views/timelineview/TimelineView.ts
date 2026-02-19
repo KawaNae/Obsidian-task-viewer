@@ -274,6 +274,17 @@ export class TimelineView extends ItemView {
             }
         });
 
+        // Ctrl+wheel zoom
+        this.registerDomEvent(this.container, 'wheel', (e: WheelEvent) => {
+            if (!e.ctrlKey) return;
+            e.preventDefault();
+            const delta = e.deltaY < 0 ? 0.25 : -0.25;
+            const newZoom = Math.min(4.0, Math.max(0.25, this.plugin.settings.zoomLevel + delta));
+            if (newZoom === this.plugin.settings.zoomLevel) return;
+            this.plugin.settings.zoomLevel = newZoom;
+            this.plugin.saveSettings();
+            this.render();
+        }, { passive: false });
 
         // Start Current Time Interval
         this.currentTimeInterval = window.setInterval(() => {
