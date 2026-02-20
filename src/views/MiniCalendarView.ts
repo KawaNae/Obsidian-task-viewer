@@ -158,7 +158,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     private renderToolbar(): void {
-        const toolbar = this.container.createDiv('mini-calendar-toolbar');
+        const toolbar = this.container.createDiv('view-toolbar mini-calendar-toolbar');
 
         const labelGroup = toolbar.createDiv('mini-calendar-toolbar__label');
         const referenceMonth = this.getReferenceMonth();
@@ -181,7 +181,7 @@ export class MiniCalendarView extends ItemView {
         prevBtn.setAttribute('title', 'Previous week');
         prevBtn.addEventListener('click', () => this.navigateWeek(-1));
 
-        const todayBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--today mini-calendar-toolbar__today', text: '\u4eca\u65e5' });
+        const todayBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--today mini-calendar-toolbar__today', text: 'Today' });
         todayBtn.setAttribute('aria-label', 'Today');
         todayBtn.setAttribute('title', 'Today');
         todayBtn.addEventListener('click', () => {

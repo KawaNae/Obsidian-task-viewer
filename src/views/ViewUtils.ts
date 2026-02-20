@@ -202,24 +202,33 @@ export class DateNavigator {
     static render(
         toolbar: HTMLElement,
         onNavigate: (days: number) => void,
-        onToday: () => void
+        onToday: () => void,
+        options?: { vertical?: boolean }
     ): void {
+        const vertical = options?.vertical ?? false;
+        const prevIcon = vertical ? 'chevron-up' : 'chevron-left';
+        const nextIcon = vertical ? 'chevron-down' : 'chevron-right';
+        const prevLabel = vertical ? 'Previous week' : 'Previous day';
+        const nextLabel = vertical ? 'Next week' : 'Next day';
+
         const prevBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(prevBtn, 'chevron-left');
-        prevBtn.setAttribute('aria-label', 'Previous day');
-        prevBtn.setAttribute('title', 'Previous day');
+        setIcon(prevBtn, prevIcon);
+        prevBtn.setAttribute('aria-label', prevLabel);
+        prevBtn.setAttribute('title', prevLabel);
         prevBtn.onclick = () => onNavigate(-1);
 
-        const todayBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon view-toolbar__btn--today' });
-        setIcon(todayBtn, 'circle');
+        const todayBtn = toolbar.createEl('button', {
+            cls: 'view-toolbar__btn--today',
+            text: 'Today'
+        });
         todayBtn.setAttribute('aria-label', 'Today');
         todayBtn.setAttribute('title', 'Today');
         todayBtn.onclick = () => onToday();
 
         const nextBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(nextBtn, 'chevron-right');
-        nextBtn.setAttribute('aria-label', 'Next day');
-        nextBtn.setAttribute('title', 'Next day');
+        setIcon(nextBtn, nextIcon);
+        nextBtn.setAttribute('aria-label', nextLabel);
+        nextBtn.setAttribute('title', nextLabel);
         nextBtn.onclick = () => onNavigate(1);
     }
 }
@@ -239,9 +248,9 @@ export class ViewModeSelector {
             return 'Week';
         };
 
-        const button = toolbar.createEl('button', { cls: 'view-toolbar__btn--range' });
-        const iconEl = button.createSpan('view-toolbar__btn-icon');
-        const labelEl = button.createSpan({ cls: 'view-toolbar__btn-label' });
+        const button = toolbar.createEl('button', { cls: 'timeline-toolbar__btn--range timeline-toolbar__btn--view-mode' });
+        const iconEl = button.createSpan('timeline-toolbar__btn-icon');
+        const labelEl = button.createSpan({ cls: 'timeline-toolbar__btn-label' });
         setIcon(iconEl, 'chevrons-up-down');
 
         const applyModeLabel = (value: number) => {
@@ -289,11 +298,11 @@ export class ViewModeSelector {
 }
 
 /**
- * Zoom controls for timeline scaling.
+ * Zoom selector for timeline scaling.
  */
-export class ZoomControls {
+export class ZoomSelector {
     /**
-     * Renders zoom in/out buttons with percentage display.
+     * Renders zoom selector button with dropdown options.
      * @param toolbar - Parent element to render into
      * @param currentZoom - Current zoom level (e.g., 1.0 = 100%)
      * @param onZoomChange - Callback when zoom changes
@@ -303,30 +312,35 @@ export class ZoomControls {
         currentZoom: number,
         onZoomChange: (newZoom: number) => Promise<void>
     ): void {
-        const zoomContainer = toolbar.createDiv('view-toolbar__zoom-controls');
-        const zoomOutBtn = zoomContainer.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(zoomOutBtn, 'minus');
-        zoomOutBtn.setAttribute('aria-label', 'Zoom out');
-        zoomOutBtn.setAttribute('title', 'Zoom out');
-        zoomOutBtn.onclick = async () => {
-            let newZoom = currentZoom - 0.25;
-            if (newZoom < 0.25) newZoom = 0.25;
-            await onZoomChange(newZoom);
+        const button = toolbar.createEl('button', { cls: 'timeline-toolbar__btn--range timeline-toolbar__btn--zoom' });
+        const iconEl = button.createSpan('timeline-toolbar__btn-icon');
+        const labelEl = button.createSpan({ cls: 'timeline-toolbar__btn-label' });
+        setIcon(iconEl, 'search');
+
+        const applyLabel = (zoom: number) => {
+            const pct = `${Math.round(zoom * 100)}%`;
+            labelEl.setText(pct);
+            button.setAttribute('aria-label', `Zoom: ${pct}`);
+            button.setAttribute('title', `Zoom: ${pct}`);
         };
+        applyLabel(currentZoom);
 
-        zoomContainer.createSpan({
-            cls: 'view-toolbar__label',
-            text: `${Math.round(currentZoom * 100)}%`
-        });
-
-        const zoomInBtn = zoomContainer.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(zoomInBtn, 'plus');
-        zoomInBtn.setAttribute('aria-label', 'Zoom in');
-        zoomInBtn.setAttribute('title', 'Zoom in');
-        zoomInBtn.onclick = async () => {
-            let newZoom = currentZoom + 0.25;
-            if (newZoom > 10.0) newZoom = 10.0;
-            await onZoomChange(newZoom);
+        const zoomLevels = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
+        button.onclick = (e) => {
+            const { Menu } = require('obsidian');
+            const menu = new Menu();
+            for (const level of zoomLevels) {
+                const pct = `${Math.round(level * 100)}%`;
+                menu.addItem((item: any) => {
+                    item.setTitle(pct)
+                        .setChecked(currentZoom === level)
+                        .onClick(async () => {
+                            await onZoomChange(level);
+                            applyLabel(level);
+                        });
+                });
+            }
+            menu.showAtPosition({ x: e.pageX, y: e.pageY });
         };
     }
 }

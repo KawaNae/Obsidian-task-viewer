@@ -12,10 +12,10 @@
 }
 
 .mini-calendar-toolbar {
-    display: flex;
-    align-items: center;
     justify-content: space-between;
+    padding: 0;
     padding-bottom: 4px;
+    border-bottom: none;
 }
 
 .mini-calendar-toolbar__label {

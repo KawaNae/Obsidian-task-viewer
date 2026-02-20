@@ -303,7 +303,7 @@ export class TimelineView extends ItemView {
 
             this.plugin.settings.zoomLevel = newZoom;
             this.container.style.setProperty('--hour-height', `${60 * newZoom}px`);
-            const zoomLabel = this.container.querySelector('.view-toolbar__zoom-controls .view-toolbar__label');
+            const zoomLabel = this.container.querySelector('.timeline-toolbar__btn--zoom .timeline-toolbar__btn-label');
             if (zoomLabel) {
                 zoomLabel.textContent = `${Math.round(newZoom * 100)}%`;
             }
@@ -351,7 +351,7 @@ export class TimelineView extends ItemView {
 
             this.plugin.settings.zoomLevel = newZoom;
             this.container.style.setProperty('--hour-height', `${60 * newZoom}px`);
-            const zoomLabel = this.container.querySelector('.view-toolbar__zoom-controls .view-toolbar__label');
+            const zoomLabel = this.container.querySelector('.timeline-toolbar__btn--zoom .timeline-toolbar__btn-label');
             if (zoomLabel) {
                 zoomLabel.textContent = `${Math.round(newZoom * 100)}%`;
             }

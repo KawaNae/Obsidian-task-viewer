@@ -1,0 +1,47 @@
+/* =============================================================================
+   Timeline Toolbar Extensions
+   View-specific toolbar styles used by timeline controls.
+============================================================================= */
+
+.timeline-toolbar__btn--range {
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px !important;
+    color: var(--tv-text);
+    font-size: 0.9em;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.timeline-toolbar__btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--tv-text-muted);
+    width: 14px;
+    height: 14px;
+}
+
+.timeline-toolbar__btn-icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+.timeline-toolbar__btn-label {
+    line-height: 1;
+}
+
+.timeline-toolbar__btn--sidebar-toggle {
+    margin-left: auto;
+}
+
+.sidebar-toggle-button-icon {
+    flex-shrink: 0;
+}
+
+.sidebar-toggle-button-icon svg {
+    width: 16px;
+    height: 16px;
+}

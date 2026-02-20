@@ -9,7 +9,7 @@ import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { TaskIdGenerator } from '../utils/TaskIdGenerator';
 import { DragHandler } from '../interaction/drag/DragHandler';
 import TaskViewerPlugin from '../main';
-import { FileFilterMenu, ViewUtils } from './ViewUtils';
+import { DateNavigator, FileFilterMenu, ViewUtils } from './ViewUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../constants/hover';
 import { TaskLinkInteractionManager } from './taskcard/TaskLinkInteractionManager';
 import { VIEW_META_CALENDAR } from '../constants/viewRegistry';
@@ -245,37 +245,33 @@ export class CalendarView extends ItemView {
 
     private renderToolbar(): HTMLElement {
         const toolbar = this.container.createDiv('view-toolbar calendar-toolbar');
+        const labelGroup = toolbar.createDiv('calendar-toolbar__label');
+        const referenceMonth = this.getReferenceMonth();
+        const now = new Date();
+        const isCurrentMonth = referenceMonth.year === now.getFullYear() && referenceMonth.month === now.getMonth();
 
-        const prevBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(prevBtn, 'chevron-left');
-        prevBtn.setAttribute('aria-label', 'Previous week');
-        prevBtn.setAttribute('title', 'Previous week');
-        prevBtn.addEventListener('click', () => this.navigateWeek(-1));
+        const monthSpan = labelGroup.createSpan({ cls: 'calendar-toolbar__month' });
+        monthSpan.setText(`${String(referenceMonth.month + 1).padStart(2, '0')}月`);
+        monthSpan.toggleClass('is-current', isCurrentMonth);
 
-        const monthLabel = toolbar.createSpan({ cls: 'calendar-month-label' });
-        monthLabel.setText(this.formatWindowLabel());
+        const yearSpan = labelGroup.createSpan({ cls: 'calendar-toolbar__year' });
+        yearSpan.setText(`${referenceMonth.year}`);
+        yearSpan.toggleClass('is-current', isCurrentMonth);
 
-        const nextBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(nextBtn, 'chevron-right');
-        nextBtn.setAttribute('aria-label', 'Next week');
-        nextBtn.setAttribute('title', 'Next week');
-        nextBtn.addEventListener('click', () => this.navigateWeek(1));
-
-        const todayBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon view-toolbar__btn--today' });
-        setIcon(todayBtn, 'circle');
-        todayBtn.setAttribute('aria-label', 'Today');
-        todayBtn.setAttribute('title', 'Today');
-        todayBtn.addEventListener('click', () => {
-            const today = new Date();
-            const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-            const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
-            this.windowStart = DateUtils.getLocalDateString(weekStart);
-            void this.app.workspace.requestSaveLayout();
-            void this.render();
-        });
-
-        const spacer = toolbar.createDiv('view-toolbar__spacer');
-        spacer.style.flex = '1';
+        toolbar.createDiv('view-toolbar__spacer');
+        DateNavigator.render(
+            toolbar,
+            (days) => this.navigateWeek(days),
+            () => {
+                const today = new Date();
+                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
+                this.windowStart = DateUtils.getLocalDateString(weekStart);
+                void this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
+            { vertical: true }
+        );
 
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
@@ -613,15 +609,6 @@ export class CalendarView extends ItemView {
         return labels;
     }
 
-    private formatWindowLabel(): string {
-        const midDate = this.parseLocalDateString(DateUtils.addDays(this.windowStart, 20));
-        const fallback = this.parseLocalDateString(this.windowStart) ?? new Date();
-        const date = midDate ?? fallback;
-        const year = date.getFullYear();
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        return `${year}-${month}`;
-    }
-
     private getReferenceMonth(): { year: number; month: number } {
         const midDate = this.parseLocalDateString(DateUtils.addDays(this.windowStart, 20));
         const fallback = this.parseLocalDateString(this.windowStart) ?? new Date();
@@ -629,9 +616,27 @@ export class CalendarView extends ItemView {
         return { year: date.getFullYear(), month: date.getMonth() };
     }
 
+    private updateToolbarMonthLabel(): void {
+        const referenceMonth = this.getReferenceMonth();
+        const now = new Date();
+        const isCurrentMonth = referenceMonth.year === now.getFullYear() && referenceMonth.month === now.getMonth();
+
+        const monthEl = this.container?.querySelector('.calendar-toolbar__month');
+        const yearEl = this.container?.querySelector('.calendar-toolbar__year');
+        if (monthEl instanceof HTMLElement) {
+            monthEl.setText(`${String(referenceMonth.month + 1).padStart(2, '0')}月`);
+            monthEl.toggleClass('is-current', isCurrentMonth);
+        }
+        if (yearEl instanceof HTMLElement) {
+            yearEl.setText(`${referenceMonth.year}`);
+            yearEl.toggleClass('is-current', isCurrentMonth);
+        }
+    }
+
     private navigateWeek(offset: number): void {
         this.windowStart = DateUtils.addDays(this.windowStart, offset * 7);
         void this.app.workspace.requestSaveLayout();
+        this.updateToolbarMonthLabel();
         void this.render();
     }
 

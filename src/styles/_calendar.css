@@ -11,16 +11,27 @@
     padding: 0 !important;
 }
 
-.calendar-toolbar {
-    border-bottom: 1px solid var(--tv-border);
+.calendar-toolbar__label {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
 }
 
-.calendar-month-label {
+.calendar-toolbar__month {
+    font-size: 1.05em;
     font-weight: 700;
-    font-size: 0.95em;
     color: var(--tv-text);
-    min-width: 6.5em;
-    text-align: center;
+}
+
+.calendar-toolbar__year {
+    font-size: 1.05em;
+    font-weight: 700;
+    color: var(--tv-text-accent);
+}
+
+.calendar-toolbar__month.is-current,
+.calendar-toolbar__year.is-current {
+    color: var(--tv-text-accent);
 }
 
 .calendar-grid {

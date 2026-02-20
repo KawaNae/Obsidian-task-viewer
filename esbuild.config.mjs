@@ -66,6 +66,7 @@ const copyStaticFiles = {
           '_deadline.css',
           '_checkboxes.css',
           '_toolbar.css',
+          '_timeline-toolbar.css',
           '_pomodoro.css',
           '_timer-widget.css',
           '_modal.css'
