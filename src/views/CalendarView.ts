@@ -195,6 +195,7 @@ export class CalendarView extends ItemView {
         const allVisibleTasks = this.getVisibleTasksInRange(rangeStartStr, rangeEndStr);
         const body = calendarHost.createDiv('calendar-grid__body');
         const referenceMonth = this.getReferenceMonth();
+        const showWeekNumbers = this.shouldShowWeekNumbers();
 
         body.addEventListener('wheel', (e: WheelEvent) => {
             if (e.deltaY === 0) {
@@ -214,9 +215,18 @@ export class CalendarView extends ItemView {
         let cursor = new Date(startDate);
         while (cursor <= endDate) {
             const weekRow = body.createDiv('calendar-week-row');
+            if (showWeekNumbers) {
+                weekRow.addClass('has-week-numbers');
+            }
+
+            const weekStartDate = new Date(cursor);
             const weekStartStr = DateUtils.getLocalDateString(cursor);
             weekRow.dataset.weekStart = weekStartStr;
             const weekDates: string[] = [];
+
+            if (showWeekNumbers) {
+                this.renderWeekNumberCell(weekRow, weekStartDate);
+            }
 
             for (let i = 0; i < 7; i++) {
                 const cellDate = new Date(cursor);
@@ -226,10 +236,20 @@ export class CalendarView extends ItemView {
                 cursor.setDate(cursor.getDate() + 1);
             }
 
-            // Add column separators (columns 1-6, skip last column).
-            for (let i = 1; i <= 6; i++) {
+            // Add column separators (skip the outer-right edge).
+            const separatorCount = showWeekNumbers ? 7 : 6;
+            for (let i = 1; i <= separatorCount; i++) {
                 const separator = weekRow.createDiv('calendar-col-separator');
-                separator.style.left = `calc(${i} / 7 * 100%)`;
+                if (showWeekNumbers) {
+                    if (i === 1) {
+                        separator.style.left = 'var(--calendar-wk-col-width, 32px)';
+                    } else {
+                        const dayBoundary = i - 1;
+                        separator.style.left = `calc(var(--calendar-wk-col-width, 32px) + (${dayBoundary} / 7) * (100% - var(--calendar-wk-col-width, 32px)))`;
+                    }
+                } else {
+                    separator.style.left = `calc(${i} / 7 * 100%)`;
+                }
             }
 
             await this.renderWeekTasks(weekRow, weekDates, allVisibleTasks);
@@ -244,23 +264,7 @@ export class CalendarView extends ItemView {
     }
 
     private renderToolbar(): HTMLElement {
-        const toolbar = this.container.createDiv('view-toolbar calendar-toolbar');
-        const labelGroup = toolbar.createDiv('calendar-toolbar__label');
-        const referenceMonth = this.getReferenceMonth();
-        const now = new Date();
-        const isCurrentYear = referenceMonth.year === now.getFullYear();
-        const isCurrentMonth = isCurrentYear && referenceMonth.month === now.getMonth();
-
-        const yearSpan = labelGroup.createSpan({ cls: 'calendar-toolbar__year' });
-        yearSpan.setText(`${referenceMonth.year}`);
-        yearSpan.toggleClass('is-current', isCurrentYear);
-
-        labelGroup.createSpan({ cls: 'calendar-toolbar__separator', text: '-' });
-
-        const monthSpan = labelGroup.createSpan({ cls: 'calendar-toolbar__month' });
-        monthSpan.setText(`${String(referenceMonth.month + 1).padStart(2, '0')}`);
-        monthSpan.toggleClass('is-current', isCurrentMonth);
-
+        const toolbar = this.container.createDiv('view-toolbar');
         DateNavigator.render(
             toolbar,
             (days) => this.navigateWeek(days),
@@ -274,6 +278,7 @@ export class CalendarView extends ItemView {
             },
             { vertical: true }
         );
+
         toolbar.createDiv('view-toolbar__spacer');
 
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
@@ -302,6 +307,11 @@ export class CalendarView extends ItemView {
 
     private renderWeekdayHeader(container: HTMLElement): void {
         const header = container.createDiv('calendar-weekday-header');
+        if (this.shouldShowWeekNumbers()) {
+            header.addClass('has-week-numbers');
+            header.createEl('div', { cls: 'calendar-weekday-cell', text: 'Wk' });
+        }
+
         const weekdays = this.getWeekdayNames();
         weekdays.forEach((label) => {
             header.createEl('div', { cls: 'calendar-weekday-cell', text: label });
@@ -312,8 +322,12 @@ export class CalendarView extends ItemView {
         const header = weekRow.createDiv('calendar-date-header');
         const dateKey = DateUtils.getLocalDateString(date);
         const todayKey = DateUtils.getLocalDateString(new Date());
+        const isFirstOfMonth = date.getDate() === 1;
+        const dateLabel = isFirstOfMonth
+            ? dateKey
+            : `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
-        header.style.gridColumn = `${colIndex}`;
+        header.style.gridColumn = `${this.getGridColumnForDay(colIndex)}`;
         header.style.gridRow = '1';
         if (colIndex === 7) {
             header.addClass('is-last-col');
@@ -329,7 +343,7 @@ export class CalendarView extends ItemView {
         const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(this.app, date);
         const dateLink = header.createEl('a', {
             cls: 'internal-link',
-            text: String(date.getDate()),
+            text: dateLabel,
         });
         dateLink.dataset.href = linkTarget;
         dateLink.setAttribute('href', linkTarget);
@@ -504,6 +518,8 @@ export class CalendarView extends ItemView {
 
     private async renderGridTask(weekRow: HTMLElement, entry: CalendarTaskEntry, gridRow: number): Promise<void> {
         const isMultiday = this.isMultiDayTask(entry.task);
+        const columnOffset = this.getColumnOffset();
+        const displayColStart = entry.colStart + columnOffset;
 
         if (isMultiday) {
             const barEl = weekRow.createDiv('task-card calendar-task-card calendar-multiday-bar');
@@ -513,7 +529,7 @@ export class CalendarView extends ItemView {
             if (entry.continuesBefore || entry.continuesAfter) {
                 barEl.dataset.splitOriginalId = entry.task.id;
             }
-            barEl.style.gridColumn = `${entry.colStart} / span ${entry.span}`;
+            barEl.style.gridColumn = `${displayColStart} / span ${entry.span}`;
             barEl.style.gridRow = `${gridRow}`;
 
             if (entry.continuesBefore && entry.continuesAfter) {
@@ -537,7 +553,7 @@ export class CalendarView extends ItemView {
         if (!entry.task.startTime) {
             card.addClass('task-card--allday');
         }
-        card.style.gridColumn = `${entry.colStart} / span ${entry.span}`;
+        card.style.gridColumn = `${displayColStart} / span ${entry.span}`;
         card.style.gridRow = `${gridRow}`;
 
         ViewUtils.applyFileColor(this.app, card, entry.task.file, this.plugin.settings.frontmatterTaskKeys.color);
@@ -612,6 +628,27 @@ export class CalendarView extends ItemView {
         return labels;
     }
 
+    private shouldShowWeekNumbers(): boolean {
+        return this.plugin.settings.calendarShowWeekNumbers;
+    }
+
+    private getColumnOffset(): number {
+        return this.shouldShowWeekNumbers() ? 1 : 0;
+    }
+
+    private getGridColumnForDay(dayColumn: number): number {
+        return dayColumn + this.getColumnOffset();
+    }
+
+    private renderWeekNumberCell(weekRow: HTMLElement, weekStartDate: Date): void {
+        const weekNumberEl = weekRow.createDiv('calendar-week-number');
+        const weekNumber = DateUtils.getISOWeekNumber(weekStartDate);
+        weekNumberEl.setText(`W${String(weekNumber).padStart(2, '0')}`);
+        weekNumberEl.addEventListener('click', (event: MouseEvent) => {
+            event.preventDefault();
+        });
+    }
+
     private getReferenceMonth(): { year: number; month: number } {
         const midDate = this.parseLocalDateString(DateUtils.addDays(this.windowStart, 20));
         const fallback = this.parseLocalDateString(this.windowStart) ?? new Date();
@@ -619,28 +656,9 @@ export class CalendarView extends ItemView {
         return { year: date.getFullYear(), month: date.getMonth() };
     }
 
-    private updateToolbarMonthLabel(): void {
-        const referenceMonth = this.getReferenceMonth();
-        const now = new Date();
-        const isCurrentYear = referenceMonth.year === now.getFullYear();
-        const isCurrentMonth = isCurrentYear && referenceMonth.month === now.getMonth();
-
-        const monthEl = this.container?.querySelector('.calendar-toolbar__month');
-        const yearEl = this.container?.querySelector('.calendar-toolbar__year');
-        if (monthEl instanceof HTMLElement) {
-            monthEl.setText(`${String(referenceMonth.month + 1).padStart(2, '0')}`);
-            monthEl.toggleClass('is-current', isCurrentMonth);
-        }
-        if (yearEl instanceof HTMLElement) {
-            yearEl.setText(`${referenceMonth.year}`);
-            yearEl.toggleClass('is-current', isCurrentYear);
-        }
-    }
-
     private navigateWeek(offset: number): void {
         this.windowStart = DateUtils.addDays(this.windowStart, offset * 7);
         void this.app.workspace.requestSaveLayout();
-        this.updateToolbarMonthLabel();
         void this.render();
     }
 

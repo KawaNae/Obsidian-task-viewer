@@ -136,6 +136,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
             if (colStart < 1 || span < 1) {
                 continue;
             }
+            const columnOffset = this.getCalendarColumnOffset(weekRow);
 
             const continuesBefore = start < weekStart;
             const continuesAfter = end > weekEnd;
@@ -145,7 +146,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
             preview.removeClass('selected', 'is-dragging');
             preview.removeClass('calendar-multiday-bar--head', 'calendar-multiday-bar--middle', 'calendar-multiday-bar--tail');
             preview.addClass('calendar-task-card--drag-preview');
-            preview.style.gridColumn = `${colStart} / span ${span}`;
+            preview.style.gridColumn = `${colStart + columnOffset} / span ${span}`;
             preview.style.gridRow = `${gridRow}`;
             preview.style.transform = '';
             preview.style.opacity = '';
@@ -179,6 +180,51 @@ export abstract class BaseDragStrategy implements DragStrategy {
     protected getCalendarWeekRows(context: DragContext): HTMLElement[] {
         return Array.from(context.container.querySelectorAll('.calendar-week-row'))
             .filter((el): el is HTMLElement => el instanceof HTMLElement);
+    }
+
+    protected getCalendarColumnOffset(weekRow: HTMLElement): number {
+        return weekRow.classList.contains('has-week-numbers') ? 1 : 0;
+    }
+
+    protected toCalendarDayColumn(displayColumn: number, weekRow: HTMLElement): number {
+        const dayColumn = displayColumn - this.getCalendarColumnOffset(weekRow);
+        return Math.min(7, Math.max(1, dayColumn));
+    }
+
+    protected toCalendarDisplayColumn(dayColumn: number, weekRow: HTMLElement): number {
+        return dayColumn + this.getCalendarColumnOffset(weekRow);
+    }
+
+    protected getCalendarDayHeaders(weekRow: HTMLElement): HTMLElement[] {
+        return Array.from(weekRow.querySelectorAll('.calendar-date-header'))
+            .filter((el): el is HTMLElement => el instanceof HTMLElement);
+    }
+
+    protected getCalendarDayColumnWidth(weekRow: HTMLElement): number {
+        const dayHeaders = this.getCalendarDayHeaders(weekRow);
+        for (const dayHeader of dayHeaders) {
+            const rect = dayHeader.getBoundingClientRect();
+            if (rect.width > 0) {
+                return rect.width;
+            }
+        }
+
+        const weekRect = weekRow.getBoundingClientRect();
+        if (weekRect.width > 0) {
+            let dayAreaWidth = weekRect.width;
+            if (this.getCalendarColumnOffset(weekRow) > 0) {
+                const weekNumberEl = weekRow.querySelector('.calendar-week-number');
+                if (weekNumberEl instanceof HTMLElement) {
+                    const weekNumberRect = weekNumberEl.getBoundingClientRect();
+                    dayAreaWidth = Math.max(0, weekRect.right - weekNumberRect.right);
+                }
+            }
+            if (dayAreaWidth > 0) {
+                return dayAreaWidth / 7;
+            }
+        }
+
+        return this.getCalendarFallbackColWidth();
     }
 
     protected findNearestCalendarWeekRow(clientY: number, context: DragContext): HTMLElement | null {
@@ -233,11 +279,58 @@ export abstract class BaseDragStrategy implements DragStrategy {
         if (!weekStart) {
             return null;
         }
+        const dayHeaders = this.getCalendarDayHeaders(weekRow);
+        let colWidth = this.getCalendarDayColumnWidth(weekRow);
+        let col = 1;
 
-        const weekRect = weekRow.getBoundingClientRect();
-        const colWidth = weekRect.width > 0 ? weekRect.width / 7 : this.getCalendarFallbackColWidth();
-        const rawCol = Math.floor((clientX - weekRect.left) / colWidth) + 1;
-        const col = Math.min(7, Math.max(1, rawCol));
+        if (dayHeaders.length === 7) {
+            const dayRects = dayHeaders.map((header) => header.getBoundingClientRect());
+            const firstRect = dayRects[0];
+            const lastRect = dayRects[dayRects.length - 1];
+
+            const containsIndex = dayRects.findIndex((rect) => clientX >= rect.left && clientX <= rect.right);
+            if (containsIndex >= 0) {
+                col = containsIndex + 1;
+            } else if (clientX < firstRect.left) {
+                col = 1;
+            } else if (clientX > lastRect.right) {
+                col = 7;
+            } else {
+                let nearestIndex = 0;
+                let nearestDistance = Number.POSITIVE_INFINITY;
+                dayRects.forEach((rect, index) => {
+                    const center = (rect.left + rect.right) / 2;
+                    const distance = Math.abs(clientX - center);
+                    if (distance < nearestDistance) {
+                        nearestDistance = distance;
+                        nearestIndex = index;
+                    }
+                });
+                col = nearestIndex + 1;
+            }
+
+            if (dayRects[0].width > 0) {
+                colWidth = dayRects[0].width;
+            }
+        } else {
+            const weekRect = weekRow.getBoundingClientRect();
+            let dayAreaLeft = weekRect.left;
+            let dayAreaWidth = weekRect.width;
+
+            if (this.getCalendarColumnOffset(weekRow) > 0) {
+                const weekNumberEl = weekRow.querySelector('.calendar-week-number');
+                if (weekNumberEl instanceof HTMLElement) {
+                    const weekNumberRect = weekNumberEl.getBoundingClientRect();
+                    dayAreaLeft = weekNumberRect.right;
+                    dayAreaWidth = Math.max(0, weekRect.right - weekNumberRect.right);
+                }
+            }
+
+            colWidth = dayAreaWidth > 0 ? dayAreaWidth / 7 : this.getCalendarFallbackColWidth();
+            const rawCol = Math.floor((clientX - dayAreaLeft) / colWidth) + 1;
+            col = Math.min(7, Math.max(1, rawCol));
+        }
+
         const targetDate = DateUtils.addDays(weekStart, col - 1);
 
         return {

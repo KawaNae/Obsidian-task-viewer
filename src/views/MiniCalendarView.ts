@@ -11,7 +11,10 @@ import { VIEW_META_MINI_CALENDAR } from '../constants/viewRegistry';
 
 export const VIEW_TYPE_MINI_CALENDAR = VIEW_META_MINI_CALENDAR.type;
 
-type IndicatorState = 'none' | 'complete-only' | 'incomplete';
+interface IndicatorState {
+    hasIncomplete: boolean;
+    hasComplete: boolean;
+}
 
 export class MiniCalendarView extends ItemView {
     private readonly taskIndex: TaskIndex;
@@ -144,14 +147,27 @@ export class MiniCalendarView extends ItemView {
         const rangeEndStr = DateUtils.getLocalDateString(endDate);
         const indicators = this.computeIndicators(rangeStartStr, rangeEndStr);
         const referenceMonth = this.getReferenceMonth();
+        const showWeekNumbers = this.shouldShowWeekNumbers();
 
         const cursor = new Date(startDate);
         for (let weekIndex = 0; weekIndex < 6; weekIndex++) {
+            const weekStartDate = new Date(cursor);
             const weekEl = track.createDiv('mini-calendar-week');
+            if (showWeekNumbers) {
+                weekEl.addClass('has-week-numbers');
+                this.renderWeekNumberCell(weekEl, weekStartDate);
+            }
             for (let colIndex = 1; colIndex <= 7; colIndex++) {
                 const date = new Date(cursor);
                 const dateKey = DateUtils.getLocalDateString(date);
-                this.renderCell(weekEl, date, dateKey, colIndex, referenceMonth, indicators.get(dateKey) ?? 'none');
+                this.renderCell(
+                    weekEl,
+                    date,
+                    dateKey,
+                    colIndex,
+                    referenceMonth,
+                    indicators.get(dateKey) ?? { hasIncomplete: false, hasComplete: false }
+                );
                 cursor.setDate(cursor.getDate() + 1);
             }
         }
@@ -208,6 +224,10 @@ export class MiniCalendarView extends ItemView {
     }
     private renderWeekdayHeader(grid: HTMLElement): void {
         const header = grid.createDiv('mini-calendar-weekday-header');
+        if (this.shouldShowWeekNumbers()) {
+            header.addClass('has-week-numbers');
+            header.createDiv({ cls: 'mini-calendar-weekday-cell', text: 'W' });
+        }
         const weekdays = this.getWeekdayNames();
         weekdays.forEach((label) => {
             header.createDiv({ cls: 'mini-calendar-weekday-cell', text: label });
@@ -220,10 +240,10 @@ export class MiniCalendarView extends ItemView {
         dateKey: string,
         colIndex: number,
         referenceMonth: { year: number; month: number },
-        indicatorState: IndicatorState,
+        indicatorState: IndicatorState = { hasIncomplete: false, hasComplete: false },
     ): void {
         const cell = weekEl.createDiv('mini-calendar-cell');
-        cell.style.gridColumn = `${colIndex}`;
+        cell.style.gridColumn = `${this.getGridColumnForDay(colIndex)}`;
         cell.dataset.date = dateKey;
 
         if (date.getFullYear() !== referenceMonth.year || date.getMonth() !== referenceMonth.month) {
@@ -248,13 +268,16 @@ export class MiniCalendarView extends ItemView {
             text: String(date.getDate()),
         });
 
-        if (indicatorState !== 'none') {
-            const indicator = link.createSpan({ cls: 'mini-calendar-cell__indicator' });
-            if (indicatorState === 'incomplete') {
-                indicator.addClass('mini-calendar-cell__indicator--incomplete');
-            } else {
-                indicator.addClass('mini-calendar-cell__indicator--complete');
-            }
+        const indicatorRow = link.createDiv({ cls: 'mini-calendar-cell__indicators' });
+        if (indicatorState.hasIncomplete) {
+            indicatorRow.createSpan({
+                cls: 'mini-calendar-cell__indicator mini-calendar-cell__indicator--incomplete'
+            });
+        }
+        if (indicatorState.hasComplete) {
+            indicatorRow.createSpan({
+                cls: 'mini-calendar-cell__indicator mini-calendar-cell__indicator--complete'
+            });
         }
 
         this.linkInteractionManager.bind(cell, {
@@ -289,26 +312,16 @@ export class MiniCalendarView extends ItemView {
 
             let dateCursor = clippedStart;
             while (dateCursor <= clippedEnd) {
-                const currentState = indicatorMap.get(dateCursor) ?? 'none';
-                indicatorMap.set(dateCursor, this.mergeIndicatorState(currentState, isCompleted));
+                const currentState = indicatorMap.get(dateCursor) ?? { hasIncomplete: false, hasComplete: false };
+                indicatorMap.set(dateCursor, {
+                    hasIncomplete: currentState.hasIncomplete || !isCompleted,
+                    hasComplete: currentState.hasComplete || isCompleted,
+                });
                 dateCursor = DateUtils.addDays(dateCursor, 1);
             }
         }
 
         return indicatorMap;
-    }
-
-    private mergeIndicatorState(current: IndicatorState, isCompleted: boolean): IndicatorState {
-        if (current === 'incomplete') {
-            return current;
-        }
-        if (!isCompleted) {
-            return 'incomplete';
-        }
-        if (current === 'none') {
-            return 'complete-only';
-        }
-        return current;
     }
 
     private getTaskDateRange(task: Task): { effectiveStart: string | null; effectiveEnd: string | null } {
@@ -375,16 +388,32 @@ export class MiniCalendarView extends ItemView {
     }
 
     private getWeekdayNames(): string[] {
-        const labels = ['日', '月', '火', '水', '木', '金', '土'];
+        const labels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
         if (this.plugin.settings.calendarWeekStartDay === 1) {
             return [...labels.slice(1), labels[0]];
         }
         return labels;
     }
 
-    private formatWindowLabel(): string {
-        const reference = this.getReferenceMonth();
-        return `${reference.month + 1}月 ${reference.year}`;
+    private shouldShowWeekNumbers(): boolean {
+        return this.plugin.settings.calendarShowWeekNumbers;
+    }
+
+    private getColumnOffset(): number {
+        return this.shouldShowWeekNumbers() ? 1 : 0;
+    }
+
+    private getGridColumnForDay(dayColumn: number): number {
+        return dayColumn + this.getColumnOffset();
+    }
+
+    private renderWeekNumberCell(weekEl: HTMLElement, weekStartDate: Date): void {
+        const weekNumberEl = weekEl.createDiv('mini-calendar-week-number');
+        const weekNumber = DateUtils.getISOWeekNumber(weekStartDate);
+        weekNumberEl.setText(`W${String(weekNumber).padStart(2, '0')}`);
+        weekNumberEl.addEventListener('click', (event: MouseEvent) => {
+            event.preventDefault();
+        });
     }
 
     private getReferenceMonth(): { year: number; month: number } {
@@ -574,6 +603,9 @@ export class MiniCalendarView extends ItemView {
     ): HTMLElement {
         const weekEl = document.createElement('div');
         weekEl.addClass('mini-calendar-week');
+        if (this.shouldShowWeekNumbers()) {
+            weekEl.addClass('has-week-numbers');
+        }
         weekEl.style.height = `${rowHeight}px`;
         weekEl.style.flex = 'none';
 
@@ -582,11 +614,22 @@ export class MiniCalendarView extends ItemView {
             return weekEl;
         }
 
+        if (this.shouldShowWeekNumbers()) {
+            this.renderWeekNumberCell(weekEl, startDate);
+        }
+
         const cursor = new Date(startDate);
         for (let colIndex = 1; colIndex <= 7; colIndex++) {
             const date = new Date(cursor);
             const dateKey = DateUtils.getLocalDateString(date);
-            this.renderCell(weekEl, date, dateKey, colIndex, referenceMonth, indicators.get(dateKey) ?? 'none');
+            this.renderCell(
+                weekEl,
+                date,
+                dateKey,
+                colIndex,
+                referenceMonth,
+                indicators.get(dateKey) ?? { hasIncomplete: false, hasComplete: false }
+            );
             cursor.setDate(cursor.getDate() + 1);
         }
 

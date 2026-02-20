@@ -247,12 +247,12 @@ export class ResizeStrategy extends BaseDragStrategy {
     // ========== Calendar Resize ==========
 
     private initCalendarResize(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
-        this.container = (el.closest('.calendar-week-row') as HTMLElement) || context.container;
+        const weekRow = (el.closest('.calendar-week-row') as HTMLElement) || context.container;
+        this.container = weekRow;
 
-        const headerCell = this.container?.querySelector('.calendar-date-header') as HTMLElement;
+        const headerCell = weekRow.querySelector('.calendar-date-header') as HTMLElement;
         this.refHeaderCell = headerCell;
-        const weekRect = this.container?.getBoundingClientRect();
-        this.colWidth = weekRect && weekRect.width > 0 ? weekRect.width / 7 : 100;
+        this.colWidth = this.getCalendarDayColumnWidth(weekRow);
 
         const viewStartDate = context.getViewStartDate();
         this.initialDate = task.startDate || viewStartDate || DateUtils.getToday();
@@ -260,8 +260,11 @@ export class ResizeStrategy extends BaseDragStrategy {
 
         const gridCol = el.style.gridColumn;
         const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
-        this.startCol = colMatch ? parseInt(colMatch[1]) : 1;
-        this.initialSpan = colMatch ? parseInt(colMatch[2]) : 1;
+        const displayStartCol = colMatch
+            ? parseInt(colMatch[1], 10)
+            : this.getCalendarColumnOffset(weekRow) + 1;
+        this.startCol = this.toCalendarDayColumn(displayStartCol, weekRow);
+        this.initialSpan = colMatch ? parseInt(colMatch[2], 10) : 1;
         this.initialGridColumn = el.style.gridColumn;
         this.calendarPreviewTargetDate = null;
         this.hiddenElements = [];
@@ -280,6 +283,7 @@ export class ResizeStrategy extends BaseDragStrategy {
         if (!this.dragEl) return;
 
         const sourceWeekRow = this.container as HTMLElement;
+        const columnOffset = this.getCalendarColumnOffset(sourceWeekRow);
         const sourceWeekStart = sourceWeekRow?.dataset.weekStart || context.getViewStartDate();
         const target = this.resolveCalendarPointerTarget(e.clientX, e.clientY, context);
         if (!target) {
@@ -303,7 +307,7 @@ export class ResizeStrategy extends BaseDragStrategy {
             this.clearCalendarPreviewGhosts();
             this.dragEl.style.opacity = '';
             const newSpan = Math.max(1, target.col - this.startCol + 1);
-            this.dragEl.style.gridColumn = `${this.startCol} / span ${newSpan}`;
+            this.dragEl.style.gridColumn = `${this.startCol + columnOffset} / span ${newSpan}`;
         } else if (this.resizeDirection === 'left') {
             const boundedStart = target.targetDate > this.initialEndDate ? this.initialEndDate : target.targetDate;
             this.calendarPreviewTargetDate = boundedStart;
@@ -323,7 +327,7 @@ export class ResizeStrategy extends BaseDragStrategy {
             targetStartCol = Math.min(targetStartCol, currentEndCol);
             targetStartCol = Math.max(targetStartCol, 1);
             const newSpan = Math.max(1, currentEndCol - targetStartCol + 1);
-            this.dragEl.style.gridColumn = `${targetStartCol} / span ${newSpan}`;
+            this.dragEl.style.gridColumn = `${targetStartCol + columnOffset} / span ${newSpan}`;
         }
     }
 

@@ -33,6 +33,10 @@
     line-height: 1;
 }
 
+/* Intentional hooks for future per-selector styling */
+.timeline-toolbar__btn--view-mode {}
+.timeline-toolbar__btn--zoom {}
+
 .timeline-toolbar__btn--sidebar-toggle {
     margin-left: 8px;
 }

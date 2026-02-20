@@ -44,6 +44,16 @@ export class DateUtils {
     }
 
     /**
+     * Returns ISO-8601 week number (1-53) for the given date.
+     */
+    static getISOWeekNumber(date: Date): number {
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+    }
+
+    /**
      * Get the visual start date for a task considering startHour.
      * If a task's startTime is before startHour, it visually belongs to the previous day.
      * 

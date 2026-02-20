@@ -330,12 +330,12 @@ export class MoveStrategy extends BaseDragStrategy {
     // ========== Calendar Move ==========
 
     private initCalendarMove(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
-        this.container = (el.closest('.calendar-week-row') as HTMLElement) || context.container;
+        const weekRow = (el.closest('.calendar-week-row') as HTMLElement) || context.container;
+        this.container = weekRow;
 
-        const headerCell = this.container?.querySelector('.calendar-date-header') as HTMLElement;
+        const headerCell = weekRow.querySelector('.calendar-date-header') as HTMLElement;
         this.refHeaderCell = headerCell;
-        const weekRect = this.container?.getBoundingClientRect();
-        this.colWidth = weekRect && weekRect.width > 0 ? weekRect.width / 7 : 100;
+        this.colWidth = this.getCalendarDayColumnWidth(weekRow);
 
         const viewStartDate = context.getViewStartDate();
         this.initialDate = task.startDate || viewStartDate || DateUtils.getToday();
@@ -344,11 +344,14 @@ export class MoveStrategy extends BaseDragStrategy {
 
         const gridCol = el.style.gridColumn;
         const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
-        this.startCol = colMatch ? parseInt(colMatch[1]) : 1;
-        const span = colMatch ? parseInt(colMatch[2]) : 1;
+        const displayStartCol = colMatch
+            ? parseInt(colMatch[1], 10)
+            : this.getCalendarColumnOffset(weekRow) + 1;
+        this.startCol = this.toCalendarDayColumn(displayStartCol, weekRow);
+        const span = colMatch ? parseInt(colMatch[2], 10) : 1;
         const target = e.target as HTMLElement;
         if (target.closest('.task-card__handle--move-top-right')) {
-            this.grabCol = this.startCol + span - 1;
+            this.grabCol = Math.min(7, this.startCol + span - 1);
         } else {
             this.grabCol = this.startCol;
         }
