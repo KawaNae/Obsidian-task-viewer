@@ -9,14 +9,6 @@ import {
     toLogicalTopPx
 } from '../../../utils/TimelineCardPosition';
 
-interface CalendarResizePointerTarget {
-    weekRow: HTMLElement;
-    weekStart: string;
-    col: number;
-    colWidth: number;
-    targetDate: string;
-}
-
 /**
  * リサイズ操作を処理するドラッグストラテジー。
  * TimelineとAllDay両方のリサイズ操作を統一的に処理。
@@ -42,7 +34,7 @@ export class ResizeStrategy extends BaseDragStrategy {
     private initialGridColumn: string = '';
     private container: HTMLElement | null = null;
     private refHeaderCell: HTMLElement | null = null;
-    private calendarPreviewGhosts: HTMLElement[] = [];
+    private hiddenElements: HTMLElement[] = [];
     private calendarPreviewTargetDate: string | null = null;
 
     onDown(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
@@ -255,11 +247,12 @@ export class ResizeStrategy extends BaseDragStrategy {
     // ========== Calendar Resize ==========
 
     private initCalendarResize(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
-        this.container = (el.closest('.calendar-week-row') as HTMLElement) || context.container;
+        const weekRow = (el.closest('.calendar-week-row') as HTMLElement) || context.container;
+        this.container = weekRow;
 
-        const headerCell = this.container?.querySelector('.calendar-date-header') as HTMLElement;
+        const headerCell = weekRow.querySelector('.calendar-date-header') as HTMLElement;
         this.refHeaderCell = headerCell;
-        this.colWidth = headerCell?.getBoundingClientRect().width || 100;
+        this.colWidth = this.getCalendarDayColumnWidth(weekRow);
 
         const viewStartDate = context.getViewStartDate();
         this.initialDate = task.startDate || viewStartDate || DateUtils.getToday();
@@ -267,17 +260,30 @@ export class ResizeStrategy extends BaseDragStrategy {
 
         const gridCol = el.style.gridColumn;
         const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
-        this.startCol = colMatch ? parseInt(colMatch[1]) : 1;
-        this.initialSpan = colMatch ? parseInt(colMatch[2]) : 1;
+        const displayStartCol = colMatch
+            ? parseInt(colMatch[1], 10)
+            : this.getCalendarColumnOffset(weekRow) + 1;
+        this.startCol = this.toCalendarDayColumn(displayStartCol, weekRow);
+        this.initialSpan = colMatch ? parseInt(colMatch[2], 10) : 1;
         this.initialGridColumn = el.style.gridColumn;
         this.calendarPreviewTargetDate = null;
+        this.hiddenElements = [];
         this.clearCalendarPreviewGhosts();
+
+        const originalId = (task as any).originalTaskId || task.id;
+        const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
+        context.container.querySelectorAll(selector).forEach(segment => {
+            if (segment instanceof HTMLElement) {
+                this.hiddenElements.push(segment);
+            }
+        });
     }
 
     private processCalendarResize(e: PointerEvent, context: DragContext) {
         if (!this.dragEl) return;
 
         const sourceWeekRow = this.container as HTMLElement;
+        const columnOffset = this.getCalendarColumnOffset(sourceWeekRow);
         const sourceWeekStart = sourceWeekRow?.dataset.weekStart || context.getViewStartDate();
         const target = this.resolveCalendarPointerTarget(e.clientX, e.clientY, context);
         if (!target) {
@@ -291,25 +297,29 @@ export class ResizeStrategy extends BaseDragStrategy {
             this.calendarPreviewTargetDate = boundedEnd;
 
             if (crossWeek) {
+                this.hiddenElements.forEach(el => el.style.opacity = '0');
                 this.dragEl.style.opacity = '0.15';
-                this.updateCalendarResizeSplitPreview(context, this.initialDate, boundedEnd);
+                this.updateCalendarSplitPreview(context, this.initialDate, boundedEnd);
                 return;
             }
 
+            this.hiddenElements.forEach(el => el.style.opacity = '');
             this.clearCalendarPreviewGhosts();
             this.dragEl.style.opacity = '';
             const newSpan = Math.max(1, target.col - this.startCol + 1);
-            this.dragEl.style.gridColumn = `${this.startCol} / span ${newSpan}`;
+            this.dragEl.style.gridColumn = `${this.startCol + columnOffset} / span ${newSpan}`;
         } else if (this.resizeDirection === 'left') {
             const boundedStart = target.targetDate > this.initialEndDate ? this.initialEndDate : target.targetDate;
             this.calendarPreviewTargetDate = boundedStart;
 
             if (crossWeek) {
+                this.hiddenElements.forEach(el => el.style.opacity = '0');
                 this.dragEl.style.opacity = '0.15';
-                this.updateCalendarResizeSplitPreview(context, boundedStart, this.initialEndDate);
+                this.updateCalendarSplitPreview(context, boundedStart, this.initialEndDate);
                 return;
             }
 
+            this.hiddenElements.forEach(el => el.style.opacity = '');
             this.clearCalendarPreviewGhosts();
             this.dragEl.style.opacity = '';
             const currentEndCol = this.startCol + this.initialSpan - 1;
@@ -317,12 +327,13 @@ export class ResizeStrategy extends BaseDragStrategy {
             targetStartCol = Math.min(targetStartCol, currentEndCol);
             targetStartCol = Math.max(targetStartCol, 1);
             const newSpan = Math.max(1, currentEndCol - targetStartCol + 1);
-            this.dragEl.style.gridColumn = `${targetStartCol} / span ${newSpan}`;
+            this.dragEl.style.gridColumn = `${targetStartCol + columnOffset} / span ${newSpan}`;
         }
     }
 
     private async finishCalendarResize(e: PointerEvent, context: DragContext) {
         this.clearCalendarPreviewGhosts();
+        this.hiddenElements.forEach(el => el.style.opacity = '');
         if (this.dragEl) {
             this.dragEl.style.opacity = '';
         }
@@ -472,162 +483,11 @@ export class ResizeStrategy extends BaseDragStrategy {
         }
     }
 
-    private updateCalendarResizeSplitPreview(context: DragContext, rangeStart: string, rangeEnd: string): void {
-        if (!this.dragEl) {
-            return;
-        }
-
-        this.clearCalendarPreviewGhosts();
-
-        const start = rangeStart <= rangeEnd ? rangeStart : rangeEnd;
-        const end = rangeStart <= rangeEnd ? rangeEnd : rangeStart;
-        const gridRow = this.extractGridRow(this.dragEl.style.gridRow);
-        const weekRows = this.getCalendarWeekRows(context);
-        if (weekRows.length === 0) {
-            return;
-        }
-
-        for (const weekRow of weekRows) {
-            const weekStart = weekRow.dataset.weekStart;
-            if (!weekStart) {
-                continue;
-            }
-
-            const weekEnd = DateUtils.addDays(weekStart, 6);
-            if (start > weekEnd || end < weekStart) {
-                continue;
-            }
-
-            const segStart = start < weekStart ? weekStart : start;
-            const segEnd = end > weekEnd ? weekEnd : end;
-            const colStart = DateUtils.getDiffDays(weekStart, segStart) + 1;
-            const span = DateUtils.getDiffDays(segStart, segEnd) + 1;
-            if (colStart < 1 || span < 1) {
-                continue;
-            }
-
-            const continuesBefore = start < weekStart;
-            const continuesAfter = end > weekEnd;
-
-            const preview = this.dragEl.cloneNode(true) as HTMLElement;
-            preview.querySelectorAll('.task-card__handle').forEach((handle) => handle.remove());
-            preview.removeClass('selected', 'is-dragging');
-            preview.removeClass('calendar-multiday-bar--head', 'calendar-multiday-bar--middle', 'calendar-multiday-bar--tail');
-            preview.addClass('calendar-task-card--drag-preview');
-            preview.style.gridColumn = `${colStart} / span ${span}`;
-            preview.style.gridRow = `${gridRow}`;
-            preview.style.transform = '';
-            preview.style.opacity = '';
-            preview.style.zIndex = '1001';
-            preview.style.pointerEvents = 'none';
-            if (continuesBefore && continuesAfter) {
-                preview.addClass('calendar-multiday-bar--middle');
-            } else if (continuesAfter) {
-                preview.addClass('calendar-multiday-bar--head');
-            } else if (continuesBefore) {
-                preview.addClass('calendar-multiday-bar--tail');
-            }
-
-            weekRow.appendChild(preview);
-            this.calendarPreviewGhosts.push(preview);
-        }
-    }
-
-    private clearCalendarPreviewGhosts(): void {
-        for (const ghost of this.calendarPreviewGhosts) {
-            ghost.remove();
-        }
-        this.calendarPreviewGhosts = [];
-    }
-
-    private extractGridRow(gridRowStyle: string): number {
-        const parsed = Number.parseInt(gridRowStyle, 10);
-        return Number.isFinite(parsed) && parsed > 0 ? parsed : 2;
-    }
-
-    private getCalendarWeekRows(context: DragContext): HTMLElement[] {
-        return Array.from(context.container.querySelectorAll('.calendar-week-row'))
-            .filter((el): el is HTMLElement => el instanceof HTMLElement);
-    }
-
-    private findNearestCalendarWeekRow(clientY: number, context: DragContext): HTMLElement | null {
-        const rows = this.getCalendarWeekRows(context);
-        if (rows.length === 0) {
-            return null;
-        }
-
-        let nearest: HTMLElement | null = null;
-        let minDistance = Number.POSITIVE_INFINITY;
-
-        for (const row of rows) {
-            const rect = row.getBoundingClientRect();
-            let distance = 0;
-            if (clientY < rect.top) {
-                distance = rect.top - clientY;
-            } else if (clientY > rect.bottom) {
-                distance = clientY - rect.bottom;
-            }
-
-            if (distance < minDistance) {
-                minDistance = distance;
-                nearest = row;
-            }
-        }
-
-        return nearest;
-    }
-
-    private resolveCalendarPointerTarget(clientX: number, clientY: number, context: DragContext): CalendarResizePointerTarget | null {
-        const doc = context.container.ownerDocument || document;
-        let elBelow: Element | null = null;
-
-        if (this.dragEl) {
-            const prevPointerEvents = this.dragEl.style.pointerEvents;
-            this.dragEl.style.pointerEvents = 'none';
-            elBelow = doc.elementFromPoint(clientX, clientY);
-            this.dragEl.style.pointerEvents = prevPointerEvents;
-        } else {
-            elBelow = doc.elementFromPoint(clientX, clientY);
-        }
-
-        let weekRow = elBelow?.closest('.calendar-week-row') as HTMLElement | null;
-        if (!weekRow) {
-            weekRow = this.findNearestCalendarWeekRow(clientY, context);
-        }
-        if (!weekRow) {
-            return null;
-        }
-
-        const weekStart = weekRow.dataset.weekStart;
-        if (!weekStart) {
-            return null;
-        }
-
-        const header = weekRow.querySelector('.calendar-date-header') as HTMLElement | null;
-        if (!header) {
-            return null;
-        }
-
-        const headerRect = header.getBoundingClientRect();
-        const colWidth = headerRect.width > 0 ? headerRect.width : this.colWidth || 100;
-        const rawCol = Math.round((clientX - headerRect.left) / colWidth) + 1;
-        const col = Math.min(7, Math.max(1, rawCol));
-        const targetDate = DateUtils.addDays(weekStart, col - 1);
-
-        return {
-            weekRow,
-            weekStart,
-            col,
-            colWidth,
-            targetDate,
-        };
-    }
-
     protected cleanup(): void {
         super.cleanup();
         this.currentDayDate = null;
         this.container = null;
+        this.hiddenElements = [];
         this.calendarPreviewTargetDate = null;
-        this.clearCalendarPreviewGhosts();
     }
 }

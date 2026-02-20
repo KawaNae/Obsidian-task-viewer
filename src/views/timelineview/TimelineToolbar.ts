@@ -3,7 +3,7 @@ import { ViewState, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
 import TaskViewerPlugin from '../../main';
-import { FileFilterMenu, DateNavigator, ViewModeSelector, ZoomControls } from '../ViewUtils';
+import { FileFilterMenu, DateNavigator, ViewModeSelector, ZoomSelector } from '../ViewUtils';
 
 export interface ToolbarCallbacks {
     onRender: () => void;
@@ -65,6 +65,9 @@ export class TimelineToolbar {
 
         // Zoom Controls
         this.renderZoomControls(toolbar);
+
+        // Push filter/toggle controls to the right
+        toolbar.createDiv('view-toolbar__spacer');
 
         // Filter Button
         this.renderFilterButton(toolbar);
@@ -132,7 +135,7 @@ export class TimelineToolbar {
     }
 
     private renderZoomControls(toolbar: HTMLElement): void {
-        ZoomControls.render(
+        ZoomSelector.render(
             toolbar,
             this.plugin.settings.zoomLevel,
             async (newZoom) => {
@@ -178,7 +181,7 @@ export class TimelineToolbar {
 
     private renderSidebarToggle(toolbar: HTMLElement): void {
         const toggleBtn = toolbar.createEl('button', {
-            cls: 'view-toolbar__btn--icon view-toolbar__btn--sidebar-toggle sidebar-toggle-button-icon'
+            cls: 'view-toolbar__btn--icon timeline-toolbar__btn--sidebar-toggle sidebar-toggle-button-icon'
         });
         this.sidebarToggleBtn = toggleBtn;
         this.updateSidebarToggleButton(toggleBtn);

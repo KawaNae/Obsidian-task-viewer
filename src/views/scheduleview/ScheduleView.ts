@@ -216,8 +216,7 @@ export class ScheduleView extends ItemView {
             }
         );
 
-        const spacer = toolbar.createDiv('view-toolbar__spacer');
-        spacer.style.flex = '1';
+        toolbar.createDiv('view-toolbar__spacer');
 
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');

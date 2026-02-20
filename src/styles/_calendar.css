@@ -11,18 +11,6 @@
     padding: 0 !important;
 }
 
-.calendar-toolbar {
-    border-bottom: 1px solid var(--tv-border);
-}
-
-.calendar-month-label {
-    font-weight: 700;
-    font-size: 0.95em;
-    color: var(--tv-text);
-    min-width: 6.5em;
-    text-align: center;
-}
-
 .calendar-grid {
     flex: 1;
     display: flex;
@@ -35,6 +23,10 @@
     grid-template-columns: repeat(7, minmax(0, 1fr));
     background: var(--tv-bg-date-header);
     border-bottom: 1px solid var(--tv-border);
+}
+
+.calendar-weekday-header.has-week-numbers {
+    grid-template-columns: var(--calendar-wk-col-width, 32px) repeat(7, minmax(0, 1fr));
 }
 
 .calendar-weekday-cell {
@@ -64,6 +56,29 @@
     align-content: start;
     min-height: 140px;
     border-bottom: 1px solid var(--tv-border);
+}
+
+.calendar-week-row.has-week-numbers {
+    grid-template-columns: var(--calendar-wk-col-width, 32px) repeat(7, minmax(0, 1fr));
+}
+
+.calendar-week-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72em;
+    font-weight: 600;
+    color: var(--tv-text-muted);
+    grid-column: 1;
+    grid-row: 1;
+    padding: 2px;
+    cursor: pointer;
+}
+
+.calendar-week-number:hover {
+    color: var(--tv-text);
+    background: var(--tv-bg-hover);
+    border-radius: var(--tv-radius-s);
 }
 
 .calendar-col-separator {
@@ -159,6 +174,19 @@
 .calendar-task-card--drag-preview {
     pointer-events: none !important;
     opacity: 0.82;
+    z-index: 10;
+}
+
+.calendar-task-card--drag-preview::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 2px solid var(--file-accent, var(--tv-accent));
+    border-radius: var(--task-card-border-radius);
+    pointer-events: none;
 }
 
 .calendar-task-card--drag-preview .task-card__handle {
@@ -173,24 +201,6 @@
 .calendar-task-card .task-card__content ol {
     margin-block-start: 0.1em;
     margin-block-end: 0.1em;
-}
-
-.calendar-more-button {
-    margin: 1px 2px;
-    width: auto;
-    justify-self: stretch;
-    border: 1px dashed var(--tv-border);
-    border-radius: var(--tv-radius-s);
-    background: var(--tv-bg-secondary);
-    color: var(--tv-text-muted);
-    font-size: 0.75em;
-    padding: 3px 6px;
-    cursor: pointer;
-}
-
-.calendar-more-button:hover {
-    background: var(--tv-bg-hover);
-    color: var(--tv-text);
 }
 
 .calendar-task-modal {

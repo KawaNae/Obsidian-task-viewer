@@ -392,24 +392,22 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Max Tasks Per Cell')
-            .setDesc('Maximum number of tasks shown in each calendar day cell before showing "+N more".')
-            .addSlider(slider => slider
-                .setLimits(1, 10, 1)
-                .setValue(this.plugin.settings.calendarMaxTasksPerCell)
-                .setDynamicTooltip()
-                .onChange(async (value) => {
-                    this.plugin.settings.calendarMaxTasksPerCell = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
             .setName('Show Completed Tasks')
             .setDesc('Show completed tasks in Calendar View.')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.calendarShowCompleted)
                 .onChange(async (value) => {
                     this.plugin.settings.calendarShowCompleted = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Show Week Numbers')
+            .setDesc('Show ISO week numbers in Calendar and Mini Calendar views.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.calendarShowWeekNumbers)
+                .onChange(async (value) => {
+                    this.plugin.settings.calendarShowWeekNumbers = value;
                     await this.plugin.saveSettings();
                 }));
 

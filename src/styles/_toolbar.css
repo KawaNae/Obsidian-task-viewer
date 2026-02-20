@@ -1,10 +1,8 @@
 /* =============================================================================
    View Toolbar
-   Shared toolbar styles for Timeline, Schedule, and Kanban views
-   命名規則: BEM (Block: view-toolbar)
+   Shared toolbar foundation styles
 ============================================================================= */
 
-/* Toolbar Container */
 .view-toolbar {
     padding: var(--toolbar-padding, 8px);
     display: flex;
@@ -45,21 +43,6 @@
     color: var(--tv-text);
 }
 
-/* Zoom Controls */
-.view-toolbar__zoom-controls {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-}
-
-.view-toolbar__label {
-    min-width: 40px;
-    text-align: center;
-    color: var(--tv-text-muted);
-    font-size: 0.85em;
-}
-
-/* Toolbar Buttons (iPad Fix & Sizing) */
 .view-toolbar__btn--icon {
     width: 28px;
     height: 28px;
@@ -67,64 +50,20 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    /* remove padding for ipad */
     padding: 0 !important;
 }
 
-.view-toolbar__btn--text {
+.view-toolbar__btn--today {
     height: 28px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    /* remove padding for ipad */
-    padding: 0 12px !important;
+    padding: 0 8px !important;
+    font-size: 0.82em;
+    min-width: 3.2em;
 }
 
-.view-toolbar__btn--today svg {
-    width: 12px;
-    height: 12px;
-}
-
-.view-toolbar__btn--range {
-    height: 28px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0 10px !important;
-    color: var(--tv-text);
-    font-size: 0.9em;
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-.view-toolbar__btn-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--tv-text-muted);
-    width: 14px;
-    height: 14px;
-}
-
-.view-toolbar__btn-icon svg {
-    width: 14px;
-    height: 14px;
-}
-
-.view-toolbar__btn-label {
-    line-height: 1;
-}
-
-.view-toolbar__btn--sidebar-toggle {
-    margin-left: auto;
-}
-
-.sidebar-toggle-button-icon {
-    flex-shrink: 0;
-}
-
-.sidebar-toggle-button-icon svg {
-    width: 16px;
-    height: 16px;
+.view-toolbar__spacer {
+    flex: 1;
 }
