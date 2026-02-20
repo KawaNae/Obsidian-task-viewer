@@ -52,6 +52,14 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    overflow: hidden;
+}
+
+.mini-calendar-body__track {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
 }
 
 .mini-calendar-week {

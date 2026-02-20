@@ -21,6 +21,7 @@ export class MiniCalendarView extends ItemView {
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private windowStart: string;
+    private isAnimating: boolean = false;
     private navigateWeekDebounceTimer: number | null = null;
     private pendingWeekOffset: number = 0;
 
@@ -97,6 +98,7 @@ export class MiniCalendarView extends ItemView {
             this.navigateWeekDebounceTimer = null;
             this.pendingWeekOffset = 0;
         }
+        this.isAnimating = false;
 
         if (this.unsubscribe) {
             this.unsubscribe();
@@ -113,6 +115,8 @@ export class MiniCalendarView extends ItemView {
             return;
         }
 
+        this.isAnimating = false;
+
         const normalizedWindowStart = this.getNormalizedWindowStart(this.windowStart);
         if (normalizedWindowStart !== this.windowStart) {
             this.windowStart = normalizedWindowStart;
@@ -126,6 +130,7 @@ export class MiniCalendarView extends ItemView {
         this.renderWeekdayHeader(grid);
 
         const body = grid.createDiv('mini-calendar-body');
+        const track = body.createDiv('mini-calendar-body__track');
         body.addEventListener('wheel', (e: WheelEvent) => {
             if (e.deltaY === 0) {
                 return;
@@ -142,7 +147,7 @@ export class MiniCalendarView extends ItemView {
 
         const cursor = new Date(startDate);
         for (let weekIndex = 0; weekIndex < 6; weekIndex++) {
-            const weekEl = body.createDiv('mini-calendar-week');
+            const weekEl = track.createDiv('mini-calendar-week');
             for (let colIndex = 1; colIndex <= 7; colIndex++) {
                 const date = new Date(cursor);
                 const dateKey = DateUtils.getLocalDateString(date);
@@ -168,6 +173,9 @@ export class MiniCalendarView extends ItemView {
         todayBtn.setAttribute('aria-label', 'Today');
         todayBtn.setAttribute('title', 'Today');
         todayBtn.addEventListener('click', () => {
+            if (this.isAnimating) {
+                return;
+            }
             const today = new Date();
             const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
             const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
@@ -372,12 +380,27 @@ export class MiniCalendarView extends ItemView {
     }
 
     private navigateWeek(offset: number): void {
+        if (offset === 0 || this.isAnimating) {
+            return;
+        }
+
         this.windowStart = DateUtils.addDays(this.windowStart, offset * 7);
         void this.app.workspace.requestSaveLayout();
-        void this.render();
+        this.updateToolbarMonthLabel();
+
+        const body = this.container?.querySelector('.mini-calendar-body');
+        if (!(body instanceof HTMLElement)) {
+            void this.render();
+            return;
+        }
+
+        this.animateWeekSlide(body, offset);
     }
 
     private navigateWeekDebounced(offset: number): void {
+        if (this.isAnimating) {
+            return;
+        }
         this.pendingWeekOffset = offset;
         if (this.navigateWeekDebounceTimer !== null) {
             window.clearTimeout(this.navigateWeekDebounceTimer);
@@ -386,7 +409,9 @@ export class MiniCalendarView extends ItemView {
             this.navigateWeekDebounceTimer = null;
             const nextOffset = this.pendingWeekOffset;
             this.pendingWeekOffset = 0;
-            this.navigateWeek(nextOffset);
+            if (!this.isAnimating) {
+                this.navigateWeek(nextOffset);
+            }
         }, 200);
     }
 
@@ -420,6 +445,125 @@ export class MiniCalendarView extends ItemView {
         const baseDate = parsed ?? new Date();
         const weekStart = this.getWeekStart(baseDate, this.plugin.settings.calendarWeekStartDay);
         return DateUtils.getLocalDateString(weekStart);
+    }
+
+    private updateToolbarMonthLabel(): void {
+        const monthLabel = this.container?.querySelector('.mini-calendar-month-label');
+        if (monthLabel instanceof HTMLElement) {
+            monthLabel.setText(this.formatWindowLabel());
+        }
+    }
+
+    private animateWeekSlide(body: HTMLElement, offset: number): void {
+        const track = body.querySelector('.mini-calendar-body__track');
+        if (!(track instanceof HTMLElement)) {
+            void this.render();
+            return;
+        }
+
+        const weekRows = Array.from(track.querySelectorAll('.mini-calendar-week'))
+            .filter((el): el is HTMLElement => el instanceof HTMLElement);
+        if (weekRows.length !== 6) {
+            void this.render();
+            return;
+        }
+
+        const rowHeight = body.clientHeight / 6;
+        if (!Number.isFinite(rowHeight) || rowHeight <= 0) {
+            void this.render();
+            return;
+        }
+
+        const { startDate, endDate } = this.getCalendarDateRange();
+        const indicators = this.computeIndicators(
+            DateUtils.getLocalDateString(startDate),
+            DateUtils.getLocalDateString(endDate)
+        );
+        const referenceMonth = this.getReferenceMonth();
+
+        weekRows.forEach((row) => {
+            row.style.height = `${rowHeight}px`;
+            row.style.flex = 'none';
+        });
+
+        const finalize = () => {
+            track.style.transition = '';
+            track.style.transform = '';
+            track.style.willChange = '';
+            track.querySelectorAll('.mini-calendar-week').forEach((row) => {
+                if (row instanceof HTMLElement) {
+                    row.style.height = '';
+                    row.style.flex = '';
+                }
+            });
+            this.isAnimating = false;
+            void this.render();
+        };
+
+        this.isAnimating = true;
+
+        if (offset > 0) {
+            const incomingWeekStart = DateUtils.addDays(this.windowStart, 35);
+            const incomingWeek = this.createWeekRow(incomingWeekStart, indicators, referenceMonth, rowHeight);
+            track.appendChild(incomingWeek);
+            track.style.transform = 'translateY(0)';
+            void track.offsetHeight;
+            track.style.transition = 'transform 150ms ease-out';
+            track.style.willChange = 'transform';
+            track.style.transform = `translateY(-${rowHeight}px)`;
+            track.addEventListener('transitionend', () => {
+                const firstWeek = track.querySelector('.mini-calendar-week');
+                if (firstWeek instanceof HTMLElement) {
+                    firstWeek.remove();
+                }
+                finalize();
+            }, { once: true });
+            return;
+        }
+
+        const incomingWeekStart = this.windowStart;
+        const incomingWeek = this.createWeekRow(incomingWeekStart, indicators, referenceMonth, rowHeight);
+        track.insertBefore(incomingWeek, track.firstChild);
+        track.style.transform = `translateY(-${rowHeight}px)`;
+        track.style.willChange = 'transform';
+        void track.offsetHeight;
+        track.style.transition = 'transform 150ms ease-out';
+        track.style.transform = 'translateY(0)';
+        track.addEventListener('transitionend', () => {
+            const currentWeeks = track.querySelectorAll('.mini-calendar-week');
+            const lastWeek = currentWeeks.item(currentWeeks.length - 1);
+            if (lastWeek instanceof HTMLElement) {
+                lastWeek.remove();
+            }
+            finalize();
+        }, { once: true });
+    }
+
+    private createWeekRow(
+        weekStart: string,
+        indicators: Map<string, IndicatorState>,
+        referenceMonth: { year: number; month: number },
+        rowHeight: number,
+    ): HTMLElement {
+        const weekEl = document.createElement('div');
+        weekEl.addClass('mini-calendar-week');
+        weekEl.style.height = `${rowHeight}px`;
+        weekEl.style.flex = 'none';
+
+        const startDate = this.parseLocalDateString(weekStart);
+        if (!startDate) {
+            return weekEl;
+        }
+
+        const cursor = new Date(startDate);
+        for (let colIndex = 1; colIndex <= 7; colIndex++) {
+            const date = new Date(cursor);
+            const dateKey = DateUtils.getLocalDateString(date);
+            this.renderCell(weekEl, date, dateKey, colIndex, referenceMonth, indicators.get(dateKey) ?? 'none');
+            cursor.setDate(cursor.getDate() + 1);
+        }
+
+        return weekEl;
     }
 
     private async openOrCreateDailyNote(date: Date): Promise<void> {
