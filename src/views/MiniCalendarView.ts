@@ -158,18 +158,30 @@ export class MiniCalendarView extends ItemView {
     }
 
     private renderToolbar(): void {
-        const toolbar = this.container.createDiv('view-toolbar mini-calendar-toolbar');
+        const toolbar = this.container.createDiv('mini-calendar-toolbar');
 
-        const prevBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(prevBtn, 'chevron-left');
+        const labelGroup = toolbar.createDiv('mini-calendar-toolbar__label');
+        const referenceMonth = this.getReferenceMonth();
+        const now = new Date();
+        const isCurrentMonth = referenceMonth.year === now.getFullYear() && referenceMonth.month === now.getMonth();
+
+        const monthSpan = labelGroup.createSpan({ cls: 'mini-calendar-toolbar__month' });
+        monthSpan.setText(`${String(referenceMonth.month + 1).padStart(2, '0')}\u6708`);
+        monthSpan.toggleClass('is-current', isCurrentMonth);
+
+        const yearSpan = labelGroup.createSpan({ cls: 'mini-calendar-toolbar__year' });
+        yearSpan.setText(`${referenceMonth.year}`);
+        yearSpan.toggleClass('is-current', isCurrentMonth);
+
+        const navGroup = toolbar.createDiv('mini-calendar-toolbar__nav');
+
+        const prevBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(prevBtn, 'chevron-up');
         prevBtn.setAttribute('aria-label', 'Previous week');
         prevBtn.setAttribute('title', 'Previous week');
         prevBtn.addEventListener('click', () => this.navigateWeek(-1));
 
-        const monthLabel = toolbar.createSpan({ cls: 'mini-calendar-month-label' });
-        monthLabel.setText(this.formatWindowLabel());
-
-        const todayBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--today mini-calendar-toolbar__today', text: '今日' });
+        const todayBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--today mini-calendar-toolbar__today', text: '\u4eca\u65e5' });
         todayBtn.setAttribute('aria-label', 'Today');
         todayBtn.setAttribute('title', 'Today');
         todayBtn.addEventListener('click', () => {
@@ -184,13 +196,12 @@ export class MiniCalendarView extends ItemView {
             void this.render();
         });
 
-        const nextBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(nextBtn, 'chevron-right');
+        const nextBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(nextBtn, 'chevron-down');
         nextBtn.setAttribute('aria-label', 'Next week');
         nextBtn.setAttribute('title', 'Next week');
         nextBtn.addEventListener('click', () => this.navigateWeek(1));
     }
-
     private renderWeekdayHeader(grid: HTMLElement): void {
         const header = grid.createDiv('mini-calendar-weekday-header');
         const weekdays = this.getWeekdayNames();
@@ -412,7 +423,7 @@ export class MiniCalendarView extends ItemView {
             if (!this.isAnimating) {
                 this.navigateWeek(nextOffset);
             }
-        }, 200);
+        }, 100);
     }
 
     private parseLocalDateString(value: string): Date | null {
@@ -448,12 +459,23 @@ export class MiniCalendarView extends ItemView {
     }
 
     private updateToolbarMonthLabel(): void {
-        const monthLabel = this.container?.querySelector('.mini-calendar-month-label');
-        if (monthLabel instanceof HTMLElement) {
-            monthLabel.setText(this.formatWindowLabel());
+        const referenceMonth = this.getReferenceMonth();
+        const now = new Date();
+        const isCurrentMonth = referenceMonth.year === now.getFullYear() && referenceMonth.month === now.getMonth();
+
+        const monthEl = this.container?.querySelector('.mini-calendar-toolbar__month');
+        const yearEl = this.container?.querySelector('.mini-calendar-toolbar__year');
+
+        if (monthEl instanceof HTMLElement) {
+            monthEl.setText(`${String(referenceMonth.month + 1).padStart(2, '0')}\u6708`);
+            monthEl.toggleClass('is-current', isCurrentMonth);
+        }
+
+        if (yearEl instanceof HTMLElement) {
+            yearEl.setText(`${referenceMonth.year}`);
+            yearEl.toggleClass('is-current', isCurrentMonth);
         }
     }
-
     private animateWeekSlide(body: HTMLElement, offset: number): void {
         const track = body.querySelector('.mini-calendar-body__track');
         if (!(track instanceof HTMLElement)) {

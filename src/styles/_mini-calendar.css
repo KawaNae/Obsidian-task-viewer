@@ -12,19 +12,43 @@
 }
 
 .mini-calendar-toolbar {
-    gap: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 4px;
 }
 
-.mini-calendar-month-label {
-    font-size: 0.9em;
+.mini-calendar-toolbar__label {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.mini-calendar-toolbar__month {
+    font-size: 1.1em;
     font-weight: 700;
     color: var(--tv-text);
-    min-width: 7.5em;
-    text-align: center;
+}
+
+.mini-calendar-toolbar__year {
+    font-size: 1.1em;
+    font-weight: 700;
+    color: var(--tv-text-accent);
+}
+
+.mini-calendar-toolbar__month.is-current,
+.mini-calendar-toolbar__year.is-current {
+    color: var(--tv-text-accent);
 }
 
 .mini-calendar-toolbar__today {
     min-width: 3.6em;
+}
+
+.mini-calendar-toolbar__nav {
+    display: flex;
+    align-items: center;
+    gap: 2px;
 }
 
 .mini-calendar-grid {
