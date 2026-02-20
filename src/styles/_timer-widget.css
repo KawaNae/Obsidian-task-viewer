@@ -173,15 +173,15 @@
 }
 
 .timer-widget__progress-ring-progress--work {
-    stroke: var(--tv-text-danger);
+    stroke: var(--tv-timer-work);
 }
 
 .timer-widget__progress-ring-progress--break {
-    stroke: var(--tv-text-success);
+    stroke: var(--tv-timer-break);
 }
 
 .timer-widget__progress-ring-progress--idle {
-    stroke: var(--tv-text-muted);
+    stroke: var(--tv-timer-idle);
 }
 
 .timer-widget__time-display {
