@@ -325,7 +325,7 @@ export class TimelineSectionRenderer {
 
         // Open Timer (Daily Note)
         menu.addItem((item) => {
-            item.setTitle('⏱️ Open Timer for Daily Note')
+            item.setTitle('⏱️ Open Tracker for Daily Note')
                 .setIcon('clock')
                 .onClick(() => this.openDailyNoteTimer(date, 'countup'));
         });
@@ -338,10 +338,11 @@ export class TimelineSectionRenderer {
         const dailyNoteId = `daily-${date}`;
         const displayName = date;
         const widget = this.plugin.getTimerWidget();
-        if (timerType === 'pomodoro') {
-            widget.show(dailyNoteId, displayName);
-        } else {
-            widget.showCountup(dailyNoteId, displayName);
-        }
+        widget.startTimer({
+            taskId: dailyNoteId,
+            taskName: displayName,
+            timerType,
+            autoStart: false
+        });
     }
 }

@@ -96,6 +96,7 @@ body {
     --tv-timer-work: var(--tv-text-danger);
     --tv-timer-break: var(--tv-text-success);
     --tv-timer-idle: var(--color-yellow, #e5a50a);
+    --tv-timer-prepare: var(--tv-text-warning);
 
     --tv-link: var(--link-color);
     --tv-link-hover: var(--link-color-hover);

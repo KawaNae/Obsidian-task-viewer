@@ -112,6 +112,10 @@
     stroke: var(--tv-timer-idle);
 }
 
+.pomodoro-view__progress-ring-progress--prepare {
+    stroke: var(--tv-timer-prepare);
+}
+
 .pomodoro-view__time-display {
     position: absolute;
     top: 50%;
