@@ -456,7 +456,7 @@ export class MiniCalendarView extends ItemView {
             if (!this.isAnimating) {
                 this.navigateWeek(nextOffset);
             }
-        }, 100);
+        }, 50);
     }
 
     private parseLocalDateString(value: string): Date | null {
