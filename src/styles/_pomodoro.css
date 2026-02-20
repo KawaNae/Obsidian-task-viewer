@@ -101,15 +101,15 @@
 }
 
 .pomodoro-view__progress-ring-progress--work {
-    stroke: var(--tv-text-danger);
+    stroke: var(--tv-timer-work);
 }
 
 .pomodoro-view__progress-ring-progress--break {
-    stroke: var(--tv-text-success);
+    stroke: var(--tv-timer-break);
 }
 
 .pomodoro-view__progress-ring-progress--idle {
-    stroke: var(--tv-accent);
+    stroke: var(--tv-timer-idle);
 }
 
 .pomodoro-view__time-display {

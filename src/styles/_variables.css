@@ -92,6 +92,11 @@ body {
     --tv-text-warning: var(--text-warning, var(--text-accent));
     --tv-text-success: var(--text-success, var(--color-green));
 
+    /* Timer ring colors (traffic light) */
+    --tv-timer-work: var(--tv-text-danger);
+    --tv-timer-break: var(--tv-text-success);
+    --tv-timer-idle: var(--color-yellow, #e5a50a);
+
     --tv-link: var(--link-color);
     --tv-link-hover: var(--link-color-hover);
 
