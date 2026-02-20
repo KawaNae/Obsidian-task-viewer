@@ -26,7 +26,13 @@
 .calendar-toolbar__year {
     font-size: 1.05em;
     font-weight: 700;
-    color: var(--tv-text-accent);
+    color: var(--tv-text);
+}
+
+.calendar-toolbar__separator {
+    font-size: 1.05em;
+    font-weight: 700;
+    color: var(--tv-text-muted);
 }
 
 .calendar-toolbar__month.is-current,

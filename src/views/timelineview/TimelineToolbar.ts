@@ -66,6 +66,9 @@ export class TimelineToolbar {
         // Zoom Controls
         this.renderZoomControls(toolbar);
 
+        // Push filter/toggle controls to the right
+        toolbar.createDiv('view-toolbar__spacer');
+
         // Filter Button
         this.renderFilterButton(toolbar);
 

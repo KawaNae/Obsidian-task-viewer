@@ -33,7 +33,13 @@
 .mini-calendar-toolbar__year {
     font-size: 1.1em;
     font-weight: 700;
-    color: var(--tv-text-accent);
+    color: var(--tv-text);
+}
+
+.mini-calendar-toolbar__separator {
+    font-size: 1.1em;
+    font-weight: 700;
+    color: var(--tv-text-muted);
 }
 
 .mini-calendar-toolbar__month.is-current,

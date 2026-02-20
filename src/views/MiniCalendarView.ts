@@ -163,16 +163,20 @@ export class MiniCalendarView extends ItemView {
         const labelGroup = toolbar.createDiv('mini-calendar-toolbar__label');
         const referenceMonth = this.getReferenceMonth();
         const now = new Date();
-        const isCurrentMonth = referenceMonth.year === now.getFullYear() && referenceMonth.month === now.getMonth();
-
-        const monthSpan = labelGroup.createSpan({ cls: 'mini-calendar-toolbar__month' });
-        monthSpan.setText(`${String(referenceMonth.month + 1).padStart(2, '0')}\u6708`);
-        monthSpan.toggleClass('is-current', isCurrentMonth);
+        const isCurrentYear = referenceMonth.year === now.getFullYear();
+        const isCurrentMonth = isCurrentYear && referenceMonth.month === now.getMonth();
 
         const yearSpan = labelGroup.createSpan({ cls: 'mini-calendar-toolbar__year' });
         yearSpan.setText(`${referenceMonth.year}`);
-        yearSpan.toggleClass('is-current', isCurrentMonth);
+        yearSpan.toggleClass('is-current', isCurrentYear);
 
+        labelGroup.createSpan({ cls: 'mini-calendar-toolbar__separator', text: '-' });
+
+        const monthSpan = labelGroup.createSpan({ cls: 'mini-calendar-toolbar__month' });
+        monthSpan.setText(`${String(referenceMonth.month + 1).padStart(2, '0')}`);
+        monthSpan.toggleClass('is-current', isCurrentMonth);
+
+        toolbar.createDiv('view-toolbar__spacer');
         const navGroup = toolbar.createDiv('mini-calendar-toolbar__nav');
 
         const prevBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
@@ -461,19 +465,20 @@ export class MiniCalendarView extends ItemView {
     private updateToolbarMonthLabel(): void {
         const referenceMonth = this.getReferenceMonth();
         const now = new Date();
-        const isCurrentMonth = referenceMonth.year === now.getFullYear() && referenceMonth.month === now.getMonth();
+        const isCurrentYear = referenceMonth.year === now.getFullYear();
+        const isCurrentMonth = isCurrentYear && referenceMonth.month === now.getMonth();
 
         const monthEl = this.container?.querySelector('.mini-calendar-toolbar__month');
         const yearEl = this.container?.querySelector('.mini-calendar-toolbar__year');
 
         if (monthEl instanceof HTMLElement) {
-            monthEl.setText(`${String(referenceMonth.month + 1).padStart(2, '0')}\u6708`);
+            monthEl.setText(`${String(referenceMonth.month + 1).padStart(2, '0')}`);
             monthEl.toggleClass('is-current', isCurrentMonth);
         }
 
         if (yearEl instanceof HTMLElement) {
             yearEl.setText(`${referenceMonth.year}`);
-            yearEl.toggleClass('is-current', isCurrentMonth);
+            yearEl.toggleClass('is-current', isCurrentYear);
         }
     }
     private animateWeekSlide(body: HTMLElement, offset: number): void {

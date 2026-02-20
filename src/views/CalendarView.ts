@@ -248,17 +248,19 @@ export class CalendarView extends ItemView {
         const labelGroup = toolbar.createDiv('calendar-toolbar__label');
         const referenceMonth = this.getReferenceMonth();
         const now = new Date();
-        const isCurrentMonth = referenceMonth.year === now.getFullYear() && referenceMonth.month === now.getMonth();
-
-        const monthSpan = labelGroup.createSpan({ cls: 'calendar-toolbar__month' });
-        monthSpan.setText(`${String(referenceMonth.month + 1).padStart(2, '0')}月`);
-        monthSpan.toggleClass('is-current', isCurrentMonth);
+        const isCurrentYear = referenceMonth.year === now.getFullYear();
+        const isCurrentMonth = isCurrentYear && referenceMonth.month === now.getMonth();
 
         const yearSpan = labelGroup.createSpan({ cls: 'calendar-toolbar__year' });
         yearSpan.setText(`${referenceMonth.year}`);
-        yearSpan.toggleClass('is-current', isCurrentMonth);
+        yearSpan.toggleClass('is-current', isCurrentYear);
 
-        toolbar.createDiv('view-toolbar__spacer');
+        labelGroup.createSpan({ cls: 'calendar-toolbar__separator', text: '-' });
+
+        const monthSpan = labelGroup.createSpan({ cls: 'calendar-toolbar__month' });
+        monthSpan.setText(`${String(referenceMonth.month + 1).padStart(2, '0')}`);
+        monthSpan.toggleClass('is-current', isCurrentMonth);
+
         DateNavigator.render(
             toolbar,
             (days) => this.navigateWeek(days),
@@ -272,6 +274,7 @@ export class CalendarView extends ItemView {
             },
             { vertical: true }
         );
+        toolbar.createDiv('view-toolbar__spacer');
 
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
@@ -619,17 +622,18 @@ export class CalendarView extends ItemView {
     private updateToolbarMonthLabel(): void {
         const referenceMonth = this.getReferenceMonth();
         const now = new Date();
-        const isCurrentMonth = referenceMonth.year === now.getFullYear() && referenceMonth.month === now.getMonth();
+        const isCurrentYear = referenceMonth.year === now.getFullYear();
+        const isCurrentMonth = isCurrentYear && referenceMonth.month === now.getMonth();
 
         const monthEl = this.container?.querySelector('.calendar-toolbar__month');
         const yearEl = this.container?.querySelector('.calendar-toolbar__year');
         if (monthEl instanceof HTMLElement) {
-            monthEl.setText(`${String(referenceMonth.month + 1).padStart(2, '0')}月`);
+            monthEl.setText(`${String(referenceMonth.month + 1).padStart(2, '0')}`);
             monthEl.toggleClass('is-current', isCurrentMonth);
         }
         if (yearEl instanceof HTMLElement) {
             yearEl.setText(`${referenceMonth.year}`);
-            yearEl.toggleClass('is-current', isCurrentMonth);
+            yearEl.toggleClass('is-current', isCurrentYear);
         }
     }
 
