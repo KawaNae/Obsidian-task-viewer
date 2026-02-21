@@ -376,3 +376,233 @@ MIT License
 4. Component/style files must use only `--tv-*` tokens.
 5. Keep token design effectively single-layer; only keep `theme-light`/`theme-dark` overrides for app/card background and shadow strength.
 6. Drag-and-drop visuals must separate drop-zone tokens (`--tv-drop-*`) from drag-ghost tokens (`--tv-ghost-*`).
+
+---
+
+## 実際のディレクトリ構造（v0.18.0+）
+
+上記「アーキテクチャ概要」のツリー図は旧構造のため、実際の `src/` 構造は以下のとおり。
+
+```
+src/
+├── main.ts                    # プラグインエントリーポイント・onload/onunload
+├── types.ts                   # 全層共有の型・設定（Task, TaskViewerSettings 等）
+├── settings.ts                # 設定UI（TaskViewerSettingTab）
+├── constants/                 # 定数・ビューレジストリ
+├── services/
+│   ├── core/                  # 中枢サービス（TaskIndex, TaskStore, WikiLinkResolver 等）
+│   ├── parsing/               # パーサー層（ParserChain, AtNotationParser 等）
+│   │   ├── inline/            # ラインレベルパーサー（AtNotationParser 等）
+│   │   └── file/              # ファイルレベルパーサー（FrontmatterTaskBuilder 等）
+│   ├── persistence/           # 書き込み層（TaskRepository, FrontmatterWriter 等）
+│   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter
+│   │   └── utils/             # FrontmatterLineEditor 等
+│   ├── execution/             # タスク変換実行（InlineToFrontmatterConversionService）
+│   └── aiindex/               # AI Index 生成サービス
+├── views/
+│   ├── timelineview/          # タイムラインビュー（renderers/ 含む）
+│   ├── scheduleview/          # スケジュールビュー
+│   ├── taskcard/              # タスクカードレンダリング（本ドキュメント上部参照）
+│   ├── utils/                 # ビュー専用ユーティリティ（RenderableTaskUtils 等）
+│   ├── CalendarView.ts        # カレンダービュー
+│   ├── MiniCalendarView.ts    # ミニカレンダービュー
+│   └── PomodoroView.ts        # タイマービュー（Pomodoro/Countdown/Countup の3モード）
+├── widgets/                   # タイマーウィジェット（フローティングUI）
+├── interaction/
+│   ├── drag/                  # ドラッグ&ドロップ（DragHandler, MoveStrategy 等）
+│   └── menu/                  # コンテキストメニュー（MenuHandler, Builder群）
+├── commands/                  # フローコマンド実行（next/repeat/move）
+├── modals/                    # モーダルUI（CreateTaskModal 等）
+├── suggest/                   # Obsidianプロパティパネル補完
+├── utils/                     # 汎用ユーティリティ（AudioUtils, DateUtils 等）
+└── styles/                    # CSS（BEM命名、--tv-* トークン）
+```
+
+---
+
+## サブシステム責務マップ
+
+AI実装担当が「この機能はどの層か」を迷わないための一覧。
+
+| サブシステム | 主要ファイル | 責務 |
+|---|---|---|
+| **TaskIndex** | `services/core/TaskIndex.ts` | スキャン・インデックス・イベント管理の中枢。parserId で frontmatter/inline を分岐 |
+| **TaskStore** | `services/core/TaskStore.ts` | インメモリキャッシュ。onChange リスナーでUI更新を通知 |
+| **TaskScanner** | `services/core/TaskScanner.ts` | ファイルスキャン → ParserChain 呼び出し |
+| **WikiLinkResolver** | `services/core/WikiLinkResolver.ts` | frontmatter wikilink 親子解決。wikiLinkTargets/childLines 両対応 |
+| **SyncDetector / EditorObserver** | `services/core/SyncDetector.ts` 他 | ローカル編集 vs 同期変更の判別 |
+| **ParserChain** | `services/parsing/ParserChain.ts` | 複数パーサーを順番に試す戦略チェーン |
+| **AtNotationParser** | `services/parsing/inline/AtNotationParser.ts` | `@date` 記法パーサー（ラインレベル） |
+| **FrontmatterTaskBuilder** | `services/parsing/file/FrontmatterTaskBuilder.ts` | frontmatter → Task 変換（ファイルレベル） |
+| **TaskRepository** | `services/persistence/TaskRepository.ts` | 書き込みファサード。parserId で writer を分岐 |
+| **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | frontmatter surgical edit + 見出しベース子挿入 |
+| **FrontmatterLineEditor** | `services/persistence/utils/FrontmatterLineEditor.ts` | YAML キーの行範囲特定・更新・削除。他行に触れない |
+| **InlineTaskWriter** | `services/persistence/writers/InlineTaskWriter.ts` | インライン行の直接書き換え |
+| **AiIndexService** | `services/aiindex/AiIndexService.ts` | タスクのNDJSON出力。デバウンス・リトライ・ハッシュ差分検知 |
+| **TaskCommandExecutor** | `commands/TaskCommandExecutor.ts` | `==>` フローコマンド（next/repeat/move）の実行 |
+| **DragHandler** | `interaction/drag/DragHandler.ts` | ポインターイベント → Move/Resize 戦略に委譲 |
+| **MenuHandler** | `interaction/menu/MenuHandler.ts` | コンテキストメニューのファサード（複数 Builder を統括） |
+| **TimerWidget** | `widgets/TimerWidget.ts` | フローティングタイマーUI。全タイマー種別を管理・永続化 |
+| **PomodoroView** | `views/PomodoroView.ts` | スタンドアロンタイマービュー（Pomodoro/Countdown/Countup） |
+| **TaskCardRenderer** | `views/taskcard/TaskCardRenderer.ts` | タスクカード描画のオーケストレーター（本ドキュメント上部参照） |
+| **CreateTaskModal** | `modals/CreateTaskModal.ts` | タスク作成モーダルUI |
+| **AudioUtils** | `utils/AudioUtils.ts` | Web Audio API 通知音（シリアライズ済みコンテキスト管理） |
+
+---
+
+## タイマーウィジェット仕様
+
+`src/widgets/` — 完全独立のフローティングUI。タイムライン/スケジュールビューとは独立して動作する。
+
+### タイマー種別（`widgets/TimerInstance.ts` で定義）
+
+| 種別 | 説明 |
+|---|---|
+| `CountupTimer` | 経過時間計測。タスク紐付けあり/なし両対応 |
+| `CountdownTimer` | カウントダウン。`timeRemaining` を管理 |
+| `IntervalTimer` | 複数セグメント（work/break）の繰り返し。ポモドーロはこれで実装 |
+| `IdleTimer` | アイドル時の受動計測。タスク紐付けなし |
+
+タイマーフェーズ: `'idle'` | `'work'` | `'break'` | `'prepare'`
+
+### 永続化
+
+- ストレージキー: `task-viewer.active-timers.v5:{vaultFingerprint}`
+- v3→v4→v5 マイグレーションロジックあり
+- **ストレージキー変更時は必ずバージョン番号を上げ、マイグレーション処理を追加する**
+
+### タスク連携
+
+- `TimerTaskResolver` — インライン/frontmatter 両方のタスクを解決
+- `TimerRecorder` — 子タスク行挿入または `updateTask()` 直接更新
+- `timerTargetId`（frontmatter キー `tv-timer-target-id`）でファイルリネーム後も追跡
+
+### コンポーネント
+
+- `TimerProgressUI` — 円形プログレス + 時間表示
+- `TimerSettingsMenu` — ポモドーロ設定コンテキストメニュー
+- `IntervalParser` — インターバル記法のパース
+
+---
+
+## AI Index サービス仕様
+
+`src/services/aiindex/` — タスク索引をvaultファイルとして出力する独立サービス。
+
+**出力ファイル**:
+- `ai-task-index.ndjson` — タスク1行=1JSONのNDJSON形式
+- `ai-task-index.meta.json` — 鮮度管理。`generatedAt` フィールドで最終更新時刻を参照
+
+**設計パターン**:
+- デバウンス書き込み（デフォルト 1000ms）
+- 書き込み失敗時のリトライ（指数バックオフ、最大 30s）
+- ハッシュ差分検知（変化がなければ書き込みスキップ）
+- クールダウン通知（15s）でユーザーへの過剰通知を抑制
+
+**locator フィールド形式**: `ln:<number>` | `blk:<blockId>` | `tid:<timerTargetId>` | `fm-root`
+
+**content フォールバック**: `Task.content` が空の inline/frontmatter タスクはファイル basename を索引出力時に使用。Task オブジェクト自体の `content` は空のまま（パーサーで補完しない）。
+
+---
+
+## ドラッグ&ドロップとコンテキストメニュー
+
+### ドラッグ（`src/interaction/drag/`）
+
+- `DragHandler` がポインターイベントを受け取り、`MoveStrategy` / `ResizeStrategy` に委譲（Strategy パターン）
+- `GhostFactory` + `GhostManager` でドラッグプレビューDOMを管理
+- 分割タスク（`RenderableTask`）はドラッグ時に `splitOriginalId` で元 taskId を追跡
+
+### コンテキストメニュー（`src/interaction/menu/`）
+
+`MenuHandler` が以下の Builder を統括:
+
+| Builder | 役割 |
+|---|---|
+| `PropertiesMenuBuilder` | 日付/時刻プロパティ編集 |
+| `TimerMenuBuilder` | タイマー起動ショートカット |
+| `MoveMenuBuilder` | 移動・複製操作 |
+| `TaskActionsMenuBuilder` | 完了・削除・変換アクション |
+
+タッチ操作: `TouchEventHandler` が長押し（設定値 `longPressThreshold`、デフォルト 400ms）を検出してメニューを開く。
+
+---
+
+## 永続化レイヤーの注意事項
+
+### Surgical edit 原則
+
+`FrontmatterWriter` / `FrontmatterLineEditor` を使う場合：
+
+- `FrontmatterLineEditor.applyUpdates()` は**対象キーの行のみ**操作し、他行には一切触れない
+- `findKeyRange()` でキー行＋継続行の範囲 `[start, end)` を特定してから更新/削除/挿入を行う
+- YAML配列・ブロックスカラー等のマルチライン値は壊れない
+- キー順序はユーザーが書いた順序を保持する
+- **frontmatter 全体を文字列として再構築するコードは書かない**（データ消失リスクが高い）
+
+### vault.process() の使用
+
+- 書き込みは必ず `vault.process()` で原子的に行う
+- collapsed ハンドラーで `childLine.replace()` を忘れると `vault.process` が no-op になる点に注意
+
+### parserId による書き込み分岐
+
+```
+task.parserId === 'frontmatter'  →  FrontmatterWriter
+task.parserId === 'at-notation'  →  InlineTaskWriter
+```
+
+- `line: -1` は「行番号なし」の意味のみ。種別判定には使わない（`parserId` を使う）
+- `TimerRecorder` の `line: -1` は「行番号不明→コンテンツベース検索を強制」という特殊な意味
+
+---
+
+## 設定スキーマ
+
+`src/types.ts` の `TaskViewerSettings` で定義。`DEFAULT_SETTINGS` も同ファイルにある。
+
+| 設定キー | 型 | デフォルト | 説明 |
+|---|---|---|---|
+| `startHour` | number | 5 | 1日の開始時刻（この時刻を日付境界として使用） |
+| `frontmatterTaskKeys` | FrontmatterTaskKeys | `tv-*` 系 | frontmatterキー名（全フィールドカスタマイズ可能） |
+| `completeStatusChars` | string[] | `['x','X','-','!']` | 完了とみなすステータス文字 |
+| `habits` | HabitDefinition[] | `[]` | 習慣トラッキング定義（boolean/number/string） |
+| `frontmatterTaskHeader` | string | `'Tasks'` | frontmatter子挿入先見出しテキスト |
+| `frontmatterTaskHeaderLevel` | number | 2 | 上記見出しのレベル（2 = `##`） |
+| `longPressThreshold` | number | 400 | 長押し検出時間 (ms) |
+| `aiIndex` | AiIndexSettings | — | AI Index 生成設定（`services/aiindex/AiIndexSettings.ts`） |
+| `pomodoroWorkMinutes` | number | 25 | ポモドーロ作業時間 |
+| `pomodoroBreakMinutes` | number | 5 | ポモドーロ休憩時間 |
+| `countdownMinutes` | number | 25 | カウントダウンのデフォルト時間 |
+
+`FrontmatterTaskKeys` の各フィールド（`start`, `end`, `deadline`, `status`, `content`, `timerTargetId`, `color`, `linestyle`, `ignore`）はすべて独立してカスタマイズ可能。重複キー不可。
+
+---
+
+## コーディング規約補足
+
+### 型の配置ルール
+
+| 配置先 | 対象 |
+|---|---|
+| `src/types.ts` | 全層共有のモデル型・設定型のみ |
+| `src/views/taskcard/types.ts` | タスクカードローカルの描画ヘルパー型 |
+| `src/views/utils/RenderableTaskUtils.ts` | `RenderableTask`・分割ヘルパー |
+| 各サブシステムのディレクトリ内 | サブシステム固有型（cross-layer にしない） |
+
+### 設計パターン一覧
+
+| パターン | 使用箇所 |
+|---|---|
+| **Facade** | `TaskIndex`, `MenuHandler`, `TaskRepository` |
+| **Strategy** | `DragStrategy`（Move/Resize）, `CommandStrategy`（next/repeat/move）, `ParserStrategy` |
+| **Builder** | `PropertiesMenuBuilder`, `TimerMenuBuilder` 他のメニュービルダー |
+| **Observer** | `TaskStore.onChange()` でUI更新を通知 |
+| **Surgical Edit** | `FrontmatterLineEditor` で YAML を行単位で安全に操作 |
+
+### CSS スタイルの追加方法
+
+1. 新しいCSS変数が必要な場合 → `src/styles/_variables.css` の `body` ブロックに `--tv-*` トークンとして定義
+2. `:root` にはサイズ・z-index 等のテーマ非依存定数のみ配置
+3. コンポーネントスタイルは `--tv-*` トークンのみ参照（Obsidian変数を直接参照しない）
+4. ドラッグ関連: ドロップゾーンは `--tv-drop-*`、ドラッグゴーストは `--tv-ghost-*` で分離
