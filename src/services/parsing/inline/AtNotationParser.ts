@@ -13,9 +13,11 @@ export class AtNotationParser implements ParserStrategy {
     // Regex to match basic task structure: - [x] ...
     private static readonly BASIC_TASK_REGEX = /^(\s*)-\s*\[(.)]\s*(.*)$/;
 
-    // Regex for locating the Date block start: @...
-    // Matches @ followed by date-like chars, or 'future', or just > (for empty start)
-    private static readonly DATE_BLOCK_REGEX = /(@(?:[\d\-T:]*)?)(?:>.*)?/;
+    // Regex for locating the Date block: @start>end>deadline
+    // Each segment accepts: YYYY-MM-DD, YYYY-MM-DDTHH:mm, T?HH:mm, or empty
+    // Rejects non-date @ patterns like @user, @notation
+    private static readonly DATE_BLOCK_REGEX =
+        /(@(?=[\d>T])(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|T?\d{2}:\d{2})?(?:>(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|\d{2}:\d{2})?)*)/;
 
 
     // Regex for Command: Name(Args)
@@ -58,6 +60,7 @@ export class AtNotationParser implements ParserStrategy {
         let deadline: string | undefined;
 
         let commands: any[] = [];
+        let validationWarning: string | undefined;
 
         // Explicit field flags - track which fields were explicitly written
         let explicitStartDate = false;
@@ -71,9 +74,7 @@ export class AtNotationParser implements ParserStrategy {
         }
 
         // 3. Extract Date Block
-        // Updated Regex to capture the whole date/time/deadline chain
-        const dateBlockMatch = content.match(/(@(?:[\d\-T:]*)?(?:(?:>|>>)(?:[\d\-T:]*))*)/);
-
+        const dateBlockMatch = content.match(AtNotationParser.DATE_BLOCK_REGEX);
 
         if (dateBlockMatch) {
             const fullDateBlock = dateBlockMatch[1];
@@ -146,6 +147,11 @@ export class AtNotationParser implements ParserStrategy {
                     }
                 }
             }
+
+            // --- 3. Excess separator check ---
+            if (parts.length > 3) {
+                validationWarning = `Too many '>' separators in date block. Expected at most 2 (start>end>deadline), found ${parts.length - 1}.`;
+            }
         }
 
         // Filter: Must have Date/Time OR EndDate/Time OR Deadline OR Future OR Commands to be considered a "Task"
@@ -158,7 +164,6 @@ export class AtNotationParser implements ParserStrategy {
 
 
         // Validate task data during parse
-        let validationWarning: string | undefined;
 
         // Rule 1: Check for invalid same-day time range (endTime < startTime)
         if (date && startTime && endTime && endDate && date === endDate) {
@@ -222,10 +227,25 @@ export class AtNotationParser implements ParserStrategy {
     private parseDateTime(str: string): { date?: string, time?: string } {
         const dateMatch = str.match(/(\d{4}-\d{2}-\d{2})/);
         const timeMatch = str.match(/(\d{2}:\d{2})/);
-        return {
-            date: dateMatch ? dateMatch[1] : undefined,
-            time: timeMatch ? timeMatch[1] : undefined
-        };
+
+        let date: string | undefined;
+        if (dateMatch) {
+            const parts = dateMatch[1].match(/(\d{4})-(\d{2})-(\d{2})/)!;
+            const month = Number(parts[2]), day = Number(parts[3]);
+            if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                date = dateMatch[1];
+            }
+        }
+
+        let time: string | undefined;
+        if (timeMatch) {
+            const [h, m] = timeMatch[1].split(':').map(Number);
+            if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+                time = timeMatch[1];
+            }
+        }
+
+        return { date, time };
     }
 
     private parseFlowCommands(flowStr: string): any[] {
