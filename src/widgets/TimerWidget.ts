@@ -804,15 +804,6 @@ export class TimerWidget {
 
                 this.closeTimer(timer.id);
             };
-
-            const cancelBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--danger'
-            });
-            setIcon(cancelBtn, 'x');
-            cancelBtn.createSpan({ text: ' Cancel' });
-            cancelBtn.onclick = () => {
-                this.closeTimer(timer.id);
-            };
         } else {
             const resumeBtn = container.createEl('button', {
                 cls: 'timer-widget__btn timer-widget__btn--primary'
@@ -821,15 +812,6 @@ export class TimerWidget {
             resumeBtn.createSpan({ text: ' Resume' });
             resumeBtn.onclick = () => {
                 this.resumeTimer(timer);
-            };
-
-            const cancelBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--danger'
-            });
-            setIcon(cancelBtn, 'x');
-            cancelBtn.createSpan({ text: ' Cancel' });
-            cancelBtn.onclick = () => {
-                this.closeTimer(timer.id);
             };
         }
     }
@@ -872,15 +854,6 @@ export class TimerWidget {
                 }
                 this.closeTimer(timer.id);
             };
-
-            const cancelBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--danger'
-            });
-            setIcon(cancelBtn, 'x');
-            cancelBtn.createSpan({ text: ' Cancel' });
-            cancelBtn.onclick = () => {
-                this.closeTimer(timer.id);
-            };
             return;
         }
 
@@ -891,15 +864,6 @@ export class TimerWidget {
         resumeBtn.createSpan({ text: ' Resume' });
         resumeBtn.onclick = () => {
             this.resumeTimer(timer);
-        };
-
-        const cancelBtn = container.createEl('button', {
-            cls: 'timer-widget__btn timer-widget__btn--danger'
-        });
-        setIcon(cancelBtn, 'x');
-        cancelBtn.createSpan({ text: ' Cancel' });
-        cancelBtn.onclick = () => {
-            this.closeTimer(timer.id);
         };
     }
 
@@ -952,15 +916,6 @@ export class TimerWidget {
                 }
                 this.closeTimer(timer.id);
             };
-
-            const cancelBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--danger'
-            });
-            setIcon(cancelBtn, 'x');
-            cancelBtn.createSpan({ text: ' Cancel' });
-            cancelBtn.onclick = () => {
-                this.closeTimer(timer.id);
-            };
             return;
         }
 
@@ -974,15 +929,6 @@ export class TimerWidget {
                 this.pauseIntervalToPrepare(timer);
                 this.render();
                 this.persistTimersToStorage();
-            };
-
-            const cancelBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--danger'
-            });
-            setIcon(cancelBtn, 'x');
-            cancelBtn.createSpan({ text: ' Cancel' });
-            cancelBtn.onclick = () => {
-                this.closeTimer(timer.id);
             };
             return;
         }
@@ -1009,15 +955,6 @@ export class TimerWidget {
             } else {
                 await this.recorder.addIntervalRecord(timer);
             }
-            this.closeTimer(timer.id);
-        };
-
-        const cancelBtn = container.createEl('button', {
-            cls: 'timer-widget__btn timer-widget__btn--danger'
-        });
-        setIcon(cancelBtn, 'x');
-        cancelBtn.createSpan({ text: ' Cancel' });
-        cancelBtn.onclick = () => {
             this.closeTimer(timer.id);
         };
     }
