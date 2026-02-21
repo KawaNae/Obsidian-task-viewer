@@ -8,7 +8,7 @@ type ParsedDuration = {
 };
 
 export class IntervalParser {
-    private static readonly DURATION_REGEX = /^(\d+)\s*(h|m|min|s|sec)(?:\s*(\d+)\s*(m|min|s|sec))?/i;
+    private static readonly DURATION_REGEX = /^(\d+)\s*(min|sec|h|m|s)(?:\s*(\d+)\s*(min|sec|m|s))?/i;
     private static readonly GROUP_HEADER_REGEX = /^-\s*\[[^\]]\]\s*x(\d+)\b\s*(.*)$/i;
     private static readonly CHECKBOX_LINE_REGEX = /^-\s*\[[^\]]\]\s*(.*)$/;
     private static readonly LIST_ITEM_PREFIX_REGEX = /^-\s*/;

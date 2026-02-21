@@ -519,6 +519,13 @@ export class TimerWidget {
 
         timer.totalElapsedTime = Math.min(timer.totalDuration, this.computeIntervalCompletedDuration(timer) + currentSegment.durationSeconds);
 
+        // Play transition chime between interval segments based on the completed segment type.
+        if (currentSegment.type === 'work') {
+            AudioUtils.playWorkCompleteChime();
+        } else if (currentSegment.type === 'break') {
+            AudioUtils.playBreakCompleteChime();
+        }
+
         const moved = this.advanceIntervalSegment(timer);
         if (!moved) {
             await this.finishIntervalTimer(taskId, timer);
