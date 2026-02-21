@@ -8,7 +8,7 @@ import { TaskScanner } from './TaskScanner';
 import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { EditorObserver } from './EditorObserver';
-import { InlineToFrontmatterConversionService } from '../execution/InlineToFrontmatterConversionService';
+import { InlineToFrontmatterConversionService } from './InlineToFrontmatterConversionService';
 import { AiIndexService } from '../aiindex/AiIndexService';
 import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
 import { DateUtils as CoreDateUtils } from '../../utils/DateUtils';

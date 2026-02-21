@@ -8,7 +8,8 @@ import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import TaskViewerPlugin from '../../main';
-import { ViewUtils, FileFilterMenu, DateNavigator } from '../ViewUtils';
+import { TaskStyling } from '../utils/TaskStyling';
+import { FileFilterMenu, DateNavigator } from '../ViewToolbar';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { HabitTrackerRenderer } from '../timelineview/renderers/HabitTrackerRenderer';
@@ -227,7 +228,7 @@ export class ScheduleView extends ItemView {
             this.filterMenu.showMenu(
                 event,
                 files,
-                (filePath) => ViewUtils.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color),
+                (filePath) => TaskStyling.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color),
                 () => {
                     void this.app.workspace.requestSaveLayout();
                     void this.render();

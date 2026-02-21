@@ -1,6 +1,6 @@
 import { DateUtils } from '../../../utils/DateUtils';
 import { createGhostElement, removeGhostElement } from './GhostFactory';
-import { toDisplayHeightPx, toDisplayTopPx } from '../../../utils/TimelineCardPosition';
+import { toDisplayHeightPx, toDisplayTopPx } from '../../../views/utils/TimelineCardPosition';
 
 export interface GhostSegment {
     date: string;       // YYYY-MM-DD

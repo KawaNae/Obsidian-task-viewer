@@ -2,7 +2,7 @@ import { Component, Menu } from 'obsidian';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
-import { ViewUtils } from '../../ViewUtils';
+import { TaskStyling } from '../../utils/TaskStyling';
 import { TaskLayout } from '../../utils/TaskLayout';
 import { TaskIndex } from '../../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
@@ -123,8 +123,8 @@ export class TimelineSectionRenderer {
             el.dataset.id = task.id;
 
             // Apply Color
-            ViewUtils.applyFileColor(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.color);
-            ViewUtils.applyFileLinestyle(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
+            TaskStyling.applyFileColor(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.color);
+            TaskStyling.applyFileLinestyle(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
 
             // Calculate position
             let startMinutes = DateUtils.timeToMinutes(task.startTime);
