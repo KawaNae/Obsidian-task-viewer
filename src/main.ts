@@ -5,7 +5,7 @@ import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
 import { CalendarView, VIEW_TYPE_CALENDAR } from './views/CalendarView';
 import { MiniCalendarView, VIEW_TYPE_MINI_CALENDAR } from './views/MiniCalendarView';
 import { PomodoroView, VIEW_TYPE_POMODORO } from './views/PomodoroView';
-import { TimerWidget } from './widgets/TimerWidget';
+import { TimerWidget } from './timer/TimerWidget';
 import {
     TaskViewerSettings,
     DEFAULT_SETTINGS,

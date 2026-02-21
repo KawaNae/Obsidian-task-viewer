@@ -2,7 +2,7 @@ import { Menu } from 'obsidian';
 import { Task } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { getTaskDisplayName } from '../../../utils/TaskContent';
-import { IntervalParser } from '../../../widgets/IntervalParser';
+import { IntervalParser } from '../../../timer/IntervalParser';
 
 /**
  * Builder for timer-related menu items.

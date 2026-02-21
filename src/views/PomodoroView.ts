@@ -18,8 +18,8 @@ import {
     IntervalSegment,
     TimerInstance,
     TimerPhase,
-} from '../widgets/TimerInstance';
-import { TimerProgressUI } from '../widgets/TimerProgressUI';
+} from '../timer/TimerInstance';
+import { TimerProgressUI } from '../timer/TimerProgressUI';
 import { AudioUtils } from '../utils/AudioUtils';
 import { TimeFormatter } from '../utils/TimeFormatter';
 
