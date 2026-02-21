@@ -81,38 +81,41 @@ export class TaskActionsMenuBuilder {
                 .setIcon('timer')
                 .onClick(() => {
                     const widget = this.plugin.getTimerWidget();
-                    widget.show(
-                        task.id,
-                        displayName,
-                        task.originalText,
-                        task.file,
-                        'child',
-                        task.parserId,
-                        task.timerTargetId ?? task.blockId
-                    );
+                    widget.startTimer({
+                        taskId: task.id,
+                        taskName: displayName,
+                        taskOriginalText: task.originalText,
+                        taskFile: task.file,
+                        recordMode: 'child',
+                        parserId: task.parserId,
+                        timerTargetId: task.timerTargetId ?? task.blockId,
+                        timerType: 'pomodoro',
+                        autoStart: false
+                    });
                 });
         });
     }
 
     /**
-     * "⏱️ Open Timer as Child"項目を追加
+     * "⏱️ Open Tracker as Child"項目を追加
      */
     private addTimerAsChildItem(menu: Menu, task: Task, displayName: string): void {
         menu.addItem((item) => {
-            item.setTitle('⏱️ Open Timer as Child')
+            item.setTitle('⏱️ Open Tracker as Child')
                 .setIcon('clock')
                 .onClick(() => {
                     const widget = this.plugin.getTimerWidget();
-                    widget.showCountup(
-                        task.id,
-                        displayName,
-                        task.originalText,
-                        task.file,
-                        'child',
-                        false,
-                        task.parserId,
-                        task.timerTargetId ?? task.blockId
-                    );
+                    widget.startTimer({
+                        taskId: task.id,
+                        taskName: displayName,
+                        taskOriginalText: task.originalText,
+                        taskFile: task.file,
+                        recordMode: 'child',
+                        parserId: task.parserId,
+                        timerTargetId: task.timerTargetId ?? task.blockId,
+                        timerType: 'countup',
+                        autoStart: false
+                    });
                 });
         });
     }

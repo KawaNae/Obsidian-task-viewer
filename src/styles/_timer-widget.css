@@ -26,6 +26,16 @@
     border-bottom: 1px solid var(--tv-border);
 }
 
+.timer-widget__item--idle {
+    opacity: 0.75;
+}
+
+
+.timer-widget__item--idle .timer-widget__title {
+    font-style: italic;
+    color: var(--tv-text-muted);
+}
+
 .timer-widget__item:last-child {
     border-bottom: none;
 }
@@ -71,6 +81,12 @@
 
 .timer-widget__header-time--break {
     color: var(--tv-text-success);
+}
+
+.timer-widget__header-repeat {
+    font-size: 0.75em;
+    color: var(--tv-text-muted);
+    margin-left: 4px;
 }
 
 .timer-widget button.timer-widget__toggle-btn,
@@ -184,6 +200,10 @@
     stroke: var(--tv-timer-idle);
 }
 
+.timer-widget__progress-ring-progress--prepare {
+    stroke: var(--tv-timer-prepare);
+}
+
 .timer-widget__time-display {
     position: absolute;
     top: 50%;
@@ -193,6 +213,21 @@
     font-weight: 700;
     color: var(--tv-text);
     font-variant-numeric: tabular-nums;
+}
+
+.timer-widget__time-display--countup {
+    color: var(--tv-text-muted);
+}
+
+.timer-widget__repeat-info {
+    position: absolute;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    font-size: 0.75em;
+    color: var(--tv-text-muted);
+    text-align: center;
+    white-space: nowrap;
 }
 
 /* Controls */

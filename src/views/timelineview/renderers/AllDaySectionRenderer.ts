@@ -222,7 +222,7 @@ export class AllDaySectionRenderer {
 
         // Open Timer (Daily Note)
         menu.addItem((item) => {
-            item.setTitle('⏱️ Open Timer for Daily Note')
+            item.setTitle('⏱️ Open Tracker for Daily Note')
                 .setIcon('clock')
                 .onClick(() => this.openDailyNoteTimer(date, 'countup'));
         });
@@ -255,10 +255,12 @@ export class AllDaySectionRenderer {
         const dailyNoteId = `daily-${date}`;
         const displayName = date;
         const widget = this.plugin.getTimerWidget();
-        if (timerType === 'pomodoro') {
-            widget.show(dailyNoteId, displayName);
-        } else {
-            widget.showCountup(dailyNoteId, displayName);
-        }
+        widget.startTimer({
+            taskId: dailyNoteId,
+            taskName: displayName,
+            recordMode: 'child',
+            timerType,
+            autoStart: false
+        });
     }
 }
