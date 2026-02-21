@@ -1,12 +1,12 @@
 import { App, Menu } from 'obsidian';
 import TaskViewerPlugin from '../main';
 import { InputModal } from '../modals/InputModal';
-import { PomodoroTimer } from './TimerInstance';
+import { IntervalTimer } from './TimerInstance';
 
 interface PomodoroSettingsMenuOptions {
     app: App;
     plugin: TaskViewerPlugin;
-    timer: PomodoroTimer;
+    timer: IntervalTimer;
     event: MouseEvent;
     onPersist: () => void;
     onRender: () => void;
@@ -15,6 +15,13 @@ interface PomodoroSettingsMenuOptions {
 export class TimerSettingsMenu {
     static showPomodoroSettings(options: PomodoroSettingsMenuOptions): void {
         const { app, plugin, timer, event, onPersist, onRender } = options;
+        const group = timer.groups[0];
+        const workSegment = group?.segments[0];
+        const breakSegment = group?.segments[1];
+        if (!group || !workSegment || !breakSegment) {
+            return;
+        }
+
         const menu = new Menu();
 
         menu.addItem((item) => {
@@ -28,12 +35,9 @@ export class TimerSettingsMenu {
                 item.setTitle(`  ${mins} min${current === mins ? ' ✓' : ''}`)
                     .onClick(async () => {
                         plugin.settings.pomodoroWorkMinutes = mins;
+                        workSegment.durationSeconds = mins * 60;
                         await plugin.saveSettings();
-                        if (timer.phase === 'idle') {
-                            timer.timeRemaining = mins * 60;
-                            timer.totalTime = mins * 60;
-                            onRender();
-                        }
+                        this.syncIdleDisplay(timer, onRender);
                         onPersist();
                     });
             });
@@ -53,12 +57,9 @@ export class TimerSettingsMenu {
                             const mins = parseInt(value, 10);
                             if (!isNaN(mins) && mins > 0 && mins <= 120) {
                                 plugin.settings.pomodoroWorkMinutes = mins;
+                                workSegment.durationSeconds = mins * 60;
                                 await plugin.saveSettings();
-                                if (timer.phase === 'idle') {
-                                    timer.timeRemaining = mins * 60;
-                                    timer.totalTime = mins * 60;
-                                    onRender();
-                                }
+                                this.syncIdleDisplay(timer, onRender);
                                 onPersist();
                             }
                         }
@@ -79,7 +80,9 @@ export class TimerSettingsMenu {
                 item.setTitle(`  ${mins} min${current === mins ? ' ✓' : ''}`)
                     .onClick(async () => {
                         plugin.settings.pomodoroBreakMinutes = mins;
+                        breakSegment.durationSeconds = mins * 60;
                         await plugin.saveSettings();
+                        this.syncIdleDisplay(timer, onRender);
                         onPersist();
                     });
             });
@@ -99,7 +102,9 @@ export class TimerSettingsMenu {
                             const mins = parseInt(value, 10);
                             if (!isNaN(mins) && mins > 0 && mins <= 60) {
                                 plugin.settings.pomodoroBreakMinutes = mins;
+                                breakSegment.durationSeconds = mins * 60;
                                 await plugin.saveSettings();
+                                this.syncIdleDisplay(timer, onRender);
                                 onPersist();
                             }
                         }
@@ -109,14 +114,40 @@ export class TimerSettingsMenu {
 
         menu.addSeparator();
         menu.addItem((item) => {
-            item.setTitle(`Auto Repeat${timer.autoRepeat ? ' ✓' : ''}`)
+            const autoRepeat = group.repeatCount === 0;
+            item.setTitle(`Auto Repeat${autoRepeat ? ' ✓' : ''}`)
                 .onClick(() => {
-                    timer.autoRepeat = !timer.autoRepeat;
+                    group.repeatCount = autoRepeat ? 1 : 0;
+                    timer.totalDuration = this.computeTotalDuration(timer);
                     onPersist();
                 });
         });
 
         menu.showAtMouseEvent(event);
     }
-}
 
+    private static syncIdleDisplay(timer: IntervalTimer, onRender: () => void): void {
+        timer.totalDuration = this.computeTotalDuration(timer);
+        if (timer.phase !== 'idle') {
+            return;
+        }
+        timer.currentGroupIndex = 0;
+        timer.currentSegmentIndex = 0;
+        timer.currentRepeatIndex = 0;
+        const firstSegment = timer.groups[0]?.segments[0];
+        if (firstSegment) {
+            timer.segmentTimeRemaining = firstSegment.durationSeconds;
+        }
+        onRender();
+    }
+
+    private static computeTotalDuration(timer: IntervalTimer): number {
+        if (timer.groups.some((group) => group.repeatCount === 0)) {
+            return 0;
+        }
+        return timer.groups.reduce((total, group) => {
+            const groupTotal = group.segments.reduce((sum, segment) => sum + segment.durationSeconds, 0);
+            return total + groupTotal * Math.max(1, group.repeatCount);
+        }, 0);
+    }
+}

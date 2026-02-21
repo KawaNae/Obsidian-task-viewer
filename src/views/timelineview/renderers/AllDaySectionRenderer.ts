@@ -258,6 +258,7 @@ export class AllDaySectionRenderer {
         widget.startTimer({
             taskId: dailyNoteId,
             taskName: displayName,
+            recordMode: 'child',
             timerType,
             autoStart: false
         });

@@ -15,7 +15,6 @@ import {
     IntervalGroup,
     IntervalSegment,
     IntervalTimer,
-    PomodoroTimer,
     TimerInstance,
     TimerPhase,
     TimerStartConfig
@@ -63,10 +62,11 @@ interface PersistedTimer {
     segmentTimeRemaining?: number;
     totalElapsedTime?: number;
     totalDuration?: number;
+    intervalSource?: 'pomodoro';
 }
 
 interface PersistedTimerState {
-    version: 4;
+    version: 5;
     ownerDeviceId: string;
     vaultFingerprint: string;
     updatedAtMs: number;
@@ -74,7 +74,7 @@ interface PersistedTimerState {
 }
 
 export class TimerWidget {
-    private static readonly STORAGE_VERSION = 4;
+    private static readonly STORAGE_VERSION = 5;
     private static readonly STORAGE_KEY_PREFIX = 'task-viewer.active-timers';
     private static readonly LEGACY_STORAGE_KEY = 'task-viewer.active-timers.v2';
     private static readonly DEVICE_ID_KEY = 'task-viewer.device-id.v1';
@@ -111,7 +111,7 @@ export class TimerWidget {
         taskName: string,
         taskOriginalText: string = '',
         taskFile: string = '',
-        recordMode: 'child' | 'self' = 'child',
+        recordMode: 'child' | 'self' = 'self',
         parserId: string = 'at-notation',
         timerTargetId?: string
     ): void {
@@ -219,13 +219,29 @@ export class TimerWidget {
 
         switch (config.timerType) {
             case 'pomodoro': {
-                const total = this.plugin.settings.pomodoroWorkMinutes * 60;
-                const timer: PomodoroTimer = {
+                const workSec = this.plugin.settings.pomodoroWorkMinutes * 60;
+                const breakSec = this.plugin.settings.pomodoroBreakMinutes * 60;
+                const groups: IntervalGroup[] = [
+                    {
+                        segments: [
+                            { label: 'Work', durationSeconds: workSec, type: 'work' },
+                            { label: 'Break', durationSeconds: breakSec, type: 'break' }
+                        ],
+                        repeatCount: 0
+                    }
+                ];
+                const timer: IntervalTimer = {
                     ...base,
-                    timerType: 'pomodoro',
-                    timeRemaining: total,
-                    totalTime: total,
-                    autoRepeat: false
+                    timerType: 'interval',
+                    intervalSource: 'pomodoro',
+                    groups,
+                    currentGroupIndex: 0,
+                    currentSegmentIndex: 0,
+                    currentRepeatIndex: 0,
+                    segmentTimeRemaining: workSec,
+                    totalElapsedTime: 0,
+                    totalDuration: 0,
+                    phase: autoStart ? 'work' : 'idle'
                 };
                 return timer;
             }
@@ -254,6 +270,7 @@ export class TimerWidget {
                 const timer: IntervalTimer = {
                     ...base,
                     timerType: 'interval',
+                    intervalSource: config.intervalSource,
                     groups,
                     currentGroupIndex: 0,
                     currentSegmentIndex: 0,
@@ -284,7 +301,7 @@ export class TimerWidget {
     private normalizeIntervalGroups(input?: IntervalGroup[]): IntervalGroup[] {
         const normalized = (input ?? [])
             .map((group) => ({
-                repeatCount: Math.max(1, Math.floor(group.repeatCount || 1)),
+                repeatCount: group.repeatCount === 0 ? 0 : Math.max(1, Math.floor(group.repeatCount || 1)),
                 segments: (group.segments || [])
                     .map((segment) => ({
                         label: (segment.label || '').trim() || this.defaultSegmentLabel(segment.type),
@@ -316,10 +333,17 @@ export class TimerWidget {
     }
 
     private computeIntervalTotalDuration(groups: IntervalGroup[]): number {
+        if (groups.some((group) => group.repeatCount === 0)) {
+            return 0;
+        }
         return groups.reduce((total, group) => {
             const groupTotal = group.segments.reduce((sum, segment) => sum + segment.durationSeconds, 0);
             return total + groupTotal * Math.max(1, group.repeatCount);
         }, 0);
+    }
+
+    private clampToTotalDuration(timer: IntervalTimer, value: number): number {
+        return timer.totalDuration > 0 ? Math.min(timer.totalDuration, value) : value;
     }
 
     private defaultSegmentLabel(type: IntervalSegment['type']): string {
@@ -429,14 +453,6 @@ export class TimerWidget {
                 timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
                 this.renderTimerItem(taskId);
                 return;
-            case 'pomodoro':
-                timer.timeRemaining = Math.max(0, timer.totalTime - totalElapsed);
-                if (timer.timeRemaining > 0) {
-                    this.renderTimerItem(taskId);
-                } else {
-                    void this.handlePomodoroComplete(taskId, timer);
-                }
-                return;
             case 'interval': {
                 if (timer.phase === 'prepare') {
                     const baseElapsed = this.intervalPrepareBaseElapsed.get(taskId) ?? timer.totalElapsedTime;
@@ -453,7 +469,10 @@ export class TimerWidget {
                 const segmentElapsed = Math.max(0, timer.pausedElapsedTime + currentSessionElapsed);
                 timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - segmentElapsed);
                 const completedBefore = this.computeIntervalCompletedDuration(timer);
-                timer.totalElapsedTime = Math.min(timer.totalDuration, completedBefore + Math.min(segment.durationSeconds, segmentElapsed));
+                timer.totalElapsedTime = this.clampToTotalDuration(
+                    timer,
+                    completedBefore + Math.min(segment.durationSeconds, segmentElapsed)
+                );
 
                 if (timer.segmentTimeRemaining > 0) {
                     this.renderTimerItem(taskId);
@@ -467,48 +486,6 @@ export class TimerWidget {
         }
     }
 
-    private async handlePomodoroComplete(taskId: string, timer: PomodoroTimer): Promise<void> {
-        this.stopTimer(taskId);
-
-        if (timer.phase === 'work') {
-            AudioUtils.playWorkCompleteChime();
-            new Notice(`🍅 ${timer.taskName} - Pomodoro complete!`);
-            await this.recorder.addPomodoroRecord(timer);
-
-            timer.phase = 'break';
-            timer.timeRemaining = this.plugin.settings.pomodoroBreakMinutes * 60;
-            timer.totalTime = this.plugin.settings.pomodoroBreakMinutes * 60;
-            timer.startTimeMs = Date.now();
-            timer.pausedElapsedTime = 0;
-            timer.isRunning = true;
-            this.startTimerTicker(taskId);
-        } else {
-            AudioUtils.playBreakCompleteChime();
-            new Notice(`☕ ${timer.taskName} - Break complete!`);
-
-            if (timer.autoRepeat) {
-                timer.phase = 'work';
-                timer.timeRemaining = this.plugin.settings.pomodoroWorkMinutes * 60;
-                timer.totalTime = this.plugin.settings.pomodoroWorkMinutes * 60;
-                timer.startTimeMs = Date.now();
-                timer.pausedElapsedTime = 0;
-                timer.isRunning = true;
-                this.startTimerTicker(taskId);
-                AudioUtils.playStartSound();
-            } else {
-                timer.phase = 'idle';
-                timer.timeRemaining = this.plugin.settings.pomodoroWorkMinutes * 60;
-                timer.totalTime = this.plugin.settings.pomodoroWorkMinutes * 60;
-                timer.startTimeMs = 0;
-                timer.pausedElapsedTime = 0;
-                timer.isRunning = false;
-            }
-        }
-
-        this.render();
-        this.persistTimersToStorage();
-    }
-
     private async handleIntervalSegmentComplete(taskId: string, timer: IntervalTimer): Promise<void> {
         this.stopTimer(taskId);
         const currentSegment = this.getCurrentIntervalSegment(timer);
@@ -517,7 +494,10 @@ export class TimerWidget {
             return;
         }
 
-        timer.totalElapsedTime = Math.min(timer.totalDuration, this.computeIntervalCompletedDuration(timer) + currentSegment.durationSeconds);
+        timer.totalElapsedTime = this.clampToTotalDuration(
+            timer,
+            this.computeIntervalCompletedDuration(timer) + currentSegment.durationSeconds
+        );
 
         // Play transition chime between interval segments based on the completed segment type.
         if (currentSegment.type === 'work') {
@@ -550,12 +530,14 @@ export class TimerWidget {
 
     private async finishIntervalTimer(taskId: string, timer: IntervalTimer): Promise<void> {
         this.intervalPrepareBaseElapsed.delete(taskId);
-        timer.totalElapsedTime = timer.totalDuration;
+        if (timer.totalDuration > 0) {
+            timer.totalElapsedTime = timer.totalDuration;
+        }
         timer.segmentTimeRemaining = 0;
         timer.phase = 'idle';
         timer.isRunning = false;
         timer.startTimeMs = 0;
-        timer.pausedElapsedTime = timer.totalDuration;
+        timer.pausedElapsedTime = timer.totalElapsedTime;
         this.stopTimer(taskId);
 
         AudioUtils.playWorkCompleteChime();
@@ -577,7 +559,9 @@ export class TimerWidget {
         let total = 0;
         for (let g = 0; g < timer.groups.length; g++) {
             const group = timer.groups[g];
-            const repeats = Math.max(1, group.repeatCount || 1);
+            const repeats = group.repeatCount === 0
+                ? (g === timer.currentGroupIndex ? timer.currentRepeatIndex : 0)
+                : Math.max(1, group.repeatCount || 1);
             const groupDuration = group.segments.reduce((sum, segment) => sum + segment.durationSeconds, 0);
 
             if (g < timer.currentGroupIndex) {
@@ -606,7 +590,7 @@ export class TimerWidget {
             return true;
         }
 
-        if (timer.currentRepeatIndex + 1 < Math.max(1, currentGroup.repeatCount || 1)) {
+        if (currentGroup.repeatCount === 0 || timer.currentRepeatIndex + 1 < Math.max(1, currentGroup.repeatCount || 1)) {
             timer.currentRepeatIndex++;
             timer.currentSegmentIndex = 0;
             return true;
@@ -673,10 +657,22 @@ export class TimerWidget {
                 timeSpan.dataset.timeDisplay = 'header';
                 timeSpan.setText(this.getTimerDisplayText(timer));
                 timeSpan.toggleClass('timer-widget__header-time--break', timer.phase === 'break');
+
+                if (timer.timerType === 'interval') {
+                    const group = timer.groups[timer.currentGroupIndex];
+                    const segment = this.getCurrentIntervalSegment(timer);
+                    if (group && segment) {
+                        const repeatSpan = header.createSpan('timer-widget__header-repeat');
+                        const repeatText = group.repeatCount === 0
+                            ? `${segment.label} ${timer.currentRepeatIndex + 1}`
+                            : `${segment.label} ${timer.currentRepeatIndex + 1}/${group.repeatCount}`;
+                        repeatSpan.setText(repeatText);
+                    }
+                }
             }
 
-            // Settings button (only for pomodoro)
-            if (timer.timerType === 'pomodoro') {
+            // Settings button (only for pomodoro-like interval timers)
+            if (timer.timerType === 'interval' && timer.intervalSource === 'pomodoro') {
                 const settingsBtn = header.createEl('button', { cls: 'timer-widget__settings-btn' });
                 setIcon(settingsBtn, 'settings');
                 settingsBtn.onclick = (e) => {
@@ -755,9 +751,6 @@ export class TimerWidget {
 
     private renderControls(container: HTMLElement, timer: TimerInstance): void {
         switch (timer.timerType) {
-            case 'pomodoro':
-                this.renderPomodoroControls(container, timer);
-                return;
             case 'countup':
                 this.renderCountupControls(container, timer);
                 return;
@@ -772,64 +765,6 @@ export class TimerWidget {
                 return;
             default:
                 return;
-        }
-    }
-
-    private renderPomodoroControls(container: HTMLElement, timer: PomodoroTimer): void {
-        if (timer.phase === 'idle') {
-            const startBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--primary'
-            });
-            setIcon(startBtn, 'play');
-            startBtn.createSpan({ text: ' Start' });
-            startBtn.onclick = () => {
-                timer.phase = 'work';
-                timer.startTimeMs = Date.now();
-                timer.pausedElapsedTime = 0;
-                timer.isRunning = true;
-                this.startTimerTicker(timer.id);
-                AudioUtils.playStartSound();
-                this.render();
-                this.persistTimersToStorage();
-            };
-        } else if (timer.isRunning) {
-            const pauseBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--secondary'
-            });
-            setIcon(pauseBtn, 'pause');
-            pauseBtn.createSpan({ text: ' Pause' });
-            pauseBtn.onclick = () => {
-                this.pauseTimer(timer);
-                this.render();
-                this.persistTimersToStorage();
-            };
-
-            const resetBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--danger'
-            });
-            setIcon(resetBtn, 'x');
-            resetBtn.createSpan({ text: ' Reset' });
-            resetBtn.onclick = () => {
-                this.resetPomodoroTimer(timer.id);
-            };
-        } else {
-            const resumeBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--primary'
-            });
-            setIcon(resumeBtn, 'play');
-            resumeBtn.createSpan({ text: ' Resume' });
-            resumeBtn.onclick = () => {
-                this.resumeTimer(timer);
-            };
-
-            const resetBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--danger'
-            });
-            setIcon(resetBtn, 'x');
-            resetBtn.createSpan({ text: ' Reset' });
-            resetBtn.onclick = () => {
-                this.resetPomodoroTimer(timer.id);
-            };
         }
     }
 
@@ -1117,16 +1052,13 @@ export class TimerWidget {
                 timer.timeRemaining = timer.totalTime - timer.elapsedTime;
                 timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
                 break;
-            case 'pomodoro':
-                timer.timeRemaining = Math.max(0, timer.totalTime - timer.pausedElapsedTime);
-                break;
             case 'interval': {
                 const segment = this.getCurrentIntervalSegment(timer);
                 if (!segment) break;
                 timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - timer.pausedElapsedTime);
                 const completedBefore = this.computeIntervalCompletedDuration(timer);
-                timer.totalElapsedTime = Math.min(
-                    timer.totalDuration,
+                timer.totalElapsedTime = this.clampToTotalDuration(
+                    timer,
                     completedBefore + Math.min(segment.durationSeconds, timer.pausedElapsedTime)
                 );
                 break;
@@ -1184,21 +1116,6 @@ export class TimerWidget {
         this.persistTimersToStorage();
     }
 
-    private resetPomodoroTimer(taskId: string): void {
-        const timer = this.timers.get(taskId);
-        if (!timer || timer.timerType !== 'pomodoro') return;
-
-        this.stopTimer(taskId);
-        timer.phase = 'idle';
-        timer.timeRemaining = this.plugin.settings.pomodoroWorkMinutes * 60;
-        timer.totalTime = this.plugin.settings.pomodoroWorkMinutes * 60;
-        timer.startTimeMs = 0;
-        timer.pausedElapsedTime = 0;
-        timer.isRunning = false;
-        this.render();
-        this.persistTimersToStorage();
-    }
-
     private closeTimer(taskId: string): void {
         const timer = this.timers.get(taskId);
         if (!timer) return;
@@ -1233,9 +1150,8 @@ export class TimerWidget {
                 return TimeFormatter.formatSignedSeconds(timer.timeRemaining);
             case 'interval':
                 return TimeFormatter.formatSeconds(timer.segmentTimeRemaining);
-            case 'pomodoro':
             default:
-                return TimeFormatter.formatSeconds(timer.timeRemaining);
+                return '00:00';
         }
     }
 
@@ -1512,7 +1428,11 @@ export class TimerWidget {
     }
 
     private getStorageKey(): string {
-        return `${TimerWidget.STORAGE_KEY_PREFIX}.v${TimerWidget.STORAGE_VERSION}:${this.vaultFingerprint}`;
+        return this.getStorageKeyForVersion(TimerWidget.STORAGE_VERSION);
+    }
+
+    private getStorageKeyForVersion(version: number): string {
+        return `${TimerWidget.STORAGE_KEY_PREFIX}.v${version}:${this.vaultFingerprint}`;
     }
 
     private cleanupLegacyStorage(): void {
@@ -1640,7 +1560,13 @@ export class TimerWidget {
     private restoreTimersFromStorage(): void {
         const storageKey = this.getStorageKey();
         try {
-            const raw = window.localStorage.getItem(storageKey);
+            let sourceKey = storageKey;
+            let raw = window.localStorage.getItem(storageKey);
+            if (!raw) {
+                const legacyV4Key = this.getStorageKeyForVersion(4);
+                raw = window.localStorage.getItem(legacyV4Key);
+                sourceKey = legacyV4Key;
+            }
             if (!raw) return;
 
             const parsed = JSON.parse(raw) as PersistedTimerState | {
@@ -1658,7 +1584,7 @@ export class TimerWidget {
                 || normalized.vaultFingerprint !== this.vaultFingerprint
                 || !Array.isArray(normalized.timers)
             ) {
-                window.localStorage.removeItem(storageKey);
+                window.localStorage.removeItem(sourceKey);
                 return;
             }
             if (normalized.ownerDeviceId !== this.deviceId) {
@@ -1684,9 +1610,7 @@ export class TimerWidget {
 
             for (const [timerId, timer] of this.timers) {
                 if (timer.isRunning) {
-                    if (timer.timerType === 'pomodoro' && timer.timeRemaining <= 0) {
-                        void this.handlePomodoroComplete(timerId, timer);
-                    } else if (timer.timerType === 'interval' && timer.segmentTimeRemaining <= 0) {
+                    if (timer.timerType === 'interval' && timer.segmentTimeRemaining <= 0) {
                         void this.handleIntervalSegmentComplete(timerId, timer);
                     } else {
                         this.startTimerTicker(timerId);
@@ -1699,6 +1623,10 @@ export class TimerWidget {
             }
 
             this.render();
+            if (sourceKey !== storageKey) {
+                window.localStorage.removeItem(sourceKey);
+                this.persistTimersToStorage();
+            }
         } catch (error) {
             window.localStorage.removeItem(storageKey);
             console.error('[TimerWidget] Failed to restore timers:', error);
@@ -1716,7 +1644,7 @@ export class TimerWidget {
             return parsed as PersistedTimerState;
         }
 
-        if (parsed.version === 3) {
+        if (parsed.version === 3 || parsed.version === 4) {
             const migratedTimers = parsed.timers.map((timer) => ({
                 ...timer,
                 phase: timer.phase ?? timer.mode ?? 'idle'
@@ -1754,13 +1682,6 @@ export class TimerWidget {
         };
 
         switch (timer.timerType) {
-            case 'pomodoro':
-                return {
-                    ...common,
-                    timeRemaining: timer.timeRemaining,
-                    totalTime: timer.totalTime,
-                    autoRepeat: timer.autoRepeat
-                };
             case 'countup':
                 return {
                     ...common,
@@ -1782,7 +1703,8 @@ export class TimerWidget {
                     currentRepeatIndex: timer.currentRepeatIndex,
                     segmentTimeRemaining: timer.segmentTimeRemaining,
                     totalElapsedTime: timer.totalElapsedTime,
-                    totalDuration: timer.totalDuration
+                    totalDuration: timer.totalDuration,
+                    intervalSource: timer.intervalSource
                 };
             case 'idle':
             default:
@@ -1825,13 +1747,32 @@ export class TimerWidget {
 
         switch (persisted.timerType) {
             case 'pomodoro': {
-                return {
+                const workSec = Math.max(1, persisted.totalTime ?? this.plugin.settings.pomodoroWorkMinutes * 60);
+                const breakSec = Math.max(1, this.plugin.settings.pomodoroBreakMinutes * 60);
+                const repeatCount = persisted.autoRepeat ? 0 : 1;
+                const groups: IntervalGroup[] = [
+                    {
+                        segments: [
+                            { label: 'Work', durationSeconds: workSec, type: 'work' },
+                            { label: 'Break', durationSeconds: breakSec, type: 'break' }
+                        ],
+                        repeatCount
+                    }
+                ];
+                const migratedInterval: IntervalTimer = {
                     ...common,
-                    timerType: 'pomodoro',
-                    timeRemaining: Math.max(0, persisted.timeRemaining ?? this.plugin.settings.pomodoroWorkMinutes * 60),
-                    totalTime: Math.max(1, persisted.totalTime ?? this.plugin.settings.pomodoroWorkMinutes * 60),
-                    autoRepeat: !!persisted.autoRepeat
+                    timerType: 'interval',
+                    intervalSource: 'pomodoro',
+                    groups,
+                    currentGroupIndex: 0,
+                    currentSegmentIndex: phase === 'break' ? 1 : 0,
+                    currentRepeatIndex: 0,
+                    segmentTimeRemaining: Math.max(0, persisted.timeRemaining ?? workSec),
+                    totalElapsedTime: Math.max(0, persisted.pausedElapsedTime ?? 0),
+                    totalDuration: repeatCount === 0 ? 0 : this.computeIntervalTotalDuration(groups),
+                    phase
                 };
+                return migratedInterval;
             }
             case 'countdown': {
                 const totalTime = Math.max(1, persisted.totalTime ?? this.plugin.settings.pomodoroWorkMinutes * 60);
@@ -1850,13 +1791,14 @@ export class TimerWidget {
                 const intervalTimer: IntervalTimer = {
                     ...common,
                     timerType: 'interval',
+                    intervalSource: persisted.intervalSource,
                     groups,
                     currentGroupIndex: Math.max(0, persisted.currentGroupIndex ?? 0),
                     currentSegmentIndex: Math.max(0, persisted.currentSegmentIndex ?? 0),
                     currentRepeatIndex: Math.max(0, persisted.currentRepeatIndex ?? 0),
                     segmentTimeRemaining: Math.max(0, persisted.segmentTimeRemaining ?? groups[0].segments[0].durationSeconds),
                     totalElapsedTime: Math.max(0, persisted.totalElapsedTime ?? 0),
-                    totalDuration: Math.max(1, persisted.totalDuration ?? this.computeIntervalTotalDuration(groups))
+                    totalDuration: Math.max(0, persisted.totalDuration ?? this.computeIntervalTotalDuration(groups))
                 };
                 const segment = this.getCurrentIntervalSegment(intervalTimer);
                 if (!segment) {
@@ -1894,14 +1836,12 @@ export class TimerWidget {
                 timer.elapsedTime = Math.max(timer.elapsedTime, timer.pausedElapsedTime);
                 timer.timeRemaining = timer.totalTime - timer.elapsedTime;
                 timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
-            } else if (timer.timerType === 'pomodoro') {
-                timer.timeRemaining = Math.max(0, timer.totalTime - timer.pausedElapsedTime);
             } else if (timer.timerType === 'interval') {
                 const segment = this.getCurrentIntervalSegment(timer);
                 if (segment) {
                     timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - timer.pausedElapsedTime);
-                    timer.totalElapsedTime = Math.min(
-                        timer.totalDuration,
+                    timer.totalElapsedTime = this.clampToTotalDuration(
+                        timer,
                         this.computeIntervalCompletedDuration(timer) + Math.min(segment.durationSeconds, timer.pausedElapsedTime)
                     );
                 }
@@ -1927,9 +1867,6 @@ export class TimerWidget {
                 timer.timeRemaining = timer.totalTime - totalElapsed;
                 timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
                 break;
-            case 'pomodoro':
-                timer.timeRemaining = Math.max(0, timer.totalTime - totalElapsed);
-                break;
             case 'interval': {
                 const segment = this.getCurrentIntervalSegment(timer);
                 if (!segment) {
@@ -1938,8 +1875,8 @@ export class TimerWidget {
                     break;
                 }
                 timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - totalElapsed);
-                timer.totalElapsedTime = Math.min(
-                    timer.totalDuration,
+                timer.totalElapsedTime = this.clampToTotalDuration(
+                    timer,
                     this.computeIntervalCompletedDuration(timer) + Math.min(segment.durationSeconds, totalElapsed)
                 );
                 break;
@@ -1951,7 +1888,7 @@ export class TimerWidget {
 
     private showSettingsMenu(e: MouseEvent, taskId: string): void {
         const timer = this.timers.get(taskId);
-        if (!timer || timer.timerType !== 'pomodoro') return;
+        if (!timer || timer.timerType !== 'interval' || timer.intervalSource !== 'pomodoro') return;
 
         TimerSettingsMenu.showPomodoroSettings({
             app: this.app,

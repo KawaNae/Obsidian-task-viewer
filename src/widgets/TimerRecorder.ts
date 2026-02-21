@@ -25,50 +25,23 @@ export class TimerRecorder {
     }
 
     /**
-     * Record a completed Pomodoro session
-     */
-    async addPomodoroRecord(timer: TimerInstance): Promise<void> {
-        const endTime = new Date();
-        const workMinutes = this.plugin.settings.pomodoroWorkMinutes;
-        const startTime = new Date(endTime.getTime() - workMinutes * 60 * 1000);
-
-        const startDateStr = this.formatDate(startTime);
-        const startTimeStr = this.formatTime(startTime);
-        const endDateStr = this.formatDate(endTime);
-        const endTimeStr = this.formatTime(endTime);
-
-        const customText = timer.customLabel.trim();
-        const label = customText ? `🍅 ${customText}` : '🍅';
-
-        const taskObj = this.createTaskObject(label, startDateStr, startTimeStr, endDateStr, endTimeStr);
-        const formattedLine = TaskParser.format(taskObj);
-
-        await this.insertChildRecord(timer, formattedLine);
-
-        new Notice('🍅 Pomodoro recorded!');
-    }
-
-    /**
-     * Record a completed Countup timer session
+     * Record a completed Countup timer session.
      */
     async addCountupRecord(timer: TimerInstance): Promise<void> {
         const elapsedSeconds = getTimerElapsedSeconds(timer);
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
-        const startDateStr = this.formatDate(startTime);
-        const startTimeStr = this.formatTime(startTime);
-        const endDateStr = this.formatDate(endTime);
-        const endTimeStr = this.formatTime(endTime);
-
-        const customText = timer.customLabel.trim();
-        const label = customText ? `⏱️ ${customText}` : '⏱️';
-
-        const taskObj = this.createTaskObject(label, startDateStr, startTimeStr, endDateStr, endTimeStr);
+        const taskObj = this.createTaskObject(
+            timer.customLabel.trim() ? `⏱️ ${timer.customLabel.trim()}` : '⏱️',
+            this.formatDate(startTime),
+            this.formatTime(startTime),
+            this.formatDate(endTime),
+            this.formatTime(endTime)
+        );
         const formattedLine = TaskParser.format(taskObj);
 
         await this.insertChildRecord(timer, formattedLine);
-
         new Notice(`⏱️ Timer recorded! (${TimeFormatter.formatSeconds(elapsedSeconds)})`);
     }
 
@@ -80,14 +53,13 @@ export class TimerRecorder {
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
-        const startDateStr = this.formatDate(startTime);
-        const startTimeStr = this.formatTime(startTime);
-        const endDateStr = this.formatDate(endTime);
-        const endTimeStr = this.formatTime(endTime);
-
-        const customText = timer.customLabel.trim();
-        const label = customText ? `⏲️ ${customText}` : '⏲️';
-        const taskObj = this.createTaskObject(label, startDateStr, startTimeStr, endDateStr, endTimeStr);
+        const taskObj = this.createTaskObject(
+            timer.customLabel.trim() ? `⏲️ ${timer.customLabel.trim()}` : '⏲️',
+            this.formatDate(startTime),
+            this.formatTime(startTime),
+            this.formatDate(endTime),
+            this.formatTime(endTime)
+        );
         const formattedLine = TaskParser.format(taskObj);
 
         await this.insertChildRecord(timer, formattedLine);
@@ -96,24 +68,30 @@ export class TimerRecorder {
 
     /**
      * Record a completed Interval timer session.
+     * Pomodoro-origin intervals are recorded with 🍅 label.
      */
     async addIntervalRecord(timer: TimerInstance): Promise<void> {
         const elapsedSeconds = getTimerElapsedSeconds(timer);
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
-        const startDateStr = this.formatDate(startTime);
-        const startTimeStr = this.formatTime(startTime);
-        const endDateStr = this.formatDate(endTime);
-        const endTimeStr = this.formatTime(endTime);
+        const isPomodoroSource = timer.timerType === 'interval' && timer.intervalSource === 'pomodoro';
+        const icon = isPomodoroSource ? '🍅' : '🔁';
+        const custom = timer.customLabel.trim();
+        const label = custom ? `${icon} ${custom}` : icon;
 
-        const customText = timer.customLabel.trim();
-        const label = customText ? `🔁 ${customText}` : '🔁';
-        const taskObj = this.createTaskObject(label, startDateStr, startTimeStr, endDateStr, endTimeStr);
+        const taskObj = this.createTaskObject(
+            label,
+            this.formatDate(startTime),
+            this.formatTime(startTime),
+            this.formatDate(endTime),
+            this.formatTime(endTime)
+        );
         const formattedLine = TaskParser.format(taskObj);
 
         await this.insertChildRecord(timer, formattedLine);
-        new Notice(`🔁 Interval recorded! (${TimeFormatter.formatSeconds(elapsedSeconds)})`);
+        const kind = isPomodoroSource ? 'Pomodoro' : 'Interval';
+        new Notice(`${icon} ${kind} recorded! (${TimeFormatter.formatSeconds(elapsedSeconds)})`);
     }
 
     /**
@@ -139,7 +117,7 @@ export class TimerRecorder {
     }
 
     /**
-     * Update the task's start/end times directly (for 'self' recordMode)
+     * Update the task's start/end times directly (for 'self' recordMode).
      * This converts the task to SE-Timed type.
      */
     async updateTaskDirectly(timer: TimerInstance): Promise<void> {
@@ -164,7 +142,7 @@ export class TimerRecorder {
             }
 
             const displayName = getTaskDisplayName(task);
-            const content = displayName.startsWith('⏱️') ? displayName : `⏱️ ${displayName}`;
+            const content = displayName.startsWith('⏱️ ') ? displayName : `⏱️ ${displayName}`;
             await taskIndex.updateTask(task.id, {
                 content,
                 startDate: startDateStr,
@@ -219,7 +197,7 @@ export class TimerRecorder {
     }
 
     /**
-     * Add timer record directly to daily note (completed task format)
+     * Add timer record directly to daily note (completed task format).
      */
     private async addTimerRecordToDailyNote(dateStr: string, taskLine: string): Promise<void> {
         const [y, m, d] = dateStr.split('-').map(Number);
@@ -237,7 +215,7 @@ export class TimerRecorder {
     }
 
     /**
-     * Create a minimal Task object for formatting
+     * Create a minimal Task object for formatting.
      */
     private createTaskObject(
         label: string,
@@ -306,5 +284,4 @@ export class TimerRecorder {
 
         return parentIndent + '    ';
     }
-
 }

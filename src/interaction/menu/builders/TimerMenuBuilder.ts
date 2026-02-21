@@ -5,13 +5,13 @@ import { getTaskDisplayName } from '../../../utils/TaskContent';
 import { IntervalParser } from '../../../widgets/IntervalParser';
 
 /**
- * Timerメニューの構築
+ * Builder for timer-related menu items.
  */
 export class TimerMenuBuilder {
     constructor(private plugin: TaskViewerPlugin) { }
 
     /**
-     * Timerメニュー項目を追加
+     * Countup auto-start.
      */
     addTimerItem(menu: Menu, task: Task): void {
         menu.addItem((item) => {
@@ -37,7 +37,33 @@ export class TimerMenuBuilder {
     }
 
     /**
-     * Countdownメニュー項目を追加（start/end time があるタスクのみ）
+     * Pomodoro auto-start (implemented as intervalSource='pomodoro' in TimerWidget).
+     */
+    addPomodoroItem(menu: Menu, task: Task): void {
+        menu.addItem((item) => {
+            const displayName = getTaskDisplayName(task);
+
+            item.setTitle('🍅 Start Pomodoro')
+                .setIcon('timer')
+                .onClick(() => {
+                    const widget = this.plugin.getTimerWidget();
+                    widget.startTimer({
+                        taskId: task.id,
+                        taskName: displayName,
+                        taskOriginalText: task.originalText,
+                        taskFile: task.file,
+                        recordMode: 'self',
+                        parserId: task.parserId,
+                        timerTargetId: task.timerTargetId ?? task.blockId,
+                        timerType: 'pomodoro',
+                        autoStart: true
+                    });
+                });
+        });
+    }
+
+    /**
+     * Countdown auto-start (requires both startTime and endTime).
      */
     addCountdownItem(menu: Menu, task: Task): void {
         const countdownSeconds = this.calculateCountdownSeconds(task);
@@ -69,7 +95,7 @@ export class TimerMenuBuilder {
     }
 
     /**
-     * Intervalメニュー項目を追加（子行から interval セグメントが抽出できる場合のみ）
+     * Interval auto-start (requires at least one parsed segment from children).
      */
     addIntervalItem(menu: Menu, task: Task): void {
         const intervalGroups = IntervalParser.parseIntervalGroups(task, this.plugin.getTaskIndex());

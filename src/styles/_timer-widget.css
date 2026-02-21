@@ -83,6 +83,12 @@
     color: var(--tv-text-success);
 }
 
+.timer-widget__header-repeat {
+    font-size: 0.75em;
+    color: var(--tv-text-muted);
+    margin-left: 4px;
+}
+
 .timer-widget button.timer-widget__toggle-btn,
 .timer-widget button.timer-widget__close-btn,
 .timer-widget button.timer-widget__settings-btn {
@@ -211,6 +217,17 @@
 
 .timer-widget__time-display--countup {
     color: var(--tv-text-muted);
+}
+
+.timer-widget__repeat-info {
+    position: absolute;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    font-size: 0.75em;
+    color: var(--tv-text-muted);
+    text-align: center;
+    white-space: nowrap;
 }
 
 /* Controls */

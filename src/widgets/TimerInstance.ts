@@ -28,13 +28,6 @@ export interface TimerBase {
     parserId: string;
 }
 
-export interface PomodoroTimer extends TimerBase {
-    timerType: 'pomodoro';
-    timeRemaining: number;
-    totalTime: number;
-    autoRepeat: boolean;
-}
-
 export interface CountupTimer extends TimerBase {
     timerType: 'countup';
     elapsedTime: number;
@@ -60,6 +53,7 @@ export interface IntervalGroup {
 
 export interface IntervalTimer extends TimerBase {
     timerType: 'interval';
+    intervalSource?: 'pomodoro';
     groups: IntervalGroup[];
     currentGroupIndex: number;
     currentSegmentIndex: number;
@@ -74,7 +68,7 @@ export interface IdleTimer extends TimerBase {
     elapsedTime: number;
 }
 
-export type TimerInstance = PomodoroTimer | CountupTimer | CountdownTimer | IntervalTimer | IdleTimer;
+export type TimerInstance = CountupTimer | CountdownTimer | IntervalTimer | IdleTimer;
 export type TimerType = TimerInstance['timerType'];
 
 export interface TimerStartConfig {
@@ -85,10 +79,11 @@ export interface TimerStartConfig {
     recordMode?: 'child' | 'self';
     parserId?: string;
     timerTargetId?: string;
-    timerType: TimerType;
+    timerType: TimerType | 'pomodoro';
     autoStart?: boolean;
     countdownSeconds?: number;
     intervalGroups?: IntervalGroup[];
+    intervalSource?: 'pomodoro';
 }
 
 export function getTimerElapsedSeconds(timer: TimerInstance): number {
@@ -99,10 +94,7 @@ export function getTimerElapsedSeconds(timer: TimerInstance): number {
             return timer.elapsedTime;
         case 'interval':
             return timer.totalElapsedTime;
-        case 'pomodoro':
-            return Math.max(0, timer.totalTime - timer.timeRemaining);
         default:
             return 0;
     }
 }
-

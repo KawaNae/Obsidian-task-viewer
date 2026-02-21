@@ -59,6 +59,12 @@ export class TimerProgressUI {
         if (state.isCountupLike) {
             timeDisplay.addClass('timer-widget__time-display--countup');
         }
+
+        if (timer.timerType === 'interval') {
+            const repeatInfo = container.createDiv('timer-widget__repeat-info');
+            repeatInfo.dataset.repeatDisplay = 'ring';
+            repeatInfo.setText(this.getIntervalRepeatText(timer));
+        }
     }
 
     static updateDisplay(
@@ -87,19 +93,19 @@ export class TimerProgressUI {
             timeDisplay.setText(formatTime(state.displaySeconds));
             timeDisplay.toggleClass('timer-widget__time-display--countup', state.isCountupLike);
         }
+
+        const repeatInfo = itemEl.querySelector('[data-repeat-display="ring"]') as HTMLElement | null;
+        if (timer.timerType === 'interval') {
+            if (repeatInfo) {
+                repeatInfo.setText(this.getIntervalRepeatText(timer));
+            }
+        } else if (repeatInfo) {
+            repeatInfo.remove();
+        }
     }
 
     private static getProgressState(timer: TimerInstance): ProgressState {
         switch (timer.timerType) {
-            case 'pomodoro': {
-                const progress = timer.totalTime > 0 ? timer.timeRemaining / timer.totalTime : 1;
-                return {
-                    progress: Math.max(0, Math.min(1, progress)),
-                    displaySeconds: timer.timeRemaining,
-                    phaseClass: timer.phase,
-                    isCountupLike: false,
-                };
-            }
             case 'countup':
             case 'idle': {
                 const fullRotation = 30 * 60;
@@ -142,5 +148,18 @@ export class TimerProgressUI {
                     isCountupLike: false,
                 };
         }
+    }
+
+    private static getIntervalRepeatText(timer: Extract<TimerInstance, { timerType: 'interval' }>): string {
+        const group = timer.groups[timer.currentGroupIndex];
+        const segment = group?.segments[timer.currentSegmentIndex];
+        if (!group || !segment) {
+            return '';
+        }
+
+        if (group.repeatCount === 0) {
+            return `${segment.label} ${timer.currentRepeatIndex + 1}`;
+        }
+        return `${segment.label} ${timer.currentRepeatIndex + 1}/${group.repeatCount}`;
     }
 }
