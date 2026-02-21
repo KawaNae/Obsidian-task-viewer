@@ -20,6 +20,7 @@ import { PropertyColorSuggest } from './suggest/color/PropertyColorSuggest';
 import { LineStyleSuggest } from './suggest/line/LineStyleSuggest';
 import { PropertyLineStyleSuggest } from './suggest/line/PropertyLineStyleSuggest';
 import { DateUtils } from './utils/DateUtils';
+import { AudioUtils } from './utils/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
 import { getViewMeta } from './constants/viewRegistry';
 
@@ -347,6 +348,7 @@ export default class TaskViewerPlugin extends Plugin {
     onunload() {
         console.log('Unloading Task Viewer Plugin');
         this.taskIndex?.dispose();
+        AudioUtils.dispose();
         document.body.classList.remove('task-viewer-global-styles');
         this.timerWidget?.destroy();
 
