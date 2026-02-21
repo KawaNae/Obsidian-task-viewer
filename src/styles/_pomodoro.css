@@ -6,8 +6,7 @@
 .pomodoro-view {
     height: 100%;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    flex-direction: column;
     background: linear-gradient(135deg,
             var(--tv-bg-pomodoro-start) 0%,
             var(--tv-bg-pomodoro-end) 100%);
@@ -26,70 +25,62 @@
     display: none;
 }
 
+/* ─── Toolbar ──────────────────────────────────────────────── */
+
+.pomodoro-view .view-toolbar {
+    background: transparent;
+    border-bottom: none;
+    flex-shrink: 0;
+}
+
+.view-toolbar__btn--dropdown {
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px !important;
+    color: var(--tv-text);
+    font-size: 0.9em;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.view-toolbar__btn--dropdown:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.view-toolbar__btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--tv-text-muted);
+    width: 14px;
+    height: 14px;
+}
+
+.view-toolbar__btn-icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+.view-toolbar__btn-label {
+    line-height: 1;
+}
+
+/* ─── Main Content ─────────────────────────────────────────── */
+
 .pomodoro-view__main {
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: clamp(12px, 4vh, 24px);
     padding: clamp(16px, 5vw, 32px);
     width: 100%;
     max-width: 400px;
-}
-
-.pomodoro-view__settings-btn {
-    position: absolute;
-    top: 0;
-    right: 0;
-    background: transparent;
-    border: none;
-    font-size: 1.2rem;
-    color: var(--tv-text-muted);
-    cursor: pointer;
-    padding: 8px;
-    opacity: 0.6;
-    transition: opacity 0.2s ease;
-}
-
-.pomodoro-view__settings-btn:hover {
-    opacity: 1;
-}
-
-/* ─── Mode Switcher ────────────────────────────────────────── */
-
-.pomodoro-view__mode-switcher {
-    display: flex;
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid var(--tv-border);
-}
-
-.pomodoro-view__mode-btn {
-    flex: 1;
-    padding: 6px 12px;
-    border: none;
-    background: transparent;
-    color: var(--tv-text-muted);
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.pomodoro-view__mode-btn:hover:not(:disabled) {
-    background: var(--tv-bg-hover);
-}
-
-.pomodoro-view__mode-btn--active {
-    background: var(--tv-accent);
-    color: var(--tv-text-on-accent);
-}
-
-.pomodoro-view__mode-btn--active:hover:not(:disabled) {
-    background: var(--tv-accent-hover);
-}
-
-.pomodoro-view__mode-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    margin: 0 auto;
 }
 
 /* ─── Progress Ring (TimerProgressUI overrides) ────────────── */

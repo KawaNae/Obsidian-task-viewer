@@ -383,22 +383,10 @@ export class PomodoroView extends ItemView {
     private render(): void {
         this.container.empty();
 
-        const isIdle = !this.timer || this.timer.phase === 'idle';
-
-        // Settings button (countdown/pomodoro only, not during countup)
-        if (this.timerViewMode !== 'countup') {
-            const settingsBtn = this.container.createEl('button', {
-                cls: 'pomodoro-view__settings-btn',
-                attr: { 'aria-label': 'Settings' },
-            });
-            setIcon(settingsBtn, 'settings');
-            settingsBtn.onclick = (e) => this.showSettingsMenu(e);
-        }
+        // Toolbar
+        this.renderToolbar();
 
         const mainContainer = this.container.createDiv('pomodoro-view__main');
-
-        // Mode switcher
-        this.renderModeSwitcher(mainContainer, isIdle);
 
         // Progress ring
         const progressContainer = mainContainer.createDiv('pomodoro-view__progress-container');
@@ -422,6 +410,54 @@ export class PomodoroView extends ItemView {
         this.renderControls(controls);
     }
 
+    private renderToolbar(): void {
+        const toolbar = this.container.createDiv('view-toolbar');
+
+        const isIdle = !this.timer || this.timer.phase === 'idle';
+
+        // Mode dropdown (left)
+        const modeBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--dropdown' });
+        const modeIcon = modeBtn.createSpan('view-toolbar__btn-icon');
+        const modeLabel = modeBtn.createSpan({ cls: 'view-toolbar__btn-label' });
+        setIcon(modeIcon, 'chevrons-up-down');
+
+        const labels: Record<TimerViewMode, string> = {
+            countup: 'Countup',
+            countdown: 'Countdown',
+            pomodoro: 'Pomodoro',
+        };
+        modeLabel.setText(labels[this.timerViewMode]);
+        modeBtn.disabled = !isIdle;
+
+        modeBtn.onclick = (e) => {
+            if (!isIdle) return;
+            const menu = new Menu();
+            for (const mode of ['countup', 'countdown', 'pomodoro'] as TimerViewMode[]) {
+                menu.addItem((item) => {
+                    item.setTitle(labels[mode])
+                        .setChecked(this.timerViewMode === mode)
+                        .onClick(() => {
+                            this.timerViewMode = mode;
+                            this.timer = null;
+                            this.render();
+                        });
+                });
+            }
+            menu.showAtMouseEvent(e);
+        };
+
+        // Spacer
+        toolbar.createDiv('view-toolbar__spacer');
+
+        // Settings gear (right, countdown/pomodoro only)
+        if (this.timerViewMode !== 'countup') {
+            const settingsBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+            setIcon(settingsBtn, 'settings');
+            settingsBtn.setAttribute('aria-label', 'Settings');
+            settingsBtn.onclick = (e) => this.showSettingsMenu(e);
+        }
+    }
+
     private updateDisplay(): void {
         if (!this.timer) return;
         TimerProgressUI.updateDisplay(this.container, this.timer, this.formatTime.bind(this), 200);
@@ -437,30 +473,6 @@ export class PomodoroView extends ItemView {
                     : `${segment.label} ${this.timer.currentRepeatIndex + 1}/${group.repeatCount}`;
                 segmentLabelEl.setText(label);
             }
-        }
-    }
-
-    private renderModeSwitcher(container: HTMLElement, isIdle: boolean): void {
-        const switcher = container.createDiv('pomodoro-view__mode-switcher');
-
-        const modes: { mode: TimerViewMode; label: string }[] = [
-            { mode: 'countup', label: 'Countup' },
-            { mode: 'countdown', label: 'Countdown' },
-            { mode: 'pomodoro', label: 'Pomodoro' },
-        ];
-
-        for (const { mode, label } of modes) {
-            const btn = switcher.createEl('button', {
-                cls: `pomodoro-view__mode-btn${this.timerViewMode === mode ? ' pomodoro-view__mode-btn--active' : ''}`,
-                text: label,
-            });
-            btn.disabled = !isIdle;
-            btn.onclick = () => {
-                if (this.timerViewMode === mode) return;
-                this.timerViewMode = mode;
-                this.timer = null;
-                this.render();
-            };
         }
     }
 
