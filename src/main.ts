@@ -5,7 +5,6 @@ import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
 import { CalendarView, VIEW_TYPE_CALENDAR } from './views/CalendarView';
 import { MiniCalendarView, VIEW_TYPE_MINI_CALENDAR } from './views/MiniCalendarView';
 import { PomodoroView, VIEW_TYPE_POMODORO } from './views/PomodoroView';
-import { PomodoroService } from './services/execution/PomodoroService';
 import { TimerWidget } from './widgets/TimerWidget';
 import {
     TaskViewerSettings,
@@ -26,7 +25,6 @@ import { getViewMeta } from './constants/viewRegistry';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
-    private pomodoroService: PomodoroService;
     private timerWidget: TimerWidget;
     public settings: TaskViewerSettings;
 
@@ -47,11 +45,6 @@ export default class TaskViewerPlugin extends Plugin {
         // Initialize Services
         this.taskIndex = new TaskIndex(this.app, this.settings, this.manifest.version);
         await this.taskIndex.initialize();
-
-        this.pomodoroService = new PomodoroService({
-            workMinutes: this.settings.pomodoroWorkMinutes,
-            breakMinutes: this.settings.pomodoroBreakMinutes,
-        });
 
         // Initialize Timer Widget
         this.timerWidget = new TimerWidget(this.app, this);
@@ -79,7 +72,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         this.registerView(
             VIEW_TYPE_POMODORO,
-            (leaf) => new PomodoroView(leaf, this, this.pomodoroService)
+            (leaf) => new PomodoroView(leaf, this)
         );
 
         this.registerView(
@@ -280,12 +273,6 @@ export default class TaskViewerPlugin extends Plugin {
         await this.saveData(this.settings);
         this.taskIndex.updateSettings(this.settings);
 
-        // Update pomodoro service settings
-        this.pomodoroService?.updateSettings({
-            workMinutes: this.settings.pomodoroWorkMinutes,
-            breakMinutes: this.settings.pomodoroBreakMinutes,
-        });
-
         this.refreshAllViews();
     }
 
@@ -361,7 +348,6 @@ export default class TaskViewerPlugin extends Plugin {
         console.log('Unloading Task Viewer Plugin');
         this.taskIndex?.dispose();
         document.body.classList.remove('task-viewer-global-styles');
-        this.pomodoroService?.destroy();
         this.timerWidget?.destroy();
 
         // Clear day boundary check interval

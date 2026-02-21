@@ -26,10 +26,10 @@ export const VIEW_META_SCHEDULE: ViewMeta = {
 
 export const VIEW_META_POMODORO: ViewMeta = {
     type: 'pomodoro-view',
-    displayText: 'Pomodoro Timer',
+    displayText: 'Timer View',
     icon: 'timer',
-    ribbonTitle: 'Open Pomodoro Timer',
-    commandName: 'Open Pomodoro Timer',
+    ribbonTitle: 'Open Timer View',
+    commandName: 'Open Timer View',
 };
 
 export const VIEW_META_CALENDAR: ViewMeta = {
