@@ -2,7 +2,7 @@ import { Menu } from 'obsidian';
 import { Task } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { getTaskDisplayName } from '../../../utils/TaskContent';
-import { IntervalParser } from '../../../widgets/IntervalParser';
+import { IntervalParser } from '../../../timer/IntervalParser';
 
 /**
  * Builder for timer-related menu items.
@@ -148,9 +148,18 @@ export class TimerMenuBuilder {
             return null;
         }
 
-        const startTotalMinutes = startHour * 60 + startMinute;
-        const endTotalMinutes = endHour * 60 + endMinute;
-        const diffMinutes = endTotalMinutes - startTotalMinutes;
+        let diffMinutes = (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
+
+        // 日付跨ぎ対応: startDate と endDate が異なる場合、日数差を加算
+        if (task.startDate && task.endDate && task.startDate !== task.endDate) {
+            const dayDiff = Math.round(
+                (new Date(task.endDate).getTime() - new Date(task.startDate).getTime()) / 86400000
+            );
+            if (dayDiff > 0) {
+                diffMinutes += dayDiff * 24 * 60;
+            }
+        }
+
         if (diffMinutes <= 0) {
             return null;
         }

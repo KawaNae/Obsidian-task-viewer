@@ -3,7 +3,7 @@ import { ViewState, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
 import TaskViewerPlugin from '../../main';
-import { FileFilterMenu, DateNavigator, ViewModeSelector, ZoomSelector } from '../ViewUtils';
+import { FileFilterMenu, DateNavigator, ViewModeSelector, ZoomSelector } from '../ViewToolbar';
 
 export interface ToolbarCallbacks {
     onRender: () => void;

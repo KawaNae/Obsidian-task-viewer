@@ -9,7 +9,8 @@ import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { TaskIdGenerator } from '../utils/TaskIdGenerator';
 import { DragHandler } from '../interaction/drag/DragHandler';
 import TaskViewerPlugin from '../main';
-import { DateNavigator, FileFilterMenu, ViewUtils } from './ViewUtils';
+import { TaskStyling } from './utils/TaskStyling';
+import { DateNavigator, FileFilterMenu } from './ViewToolbar';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../constants/hover';
 import { TaskLinkInteractionManager } from './taskcard/TaskLinkInteractionManager';
 import { VIEW_META_CALENDAR } from '../constants/viewRegistry';
@@ -294,7 +295,7 @@ export class CalendarView extends ItemView {
             this.filterMenu.showMenu(
                 event,
                 files,
-                (filePath) => ViewUtils.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color),
+                (filePath) => TaskStyling.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color),
                 () => {
                     void this.app.workspace.requestSaveLayout();
                     void this.render();
@@ -540,8 +541,8 @@ export class CalendarView extends ItemView {
                 barEl.addClass('calendar-multiday-bar--tail');
             }
 
-            ViewUtils.applyFileColor(this.app, barEl, entry.task.file, this.plugin.settings.frontmatterTaskKeys.color);
-            ViewUtils.applyFileLinestyle(this.app, barEl, entry.task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
+            TaskStyling.applyFileColor(this.app, barEl, entry.task.file, this.plugin.settings.frontmatterTaskKeys.color);
+            TaskStyling.applyFileLinestyle(this.app, barEl, entry.task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
 
             this.menuHandler.addTaskContextMenu(barEl, entry.task);
             await this.taskRenderer.render(barEl, entry.task, this, this.plugin.settings, { topRight: 'none' });
@@ -556,8 +557,8 @@ export class CalendarView extends ItemView {
         card.style.gridColumn = `${displayColStart} / span ${entry.span}`;
         card.style.gridRow = `${gridRow}`;
 
-        ViewUtils.applyFileColor(this.app, card, entry.task.file, this.plugin.settings.frontmatterTaskKeys.color);
-        ViewUtils.applyFileLinestyle(this.app, card, entry.task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
+        TaskStyling.applyFileColor(this.app, card, entry.task.file, this.plugin.settings.frontmatterTaskKeys.color);
+        TaskStyling.applyFileLinestyle(this.app, card, entry.task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
         this.menuHandler.addTaskContextMenu(card, entry.task);
         await this.taskRenderer.render(card, entry.task, this, this.plugin.settings);
     }

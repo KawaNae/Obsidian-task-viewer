@@ -194,6 +194,7 @@ export interface TaskViewerSettings {
     dailyNoteHeaderLevel: number;
     pomodoroWorkMinutes: number;
     pomodoroBreakMinutes: number;
+    countdownMinutes: number;
     completeStatusChars: string[];
     defaultDeadlineOffset: number;
     upcomingDays: number;
@@ -218,6 +219,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     dailyNoteHeaderLevel: 2,
     pomodoroWorkMinutes: 25,
     pomodoroBreakMinutes: 5,
+    countdownMinutes: 25,
     completeStatusChars: ['x', 'X', '-', '!'],
     defaultDeadlineOffset: 0,
     upcomingDays: 7,

@@ -1,4 +1,4 @@
-import { toLogicalHeightPx } from '../../../utils/TimelineCardPosition';
+import { toLogicalHeightPx } from '../../utils/TimelineCardPosition';
 import type { AdaptiveGridLayout, GridRow, TimedRenderableTask } from '../ScheduleTypes';
 
 export interface ScheduleGridCalculatorOptions {

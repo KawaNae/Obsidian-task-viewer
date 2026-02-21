@@ -1,13 +1,12 @@
 /**
- * Pomodoro Timer Styles
+ * Timer View Styles (formerly Pomodoro Timer)
  * 命名規則: BEM (Block: pomodoro-view)
  */
 
 .pomodoro-view {
     height: 100%;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    flex-direction: column;
     background: linear-gradient(135deg,
             var(--tv-bg-pomodoro-start) 0%,
             var(--tv-bg-pomodoro-end) 100%);
@@ -26,52 +25,65 @@
     display: none;
 }
 
+/* ─── Toolbar ──────────────────────────────────────────────── */
+
+.pomodoro-view .view-toolbar {
+    background: transparent;
+    border-bottom: none;
+    flex-shrink: 0;
+}
+
+.view-toolbar__btn--dropdown {
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px !important;
+    color: var(--tv-text);
+    font-size: 0.9em;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.view-toolbar__btn--dropdown:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.view-toolbar__btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--tv-text-muted);
+    width: 14px;
+    height: 14px;
+}
+
+.view-toolbar__btn-icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+.view-toolbar__btn-label {
+    line-height: 1;
+}
+
+/* ─── Main Content ─────────────────────────────────────────── */
+
 .pomodoro-view__main {
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: clamp(12px, 4vh, 24px);
     padding: clamp(16px, 5vw, 32px);
     width: 100%;
     max-width: 400px;
+    margin: 0 auto;
 }
 
-.pomodoro-view__settings-btn {
-    position: absolute;
-    top: 0;
-    right: 0;
-    background: transparent;
-    border: none;
-    font-size: 1.2rem;
-    color: var(--tv-text-muted);
-    cursor: pointer;
-    padding: 8px;
-    opacity: 0.6;
-    transition: opacity 0.2s ease;
-}
-
-.pomodoro-view__settings-btn:hover {
-    opacity: 1;
-}
-
-.pomodoro-view__task-label {
-    font-size: clamp(0.75rem, 2.5vw, 1rem);
-    color: var(--tv-text-muted);
-    text-align: center;
-    padding: 4px 12px;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    margin-bottom: 8px;
-}
-
-.pomodoro-view__title {
-    font-size: clamp(1rem, 4vw, 1.5rem);
-    font-weight: 600;
-    color: var(--tv-text);
-    text-align: center;
-}
+/* ─── Progress Ring (TimerProgressUI overrides) ────────────── */
 
 .pomodoro-view__progress-container {
     position: relative;
@@ -81,42 +93,16 @@
     width: 100%;
     max-width: 200px;
     aspect-ratio: 1 / 1;
+    container-type: inline-size;
 }
 
-.pomodoro-view__progress-ring {
+.pomodoro-view .timer-widget__progress-ring {
     display: block;
     width: 100%;
     height: 100%;
 }
 
-.pomodoro-view__progress-ring-bg {
-    fill: none;
-    stroke: var(--tv-border);
-}
-
-.pomodoro-view__progress-ring-progress {
-    fill: none;
-    stroke-linecap: round;
-    transition: stroke-dashoffset 0.5s ease;
-}
-
-.pomodoro-view__progress-ring-progress--work {
-    stroke: var(--tv-timer-work);
-}
-
-.pomodoro-view__progress-ring-progress--break {
-    stroke: var(--tv-timer-break);
-}
-
-.pomodoro-view__progress-ring-progress--idle {
-    stroke: var(--tv-timer-idle);
-}
-
-.pomodoro-view__progress-ring-progress--prepare {
-    stroke: var(--tv-timer-prepare);
-}
-
-.pomodoro-view__time-display {
+.pomodoro-view .timer-widget__time-display {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -127,10 +113,22 @@
     color: var(--tv-text);
 }
 
-/* Container query for progress container */
-.pomodoro-view__progress-container {
-    container-type: inline-size;
+.pomodoro-view .timer-widget__repeat-info {
+    font-size: 0.9rem;
+    color: var(--tv-text-muted);
+    text-align: center;
+    margin-top: 4px;
 }
+
+/* ─── Segment Label ────────────────────────────────────────── */
+
+.pomodoro-view__segment-label {
+    font-size: 0.9rem;
+    color: var(--tv-text-muted);
+    text-align: center;
+}
+
+/* ─── Controls ─────────────────────────────────────────────── */
 
 .pomodoro-view__controls {
     display: flex;
@@ -181,7 +179,8 @@
     opacity: 0.9;
 }
 
-/* Input Modal Styles */
+/* ─── Input Modal Styles ───────────────────────────────────── */
+
 .input-modal__input-container {
     display: flex;
     flex-direction: column;

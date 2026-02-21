@@ -5,7 +5,7 @@ import { DateUtils } from '../../../utils/DateUtils';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import TaskViewerPlugin from '../../../main';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
-import { ViewUtils } from '../../ViewUtils';
+import { TaskStyling } from '../../utils/TaskStyling';
 
 export class DeadlineListRenderer {
     // Preserve collapsed state across re-renders
@@ -186,8 +186,8 @@ export class DeadlineListRenderer {
         tasks.forEach(task => {
             const card = listEl.createDiv('task-card task-card--deadline');
 
-            ViewUtils.applyFileColor(this.plugin.app, card, task.file, this.plugin.settings.frontmatterTaskKeys.color);
-            ViewUtils.applyFileLinestyle(this.plugin.app, card, task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
+            TaskStyling.applyFileColor(this.plugin.app, card, task.file, this.plugin.settings.frontmatterTaskKeys.color);
+            TaskStyling.applyFileLinestyle(this.plugin.app, card, task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
 
             this.taskRenderer.render(card, task, owner, this.plugin.settings, { topRight: 'deadline' });
 

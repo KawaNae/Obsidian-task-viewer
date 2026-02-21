@@ -1,23 +1,33 @@
 /**
  * Audio Utilities
- * 
+ *
  * Web Audio APIを使用して通知音を生成するユーティリティ
- * 
- * 【重要な設計上の考慮点】
- * AudioContextはresume()直後に「running」状態になりますが、
- * 内部のオーディオスレッドが完全に安定するまで時間がかかります。
- * そのため、音の再生は currentTime + 0.2秒 でスケジュールし、
- * 最初の音がクリップ（欠け）しないようにしています。
+ *
+ * 【設計上の考慮点】
+ * - getReadyContext() は Promise でシリアライズされ、並行 resume() 競合を防止
+ * - コンテキスト初回起動時のみサイレントパルスでオーディオスレッド稼働を確認
+ * - チャイムは単一セッションで全音をスケジュールし、setTimeout を使わない
  */
 
 export class AudioUtils {
     private static audioContext: AudioContext | null = null;
+    private static contextReady: Promise<AudioContext> | null = null;
 
     /**
-     * AudioContextを取得し、必要に応じてresumeする
+     * AudioContextを取得し、必要に応じてresumeする。
+     * 同時呼び出しは同一Promiseを共有し、resume()競合を防止。
      */
-    private static async getReadyContext(): Promise<AudioContext> {
-        if (!this.audioContext) {
+    private static getReadyContext(): Promise<AudioContext> {
+        if (!this.contextReady) {
+            this.contextReady = this.ensureHealthyContext().finally(() => {
+                this.contextReady = null;
+            });
+        }
+        return this.contextReady;
+    }
+
+    private static async ensureHealthyContext(): Promise<AudioContext> {
+        if (!this.audioContext || this.audioContext.state === 'closed') {
             this.audioContext = new AudioContext();
         }
 
@@ -25,7 +35,31 @@ export class AudioUtils {
             await this.audioContext.resume();
         }
 
+        // ゾンビ検出: resume後もcurrentTimeが0ならオーディオスレッド未起動
+        if (this.audioContext.currentTime === 0) {
+            await this.playSilentPulse(this.audioContext);
+        }
+
         return this.audioContext;
+    }
+
+    /**
+     * 無音パルスを再生してオーディオスレッドの稼働を確認する。
+     * onendedイベントで実際にハードウェアが処理したことを保証。
+     */
+    private static playSilentPulse(ctx: AudioContext): Promise<void> {
+        return new Promise<void>((resolve) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            gain.gain.value = 0;
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            const now = ctx.currentTime;
+            osc.start(now);
+            osc.stop(now + 0.05);
+            osc.onended = () => resolve();
+        });
     }
 
     /**
@@ -38,8 +72,8 @@ export class AudioUtils {
         try {
             const ctx = await this.getReadyContext();
 
-            // AudioContext安定化のため、少し先の時刻でスケジュール
-            const startTime = ctx.currentTime + 0.2;
+            // スケジューリングマージン（ウォームアップはgetReadyContext側で保証済み）
+            const startTime = ctx.currentTime + 0.05;
 
             const oscillator = ctx.createOscillator();
             const gainNode = ctx.createGain();
@@ -64,23 +98,60 @@ export class AudioUtils {
     }
 
     /**
+     * 複数音を単一セッションでスケジュールする。
+     * setTimeout不使用、Web Audioスケジューラで精密配置。
+     */
+    private static async playChime(
+        notes: { frequency: number; delay: number; duration: number; volume: number }[]
+    ): Promise<void> {
+        try {
+            const ctx = await this.getReadyContext();
+            const baseTime = ctx.currentTime + 0.05;
+
+            for (const note of notes) {
+                const oscillator = ctx.createOscillator();
+                const gainNode = ctx.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(ctx.destination);
+
+                oscillator.frequency.value = note.frequency;
+                oscillator.type = 'sine';
+
+                const t = baseTime + note.delay;
+                gainNode.gain.setValueAtTime(0, t);
+                gainNode.gain.linearRampToValueAtTime(note.volume, t + 0.01);
+                gainNode.gain.setValueAtTime(note.volume, t + note.duration - 0.01);
+                gainNode.gain.linearRampToValueAtTime(0, t + note.duration);
+
+                oscillator.start(t);
+                oscillator.stop(t + note.duration);
+            }
+        } catch (e) {
+            console.warn('Failed to play chime:', e);
+        }
+    }
+
+    /**
      * ポモドーロ完了時のチャイム音（上昇音）
      */
     static playWorkCompleteChime(): void {
-        const notes = [523, 659, 784]; // C5, E5, G5 (Major chord)
-        notes.forEach((freq, i) => {
-            setTimeout(() => this.playBeep(freq, 0.3, 0.25), i * 150);
-        });
+        void this.playChime([
+            { frequency: 523, delay: 0,    duration: 0.3, volume: 0.25 }, // C5
+            { frequency: 659, delay: 0.15, duration: 0.3, volume: 0.25 }, // E5
+            { frequency: 784, delay: 0.30, duration: 0.3, volume: 0.25 }, // G5
+        ]);
     }
 
     /**
      * 休憩完了時のチャイム音（下降音）
      */
     static playBreakCompleteChime(): void {
-        const notes = [784, 659, 523]; // G5, E5, C5 (Descending)
-        notes.forEach((freq, i) => {
-            setTimeout(() => this.playBeep(freq, 0.3, 0.25), i * 150);
-        });
+        void this.playChime([
+            { frequency: 784, delay: 0,    duration: 0.3, volume: 0.25 }, // G5
+            { frequency: 659, delay: 0.15, duration: 0.3, volume: 0.25 }, // E5
+            { frequency: 523, delay: 0.30, duration: 0.3, volume: 0.25 }, // C5
+        ]);
     }
 
     /**
@@ -88,5 +159,17 @@ export class AudioUtils {
      */
     static async playStartSound(): Promise<void> {
         await this.playBeep(660, 0.15, 0.2);
+    }
+
+    /**
+     * AudioContextを閉じてリソースを解放する。
+     * プラグインonunload()から呼び出す。
+     */
+    static dispose(): void {
+        if (this.audioContext && this.audioContext.state !== 'closed') {
+            this.audioContext.close();
+        }
+        this.audioContext = null;
+        this.contextReady = null;
     }
 }

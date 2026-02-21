@@ -1,12 +1,12 @@
 import type { App, Component } from 'obsidian';
 import type { TaskViewerSettings } from '../../../types';
-import { ViewUtils } from '../../ViewUtils';
+import { TaskStyling } from '../../utils/TaskStyling';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import type { GridRow, TaskPlacement, TimedRenderableTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from '../utils/ScheduleGridCalculator';
 import type { ScheduleOverlapLayout } from '../utils/ScheduleOverlapLayout';
-import { toDisplayHeightPx, toDisplayTopPx } from '../../../utils/TimelineCardPosition';
+import { toDisplayHeightPx, toDisplayTopPx } from '../../utils/TimelineCardPosition';
 import type { RenderableTask } from '../../utils/RenderableTaskUtils';
 
 export interface ScheduleTaskRendererOptions {
@@ -175,7 +175,7 @@ export class ScheduleTaskRenderer {
     }
 
     private getFileLinestyle(filePath: string): string {
-        return ViewUtils.getFileLinestyle(
+        return TaskStyling.getFileLinestyle(
             this.app,
             filePath,
             this.getSettings().frontmatterTaskKeys.linestyle
@@ -183,10 +183,10 @@ export class ScheduleTaskRenderer {
     }
 
     private applyTaskColor(el: HTMLElement, filePath: string): void {
-        ViewUtils.applyFileColor(this.app, el, filePath, this.getSettings().frontmatterTaskKeys.color);
+        TaskStyling.applyFileColor(this.app, el, filePath, this.getSettings().frontmatterTaskKeys.color);
     }
 
     private applyTaskLinestyle(el: HTMLElement, filePath: string): void {
-        ViewUtils.applyTaskLinestyle(el, this.getFileLinestyle(filePath));
+        TaskStyling.applyTaskLinestyle(el, this.getFileLinestyle(filePath));
     }
 }

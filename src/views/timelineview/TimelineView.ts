@@ -11,7 +11,7 @@ import TaskViewerPlugin from '../../main';
 
 import { HandleManager } from './HandleManager';
 import { TimelineToolbar } from './TimelineToolbar';
-import { ViewUtils } from '../ViewUtils';
+import { TaskStyling } from '../utils/TaskStyling';
 import { GridRenderer } from './renderers/GridRenderer';
 import { AllDaySectionRenderer } from './renderers/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
@@ -178,7 +178,7 @@ export class TimelineView extends ItemView {
             {
                 onRender: () => this.render(),
                 onStateChange: () => { },
-                getFileColor: (filePath) => ViewUtils.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color),
+                getFileColor: (filePath) => TaskStyling.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color),
                 getDatesToShow: () => this.getDatesToShow(),
                 onRequestDeadlineListToggle: (nextOpen, source) => {
                     this.setDeadlineListOpen(nextOpen, source, {
@@ -636,7 +636,7 @@ export class TimelineView extends ItemView {
 
     /** Gets the custom color for a file from its frontmatter. */
     private getFileColor(filePath: string): string | null {
-        return ViewUtils.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color);
+        return TaskStyling.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color);
     }
 
 

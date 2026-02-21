@@ -3,7 +3,7 @@ import { Component, Menu } from 'obsidian';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
-import { ViewUtils } from '../../ViewUtils';
+import { TaskStyling } from '../../utils/TaskStyling';
 import { TaskIndex } from '../../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { HandleManager } from '../HandleManager';
@@ -132,8 +132,8 @@ export class AllDaySectionRenderer {
             if (task.startDateInherited) el.addClass('task-card--inherited');
             el.dataset.id = task.id;
 
-            ViewUtils.applyFileColor(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.color);
-            ViewUtils.applyFileLinestyle(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
+            TaskStyling.applyFileColor(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.color);
+            TaskStyling.applyFileLinestyle(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
 
             // Use TaskCardRenderer
             this.taskRenderer.render(el, task, owner, this.plugin.settings, { topRight: 'none' });
