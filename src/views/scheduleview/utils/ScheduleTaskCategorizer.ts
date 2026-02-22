@@ -2,20 +2,20 @@ import type { Task } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
 import type { TaskIndex } from '../../../services/core/TaskIndex';
 import { shouldSplitTask, splitTaskAtBoundary, type RenderableTask } from '../../utils/RenderableTaskUtils';
-import type { FileFilterMenu } from '../../ViewToolbar';
+import type { FilterMenuComponent } from '../../filter/FilterMenuComponent';
 import type { CategorizedTasks, TimedRenderableTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from './ScheduleGridCalculator';
 
 export interface ScheduleTaskCategorizerOptions {
     taskIndex: TaskIndex;
-    filterMenu: FileFilterMenu;
+    filterMenu: FilterMenuComponent;
     getStartHour: () => number;
     gridCalculator: ScheduleGridCalculator;
 }
 
 export class ScheduleTaskCategorizer {
     private readonly taskIndex: TaskIndex;
-    private readonly filterMenu: FileFilterMenu;
+    private readonly filterMenu: FilterMenuComponent;
     private readonly getStartHour: () => number;
     private readonly gridCalculator: ScheduleGridCalculator;
 
@@ -86,7 +86,7 @@ export class ScheduleTaskCategorizer {
         const result: RenderableTask[] = [];
         const allTasks = this.taskIndex.getTasks();
         for (const task of allTasks) {
-            if (!this.filterMenu.isFileVisible(task.file)) {
+            if (!this.filterMenu.isTaskVisible(task)) {
                 continue;
             }
             result.push(...this.getRenderableTasksForDate(task, dateStr));
@@ -94,18 +94,20 @@ export class ScheduleTaskCategorizer {
         return result;
     }
 
-    getFilterableFiles(dateStr: string): string[] {
-        const files = new Set<string>();
-        const allTasks = this.taskIndex.getTasks();
-
-        for (const task of allTasks) {
-            const renderableTasks = this.getRenderableTasksForDate(task, dateStr);
-            if (renderableTasks.length > 0) {
-                files.add(task.file);
-            }
+    private getRenderableTasksForDate(task: Task, dateStr: string): RenderableTask[] {
+        if (this.isTimedTask(task)) {
+            return this.getTimedTaskSegmentsForDate(task, dateStr);
         }
 
-        return Array.from(files).sort();
+        if (this.isAllDayLikeTaskOnDate(task, dateStr)) {
+            return [this.toRenderableTask(task)];
+        }
+
+        if (this.isDeadlineOnlyTaskOnDate(task, dateStr)) {
+            return [this.toRenderableTask(task)];
+        }
+
+        return [];
     }
 
     private toTimedRenderableTask(task: RenderableTask): TimedRenderableTask | null {
@@ -147,22 +149,6 @@ export class ScheduleTaskCategorizer {
         }
 
         return Math.max(1, Math.round(durationMs / (1000 * 60)));
-    }
-
-    private getRenderableTasksForDate(task: Task, dateStr: string): RenderableTask[] {
-        if (this.isTimedTask(task)) {
-            return this.getTimedTaskSegmentsForDate(task, dateStr);
-        }
-
-        if (this.isAllDayLikeTaskOnDate(task, dateStr)) {
-            return [this.toRenderableTask(task)];
-        }
-
-        if (this.isDeadlineOnlyTaskOnDate(task, dateStr)) {
-            return [this.toRenderableTask(task)];
-        }
-
-        return [];
     }
 
     private getTimedTaskSegmentsForDate(task: Task, dateStr: string): RenderableTask[] {

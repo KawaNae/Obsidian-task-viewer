@@ -63,6 +63,9 @@ export interface Task {
 
     recurrence?: string;
 
+    // Tags extracted from task content and/or frontmatter.
+    tags: string[];
+
     // Parsed flow commands.
     commands?: FlowCommand[];
 
@@ -96,6 +99,7 @@ export interface ViewState {
     daysToShow: number;
     showDeadlineList: boolean;
     filterFiles: string[] | null;
+    filterState?: import('./services/filter/FilterTypes').FilterState;
 }
 
 export interface FrontmatterTaskKeys {

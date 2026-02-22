@@ -41,7 +41,7 @@ export class GridRenderer {
         handleManager: HandleManager,
         getDatesToShow: () => string[],
         owner: Component,
-        visibleFiles: Set<string> | null
+        isTaskVisible: (task: import('../../../types').Task) => boolean
     ) {
         // Use parentContainer for rendering the grid
         const grid = parentContainer.createDiv('timeline-grid');
@@ -203,7 +203,7 @@ export class GridRenderer {
         });
 
         // Render Tasks (Overlaid)
-        allDayRenderer.render(allDayRow, dates, owner, visibleFiles);
+        allDayRenderer.render(allDayRow, dates, owner, isTaskVisible);
 
         // 3. Timeline Row (Scrollable)
         const scrollArea = grid.createDiv('timeline-row timeline-scroll-area');
@@ -221,7 +221,7 @@ export class GridRenderer {
         dates.forEach(date => {
             const col = scrollArea.createDiv('day-timeline-column');
             col.dataset.date = date;
-            timelineRenderer.render(col, date, owner, visibleFiles);
+            timelineRenderer.render(col, date, owner, isTaskVisible);
 
             // Add interaction listeners for creating tasks
             timelineRenderer.addCreateTaskListeners(col, date);

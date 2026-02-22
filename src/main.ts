@@ -23,6 +23,9 @@ import { DateUtils } from './utils/DateUtils';
 import { AudioUtils } from './utils/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
 import { getViewMeta } from './constants/viewRegistry';
+import type { FilterState } from './services/filter/FilterTypes';
+import { EMPTY_FILTER_STATE } from './services/filter/FilterTypes';
+import { FilterSerializer } from './services/filter/FilterSerializer';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
@@ -214,6 +217,7 @@ export default class TaskViewerPlugin extends Plugin {
         this.startPropertiesColorSuggest();
 
         // Register URI handler: obsidian://task-viewer?view=timeline|calendar|schedule
+        // Supports filter params: ?tag=work,urgent  ?status=x  ?file=path.md  ?filter=<base64>
         this.registerObsidianProtocolHandler('task-viewer', (params) => {
             const viewMap: Record<string, string> = {
                 timeline: VIEW_TYPE_TIMELINE,
@@ -222,9 +226,49 @@ export default class TaskViewerPlugin extends Plugin {
                 'mini-calendar': VIEW_TYPE_MINI_CALENDAR,
             };
             const viewType = viewMap[params.view];
-            if (viewType) {
-                this.activateView(viewType);
+            if (!viewType) return;
+
+            let filterState: FilterState | undefined;
+
+            // Full filter (base64-encoded JSON)
+            if (params.filter) {
+                filterState = FilterSerializer.fromURIParam(params.filter);
             }
+
+            // Shorthand: ?tag=work,urgent
+            if (params.tag) {
+                filterState = filterState ?? { ...EMPTY_FILTER_STATE };
+                filterState.conditions.push({
+                    id: 'uri-tag',
+                    property: 'tag',
+                    operator: 'includes',
+                    value: { type: 'stringSet', values: params.tag.split(',') },
+                });
+            }
+
+            // Shorthand: ?status=x
+            if (params.status) {
+                filterState = filterState ?? { ...EMPTY_FILTER_STATE };
+                filterState.conditions.push({
+                    id: 'uri-status',
+                    property: 'status',
+                    operator: 'includes',
+                    value: { type: 'stringSet', values: params.status.split(',') },
+                });
+            }
+
+            // Shorthand: ?file=path.md
+            if (params.file) {
+                filterState = filterState ?? { ...EMPTY_FILTER_STATE };
+                filterState.conditions.push({
+                    id: 'uri-file',
+                    property: 'file',
+                    operator: 'includes',
+                    value: { type: 'stringSet', values: params.file.split(',') },
+                });
+            }
+
+            this.activateView(viewType, filterState);
         });
     }
 
@@ -327,7 +371,7 @@ export default class TaskViewerPlugin extends Plugin {
         });
     }
 
-    async activateView(viewType: string) {
+    async activateView(viewType: string, filterState?: FilterState) {
         const { workspace } = this.app;
 
         let leaf: WorkspaceLeaf | null = null;
@@ -340,7 +384,11 @@ export default class TaskViewerPlugin extends Plugin {
         }
 
         if (leaf) {
-            await leaf.setViewState({ type: viewType, active: true });
+            const state: Record<string, unknown> = {};
+            if (filterState && filterState.conditions.length > 0) {
+                state.filterState = FilterSerializer.toJSON(filterState);
+            }
+            await leaf.setViewState({ type: viewType, active: true, state });
             workspace.revealLeaf(leaf);
         }
     }

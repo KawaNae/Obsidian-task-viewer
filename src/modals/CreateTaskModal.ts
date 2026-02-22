@@ -37,6 +37,7 @@ export function formatTaskLine(result: CreateTaskResult): string {
         commands: [],
         originalText: '',
         childLineBodyOffsets: [],
+        tags: [],
         parserId: 'at-notation'
     };
     return TaskParser.format(task);

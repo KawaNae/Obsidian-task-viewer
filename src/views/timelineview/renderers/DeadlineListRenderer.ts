@@ -19,7 +19,7 @@ export class DeadlineListRenderer {
         private menuHandler: MenuHandler
     ) { }
 
-    public render(container: HTMLElement, tasks: Task[], owner: Component, visibleFiles: Set<string> | null) {
+    public render(container: HTMLElement, tasks: Task[], owner: Component, isTaskVisible: (task: Task) => boolean) {
         container.empty();
         container.addClass('deadline-list-container');
         this.hydratedGroups.clear();
@@ -30,10 +30,7 @@ export class DeadlineListRenderer {
         const upcomingEnd = DateUtils.addDays(today, settings.upcomingDays);
         const completedDefaultCollapsed = !settings.expandCompletedInDeadlineList;
 
-        // Apply file filter
-        if (visibleFiles) {
-            tasks = tasks.filter(t => visibleFiles.has(t.file));
-        }
+        tasks = tasks.filter(isTaskVisible);
 
         // Classify into 4 groups
         const overdue: Task[] = [];

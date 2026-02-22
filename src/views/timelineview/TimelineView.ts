@@ -120,7 +120,9 @@ export class TimelineView extends ItemView {
             if (typeof state.daysToShow === 'number') {
                 this.viewState.daysToShow = state.daysToShow;
             }
-            if (Object.prototype.hasOwnProperty.call(state, 'filterFiles')) {
+            if (state.filterState) {
+                this.viewState.filterState = state.filterState;
+            } else if (Object.prototype.hasOwnProperty.call(state, 'filterFiles')) {
                 this.viewState.filterFiles = state.filterFiles;
             }
             if (typeof state.showDeadlineList === 'boolean') {
@@ -137,11 +139,15 @@ export class TimelineView extends ItemView {
 
     getState() {
         // Only save daysToShow, not startDate (startDate resets on reload like Today button)
-        const state = {
+        const state: Record<string, unknown> = {
             daysToShow: this.viewState.daysToShow,
-            filterFiles: this.viewState.filterFiles,
             showDeadlineList: this.viewState.showDeadlineList,
         };
+        if (this.viewState.filterState) {
+            state.filterState = this.viewState.filterState;
+        } else if (this.viewState.filterFiles) {
+            state.filterFiles = this.viewState.filterFiles;
+        }
         return state;
     }
 
@@ -454,8 +460,7 @@ export class TimelineView extends ItemView {
         const listContainer = targetColumn.createDiv('timeline-view__sidebar-body deadline-list-wrapper');
 
         const deadlineTasks = this.taskIndex.getDeadlineTasks();
-        const visibleFiles = this.viewState.filterFiles ? new Set(this.viewState.filterFiles) : null;
-        this.deadlineRenderer.render(listContainer, deadlineTasks, this, visibleFiles);
+        this.deadlineRenderer.render(listContainer, deadlineTasks, this, this.toolbar.getTaskFilter());
 
         this.targetColumnEl = targetColumn;
 
@@ -495,7 +500,7 @@ export class TimelineView extends ItemView {
             this.handleManager,
             () => this.getDatesToShow(),
             this,
-            this.toolbar.getVisibleFiles()
+            this.toolbar.getTaskFilter()
         );
 
         this.handleManager.createOverlay();

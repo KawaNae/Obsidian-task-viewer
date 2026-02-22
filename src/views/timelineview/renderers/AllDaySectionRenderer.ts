@@ -20,7 +20,7 @@ export class AllDaySectionRenderer {
         private getDaysToShow: () => number
     ) { }
 
-    public render(container: HTMLElement, dates: string[], owner: Component, visibleFiles: Set<string> | null) {
+    public render(container: HTMLElement, dates: string[], owner: Component, isTaskVisible: (task: Task) => boolean) {
         const viewStart = dates[0];
         const viewEnd = dates[dates.length - 1];
         const startHour = this.plugin.settings.startHour;
@@ -54,9 +54,7 @@ export class AllDaySectionRenderer {
             return durationMs >= hours24;
         });
 
-        if (visibleFiles) {
-            tasks = tasks.filter(t => visibleFiles.has(t.file));
-        }
+        tasks = tasks.filter(isTaskVisible);
 
         tasks.sort((a, b) => {
             const startA = a.startDate

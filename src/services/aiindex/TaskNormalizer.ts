@@ -2,6 +2,7 @@ import type { Task } from '../../types';
 import type { NormalizedTask, NormalizedTaskStatus } from './NormalizedTask';
 import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
 import { getFileBaseName } from '../../utils/TaskContent';
+import { TagExtractor } from '../../utils/TagExtractor';
 
 export interface TaskNormalizerOptions {
     completeStatusChars: string[];
@@ -86,7 +87,7 @@ export class TaskNormalizer {
             }
         }
 
-        const tags = this.extractTags(effectiveContent);
+        const tags = task.tags.length > 0 ? task.tags : TagExtractor.fromContent(effectiveContent);
         const raw = task.originalText && task.originalText.trim().length > 0
             ? task.originalText.trim()
             : this.buildFrontmatterRaw(task);
@@ -194,18 +195,6 @@ export class TaskNormalizer {
         }
         const baseName = getFileBaseName(sourcePath);
         return baseName.length > 0 ? baseName : content;
-    }
-
-    private extractTags(content: string): string[] {
-        const tags = new Set<string>();
-        const matches = content.match(/\B#[^\s#]+/g) ?? [];
-        for (const raw of matches) {
-            const tag = raw.substring(1).trim();
-            if (tag.length > 0) {
-                tags.add(tag);
-            }
-        }
-        return Array.from(tags).sort();
     }
 
     private buildFrontmatterRaw(task: Task): string {

@@ -1,5 +1,6 @@
 import { FrontmatterTaskKeys, Task } from '../../../types';
 import { TaskIdGenerator } from '../../../utils/TaskIdGenerator';
+import { TagExtractor } from '../../../utils/TagExtractor';
 
 /**
  * Builds a frontmatter-backed Task from metadata cache data.
@@ -96,6 +97,9 @@ export class FrontmatterTaskBuilder {
             }
         }
 
+        const contentTags = TagExtractor.fromContent(content);
+        const fmTags = TagExtractor.fromFrontmatter(frontmatter['tags']);
+
         return {
             id: TaskIdGenerator.generate('frontmatter', filePath, 'fm-root'),
             file: filePath,
@@ -115,6 +119,7 @@ export class FrontmatterTaskBuilder {
             explicitStartTime: !!start.time,
             explicitEndDate: !!end.date,
             explicitEndTime: !!end.time,
+            tags: TagExtractor.merge(contentTags, fmTags),
             wikiLinkTargets,
             wikiLinkBodyLines,
             originalText: '',

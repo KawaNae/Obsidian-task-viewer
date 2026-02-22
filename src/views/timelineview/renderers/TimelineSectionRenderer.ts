@@ -1,4 +1,5 @@
 import { Component, Menu } from 'obsidian';
+import type { Task } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
@@ -20,7 +21,7 @@ export class TimelineSectionRenderer {
         private taskRenderer: TaskCardRenderer
     ) { }
 
-    public render(container: HTMLElement, date: string, owner: Component, visibleFiles: Set<string> | null) {
+    public render(container: HTMLElement, date: string, owner: Component, isTaskVisible: (task: Task) => boolean) {
         const startHour = this.plugin.settings.startHour;
 
         // Get all tasks and filter for those that should appear in this timeline column
@@ -63,10 +64,7 @@ export class TimelineSectionRenderer {
             return !isAllDay;
         });
 
-        // Filter by visible files
-        if (visibleFiles) {
-            tasks = tasks.filter(t => visibleFiles.has(t.file));
-        }
+        tasks = tasks.filter(isTaskVisible);
 
         // Split tasks that cross day boundary
         const renderableTasks: RenderableTask[] = [];

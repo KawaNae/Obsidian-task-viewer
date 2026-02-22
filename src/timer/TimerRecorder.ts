@@ -246,6 +246,7 @@ export class TimerRecorder {
             originalText: '',
             childLines: [],
             childLineBodyOffsets: [],
+            tags: [],
             parserId: 'at-notation'
         };
     }
