@@ -125,6 +125,27 @@
     color: var(--tv-text-danger);
 }
 
+.timer-widget button.timer-widget__close-btn--confirming {
+    background: var(--tv-text-danger);
+    border-color: var(--tv-text-danger);
+    color: var(--tv-bg-widget);
+    transition: none;
+}
+
+.timer-widget button.timer-widget__close-btn--confirming:hover {
+    background: var(--tv-text-danger);
+    border-color: var(--tv-text-danger);
+    color: var(--tv-bg-widget);
+    opacity: 0.75;
+}
+
+.timer-widget button.timer-widget__close-btn--fading {
+    transition:
+        background-color 500ms ease,
+        border-color 500ms ease,
+        color 500ms ease;
+}
+
 /* Content */
 .timer-widget__content {
     padding: 12px;
