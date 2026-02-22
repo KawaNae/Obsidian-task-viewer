@@ -57,6 +57,16 @@ export const PROPERTY_LABELS: Record<FilterProperty, string> = {
 /** Operators that require no value input */
 export const NO_VALUE_OPERATORS: Set<FilterOperator> = new Set(['isSet', 'isNotSet']);
 
+/** Lucide icon names for property types */
+export const PROPERTY_ICONS: Record<FilterProperty, string> = {
+    file: 'file',
+    tag: 'tag',
+    status: 'check-square',
+    content: 'text',
+    hasStartDate: 'calendar',
+    hasDeadline: 'alert-triangle',
+};
+
 /** Create a default new filter condition */
 export function createDefaultCondition(): FilterCondition {
     return {

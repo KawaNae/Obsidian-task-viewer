@@ -6,6 +6,7 @@ import {
     PROPERTY_OPERATORS,
     OPERATOR_LABELS,
     PROPERTY_LABELS,
+    PROPERTY_ICONS,
     NO_VALUE_OPERATORS,
     createDefaultCondition,
 } from '../../services/filter/FilterTypes';
@@ -22,12 +23,12 @@ interface SelectItem {
     label: string;
     value: string;
     checked: boolean;
+    icon?: string;
 }
 
 /**
  * Notion-style row-based filter popover.
- * Each row: [Property ▾] [Operator ▾] [Value ▾] [✕]
- * Rows connected by AND/OR logic switch.
+ * 5-column grid: [Logic] [Property] [Operator] [Value] [✕]
  */
 export class FilterMenuComponent {
     private state: FilterState = { ...EMPTY_FILTER_STATE };
@@ -113,9 +114,6 @@ export class FilterMenuComponent {
             this.popoverEl.createDiv('filter-popover__empty').setText('No filters applied');
         } else {
             for (let i = 0; i < this.state.conditions.length; i++) {
-                if (i > 0) {
-                    this.renderLogicSwitch(this.popoverEl);
-                }
                 this.renderConditionRow(this.popoverEl, this.state.conditions[i], i);
             }
         }
@@ -129,22 +127,40 @@ export class FilterMenuComponent {
         this.lastCallbacks?.onFilterChange();
     }
 
-    // ── Condition Row ──
+    // ── Condition Row (5-column grid) ──
 
     private renderConditionRow(parent: HTMLElement, condition: FilterCondition, index: number): void {
         const row = parent.createDiv('filter-popover__row');
 
-        // Property dropdown
+        // Column 1: Logic cell (Where / AND / OR)
+        if (index === 0) {
+            row.createDiv('filter-popover__logic-cell').setText('Where');
+        } else {
+            const logicCell = row.createDiv('filter-popover__logic-cell');
+            const logicBtn = logicCell.createEl('button', {
+                cls: 'filter-popover__logic-btn',
+                text: this.state.logic.toUpperCase(),
+            });
+            logicBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.state.logic = this.state.logic === 'and' ? 'or' : 'and';
+                this.refreshPopover();
+            });
+        }
+
+        // Column 2: Property dropdown (with icon)
         const propBtn = row.createEl('button', {
             cls: 'filter-popover__dropdown',
-            text: PROPERTY_LABELS[condition.property],
         });
+        const propIcon = propBtn.createSpan('filter-popover__dropdown-icon');
+        setIcon(propIcon, PROPERTY_ICONS[condition.property]);
+        propBtn.createSpan().setText(PROPERTY_LABELS[condition.property]);
         propBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.showPropertyMenu(propBtn, condition);
         });
 
-        // Operator dropdown
+        // Column 3: Operator dropdown
         const opBtn = row.createEl('button', {
             cls: 'filter-popover__dropdown',
             text: OPERATOR_LABELS[condition.operator],
@@ -154,12 +170,15 @@ export class FilterMenuComponent {
             this.showOperatorMenu(opBtn, condition);
         });
 
-        // Value selector (depends on property/operator)
-        if (!NO_VALUE_OPERATORS.has(condition.operator)) {
+        // Column 4: Value selector (depends on property/operator)
+        if (NO_VALUE_OPERATORS.has(condition.operator)) {
+            // Empty cell to maintain grid layout
+            row.createDiv();
+        } else {
             this.renderValueSelector(row, condition);
         }
 
-        // Delete button
+        // Column 5: Delete button
         const deleteBtn = row.createEl('button', { cls: 'filter-popover__delete-btn' });
         setIcon(deleteBtn, 'x');
         deleteBtn.addEventListener('click', (e) => {
@@ -231,11 +250,6 @@ export class FilterMenuComponent {
 
     // ── Custom Select Popover ──
 
-    /**
-     * Shows a dropdown popover anchored below the given element.
-     * - Single-select (default): clicking an item closes the popover and fires onSelect.
-     * - Multi-select: items have checkboxes, popover stays open until outside click.
-     */
     private showSelectPopover(
         anchorEl: HTMLElement,
         items: SelectItem[],
@@ -261,18 +275,21 @@ export class FilterMenuComponent {
                     checkbox.classList.add('filter-child-popover__checkbox');
                 }
 
+                if (item.icon) {
+                    const iconEl = row.createSpan('filter-child-popover__icon');
+                    setIcon(iconEl, item.icon);
+                }
+
                 row.createSpan('filter-child-popover__label').setText(item.label);
 
                 row.addEventListener('click', (e) => {
                     e.stopPropagation();
                     if (multiSelect) {
-                        // Toggle checkbox state
                         item.checked = !item.checked;
                         const cb = row.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
                         if (cb) cb.checked = item.checked;
                         onSelect(item.value);
                     } else {
-                        // Single select: close and fire
                         this.closeChildPopover();
                         onSelect(item.value);
                     }
@@ -297,13 +314,11 @@ export class FilterMenuComponent {
         popover.style.left = `${Math.max(8, x)}px`;
         popover.style.top = `${Math.max(8, y)}px`;
 
-        // Close on outside click
         const handler = (e: MouseEvent) => {
             const target = e.target as Node;
             if (popover.contains(target)) return;
             this.closeChildPopover();
             if (multiSelect) {
-                // Re-render to update the value button label
                 this.renderContent();
             }
         };
@@ -323,6 +338,7 @@ export class FilterMenuComponent {
             label: PROPERTY_LABELS[p],
             value: p,
             checked: condition.property === p,
+            icon: PROPERTY_ICONS[p],
         }));
 
         this.showSelectPopover(anchorEl, items, (val) => {
@@ -375,21 +391,6 @@ export class FilterMenuComponent {
             condition.value = { type: 'stringSet', values: Array.from(currentValues) };
             this.lastCallbacks?.onFilterChange();
         }, true);
-    }
-
-    // ── Logic Switch ──
-
-    private renderLogicSwitch(parent: HTMLElement): void {
-        const wrapper = parent.createDiv('filter-popover__logic');
-        const btn = wrapper.createEl('button', {
-            cls: 'filter-popover__logic-btn',
-            text: this.state.logic.toUpperCase(),
-        });
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.state.logic = this.state.logic === 'and' ? 'or' : 'and';
-            this.refreshPopover();
-        });
     }
 
     // ── Add Filter ──
