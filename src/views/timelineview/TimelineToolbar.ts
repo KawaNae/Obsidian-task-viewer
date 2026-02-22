@@ -1,13 +1,15 @@
-import { App, setIcon } from 'obsidian';
+import { App, Notice, setIcon } from 'obsidian';
 import { ViewState, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
+import { ViewUriBuilder } from '../../utils/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
 import { DateNavigator, ViewModeSelector, ZoomSelector } from '../ViewToolbar';
 import { FilterMenuComponent } from '../filter/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import type { Task } from '../../types';
+import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 
 export interface ToolbarCallbacks {
     onRender: () => void;
@@ -46,6 +48,13 @@ export class TimelineToolbar {
      */
     hasActiveFilters(): boolean {
         return this.filterMenu.hasActiveFilters();
+    }
+
+    /**
+     * Closes the filter popover if open.
+     */
+    closeFilterPopover(): void {
+        this.filterMenu.close();
     }
 
     /**
@@ -90,6 +99,9 @@ export class TimelineToolbar {
 
         // Push filter/toggle controls to the right
         toolbar.createDiv('view-toolbar__spacer');
+
+        // Copy URI Button
+        this.renderCopyUriButton(toolbar);
 
         // Filter Button
         this.renderFilterButton(toolbar);
@@ -166,6 +178,18 @@ export class TimelineToolbar {
                 this.callbacks.onRender();
             }
         );
+    }
+
+    private renderCopyUriButton(toolbar: HTMLElement): void {
+        const btn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(btn, 'link');
+        btn.setAttribute('aria-label', 'Copy view URI');
+        btn.setAttribute('title', 'Copy view URI');
+        btn.onclick = async () => {
+            const uri = ViewUriBuilder.build(VIEW_META_TIMELINE.type, this.filterMenu.getFilterState());
+            await navigator.clipboard.writeText(uri);
+            new Notice('URI copied to clipboard');
+        };
     }
 
     private renderFilterButton(toolbar: HTMLElement): void {

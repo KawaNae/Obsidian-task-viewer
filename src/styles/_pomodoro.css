@@ -7,9 +7,6 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: linear-gradient(135deg,
-            var(--tv-bg-pomodoro-start) 0%,
-            var(--tv-bg-pomodoro-end) 100%);
     overflow: hidden;
     padding: 0 !important;
     position: relative;
@@ -79,8 +76,7 @@
     gap: clamp(12px, 4vh, 24px);
     padding: clamp(16px, 5vw, 32px);
     width: 100%;
-    max-width: 400px;
-    margin: 0 auto;
+    background: var(--tv-bg-primary)
 }
 
 /* ─── Progress Ring (TimerProgressUI overrides) ────────────── */
@@ -91,7 +87,7 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-width: 200px;
+    max-width: 300px;
     aspect-ratio: 1 / 1;
     container-type: inline-size;
 }

@@ -7,10 +7,15 @@ import type { FilterState, FilterCondition } from './FilterTypes';
 export class TaskFilterEngine {
     static evaluate(task: Task, filterState: FilterState): boolean {
         if (filterState.conditions.length === 0) return true;
+        if (filterState.logic === 'or') {
+            return filterState.conditions.some(c => this.evalCondition(task, c));
+        }
         return filterState.conditions.every(c => this.evalCondition(task, c));
     }
 
     private static evalCondition(task: Task, condition: FilterCondition): boolean {
+        // Skip conditions with empty stringSet values (value not yet selected)
+        if (condition.value.type === 'stringSet' && condition.value.values.length === 0) return true;
         switch (condition.property) {
             case 'file':
                 return this.evalStringSet(task.file, condition);

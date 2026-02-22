@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
+import { ItemView, Notice, WorkspaceLeaf, setIcon } from 'obsidian';
 import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -7,6 +7,7 @@ import type { RenderableTask } from '../utils/RenderableTaskUtils';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import { ViewUriBuilder } from '../../utils/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
 import { TaskStyling } from '../utils/TaskStyling';
 import { DateNavigator } from '../ViewToolbar';
@@ -169,6 +170,7 @@ export class ScheduleView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        this.filterMenu.close();
         if (this.unsubscribe) {
             this.unsubscribe();
             this.unsubscribe = null;
@@ -233,6 +235,16 @@ export class ScheduleView extends ItemView {
         );
 
         toolbar.createDiv('view-toolbar__spacer');
+
+        const copyBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(copyBtn, 'link');
+        copyBtn.setAttribute('aria-label', 'Copy view URI');
+        copyBtn.setAttribute('title', 'Copy view URI');
+        copyBtn.onclick = async () => {
+            const uri = ViewUriBuilder.build(VIEW_META_SCHEDULE.type, this.filterMenu.getFilterState());
+            await navigator.clipboard.writeText(uri);
+            new Notice('URI copied to clipboard');
+        };
 
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');

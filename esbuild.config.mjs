@@ -69,7 +69,8 @@ const copyStaticFiles = {
           '_timeline-toolbar.css',
           '_pomodoro.css',
           '_timer-widget.css',
-          '_modal.css'
+          '_modal.css',
+          '_filter-popover.css'
         ];
 
         const cssFilesSet = new Set(cssFiles);
