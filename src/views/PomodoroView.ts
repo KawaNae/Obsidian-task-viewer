@@ -434,19 +434,6 @@ export class PomodoroView extends ItemView {
         const displayTimer = this.timer ?? this.createTimerInstance();
         TimerProgressUI.render(progressContainer, displayTimer, this.formatTime.bind(this), 200);
 
-        // Segment label (pomodoro / interval)
-        if ((this.timerViewMode === 'pomodoro' || this.timerViewMode === 'interval')
-            && this.timer && this.timer.timerType === 'interval') {
-            const segment = this.getCurrentSegment(this.timer);
-            if (segment && this.timer.phase !== 'idle') {
-                const group = this.timer.groups[this.timer.currentGroupIndex];
-                const label = group.repeatCount === 0
-                    ? `${segment.label} ${this.timer.currentRepeatIndex + 1}`
-                    : `${segment.label} ${this.timer.currentRepeatIndex + 1}/${group.repeatCount}`;
-                mainContainer.createDiv({ cls: 'pomodoro-view__segment-label', text: label });
-            }
-        }
-
         // Controls
         const controls = mainContainer.createDiv('pomodoro-view__controls');
         this.renderControls(controls);
@@ -519,19 +506,6 @@ export class PomodoroView extends ItemView {
     private updateDisplay(): void {
         if (!this.timer) return;
         TimerProgressUI.updateDisplay(this.container, this.timer, this.formatTime.bind(this), 200);
-
-        // Update segment label for pomodoro / interval
-        const segmentLabelEl = this.container.querySelector('.pomodoro-view__segment-label') as HTMLElement | null;
-        if (segmentLabelEl && this.timer.timerType === 'interval') {
-            const segment = this.getCurrentSegment(this.timer);
-            const group = this.timer.groups[this.timer.currentGroupIndex];
-            if (segment && group) {
-                const label = group.repeatCount === 0
-                    ? `${segment.label} ${this.timer.currentRepeatIndex + 1}`
-                    : `${segment.label} ${this.timer.currentRepeatIndex + 1}/${group.repeatCount}`;
-                segmentLabelEl.setText(label);
-            }
-        }
     }
 
     private renderControls(container: HTMLElement): void {

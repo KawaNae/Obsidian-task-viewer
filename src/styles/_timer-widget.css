@@ -243,12 +243,17 @@
 .timer-widget__repeat-info {
     position: absolute;
     left: 50%;
-    bottom: 18px;
+    bottom: 12%;
     transform: translateX(-50%);
     font-size: 0.75em;
     color: var(--tv-text-muted);
     text-align: center;
-    white-space: nowrap;
+    white-space: normal;
+    max-width: 70%;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
 }
 
 /* Controls */
