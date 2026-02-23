@@ -411,6 +411,74 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
+        containerEl.createEl('h3', { text: 'Periodic Notes', cls: 'setting-section-header' });
+
+        new Setting(containerEl)
+            .setName('Weekly Note Format')
+            .setDesc('moment.js format for weekly note filenames (e.g. gggg-[W]ww).')
+            .addText(text => text
+                .setPlaceholder('gggg-[W]ww')
+                .setValue(this.plugin.settings.weeklyNoteFormat)
+                .onChange(async (value) => {
+                    this.plugin.settings.weeklyNoteFormat = value || 'gggg-[W]ww';
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Weekly Note Folder')
+            .setDesc('Folder for weekly notes. Leave empty for vault root.')
+            .addText(text => text
+                .setPlaceholder('')
+                .setValue(this.plugin.settings.weeklyNoteFolder)
+                .onChange(async (value) => {
+                    this.plugin.settings.weeklyNoteFolder = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Monthly Note Format')
+            .setDesc('moment.js format for monthly note filenames (e.g. YYYY-MM).')
+            .addText(text => text
+                .setPlaceholder('YYYY-MM')
+                .setValue(this.plugin.settings.monthlyNoteFormat)
+                .onChange(async (value) => {
+                    this.plugin.settings.monthlyNoteFormat = value || 'YYYY-MM';
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Monthly Note Folder')
+            .setDesc('Folder for monthly notes. Leave empty for vault root.')
+            .addText(text => text
+                .setPlaceholder('')
+                .setValue(this.plugin.settings.monthlyNoteFolder)
+                .onChange(async (value) => {
+                    this.plugin.settings.monthlyNoteFolder = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Yearly Note Format')
+            .setDesc('moment.js format for yearly note filenames (e.g. YYYY).')
+            .addText(text => text
+                .setPlaceholder('YYYY')
+                .setValue(this.plugin.settings.yearlyNoteFormat)
+                .onChange(async (value) => {
+                    this.plugin.settings.yearlyNoteFormat = value || 'YYYY';
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Yearly Note Folder')
+            .setDesc('Folder for yearly notes. Leave empty for vault root.')
+            .addText(text => text
+                .setPlaceholder('')
+                .setValue(this.plugin.settings.yearlyNoteFolder)
+                .onChange(async (value) => {
+                    this.plugin.settings.yearlyNoteFolder = value;
+                    await this.plugin.saveSettings();
+                }));
+
         containerEl.createEl('h3', { text: 'DeadlineList', cls: 'setting-section-header' });
 
         new Setting(containerEl)
@@ -536,6 +604,17 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                     });
             });
+
+        new Setting(containerEl)
+            .setName('Interval Template Folder')
+            .setDesc('Vault folder containing interval timer template files (.md with tv-segments in frontmatter). Leave empty to disable.')
+            .addText(text => text
+                .setPlaceholder('Templates/Timers')
+                .setValue(this.plugin.settings.intervalTemplateFolder)
+                .onChange(async (value) => {
+                    this.plugin.settings.intervalTemplateFolder = value.trim();
+                    await this.plugin.saveSettings();
+                }));
 
         containerEl.createEl('h3', { text: 'Habit Tracker', cls: 'setting-section-header' });
 

@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
+import { ItemView, Notice, WorkspaceLeaf, setIcon } from 'obsidian';
 import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -7,9 +7,12 @@ import type { RenderableTask } from '../utils/RenderableTaskUtils';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import { ViewUriBuilder } from '../../utils/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
 import { TaskStyling } from '../utils/TaskStyling';
-import { FileFilterMenu, DateNavigator } from '../ViewToolbar';
+import { DateNavigator } from '../ViewToolbar';
+import { FilterMenuComponent } from '../filter/FilterMenuComponent';
+import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { HabitTrackerRenderer } from '../timelineview/renderers/HabitTrackerRenderer';
@@ -36,7 +39,7 @@ export class ScheduleView extends ItemView {
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly habitRenderer: HabitTrackerRenderer;
-    private readonly filterMenu = new FileFilterMenu();
+    private readonly filterMenu = new FilterMenuComponent();
     private readonly menuHandler: MenuHandler;
     private readonly gridCalculator: ScheduleGridCalculator;
     private readonly taskCategorizer: ScheduleTaskCategorizer;
@@ -112,13 +115,23 @@ export class ScheduleView extends ItemView {
             this.currentDate = state.currentDate;
         }
 
-        if (state && Object.prototype.hasOwnProperty.call(state, 'filterFiles')) {
+        if (state && state.filterState) {
+            this.filterMenu.setFilterState(FilterSerializer.fromJSON(state.filterState));
+        } else if (state && Object.prototype.hasOwnProperty.call(state, 'filterFiles')) {
             const raw = state.filterFiles;
             if (Array.isArray(raw)) {
                 const files = raw.filter((value: unknown): value is string => typeof value === 'string');
-                this.filterMenu.setVisibleFiles(files.length > 0 ? new Set(files) : null);
-            } else {
-                this.filterMenu.setVisibleFiles(null);
+                if (files.length > 0) {
+                    this.filterMenu.setFilterState({
+                        conditions: [{
+                            id: 'migrated-file',
+                            property: 'file',
+                            operator: 'includes',
+                            value: { type: 'stringSet', values: files },
+                        }],
+                        logic: 'and',
+                    });
+                }
             }
         }
 
@@ -129,11 +142,14 @@ export class ScheduleView extends ItemView {
     }
 
     getState(): Record<string, unknown> {
-        const visibleFiles = this.filterMenu.getVisibleFiles();
-        return {
+        const filterState = this.filterMenu.getFilterState();
+        const result: Record<string, unknown> = {
             currentDate: this.currentDate,
-            filterFiles: visibleFiles ? Array.from(visibleFiles).sort() : null,
         };
+        if (filterState.conditions.length > 0) {
+            result.filterState = FilterSerializer.toJSON(filterState);
+        }
+        return result;
     }
 
     async onOpen(): Promise<void> {
@@ -154,6 +170,7 @@ export class ScheduleView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        this.filterMenu.close();
         if (this.unsubscribe) {
             this.unsubscribe();
             this.unsubscribe = null;
@@ -219,21 +236,31 @@ export class ScheduleView extends ItemView {
 
         toolbar.createDiv('view-toolbar__spacer');
 
+        const copyBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(copyBtn, 'link');
+        copyBtn.setAttribute('aria-label', 'Copy view URI');
+        copyBtn.setAttribute('title', 'Copy view URI');
+        copyBtn.onclick = async () => {
+            const uri = ViewUriBuilder.build(VIEW_META_SCHEDULE.type, this.filterMenu.getFilterState());
+            await navigator.clipboard.writeText(uri);
+            new Notice('URI copied to clipboard');
+        };
+
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
-        filterBtn.setAttribute('aria-label', 'Filter files');
-        filterBtn.setAttribute('title', 'Filter files');
+        filterBtn.setAttribute('aria-label', 'Filter');
+        filterBtn.setAttribute('title', 'Filter');
+        filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
         filterBtn.addEventListener('click', (event: MouseEvent) => {
-            const files = this.taskCategorizer.getFilterableFiles(this.currentDate);
-            this.filterMenu.showMenu(
-                event,
-                files,
-                (filePath) => TaskStyling.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color),
-                () => {
+            this.filterMenu.showMenu(event, {
+                onFilterChange: () => {
                     void this.app.workspace.requestSaveLayout();
                     void this.render();
-                }
-            );
+                    filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
+                },
+                getTasks: () => this.taskIndex.getTasks(),
+                getFileColor: (filePath) => TaskStyling.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color),
+            });
         });
     }
 

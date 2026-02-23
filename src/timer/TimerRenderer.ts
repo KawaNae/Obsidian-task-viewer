@@ -23,6 +23,7 @@ export class TimerRenderer {
     private container: HTMLElement | null = null;
     private isDragging = false;
     private dragOffset = { x: 0, y: 0 };
+    private closeConfirmTimers = new Map<string, number>();
 
     constructor(
         private ctx: TimerContext,
@@ -178,7 +179,30 @@ export class TimerRenderer {
             const closeBtn = header.createEl('button', { cls: 'timer-widget__close-btn' });
             setIcon(closeBtn, 'x');
             closeBtn.onclick = () => {
-                this.lifecycle.closeTimer(taskId);
+                // Skip confirmation for non-running or idle timers
+                if (!timer.isRunning || timer.phase === 'idle') {
+                    this.clearCloseConfirmTimer(taskId);
+                    this.lifecycle.closeTimer(taskId);
+                    return;
+                }
+
+                // Already in confirming state → execute close
+                if (closeBtn.classList.contains('timer-widget__close-btn--confirming')) {
+                    this.clearCloseConfirmTimer(taskId);
+                    this.lifecycle.closeTimer(taskId);
+                    return;
+                }
+
+                // Enter confirming state
+                closeBtn.classList.add('timer-widget__close-btn--confirming');
+                this.closeConfirmTimers.set(taskId, window.setTimeout(() => {
+                    closeBtn.classList.remove('timer-widget__close-btn--confirming');
+                    closeBtn.classList.add('timer-widget__close-btn--fading');
+                    this.closeConfirmTimers.delete(taskId);
+                    window.setTimeout(() => {
+                        closeBtn.classList.remove('timer-widget__close-btn--fading');
+                    }, 500);
+                }, 2000));
             };
 
             // Expandable content
@@ -194,6 +218,10 @@ export class TimerRenderer {
     // ─── Destroy ─────────────────────────────────────────────
 
     destroyContainer(): void {
+        for (const id of this.closeConfirmTimers.values()) {
+            clearTimeout(id);
+        }
+        this.closeConfirmTimers.clear();
         if (this.container) {
             this.container.remove();
             this.container = null;
@@ -201,6 +229,14 @@ export class TimerRenderer {
     }
 
     // ─── Private ─────────────────────────────────────────────
+
+    private clearCloseConfirmTimer(taskId: string): void {
+        const id = this.closeConfirmTimers.get(taskId);
+        if (id !== undefined) {
+            clearTimeout(id);
+            this.closeConfirmTimers.delete(taskId);
+        }
+    }
 
     private updateTimerDisplay(itemEl: HTMLElement, timer: TimerInstance): void {
         const headerTime = itemEl.querySelector('[data-time-display="header"]') as HTMLElement;

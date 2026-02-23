@@ -2,7 +2,7 @@
  * Timer View (formerly Pomodoro View)
  *
  * タスク非紐付けの独立タイマービュー。
- * 3モード対応: countup / countdown / pomodoro
+ * 4モード対応: countup / countdown / pomodoro / interval
  * TimerInstance 型と TimerProgressUI を再利用。
  */
 
@@ -20,12 +20,13 @@ import {
     TimerPhase,
 } from '../timer/TimerInstance';
 import { TimerProgressUI } from '../timer/TimerProgressUI';
+import { IntervalTemplateLoader, IntervalTemplate } from '../timer/IntervalTemplateLoader';
 import { AudioUtils } from '../utils/AudioUtils';
 import { TimeFormatter } from '../utils/TimeFormatter';
 
 export const VIEW_TYPE_POMODORO = VIEW_META_POMODORO.type;
 
-type TimerViewMode = 'countup' | 'countdown' | 'pomodoro';
+type TimerViewMode = 'countup' | 'countdown' | 'pomodoro' | 'interval';
 
 const TIMER_VIEW_ID = '__timer-view__';
 
@@ -36,9 +37,14 @@ export class PomodoroView extends ItemView {
     private timer: TimerInstance | null = null;
     private tickIntervalId: number | null = null;
 
+    private templateLoader: IntervalTemplateLoader;
+    private templates: IntervalTemplate[] = [];
+    private selectedTemplate: IntervalTemplate | null = null;
+
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
         this.plugin = plugin;
+        this.templateLoader = new IntervalTemplateLoader(plugin.app);
     }
 
     getViewType(): string {
@@ -121,7 +127,36 @@ export class PomodoroView extends ItemView {
                     totalDuration: 0,
                 } as IntervalTimer;
             }
+            case 'interval': {
+                if (!this.selectedTemplate) {
+                    return { ...base, timerType: 'countup', elapsedTime: 0 } as CountupTimer;
+                }
+                const groups = this.selectedTemplate.groups;
+                const firstSeg = groups[0]?.segments[0];
+                const totalDuration = this.computeTotalDurationFromGroups(groups);
+                return {
+                    ...base,
+                    timerType: 'interval',
+                    groups,
+                    currentGroupIndex: 0,
+                    currentSegmentIndex: 0,
+                    currentRepeatIndex: 0,
+                    segmentTimeRemaining: firstSeg?.durationSeconds ?? 0,
+                    totalElapsedTime: 0,
+                    totalDuration,
+                } as IntervalTimer;
+            }
         }
+    }
+
+    private computeTotalDurationFromGroups(groups: IntervalGroup[]): number {
+        let total = 0;
+        for (const group of groups) {
+            if (group.repeatCount === 0) return 0;
+            const groupSec = group.segments.reduce((sum, s) => sum + s.durationSeconds, 0);
+            total += groupSec * Math.max(1, group.repeatCount);
+        }
+        return total;
     }
 
     // ─── Timer Actions ──────────────────────────────────────────
@@ -226,16 +261,18 @@ export class PomodoroView extends ItemView {
                 this.timer.elapsedTime = totalElapsed;
                 this.updateDisplay();
                 return;
-            case 'countdown':
+            case 'countdown': {
                 this.timer.elapsedTime = totalElapsed;
+                const prevRemaining = this.timer.timeRemaining;
                 this.timer.timeRemaining = this.timer.totalTime - totalElapsed;
-                if (this.timer.timeRemaining <= 0) {
-                    this.timer.timeRemaining = 0;
-                    this.handleCountdownComplete();
-                } else {
-                    this.updateDisplay();
+                this.timer.phase = this.timer.timeRemaining < 0 ? 'idle' : 'work';
+                if (prevRemaining > 0 && this.timer.timeRemaining <= 0) {
+                    AudioUtils.playWorkCompleteChime();
+                    new Notice('Timer complete!');
                 }
+                this.updateDisplay();
                 return;
+            }
             case 'interval': {
                 const segment = this.getCurrentSegment(this.timer);
                 if (!segment) {
@@ -258,14 +295,6 @@ export class PomodoroView extends ItemView {
     }
 
     // ─── Completion Handlers ────────────────────────────────────
-
-    private handleCountdownComplete(): void {
-        this.stopTicker();
-        AudioUtils.playWorkCompleteChime();
-        new Notice('Timer complete!');
-        this.timer = null;
-        this.render();
-    }
 
     private handleSegmentComplete(): void {
         if (!this.timer || this.timer.timerType !== 'interval') return;
@@ -388,22 +417,16 @@ export class PomodoroView extends ItemView {
 
         const mainContainer = this.container.createDiv('pomodoro-view__main');
 
+        // Interval mode: show template selector when idle
+        if (this.timerViewMode === 'interval' && (!this.timer || this.timer.phase === 'idle')) {
+            this.renderTemplateSelector(mainContainer);
+            return;
+        }
+
         // Progress ring
         const progressContainer = mainContainer.createDiv('pomodoro-view__progress-container');
         const displayTimer = this.timer ?? this.createTimerInstance();
         TimerProgressUI.render(progressContainer, displayTimer, this.formatTime.bind(this), 200);
-
-        // Segment label (pomodoro only)
-        if (this.timerViewMode === 'pomodoro' && this.timer && this.timer.timerType === 'interval') {
-            const segment = this.getCurrentSegment(this.timer);
-            if (segment && this.timer.phase !== 'idle') {
-                const group = this.timer.groups[this.timer.currentGroupIndex];
-                const label = group.repeatCount === 0
-                    ? `${segment.label} ${this.timer.currentRepeatIndex + 1}`
-                    : `${segment.label} ${this.timer.currentRepeatIndex + 1}/${group.repeatCount}`;
-                mainContainer.createDiv({ cls: 'pomodoro-view__segment-label', text: label });
-            }
-        }
 
         // Controls
         const controls = mainContainer.createDiv('pomodoro-view__controls');
@@ -425,6 +448,7 @@ export class PomodoroView extends ItemView {
             countup: 'Countup',
             countdown: 'Countdown',
             pomodoro: 'Pomodoro',
+            interval: 'Interval',
         };
         modeLabel.setText(labels[this.timerViewMode]);
         modeBtn.disabled = !isIdle;
@@ -432,13 +456,17 @@ export class PomodoroView extends ItemView {
         modeBtn.onclick = (e) => {
             if (!isIdle) return;
             const menu = new Menu();
-            for (const mode of ['countup', 'countdown', 'pomodoro'] as TimerViewMode[]) {
+            for (const mode of ['countup', 'countdown', 'pomodoro', 'interval'] as TimerViewMode[]) {
                 menu.addItem((item) => {
                     item.setTitle(labels[mode])
                         .setChecked(this.timerViewMode === mode)
-                        .onClick(() => {
+                        .onClick(async () => {
                             this.timerViewMode = mode;
                             this.timer = null;
+                            this.selectedTemplate = null;
+                            if (mode === 'interval') {
+                                await this.loadTemplates();
+                            }
                             this.render();
                         });
                 });
@@ -449,8 +477,19 @@ export class PomodoroView extends ItemView {
         // Spacer
         toolbar.createDiv('view-toolbar__spacer');
 
+        // Interval mode: refresh button
+        if (this.timerViewMode === 'interval' && isIdle) {
+            const refreshBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+            setIcon(refreshBtn, 'refresh-cw');
+            refreshBtn.setAttribute('aria-label', 'Reload templates');
+            refreshBtn.onclick = async () => {
+                await this.loadTemplates();
+                this.render();
+            };
+        }
+
         // Settings gear (right, countdown/pomodoro only)
-        if (this.timerViewMode !== 'countup') {
+        if (this.timerViewMode === 'countdown' || this.timerViewMode === 'pomodoro') {
             const settingsBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
             setIcon(settingsBtn, 'settings');
             settingsBtn.setAttribute('aria-label', 'Settings');
@@ -461,19 +500,6 @@ export class PomodoroView extends ItemView {
     private updateDisplay(): void {
         if (!this.timer) return;
         TimerProgressUI.updateDisplay(this.container, this.timer, this.formatTime.bind(this), 200);
-
-        // Update segment label for pomodoro
-        const segmentLabelEl = this.container.querySelector('.pomodoro-view__segment-label') as HTMLElement | null;
-        if (segmentLabelEl && this.timer.timerType === 'interval') {
-            const segment = this.getCurrentSegment(this.timer);
-            const group = this.timer.groups[this.timer.currentGroupIndex];
-            if (segment && group) {
-                const label = group.repeatCount === 0
-                    ? `${segment.label} ${this.timer.currentRepeatIndex + 1}`
-                    : `${segment.label} ${this.timer.currentRepeatIndex + 1}/${group.repeatCount}`;
-                segmentLabelEl.setText(label);
-            }
-        }
     }
 
     private renderControls(container: HTMLElement): void {
@@ -497,13 +523,13 @@ export class PomodoroView extends ItemView {
             pauseBtn.createSpan({ text: ' Pause' });
             pauseBtn.onclick = () => this.pauseTimer();
 
-            // Reset button
-            const resetBtn = container.createEl('button', {
+            // Stop button
+            const stopBtn = container.createEl('button', {
                 cls: 'pomodoro-view__btn pomodoro-view__btn--danger',
             });
-            setIcon(resetBtn, 'x');
-            resetBtn.createSpan({ text: ' Reset' });
-            resetBtn.onclick = () => this.resetTimer();
+            setIcon(stopBtn, 'square');
+            stopBtn.createSpan({ text: ' Stop' });
+            stopBtn.onclick = () => this.resetTimer();
             return;
         }
 
@@ -521,6 +547,74 @@ export class PomodoroView extends ItemView {
         setIcon(resetBtn, 'x');
         resetBtn.createSpan({ text: ' Reset' });
         resetBtn.onclick = () => this.resetTimer();
+    }
+
+    // ─── Interval Templates ─────────────────────────────────────
+
+    private async loadTemplates(): Promise<void> {
+        const folder = this.plugin.settings.intervalTemplateFolder;
+        this.templates = await this.templateLoader.loadTemplates(folder);
+
+        // Re-match selectedTemplate by filePath so stale references are replaced
+        if (this.selectedTemplate) {
+            const prev = this.selectedTemplate.filePath;
+            this.selectedTemplate = this.templates.find(t => t.filePath === prev) ?? null;
+        }
+    }
+
+    private renderTemplateSelector(parent: HTMLElement): void {
+        const folder = this.plugin.settings.intervalTemplateFolder;
+
+        if (!folder) {
+            parent.createDiv({
+                cls: 'pomodoro-view__template-empty',
+                text: 'Set an interval template folder in plugin settings.',
+            });
+            return;
+        }
+
+        if (this.templates.length === 0) {
+            parent.createDiv({
+                cls: 'pomodoro-view__template-empty',
+                text: 'No templates found. Add .md files with tv-segments in frontmatter.',
+            });
+            return;
+        }
+
+        const list = parent.createDiv('pomodoro-view__template-list');
+
+        for (const template of this.templates) {
+            const item = list.createDiv({
+                cls: 'pomodoro-view__template-item'
+                    + (this.selectedTemplate === template ? ' pomodoro-view__template-item--selected' : ''),
+            });
+
+            const iconEl = item.createSpan('pomodoro-view__template-icon');
+            setIcon(iconEl, template.icon);
+
+            item.createSpan({ cls: 'pomodoro-view__template-name', text: template.name });
+            item.createSpan({ cls: 'pomodoro-view__template-duration', text: template.totalDurationLabel });
+
+            item.onclick = () => {
+                this.selectedTemplate = template;
+                this.render();
+            };
+        }
+
+        // Controls below template list
+        const controls = parent.createDiv('pomodoro-view__controls');
+        const startBtn = controls.createEl('button', {
+            cls: 'pomodoro-view__btn pomodoro-view__btn--primary',
+        });
+        setIcon(startBtn, 'play');
+        startBtn.createSpan({ text: ' Start' });
+        startBtn.disabled = !this.selectedTemplate;
+        if (!this.selectedTemplate) {
+            startBtn.addClass('pomodoro-view__btn--disabled');
+        }
+        startBtn.onclick = () => {
+            if (this.selectedTemplate) this.startTimer();
+        };
     }
 
     // ─── Settings Menu ──────────────────────────────────────────

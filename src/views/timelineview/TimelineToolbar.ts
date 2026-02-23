@@ -1,9 +1,15 @@
-import { App, setIcon } from 'obsidian';
+import { App, Notice, setIcon } from 'obsidian';
 import { ViewState, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
+import { ViewUriBuilder } from '../../utils/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
-import { FileFilterMenu, DateNavigator, ViewModeSelector, ZoomSelector } from '../ViewToolbar';
+import { DateNavigator, ViewModeSelector, ZoomSelector } from '../ViewToolbar';
+import { FilterMenuComponent } from '../filter/FilterMenuComponent';
+import { FilterSerializer } from '../../services/filter/FilterSerializer';
+import type { FilterState } from '../../services/filter/FilterTypes';
+import type { Task } from '../../types';
+import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 
 export interface ToolbarCallbacks {
     onRender: () => void;
@@ -15,10 +21,10 @@ export interface ToolbarCallbacks {
 
 /**
  * Manages the toolbar UI for TimelineView.
- * Handles date navigation, view mode switching, zoom controls, and file filtering.
+ * Handles date navigation, view mode switching, zoom controls, and filtering.
  */
 export class TimelineToolbar {
-    private filterMenu = new FileFilterMenu();
+    private filterMenu = new FilterMenuComponent();
     private sidebarToggleBtn: HTMLElement | null = null;
 
     constructor(
@@ -31,10 +37,24 @@ export class TimelineToolbar {
     ) { }
 
     /**
-     * Gets the current visible files filter state.
+     * Returns a predicate that checks if a task passes the current filter.
      */
-    getVisibleFiles(): Set<string> | null {
-        return this.filterMenu.getVisibleFiles();
+    getTaskFilter(): (task: Task) => boolean {
+        return (task: Task) => this.filterMenu.isTaskVisible(task);
+    }
+
+    /**
+     * Returns whether any filters are currently active.
+     */
+    hasActiveFilters(): boolean {
+        return this.filterMenu.hasActiveFilters();
+    }
+
+    /**
+     * Closes the filter popover if open.
+     */
+    closeFilterPopover(): void {
+        this.filterMenu.close();
     }
 
     /**
@@ -51,8 +71,19 @@ export class TimelineToolbar {
      */
     render(): void {
         // Restore persisted filter state
-        if (this.viewState.filterFiles) {
-            this.filterMenu.setVisibleFiles(new Set(this.viewState.filterFiles));
+        if (this.viewState.filterState) {
+            this.filterMenu.setFilterState(FilterSerializer.fromJSON(this.viewState.filterState));
+        } else if (this.viewState.filterFiles) {
+            // Migrate legacy filterFiles to FilterState
+            this.filterMenu.setFilterState({
+                conditions: [{
+                    id: 'migrated-file',
+                    property: 'file',
+                    operator: 'includes',
+                    value: { type: 'stringSet', values: this.viewState.filterFiles },
+                }],
+                logic: 'and',
+            });
         }
 
         const toolbar = this.container.createDiv('view-toolbar');
@@ -68,6 +99,9 @@ export class TimelineToolbar {
 
         // Push filter/toggle controls to the right
         toolbar.createDiv('view-toolbar__spacer');
+
+        // Copy URI Button
+        this.renderCopyUriButton(toolbar);
 
         // Filter Button
         this.renderFilterButton(toolbar);
@@ -146,37 +180,52 @@ export class TimelineToolbar {
         );
     }
 
+    private renderCopyUriButton(toolbar: HTMLElement): void {
+        const btn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(btn, 'link');
+        btn.setAttribute('aria-label', 'Copy view URI');
+        btn.setAttribute('title', 'Copy view URI');
+        btn.onclick = async () => {
+            const uri = ViewUriBuilder.build(VIEW_META_TIMELINE.type, this.filterMenu.getFilterState());
+            await navigator.clipboard.writeText(uri);
+            new Notice('URI copied to clipboard');
+        };
+    }
+
     private renderFilterButton(toolbar: HTMLElement): void {
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', 'Filter');
         filterBtn.setAttribute('title', 'Filter');
+        filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
+
         filterBtn.onclick = (e) => {
             const dates = this.callbacks.getDatesToShow();
             const allTasksInView = dates.flatMap(date =>
                 this.taskIndex.getTasksForVisualDay(date, this.plugin.settings.startHour)
             );
-            // Include deadline task files in the filter list
             const deadlineTasks = this.taskIndex.getDeadlineTasks();
-            const allFiles = new Set([
-                ...allTasksInView.map(t => t.file),
-                ...deadlineTasks.map(t => t.file)
-            ]);
-            const distinctFiles = Array.from(allFiles).sort();
+            const allTasks = [...allTasksInView, ...deadlineTasks];
 
-            this.filterMenu.showMenu(
-                e,
-                distinctFiles,
-                (file) => this.callbacks.getFileColor(file),
-                () => {
-                    // Persist filter state
-                    const visible = this.filterMenu.getVisibleFiles();
-                    this.viewState.filterFiles = visible ? Array.from(visible) : null;
-                    this.app.workspace.requestSaveLayout();
+            this.filterMenu.showMenu(e, {
+                onFilterChange: () => {
+                    this.persistFilterState();
                     this.callbacks.onRender();
-                }
-            );
+                    filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
+                },
+                getTasks: () => allTasks,
+                getFileColor: (file) => this.callbacks.getFileColor(file),
+            });
         };
+    }
+
+    private persistFilterState(): void {
+        const state = this.filterMenu.getFilterState();
+        this.viewState.filterState = state.conditions.length > 0
+            ? FilterSerializer.fromJSON(FilterSerializer.toJSON(state))
+            : undefined;
+        this.viewState.filterFiles = null; // Clear legacy field
+        this.app.workspace.requestSaveLayout();
     }
 
     private renderSidebarToggle(toolbar: HTMLElement): void {

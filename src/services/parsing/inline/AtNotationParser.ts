@@ -2,6 +2,7 @@ import { Task } from '../../../types';
 import { ParserStrategy } from '../strategies/ParserStrategy';
 import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
 import { TaskIdGenerator } from '../../../utils/TaskIdGenerator';
+import { TagExtractor } from '../../../utils/TagExtractor';
 
 /**
  * Task Viewer native notation parser.
@@ -214,6 +215,7 @@ export class AtNotationParser implements ParserStrategy {
             explicitEndDate,
             explicitEndTime,
             commands,
+            tags: TagExtractor.fromContent(content.trim()),
             originalText: line,
             childLines: [],
             childLineBodyOffsets: [],

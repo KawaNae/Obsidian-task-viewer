@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
+import { ItemView, Notice, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
 import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../services/core/TaskIndex';
 import { MenuHandler } from '../interaction/menu/MenuHandler';
@@ -6,11 +6,14 @@ import { TaskCardRenderer } from './taskcard/TaskCardRenderer';
 import { Task, isCompleteStatusChar } from '../types';
 import { DateUtils } from '../utils/DateUtils';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
+import { ViewUriBuilder } from '../utils/ViewUriBuilder';
 import { TaskIdGenerator } from '../utils/TaskIdGenerator';
 import { DragHandler } from '../interaction/drag/DragHandler';
 import TaskViewerPlugin from '../main';
 import { TaskStyling } from './utils/TaskStyling';
-import { DateNavigator, FileFilterMenu } from './ViewToolbar';
+import { DateNavigator } from './ViewToolbar';
+import { FilterMenuComponent } from './filter/FilterMenuComponent';
+import { FilterSerializer } from '../services/filter/FilterSerializer';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../constants/hover';
 import { TaskLinkInteractionManager } from './taskcard/TaskLinkInteractionManager';
 import { VIEW_META_CALENDAR } from '../constants/viewRegistry';
@@ -32,7 +35,7 @@ export class CalendarView extends ItemView {
     private readonly plugin: TaskViewerPlugin;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
-    private readonly filterMenu = new FileFilterMenu();
+    private readonly filterMenu = new FilterMenuComponent();
 
     private menuHandler: MenuHandler;
     private dragHandler: DragHandler | null = null;
@@ -91,13 +94,23 @@ export class CalendarView extends ItemView {
             }
         }
 
-        if (state && Object.prototype.hasOwnProperty.call(state, 'filterFiles')) {
+        if (state && state.filterState) {
+            this.filterMenu.setFilterState(FilterSerializer.fromJSON(state.filterState));
+        } else if (state && Object.prototype.hasOwnProperty.call(state, 'filterFiles')) {
             const raw = state.filterFiles;
             if (Array.isArray(raw)) {
                 const files = raw.filter((value: unknown): value is string => typeof value === 'string');
-                this.filterMenu.setVisibleFiles(files.length > 0 ? new Set(files) : null);
-            } else {
-                this.filterMenu.setVisibleFiles(null);
+                if (files.length > 0) {
+                    this.filterMenu.setFilterState({
+                        conditions: [{
+                            id: 'migrated-file',
+                            property: 'file',
+                            operator: 'includes',
+                            value: { type: 'stringSet', values: files },
+                        }],
+                        logic: 'and',
+                    });
+                }
             }
         }
 
@@ -106,11 +119,14 @@ export class CalendarView extends ItemView {
     }
 
     getState(): Record<string, unknown> {
-        const visibleFiles = this.filterMenu.getVisibleFiles();
-        return {
+        const filterState = this.filterMenu.getFilterState();
+        const result: Record<string, unknown> = {
             windowStart: this.windowStart,
-            filterFiles: visibleFiles ? Array.from(visibleFiles).sort() : null,
         };
+        if (filterState.conditions.length > 0) {
+            result.filterState = FilterSerializer.toJSON(filterState);
+        }
+        return result;
     }
 
     async onOpen(): Promise<void> {
@@ -151,6 +167,7 @@ export class CalendarView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        this.filterMenu.close();
         if (this.navigateWeekDebounceTimer !== null) {
             window.clearTimeout(this.navigateWeekDebounceTimer);
             this.navigateWeekDebounceTimer = null;
@@ -282,25 +299,31 @@ export class CalendarView extends ItemView {
 
         toolbar.createDiv('view-toolbar__spacer');
 
+        const copyBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(copyBtn, 'link');
+        copyBtn.setAttribute('aria-label', 'Copy view URI');
+        copyBtn.setAttribute('title', 'Copy view URI');
+        copyBtn.onclick = async () => {
+            const uri = ViewUriBuilder.build(VIEW_META_CALENDAR.type, this.filterMenu.getFilterState());
+            await navigator.clipboard.writeText(uri);
+            new Notice('URI copied to clipboard');
+        };
+
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
-        filterBtn.setAttribute('aria-label', 'Filter files');
-        filterBtn.setAttribute('title', 'Filter files');
+        filterBtn.setAttribute('aria-label', 'Filter');
+        filterBtn.setAttribute('title', 'Filter');
+        filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
         filterBtn.addEventListener('click', (event: MouseEvent) => {
-            const { startDate, endDate } = this.getCalendarDateRange();
-            const files = this.getFilterableFiles(
-                DateUtils.getLocalDateString(startDate),
-                DateUtils.getLocalDateString(endDate)
-            );
-            this.filterMenu.showMenu(
-                event,
-                files,
-                (filePath) => TaskStyling.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color),
-                () => {
+            this.filterMenu.showMenu(event, {
+                onFilterChange: () => {
                     void this.app.workspace.requestSaveLayout();
                     void this.render();
-                }
-            );
+                    filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
+                },
+                getTasks: () => this.taskIndex.getTasks(),
+                getFileColor: (filePath: string) => TaskStyling.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color),
+            });
         });
 
         return toolbar;
@@ -456,7 +479,7 @@ export class CalendarView extends ItemView {
             if (!this.plugin.settings.calendarShowCompleted && this.isTaskCompleted(task)) {
                 return false;
             }
-            if (!this.filterMenu.isFileVisible(task.file)) {
+            if (!this.filterMenu.isTaskVisible(task)) {
                 return false;
             }
 
@@ -580,27 +603,6 @@ export class CalendarView extends ItemView {
         return completed;
     }
 
-    private getFilterableFiles(rangeStart: string, rangeEnd: string): string[] {
-        const files = new Set<string>();
-        const tasks = this.taskIndex.getTasks();
-
-        tasks.forEach((task) => {
-            if (!this.plugin.settings.calendarShowCompleted && this.isTaskCompleted(task)) {
-                return;
-            }
-            const { effectiveStart, effectiveEnd } = this.getTaskDateRange(task);
-            if (!effectiveStart) {
-                return;
-            }
-            const taskEnd = effectiveEnd || effectiveStart;
-            if (effectiveStart <= rangeEnd && taskEnd >= rangeStart) {
-                files.add(task.file);
-            }
-        });
-
-        return Array.from(files).sort();
-    }
-
     private getViewStartDateString(): string {
         const { startDate } = this.getCalendarDateRange();
         return DateUtils.getLocalDateString(startDate);
@@ -644,9 +646,29 @@ export class CalendarView extends ItemView {
     private renderWeekNumberCell(weekRow: HTMLElement, weekStartDate: Date): void {
         const weekNumberEl = weekRow.createDiv('calendar-week-number');
         const weekNumber = DateUtils.getISOWeekNumber(weekStartDate);
-        weekNumberEl.setText(`W${String(weekNumber).padStart(2, '0')}`);
-        weekNumberEl.addEventListener('click', (event: MouseEvent) => {
+
+        const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.calendarWeekStartDay);
+        if (DateUtils.getLocalDateString(weekStartDate) === DateUtils.getLocalDateString(todayWeekStart)) {
+            weekNumberEl.addClass('is-current-week');
+        }
+
+        const weekLinkTarget = DailyNoteUtils.getWeeklyNoteLinkTarget(this.plugin.settings, weekStartDate);
+        const weekLink = weekNumberEl.createEl('a', {
+            cls: 'internal-link',
+            text: `W${String(weekNumber).padStart(2, '0')}`,
+        });
+        weekLink.dataset.href = weekLinkTarget;
+        weekLink.setAttribute('href', weekLinkTarget);
+        weekLink.addEventListener('click', (event: MouseEvent) => {
             event.preventDefault();
+        });
+        this.linkInteractionManager.bind(weekNumberEl, {
+            sourcePath: '',
+            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+            hoverParent: this.leaf as HoverParent,
+        }, { bindClick: false });
+        weekNumberEl.addEventListener('click', () => {
+            void this.openOrCreatePeriodicNote(weekStartDate);
         });
     }
 
@@ -712,6 +734,17 @@ export class CalendarView extends ItemView {
         let file = DailyNoteUtils.getDailyNote(this.app, date);
         if (!file) {
             file = await DailyNoteUtils.createDailyNote(this.app, date);
+        }
+        if (file) {
+            await this.app.workspace.getLeaf(false).openFile(file);
+        }
+    }
+
+    private async openOrCreatePeriodicNote(date: Date): Promise<void> {
+        const settings = this.plugin.settings;
+        let file: TFile | null = DailyNoteUtils.getWeeklyNote(this.app, settings, date);
+        if (!file) {
+            file = await DailyNoteUtils.createWeeklyNote(this.app, settings, date);
         }
         if (file) {
             await this.app.workspace.getLeaf(false).openFile(file);

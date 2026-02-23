@@ -63,6 +63,9 @@ export interface Task {
 
     recurrence?: string;
 
+    // Tags extracted from task content and/or frontmatter.
+    tags: string[];
+
     // Parsed flow commands.
     commands?: FlowCommand[];
 
@@ -96,6 +99,7 @@ export interface ViewState {
     daysToShow: number;
     showDeadlineList: boolean;
     filterFiles: string[] | null;
+    filterState?: import('./services/filter/FilterTypes').FilterState;
 }
 
 export interface FrontmatterTaskKeys {
@@ -207,6 +211,13 @@ export interface TaskViewerSettings {
     calendarWeekStartDay: 0 | 1;
     calendarShowCompleted: boolean;
     calendarShowWeekNumbers: boolean;
+    weeklyNoteFormat: string;
+    weeklyNoteFolder: string;
+    monthlyNoteFormat: string;
+    monthlyNoteFolder: string;
+    yearlyNoteFormat: string;
+    yearlyNoteFolder: string;
+    intervalTemplateFolder: string;
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -232,4 +243,11 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     calendarWeekStartDay: 0,
     calendarShowCompleted: true,
     calendarShowWeekNumbers: false,
+    weeklyNoteFormat: 'gggg-[W]ww',
+    weeklyNoteFolder: '',
+    monthlyNoteFormat: 'YYYY-MM',
+    monthlyNoteFolder: '',
+    yearlyNoteFormat: 'YYYY',
+    yearlyNoteFolder: '',
+    intervalTemplateFolder: '',
 };

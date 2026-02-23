@@ -7,6 +7,7 @@ import { TaskStore } from './TaskStore';
 import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
+import { TagExtractor } from '../../utils/TagExtractor';
 
 /**
  * タスクスキャナー - ファイルのスキャンとパース処理
@@ -237,6 +238,13 @@ export class TaskScanner {
         const allExtractedTasks = extractTasksFromLines(bodyLines, bodyStartIndex, fmTask?.startDate);
 
         if (fmTask) {
+            // MetadataCacheからファイル全体のタグを取得してマージ（frontmatterタスクのみ）
+            const cacheTags = this.app.metadataCache.getFileCache(file)?.tags;
+            if (cacheTags && cacheTags.length > 0) {
+                const metaTags = cacheTags.map(t => t.tag.replace(/^#/, ''));
+                fmTask.tags = TagExtractor.merge(fmTask.tags, metaTags);
+            }
+
             // frontmatter の childLine 範囲に含まれるボディタスクを frontmatter タスクの子にする
             const childLineSet = new Set<number>(fmTask.childLineBodyOffsets);
             for (const bt of allExtractedTasks) {

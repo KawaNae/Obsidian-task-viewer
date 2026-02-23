@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
+import { ItemView, WorkspaceLeaf, TFile, setIcon } from 'obsidian';
 import type { HoverParent } from 'obsidian';
 import { Task, isCompleteStatusChar } from '../types';
 import { TaskIndex } from '../services/core/TaskIndex';
@@ -182,15 +182,51 @@ export class MiniCalendarView extends ItemView {
         const isCurrentYear = referenceMonth.year === now.getFullYear();
         const isCurrentMonth = isCurrentYear && referenceMonth.month === now.getMonth();
 
-        const yearSpan = labelGroup.createSpan({ cls: 'mini-calendar-toolbar__year' });
-        yearSpan.setText(`${referenceMonth.year}`);
-        yearSpan.toggleClass('is-current', isCurrentYear);
+        const yearDate = new Date(referenceMonth.year, 0, 1);
+        const yearLinkTarget = DailyNoteUtils.getYearlyNoteLinkTarget(this.plugin.settings, yearDate);
+        const yearWrapper = labelGroup.createSpan({ cls: 'mini-calendar-toolbar__year' });
+        const yearLink = yearWrapper.createEl('a', {
+            cls: 'internal-link',
+            text: `${referenceMonth.year}`,
+        });
+        yearLink.dataset.href = yearLinkTarget;
+        yearLink.setAttribute('href', yearLinkTarget);
+        yearWrapper.toggleClass('is-current', isCurrentYear);
+        yearLink.addEventListener('click', (event: MouseEvent) => {
+            event.preventDefault();
+        });
+        this.linkInteractionManager.bind(yearWrapper, {
+            sourcePath: '',
+            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+            hoverParent: this.leaf as HoverParent,
+        }, { bindClick: false });
+        yearWrapper.addEventListener('click', () => {
+            void this.openOrCreatePeriodicNote('yearly', yearDate);
+        });
 
         labelGroup.createSpan({ cls: 'mini-calendar-toolbar__separator', text: '-' });
 
-        const monthSpan = labelGroup.createSpan({ cls: 'mini-calendar-toolbar__month' });
-        monthSpan.setText(`${String(referenceMonth.month + 1).padStart(2, '0')}`);
-        monthSpan.toggleClass('is-current', isCurrentMonth);
+        const monthDate = new Date(referenceMonth.year, referenceMonth.month, 1);
+        const monthLinkTarget = DailyNoteUtils.getMonthlyNoteLinkTarget(this.plugin.settings, monthDate);
+        const monthWrapper = labelGroup.createSpan({ cls: 'mini-calendar-toolbar__month' });
+        const monthLink = monthWrapper.createEl('a', {
+            cls: 'internal-link',
+            text: `${String(referenceMonth.month + 1).padStart(2, '0')}`,
+        });
+        monthLink.dataset.href = monthLinkTarget;
+        monthLink.setAttribute('href', monthLinkTarget);
+        monthWrapper.toggleClass('is-current', isCurrentMonth);
+        monthLink.addEventListener('click', (event: MouseEvent) => {
+            event.preventDefault();
+        });
+        this.linkInteractionManager.bind(monthWrapper, {
+            sourcePath: '',
+            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+            hoverParent: this.leaf as HoverParent,
+        }, { bindClick: false });
+        monthWrapper.addEventListener('click', () => {
+            void this.openOrCreatePeriodicNote('monthly', monthDate);
+        });
 
         toolbar.createDiv('view-toolbar__spacer');
         const navGroup = toolbar.createDiv('mini-calendar-toolbar__nav');
@@ -410,9 +446,29 @@ export class MiniCalendarView extends ItemView {
     private renderWeekNumberCell(weekEl: HTMLElement, weekStartDate: Date): void {
         const weekNumberEl = weekEl.createDiv('mini-calendar-week-number');
         const weekNumber = DateUtils.getISOWeekNumber(weekStartDate);
-        weekNumberEl.setText(`W${String(weekNumber).padStart(2, '0')}`);
-        weekNumberEl.addEventListener('click', (event: MouseEvent) => {
+
+        const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.calendarWeekStartDay);
+        if (DateUtils.getLocalDateString(weekStartDate) === DateUtils.getLocalDateString(todayWeekStart)) {
+            weekNumberEl.addClass('is-current-week');
+        }
+
+        const weekLinkTarget = DailyNoteUtils.getWeeklyNoteLinkTarget(this.plugin.settings, weekStartDate);
+        const weekLink = weekNumberEl.createEl('a', {
+            cls: 'internal-link',
+            text: `W${String(weekNumber).padStart(2, '0')}`,
+        });
+        weekLink.dataset.href = weekLinkTarget;
+        weekLink.setAttribute('href', weekLinkTarget);
+        weekLink.addEventListener('click', (event: MouseEvent) => {
             event.preventDefault();
+        });
+        this.linkInteractionManager.bind(weekNumberEl, {
+            sourcePath: '',
+            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+            hoverParent: this.leaf as HoverParent,
+        }, { bindClick: false });
+        weekNumberEl.addEventListener('click', () => {
+            void this.openOrCreatePeriodicNote('weekly', weekStartDate);
         });
     }
 
@@ -640,6 +696,31 @@ export class MiniCalendarView extends ItemView {
         let file = DailyNoteUtils.getDailyNote(this.app, date);
         if (!file) {
             file = await DailyNoteUtils.createDailyNote(this.app, date);
+        }
+        if (file) {
+            await this.app.workspace.getLeaf(false).openFile(file);
+        }
+    }
+
+    private async openOrCreatePeriodicNote(
+        granularity: 'weekly' | 'monthly' | 'yearly',
+        date: Date
+    ): Promise<void> {
+        let file: TFile | null;
+        const settings = this.plugin.settings;
+        switch (granularity) {
+            case 'weekly':
+                file = DailyNoteUtils.getWeeklyNote(this.app, settings, date);
+                if (!file) file = await DailyNoteUtils.createWeeklyNote(this.app, settings, date);
+                break;
+            case 'monthly':
+                file = DailyNoteUtils.getMonthlyNote(this.app, settings, date);
+                if (!file) file = await DailyNoteUtils.createMonthlyNote(this.app, settings, date);
+                break;
+            case 'yearly':
+                file = DailyNoteUtils.getYearlyNote(this.app, settings, date);
+                if (!file) file = await DailyNoteUtils.createYearlyNote(this.app, settings, date);
+                break;
         }
         if (file) {
             await this.app.workspace.getLeaf(false).openFile(file);
