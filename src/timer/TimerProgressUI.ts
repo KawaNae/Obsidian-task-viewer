@@ -118,13 +118,25 @@ export class TimerProgressUI {
                 };
             }
             case 'countdown': {
-                const progress = timer.totalTime > 0 ? timer.timeRemaining / timer.totalTime : 0;
-                return {
-                    progress: Math.max(0, Math.min(1, progress)),
-                    displaySeconds: timer.timeRemaining,
-                    phaseClass: timer.phase,
-                    isCountupLike: false,
-                };
+                if (timer.timeRemaining >= 0) {
+                    const progress = timer.totalTime > 0 ? timer.timeRemaining / timer.totalTime : 0;
+                    return {
+                        progress: Math.min(1, progress),
+                        displaySeconds: timer.timeRemaining,
+                        phaseClass: timer.phase,
+                        isCountupLike: false,
+                    };
+                } else {
+                    const overtime = -timer.timeRemaining;
+                    const fullRotation = 30 * 60;
+                    const progress = (overtime % fullRotation) / fullRotation;
+                    return {
+                        progress: Math.max(0, Math.min(1, progress)),
+                        displaySeconds: timer.timeRemaining,
+                        phaseClass: timer.phase,
+                        isCountupLike: true,
+                    };
+                }
             }
             case 'interval': {
                 const currentGroup = timer.groups[timer.currentGroupIndex];

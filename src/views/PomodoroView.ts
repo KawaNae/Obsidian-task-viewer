@@ -261,16 +261,18 @@ export class PomodoroView extends ItemView {
                 this.timer.elapsedTime = totalElapsed;
                 this.updateDisplay();
                 return;
-            case 'countdown':
+            case 'countdown': {
                 this.timer.elapsedTime = totalElapsed;
+                const prevRemaining = this.timer.timeRemaining;
                 this.timer.timeRemaining = this.timer.totalTime - totalElapsed;
-                if (this.timer.timeRemaining <= 0) {
-                    this.timer.timeRemaining = 0;
-                    this.handleCountdownComplete();
-                } else {
-                    this.updateDisplay();
+                this.timer.phase = this.timer.timeRemaining < 0 ? 'idle' : 'work';
+                if (prevRemaining > 0 && this.timer.timeRemaining <= 0) {
+                    AudioUtils.playWorkCompleteChime();
+                    new Notice('Timer complete!');
                 }
+                this.updateDisplay();
                 return;
+            }
             case 'interval': {
                 const segment = this.getCurrentSegment(this.timer);
                 if (!segment) {
@@ -293,14 +295,6 @@ export class PomodoroView extends ItemView {
     }
 
     // ─── Completion Handlers ────────────────────────────────────
-
-    private handleCountdownComplete(): void {
-        this.stopTicker();
-        AudioUtils.playWorkCompleteChime();
-        new Notice('Timer complete!');
-        this.timer = null;
-        this.render();
-    }
 
     private handleSegmentComplete(): void {
         if (!this.timer || this.timer.timerType !== 'interval') return;
@@ -529,13 +523,13 @@ export class PomodoroView extends ItemView {
             pauseBtn.createSpan({ text: ' Pause' });
             pauseBtn.onclick = () => this.pauseTimer();
 
-            // Reset button
-            const resetBtn = container.createEl('button', {
+            // Stop button
+            const stopBtn = container.createEl('button', {
                 cls: 'pomodoro-view__btn pomodoro-view__btn--danger',
             });
-            setIcon(resetBtn, 'x');
-            resetBtn.createSpan({ text: ' Reset' });
-            resetBtn.onclick = () => this.resetTimer();
+            setIcon(stopBtn, 'square');
+            stopBtn.createSpan({ text: ' Stop' });
+            stopBtn.onclick = () => this.resetTimer();
             return;
         }
 
