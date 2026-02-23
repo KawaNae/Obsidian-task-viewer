@@ -586,6 +586,12 @@ export class PomodoroView extends ItemView {
     private async loadTemplates(): Promise<void> {
         const folder = this.plugin.settings.intervalTemplateFolder;
         this.templates = await this.templateLoader.loadTemplates(folder);
+
+        // Re-match selectedTemplate by filePath so stale references are replaced
+        if (this.selectedTemplate) {
+            const prev = this.selectedTemplate.filePath;
+            this.selectedTemplate = this.templates.find(t => t.filePath === prev) ?? null;
+        }
     }
 
     private renderTemplateSelector(parent: HTMLElement): void {
