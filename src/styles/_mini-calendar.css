@@ -24,16 +24,17 @@
     gap: 6px;
 }
 
-.mini-calendar-toolbar__month {
+.mini-calendar-toolbar__month,
+.mini-calendar-toolbar__year {
     font-size: 1.1em;
     font-weight: 700;
     color: var(--tv-text);
 }
 
-.mini-calendar-toolbar__year {
-    font-size: 1.1em;
-    font-weight: 700;
-    color: var(--tv-text);
+.mini-calendar-toolbar__month .internal-link,
+.mini-calendar-toolbar__year .internal-link {
+    color: inherit;
+    text-decoration: none;
 }
 
 .mini-calendar-toolbar__separator {
@@ -114,6 +115,15 @@
     font-size: 0.62em;
     color: var(--tv-text-muted);
     cursor: pointer;
+}
+
+.mini-calendar-week-number .internal-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.mini-calendar-week-number.is-current-week {
+    color: var(--tv-text-accent);
 }
 
 .mini-calendar-week-number:hover {

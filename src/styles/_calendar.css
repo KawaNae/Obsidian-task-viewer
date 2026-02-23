@@ -75,6 +75,15 @@
     cursor: pointer;
 }
 
+.calendar-week-number .internal-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.calendar-week-number.is-current-week {
+    color: var(--tv-text-accent);
+}
+
 .calendar-week-number:hover {
     color: var(--tv-text);
     background: var(--tv-bg-hover);

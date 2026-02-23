@@ -1,4 +1,4 @@
-import { ItemView, Notice, WorkspaceLeaf, setIcon } from 'obsidian';
+import { ItemView, Notice, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
 import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../services/core/TaskIndex';
 import { MenuHandler } from '../interaction/menu/MenuHandler';
@@ -646,9 +646,29 @@ export class CalendarView extends ItemView {
     private renderWeekNumberCell(weekRow: HTMLElement, weekStartDate: Date): void {
         const weekNumberEl = weekRow.createDiv('calendar-week-number');
         const weekNumber = DateUtils.getISOWeekNumber(weekStartDate);
-        weekNumberEl.setText(`W${String(weekNumber).padStart(2, '0')}`);
-        weekNumberEl.addEventListener('click', (event: MouseEvent) => {
+
+        const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.calendarWeekStartDay);
+        if (DateUtils.getLocalDateString(weekStartDate) === DateUtils.getLocalDateString(todayWeekStart)) {
+            weekNumberEl.addClass('is-current-week');
+        }
+
+        const weekLinkTarget = DailyNoteUtils.getWeeklyNoteLinkTarget(this.plugin.settings, weekStartDate);
+        const weekLink = weekNumberEl.createEl('a', {
+            cls: 'internal-link',
+            text: `W${String(weekNumber).padStart(2, '0')}`,
+        });
+        weekLink.dataset.href = weekLinkTarget;
+        weekLink.setAttribute('href', weekLinkTarget);
+        weekLink.addEventListener('click', (event: MouseEvent) => {
             event.preventDefault();
+        });
+        this.linkInteractionManager.bind(weekNumberEl, {
+            sourcePath: '',
+            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+            hoverParent: this.leaf as HoverParent,
+        }, { bindClick: false });
+        weekNumberEl.addEventListener('click', () => {
+            void this.openOrCreatePeriodicNote(weekStartDate);
         });
     }
 
@@ -714,6 +734,17 @@ export class CalendarView extends ItemView {
         let file = DailyNoteUtils.getDailyNote(this.app, date);
         if (!file) {
             file = await DailyNoteUtils.createDailyNote(this.app, date);
+        }
+        if (file) {
+            await this.app.workspace.getLeaf(false).openFile(file);
+        }
+    }
+
+    private async openOrCreatePeriodicNote(date: Date): Promise<void> {
+        const settings = this.plugin.settings;
+        let file: TFile | null = DailyNoteUtils.getWeeklyNote(this.app, settings, date);
+        if (!file) {
+            file = await DailyNoteUtils.createWeeklyNote(this.app, settings, date);
         }
         if (file) {
             await this.app.workspace.getLeaf(false).openFile(file);
