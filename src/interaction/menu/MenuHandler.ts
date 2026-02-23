@@ -87,7 +87,6 @@ export class MenuHandler {
         this.timerMenuBuilder.addTimerItem(menu, task);
         this.timerMenuBuilder.addPomodoroItem(menu, task);
         this.timerMenuBuilder.addCountdownItem(menu, task);
-        this.timerMenuBuilder.addIntervalItem(menu, task);
         menu.addSeparator();
 
         // 3. Move Operations

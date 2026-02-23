@@ -2,7 +2,6 @@ import { Menu } from 'obsidian';
 import { Task } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { getTaskDisplayName } from '../../../utils/TaskContent';
-import { IntervalParser } from '../../../timer/IntervalParser';
 
 /**
  * Builder for timer-related menu items.
@@ -88,38 +87,6 @@ export class TimerMenuBuilder {
                         timerTargetId: task.timerTargetId ?? task.blockId,
                         timerType: 'countdown',
                         countdownSeconds,
-                        autoStart: true
-                    });
-                });
-        });
-    }
-
-    /**
-     * Interval auto-start (requires at least one parsed segment from children).
-     */
-    addIntervalItem(menu: Menu, task: Task): void {
-        const intervalGroups = IntervalParser.parseIntervalGroups(task, this.plugin.getTaskIndex());
-        if (intervalGroups.length === 0) {
-            return;
-        }
-
-        menu.addItem((item) => {
-            const displayName = getTaskDisplayName(task);
-
-            item.setTitle('🔁 Start Interval')
-                .setIcon('rotate-cw')
-                .onClick(() => {
-                    const widget = this.plugin.getTimerWidget();
-                    widget.startTimer({
-                        taskId: task.id,
-                        taskName: displayName,
-                        taskOriginalText: task.originalText,
-                        taskFile: task.file,
-                        recordMode: 'self',
-                        parserId: task.parserId,
-                        timerTargetId: task.timerTargetId ?? task.blockId,
-                        timerType: 'interval',
-                        intervalGroups,
                         autoStart: true
                     });
                 });

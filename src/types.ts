@@ -217,6 +217,7 @@ export interface TaskViewerSettings {
     monthlyNoteFolder: string;
     yearlyNoteFormat: string;
     yearlyNoteFolder: string;
+    intervalTemplateFolder: string;
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -248,4 +249,5 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     monthlyNoteFolder: '',
     yearlyNoteFormat: 'YYYY',
     yearlyNoteFolder: '',
+    intervalTemplateFolder: '',
 };

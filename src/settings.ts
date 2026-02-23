@@ -605,6 +605,17 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     });
             });
 
+        new Setting(containerEl)
+            .setName('Interval Template Folder')
+            .setDesc('Vault folder containing interval timer template files (.md with tv-segments in frontmatter). Leave empty to disable.')
+            .addText(text => text
+                .setPlaceholder('Templates/Timers')
+                .setValue(this.plugin.settings.intervalTemplateFolder)
+                .onChange(async (value) => {
+                    this.plugin.settings.intervalTemplateFolder = value.trim();
+                    await this.plugin.saveSettings();
+                }));
+
         containerEl.createEl('h3', { text: 'Habit Tracker', cls: 'setting-section-header' });
 
         // --- Habit Tracker Section ---
