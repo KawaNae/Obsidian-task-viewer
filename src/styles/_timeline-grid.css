@@ -54,7 +54,7 @@
     border-left: 0;
     display: flex;
     flex-direction: column;
-    background-color: var(--tv-bg-deadline-list);
+    background-color: var(--tv-bg-sidebar);
     overflow: hidden;
     z-index: var(--z-base);
 }

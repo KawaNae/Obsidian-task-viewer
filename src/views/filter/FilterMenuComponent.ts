@@ -55,6 +55,14 @@ export class FilterMenuComponent {
         return this.state.conditions.length > 0;
     }
 
+    showMenuAtElement(anchorEl: HTMLElement, callbacks: FilterMenuCallbacks): void {
+        const rect = anchorEl.getBoundingClientRect();
+        const syntheticEvent = new MouseEvent('click', { clientX: rect.left, clientY: rect.bottom });
+        Object.defineProperty(syntheticEvent, 'pageX', { value: rect.left + window.scrollX });
+        Object.defineProperty(syntheticEvent, 'pageY', { value: rect.bottom + window.scrollY });
+        this.showMenu(syntheticEvent, callbacks);
+    }
+
     showMenu(event: MouseEvent, callbacks: FilterMenuCallbacks): void {
         this.close();
 

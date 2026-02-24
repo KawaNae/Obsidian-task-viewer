@@ -1,0 +1,86 @@
+/* ==========================================================================
+   Pinned Lists — Sidebar list sections with independent filters
+   ========================================================================== */
+
+.pinned-lists-container {
+    padding: 0 4px;
+}
+
+/* Individual list section */
+.pinned-list {
+    margin-bottom: 8px;
+}
+
+/* Header bar (clickable for collapse) */
+.pinned-list__header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 4px 4px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--tv-text);
+}
+
+.pinned-list__header:hover {
+    color: var(--tv-text-accent);
+}
+
+/* Toggle arrow icon */
+.pinned-list__toggle {
+    font-size: 0.7em;
+    color: var(--tv-text-muted);
+    min-width: 10px;
+    text-align: center;
+}
+
+/* List name */
+.pinned-list__name {
+    flex: 1;
+}
+
+/* Task count badge */
+.pinned-list__count {
+    color: var(--tv-text-muted);
+    font-weight: 400;
+}
+
+/* Filter edit button */
+.pinned-list__filter-btn {
+    width: 20px;
+    height: 20px;
+    appearance: none;
+    -webkit-appearance: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--tv-text-muted);
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--tv-radius-s);
+}
+
+.pinned-list__filter-btn:hover {
+    color: var(--tv-text-accent);
+}
+
+.pinned-list__filter-btn.is-filtered {
+    color: var(--tv-text-accent);
+}
+
+/* Collapsed state: hide the task list */
+.pinned-list--collapsed .pinned-list__body {
+    display: none;
+}
+
+/* Empty state */
+.pinned-lists-container__empty {
+    padding: 16px;
+    text-align: center;
+    color: var(--tv-text-muted);
+    font-size: 0.85em;
+}

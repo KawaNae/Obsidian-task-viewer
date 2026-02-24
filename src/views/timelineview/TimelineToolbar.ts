@@ -17,7 +17,7 @@ export interface ToolbarCallbacks {
     onStateChange: () => void;
     getFileColor: (filePath: string) => string | null;
     getDatesToShow: () => string[];
-    onRequestDeadlineListToggle: (nextOpen: boolean, source: 'toolbar' | 'backdrop' | 'escape') => void;
+    onRequestSidebarToggle: (nextOpen: boolean, source: 'toolbar' | 'backdrop' | 'escape') => void;
 }
 
 /**
@@ -208,12 +208,7 @@ export class TimelineToolbar {
         filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
 
         filterBtn.onclick = (e) => {
-            const dates = this.callbacks.getDatesToShow();
-            const allTasksInView = dates.flatMap(date =>
-                this.taskIndex.getTasksForVisualDay(date, this.plugin.settings.startHour)
-            );
-            const deadlineTasks = this.taskIndex.getDeadlineTasks();
-            const allTasks = [...allTasksInView, ...deadlineTasks];
+            const allTasks = this.taskIndex.getTasks();
 
             this.filterMenu.showMenu(e, {
                 onFilterChange: () => {
@@ -244,13 +239,13 @@ export class TimelineToolbar {
         this.updateSidebarToggleButton(toggleBtn);
 
         toggleBtn.onclick = () => {
-            const nextOpen = !this.viewState.showDeadlineList;
-            this.callbacks.onRequestDeadlineListToggle(nextOpen, 'toolbar');
+            const nextOpen = !this.viewState.showSidebar;
+            this.callbacks.onRequestSidebarToggle(nextOpen, 'toolbar');
         };
     }
 
     private updateSidebarToggleButton(toggleBtn: HTMLElement): void {
-        const isOpen = this.viewState.showDeadlineList;
+        const isOpen = this.viewState.showSidebar;
         const primaryIcon = isOpen ? 'panel-right-open' : 'panel-right-close';
         const fallbackIcon = isOpen ? 'sidebar-right' : 'sidebar-left';
 
@@ -263,7 +258,7 @@ export class TimelineToolbar {
         toggleBtn.classList.toggle('is-closed', !isOpen);
         toggleBtn.classList.toggle('is-active', isOpen);
 
-        const label = isOpen ? 'Hide Deadline List' : 'Show Deadline List';
+        const label = isOpen ? 'Hide Sidebar' : 'Show Sidebar';
         toggleBtn.setAttribute('aria-label', label);
         toggleBtn.setAttribute('title', label);
     }

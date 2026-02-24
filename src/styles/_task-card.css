@@ -148,8 +148,8 @@
     overflow: visible;
 }
 
-/* Deadline Task Card */
-.task-card.task-card--deadline {
+/* Sidebar Task Card (Pinned Lists) */
+.pinned-list .task-card {
     position: relative;
     top: auto;
     left: auto;

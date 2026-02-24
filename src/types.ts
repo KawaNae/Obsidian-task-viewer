@@ -1,5 +1,6 @@
 import { DEFAULT_AI_INDEX_SETTINGS } from './services/aiindex/AiIndexSettings';
 import type { AiIndexSettings } from './services/aiindex/AiIndexSettings';
+import type { FilterState } from './services/filter/FilterTypes';
 
 /**
  * Returns true when statusChar is considered completed by settings.
@@ -97,10 +98,17 @@ export interface FlowModifier {
 export interface ViewState {
     startDate: string;
     daysToShow: number;
-    showDeadlineList: boolean;
+    showSidebar: boolean;
     filterFiles: string[] | null;
-    filterState?: import('./services/filter/FilterTypes').FilterState;
+    filterState?: FilterState;
     zoomLevel?: number;
+    pinnedListCollapsed?: Record<string, boolean>;
+}
+
+export interface PinnedListDefinition {
+    id: string;
+    name: string;
+    filterState: FilterState;
 }
 
 export interface FrontmatterTaskKeys {
@@ -201,9 +209,7 @@ export interface TaskViewerSettings {
     pomodoroBreakMinutes: number;
     countdownMinutes: number;
     completeStatusChars: string[];
-    defaultDeadlineOffset: number;
-    upcomingDays: number;
-    expandCompletedInDeadlineList: boolean;
+    pinnedLists: PinnedListDefinition[];
     pastDaysToShow: number;
     habits: HabitDefinition[];
     frontmatterTaskHeader: string;
@@ -233,9 +239,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     pomodoroBreakMinutes: 5,
     countdownMinutes: 25,
     completeStatusChars: ['x', 'X', '-', '!'],
-    defaultDeadlineOffset: 0,
-    upcomingDays: 7,
-    expandCompletedInDeadlineList: false,
+    pinnedLists: [],
     pastDaysToShow: 0,
     habits: [],
     frontmatterTaskHeader: 'Tasks',

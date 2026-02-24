@@ -69,13 +69,6 @@ export class TaskStore {
         return [...currentDayTasks, ...nextDayTasks];
     }
 
-    /**
-     * deadlineを持つ全タスクを取得
-     */
-    getDeadlineTasks(): Task[] {
-        return this.getTasks().filter(t => !!t.deadline);
-    }
-
     // ===== 内部操作 =====
 
     /**

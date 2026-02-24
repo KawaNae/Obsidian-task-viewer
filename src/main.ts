@@ -332,26 +332,28 @@ export default class TaskViewerPlugin extends Plugin {
             frontmatterTaskKeys?: unknown;
             aiIndex?: unknown;
         };
-        const hasExpandCompletedKey = Object.prototype.hasOwnProperty.call(rawObject, 'expandCompletedInDeadlineList');
-        const hasLegacyShowCompletedKey = Object.prototype.hasOwnProperty.call(rawObject, 'showCompletedInDeadlineList');
-        const resolveExpandCompletedInDeadlineList = (): boolean => {
-            if (hasExpandCompletedKey) {
-                const rawValue = rawObject.expandCompletedInDeadlineList;
-                return typeof rawValue === 'boolean'
-                    ? rawValue
-                    : DEFAULT_SETTINGS.expandCompletedInDeadlineList;
-            }
-            if (hasLegacyShowCompletedKey) {
-                const rawValue = rawObject.showCompletedInDeadlineList;
-                return typeof rawValue === 'boolean'
-                    ? rawValue
-                    : DEFAULT_SETTINGS.expandCompletedInDeadlineList;
-            }
-            return DEFAULT_SETTINGS.expandCompletedInDeadlineList;
-        };
+        // Migrate legacy DeadlineList settings → pinnedLists
+        if (!Array.isArray(rawObject.pinnedLists)) {
+            merged.pinnedLists = [{
+                id: 'migrated-deadline',
+                name: 'Deadline',
+                filterState: {
+                    conditions: [{
+                        id: 'migrated-deadline-cond',
+                        property: 'hasDeadline' as const,
+                        operator: 'isSet' as const,
+                        value: { type: 'boolean' as const, value: true },
+                    }],
+                    logic: 'and' as const,
+                },
+            }];
+        }
         const sanitizedMerged = { ...merged } as TaskViewerSettings & Record<string, unknown>;
         delete sanitizedMerged.showCompletedInDeadlineList;
         delete sanitizedMerged.excludedPaths;
+        delete sanitizedMerged.defaultDeadlineOffset;
+        delete sanitizedMerged.upcomingDays;
+        delete sanitizedMerged.expandCompletedInDeadlineList;
 
         const normalizedFrontmatterKeys = normalizeFrontmatterTaskKeys(merged.frontmatterTaskKeys);
         const keysValidationError = validateFrontmatterTaskKeys(normalizedFrontmatterKeys);
@@ -359,7 +361,6 @@ export default class TaskViewerPlugin extends Plugin {
 
         this.settings = {
             ...sanitizedMerged,
-            expandCompletedInDeadlineList: resolveExpandCompletedInDeadlineList(),
             frontmatterTaskKeys: keysValidationError
                 ? { ...DEFAULT_FRONTMATTER_TASK_KEYS }
                 : normalizedFrontmatterKeys,

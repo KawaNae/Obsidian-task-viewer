@@ -63,7 +63,7 @@ const copyStaticFiles = {
           '_calendar.css',
           '_mini-calendar.css',
           '_task-card.css',
-          '_deadline.css',
+          '_pinned-list.css',
           '_checkboxes.css',
           '_toolbar.css',
           '_timeline-toolbar.css',

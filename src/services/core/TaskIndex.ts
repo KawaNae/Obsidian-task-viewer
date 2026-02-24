@@ -219,10 +219,6 @@ export class TaskIndex {
         return this.store.getTasksForVisualDay(visualDate, startHour);
     }
 
-    getDeadlineTasks(): Task[] {
-        return this.store.getDeadlineTasks();
-    }
-
     getValidationErrors(): ValidationError[] {
         return this.validator.getValidationErrors();
     }
