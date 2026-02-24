@@ -120,7 +120,7 @@ export class MoveStrategy extends BaseDragStrategy {
         this.scrollContainer = context.container.querySelector('.timeline-scroll-area') as HTMLElement;
         this.ghostManager = new GhostManager(this.scrollContainer || context.container);
 
-        const zoomLevel = context.plugin.settings.zoomLevel;
+        const zoomLevel = context.getZoomLevel();
         const startMinutes = Number.parseFloat(el.style.getPropertyValue('--start-minutes') || '0');
         const durationMinutes = Number.parseFloat(el.style.getPropertyValue('--duration-minutes') || '0');
         this.initialTop = Number.isFinite(startMinutes) ? startMinutes * zoomLevel : 0;
@@ -200,7 +200,7 @@ export class MoveStrategy extends BaseDragStrategy {
         if (!this.dragTask || !this.dragEl || !this.currentContext || !this.ghostManager) return;
         const context = this.currentContext;
 
-        const zoomLevel = context.plugin.settings.zoomLevel;
+        const zoomLevel = context.getZoomLevel();
         const startHour = context.plugin.settings.startHour;
         const startHourMinutes = startHour * 60;
         const durationMinutes = this.initialHeight / zoomLevel;
@@ -523,7 +523,7 @@ export class MoveStrategy extends BaseDragStrategy {
                 const rect = timelineSection.getBoundingClientRect();
                 const yInContainer = e.clientY - rect.top;
 
-                const zoomLevel = context.plugin.settings.zoomLevel;
+                const zoomLevel = context.getZoomLevel();
                 const snapPixels = 15 * zoomLevel;
                 const snappedTop = Math.round(yInContainer / snapPixels) * snapPixels;
 

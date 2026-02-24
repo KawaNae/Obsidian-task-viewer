@@ -14,6 +14,7 @@ import { TaskStyling } from './utils/TaskStyling';
 import { DateNavigator } from './ViewToolbar';
 import { FilterMenuComponent } from './filter/FilterMenuComponent';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
+import { createEmptyFilterState } from '../services/filter/FilterTypes';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../constants/hover';
 import { TaskLinkInteractionManager } from './taskcard/TaskLinkInteractionManager';
 import { VIEW_META_CALENDAR } from '../constants/viewRegistry';
@@ -96,22 +97,23 @@ export class CalendarView extends ItemView {
 
         if (state && state.filterState) {
             this.filterMenu.setFilterState(FilterSerializer.fromJSON(state.filterState));
-        } else if (state && Object.prototype.hasOwnProperty.call(state, 'filterFiles')) {
-            const raw = state.filterFiles;
-            if (Array.isArray(raw)) {
-                const files = raw.filter((value: unknown): value is string => typeof value === 'string');
-                if (files.length > 0) {
-                    this.filterMenu.setFilterState({
-                        conditions: [{
-                            id: 'migrated-file',
-                            property: 'file',
-                            operator: 'includes',
-                            value: { type: 'stringSet', values: files },
-                        }],
-                        logic: 'and',
-                    });
-                }
+        } else if (state && Object.prototype.hasOwnProperty.call(state, 'filterFiles') && Array.isArray(state.filterFiles) && state.filterFiles.length > 0) {
+            const files = state.filterFiles.filter((value: unknown): value is string => typeof value === 'string');
+            if (files.length > 0) {
+                this.filterMenu.setFilterState({
+                    conditions: [{
+                        id: 'migrated-file',
+                        property: 'file',
+                        operator: 'includes',
+                        value: { type: 'stringSet', values: files },
+                    }],
+                    logic: 'and',
+                });
+            } else {
+                this.filterMenu.setFilterState(createEmptyFilterState());
             }
+        } else {
+            this.filterMenu.setFilterState(createEmptyFilterState());
         }
 
         await super.setState(state, result);
@@ -146,7 +148,8 @@ export class CalendarView extends ItemView {
             () => {
                 this.handleManager?.updatePositions();
             },
-            () => this.getViewStartDateString()
+            () => this.getViewStartDateString(),
+            () => this.plugin.settings.zoomLevel
         );
 
         this.container.addEventListener('click', (event: MouseEvent) => {

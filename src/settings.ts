@@ -17,24 +17,71 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
     display(): void {
         const { containerEl } = this;
-
         containerEl.empty();
+        containerEl.addClass('tv-settings');
 
-        // Version display at top
-        const versionEl = containerEl.createDiv('setting-item');
+        // Version display
+        const versionEl = containerEl.createDiv('tv-settings__version');
         versionEl.createSpan({
             text: `Task Viewer v${this.plugin.manifest.version}`,
             cls: 'setting-item-description'
         });
-        const buildInfoEl = containerEl.createDiv('setting-item');
-        buildInfoEl.createSpan({
-            text: `Built: ${typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'unknown'}`,
+        versionEl.createSpan({
+            text: ` — Built: ${typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'unknown'}`,
             cls: 'setting-item-description'
         });
 
-        containerEl.createEl('h3', { text: 'General', cls: 'setting-section-header' });
+        // Tab UI
+        const wrapper = containerEl.createDiv('tv-settings__wrapper');
+        const nav = wrapper.createDiv('tv-settings__nav');
+        const content = wrapper.createDiv('tv-settings__content');
 
-        new Setting(containerEl)
+        const tabs = [
+            { id: 'general',     label: 'General',     render: (el: HTMLElement) => this.renderGeneralTab(el) },
+            { id: 'views',       label: 'Views',       render: (el: HTMLElement) => this.renderViewsTab(el) },
+            { id: 'notes',       label: 'Notes',       render: (el: HTMLElement) => this.renderNotesTab(el) },
+            { id: 'timer',       label: 'Timer',       render: (el: HTMLElement) => this.renderTimerTab(el) },
+            { id: 'frontmatter', label: 'Frontmatter', render: (el: HTMLElement) => this.renderFrontmatterTab(el) },
+            { id: 'ai-index',    label: 'AI Index',    render: (el: HTMLElement) => this.renderAiIndexTab(el) },
+            { id: 'habits',      label: 'Habits',      render: (el: HTMLElement) => this.renderHabitsTab(el) },
+        ];
+
+        tabs.forEach(tab => {
+            const btn = nav.createEl('div', {
+                cls: 'tv-settings__nav-btn',
+                text: tab.label,
+                attr: { role: 'tab', tabindex: '0' },
+            });
+            btn.dataset.tabId = tab.id;
+
+            const panel = content.createDiv('tv-settings__panel');
+            panel.dataset.tabId = tab.id;
+            tab.render(panel);
+        });
+
+        this.activateTab(wrapper, tabs[0].id);
+
+        nav.addEventListener('click', (e) => {
+            const btn = (e.target as HTMLElement).closest('.tv-settings__nav-btn') as HTMLElement | null;
+            if (btn?.dataset.tabId) {
+                this.activateTab(wrapper, btn.dataset.tabId);
+            }
+        });
+    }
+
+    private activateTab(wrapper: HTMLElement, tabId: string): void {
+        wrapper.querySelectorAll('.tv-settings__nav-btn').forEach(btn =>
+            btn.toggleClass('tv-settings__nav-btn--active', (btn as HTMLElement).dataset.tabId === tabId)
+        );
+        wrapper.querySelectorAll('.tv-settings__panel').forEach(panel =>
+            (panel as HTMLElement).style.display = (panel as HTMLElement).dataset.tabId === tabId ? '' : 'none'
+        );
+    }
+
+    // ─── General Tab ─────────────────────────────────────────
+
+    private renderGeneralTab(el: HTMLElement): void {
+        new Setting(el)
             .setName('Apply Custom Checkboxes Styles')
             .setDesc('If enabled, the plugin will apply its checkbox styles to the entire Obsidian editor, replacing the need for a separate CSS snippet.')
             .addToggle(toggle => toggle
@@ -45,24 +92,348 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     this.plugin.updateGlobalStyles();
                 }));
 
-        new Setting(containerEl)
+        new Setting(el)
             .setName('Complete Status Characters')
             .setDesc('Characters that represent completed tasks (comma or space separated, e.g., "x, X, -, !").')
             .addText(text => text
                 .setPlaceholder('x, X, -, !')
                 .setValue(this.plugin.settings.completeStatusChars.join(', '))
                 .onChange(async (value) => {
-                    // Parse input: split by comma or space, trim, filter empty
                     const chars = value.split(/[,\s]+/)
                         .map(c => c.trim())
                         .filter(c => c.length > 0);
-
                     this.plugin.settings.completeStatusChars = chars.length > 0 ? chars : ['x', 'X', '-', '!'];
                     await this.plugin.saveSettings();
                 }));
 
-        containerEl.createEl('h3', { text: 'AI Index', cls: 'setting-section-header' });
+        new Setting(el)
+            .setName('Long Press Threshold')
+            .setDesc('Duration in milliseconds to trigger context menu on touch/stylus long press (100-2000). Lower values make it faster.')
+            .addSlider(slider => slider
+                .setLimits(100, 2000, 50)
+                .setValue(this.plugin.settings.longPressThreshold)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.longPressThreshold = value;
+                    await this.plugin.saveSettings();
+                }));
 
+        // Child Tasks
+        el.createEl('h3', { text: 'Child Tasks', cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName('Child Task Heading')
+            .setDesc('The heading under which new child tasks will be inserted in frontmatter task files.')
+            .addText(text => text
+                .setPlaceholder('Tasks')
+                .setValue(this.plugin.settings.frontmatterTaskHeader)
+                .onChange(async (value) => {
+                    this.plugin.settings.frontmatterTaskHeader = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Child Task Heading Level')
+            .setDesc('The level of the heading (1-6).')
+            .addSlider(slider => slider
+                .setLimits(1, 6, 1)
+                .setValue(this.plugin.settings.frontmatterTaskHeaderLevel)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.frontmatterTaskHeaderLevel = value;
+                    await this.plugin.saveSettings();
+                }));
+    }
+
+    // ─── Views Tab ───────────────────────────────────────────
+
+    private renderViewsTab(el: HTMLElement): void {
+        // Timeline
+        el.createEl('h3', { text: 'Timeline', cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName('Start Hour')
+            .setDesc('The hour when your day starts (0-23). Tasks before this hour will be shown in the previous day.')
+            .addText(text => text
+                .setPlaceholder('5')
+                .setValue(this.plugin.settings.startHour.toString())
+                .onChange(async (value) => {
+                    let hour = parseInt(value);
+                    if (isNaN(hour)) hour = 0;
+                    if (hour < 0) hour = 0;
+                    if (hour > 23) hour = 23;
+                    this.plugin.settings.startHour = hour;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Past Days to Show')
+            .setDesc('Number of past days to always display in the timeline, even when there are no incomplete tasks on those days.')
+            .addText(text => {
+                text.inputEl.type = 'number';
+                text.inputEl.min = '0';
+                text
+                    .setPlaceholder('0')
+                    .setValue(this.plugin.settings.pastDaysToShow.toString())
+                    .onChange(async (value) => {
+                        let days = parseInt(value);
+                        if (isNaN(days) || days < 0) days = 0;
+                        this.plugin.settings.pastDaysToShow = days;
+                        await this.plugin.saveSettings();
+                    });
+            });
+
+        new Setting(el)
+            .setName('Default Zoom Level')
+            .setDesc('Default zoom level for new Timeline views. Each view can override this independently.')
+            .addSlider(slider => slider
+                .setLimits(0.25, 10.0, 0.25)
+                .setValue(this.plugin.settings.zoomLevel)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.zoomLevel = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        // Calendar
+        el.createEl('h3', { text: 'Calendar', cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName('Week starts on')
+            .setDesc('Choose whether weeks start on Sunday or Monday in Calendar View.')
+            .addDropdown(dropdown => dropdown
+                .addOption('0', 'Sunday')
+                .addOption('1', 'Monday')
+                .setValue(String(this.plugin.settings.calendarWeekStartDay))
+                .onChange(async (value) => {
+                    this.plugin.settings.calendarWeekStartDay = value === '1' ? 1 : 0;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Show Completed Tasks')
+            .setDesc('Show completed tasks in Calendar View.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.calendarShowCompleted)
+                .onChange(async (value) => {
+                    this.plugin.settings.calendarShowCompleted = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Show Week Numbers')
+            .setDesc('Show ISO week numbers in Calendar and Mini Calendar views.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.calendarShowWeekNumbers)
+                .onChange(async (value) => {
+                    this.plugin.settings.calendarShowWeekNumbers = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        // Deadline List
+        el.createEl('h3', { text: 'Deadline List', cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName('Default Deadline Offset')
+            .setDesc('Number of days from today to set as the default deadline for new deadline tasks.')
+            .addText(text => text
+                .setPlaceholder('0')
+                .setValue(this.plugin.settings.defaultDeadlineOffset.toString())
+                .onChange(async (value) => {
+                    let days = parseInt(value);
+                    if (isNaN(days)) days = 0;
+                    this.plugin.settings.defaultDeadlineOffset = days;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Upcoming Days')
+            .setDesc('Number of days (from today) to show as "Upcoming" in the Deadline list. Set to 0 to hide the Upcoming group.')
+            .addText(text => text
+                .setPlaceholder('7')
+                .setValue(this.plugin.settings.upcomingDays.toString())
+                .onChange(async (value) => {
+                    let days = parseInt(value);
+                    if (isNaN(days) || days < 0) days = 0;
+                    this.plugin.settings.upcomingDays = days;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Expand Completed Group by Default')
+            .setDesc('If enabled, the Completed group starts expanded in the Deadline list.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.expandCompletedInDeadlineList)
+                .onChange(async (value) => {
+                    this.plugin.settings.expandCompletedInDeadlineList = value;
+                    await this.plugin.saveSettings();
+                }));
+    }
+
+    // ─── Notes Tab ───────────────────────────────────────────
+
+    private renderNotesTab(el: HTMLElement): void {
+        // Daily Notes
+        el.createEl('h3', { text: 'Daily Notes', cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName('Daily Note Header')
+            .setDesc('The header under which new tasks will be added in the Daily Note.')
+            .addText(text => text
+                .setPlaceholder('Tasks')
+                .setValue(this.plugin.settings.dailyNoteHeader)
+                .onChange(async (value) => {
+                    this.plugin.settings.dailyNoteHeader = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Daily Note Header Level')
+            .setDesc('The level of the header (1-6).')
+            .addSlider(slider => slider
+                .setLimits(1, 6, 1)
+                .setValue(this.plugin.settings.dailyNoteHeaderLevel)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.dailyNoteHeaderLevel = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        // Periodic Notes
+        el.createEl('h3', { text: 'Periodic Notes', cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName('Weekly Note Format')
+            .setDesc('moment.js format for weekly note filenames (e.g. gggg-[W]ww).')
+            .addText(text => text
+                .setPlaceholder('gggg-[W]ww')
+                .setValue(this.plugin.settings.weeklyNoteFormat)
+                .onChange(async (value) => {
+                    this.plugin.settings.weeklyNoteFormat = value || 'gggg-[W]ww';
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Weekly Note Folder')
+            .setDesc('Folder for weekly notes. Leave empty for vault root.')
+            .addText(text => text
+                .setPlaceholder('')
+                .setValue(this.plugin.settings.weeklyNoteFolder)
+                .onChange(async (value) => {
+                    this.plugin.settings.weeklyNoteFolder = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Monthly Note Format')
+            .setDesc('moment.js format for monthly note filenames (e.g. YYYY-MM).')
+            .addText(text => text
+                .setPlaceholder('YYYY-MM')
+                .setValue(this.plugin.settings.monthlyNoteFormat)
+                .onChange(async (value) => {
+                    this.plugin.settings.monthlyNoteFormat = value || 'YYYY-MM';
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Monthly Note Folder')
+            .setDesc('Folder for monthly notes. Leave empty for vault root.')
+            .addText(text => text
+                .setPlaceholder('')
+                .setValue(this.plugin.settings.monthlyNoteFolder)
+                .onChange(async (value) => {
+                    this.plugin.settings.monthlyNoteFolder = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Yearly Note Format')
+            .setDesc('moment.js format for yearly note filenames (e.g. YYYY).')
+            .addText(text => text
+                .setPlaceholder('YYYY')
+                .setValue(this.plugin.settings.yearlyNoteFormat)
+                .onChange(async (value) => {
+                    this.plugin.settings.yearlyNoteFormat = value || 'YYYY';
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Yearly Note Folder')
+            .setDesc('Folder for yearly notes. Leave empty for vault root.')
+            .addText(text => text
+                .setPlaceholder('')
+                .setValue(this.plugin.settings.yearlyNoteFolder)
+                .onChange(async (value) => {
+                    this.plugin.settings.yearlyNoteFolder = value;
+                    await this.plugin.saveSettings();
+                }));
+    }
+
+    // ─── Timer Tab ───────────────────────────────────────────
+
+    private renderTimerTab(el: HTMLElement): void {
+        el.createEl('h3', { text: 'Pomodoro', cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName('Custom Pomodoro Work Minutes')
+            .setDesc('Custom Work duration in minutes for the Pomodoro timer.')
+            .addText(text => {
+                text.inputEl.type = 'number';
+                text.inputEl.min = '1';
+                text
+                    .setPlaceholder('25')
+                    .setValue(this.plugin.settings.pomodoroWorkMinutes.toString())
+                    .onChange(async (value) => {
+                        let mins = parseInt(value);
+                        if (isNaN(mins) || mins < 1) mins = 1;
+                        this.plugin.settings.pomodoroWorkMinutes = mins;
+                        await this.plugin.saveSettings();
+                    });
+            });
+
+        new Setting(el)
+            .setName('Custom Pomodoro Break Minutes')
+            .setDesc('Custom Break duration in minutes for the Pomodoro timer.')
+            .addText(text => {
+                text.inputEl.type = 'number';
+                text.inputEl.min = '1';
+                text
+                    .setPlaceholder('5')
+                    .setValue(this.plugin.settings.pomodoroBreakMinutes.toString())
+                    .onChange(async (value) => {
+                        let mins = parseInt(value);
+                        if (isNaN(mins) || mins < 1) mins = 1;
+                        this.plugin.settings.pomodoroBreakMinutes = mins;
+                        await this.plugin.saveSettings();
+                    });
+            });
+
+        el.createEl('h3', { text: 'Interval Timer', cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName('Interval Template Folder')
+            .setDesc('Vault folder containing interval timer template files (.md with tv-segments in frontmatter). Leave empty to disable.')
+            .addText(text => text
+                .setPlaceholder('Templates/Timers')
+                .setValue(this.plugin.settings.intervalTemplateFolder)
+                .onChange(async (value) => {
+                    this.plugin.settings.intervalTemplateFolder = value.trim();
+                    await this.plugin.saveSettings();
+                }));
+    }
+
+    // ─── Frontmatter Tab ─────────────────────────────────────
+
+    private renderFrontmatterTab(el: HTMLElement): void {
+        el.createEl('h3', { text: 'Frontmatter Keys', cls: 'setting-section-header' });
+
+        this.addFrontmatterTaskKeySettings(el);
+
+    }
+
+    // ─── AI Index Tab ────────────────────────────────────────
+
+    private renderAiIndexTab(el: HTMLElement): void {
         let fileNameSetting: Setting | null = null;
         let outputToPluginFolderSetting: Setting | null = null;
         let customFolderSetting: Setting | null = null;
@@ -108,7 +479,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             }
         };
 
-        new Setting(containerEl)
+        new Setting(el)
             .setName('Enable AI Index')
             .setDesc('Generate and keep a task index file for AI/search tooling.')
             .addToggle(toggle => toggle
@@ -119,7 +490,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     syncAiIndexUiState();
                 }));
 
-        fileNameSetting = new Setting(containerEl)
+        fileNameSetting = new Setting(el)
             .setName('AI Index File Name')
             .setDesc('Output file name for AI index. ".ndjson" is auto-appended if missing.')
             .addText(text => {
@@ -169,7 +540,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 });
             });
 
-        outputToPluginFolderSetting = new Setting(containerEl)
+        outputToPluginFolderSetting = new Setting(el)
             .setName('Output AI Index to Plugin Folder')
             .setDesc('If enabled, AI index is written under plugin folder.')
             .addToggle(toggle => toggle
@@ -184,7 +555,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     syncAiIndexUiState();
                 }));
 
-        customFolderSetting = new Setting(containerEl)
+        customFolderSetting = new Setting(el)
             .setName('Custom AI Index Output Path')
             .addText(text => {
                 let draftFolder = this.plugin.settings.aiIndex.customOutputFolder;
@@ -236,11 +607,11 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 });
             });
 
-        resolvedPathSetting = new Setting(containerEl)
+        resolvedPathSetting = new Setting(el)
             .setName('Resolved AI Index Output Path')
             .setDesc(resolveAiIndexOutputPath(this.plugin.settings.aiIndex));
 
-        debounceSetting = new Setting(containerEl)
+        debounceSetting = new Setting(el)
             .setName('AI Index Debounce (ms)')
             .setDesc('Debounce duration for path-level incremental index updates.')
             .addSlider(slider => slider
@@ -256,7 +627,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        parsersSetting = new Setting(containerEl)
+        parsersSetting = new Setting(el)
             .setName('AI Index Parsers')
             .setDesc('Comma-separated parsers to include. Supported: inline, frontmatter.')
             .addText(text => text
@@ -271,7 +642,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        includeDoneSetting = new Setting(containerEl)
+        includeDoneSetting = new Setting(el)
             .setName('Include Completed Tasks In AI Index')
             .setDesc('Include done/cancelled/exception tasks in generated AI index.')
             .addToggle(toggle => toggle
@@ -281,7 +652,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        keepDoneDaysSetting = new Setting(containerEl)
+        keepDoneDaysSetting = new Setting(el)
             .setName('Completed Task Retention (Days)')
             .setDesc('Keep completed tasks for this many days (0 = unlimited). Tasks without dates are always kept.')
             .addText(text => text
@@ -294,7 +665,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        includeRawSetting = new Setting(containerEl)
+        includeRawSetting = new Setting(el)
             .setName('Include Raw Field In AI Index')
             .setDesc('Include the full original text (raw) for each task. Disabled saves ~30-40% file size.')
             .addToggle(toggle => toggle
@@ -304,7 +675,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        createBackupSetting = new Setting(containerEl)
+        createBackupSetting = new Setting(el)
             .setName('Create Backup on AI Index Write')
             .setDesc('Create a .bak file before overwriting the AI index. Disabled reduces I/O.')
             .addToggle(toggle => toggle
@@ -315,317 +686,18 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         syncAiIndexUiState();
+    }
 
-        containerEl.createEl('h3', { text: 'Interaction', cls: 'setting-section-header' });
+    // ─── Habits Tab ──────────────────────────────────────────
 
-        new Setting(containerEl)
-            .setName('Long Press Threshold')
-            .setDesc('Duration in milliseconds to trigger context menu on touch/stylus long press (100-2000). Lower values make it faster.')
-            .addSlider(slider => slider
-                .setLimits(100, 2000, 50)
-                .setValue(this.plugin.settings.longPressThreshold)
-                .setDynamicTooltip()
-                .onChange(async (value) => {
-                    this.plugin.settings.longPressThreshold = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        containerEl.createEl('h3', { text: 'Timeline', cls: 'setting-section-header' });
-
-        new Setting(containerEl)
-            .setName('Start Hour')
-            .setDesc('The hour when your day starts (0-23). Tasks before this hour will be shown in the previous day.')
-            .addText(text => text
-                .setPlaceholder('5')
-                .setValue(this.plugin.settings.startHour.toString())
-                .onChange(async (value) => {
-                    let hour = parseInt(value);
-                    if (isNaN(hour)) hour = 0;
-                    if (hour < 0) hour = 0;
-                    if (hour > 23) hour = 23;
-
-                    this.plugin.settings.startHour = hour;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Past Days to Show')
-            .setDesc('Number of past days to always display in the timeline, even when there are no incomplete tasks on those days.')
-            .addText(text => {
-                text.inputEl.type = 'number';
-                text.inputEl.min = '0';
-                text
-                    .setPlaceholder('0')
-                    .setValue(this.plugin.settings.pastDaysToShow.toString())
-                    .onChange(async (value) => {
-                        let days = parseInt(value);
-                        if (isNaN(days) || days < 0) days = 0;
-                        this.plugin.settings.pastDaysToShow = days;
-                        await this.plugin.saveSettings();
-                    });
-            });
-
-        new Setting(containerEl)
-            .setName('Default Zoom Level')
-            .setDesc('The default zoom level for the timeline view (0.25 - 10.0).')
-            .addSlider(slider => slider
-                .setLimits(0.25, 10.0, 0.25)
-                .setValue(this.plugin.settings.zoomLevel)
-                .setDynamicTooltip()
-                .onChange(async (value) => {
-                    this.plugin.settings.zoomLevel = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        containerEl.createEl('h3', { text: 'Calendar', cls: 'setting-section-header' });
-
-        new Setting(containerEl)
-            .setName('Week starts on')
-            .setDesc('Choose whether weeks start on Sunday or Monday in Calendar View.')
-            .addDropdown(dropdown => dropdown
-                .addOption('0', 'Sunday')
-                .addOption('1', 'Monday')
-                .setValue(String(this.plugin.settings.calendarWeekStartDay))
-                .onChange(async (value) => {
-                    this.plugin.settings.calendarWeekStartDay = value === '1' ? 1 : 0;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Show Completed Tasks')
-            .setDesc('Show completed tasks in Calendar View.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.calendarShowCompleted)
-                .onChange(async (value) => {
-                    this.plugin.settings.calendarShowCompleted = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Show Week Numbers')
-            .setDesc('Show ISO week numbers in Calendar and Mini Calendar views.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.calendarShowWeekNumbers)
-                .onChange(async (value) => {
-                    this.plugin.settings.calendarShowWeekNumbers = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        containerEl.createEl('h3', { text: 'Periodic Notes', cls: 'setting-section-header' });
-
-        new Setting(containerEl)
-            .setName('Weekly Note Format')
-            .setDesc('moment.js format for weekly note filenames (e.g. gggg-[W]ww).')
-            .addText(text => text
-                .setPlaceholder('gggg-[W]ww')
-                .setValue(this.plugin.settings.weeklyNoteFormat)
-                .onChange(async (value) => {
-                    this.plugin.settings.weeklyNoteFormat = value || 'gggg-[W]ww';
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Weekly Note Folder')
-            .setDesc('Folder for weekly notes. Leave empty for vault root.')
-            .addText(text => text
-                .setPlaceholder('')
-                .setValue(this.plugin.settings.weeklyNoteFolder)
-                .onChange(async (value) => {
-                    this.plugin.settings.weeklyNoteFolder = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Monthly Note Format')
-            .setDesc('moment.js format for monthly note filenames (e.g. YYYY-MM).')
-            .addText(text => text
-                .setPlaceholder('YYYY-MM')
-                .setValue(this.plugin.settings.monthlyNoteFormat)
-                .onChange(async (value) => {
-                    this.plugin.settings.monthlyNoteFormat = value || 'YYYY-MM';
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Monthly Note Folder')
-            .setDesc('Folder for monthly notes. Leave empty for vault root.')
-            .addText(text => text
-                .setPlaceholder('')
-                .setValue(this.plugin.settings.monthlyNoteFolder)
-                .onChange(async (value) => {
-                    this.plugin.settings.monthlyNoteFolder = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Yearly Note Format')
-            .setDesc('moment.js format for yearly note filenames (e.g. YYYY).')
-            .addText(text => text
-                .setPlaceholder('YYYY')
-                .setValue(this.plugin.settings.yearlyNoteFormat)
-                .onChange(async (value) => {
-                    this.plugin.settings.yearlyNoteFormat = value || 'YYYY';
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Yearly Note Folder')
-            .setDesc('Folder for yearly notes. Leave empty for vault root.')
-            .addText(text => text
-                .setPlaceholder('')
-                .setValue(this.plugin.settings.yearlyNoteFolder)
-                .onChange(async (value) => {
-                    this.plugin.settings.yearlyNoteFolder = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        containerEl.createEl('h3', { text: 'DeadlineList', cls: 'setting-section-header' });
-
-        new Setting(containerEl)
-            .setName('Default Deadline Offset')
-            .setDesc('Number of days from today to set as the default deadline for new deadline tasks.')
-            .addText(text => text
-                .setPlaceholder('0')
-                .setValue(this.plugin.settings.defaultDeadlineOffset.toString())
-                .onChange(async (value) => {
-                    let days = parseInt(value);
-                    if (isNaN(days)) days = 0;
-                    this.plugin.settings.defaultDeadlineOffset = days;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Upcoming Days')
-            .setDesc('Number of days (from today) to show as "Upcoming" in the Deadline list. Set to 0 to hide the Upcoming group.')
-            .addText(text => text
-                .setPlaceholder('7')
-                .setValue(this.plugin.settings.upcomingDays.toString())
-                .onChange(async (value) => {
-                    let days = parseInt(value);
-                    if (isNaN(days) || days < 0) days = 0;
-                    this.plugin.settings.upcomingDays = days;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Expand Completed Group by Default')
-            .setDesc('If enabled, the Completed group starts expanded in the Deadline list.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.expandCompletedInDeadlineList)
-                .onChange(async (value) => {
-                    this.plugin.settings.expandCompletedInDeadlineList = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        containerEl.createEl('h3', { text: 'Daily Notes', cls: 'setting-section-header' });
-
-        new Setting(containerEl)
-            .setName('Daily Note Header')
-            .setDesc('The header under which new tasks will be added in the Daily Note.')
-            .addText(text => text
-                .setPlaceholder('Tasks')
-                .setValue(this.plugin.settings.dailyNoteHeader)
-                .onChange(async (value) => {
-                    this.plugin.settings.dailyNoteHeader = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Daily Note Header Level')
-            .setDesc('The level of the header (1-6).')
-            .addSlider(slider => slider
-                .setLimits(1, 6, 1)
-                .setValue(this.plugin.settings.dailyNoteHeaderLevel)
-                .setDynamicTooltip()
-                .onChange(async (value) => {
-                    this.plugin.settings.dailyNoteHeaderLevel = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        containerEl.createEl('h3', { text: 'Frontmatter Tasks', cls: 'setting-section-header' });
-
-        this.addFrontmatterTaskKeySettings(containerEl);
-
-        new Setting(containerEl)
-            .setName('Child Task Heading')
-            .setDesc('The heading under which new child tasks will be inserted in frontmatter task files.')
-            .addText(text => text
-                .setPlaceholder('Tasks')
-                .setValue(this.plugin.settings.frontmatterTaskHeader)
-                .onChange(async (value) => {
-                    this.plugin.settings.frontmatterTaskHeader = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Child Task Heading Level')
-            .setDesc('The level of the heading (1-6).')
-            .addSlider(slider => slider
-                .setLimits(1, 6, 1)
-                .setValue(this.plugin.settings.frontmatterTaskHeaderLevel)
-                .setDynamicTooltip()
-                .onChange(async (value) => {
-                    this.plugin.settings.frontmatterTaskHeaderLevel = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        containerEl.createEl('h3', { text: 'Timer Widget', cls: 'setting-section-header' });
-
-        new Setting(containerEl)
-            .setName('Custom Pomodoro Work Minutes')
-            .setDesc('Custom Work duration in minutes for the Pomodoro timer.')
-            .addText(text => {
-                text.inputEl.type = 'number';
-                text.inputEl.min = '1';
-                text
-                    .setPlaceholder('25')
-                    .setValue(this.plugin.settings.pomodoroWorkMinutes.toString())
-                    .onChange(async (value) => {
-                        let mins = parseInt(value);
-                        if (isNaN(mins) || mins < 1) mins = 1;
-                        this.plugin.settings.pomodoroWorkMinutes = mins;
-                        await this.plugin.saveSettings();
-                    });
-            });
-
-        new Setting(containerEl)
-            .setName('Custom Pomodoro Break Minutes')
-            .setDesc('Custom Break duration in minutes for the Pomodoro timer.')
-            .addText(text => {
-                text.inputEl.type = 'number';
-                text.inputEl.min = '1';
-                text
-                    .setPlaceholder('5')
-                    .setValue(this.plugin.settings.pomodoroBreakMinutes.toString())
-                    .onChange(async (value) => {
-                        let mins = parseInt(value);
-                        if (isNaN(mins) || mins < 1) mins = 1;
-                        this.plugin.settings.pomodoroBreakMinutes = mins;
-                        await this.plugin.saveSettings();
-                    });
-            });
-
-        new Setting(containerEl)
-            .setName('Interval Template Folder')
-            .setDesc('Vault folder containing interval timer template files (.md with tv-segments in frontmatter). Leave empty to disable.')
-            .addText(text => text
-                .setPlaceholder('Templates/Timers')
-                .setValue(this.plugin.settings.intervalTemplateFolder)
-                .onChange(async (value) => {
-                    this.plugin.settings.intervalTemplateFolder = value.trim();
-                    await this.plugin.saveSettings();
-                }));
-
-        containerEl.createEl('h3', { text: 'Habit Tracker', cls: 'setting-section-header' });
-
-        // --- Habit Tracker Section ---
-        const habitHeader = containerEl.createDiv('setting-item');
+    private renderHabitsTab(el: HTMLElement): void {
+        const habitHeader = el.createDiv('setting-item');
         habitHeader.createSpan({ text: 'Define habits to track in your daily notes\' frontmatter.', cls: 'setting-item-description' });
 
-        const habitsListContainer = containerEl.createDiv('habits-list-container');
+        const habitsListContainer = el.createDiv('habits-list-container');
         this.renderHabitsList(habitsListContainer);
 
-        new Setting(containerEl)
+        new Setting(el)
             .setName('Add Habit')
             .setDesc('Create a new habit to track.')
             .addButton(btn => btn
@@ -637,6 +709,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 })
             );
     }
+
+    // ─── Shared Helpers ──────────────────────────────────────
 
     private addFrontmatterTaskKeySettings(containerEl: HTMLElement): void {
         this.addFrontmatterTaskKeySetting(

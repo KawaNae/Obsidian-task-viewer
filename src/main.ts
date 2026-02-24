@@ -24,7 +24,7 @@ import { AudioUtils } from './utils/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
 import { getViewMeta } from './constants/viewRegistry';
 import type { FilterState } from './services/filter/FilterTypes';
-import { EMPTY_FILTER_STATE } from './services/filter/FilterTypes';
+import { createEmptyFilterState } from './services/filter/FilterTypes';
 import { FilterSerializer } from './services/filter/FilterSerializer';
 
 export default class TaskViewerPlugin extends Plugin {
@@ -237,7 +237,7 @@ export default class TaskViewerPlugin extends Plugin {
 
             // Shorthand: ?tag=work,urgent
             if (params.tag) {
-                filterState = filterState ?? { ...EMPTY_FILTER_STATE };
+                filterState = filterState ?? createEmptyFilterState();
                 filterState.conditions.push({
                     id: 'uri-tag',
                     property: 'tag',
@@ -248,7 +248,7 @@ export default class TaskViewerPlugin extends Plugin {
 
             // Shorthand: ?status=x
             if (params.status) {
-                filterState = filterState ?? { ...EMPTY_FILTER_STATE };
+                filterState = filterState ?? createEmptyFilterState();
                 filterState.conditions.push({
                     id: 'uri-status',
                     property: 'status',
@@ -259,7 +259,7 @@ export default class TaskViewerPlugin extends Plugin {
 
             // Shorthand: ?file=path.md
             if (params.file) {
-                filterState = filterState ?? { ...EMPTY_FILTER_STATE };
+                filterState = filterState ?? createEmptyFilterState();
                 filterState.conditions.push({
                     id: 'uri-file',
                     property: 'file',
@@ -268,7 +268,29 @@ export default class TaskViewerPlugin extends Plugin {
                 });
             }
 
-            this.activateView(viewType, filterState);
+            const uriParams: {
+                filterState?: FilterState;
+                days?: number;
+                zoom?: number;
+                date?: string;
+            } = { filterState };
+
+            // Timeline-specific params
+            if (viewType === VIEW_TYPE_TIMELINE) {
+                if (params.days) {
+                    const days = parseInt(params.days, 10);
+                    if ([1, 3, 7].includes(days)) uriParams.days = days;
+                }
+                if (params.zoom) {
+                    const zoom = parseFloat(params.zoom);
+                    if (zoom >= 0.25 && zoom <= 10.0) uriParams.zoom = zoom;
+                }
+                if (params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date)) {
+                    uriParams.date = params.date;
+                }
+            }
+
+            this.activateView(viewType, uriParams);
         });
     }
 
@@ -371,7 +393,12 @@ export default class TaskViewerPlugin extends Plugin {
         });
     }
 
-    async activateView(viewType: string, filterState?: FilterState) {
+    async activateView(viewType: string, params?: {
+        filterState?: FilterState;
+        days?: number;
+        zoom?: number;
+        date?: string;
+    }) {
         const { workspace } = this.app;
 
         let leaf: WorkspaceLeaf | null = null;
@@ -384,10 +411,15 @@ export default class TaskViewerPlugin extends Plugin {
         }
 
         if (leaf) {
-            const state: Record<string, unknown> = {};
-            if (filterState && filterState.conditions.length > 0) {
-                state.filterState = FilterSerializer.toJSON(filterState);
-            }
+            const state: Record<string, unknown> = {
+                filterState: params?.filterState && params.filterState.conditions.length > 0
+                    ? FilterSerializer.toJSON(params.filterState)
+                    : null,
+            };
+            if (params?.days != null) state.daysToShow = params.days;
+            if (params?.zoom != null) state.zoomLevel = params.zoom;
+            if (params?.date != null) state.startDate = params.date;
+
             await leaf.setViewState({ type: viewType, active: true, state });
             workspace.revealLeaf(leaf);
         }

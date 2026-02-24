@@ -1,0 +1,76 @@
+/**
+ * Settings Tab Layout
+ * 命名規則: BEM (Block: tv-settings)
+ */
+
+.tv-settings .tv-settings__version {
+    padding: 4px 0 8px;
+}
+
+.tv-settings .tv-settings__wrapper {
+    display: flex;
+    flex-direction: column;
+}
+
+/* ─── Tab Navigation ──────────────────────────────────────── */
+
+.tv-settings .tv-settings__nav {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    padding: 0;
+}
+
+.tv-settings .tv-settings__nav::-webkit-scrollbar {
+    display: none;
+}
+
+.tv-settings .tv-settings__nav-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 12px 12px;
+    border: 1px solid transparent;
+    border-bottom: none;
+    background-color: transparent;
+    color: var(--tv-text-muted);
+    cursor: pointer;
+    border-radius: var(--tv-radius-s) var(--tv-radius-s) 0 0;
+    font-size: var(--font-ui-small);
+    margin-bottom: -1px;
+    box-shadow: none;
+    transition: color 0.15s ease;
+    user-select: none;
+}
+
+.tv-settings .tv-settings__nav-btn:hover {
+    color: var(--tv-text);
+    box-shadow: none;
+}
+
+.tv-settings .tv-settings__nav-btn--active {
+    border-color: var(--tv-border);
+    background-color: var(--tv-bg-settings-active);
+    color: var(--tv-text);
+}
+
+/* ─── Content Area ────────────────────────────────────────── */
+
+.tv-settings .tv-settings__content {
+    flex: 1;
+    overflow-y: auto;
+    border-top: 1px solid var(--tv-border);
+    padding: 16px 0 0;
+}
+
+/* Sub-section headers within tabs */
+.tv-settings .tv-settings__panel .setting-section-header {
+    margin-top: 20px;
+    margin-bottom: 4px;
+    font-size: var(--font-ui-medium);
+}
+
+.tv-settings .tv-settings__panel .setting-section-header:first-child {
+    margin-top: 4px;
+}

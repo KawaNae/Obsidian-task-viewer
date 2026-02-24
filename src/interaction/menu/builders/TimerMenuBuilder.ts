@@ -10,86 +10,59 @@ export class TimerMenuBuilder {
     constructor(private plugin: TaskViewerPlugin) { }
 
     /**
-     * Countup auto-start.
+     * Adds a "Track" submenu with Countup, Pomodoro, and Countdown options.
      */
-    addTimerItem(menu: Menu, task: Task): void {
+    addTimerSubmenu(menu: Menu, task: Task): void {
         menu.addItem((item) => {
-            const displayName = getTaskDisplayName(task);
-
-            item.setTitle('⏱️ Start Tracking')
+            const subMenu = (item as any)
+                .setTitle('Track Self')
                 .setIcon('play')
-                .onClick(() => {
-                    const widget = this.plugin.getTimerWidget();
-                    widget.startTimer({
-                        taskId: task.id,
-                        taskName: displayName,
-                        taskOriginalText: task.originalText,
-                        taskFile: task.file,
-                        recordMode: 'self',
-                        parserId: task.parserId,
-                        timerTargetId: task.timerTargetId ?? task.blockId,
-                        timerType: 'countup',
-                        autoStart: true
-                    });
-                });
-        });
-    }
+                .setSubmenu() as Menu;
 
-    /**
-     * Pomodoro auto-start (implemented as intervalSource='pomodoro' in TimerWidget).
-     */
-    addPomodoroItem(menu: Menu, task: Task): void {
-        menu.addItem((item) => {
             const displayName = getTaskDisplayName(task);
+            const baseParams = {
+                taskId: task.id,
+                taskName: displayName,
+                taskOriginalText: task.originalText,
+                taskFile: task.file,
+                recordMode: 'self' as const,
+                parserId: task.parserId,
+                timerTargetId: task.timerTargetId ?? task.blockId,
+                autoStart: true,
+            };
 
-            item.setTitle('🍅 Start Pomodoro')
-                .setIcon('timer')
-                .onClick(() => {
-                    const widget = this.plugin.getTimerWidget();
-                    widget.startTimer({
-                        taskId: task.id,
-                        taskName: displayName,
-                        taskOriginalText: task.originalText,
-                        taskFile: task.file,
-                        recordMode: 'self',
-                        parserId: task.parserId,
-                        timerTargetId: task.timerTargetId ?? task.blockId,
-                        timerType: 'pomodoro',
-                        autoStart: true
+            // Countup
+            subMenu.addItem((sub) => {
+                sub.setTitle('⏱️ Start Countup')
+                    .setIcon('play')
+                    .onClick(() => {
+                        const widget = this.plugin.getTimerWidget();
+                        widget.startTimer({ ...baseParams, timerType: 'countup' });
                     });
-                });
-        });
-    }
+            });
 
-    /**
-     * Countdown auto-start (requires both startTime and endTime).
-     */
-    addCountdownItem(menu: Menu, task: Task): void {
-        const countdownSeconds = this.calculateCountdownSeconds(task);
-        if (countdownSeconds === null) {
-            return;
-        }
-
-        menu.addItem((item) => {
-            const displayName = getTaskDisplayName(task);
-
-            item.setTitle('⏲️ Start Countdown')
-                .setIcon('timer')
-                .onClick(() => {
-                    const widget = this.plugin.getTimerWidget();
-                    widget.startTimer({
-                        taskId: task.id,
-                        taskName: displayName,
-                        taskOriginalText: task.originalText,
-                        taskFile: task.file,
-                        recordMode: 'self',
-                        parserId: task.parserId,
-                        timerTargetId: task.timerTargetId ?? task.blockId,
-                        timerType: 'countdown',
-                        countdownSeconds,
-                        autoStart: true
+            // Pomodoro
+            subMenu.addItem((sub) => {
+                sub.setTitle('🍅 Start Pomodoro')
+                    .setIcon('timer')
+                    .onClick(() => {
+                        const widget = this.plugin.getTimerWidget();
+                        widget.startTimer({ ...baseParams, timerType: 'pomodoro' });
                     });
+            });
+
+            // Countdown (conditional)
+            const countdownSeconds = this.calculateCountdownSeconds(task);
+            if (countdownSeconds !== null) {
+                subMenu.addItem((sub) => {
+                    sub.setTitle('⏳ Start Countdown')
+                        .setIcon('timer')
+                        .onClick(() => {
+                            const widget = this.plugin.getTimerWidget();
+                            widget.startTimer({ ...baseParams, timerType: 'countdown', countdownSeconds });
+                        });
                 });
+            }
         });
     }
 

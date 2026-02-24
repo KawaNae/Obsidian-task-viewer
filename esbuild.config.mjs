@@ -70,7 +70,8 @@ const copyStaticFiles = {
           '_pomodoro.css',
           '_timer-widget.css',
           '_modal.css',
-          '_filter-popover.css'
+          '_filter-popover.css',
+          '_settings.css'
         ];
 
         const cssFilesSet = new Set(cssFiles);

@@ -2,13 +2,13 @@ import { setIcon } from 'obsidian';
 import type { Task } from '../../types';
 import type { FilterState, FilterCondition, FilterProperty, FilterOperator } from '../../services/filter/FilterTypes';
 import {
-    EMPTY_FILTER_STATE,
     PROPERTY_OPERATORS,
     OPERATOR_LABELS,
     PROPERTY_LABELS,
     PROPERTY_ICONS,
     NO_VALUE_OPERATORS,
     createDefaultCondition,
+    createEmptyFilterState,
 } from '../../services/filter/FilterTypes';
 import { TaskFilterEngine } from '../../services/filter/TaskFilterEngine';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
@@ -31,7 +31,7 @@ interface SelectItem {
  * 5-column grid: [Logic] [Property] [Operator] [Value] [✕]
  */
 export class FilterMenuComponent {
-    private state: FilterState = { ...EMPTY_FILTER_STATE };
+    private state: FilterState = createEmptyFilterState();
     private popoverEl: HTMLElement | null = null;
     private childPopoverEl: HTMLElement | null = null;
     private childPopoverCleanup: (() => void) | null = null;
@@ -44,7 +44,7 @@ export class FilterMenuComponent {
     }
 
     setFilterState(state: FilterState): void {
-        this.state = state;
+        this.state = JSON.parse(JSON.stringify(state));
     }
 
     isTaskVisible(task: Task): boolean {

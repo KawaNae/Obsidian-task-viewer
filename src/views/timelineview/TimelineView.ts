@@ -115,15 +115,25 @@ export class TimelineView extends ItemView {
     }
 
     async setState(state: any, result: any): Promise<void> {
-        console.log('[DEBUG] setState called with:', state);
         if (state) {
             if (typeof state.daysToShow === 'number') {
                 this.viewState.daysToShow = state.daysToShow;
             }
+            if (typeof state.zoomLevel === 'number') {
+                this.viewState.zoomLevel = state.zoomLevel;
+            }
+            if (typeof state.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(state.startDate)) {
+                this.viewState.startDate = state.startDate;
+            }
             if (state.filterState) {
                 this.viewState.filterState = state.filterState;
-            } else if (Object.prototype.hasOwnProperty.call(state, 'filterFiles')) {
+                this.viewState.filterFiles = null;
+            } else if (Object.prototype.hasOwnProperty.call(state, 'filterFiles') && Array.isArray(state.filterFiles) && state.filterFiles.length > 0) {
                 this.viewState.filterFiles = state.filterFiles;
+                this.viewState.filterState = undefined;
+            } else {
+                this.viewState.filterState = undefined;
+                this.viewState.filterFiles = null;
             }
             if (typeof state.showDeadlineList === 'boolean') {
                 this.setDeadlineListOpen(state.showDeadlineList, 'setState', {
@@ -138,11 +148,13 @@ export class TimelineView extends ItemView {
     }
 
     getState() {
-        // Only save daysToShow, not startDate (startDate resets on reload like Today button)
         const state: Record<string, unknown> = {
             daysToShow: this.viewState.daysToShow,
             showDeadlineList: this.viewState.showDeadlineList,
         };
+        if (this.viewState.zoomLevel != null) {
+            state.zoomLevel = this.viewState.zoomLevel;
+        }
         if (this.viewState.filterState) {
             state.filterState = this.viewState.filterState;
         } else if (this.viewState.filterFiles) {
@@ -198,7 +210,7 @@ export class TimelineView extends ItemView {
 
         // Initialize Renderers
         this.allDayRenderer = new AllDaySectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow);
-        this.timelineRenderer = new TimelineSectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer);
+        this.timelineRenderer = new TimelineSectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel());
         this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler, this.taskIndex);
         this.deadlineRenderer = new DeadlineListRenderer(this.taskRenderer, this.plugin, this.menuHandler);
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
@@ -211,7 +223,8 @@ export class TimelineView extends ItemView {
             () => {
                 this.handleManager.updatePositions();
             },
-            () => this.viewState.startDate
+            () => this.viewState.startDate,
+            () => this.getEffectiveZoomLevel()
         );
 
         // Background click to deselect
@@ -291,7 +304,7 @@ export class TimelineView extends ItemView {
             if (!e.ctrlKey) return;
             e.preventDefault();
             const delta = e.deltaY < 0 ? 0.25 : -0.25;
-            const oldZoom = this.plugin.settings.zoomLevel;
+            const oldZoom = this.getEffectiveZoomLevel();
             const newZoom = Math.min(10.0, Math.max(0.25, oldZoom + delta));
             if (newZoom === oldZoom) return;
 
@@ -307,14 +320,13 @@ export class TimelineView extends ItemView {
                 }
             }
 
-            this.plugin.settings.zoomLevel = newZoom;
+            this.viewState.zoomLevel = newZoom;
             this.container.style.setProperty('--hour-height', `${60 * newZoom}px`);
             const zoomLabel = this.container.querySelector('.timeline-toolbar__btn--zoom .timeline-toolbar__btn-label');
             if (zoomLabel) {
                 zoomLabel.textContent = `${Math.round(newZoom * 100)}%`;
             }
-            // Avoid refreshAllViews() during wheel zoom; persist settings only.
-            void this.plugin.saveData(this.plugin.settings);
+            void this.app.workspace.requestSaveLayout();
         }, { passive: false });
 
         // Pinch zoom (touch devices)
@@ -322,7 +334,7 @@ export class TimelineView extends ItemView {
             if (e.touches.length !== 2) return;
             this.isPinching = true;
             this.pinchInitialDistance = this.getTouchDistance(e.touches);
-            this.pinchInitialZoom = this.plugin.settings.zoomLevel;
+            this.pinchInitialZoom = this.getEffectiveZoomLevel();
 
             // Capture initial midpoint and scrollTop so scroll correction uses absolute values
             // instead of accumulating per-frame rounding errors.
@@ -341,7 +353,7 @@ export class TimelineView extends ItemView {
             const currentDistance = this.getTouchDistance(e.touches);
             if (this.pinchInitialDistance <= 0) return;
             const scale = currentDistance / this.pinchInitialDistance;
-            const oldZoom = this.plugin.settings.zoomLevel;
+            const oldZoom = this.getEffectiveZoomLevel();
             const newZoom = Math.min(10.0, Math.max(0.25, this.pinchInitialZoom * scale));
             if (newZoom === oldZoom) return;
 
@@ -355,7 +367,7 @@ export class TimelineView extends ItemView {
                 }
             }
 
-            this.plugin.settings.zoomLevel = newZoom;
+            this.viewState.zoomLevel = newZoom;
             this.container.style.setProperty('--hour-height', `${60 * newZoom}px`);
             const zoomLabel = this.container.querySelector('.timeline-toolbar__btn--zoom .timeline-toolbar__btn-label');
             if (zoomLabel) {
@@ -367,13 +379,13 @@ export class TimelineView extends ItemView {
             if (!this.isPinching) return;
             if (e.touches.length < 2) {
                 this.isPinching = false;
-                void this.plugin.saveData(this.plugin.settings);
+                void this.app.workspace.requestSaveLayout();
             }
         });
         this.registerDomEvent(this.container, 'touchcancel', () => {
             if (!this.isPinching) return;
             this.isPinching = false;
-            void this.plugin.saveData(this.plugin.settings);
+            void this.app.workspace.requestSaveLayout();
         });
 
         // Start Current Time Interval
@@ -399,6 +411,10 @@ export class TimelineView extends ItemView {
             window.clearInterval(this.currentTimeInterval);
             this.currentTimeInterval = null;
         }
+    }
+
+    getEffectiveZoomLevel(): number {
+        return this.viewState.zoomLevel ?? this.plugin.settings.zoomLevel;
     }
 
     public refresh() {
@@ -431,7 +447,7 @@ export class TimelineView extends ItemView {
         this.container.empty();
 
         // Apply Zoom Level
-        const zoomLevel = this.plugin.settings.zoomLevel;
+        const zoomLevel = this.getEffectiveZoomLevel();
         this.container.style.setProperty('--hour-height', `${60 * zoomLevel}px`);
 
         // Measure and set actual scrollbar width for grid alignment

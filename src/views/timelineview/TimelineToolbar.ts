@@ -8,6 +8,7 @@ import { DateNavigator, ViewModeSelector, ZoomSelector } from '../ViewToolbar';
 import { FilterMenuComponent } from '../filter/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import type { FilterState } from '../../services/filter/FilterTypes';
+import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import type { Task } from '../../types';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 
@@ -73,7 +74,7 @@ export class TimelineToolbar {
         // Restore persisted filter state
         if (this.viewState.filterState) {
             this.filterMenu.setFilterState(FilterSerializer.fromJSON(this.viewState.filterState));
-        } else if (this.viewState.filterFiles) {
+        } else if (this.viewState.filterFiles && this.viewState.filterFiles.length > 0) {
             // Migrate legacy filterFiles to FilterState
             this.filterMenu.setFilterState({
                 conditions: [{
@@ -84,6 +85,8 @@ export class TimelineToolbar {
                 }],
                 logic: 'and',
             });
+        } else {
+            this.filterMenu.setFilterState(createEmptyFilterState());
         }
 
         const toolbar = this.container.createDiv('view-toolbar');
@@ -169,13 +172,14 @@ export class TimelineToolbar {
     }
 
     private renderZoomControls(toolbar: HTMLElement): void {
+        const currentZoom = this.viewState.zoomLevel ?? this.plugin.settings.zoomLevel;
         ZoomSelector.render(
             toolbar,
-            this.plugin.settings.zoomLevel,
+            currentZoom,
             async (newZoom) => {
-                this.plugin.settings.zoomLevel = newZoom;
-                await this.plugin.saveSettings();
+                this.viewState.zoomLevel = newZoom;
                 this.callbacks.onRender();
+                this.app.workspace.requestSaveLayout();
             }
         );
     }
@@ -186,7 +190,11 @@ export class TimelineToolbar {
         btn.setAttribute('aria-label', 'Copy view URI');
         btn.setAttribute('title', 'Copy view URI');
         btn.onclick = async () => {
-            const uri = ViewUriBuilder.build(VIEW_META_TIMELINE.type, this.filterMenu.getFilterState());
+            const uri = ViewUriBuilder.build(VIEW_META_TIMELINE.type, {
+                filterState: this.filterMenu.getFilterState(),
+                days: this.viewState.daysToShow,
+                zoom: this.viewState.zoomLevel,
+            });
             await navigator.clipboard.writeText(uri);
             new Notice('URI copied to clipboard');
         };
