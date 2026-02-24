@@ -122,8 +122,13 @@ export class TimelineView extends ItemView {
             }
             if (state.filterState) {
                 this.viewState.filterState = state.filterState;
-            } else if (Object.prototype.hasOwnProperty.call(state, 'filterFiles')) {
+                this.viewState.filterFiles = null;
+            } else if (Object.prototype.hasOwnProperty.call(state, 'filterFiles') && Array.isArray(state.filterFiles) && state.filterFiles.length > 0) {
                 this.viewState.filterFiles = state.filterFiles;
+                this.viewState.filterState = undefined;
+            } else {
+                this.viewState.filterState = undefined;
+                this.viewState.filterFiles = null;
             }
             if (typeof state.showDeadlineList === 'boolean') {
                 this.setDeadlineListOpen(state.showDeadlineList, 'setState', {

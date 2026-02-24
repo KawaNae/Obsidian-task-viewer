@@ -22,7 +22,12 @@ export interface FilterState {
     logic: 'and' | 'or';
 }
 
-export const EMPTY_FILTER_STATE: FilterState = { conditions: [], logic: 'and' };
+export const EMPTY_FILTER_STATE: FilterState = Object.freeze({ conditions: Object.freeze([]) as readonly FilterCondition[] as FilterCondition[], logic: 'and' as const });
+
+/** Create a fresh empty filter state (safe to mutate, unlike EMPTY_FILTER_STATE) */
+export function createEmptyFilterState(): FilterState {
+    return { conditions: [], logic: 'and' };
+}
 
 /** Available operators per property */
 export const PROPERTY_OPERATORS: Record<FilterProperty, FilterOperator[]> = {

@@ -24,7 +24,7 @@ import { AudioUtils } from './utils/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
 import { getViewMeta } from './constants/viewRegistry';
 import type { FilterState } from './services/filter/FilterTypes';
-import { EMPTY_FILTER_STATE } from './services/filter/FilterTypes';
+import { createEmptyFilterState } from './services/filter/FilterTypes';
 import { FilterSerializer } from './services/filter/FilterSerializer';
 
 export default class TaskViewerPlugin extends Plugin {
@@ -237,7 +237,7 @@ export default class TaskViewerPlugin extends Plugin {
 
             // Shorthand: ?tag=work,urgent
             if (params.tag) {
-                filterState = filterState ?? { ...EMPTY_FILTER_STATE };
+                filterState = filterState ?? createEmptyFilterState();
                 filterState.conditions.push({
                     id: 'uri-tag',
                     property: 'tag',
@@ -248,7 +248,7 @@ export default class TaskViewerPlugin extends Plugin {
 
             // Shorthand: ?status=x
             if (params.status) {
-                filterState = filterState ?? { ...EMPTY_FILTER_STATE };
+                filterState = filterState ?? createEmptyFilterState();
                 filterState.conditions.push({
                     id: 'uri-status',
                     property: 'status',
@@ -259,7 +259,7 @@ export default class TaskViewerPlugin extends Plugin {
 
             // Shorthand: ?file=path.md
             if (params.file) {
-                filterState = filterState ?? { ...EMPTY_FILTER_STATE };
+                filterState = filterState ?? createEmptyFilterState();
                 filterState.conditions.push({
                     id: 'uri-file',
                     property: 'file',
@@ -384,10 +384,11 @@ export default class TaskViewerPlugin extends Plugin {
         }
 
         if (leaf) {
-            const state: Record<string, unknown> = {};
-            if (filterState && filterState.conditions.length > 0) {
-                state.filterState = FilterSerializer.toJSON(filterState);
-            }
+            const state: Record<string, unknown> = {
+                filterState: filterState && filterState.conditions.length > 0
+                    ? FilterSerializer.toJSON(filterState)
+                    : null,
+            };
             await leaf.setViewState({ type: viewType, active: true, state });
             workspace.revealLeaf(leaf);
         }

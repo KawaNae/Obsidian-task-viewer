@@ -8,6 +8,7 @@ import { DateNavigator, ViewModeSelector, ZoomSelector } from '../ViewToolbar';
 import { FilterMenuComponent } from '../filter/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import type { FilterState } from '../../services/filter/FilterTypes';
+import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import type { Task } from '../../types';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 
@@ -73,7 +74,7 @@ export class TimelineToolbar {
         // Restore persisted filter state
         if (this.viewState.filterState) {
             this.filterMenu.setFilterState(FilterSerializer.fromJSON(this.viewState.filterState));
-        } else if (this.viewState.filterFiles) {
+        } else if (this.viewState.filterFiles && this.viewState.filterFiles.length > 0) {
             // Migrate legacy filterFiles to FilterState
             this.filterMenu.setFilterState({
                 conditions: [{
@@ -84,6 +85,8 @@ export class TimelineToolbar {
                 }],
                 logic: 'and',
             });
+        } else {
+            this.filterMenu.setFilterState(createEmptyFilterState());
         }
 
         const toolbar = this.container.createDiv('view-toolbar');

@@ -1,21 +1,18 @@
 import type { FilterState, FilterCondition } from './FilterTypes';
-import { EMPTY_FILTER_STATE } from './FilterTypes';
+import { createEmptyFilterState } from './FilterTypes';
 
 /**
  * Serialization utilities for FilterState (JSON persistence and URI encoding).
  */
 export class FilterSerializer {
     static toJSON(state: FilterState): Record<string, unknown> {
-        return {
-            conditions: state.conditions,
-            logic: state.logic,
-        };
+        return JSON.parse(JSON.stringify({ conditions: state.conditions, logic: state.logic }));
     }
 
     static fromJSON(raw: unknown): FilterState {
-        if (!raw || typeof raw !== 'object') return { ...EMPTY_FILTER_STATE };
+        if (!raw || typeof raw !== 'object') return createEmptyFilterState();
         const obj = raw as Record<string, unknown>;
-        if (!Array.isArray(obj.conditions)) return { ...EMPTY_FILTER_STATE };
+        if (!Array.isArray(obj.conditions)) return createEmptyFilterState();
         const conditions: FilterCondition[] = (obj.conditions as unknown[])
             .filter((c): c is FilterCondition => c != null && typeof c === 'object' && 'property' in c && 'operator' in c && 'value' in c);
         const logic = obj.logic === 'or' ? 'or' as const : 'and' as const;
@@ -37,7 +34,7 @@ export class FilterSerializer {
      * Handles both old format (conditions array) and new format ({conditions, logic}).
      */
     static fromURIParam(param: string): FilterState {
-        if (!param) return { ...EMPTY_FILTER_STATE };
+        if (!param) return createEmptyFilterState();
         try {
             const json = atob(param);
             const parsed = JSON.parse(json);
@@ -57,9 +54,9 @@ export class FilterSerializer {
                 return { conditions, logic: 'and' };
             }
 
-            return { ...EMPTY_FILTER_STATE };
+            return createEmptyFilterState();
         } catch {
-            return { ...EMPTY_FILTER_STATE };
+            return createEmptyFilterState();
         }
     }
 }
