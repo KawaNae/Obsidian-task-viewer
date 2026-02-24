@@ -1,4 +1,4 @@
-import { Notice, Plugin, WorkspaceLeaf, setIcon, TFile } from 'obsidian';
+import { Notice, Plugin, WorkspaceLeaf, setIcon, TFile, Menu, Editor, MarkdownView } from 'obsidian';
 import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
@@ -26,6 +26,11 @@ import { getViewMeta } from './constants/viewRegistry';
 import type { FilterState } from './services/filter/FilterTypes';
 import { createEmptyFilterState } from './services/filter/FilterTypes';
 import { FilterSerializer } from './services/filter/FilterSerializer';
+import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
+import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
+import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
+import { TimerMenuBuilder } from './interaction/menu/builders/TimerMenuBuilder';
+import { TaskActionsMenuBuilder } from './interaction/menu/builders/TaskActionsMenuBuilder';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
@@ -206,6 +211,32 @@ export default class TaskViewerPlugin extends Plugin {
         // Register Editor Suggest
         this.registerEditorSuggest(new ColorSuggest(this.app, this));
         this.registerEditorSuggest(new LineStyleSuggest(this.app, this));
+
+        // Register editor context menu for @notation tasks
+        const editorPropertiesBuilder = new PropertiesMenuBuilder(
+            this.app, this.taskIndex, this,
+            new PropertyCalculator(), new PropertyFormatter()
+        );
+        const editorTimerBuilder = new TimerMenuBuilder(this);
+        const editorActionsBuilder = new TaskActionsMenuBuilder(this.app, this.taskIndex, this);
+
+        this.registerEvent(
+            this.app.workspace.on('editor-menu', (menu: Menu, editor: Editor, view: MarkdownView) => {
+                const filePath = view.file?.path;
+                if (!filePath) return;
+
+                const line = editor.getCursor().line;
+                const task = this.taskIndex.getTaskByFileLine(filePath, line);
+                if (!task) return;
+
+                menu.addSeparator();
+                editorPropertiesBuilder.buildPropertiesSubmenu(menu, task, null);
+                menu.addSeparator();
+                editorTimerBuilder.addTimerSubmenu(menu, task);
+                menu.addSeparator();
+                editorActionsBuilder.addTaskActions(menu, task);
+            })
+        );
 
         // Apply global styles if enabled
         this.updateGlobalStyles();
