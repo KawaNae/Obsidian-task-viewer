@@ -20,32 +20,70 @@ export class TaskActionsMenuBuilder {
      * Task操作メニューを追加
      */
     addTaskActions(menu: Menu, task: Task): void {
-        const displayName = getTaskDisplayName(task);
-
-        // Child task creation
-        this.addCreateChildItem(menu, task);
-        this.addPomodoroAsChildItem(menu, task, displayName);
-        this.addTimerAsChildItem(menu, task, displayName);
+        // Record as Child (timer submenu)
+        this.addRecordAsChildSubmenu(menu, task);
+        // Add Child Task (standalone)
+        this.addChildTaskItem(menu, task);
         menu.addSeparator();
 
         // File operations
         this.addOpenInEditorItem(menu, task);
         this.addDuplicateSubmenu(menu, task);
-
-        // Convert to frontmatter (inline タスクのみ)
-        if (task.parserId === 'at-notation') {
-            this.addConvertToFrontmatterItem(menu, task);
-        }
-
+        this.addConvertSubmenu(menu, task);
         this.addDeleteItem(menu, task);
     }
 
     /**
-     * "Create Child Task"項目を追加
+     * "Record as Child" サブメニュー（タイマー系のみ）
      */
-    private addCreateChildItem(menu: Menu, task: Task): void {
+    private addRecordAsChildSubmenu(menu: Menu, task: Task): void {
+        const displayName = getTaskDisplayName(task);
+
         menu.addItem((item) => {
-            item.setTitle('Create Child Task')
+            const subMenu = (item as any)
+                .setTitle('Track as Child')
+                .setIcon('clock')
+                .setSubmenu() as Menu;
+
+            const baseParams = {
+                taskId: task.id,
+                taskName: displayName,
+                taskOriginalText: task.originalText,
+                taskFile: task.file,
+                recordMode: 'child' as const,
+                parserId: task.parserId,
+                timerTargetId: task.timerTargetId ?? task.blockId,
+                autoStart: false,
+            };
+
+            // Countup
+            subMenu.addItem((sub) => {
+                sub.setTitle('⏱️ Open Countup')
+                    .setIcon('play')
+                    .onClick(() => {
+                        const widget = this.plugin.getTimerWidget();
+                        widget.startTimer({ ...baseParams, timerType: 'countup' });
+                    });
+            });
+
+            // Pomodoro
+            subMenu.addItem((sub) => {
+                sub.setTitle('🍅 Open Pomodoro')
+                    .setIcon('timer')
+                    .onClick(() => {
+                        const widget = this.plugin.getTimerWidget();
+                        widget.startTimer({ ...baseParams, timerType: 'pomodoro' });
+                    });
+            });
+        });
+    }
+
+    /**
+     * "Add Child Task" 単独項目（CreateTaskModal）
+     */
+    private addChildTaskItem(menu: Menu, task: Task): void {
+        menu.addItem((item) => {
+            item.setTitle('Add Child Task')
                 .setIcon('plus')
                 .onClick(() => {
                     menu.close();
@@ -68,54 +106,6 @@ export class TaskActionsMenuBuilder {
                         const childLine = childIndent + taskLine;
                         await repository.insertLineAsFirstChild(task, childLine);
                     }).open();
-                });
-        });
-    }
-
-    /**
-     * "🍅 Open Pomodoro as Child"項目を追加
-     */
-    private addPomodoroAsChildItem(menu: Menu, task: Task, displayName: string): void {
-        menu.addItem((item) => {
-            item.setTitle('🍅 Open Pomodoro as Child')
-                .setIcon('timer')
-                .onClick(() => {
-                    const widget = this.plugin.getTimerWidget();
-                    widget.startTimer({
-                        taskId: task.id,
-                        taskName: displayName,
-                        taskOriginalText: task.originalText,
-                        taskFile: task.file,
-                        recordMode: 'child',
-                        parserId: task.parserId,
-                        timerTargetId: task.timerTargetId ?? task.blockId,
-                        timerType: 'pomodoro',
-                        autoStart: false
-                    });
-                });
-        });
-    }
-
-    /**
-     * "⏱️ Open Tracker as Child"項目を追加
-     */
-    private addTimerAsChildItem(menu: Menu, task: Task, displayName: string): void {
-        menu.addItem((item) => {
-            item.setTitle('⏱️ Open Tracker as Child')
-                .setIcon('clock')
-                .onClick(() => {
-                    const widget = this.plugin.getTimerWidget();
-                    widget.startTimer({
-                        taskId: task.id,
-                        taskName: displayName,
-                        taskOriginalText: task.originalText,
-                        taskFile: task.file,
-                        recordMode: 'child',
-                        parserId: task.parserId,
-                        timerTargetId: task.timerTargetId ?? task.blockId,
-                        timerType: 'countup',
-                        autoStart: false
-                    });
                 });
         });
     }
@@ -170,21 +160,73 @@ export class TaskActionsMenuBuilder {
     }
 
     /**
-     * "Delete"項目を追加
+     * "Convert to" サブメニュー（Move + Convert 統合）
      */
-    /**
-     * "Convert to Frontmatter Task" メニュー項目を追加
-     */
-    private addConvertToFrontmatterItem(menu: Menu, task: Task): void {
+    private addConvertSubmenu(menu: Menu, task: Task): void {
         menu.addItem((item) => {
-            item.setTitle('Convert to Frontmatter Task')
-                .setIcon('file-plus')
-                .onClick(async () => {
-                    await this.taskIndex.convertToFrontmatterTask(task.id);
+            const subMenu = (item as any)
+                .setTitle('Convert to')
+                .setIcon('arrow-right-left')
+                .setSubmenu() as Menu;
+
+            const isTime = !!task.startTime;
+
+            if (isTime) {
+                subMenu.addItem((sub) => {
+                    sub.setTitle('All Day')
+                        .setIcon('calendar-with-checkmark')
+                        .onClick(async () => {
+                            await this.taskIndex.updateTask(task.id, {
+                                startTime: undefined,
+                                endTime: undefined
+                            });
+                        });
                 });
+
+                if (task.deadline) {
+                    subMenu.addItem((sub) => {
+                        sub.setTitle('All Day (Deadline only)')
+                            .setIcon('calendar-clock')
+                            .onClick(async () => {
+                                await this.taskIndex.updateTask(task.id, {
+                                    startDate: undefined,
+                                    startTime: undefined,
+                                    endDate: undefined,
+                                    endTime: undefined
+                                });
+                            });
+                    });
+                }
+            } else {
+                subMenu.addItem((sub) => {
+                    sub.setTitle('Timeline')
+                        .setIcon('clock')
+                        .onClick(async () => {
+                            const startHour = this.plugin.settings.startHour;
+                            const h = startHour.toString().padStart(2, '0');
+                            await this.taskIndex.updateTask(task.id, {
+                                startTime: `${h}:00`,
+                                endTime: undefined
+                            });
+                        });
+                });
+            }
+
+            if (task.parserId === 'at-notation') {
+                subMenu.addItem((sub) => {
+                    sub.setTitle('Frontmatter Task')
+                        .setIcon('file-plus')
+                        .onClick(async () => {
+                            await this.taskIndex.convertToFrontmatterTask(task.id);
+                        });
+                });
+            }
         });
     }
 
+    /**
+     * "Delete"項目を追加
+     */
     private addDeleteItem(menu: Menu, task: Task): void {
         menu.addItem((item) => {
             item.setTitle('Delete')

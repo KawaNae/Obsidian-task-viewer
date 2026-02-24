@@ -16,13 +16,21 @@
 
 .tv-settings .tv-settings__nav {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
     padding: 0;
-    border-bottom: 1px solid var(--tv-border);
+}
+
+.tv-settings .tv-settings__nav::-webkit-scrollbar {
+    display: none;
 }
 
 .tv-settings .tv-settings__nav-btn {
-    padding: 6px 14px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 12px 12px;
     border: 1px solid transparent;
     border-bottom: none;
     background-color: transparent;
@@ -33,6 +41,7 @@
     margin-bottom: -1px;
     box-shadow: none;
     transition: color 0.15s ease;
+    user-select: none;
 }
 
 .tv-settings .tv-settings__nav-btn:hover {
@@ -42,9 +51,8 @@
 
 .tv-settings .tv-settings__nav-btn--active {
     border-color: var(--tv-border);
-    background-color: var(--tv-bg-primary);
+    background-color: var(--tv-bg-settings-active);
     color: var(--tv-text);
-    font-weight: 600;
 }
 
 /* ─── Content Area ────────────────────────────────────────── */
@@ -52,6 +60,7 @@
 .tv-settings .tv-settings__content {
     flex: 1;
     overflow-y: auto;
+    border-top: 1px solid var(--tv-border);
     padding: 16px 0 0;
 }
 

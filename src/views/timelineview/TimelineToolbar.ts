@@ -172,13 +172,14 @@ export class TimelineToolbar {
     }
 
     private renderZoomControls(toolbar: HTMLElement): void {
+        const currentZoom = this.viewState.zoomLevel ?? this.plugin.settings.zoomLevel;
         ZoomSelector.render(
             toolbar,
-            this.plugin.settings.zoomLevel,
+            currentZoom,
             async (newZoom) => {
-                this.plugin.settings.zoomLevel = newZoom;
-                await this.plugin.saveSettings();
+                this.viewState.zoomLevel = newZoom;
                 this.callbacks.onRender();
+                this.app.workspace.requestSaveLayout();
             }
         );
     }
@@ -189,7 +190,11 @@ export class TimelineToolbar {
         btn.setAttribute('aria-label', 'Copy view URI');
         btn.setAttribute('title', 'Copy view URI');
         btn.onclick = async () => {
-            const uri = ViewUriBuilder.build(VIEW_META_TIMELINE.type, this.filterMenu.getFilterState());
+            const uri = ViewUriBuilder.build(VIEW_META_TIMELINE.type, {
+                filterState: this.filterMenu.getFilterState(),
+                days: this.viewState.daysToShow,
+                zoom: this.viewState.zoomLevel,
+            });
             await navigator.clipboard.writeText(uri);
             new Notice('URI copied to clipboard');
         };

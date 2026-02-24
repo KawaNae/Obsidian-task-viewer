@@ -47,9 +47,10 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         ];
 
         tabs.forEach(tab => {
-            const btn = nav.createEl('button', {
+            const btn = nav.createEl('div', {
                 cls: 'tv-settings__nav-btn',
                 text: tab.label,
+                attr: { role: 'tab', tabindex: '0' },
             });
             btn.dataset.tabId = tab.id;
 
@@ -116,6 +117,32 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     this.plugin.settings.longPressThreshold = value;
                     await this.plugin.saveSettings();
                 }));
+
+        // Child Tasks
+        el.createEl('h3', { text: 'Child Tasks', cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName('Child Task Heading')
+            .setDesc('The heading under which new child tasks will be inserted in frontmatter task files.')
+            .addText(text => text
+                .setPlaceholder('Tasks')
+                .setValue(this.plugin.settings.frontmatterTaskHeader)
+                .onChange(async (value) => {
+                    this.plugin.settings.frontmatterTaskHeader = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Child Task Heading Level')
+            .setDesc('The level of the heading (1-6).')
+            .addSlider(slider => slider
+                .setLimits(1, 6, 1)
+                .setValue(this.plugin.settings.frontmatterTaskHeaderLevel)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.frontmatterTaskHeaderLevel = value;
+                    await this.plugin.saveSettings();
+                }));
     }
 
     // ─── Views Tab ───────────────────────────────────────────
@@ -158,7 +185,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
         new Setting(el)
             .setName('Default Zoom Level')
-            .setDesc('The default zoom level for the timeline view (0.25 - 10.0).')
+            .setDesc('Default zoom level for new Timeline views. Each view can override this independently.')
             .addSlider(slider => slider
                 .setLimits(0.25, 10.0, 0.25)
                 .setValue(this.plugin.settings.zoomLevel)
@@ -345,6 +372,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
     // ─── Timer Tab ───────────────────────────────────────────
 
     private renderTimerTab(el: HTMLElement): void {
+        el.createEl('h3', { text: 'Pomodoro', cls: 'setting-section-header' });
+
         new Setting(el)
             .setName('Custom Pomodoro Work Minutes')
             .setDesc('Custom Work duration in minutes for the Pomodoro timer.')
@@ -379,6 +408,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     });
             });
 
+        el.createEl('h3', { text: 'Interval Timer', cls: 'setting-section-header' });
+
         new Setting(el)
             .setName('Interval Template Folder')
             .setDesc('Vault folder containing interval timer template files (.md with tv-segments in frontmatter). Leave empty to disable.')
@@ -398,30 +429,6 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
         this.addFrontmatterTaskKeySettings(el);
 
-        el.createEl('h3', { text: 'Child Tasks', cls: 'setting-section-header' });
-
-        new Setting(el)
-            .setName('Child Task Heading')
-            .setDesc('The heading under which new child tasks will be inserted in frontmatter task files.')
-            .addText(text => text
-                .setPlaceholder('Tasks')
-                .setValue(this.plugin.settings.frontmatterTaskHeader)
-                .onChange(async (value) => {
-                    this.plugin.settings.frontmatterTaskHeader = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(el)
-            .setName('Child Task Heading Level')
-            .setDesc('The level of the heading (1-6).')
-            .addSlider(slider => slider
-                .setLimits(1, 6, 1)
-                .setValue(this.plugin.settings.frontmatterTaskHeaderLevel)
-                .setDynamicTooltip()
-                .onChange(async (value) => {
-                    this.plugin.settings.frontmatterTaskHeaderLevel = value;
-                    await this.plugin.saveSettings();
-                }));
     }
 
     // ─── AI Index Tab ────────────────────────────────────────

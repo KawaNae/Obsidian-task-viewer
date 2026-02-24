@@ -148,7 +148,8 @@ export class CalendarView extends ItemView {
             () => {
                 this.handleManager?.updatePositions();
             },
-            () => this.getViewStartDateString()
+            () => this.getViewStartDateString(),
+            () => this.plugin.settings.zoomLevel
         );
 
         this.container.addEventListener('click', (event: MouseEvent) => {

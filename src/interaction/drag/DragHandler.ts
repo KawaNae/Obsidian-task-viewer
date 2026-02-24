@@ -16,18 +16,20 @@ export class DragHandler implements DragContext {
     private currentStrategy: DragStrategy | null = null;
     private currentDoc: Document;
     private getViewStartDateProvider: () => string;
+    private getZoomLevelProvider: () => number;
 
     private boundPointerDown: (e: PointerEvent) => void;
     private boundPointerMove: (e: PointerEvent) => void;
     private boundPointerUp: (e: PointerEvent) => void;
 
-    constructor(container: HTMLElement, taskIndex: TaskIndex, plugin: TaskViewerPlugin, onTaskClick: (taskId: string) => void, onTaskMove: () => void, getViewStartDate: () => string) {
+    constructor(container: HTMLElement, taskIndex: TaskIndex, plugin: TaskViewerPlugin, onTaskClick: (taskId: string) => void, onTaskMove: () => void, getViewStartDate: () => string, getZoomLevel: () => number) {
         this.container = container;
         this.taskIndex = taskIndex;
         this.plugin = plugin;
         this.onTaskClick = onTaskClick;
         this.onTaskMove = onTaskMove;
         this.getViewStartDateProvider = getViewStartDate;
+        this.getZoomLevelProvider = getZoomLevel;
 
         this.boundPointerDown = this.onPointerDown.bind(this);
         this.boundPointerMove = this.onPointerMove.bind(this);
@@ -55,6 +57,10 @@ export class DragHandler implements DragContext {
 
     getViewStartDate(): string {
         return this.getViewStartDateProvider();
+    }
+
+    getZoomLevel(): number {
+        return this.getZoomLevelProvider();
     }
 
     private onPointerDown(e: PointerEvent) {

@@ -132,6 +132,8 @@ body {
 
     --tv-bg-schedule-main: var(--tv-bg-primary);
 
+    --tv-bg-settings-active: var(--tv-bg-secondary);
+
     --tv-shadow-rgb: var(--mono-rgb-100);
     --tv-shadow-a-card: 0.25;
     --tv-shadow-a-strong: 0.3;
@@ -166,6 +168,7 @@ body.theme-light {
     --tv-shadow-a-strong: 0.1;
     --tv-shadow-a-medium: 0.08;
     --tv-shadow-a-light: 0.05;
+    --tv-bg-settings-active: var(--tv-bg-primary);
 }
 
 body.theme-dark {
@@ -175,4 +178,5 @@ body.theme-dark {
     --tv-shadow-a-strong: 0.4;
     --tv-shadow-a-medium: 0.28;
     --tv-shadow-a-light: 0.22;
+    --tv-bg-settings-active: var(--tv-bg-secondary);
 }

@@ -1,8 +1,15 @@
 import type { FilterState } from '../services/filter/FilterTypes';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
 
+export interface ViewUriOptions {
+    filterState?: FilterState;
+    days?: number;
+    zoom?: number;
+    date?: string;
+}
+
 /**
- * Builds obsidian://task-viewer URIs from view type and filter state.
+ * Builds obsidian://task-viewer URIs from view type and optional parameters.
  * Prefers shorthand params (?tag=a,b) when possible, falls back to base64.
  */
 export class ViewUriBuilder {
@@ -16,20 +23,32 @@ export class ViewUriBuilder {
     /** Property names that support shorthand URI params. */
     private static readonly SHORTHAND_PROPERTIES = new Set(['file', 'tag', 'status']);
 
-    static build(viewType: string, filterState?: FilterState): string {
+    static build(viewType: string, options?: FilterState | ViewUriOptions): string {
         const shortName = this.VIEW_SHORT_NAMES[viewType];
         if (!shortName) return '';
 
-        let uri = `obsidian://task-viewer?view=${shortName}`;
-
-        if (!filterState || filterState.conditions.length === 0) return uri;
-
-        const shorthand = this.tryBuildShorthand(filterState);
-        if (shorthand) {
-            return `${uri}&${shorthand}`;
+        // Normalize: FilterState direct pass (backward compat) or ViewUriOptions
+        let opts: ViewUriOptions;
+        if (options && 'conditions' in options) {
+            opts = { filterState: options as FilterState };
+        } else {
+            opts = (options as ViewUriOptions) ?? {};
         }
 
-        return `${uri}&filter=${FilterSerializer.toURIParam(filterState)}`;
+        let uri = `obsidian://task-viewer?view=${shortName}`;
+
+        // View-specific params
+        if (opts.days != null) uri += `&days=${opts.days}`;
+        if (opts.zoom != null) uri += `&zoom=${opts.zoom}`;
+        if (opts.date != null) uri += `&date=${encodeURIComponent(opts.date)}`;
+
+        // Filter params
+        if (!opts.filterState || opts.filterState.conditions.length === 0) return uri;
+
+        const shorthand = this.tryBuildShorthand(opts.filterState);
+        if (shorthand) return `${uri}&${shorthand}`;
+
+        return `${uri}&filter=${FilterSerializer.toURIParam(opts.filterState)}`;
     }
 
     /**

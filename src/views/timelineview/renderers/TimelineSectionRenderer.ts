@@ -18,7 +18,8 @@ export class TimelineSectionRenderer {
         private plugin: TaskViewerPlugin,
         private menuHandler: MenuHandler,
         private handleManager: HandleManager,
-        private taskRenderer: TaskCardRenderer
+        private taskRenderer: TaskCardRenderer,
+        private getZoomLevel: () => number
     ) { }
 
     public render(container: HTMLElement, date: string, owner: Component, isTaskVisible: (task: Task) => boolean) {
@@ -228,7 +229,7 @@ export class TimelineSectionRenderer {
 
     private handleCreateTaskTrigger(offsetY: number, date: string) {
         // Calculate time from offsetY
-        const zoomLevel = this.plugin.settings.zoomLevel;
+        const zoomLevel = this.getZoomLevel();
         const startHour = this.plugin.settings.startHour;
 
         // offsetY is in pixels. 1 hour = 60 * zoomLevel pixels
@@ -314,18 +315,18 @@ export class TimelineSectionRenderer {
 
         menu.addSeparator();
 
+        // Open Countup (Daily Note)
+        menu.addItem((item) => {
+            item.setTitle('⏱️ Open Countup for Daily Note')
+                .setIcon('clock')
+                .onClick(() => this.openDailyNoteTimer(date, 'countup'));
+        });
+
         // Open Pomodoro (Daily Note)
         menu.addItem((item) => {
             item.setTitle('🍅 Open Pomodoro for Daily Note')
                 .setIcon('timer')
                 .onClick(() => this.openDailyNoteTimer(date, 'pomodoro'));
-        });
-
-        // Open Timer (Daily Note)
-        menu.addItem((item) => {
-            item.setTitle('⏱️ Open Tracker for Daily Note')
-                .setIcon('clock')
-                .onClick(() => this.openDailyNoteTimer(date, 'countup'));
         });
 
         menu.showAtPosition({ x, y });

@@ -268,7 +268,29 @@ export default class TaskViewerPlugin extends Plugin {
                 });
             }
 
-            this.activateView(viewType, filterState);
+            const uriParams: {
+                filterState?: FilterState;
+                days?: number;
+                zoom?: number;
+                date?: string;
+            } = { filterState };
+
+            // Timeline-specific params
+            if (viewType === VIEW_TYPE_TIMELINE) {
+                if (params.days) {
+                    const days = parseInt(params.days, 10);
+                    if ([1, 3, 7].includes(days)) uriParams.days = days;
+                }
+                if (params.zoom) {
+                    const zoom = parseFloat(params.zoom);
+                    if (zoom >= 0.25 && zoom <= 10.0) uriParams.zoom = zoom;
+                }
+                if (params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date)) {
+                    uriParams.date = params.date;
+                }
+            }
+
+            this.activateView(viewType, uriParams);
         });
     }
 
@@ -371,7 +393,12 @@ export default class TaskViewerPlugin extends Plugin {
         });
     }
 
-    async activateView(viewType: string, filterState?: FilterState) {
+    async activateView(viewType: string, params?: {
+        filterState?: FilterState;
+        days?: number;
+        zoom?: number;
+        date?: string;
+    }) {
         const { workspace } = this.app;
 
         let leaf: WorkspaceLeaf | null = null;
@@ -385,10 +412,14 @@ export default class TaskViewerPlugin extends Plugin {
 
         if (leaf) {
             const state: Record<string, unknown> = {
-                filterState: filterState && filterState.conditions.length > 0
-                    ? FilterSerializer.toJSON(filterState)
+                filterState: params?.filterState && params.filterState.conditions.length > 0
+                    ? FilterSerializer.toJSON(params.filterState)
                     : null,
             };
+            if (params?.days != null) state.daysToShow = params.days;
+            if (params?.zoom != null) state.zoomLevel = params.zoom;
+            if (params?.date != null) state.startDate = params.date;
+
             await leaf.setViewState({ type: viewType, active: true, state });
             workspace.revealLeaf(leaf);
         }

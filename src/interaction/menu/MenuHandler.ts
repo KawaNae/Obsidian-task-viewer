@@ -7,7 +7,6 @@ import { PropertyCalculator } from './PropertyCalculator';
 import { PropertyFormatter } from './PropertyFormatter';
 import { PropertiesMenuBuilder } from './builders/PropertiesMenuBuilder';
 import { TimerMenuBuilder } from './builders/TimerMenuBuilder';
-import { MoveMenuBuilder } from './builders/MoveMenuBuilder';
 import { TaskActionsMenuBuilder } from './builders/TaskActionsMenuBuilder';
 
 /**
@@ -20,7 +19,6 @@ export class MenuHandler {
     private propertyFormatter: PropertyFormatter;
     private propertiesMenuBuilder: PropertiesMenuBuilder;
     private timerMenuBuilder: TimerMenuBuilder;
-    private moveMenuBuilder: MoveMenuBuilder;
     private taskActionsMenuBuilder: TaskActionsMenuBuilder;
 
     private viewStartDate: string | null = null;
@@ -44,7 +42,6 @@ export class MenuHandler {
             this.propertyFormatter
         );
         this.timerMenuBuilder = new TimerMenuBuilder(plugin);
-        this.moveMenuBuilder = new MoveMenuBuilder(taskIndex, plugin);
         this.taskActionsMenuBuilder = new TaskActionsMenuBuilder(app, taskIndex, plugin);
     }
 
@@ -83,17 +80,11 @@ export class MenuHandler {
         this.propertiesMenuBuilder.buildPropertiesSubmenu(menu, task, this.viewStartDate);
         menu.addSeparator();
 
-        // 2. Timer
-        this.timerMenuBuilder.addTimerItem(menu, task);
-        this.timerMenuBuilder.addPomodoroItem(menu, task);
-        this.timerMenuBuilder.addCountdownItem(menu, task);
+        // 2. Start Timer (submenu)
+        this.timerMenuBuilder.addTimerSubmenu(menu, task);
         menu.addSeparator();
 
-        // 3. Move Operations
-        this.moveMenuBuilder.addMoveItems(menu, task);
-        menu.addSeparator();
-
-        // 4. Task Actions
+        // 3. Task Actions (child tasks, editor, duplicate, convert, delete)
         this.taskActionsMenuBuilder.addTaskActions(menu, task);
 
         menu.showAtPosition({ x, y });

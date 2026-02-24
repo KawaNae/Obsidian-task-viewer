@@ -100,6 +100,7 @@ export interface ViewState {
     showDeadlineList: boolean;
     filterFiles: string[] | null;
     filterState?: import('./services/filter/FilterTypes').FilterState;
+    zoomLevel?: number;
 }
 
 export interface FrontmatterTaskKeys {

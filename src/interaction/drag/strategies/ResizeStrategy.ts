@@ -134,7 +134,7 @@ export class ResizeStrategy extends BaseDragStrategy {
     // ========== Timeline Resize ==========
 
     private initTimelineResize(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
-        const zoomLevel = context.plugin.settings.zoomLevel;
+        const zoomLevel = context.getZoomLevel();
         const startMinutes = Number.parseFloat(el.style.getPropertyValue('--start-minutes') || '0');
         const durationMinutes = Number.parseFloat(el.style.getPropertyValue('--duration-minutes') || '0');
         this.initialTop = Number.isFinite(startMinutes) ? startMinutes * zoomLevel : 0;
@@ -150,7 +150,7 @@ export class ResizeStrategy extends BaseDragStrategy {
         if (!this.dragTask || !this.dragEl || !this.currentContext) return;
         const context = this.currentContext;
 
-        const zoomLevel = context.plugin.settings.zoomLevel;
+        const zoomLevel = context.getZoomLevel();
         const snapPixels = 15 * zoomLevel;
 
         const doc = context.container.ownerDocument || document;
@@ -191,7 +191,7 @@ export class ResizeStrategy extends BaseDragStrategy {
             return;
         }
 
-        const zoomLevel = context.plugin.settings.zoomLevel;
+        const zoomLevel = context.getZoomLevel();
         const startHour = context.plugin.settings.startHour;
         const startHourMinutes = startHour * 60;
 
