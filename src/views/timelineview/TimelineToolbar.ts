@@ -77,17 +77,18 @@ export class TimelineToolbar {
         } else if (this.viewState.filterFiles && this.viewState.filterFiles.length > 0) {
             // Migrate legacy filterFiles to FilterState
             this.filterMenu.setFilterState({
-                groups: [{
+                root: {
+                    type: 'group',
                     id: 'migrated-file-group',
-                    conditions: [{
+                    children: [{
+                        type: 'condition',
                         id: 'migrated-file',
                         property: 'file',
                         operator: 'includes',
                         value: { type: 'stringSet', values: this.viewState.filterFiles },
                     }],
                     logic: 'and',
-                }],
-                logic: 'and',
+                },
             });
         } else {
             this.filterMenu.setFilterState(createEmptyFilterState());

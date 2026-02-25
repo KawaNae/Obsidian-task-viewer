@@ -1,5 +1,5 @@
-import type { FilterState } from '../services/filter/FilterTypes';
-import { hasConditions, getAllConditions } from '../services/filter/FilterTypes';
+import type { FilterState, FilterConditionNode } from '../services/filter/FilterTypes';
+import { hasConditions } from '../services/filter/FilterTypes';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
 
 export interface ViewUriOptions {
@@ -30,7 +30,7 @@ export class ViewUriBuilder {
 
         // Normalize: FilterState direct pass (backward compat) or ViewUriOptions
         let opts: ViewUriOptions;
-        if (options && 'groups' in options) {
+        if (options && 'root' in options) {
             opts = { filterState: options as FilterState };
         } else {
             opts = (options as ViewUriOptions) ?? {};
@@ -53,19 +53,19 @@ export class ViewUriBuilder {
     }
 
     /**
-     * Converts filter state to shorthand params if all conditions are
-     * simple includes with stringSet values on supported properties.
-     * Only works for single-group AND filters.
+     * Converts filter state to shorthand params if root has only condition children
+     * with AND logic, all using includes operators on supported properties.
      */
     private static tryBuildShorthand(state: FilterState): string | null {
-        // Shorthand only for single-group AND logic with all includes operators
-        if (state.logic !== 'and') return null;
-        if (state.groups.length !== 1) return null;
-        if (state.groups[0].logic !== 'and') return null;
+        const root = state.root;
+        if (root.logic !== 'and') return null;
+        // Shorthand only if root has only conditions (no sub-groups)
+        if (root.children.some(c => c.type === 'group')) return null;
 
+        const conditions = root.children as FilterConditionNode[];
         const parts: string[] = [];
 
-        for (const condition of getAllConditions(state)) {
+        for (const condition of conditions) {
             if (condition.operator !== 'includes' || condition.value.type !== 'stringSet') {
                 return null;
             }

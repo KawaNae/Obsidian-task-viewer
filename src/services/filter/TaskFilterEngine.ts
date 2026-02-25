@@ -1,31 +1,33 @@
 import type { Task } from '../../types';
-import type { FilterState, FilterCondition, FilterGroup } from './FilterTypes';
+import type { FilterState, FilterConditionNode, FilterGroupNode, FilterNode } from './FilterTypes';
 import { DateResolver } from './DateResolver';
 
 /**
- * Evaluates whether a task passes all filter conditions.
- * Supports nested groups: top-level logic combines groups, intra-group logic combines conditions.
+ * Evaluates whether a task passes a recursive filter tree.
+ * Groups can contain both conditions and sub-groups at any depth.
  */
 export class TaskFilterEngine {
     static evaluate(task: Task, filterState: FilterState): boolean {
-        const groups = filterState.groups;
-        if (!groups || groups.length === 0) return true;
-
-        if (filterState.logic === 'or') {
-            return groups.some(g => this.evaluateGroup(task, g));
-        }
-        return groups.every(g => this.evaluateGroup(task, g));
+        return this.evaluateGroup(task, filterState.root);
     }
 
-    private static evaluateGroup(task: Task, group: FilterGroup): boolean {
-        if (group.conditions.length === 0) return true;
+    private static evaluateGroup(task: Task, group: FilterGroupNode): boolean {
+        if (group.children.length === 0) return true;
+
         if (group.logic === 'or') {
-            return group.conditions.some(c => this.evalCondition(task, c));
+            return group.children.some(child => this.evaluateNode(task, child));
         }
-        return group.conditions.every(c => this.evalCondition(task, c));
+        return group.children.every(child => this.evaluateNode(task, child));
     }
 
-    private static evalCondition(task: Task, condition: FilterCondition): boolean {
+    private static evaluateNode(task: Task, node: FilterNode): boolean {
+        if (node.type === 'condition') {
+            return this.evalCondition(task, node);
+        }
+        return this.evaluateGroup(task, node);
+    }
+
+    private static evalCondition(task: Task, condition: FilterConditionNode): boolean {
         // Skip conditions with empty stringSet values (value not yet selected)
         if (condition.value.type === 'stringSet' && condition.value.values.length === 0) return true;
         switch (condition.property) {
@@ -48,14 +50,14 @@ export class TaskFilterEngine {
         }
     }
 
-    private static evalStringSet(value: string, c: FilterCondition): boolean {
+    private static evalStringSet(value: string, c: FilterConditionNode): boolean {
         if (c.value.type !== 'stringSet') return true;
         if (c.operator === 'includes') return c.value.values.includes(value);
         if (c.operator === 'excludes') return !c.value.values.includes(value);
         return true;
     }
 
-    private static evalTag(task: Task, c: FilterCondition): boolean {
+    private static evalTag(task: Task, c: FilterConditionNode): boolean {
         if (c.value.type !== 'stringSet') return true;
         if (c.operator === 'includes') {
             return c.value.values.some(v => task.tags.includes(v));
@@ -66,7 +68,7 @@ export class TaskFilterEngine {
         return true;
     }
 
-    private static evalContent(task: Task, c: FilterCondition): boolean {
+    private static evalContent(task: Task, c: FilterConditionNode): boolean {
         if (c.value.type !== 'string') return true;
         const lower = task.content.toLowerCase();
         const search = c.value.value.toLowerCase();
@@ -75,7 +77,7 @@ export class TaskFilterEngine {
         return true;
     }
 
-    private static evalDate(taskDate: string | undefined, c: FilterCondition): boolean {
+    private static evalDate(taskDate: string | undefined, c: FilterConditionNode): boolean {
         // isSet / isNotSet — existence check, no date value needed
         if (c.operator === 'isSet') return !!taskDate;
         if (c.operator === 'isNotSet') return !taskDate;

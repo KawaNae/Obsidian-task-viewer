@@ -24,7 +24,7 @@ import { AudioUtils } from './utils/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
 import { getViewMeta } from './constants/viewRegistry';
 import type { FilterState } from './services/filter/FilterTypes';
-import { createEmptyFilterState, createEmptyFilterGroup, hasConditions } from './services/filter/FilterTypes';
+import { createEmptyFilterState, hasConditions } from './services/filter/FilterTypes';
 import { FilterSerializer } from './services/filter/FilterSerializer';
 import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
 import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
@@ -274,16 +274,15 @@ export default class TaskViewerPlugin extends Plugin {
 
             if (shorthandConditions.length > 0) {
                 filterState = filterState ?? createEmptyFilterState();
-                const group = createEmptyFilterGroup();
                 for (const sc of shorthandConditions) {
-                    group.conditions.push({
+                    filterState.root.children.push({
+                        type: 'condition',
                         id: sc.id,
                         property: sc.property,
                         operator: 'includes',
                         value: { type: 'stringSet', values: sc.values },
                     });
                 }
-                filterState.groups.push(group);
             }
 
             const uriParams: {
@@ -325,24 +324,25 @@ export default class TaskViewerPlugin extends Plugin {
                 id: 'migrated-deadline',
                 name: 'Deadline',
                 filterState: {
-                    groups: [{
+                    root: {
+                        type: 'group' as const,
                         id: 'migrated-deadline-group',
-                        conditions: [{
+                        children: [{
+                            type: 'condition' as const,
                             id: 'migrated-deadline-cond',
                             property: 'deadline' as const,
                             operator: 'isSet' as const,
                             value: { type: 'boolean' as const, value: true },
                         }],
                         logic: 'and' as const,
-                    }],
-                    logic: 'and' as const,
+                    },
                 },
             }];
         }
-        // Migrate existing pinnedList filterStates from v2 (flat conditions) to v3 (groups)
+        // Migrate existing pinnedList filterStates from older formats to v4 (recursive tree)
         if (Array.isArray(merged.pinnedLists)) {
             for (const list of merged.pinnedLists) {
-                if (list.filterState && !Array.isArray((list.filterState as unknown as Record<string, unknown>).groups)) {
+                if (list.filterState && !(list.filterState as unknown as Record<string, unknown>).root) {
                     list.filterState = FilterSerializer.fromJSON(list.filterState);
                 }
             }

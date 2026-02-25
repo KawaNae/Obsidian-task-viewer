@@ -1,7 +1,11 @@
 import { setIcon } from 'obsidian';
 import type { Task } from '../../types';
-import type { FilterState, FilterCondition, FilterProperty, FilterOperator, FilterGroup, DateFilterValue, RelativeDatePreset } from '../../services/filter/FilterTypes';
+import type {
+    FilterState, FilterConditionNode, FilterGroupNode, FilterNode,
+    FilterProperty, FilterOperator, DateFilterValue, RelativeDatePreset,
+} from '../../services/filter/FilterTypes';
 import {
+    MAX_FILTER_DEPTH,
     PROPERTY_OPERATORS,
     OPERATOR_LABELS,
     PROPERTY_LABELS,
@@ -11,7 +15,8 @@ import {
     RELATIVE_DATE_LABELS,
     createDefaultCondition,
     createEmptyFilterState,
-    createEmptyFilterGroup,
+    createFilterGroup,
+    deepCloneNode,
     hasConditions,
 } from '../../services/filter/FilterTypes';
 import { TaskFilterEngine } from '../../services/filter/TaskFilterEngine';
@@ -32,9 +37,8 @@ interface SelectItem {
 }
 
 /**
- * Notion-style row-based filter popover with group nesting.
- * Groups are visually separated; each group has its own intra-group logic.
- * 5-column grid per row: [Logic] [Property] [Operator] [Value] [✕]
+ * Notion-style filter popover with recursive group nesting.
+ * Groups can contain both conditions and sub-groups up to MAX_FILTER_DEPTH levels.
  */
 export class FilterMenuComponent {
     private state: FilterState = createEmptyFilterState();
@@ -124,15 +128,15 @@ export class FilterMenuComponent {
         if (!this.popoverEl) return;
         this.popoverEl.empty();
 
-        if (this.state.groups.length === 0) {
+        const root = this.state.root;
+
+        if (root.children.length === 0) {
             this.popoverEl.createDiv('filter-popover__empty').setText('No filters applied');
         } else {
-            for (let gi = 0; gi < this.state.groups.length; gi++) {
-                this.renderGroup(this.popoverEl, this.state.groups[gi], gi);
-            }
+            this.renderChildren(this.popoverEl, root, 0);
         }
 
-        this.renderFooterButtons(this.popoverEl);
+        this.renderFooterButtons(this.popoverEl, root, 0);
     }
 
     private refreshPopover(): void {
@@ -141,89 +145,44 @@ export class FilterMenuComponent {
         this.lastCallbacks?.onFilterChange();
     }
 
-    // ── Group Rendering ──
+    // ── Recursive Children Rendering ──
 
-    private renderGroup(parent: HTMLElement, group: FilterGroup, groupIndex: number): void {
-        const groupEl = parent.createDiv('filter-popover__group');
+    private renderChildren(parent: HTMLElement, group: FilterGroupNode, depth: number): void {
+        for (let i = 0; i < group.children.length; i++) {
+            const child = group.children[i];
 
-        // Inter-group logic row (between groups, not for first group)
-        if (groupIndex > 0) {
-            const logicRow = groupEl.createDiv('filter-popover__group-logic');
-            const logicBtn = logicRow.createEl('button', {
-                cls: 'filter-popover__logic-btn',
-                text: this.state.logic.toUpperCase(),
-            });
-            logicBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.state.logic = this.state.logic === 'and' ? 'or' : 'and';
-                this.refreshPopover();
-            });
-        }
+            // Inter-sibling logic separator (between nodes, not before the first)
+            if (i > 0) {
+                this.renderLogicSeparator(parent, group, depth);
+            }
 
-        // Group body with visual accent
-        const groupBody = groupEl.createDiv('filter-popover__group-body');
-
-        // Condition rows within group
-        for (let i = 0; i < group.conditions.length; i++) {
-            this.renderConditionRow(groupBody, group, group.conditions[i], i);
-        }
-
-        // Group footer: [+ Add filter] ... [...]
-        const groupFooter = groupBody.createDiv('filter-popover__group-footer');
-
-        // Add filter button
-        const addBtn = groupFooter.createEl('button', { cls: 'filter-popover__add-btn filter-popover__add-btn--inline' });
-        const iconEl = addBtn.createSpan();
-        setIcon(iconEl, 'plus');
-        addBtn.createSpan().setText('Add filter');
-        addBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            group.conditions.push(createDefaultCondition());
-            this.refreshPopover();
-        });
-
-        // Group more menu (...) — only when multiple groups
-        if (this.state.groups.length > 1) {
-            const groupMoreBtn = groupFooter.createEl('button', { cls: 'filter-popover__more-btn' });
-            setIcon(groupMoreBtn, 'more-horizontal');
-            groupMoreBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const items: SelectItem[] = [
-                    { label: 'Duplicate group', value: 'duplicate-group', checked: false, icon: 'copy' },
-                    { label: 'Remove group', value: 'remove-group', checked: false, icon: 'trash', cls: 'filter-child-popover__item--danger' },
-                ];
-                this.showSelectPopover(groupMoreBtn, items, (val) => {
-                    if (val === 'remove-group') {
-                        this.state.groups.splice(groupIndex, 1);
-                        this.refreshPopover();
-                    } else if (val === 'duplicate-group') {
-                        const dup: FilterGroup = JSON.parse(JSON.stringify(group));
-                        dup.id = `g-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-                        dup.conditions.forEach(c => {
-                            c.id = `f-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-                        });
-                        this.state.groups.splice(groupIndex + 1, 0, dup);
-                        this.refreshPopover();
-                    }
-                });
-            });
+            if (child.type === 'condition') {
+                this.renderConditionRow(parent, group, child, i);
+            } else {
+                this.renderGroup(parent, child, depth + 1, group, i);
+            }
         }
     }
 
-    // ── Condition Row (2-row layout: header + value) ──
+    // ── Logic Separator ──
 
-    private renderConditionRow(parent: HTMLElement, group: FilterGroup, condition: FilterCondition, index: number): void {
-        const row = parent.createDiv('filter-popover__row');
-
-        // ── Upper row: [Logic] [Property] [Operator] [Delete] ──
-        const headerLine = row.createDiv('filter-popover__row-header');
-
-        // Logic cell (Where / AND / OR) - within group
-        if (index === 0) {
-            headerLine.createDiv('filter-popover__logic-cell').setText('Where');
+    private renderLogicSeparator(parent: HTMLElement, group: FilterGroupNode, depth: number): void {
+        if (depth === 0) {
+            // Root level: horizontal line + AND/OR button
+            const logicRow = parent.createDiv('filter-popover__group-logic');
+            const logicBtn = logicRow.createEl('button', {
+                cls: 'filter-popover__logic-btn',
+                text: group.logic.toUpperCase(),
+            });
+            logicBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                group.logic = group.logic === 'and' ? 'or' : 'and';
+                this.refreshPopover();
+            });
         } else {
-            const logicCell = headerLine.createDiv('filter-popover__logic-cell');
-            const logicBtn = logicCell.createEl('button', {
+            // Nested level: compact inline AND/OR
+            const logicRow = parent.createDiv('filter-popover__nested-logic');
+            const logicBtn = logicRow.createEl('button', {
                 cls: 'filter-popover__logic-btn',
                 text: group.logic.toUpperCase(),
             });
@@ -233,11 +192,97 @@ export class FilterMenuComponent {
                 this.refreshPopover();
             });
         }
+    }
+
+    // ── Group Rendering (recursive) ──
+
+    private renderGroup(
+        parent: HTMLElement,
+        group: FilterGroupNode,
+        depth: number,
+        parentGroup: FilterGroupNode,
+        indexInParent: number,
+    ): void {
+        const groupEl = parent.createDiv('filter-popover__group');
+
+        // Group body with visual accent border and depth-based indentation
+        const groupBody = groupEl.createDiv('filter-popover__group-body');
+        groupBody.style.setProperty('--depth', String(depth));
+
+        // Render children recursively
+        this.renderChildren(groupBody, group, depth);
+
+        // Group footer: [+ Add filter] [+ Add group] [...]
+        const groupFooter = groupBody.createDiv('filter-popover__group-footer');
+
+        // Add filter button
+        const addBtn = groupFooter.createEl('button', { cls: 'filter-popover__add-btn filter-popover__add-btn--inline' });
+        setIcon(addBtn.createSpan(), 'plus');
+        addBtn.createSpan().setText('Add filter');
+        addBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            group.children.push(createDefaultCondition());
+            this.refreshPopover();
+        });
+
+        // Add sub-group button (only if depth allows)
+        if (depth < MAX_FILTER_DEPTH - 1) {
+            const addGroupBtn = groupFooter.createEl('button', { cls: 'filter-popover__add-btn filter-popover__add-btn--inline' });
+            setIcon(addGroupBtn.createSpan(), 'plus-square');
+            addGroupBtn.createSpan().setText('Add group');
+            addGroupBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const newGroup = createFilterGroup();
+                newGroup.children.push(createDefaultCondition());
+                group.children.push(newGroup);
+                this.refreshPopover();
+            });
+        }
+
+        // Group more menu (...) — only when parent has multiple children
+        if (parentGroup.children.length > 1) {
+            const groupMoreBtn = groupFooter.createEl('button', { cls: 'filter-popover__more-btn' });
+            setIcon(groupMoreBtn, 'more-horizontal');
+            groupMoreBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const items: SelectItem[] = [
+                    { label: 'Duplicate group', value: 'duplicate-group', checked: false, icon: 'copy' },
+                    { label: 'Ungroup', value: 'ungroup', checked: false, icon: 'unfold-horizontal' },
+                    { label: 'Remove group', value: 'remove-group', checked: false, icon: 'trash', cls: 'filter-child-popover__item--danger' },
+                ];
+                this.showSelectPopover(groupMoreBtn, items, (val) => {
+                    if (val === 'remove-group') {
+                        parentGroup.children.splice(indexInParent, 1);
+                        this.refreshPopover();
+                    } else if (val === 'duplicate-group') {
+                        const dup = deepCloneNode(group) as FilterGroupNode;
+                        parentGroup.children.splice(indexInParent + 1, 0, dup);
+                        this.refreshPopover();
+                    } else if (val === 'ungroup') {
+                        // Move all children of this group into the parent
+                        parentGroup.children.splice(indexInParent, 1, ...group.children);
+                        this.refreshPopover();
+                    }
+                });
+            });
+        }
+    }
+
+    // ── Condition Row (2-row layout: header + value) ──
+
+    private renderConditionRow(
+        parent: HTMLElement,
+        ownerGroup: FilterGroupNode,
+        condition: FilterConditionNode,
+        indexInGroup: number,
+    ): void {
+        const row = parent.createDiv('filter-popover__row');
+
+        // ── Upper row: [Property] [Operator] [...] ──
+        const headerLine = row.createDiv('filter-popover__row-header');
 
         // Property dropdown (with icon)
-        const propBtn = headerLine.createEl('button', {
-            cls: 'filter-popover__dropdown',
-        });
+        const propBtn = headerLine.createEl('button', { cls: 'filter-popover__dropdown' });
         const propIcon = propBtn.createSpan('filter-popover__dropdown-icon');
         setIcon(propIcon, PROPERTY_ICONS[condition.property]);
         propBtn.createSpan().setText(PROPERTY_LABELS[condition.property]);
@@ -267,12 +312,11 @@ export class FilterMenuComponent {
             ];
             this.showSelectPopover(moreBtn, items, (val) => {
                 if (val === 'remove') {
-                    group.conditions.splice(index, 1);
+                    ownerGroup.children.splice(indexInGroup, 1);
                     this.refreshPopover();
                 } else if (val === 'duplicate') {
-                    const dup: FilterCondition = JSON.parse(JSON.stringify(condition));
-                    dup.id = `f-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-                    group.conditions.splice(index + 1, 0, dup);
+                    const dup = deepCloneNode(condition) as FilterConditionNode;
+                    ownerGroup.children.splice(indexInGroup + 1, 0, dup);
                     this.refreshPopover();
                 }
             });
@@ -291,7 +335,7 @@ export class FilterMenuComponent {
 
     // ── Value Selector ──
 
-    private renderValueSelector(row: HTMLElement, condition: FilterCondition): void {
+    private renderValueSelector(row: HTMLElement, condition: FilterConditionNode): void {
         if (condition.property === 'content') {
             this.renderTextInput(row, condition);
         } else {
@@ -299,7 +343,7 @@ export class FilterMenuComponent {
         }
     }
 
-    private renderTextInput(row: HTMLElement, condition: FilterCondition): void {
+    private renderTextInput(row: HTMLElement, condition: FilterConditionNode): void {
         const input = row.createEl('input', {
             cls: 'filter-popover__text-input',
             type: 'text',
@@ -321,7 +365,7 @@ export class FilterMenuComponent {
         });
     }
 
-    private renderValueDropdown(row: HTMLElement, condition: FilterCondition): void {
+    private renderValueDropdown(row: HTMLElement, condition: FilterConditionNode): void {
         const currentValues = condition.value.type === 'stringSet' ? condition.value.values : [];
         const label = currentValues.length > 0
             ? this.formatValueLabel(condition.property, currentValues)
@@ -339,7 +383,7 @@ export class FilterMenuComponent {
 
     // ── Date Value Selector ──
 
-    private renderDateValueSelector(row: HTMLElement, condition: FilterCondition): void {
+    private renderDateValueSelector(row: HTMLElement, condition: FilterConditionNode): void {
         const container = row.createDiv('filter-popover__date-value');
 
         // Initialize value if needed
@@ -408,7 +452,7 @@ export class FilterMenuComponent {
         }
     }
 
-    private showRelativeDateMenu(anchorEl: HTMLElement, condition: FilterCondition): void {
+    private showRelativeDateMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
         const presets: RelativeDatePreset[] = ['today', 'thisWeek', 'nextWeek', 'pastWeek', 'nextNDays'];
         const currentPreset = condition.value.type === 'date' && condition.value.value.mode === 'relative'
             ? condition.value.value.preset : 'today';
@@ -527,7 +571,7 @@ export class FilterMenuComponent {
 
     // ── Property / Operator / Value Menus ──
 
-    private showPropertyMenu(anchorEl: HTMLElement, condition: FilterCondition): void {
+    private showPropertyMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
         const properties: FilterProperty[] = [
             'file', 'tag', 'status', 'content',
             'startDate', 'endDate', 'deadline',
@@ -556,7 +600,7 @@ export class FilterMenuComponent {
         });
     }
 
-    private showOperatorMenu(anchorEl: HTMLElement, condition: FilterCondition): void {
+    private showOperatorMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
         const operators = PROPERTY_OPERATORS[condition.property];
         const items: SelectItem[] = operators.map(op => ({
             label: OPERATOR_LABELS[op],
@@ -573,7 +617,7 @@ export class FilterMenuComponent {
         });
     }
 
-    private showValueMenu(anchorEl: HTMLElement, condition: FilterCondition): void {
+    private showValueMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
         const available = this.getAvailableValues(condition.property);
         const currentValues = condition.value.type === 'stringSet'
             ? new Set(condition.value.values) : new Set<string>();
@@ -597,21 +641,32 @@ export class FilterMenuComponent {
 
     // ── Footer Buttons ──
 
-    private renderFooterButtons(parent: HTMLElement): void {
+    private renderFooterButtons(parent: HTMLElement, group: FilterGroupNode, depth: number): void {
         const footer = parent.createDiv('filter-popover__footer');
 
-        // Add filter group
-        const addGroupBtn = footer.createEl('button', { cls: 'filter-popover__add-btn' });
-        const groupIcon = addGroupBtn.createSpan();
-        setIcon(groupIcon, 'plus-square');
-        addGroupBtn.createSpan().setText('Add filter group');
-        addGroupBtn.addEventListener('click', (e) => {
+        // Add filter
+        const addBtn = footer.createEl('button', { cls: 'filter-popover__add-btn' });
+        setIcon(addBtn.createSpan(), 'plus');
+        addBtn.createSpan().setText('Add filter');
+        addBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const group = createEmptyFilterGroup();
-            group.conditions.push(createDefaultCondition());
-            this.state.groups.push(group);
+            group.children.push(createDefaultCondition());
             this.refreshPopover();
         });
+
+        // Add filter group (only if depth allows)
+        if (depth < MAX_FILTER_DEPTH - 1) {
+            const addGroupBtn = footer.createEl('button', { cls: 'filter-popover__add-btn' });
+            setIcon(addGroupBtn.createSpan(), 'plus-square');
+            addGroupBtn.createSpan().setText('Add filter group');
+            addGroupBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const newGroup = createFilterGroup();
+                newGroup.children.push(createDefaultCondition());
+                group.children.push(newGroup);
+                this.refreshPopover();
+            });
+        }
     }
 
     // ── Positioning ──

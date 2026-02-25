@@ -1,3 +1,5 @@
+// ── Property & Operator enums ──
+
 export type FilterProperty =
     | 'file' | 'tag' | 'status' | 'content'
     | 'startDate' | 'endDate' | 'deadline';
@@ -8,12 +10,7 @@ export type FilterOperator =
     | 'contains' | 'notContains'
     | 'equals' | 'before' | 'after' | 'onOrBefore' | 'onOrAfter';
 
-export interface FilterCondition {
-    id: string;
-    property: FilterProperty;
-    operator: FilterOperator;
-    value: FilterValue;
-}
+// ── Value types ──
 
 export type FilterValue =
     | { type: 'stringSet'; values: string[] }
@@ -27,45 +24,118 @@ export type DateFilterValue =
     | { mode: 'absolute'; date: string }
     | { mode: 'relative'; preset: RelativeDatePreset; n?: number };
 
-export interface FilterGroup {
+// ── Recursive filter tree ──
+
+export const MAX_FILTER_DEPTH = 3;
+
+export type FilterNode = FilterConditionNode | FilterGroupNode;
+
+export interface FilterConditionNode {
+    type: 'condition';
     id: string;
-    conditions: FilterCondition[];
+    property: FilterProperty;
+    operator: FilterOperator;
+    value: FilterValue;
+}
+
+export interface FilterGroupNode {
+    type: 'group';
+    id: string;
+    children: FilterNode[];
     logic: 'and' | 'or';
 }
 
 export interface FilterState {
-    groups: FilterGroup[];
-    logic: 'and' | 'or';
+    root: FilterGroupNode;
 }
+
+/** @deprecated Use FilterConditionNode */
+export type FilterCondition = FilterConditionNode;
+/** @deprecated Use FilterGroupNode */
+export type FilterGroup = FilterGroupNode;
+
+// ── Frozen sentinel ──
 
 export const EMPTY_FILTER_STATE: FilterState = Object.freeze({
-    groups: Object.freeze([]) as readonly FilterGroup[] as FilterGroup[],
-    logic: 'and' as const,
+    root: Object.freeze({
+        type: 'group' as const,
+        id: 'root',
+        children: Object.freeze([]) as readonly FilterNode[] as FilterNode[],
+        logic: 'and' as const,
+    }),
 });
 
-/** Create a fresh empty filter state (safe to mutate, unlike EMPTY_FILTER_STATE) */
-export function createEmptyFilterState(): FilterState {
-    return { groups: [], logic: 'and' };
+// ── Factory functions ──
+
+function generateId(prefix: string): string {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-/** Create a fresh empty filter group */
-export function createEmptyFilterGroup(): FilterGroup {
+export function createEmptyFilterState(): FilterState {
+    return { root: createFilterGroup() };
+}
+
+export function createFilterGroup(): FilterGroupNode {
+    return { type: 'group', id: generateId('g'), children: [], logic: 'and' };
+}
+
+export function createDefaultCondition(): FilterConditionNode {
     return {
-        id: `g-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        conditions: [],
-        logic: 'and',
+        type: 'condition',
+        id: generateId('f'),
+        property: 'tag',
+        operator: 'includes',
+        value: { type: 'stringSet', values: [] },
     };
 }
 
-/** Whether the filter state has any conditions */
-export function hasConditions(state: FilterState): boolean {
-    return state.groups.some(g => g.conditions.length > 0);
+/** @deprecated Use createFilterGroup() */
+export function createEmptyFilterGroup(): FilterGroupNode {
+    return createFilterGroup();
 }
 
-/** Get all conditions across all groups */
-export function getAllConditions(state: FilterState): FilterCondition[] {
-    return state.groups.flatMap(g => g.conditions);
+// ── Tree query helpers ──
+
+export function hasConditions(state: FilterState): boolean {
+    return hasConditionsInGroup(state.root);
 }
+
+function hasConditionsInGroup(group: FilterGroupNode): boolean {
+    return group.children.some(child =>
+        child.type === 'condition' || hasConditionsInGroup(child),
+    );
+}
+
+export function getAllConditions(state: FilterState): FilterConditionNode[] {
+    const result: FilterConditionNode[] = [];
+    collectConditions(state.root, result);
+    return result;
+}
+
+function collectConditions(group: FilterGroupNode, out: FilterConditionNode[]): void {
+    for (const child of group.children) {
+        if (child.type === 'condition') {
+            out.push(child);
+        } else {
+            collectConditions(child, out);
+        }
+    }
+}
+
+/** Deep-clone a FilterNode, regenerating all IDs */
+export function deepCloneNode(node: FilterNode): FilterNode {
+    if (node.type === 'condition') {
+        return { ...JSON.parse(JSON.stringify(node)), id: generateId('f') };
+    }
+    return {
+        type: 'group',
+        id: generateId('g'),
+        children: node.children.map(deepCloneNode),
+        logic: node.logic,
+    };
+}
+
+// ── Constants ──
 
 /** Date properties that use date comparison operators */
 export const DATE_PROPERTIES: Set<FilterProperty> = new Set(['startDate', 'endDate', 'deadline']);
@@ -129,13 +199,3 @@ export const RELATIVE_DATE_LABELS: Record<RelativeDatePreset, string> = {
     pastWeek: 'Past week',
     nextNDays: 'Next N days',
 };
-
-/** Create a default new filter condition */
-export function createDefaultCondition(): FilterCondition {
-    return {
-        id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        property: 'tag',
-        operator: 'includes',
-        value: { type: 'stringSet', values: [] },
-    };
-}

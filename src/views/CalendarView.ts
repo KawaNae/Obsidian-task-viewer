@@ -101,17 +101,18 @@ export class CalendarView extends ItemView {
             const files = state.filterFiles.filter((value: unknown): value is string => typeof value === 'string');
             if (files.length > 0) {
                 this.filterMenu.setFilterState({
-                    groups: [{
+                    root: {
+                        type: 'group',
                         id: 'migrated-file-group',
-                        conditions: [{
+                        children: [{
+                            type: 'condition',
                             id: 'migrated-file',
                             property: 'file',
                             operator: 'includes',
                             value: { type: 'stringSet', values: files },
                         }],
                         logic: 'and',
-                    }],
-                    logic: 'and',
+                    },
                 });
             } else {
                 this.filterMenu.setFilterState(createEmptyFilterState());

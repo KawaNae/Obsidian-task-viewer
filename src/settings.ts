@@ -302,7 +302,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             return `${prop} ${op}`;
         });
 
-        const logic = listDef.filterState.logic === 'or' ? ' OR ' : ', ';
+        const logic = listDef.filterState.root.logic === 'or' ? ' OR ' : ', ';
         return parts.join(logic);
     }
 
