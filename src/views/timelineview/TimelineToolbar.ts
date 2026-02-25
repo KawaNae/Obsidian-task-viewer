@@ -8,7 +8,7 @@ import { DateNavigator, ViewModeSelector, ZoomSelector } from '../ViewToolbar';
 import { FilterMenuComponent } from '../filter/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import type { FilterState } from '../../services/filter/FilterTypes';
-import { createEmptyFilterState } from '../../services/filter/FilterTypes';
+import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import type { Task } from '../../types';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 
@@ -77,11 +77,15 @@ export class TimelineToolbar {
         } else if (this.viewState.filterFiles && this.viewState.filterFiles.length > 0) {
             // Migrate legacy filterFiles to FilterState
             this.filterMenu.setFilterState({
-                conditions: [{
-                    id: 'migrated-file',
-                    property: 'file',
-                    operator: 'includes',
-                    value: { type: 'stringSet', values: this.viewState.filterFiles },
+                groups: [{
+                    id: 'migrated-file-group',
+                    conditions: [{
+                        id: 'migrated-file',
+                        property: 'file',
+                        operator: 'includes',
+                        value: { type: 'stringSet', values: this.viewState.filterFiles },
+                    }],
+                    logic: 'and',
                 }],
                 logic: 'and',
             });
@@ -224,7 +228,7 @@ export class TimelineToolbar {
 
     private persistFilterState(): void {
         const state = this.filterMenu.getFilterState();
-        this.viewState.filterState = state.conditions.length > 0
+        this.viewState.filterState = hasConditions(state)
             ? FilterSerializer.fromJSON(FilterSerializer.toJSON(state))
             : undefined;
         this.viewState.filterFiles = null; // Clear legacy field

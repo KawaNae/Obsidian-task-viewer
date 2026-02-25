@@ -24,7 +24,7 @@ import { AudioUtils } from './utils/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
 import { getViewMeta } from './constants/viewRegistry';
 import type { FilterState } from './services/filter/FilterTypes';
-import { createEmptyFilterState } from './services/filter/FilterTypes';
+import { createEmptyFilterState, createEmptyFilterGroup, hasConditions } from './services/filter/FilterTypes';
 import { FilterSerializer } from './services/filter/FilterSerializer';
 import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
 import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
@@ -266,37 +266,24 @@ export default class TaskViewerPlugin extends Plugin {
                 filterState = FilterSerializer.fromURIParam(params.filter);
             }
 
-            // Shorthand: ?tag=work,urgent
-            if (params.tag) {
-                filterState = filterState ?? createEmptyFilterState();
-                filterState.conditions.push({
-                    id: 'uri-tag',
-                    property: 'tag',
-                    operator: 'includes',
-                    value: { type: 'stringSet', values: params.tag.split(',') },
-                });
-            }
+            // Shorthand params → build a single group with conditions
+            const shorthandConditions: { id: string; property: 'tag' | 'status' | 'file'; values: string[] }[] = [];
+            if (params.tag) shorthandConditions.push({ id: 'uri-tag', property: 'tag', values: params.tag.split(',') });
+            if (params.status) shorthandConditions.push({ id: 'uri-status', property: 'status', values: params.status.split(',') });
+            if (params.file) shorthandConditions.push({ id: 'uri-file', property: 'file', values: params.file.split(',') });
 
-            // Shorthand: ?status=x
-            if (params.status) {
+            if (shorthandConditions.length > 0) {
                 filterState = filterState ?? createEmptyFilterState();
-                filterState.conditions.push({
-                    id: 'uri-status',
-                    property: 'status',
-                    operator: 'includes',
-                    value: { type: 'stringSet', values: params.status.split(',') },
-                });
-            }
-
-            // Shorthand: ?file=path.md
-            if (params.file) {
-                filterState = filterState ?? createEmptyFilterState();
-                filterState.conditions.push({
-                    id: 'uri-file',
-                    property: 'file',
-                    operator: 'includes',
-                    value: { type: 'stringSet', values: params.file.split(',') },
-                });
+                const group = createEmptyFilterGroup();
+                for (const sc of shorthandConditions) {
+                    group.conditions.push({
+                        id: sc.id,
+                        property: sc.property,
+                        operator: 'includes',
+                        value: { type: 'stringSet', values: sc.values },
+                    });
+                }
+                filterState.groups.push(group);
             }
 
             const uriParams: {
@@ -338,15 +325,27 @@ export default class TaskViewerPlugin extends Plugin {
                 id: 'migrated-deadline',
                 name: 'Deadline',
                 filterState: {
-                    conditions: [{
-                        id: 'migrated-deadline-cond',
-                        property: 'hasDeadline' as const,
-                        operator: 'isSet' as const,
-                        value: { type: 'boolean' as const, value: true },
+                    groups: [{
+                        id: 'migrated-deadline-group',
+                        conditions: [{
+                            id: 'migrated-deadline-cond',
+                            property: 'deadline' as const,
+                            operator: 'isSet' as const,
+                            value: { type: 'boolean' as const, value: true },
+                        }],
+                        logic: 'and' as const,
                     }],
                     logic: 'and' as const,
                 },
             }];
+        }
+        // Migrate existing pinnedList filterStates from v2 (flat conditions) to v3 (groups)
+        if (Array.isArray(merged.pinnedLists)) {
+            for (const list of merged.pinnedLists) {
+                if (list.filterState && !Array.isArray((list.filterState as unknown as Record<string, unknown>).groups)) {
+                    list.filterState = FilterSerializer.fromJSON(list.filterState);
+                }
+            }
         }
         const sanitizedMerged = { ...merged } as TaskViewerSettings & Record<string, unknown>;
         delete sanitizedMerged.showCompletedInDeadlineList;
@@ -444,7 +443,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         if (leaf) {
             const state: Record<string, unknown> = {
-                filterState: params?.filterState && params.filterState.conditions.length > 0
+                filterState: params?.filterState && hasConditions(params.filterState)
                     ? FilterSerializer.toJSON(params.filterState)
                     : null,
             };

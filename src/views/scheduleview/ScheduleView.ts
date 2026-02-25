@@ -13,7 +13,7 @@ import { TaskStyling } from '../utils/TaskStyling';
 import { DateNavigator } from '../ViewToolbar';
 import { FilterMenuComponent } from '../filter/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
-import { createEmptyFilterState } from '../../services/filter/FilterTypes';
+import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { HabitTrackerRenderer } from '../timelineview/renderers/HabitTrackerRenderer';
@@ -122,11 +122,15 @@ export class ScheduleView extends ItemView {
             const files = state.filterFiles.filter((value: unknown): value is string => typeof value === 'string');
             if (files.length > 0) {
                 this.filterMenu.setFilterState({
-                    conditions: [{
-                        id: 'migrated-file',
-                        property: 'file',
-                        operator: 'includes',
-                        value: { type: 'stringSet', values: files },
+                    groups: [{
+                        id: 'migrated-file-group',
+                        conditions: [{
+                            id: 'migrated-file',
+                            property: 'file',
+                            operator: 'includes',
+                            value: { type: 'stringSet', values: files },
+                        }],
+                        logic: 'and',
                     }],
                     logic: 'and',
                 });
@@ -148,7 +152,7 @@ export class ScheduleView extends ItemView {
         const result: Record<string, unknown> = {
             currentDate: this.currentDate,
         };
-        if (filterState.conditions.length > 0) {
+        if (hasConditions(filterState)) {
             result.filterState = FilterSerializer.toJSON(filterState);
         }
         return result;

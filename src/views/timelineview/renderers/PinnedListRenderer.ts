@@ -9,6 +9,7 @@ import type { Task, PinnedListDefinition } from '../../../types';
 import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { TaskFilterEngine } from '../../../services/filter/TaskFilterEngine';
+import { hasConditions } from '../../../services/filter/FilterTypes';
 import { TaskIndex } from '../../../services/core/TaskIndex';
 import TaskViewerPlugin from '../../../main';
 import { TaskStyling } from '../../utils/TaskStyling';
@@ -93,7 +94,7 @@ export class PinnedListRenderer {
         // Filter edit button
         const filterBtn = header.createEl('button', { cls: 'pinned-list__filter-btn' });
         setIcon(filterBtn, 'filter');
-        if (listDef.filterState.conditions.length > 0) {
+        if (hasConditions(listDef.filterState)) {
             filterBtn.addClass('is-filtered');
         }
         filterBtn.addEventListener('click', (e) => {

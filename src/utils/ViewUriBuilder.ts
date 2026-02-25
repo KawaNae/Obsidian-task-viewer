@@ -1,4 +1,5 @@
 import type { FilterState } from '../services/filter/FilterTypes';
+import { hasConditions, getAllConditions } from '../services/filter/FilterTypes';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
 
 export interface ViewUriOptions {
@@ -29,7 +30,7 @@ export class ViewUriBuilder {
 
         // Normalize: FilterState direct pass (backward compat) or ViewUriOptions
         let opts: ViewUriOptions;
-        if (options && 'conditions' in options) {
+        if (options && 'groups' in options) {
             opts = { filterState: options as FilterState };
         } else {
             opts = (options as ViewUriOptions) ?? {};
@@ -43,7 +44,7 @@ export class ViewUriBuilder {
         if (opts.date != null) uri += `&date=${encodeURIComponent(opts.date)}`;
 
         // Filter params
-        if (!opts.filterState || opts.filterState.conditions.length === 0) return uri;
+        if (!opts.filterState || !hasConditions(opts.filterState)) return uri;
 
         const shorthand = this.tryBuildShorthand(opts.filterState);
         if (shorthand) return `${uri}&${shorthand}`;
@@ -54,14 +55,17 @@ export class ViewUriBuilder {
     /**
      * Converts filter state to shorthand params if all conditions are
      * simple includes with stringSet values on supported properties.
+     * Only works for single-group AND filters.
      */
     private static tryBuildShorthand(state: FilterState): string | null {
-        // Shorthand only for AND logic with all includes operators
+        // Shorthand only for single-group AND logic with all includes operators
         if (state.logic !== 'and') return null;
+        if (state.groups.length !== 1) return null;
+        if (state.groups[0].logic !== 'and') return null;
 
         const parts: string[] = [];
 
-        for (const condition of state.conditions) {
+        for (const condition of getAllConditions(state)) {
             if (condition.operator !== 'includes' || condition.value.type !== 'stringSet') {
                 return null;
             }

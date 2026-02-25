@@ -1,16 +1,28 @@
 import type { Task } from '../../types';
-import type { FilterState, FilterCondition } from './FilterTypes';
+import type { FilterState, FilterCondition, FilterGroup } from './FilterTypes';
+import { DateResolver } from './DateResolver';
 
 /**
  * Evaluates whether a task passes all filter conditions.
+ * Supports nested groups: top-level logic combines groups, intra-group logic combines conditions.
  */
 export class TaskFilterEngine {
     static evaluate(task: Task, filterState: FilterState): boolean {
-        if (filterState.conditions.length === 0) return true;
+        const groups = filterState.groups;
+        if (!groups || groups.length === 0) return true;
+
         if (filterState.logic === 'or') {
-            return filterState.conditions.some(c => this.evalCondition(task, c));
+            return groups.some(g => this.evaluateGroup(task, g));
         }
-        return filterState.conditions.every(c => this.evalCondition(task, c));
+        return groups.every(g => this.evaluateGroup(task, g));
+    }
+
+    private static evaluateGroup(task: Task, group: FilterGroup): boolean {
+        if (group.conditions.length === 0) return true;
+        if (group.logic === 'or') {
+            return group.conditions.some(c => this.evalCondition(task, c));
+        }
+        return group.conditions.every(c => this.evalCondition(task, c));
     }
 
     private static evalCondition(task: Task, condition: FilterCondition): boolean {
@@ -23,12 +35,14 @@ export class TaskFilterEngine {
                 return this.evalTag(task, condition);
             case 'status':
                 return this.evalStringSet(task.statusChar, condition);
-            case 'hasStartDate':
-                return this.evalHasField(!!task.startDate, condition);
-            case 'hasDeadline':
-                return this.evalHasField(!!task.deadline, condition);
             case 'content':
                 return this.evalContent(task, condition);
+            case 'startDate':
+                return this.evalDate(task.startDate, condition);
+            case 'endDate':
+                return this.evalDate(task.endDate, condition);
+            case 'deadline':
+                return this.evalDate(task.deadline, condition);
             default:
                 return true;
         }
@@ -52,12 +66,6 @@ export class TaskFilterEngine {
         return true;
     }
 
-    private static evalHasField(hasValue: boolean, c: FilterCondition): boolean {
-        if (c.operator === 'isSet') return hasValue;
-        if (c.operator === 'isNotSet') return !hasValue;
-        return true;
-    }
-
     private static evalContent(task: Task, c: FilterCondition): boolean {
         if (c.value.type !== 'string') return true;
         const lower = task.content.toLowerCase();
@@ -65,5 +73,23 @@ export class TaskFilterEngine {
         if (c.operator === 'contains') return lower.includes(search);
         if (c.operator === 'notContains') return !lower.includes(search);
         return true;
+    }
+
+    private static evalDate(taskDate: string | undefined, c: FilterCondition): boolean {
+        // isSet / isNotSet — existence check, no date value needed
+        if (c.operator === 'isSet') return !!taskDate;
+        if (c.operator === 'isNotSet') return !taskDate;
+
+        if (c.value.type !== 'date') return true;
+        if (!taskDate) return false;
+        const { start, end } = DateResolver.resolve(c.value.value);
+        switch (c.operator) {
+            case 'equals':     return taskDate >= start && taskDate <= end;
+            case 'before':     return taskDate < start;
+            case 'after':      return taskDate > end;
+            case 'onOrBefore': return taskDate <= end;
+            case 'onOrAfter':  return taskDate >= start;
+            default: return true;
+        }
     }
 }

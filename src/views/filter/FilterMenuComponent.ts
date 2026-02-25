@@ -1,14 +1,18 @@
 import { setIcon } from 'obsidian';
 import type { Task } from '../../types';
-import type { FilterState, FilterCondition, FilterProperty, FilterOperator } from '../../services/filter/FilterTypes';
+import type { FilterState, FilterCondition, FilterProperty, FilterOperator, FilterGroup, DateFilterValue, RelativeDatePreset } from '../../services/filter/FilterTypes';
 import {
     PROPERTY_OPERATORS,
     OPERATOR_LABELS,
     PROPERTY_LABELS,
     PROPERTY_ICONS,
     NO_VALUE_OPERATORS,
+    DATE_PROPERTIES,
+    RELATIVE_DATE_LABELS,
     createDefaultCondition,
     createEmptyFilterState,
+    createEmptyFilterGroup,
+    hasConditions,
 } from '../../services/filter/FilterTypes';
 import { TaskFilterEngine } from '../../services/filter/TaskFilterEngine';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
@@ -24,11 +28,13 @@ interface SelectItem {
     value: string;
     checked: boolean;
     icon?: string;
+    cls?: string;
 }
 
 /**
- * Notion-style row-based filter popover.
- * 5-column grid: [Logic] [Property] [Operator] [Value] [✕]
+ * Notion-style row-based filter popover with group nesting.
+ * Groups are visually separated; each group has its own intra-group logic.
+ * 5-column grid per row: [Logic] [Property] [Operator] [Value] [✕]
  */
 export class FilterMenuComponent {
     private state: FilterState = createEmptyFilterState();
@@ -52,7 +58,7 @@ export class FilterMenuComponent {
     }
 
     hasActiveFilters(): boolean {
-        return this.state.conditions.length > 0;
+        return hasConditions(this.state);
     }
 
     showMenuAtElement(anchorEl: HTMLElement, callbacks: FilterMenuCallbacks): void {
@@ -118,15 +124,15 @@ export class FilterMenuComponent {
         if (!this.popoverEl) return;
         this.popoverEl.empty();
 
-        if (this.state.conditions.length === 0) {
+        if (this.state.groups.length === 0) {
             this.popoverEl.createDiv('filter-popover__empty').setText('No filters applied');
         } else {
-            for (let i = 0; i < this.state.conditions.length; i++) {
-                this.renderConditionRow(this.popoverEl, this.state.conditions[i], i);
+            for (let gi = 0; gi < this.state.groups.length; gi++) {
+                this.renderGroup(this.popoverEl, this.state.groups[gi], gi);
             }
         }
 
-        this.renderAddButton(this.popoverEl);
+        this.renderFooterButtons(this.popoverEl);
     }
 
     private refreshPopover(): void {
@@ -135,17 +141,15 @@ export class FilterMenuComponent {
         this.lastCallbacks?.onFilterChange();
     }
 
-    // ── Condition Row (5-column grid) ──
+    // ── Group Rendering ──
 
-    private renderConditionRow(parent: HTMLElement, condition: FilterCondition, index: number): void {
-        const row = parent.createDiv('filter-popover__row');
+    private renderGroup(parent: HTMLElement, group: FilterGroup, groupIndex: number): void {
+        const groupEl = parent.createDiv('filter-popover__group');
 
-        // Column 1: Logic cell (Where / AND / OR)
-        if (index === 0) {
-            row.createDiv('filter-popover__logic-cell').setText('Where');
-        } else {
-            const logicCell = row.createDiv('filter-popover__logic-cell');
-            const logicBtn = logicCell.createEl('button', {
+        // Inter-group logic row (between groups, not for first group)
+        if (groupIndex > 0) {
+            const logicRow = groupEl.createDiv('filter-popover__group-logic');
+            const logicBtn = logicRow.createEl('button', {
                 cls: 'filter-popover__logic-btn',
                 text: this.state.logic.toUpperCase(),
             });
@@ -156,8 +160,82 @@ export class FilterMenuComponent {
             });
         }
 
-        // Column 2: Property dropdown (with icon)
-        const propBtn = row.createEl('button', {
+        // Group body with visual accent
+        const groupBody = groupEl.createDiv('filter-popover__group-body');
+
+        // Condition rows within group
+        for (let i = 0; i < group.conditions.length; i++) {
+            this.renderConditionRow(groupBody, group, group.conditions[i], i);
+        }
+
+        // Group footer: [+ Add filter] ... [...]
+        const groupFooter = groupBody.createDiv('filter-popover__group-footer');
+
+        // Add filter button
+        const addBtn = groupFooter.createEl('button', { cls: 'filter-popover__add-btn filter-popover__add-btn--inline' });
+        const iconEl = addBtn.createSpan();
+        setIcon(iconEl, 'plus');
+        addBtn.createSpan().setText('Add filter');
+        addBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            group.conditions.push(createDefaultCondition());
+            this.refreshPopover();
+        });
+
+        // Group more menu (...) — only when multiple groups
+        if (this.state.groups.length > 1) {
+            const groupMoreBtn = groupFooter.createEl('button', { cls: 'filter-popover__more-btn' });
+            setIcon(groupMoreBtn, 'more-horizontal');
+            groupMoreBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const items: SelectItem[] = [
+                    { label: 'Duplicate group', value: 'duplicate-group', checked: false, icon: 'copy' },
+                    { label: 'Remove group', value: 'remove-group', checked: false, icon: 'trash', cls: 'filter-child-popover__item--danger' },
+                ];
+                this.showSelectPopover(groupMoreBtn, items, (val) => {
+                    if (val === 'remove-group') {
+                        this.state.groups.splice(groupIndex, 1);
+                        this.refreshPopover();
+                    } else if (val === 'duplicate-group') {
+                        const dup: FilterGroup = JSON.parse(JSON.stringify(group));
+                        dup.id = `g-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+                        dup.conditions.forEach(c => {
+                            c.id = `f-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+                        });
+                        this.state.groups.splice(groupIndex + 1, 0, dup);
+                        this.refreshPopover();
+                    }
+                });
+            });
+        }
+    }
+
+    // ── Condition Row (2-row layout: header + value) ──
+
+    private renderConditionRow(parent: HTMLElement, group: FilterGroup, condition: FilterCondition, index: number): void {
+        const row = parent.createDiv('filter-popover__row');
+
+        // ── Upper row: [Logic] [Property] [Operator] [Delete] ──
+        const headerLine = row.createDiv('filter-popover__row-header');
+
+        // Logic cell (Where / AND / OR) - within group
+        if (index === 0) {
+            headerLine.createDiv('filter-popover__logic-cell').setText('Where');
+        } else {
+            const logicCell = headerLine.createDiv('filter-popover__logic-cell');
+            const logicBtn = logicCell.createEl('button', {
+                cls: 'filter-popover__logic-btn',
+                text: group.logic.toUpperCase(),
+            });
+            logicBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                group.logic = group.logic === 'and' ? 'or' : 'and';
+                this.refreshPopover();
+            });
+        }
+
+        // Property dropdown (with icon)
+        const propBtn = headerLine.createEl('button', {
             cls: 'filter-popover__dropdown',
         });
         const propIcon = propBtn.createSpan('filter-popover__dropdown-icon');
@@ -168,8 +246,8 @@ export class FilterMenuComponent {
             this.showPropertyMenu(propBtn, condition);
         });
 
-        // Column 3: Operator dropdown
-        const opBtn = row.createEl('button', {
+        // Operator dropdown
+        const opBtn = headerLine.createEl('button', {
             cls: 'filter-popover__dropdown',
             text: OPERATOR_LABELS[condition.operator],
         });
@@ -178,22 +256,37 @@ export class FilterMenuComponent {
             this.showOperatorMenu(opBtn, condition);
         });
 
-        // Column 4: Value selector (depends on property/operator)
-        if (NO_VALUE_OPERATORS.has(condition.operator)) {
-            // Empty cell to maintain grid layout
-            row.createDiv();
-        } else {
-            this.renderValueSelector(row, condition);
-        }
-
-        // Column 5: Delete button
-        const deleteBtn = row.createEl('button', { cls: 'filter-popover__delete-btn' });
-        setIcon(deleteBtn, 'x');
-        deleteBtn.addEventListener('click', (e) => {
+        // More menu button (...) — condition-level actions
+        const moreBtn = headerLine.createEl('button', { cls: 'filter-popover__more-btn' });
+        setIcon(moreBtn, 'more-horizontal');
+        moreBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.state.conditions.splice(index, 1);
-            this.refreshPopover();
+            const items: SelectItem[] = [
+                { label: 'Duplicate', value: 'duplicate', checked: false, icon: 'copy' },
+                { label: 'Remove', value: 'remove', checked: false, icon: 'trash', cls: 'filter-child-popover__item--danger' },
+            ];
+            this.showSelectPopover(moreBtn, items, (val) => {
+                if (val === 'remove') {
+                    group.conditions.splice(index, 1);
+                    this.refreshPopover();
+                } else if (val === 'duplicate') {
+                    const dup: FilterCondition = JSON.parse(JSON.stringify(condition));
+                    dup.id = `f-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+                    group.conditions.splice(index + 1, 0, dup);
+                    this.refreshPopover();
+                }
+            });
         });
+
+        // ── Lower row: Value (only when operator requires a value) ──
+        if (!NO_VALUE_OPERATORS.has(condition.operator)) {
+            const valueLine = row.createDiv('filter-popover__row-value');
+            if (DATE_PROPERTIES.has(condition.property)) {
+                this.renderDateValueSelector(valueLine, condition);
+            } else {
+                this.renderValueSelector(valueLine, condition);
+            }
+        }
     }
 
     // ── Value Selector ──
@@ -244,6 +337,98 @@ export class FilterMenuComponent {
         });
     }
 
+    // ── Date Value Selector ──
+
+    private renderDateValueSelector(row: HTMLElement, condition: FilterCondition): void {
+        const container = row.createDiv('filter-popover__date-value');
+
+        // Initialize value if needed
+        if (condition.value.type !== 'date') {
+            condition.value = { type: 'date', value: { mode: 'relative', preset: 'today' } };
+        }
+
+        const dateVal = condition.value.value as DateFilterValue;
+
+        // Mode toggle button: "Relative" / "Absolute"
+        const modeBtn = container.createEl('button', {
+            cls: 'filter-popover__dropdown filter-popover__date-mode-btn',
+            text: dateVal.mode === 'relative' ? 'Relative' : 'Absolute',
+        });
+        modeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (dateVal.mode === 'relative') {
+                condition.value = { type: 'date', value: { mode: 'absolute', date: this.getToday() } };
+            } else {
+                condition.value = { type: 'date', value: { mode: 'relative', preset: 'today' } };
+            }
+            this.refreshPopover();
+        });
+
+        if (dateVal.mode === 'relative') {
+            // Relative preset dropdown
+            const presetBtn = container.createEl('button', {
+                cls: 'filter-popover__dropdown',
+                text: dateVal.preset === 'nextNDays'
+                    ? `Next ${dateVal.n ?? 7} days`
+                    : RELATIVE_DATE_LABELS[dateVal.preset],
+            });
+            presetBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showRelativeDateMenu(presetBtn, condition);
+            });
+
+            // Number input for nextNDays
+            if (dateVal.preset === 'nextNDays') {
+                const nInput = container.createEl('input', {
+                    cls: 'filter-popover__n-input',
+                    type: 'number',
+                });
+                nInput.value = String(dateVal.n ?? 7);
+                nInput.min = '1';
+                nInput.placeholder = 'N';
+                nInput.addEventListener('change', () => {
+                    const n = parseInt(nInput.value, 10);
+                    if (n > 0) {
+                        condition.value = { type: 'date', value: { mode: 'relative', preset: 'nextNDays', n } };
+                        this.lastCallbacks?.onFilterChange();
+                    }
+                });
+            }
+        } else {
+            // Absolute date: native date input
+            const dateInput = container.createEl('input', {
+                cls: 'filter-popover__date-input',
+                type: 'date',
+            });
+            dateInput.value = dateVal.date || this.getToday();
+            dateInput.addEventListener('change', () => {
+                condition.value = { type: 'date', value: { mode: 'absolute', date: dateInput.value } };
+                this.lastCallbacks?.onFilterChange();
+            });
+        }
+    }
+
+    private showRelativeDateMenu(anchorEl: HTMLElement, condition: FilterCondition): void {
+        const presets: RelativeDatePreset[] = ['today', 'thisWeek', 'nextWeek', 'pastWeek', 'nextNDays'];
+        const currentPreset = condition.value.type === 'date' && condition.value.value.mode === 'relative'
+            ? condition.value.value.preset : 'today';
+
+        const items: SelectItem[] = presets.map(p => ({
+            label: RELATIVE_DATE_LABELS[p],
+            value: p,
+            checked: currentPreset === p,
+        }));
+
+        this.showSelectPopover(anchorEl, items, (val) => {
+            const preset = val as RelativeDatePreset;
+            const dateValue: DateFilterValue = preset === 'nextNDays'
+                ? { mode: 'relative', preset, n: 7 }
+                : { mode: 'relative', preset };
+            condition.value = { type: 'date', value: dateValue };
+            this.refreshPopover();
+        });
+    }
+
     private formatValueLabel(property: FilterProperty, values: string[]): string {
         if (values.length === 0) return 'Select...';
         if (values.length === 1) {
@@ -282,6 +467,8 @@ export class FilterMenuComponent {
                     checkbox.checked = item.checked;
                     checkbox.classList.add('filter-child-popover__checkbox');
                 }
+
+                if (item.cls) row.classList.add(item.cls);
 
                 if (item.icon) {
                     const iconEl = row.createSpan('filter-child-popover__icon');
@@ -341,7 +528,10 @@ export class FilterMenuComponent {
     // ── Property / Operator / Value Menus ──
 
     private showPropertyMenu(anchorEl: HTMLElement, condition: FilterCondition): void {
-        const properties: FilterProperty[] = ['file', 'tag', 'status', 'content', 'hasStartDate', 'hasDeadline'];
+        const properties: FilterProperty[] = [
+            'file', 'tag', 'status', 'content',
+            'startDate', 'endDate', 'deadline',
+        ];
         const items: SelectItem[] = properties.map(p => ({
             label: PROPERTY_LABELS[p],
             value: p,
@@ -353,11 +543,15 @@ export class FilterMenuComponent {
             const prop = val as FilterProperty;
             condition.property = prop;
             condition.operator = PROPERTY_OPERATORS[prop][0];
-            condition.value = NO_VALUE_OPERATORS.has(condition.operator)
-                ? { type: 'boolean', value: true }
-                : prop === 'content'
-                    ? { type: 'string', value: '' }
-                    : { type: 'stringSet', values: [] };
+            if (NO_VALUE_OPERATORS.has(condition.operator)) {
+                condition.value = { type: 'boolean', value: true };
+            } else if (DATE_PROPERTIES.has(prop)) {
+                condition.value = { type: 'date', value: { mode: 'relative', preset: 'today' } };
+            } else if (prop === 'content') {
+                condition.value = { type: 'string', value: '' };
+            } else {
+                condition.value = { type: 'stringSet', values: [] };
+            }
             this.refreshPopover();
         });
     }
@@ -401,17 +595,22 @@ export class FilterMenuComponent {
         }, true);
     }
 
-    // ── Add Filter ──
+    // ── Footer Buttons ──
 
-    private renderAddButton(parent: HTMLElement): void {
-        const btn = parent.createEl('button', { cls: 'filter-popover__add-btn' });
-        const iconEl = btn.createSpan();
-        setIcon(iconEl, 'plus');
-        btn.createSpan().setText('Add filter');
-        btn.addEventListener('click', (e) => {
+    private renderFooterButtons(parent: HTMLElement): void {
+        const footer = parent.createDiv('filter-popover__footer');
+
+        // Add filter group
+        const addGroupBtn = footer.createEl('button', { cls: 'filter-popover__add-btn' });
+        const groupIcon = addGroupBtn.createSpan();
+        setIcon(groupIcon, 'plus-square');
+        addGroupBtn.createSpan().setText('Add filter group');
+        addGroupBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.state.conditions.push(createDefaultCondition());
-            this.renderContent();
+            const group = createEmptyFilterGroup();
+            group.conditions.push(createDefaultCondition());
+            this.state.groups.push(group);
+            this.refreshPopover();
         });
     }
 
@@ -435,6 +634,14 @@ export class FilterMenuComponent {
     }
 
     // ── Helpers ──
+
+    private getToday(): string {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
 
     private getAvailableValues(property: FilterProperty): string[] {
         switch (property) {

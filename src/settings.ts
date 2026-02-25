@@ -1,7 +1,8 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import TaskViewerPlugin from './main';
 import { FrontmatterTaskKeys, HabitType, PinnedListDefinition, validateFrontmatterTaskKeys } from './types';
-import { PROPERTY_LABELS, OPERATOR_LABELS, createEmptyFilterState } from './services/filter/FilterTypes';
+import { PROPERTY_LABELS, OPERATOR_LABELS, RELATIVE_DATE_LABELS, createEmptyFilterState, getAllConditions } from './services/filter/FilterTypes';
+import type { DateFilterValue } from './services/filter/FilterTypes';
 import {
     DEFAULT_AI_INDEX_SETTINGS,
     normalizeAiIndexSettings,
@@ -279,7 +280,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
     }
 
     private buildFilterSummary(listDef: PinnedListDefinition): string {
-        const conditions = listDef.filterState.conditions;
+        const conditions = getAllConditions(listDef.filterState);
         if (conditions.length === 0) return '';
 
         const parts = conditions.map(c => {
@@ -290,6 +291,13 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             }
             if (c.value.type === 'string') {
                 return `${prop} ${op} "${c.value.value}"`;
+            }
+            if (c.value.type === 'date') {
+                const dv = c.value.value as DateFilterValue;
+                const label = dv.mode === 'relative'
+                    ? (dv.preset === 'nextNDays' ? `Next ${dv.n ?? 7} days` : RELATIVE_DATE_LABELS[dv.preset])
+                    : dv.date;
+                return `${prop} ${op} ${label}`;
             }
             return `${prop} ${op}`;
         });
