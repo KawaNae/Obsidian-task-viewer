@@ -166,32 +166,17 @@ export class FilterMenuComponent {
 
     // ── Logic Separator ──
 
-    private renderLogicSeparator(parent: HTMLElement, group: FilterGroupNode, depth: number): void {
-        if (depth === 0) {
-            // Root level: horizontal line + AND/OR button
-            const logicRow = parent.createDiv('filter-popover__group-logic');
-            const logicBtn = logicRow.createEl('button', {
-                cls: 'filter-popover__logic-btn',
-                text: group.logic.toUpperCase(),
-            });
-            logicBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                group.logic = group.logic === 'and' ? 'or' : 'and';
-                this.refreshPopover();
-            });
-        } else {
-            // Nested level: compact inline AND/OR
-            const logicRow = parent.createDiv('filter-popover__nested-logic');
-            const logicBtn = logicRow.createEl('button', {
-                cls: 'filter-popover__logic-btn',
-                text: group.logic.toUpperCase(),
-            });
-            logicBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                group.logic = group.logic === 'and' ? 'or' : 'and';
-                this.refreshPopover();
-            });
-        }
+    private renderLogicSeparator(parent: HTMLElement, group: FilterGroupNode, _depth: number): void {
+        const logicRow = parent.createDiv('filter-popover__logic-separator');
+        const logicBtn = logicRow.createEl('button', {
+            cls: 'filter-popover__logic-btn',
+            text: group.logic.toUpperCase(),
+        });
+        logicBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            group.logic = group.logic === 'and' ? 'or' : 'and';
+            this.refreshPopover();
+        });
     }
 
     // ── Group Rendering (recursive) ──

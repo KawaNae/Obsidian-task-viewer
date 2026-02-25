@@ -173,8 +173,8 @@ button.filter-popover__add-btn--inline {
     padding: 0;
 }
 
-/* Root-level logic separator (horizontal lines + AND/OR button) */
-.filter-popover__group-logic {
+/* Logic separator (horizontal lines + centered AND/OR button) */
+.filter-popover__logic-separator {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -182,28 +182,37 @@ button.filter-popover__add-btn--inline {
     gap: 8px;
 }
 
-.filter-popover__group-logic::before,
-.filter-popover__group-logic::after {
+.filter-popover__logic-separator::before,
+.filter-popover__logic-separator::after {
     content: '';
     flex: 1;
     height: 1px;
     background: var(--tv-border);
 }
 
-/* Nested-level logic separator (compact, no horizontal lines) */
-.filter-popover__nested-logic {
-    display: flex;
-    align-items: center;
-    padding: 2px 4px;
-}
-
-/* Group body with left accent border — depth-based indentation via CSS variable */
+/* Group body with left accent border — depth-based indentation and shading */
 .filter-popover__group-body {
     border-left: 2px solid var(--tv-accent);
     margin: 2px 8px;
     margin-left: calc(8px + var(--depth, 0) * 8px);
     padding-left: 4px;
     border-radius: 2px;
+}
+
+/* Depth-based background shading using color-mix (no -rgb variable needed) */
+.filter-popover__group-body[style*="--depth: 1"],
+.filter-popover__group-body[style*="--depth:1"] {
+    background: color-mix(in srgb, var(--tv-accent) 5%, transparent);
+}
+
+.filter-popover__group-body[style*="--depth: 2"],
+.filter-popover__group-body[style*="--depth:2"] {
+    background: color-mix(in srgb, var(--tv-accent) 10%, transparent);
+}
+
+.filter-popover__group-body[style*="--depth: 3"],
+.filter-popover__group-body[style*="--depth:3"] {
+    background: color-mix(in srgb, var(--tv-accent) 15%, transparent);
 }
 
 /* Group footer: [+ Add filter] [+ Add group] [...] */
