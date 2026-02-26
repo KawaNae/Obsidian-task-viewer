@@ -17,7 +17,9 @@ import { AllDaySectionRenderer } from './renderers/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
 import { PinnedListRenderer } from './renderers/PinnedListRenderer';
 import { FilterMenuComponent } from '../filter/FilterMenuComponent';
+import { SortMenuComponent } from '../sort/SortMenuComponent';
 import { createEmptyFilterState } from '../../services/filter/FilterTypes';
+import { createEmptySortState } from '../../services/sort/SortTypes';
 import { HabitTrackerRenderer } from './renderers/HabitTrackerRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
@@ -37,7 +39,7 @@ export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
  * - Task Creation: addCreateTaskListeners, handleCreateTaskTrigger
  */
 export class TimelineView extends ItemView {
-    private static readonly DEADLINE_OVERLAY_BREAKPOINT_PX = 768;
+    private static readonly MOBILE_BREAKPOINT_PX = 768;
     // ==================== Services & Handlers ====================
     private taskIndex: TaskIndex;
     private plugin: TaskViewerPlugin;
@@ -46,6 +48,7 @@ export class TimelineView extends ItemView {
     private menuHandler: MenuHandler;
     private handleManager: HandleManager;
     private toolbar: TimelineToolbar;
+    private sidebarManager: SidebarManager;
 
     // ==================== Renderers ====================
     private gridRenderer: GridRenderer;
@@ -53,8 +56,8 @@ export class TimelineView extends ItemView {
     private timelineRenderer: TimelineSectionRenderer;
     private pinnedListRenderer: PinnedListRenderer;
     private sidebarFilterMenu = new FilterMenuComponent();
+    private sidebarSortMenu = new SortMenuComponent();
     private habitRenderer: HabitTrackerRenderer;
-
 
     // ==================== State ====================
     private container: HTMLElement;
@@ -63,10 +66,6 @@ export class TimelineView extends ItemView {
     private currentTimeInterval: number | null = null;
     private lastScrollTop: number = 0;
     private hasInitializedStartDate: boolean = false;
-    private targetColumnEl: HTMLElement | null = null;
-    private executionColumnEl: HTMLElement | null = null;
-    private sidebarBackdropEl: HTMLElement | null = null;
-    private layoutResizeObserver: ResizeObserver | null = null;
     // ==================== Pinch zoom state ====================
     private pinchInitialDistance: number = 0;
     private pinchInitialZoom: number = 1;
@@ -86,6 +85,11 @@ export class TimelineView extends ItemView {
             showSidebar: true,
             filterFiles: null
         };
+        this.sidebarManager = new SidebarManager(true, {
+            mobileBreakpointPx: TimelineView.MOBILE_BREAKPOINT_PX,
+            onPersist: () => this.app.workspace.requestSaveLayout(),
+            onSyncToggleButton: () => this.toolbar?.syncSidebarToggleState(),
+        });
         this.taskRenderer = new TaskCardRenderer(this.app, this.taskIndex, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.leaf,
@@ -126,10 +130,11 @@ export class TimelineView extends ItemView {
                 this.viewState.filterFiles = null;
             }
             if (typeof state.showSidebar === 'boolean') {
-                this.setSidebarOpen(state.showSidebar, 'setState', {
+                this.sidebarManager.setOpen(state.showSidebar, 'setState', {
                     persist: false,
                     animate: false,
                 });
+                this.viewState.showSidebar = state.showSidebar;
             }
             if (state.pinnedListCollapsed) {
                 this.viewState.pinnedListCollapsed = state.pinnedListCollapsed;
@@ -143,7 +148,7 @@ export class TimelineView extends ItemView {
     getState() {
         const state: Record<string, unknown> = {
             daysToShow: this.viewState.daysToShow,
-            showSidebar: this.viewState.showSidebar,
+            showSidebar: this.sidebarManager.isOpen,
         };
         if (this.viewState.pinnedListCollapsed && Object.keys(this.viewState.pinnedListCollapsed).length > 0) {
             state.pinnedListCollapsed = this.viewState.pinnedListCollapsed;
@@ -167,14 +172,9 @@ export class TimelineView extends ItemView {
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('timeline-view');
-        this.syncSidebarPresentation({ animate: false });
-        this.layoutResizeObserver = new ResizeObserver(() => {
-            this.setSidebarOpen(this.viewState.showSidebar, 'resize', {
-                persist: false,
-                animate: false,
-            });
-        });
-        this.layoutResizeObserver.observe(this.container);
+        this.sidebarManager.attach(this.container, (el, ev, handler) =>
+            this.registerDomEvent(el as any, ev as any, handler),
+        );
 
         // Initialize MenuHandler
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
@@ -194,14 +194,13 @@ export class TimelineView extends ItemView {
                 onStateChange: () => { },
                 getDatesToShow: () => this.getDatesToShow(),
                 onRequestSidebarToggle: (nextOpen, source) => {
-                    this.setSidebarOpen(nextOpen, source, {
+                    this.sidebarManager.setOpen(nextOpen, source, {
                         persist: true,
                     });
+                    this.viewState.showSidebar = nextOpen;
                 }
             }
         );
-
-        // Initialize Renderers
 
         // Initialize Renderers
         this.allDayRenderer = new AllDaySectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow);
@@ -286,12 +285,6 @@ export class TimelineView extends ItemView {
         const win = this.container.ownerDocument.defaultView || window;
         this.registerDomEvent(win, 'resize', () => {
             this.handleManager.updatePositions();
-        });
-        this.registerDomEvent(win, 'keydown', (event: KeyboardEvent) => {
-            if (event.key === 'Escape' && this.viewState.showSidebar) {
-                event.preventDefault();
-                this.closeSidebar('escape');
-            }
         });
 
         // Ctrl+wheel zoom
@@ -398,10 +391,7 @@ export class TimelineView extends ItemView {
         if (this.unsubscribe) {
             this.unsubscribe();
         }
-        if (this.layoutResizeObserver) {
-            this.layoutResizeObserver.disconnect();
-            this.layoutResizeObserver = null;
-        }
+        this.sidebarManager.detach();
         if (this.currentTimeInterval) {
             window.clearInterval(this.currentTimeInterval);
             this.currentTimeInterval = null;
@@ -431,7 +421,7 @@ export class TimelineView extends ItemView {
     }
 
     private render() {
-        this.syncSidebarPresentation({ animate: false });
+        this.sidebarManager.syncPresentation({ animate: false });
 
         // Save scroll position
         const scrollArea = this.container.querySelector('.timeline-scroll-area');
@@ -452,24 +442,13 @@ export class TimelineView extends ItemView {
         // Toolbar host (top row)
         const toolbarHost = this.container.createDiv('timeline-view__toolbar-host');
 
-        // Initialize 2-Column Layout (bottom row)
-        const layoutContainer = this.container.createDiv('timeline-view__layout');
+        // Build sidebar layout (bottom row)
+        const { main, sidebarHeader, sidebarBody } = this.sidebarManager.buildLayout(this.container);
 
-        // Main Column (Timeline, AllDay)
-        const executionColumn = layoutContainer.createDiv('timeline-view__main');
-        this.executionColumnEl = executionColumn;
+        // Sidebar header content
+        sidebarHeader.createEl('p', { cls: 'view-sidebar__title', text: 'Pinned Lists' });
 
-        const backdrop = layoutContainer.createDiv('timeline-view__sidebar-backdrop');
-        backdrop.addEventListener('click', () => this.closeSidebar('backdrop'));
-        this.sidebarBackdropEl = backdrop;
-
-        // Sidebar Column (Pinned Lists)
-        const targetColumn = layoutContainer.createDiv('timeline-view__sidebar');
-
-        const sidebarHeader = targetColumn.createDiv('timeline-view__sidebar-header');
-        sidebarHeader.createEl('p', { cls: 'timeline-view__sidebar-title', text: 'Pinned Lists' });
-
-        const addListBtn = sidebarHeader.createEl('button', { cls: 'timeline-view__sidebar-add-btn' });
+        const addListBtn = sidebarHeader.createEl('button', { cls: 'view-sidebar__add-btn' });
         setIcon(addListBtn, 'plus');
         addListBtn.appendText('Add List');
         addListBtn.addEventListener('click', async () => {
@@ -486,10 +465,9 @@ export class TimelineView extends ItemView {
             this.render();
         });
 
-        const listContainer = targetColumn.createDiv('timeline-view__sidebar-body');
-
+        // Render pinned lists into sidebar body
         this.pinnedListRenderer.render(
-            listContainer,
+            sidebarBody,
             this,
             this.toolbar.getTaskFilter(),
             this.viewState.pinnedListCollapsed ?? {},
@@ -499,6 +477,7 @@ export class TimelineView extends ItemView {
                     this.viewState.pinnedListCollapsed[listId] = collapsed;
                     this.app.workspace.requestSaveLayout();
                 },
+                onSortEdit: (listDef, anchorEl) => this.openPinnedListSort(listDef, anchorEl),
                 onFilterEdit: (listDef, anchorEl) => this.openPinnedListFilter(listDef, anchorEl),
                 onDuplicate: (listDef) => {
                     const lists = this.plugin.settings.pinnedLists;
@@ -508,6 +487,7 @@ export class TimelineView extends ItemView {
                         id: 'pl-' + Date.now(),
                         name: listDef.name + ' (copy)',
                         filterState: JSON.parse(JSON.stringify(listDef.filterState)),
+                        sortState: listDef.sortState ? JSON.parse(JSON.stringify(listDef.sortState)) : undefined,
                     };
                     lists.splice(idx + 1, 0, dup);
                     this.plugin.saveSettings();
@@ -523,8 +503,6 @@ export class TimelineView extends ItemView {
             },
         );
 
-        this.targetColumnEl = targetColumn;
-
         // Render Toolbar (above both columns)
         this.toolbar = new TimelineToolbar(
             toolbarHost,
@@ -539,21 +517,22 @@ export class TimelineView extends ItemView {
                 },
                 getDatesToShow: () => this.getDatesToShow(),
                 onRequestSidebarToggle: (nextOpen, source) => {
-                    this.setSidebarOpen(nextOpen, source, {
+                    this.sidebarManager.setOpen(nextOpen, source, {
                         persist: true,
                     });
+                    this.viewState.showSidebar = nextOpen;
                 }
             }
         );
         this.toolbar.render();
-        this.setSidebarOpen(this.viewState.showSidebar, 'render', {
+        this.sidebarManager.setOpen(this.viewState.showSidebar, 'render', {
             persist: false,
             animate: false,
         });
 
-        // Use GridRenderer (render into execution column)
+        // Use GridRenderer (render into main column)
         this.gridRenderer.render(
-            executionColumn,
+            main,
             this.allDayRenderer,
             this.timelineRenderer,
             this.habitRenderer,
@@ -612,65 +591,14 @@ export class TimelineView extends ItemView {
         return Math.sqrt(dx * dx + dy * dy);
     }
 
-    private applyResponsiveLayoutMode(): void {
-        if (!this.container) {
-            return;
-        }
-        const width = this.container.clientWidth;
-        if (width <= 0) {
-            // Hidden tabs can report width=0. Do not flip layout mode while hidden.
-            return;
-        }
-
-        const isNarrowLayout = width <= TimelineView.DEADLINE_OVERLAY_BREAKPOINT_PX;
-        this.container.classList.toggle('timeline-view--mobile-layout', isNarrowLayout);
-    }
-
-    private shouldAnimateSidebar(source: SidebarToggleSource): boolean {
-        return source === 'toolbar' || source === 'backdrop' || source === 'escape';
-    }
-
-    private syncSidebarPresentation(options: { animate: boolean }): void {
-        if (!this.container) {
-            return;
-        }
-        this.applyResponsiveLayoutMode();
-        const isOpen = this.viewState.showSidebar;
-        this.container.classList.toggle('timeline-view--animate-sidebar', options.animate);
-
-        if (this.targetColumnEl) {
-            this.targetColumnEl.classList.toggle('timeline-view__sidebar--hidden', !isOpen);
-        }
-        if (this.executionColumnEl) {
-            this.executionColumnEl.classList.toggle('timeline-view__main--sidebar-open', isOpen);
-        }
-        if (this.sidebarBackdropEl) {
-            this.sidebarBackdropEl.classList.toggle('timeline-view__sidebar-backdrop--visible', isOpen);
-        }
-        this.toolbar?.syncSidebarToggleState();
-    }
-
-    private setSidebarOpen(
-        nextOpen: boolean,
-        source: SidebarToggleSource,
-        options: Partial<SidebarUpdateOptions> = {},
-    ): void {
-        const persist = options.persist ?? false;
-        const animate = options.animate ?? this.shouldAnimateSidebar(source);
-        const hasChanged = this.viewState.showSidebar !== nextOpen;
-        this.viewState.showSidebar = nextOpen;
-        this.syncSidebarPresentation({ animate });
-        if (persist && hasChanged) {
-            this.app.workspace.requestSaveLayout();
-        }
-    }
-
-    private closeSidebar(source: 'backdrop' | 'escape'): void {
-        if (!this.viewState.showSidebar) {
-            return;
-        }
-        this.setSidebarOpen(false, source, {
-            persist: true,
+    private openPinnedListSort(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
+        this.sidebarSortMenu.setSortState(listDef.sortState ?? createEmptySortState());
+        this.sidebarSortMenu.showMenuAtElement(anchorEl, {
+            onSortChange: () => {
+                listDef.sortState = this.sidebarSortMenu.getSortState();
+                this.plugin.saveSettings();
+                this.render();
+            },
         });
     }
 

@@ -11,6 +11,7 @@ import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import type { Task } from '../../types';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
+import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 
 export interface ToolbarCallbacks {
     onRender: () => void;
@@ -62,7 +63,7 @@ export class TimelineToolbar {
      */
     syncSidebarToggleState(): void {
         if (this.sidebarToggleBtn) {
-            this.updateSidebarToggleButton(this.sidebarToggleBtn);
+            this.updateSidebarToggleBtn(this.sidebarToggleBtn);
         }
     }
 
@@ -237,7 +238,7 @@ export class TimelineToolbar {
             cls: 'view-toolbar__btn--icon timeline-toolbar__btn--sidebar-toggle sidebar-toggle-button-icon'
         });
         this.sidebarToggleBtn = toggleBtn;
-        this.updateSidebarToggleButton(toggleBtn);
+        this.updateSidebarToggleBtn(toggleBtn);
 
         toggleBtn.onclick = () => {
             const nextOpen = !this.viewState.showSidebar;
@@ -245,22 +246,8 @@ export class TimelineToolbar {
         };
     }
 
-    private updateSidebarToggleButton(toggleBtn: HTMLElement): void {
-        const isOpen = this.viewState.showSidebar;
-        const primaryIcon = isOpen ? 'panel-right-open' : 'panel-right-close';
-        const fallbackIcon = isOpen ? 'sidebar-right' : 'sidebar-left';
-
-        setIcon(toggleBtn, primaryIcon);
-        if (!toggleBtn.querySelector('svg')) {
-            setIcon(toggleBtn, fallbackIcon);
-        }
-
-        toggleBtn.classList.toggle('is-open', isOpen);
-        toggleBtn.classList.toggle('is-closed', !isOpen);
-        toggleBtn.classList.toggle('is-active', isOpen);
-
-        const label = isOpen ? 'Hide Sidebar' : 'Show Sidebar';
-        toggleBtn.setAttribute('aria-label', label);
+    private updateSidebarToggleBtn(toggleBtn: HTMLElement): void {
+        updateSidebarToggleButton(toggleBtn, this.viewState.showSidebar);
     }
 
     private navigateDate(days: number): void {

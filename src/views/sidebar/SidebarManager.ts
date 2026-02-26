@@ -110,6 +110,9 @@ export class SidebarManager {
         const sidebarHeader = sidebar.createDiv('view-sidebar__header');
         const sidebarBody = sidebar.createDiv('view-sidebar__body');
 
+        // Apply current open/closed state to freshly created elements
+        this.syncPresentation({ animate: false });
+
         return { main, sidebarHeader, sidebarBody };
     }
 
