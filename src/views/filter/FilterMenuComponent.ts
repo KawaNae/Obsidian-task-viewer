@@ -25,7 +25,6 @@ import { FilterValueCollector } from '../../services/filter/FilterValueCollector
 export interface FilterMenuCallbacks {
     onFilterChange: () => void;
     getTasks: () => Task[];
-    getFileColor: (filePath: string) => string | null;
 }
 
 interface SelectItem {
@@ -560,6 +559,7 @@ export class FilterMenuComponent {
         const properties: FilterProperty[] = [
             'file', 'tag', 'status', 'content',
             'startDate', 'endDate', 'deadline',
+            'color', 'linestyle',
         ];
         const items: SelectItem[] = properties.map(p => ({
             label: PROPERTY_LABELS[p],
@@ -688,6 +688,8 @@ export class FilterMenuComponent {
             case 'file': return FilterValueCollector.collectFiles(this.lastTasks);
             case 'tag': return FilterValueCollector.collectTags(this.lastTasks);
             case 'status': return FilterValueCollector.collectStatuses(this.lastTasks);
+            case 'color': return FilterValueCollector.collectColors(this.lastTasks);
+            case 'linestyle': return FilterValueCollector.collectLineStyles(this.lastTasks);
             default: return [];
         }
     }

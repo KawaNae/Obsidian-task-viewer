@@ -15,7 +15,6 @@ import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 export interface ToolbarCallbacks {
     onRender: () => void;
     onStateChange: () => void;
-    getFileColor: (filePath: string) => string | null;
     getDatesToShow: () => string[];
     onRequestSidebarToggle: (nextOpen: boolean, source: 'toolbar' | 'backdrop' | 'escape') => void;
 }
@@ -222,7 +221,6 @@ export class TimelineToolbar {
                     filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
                 },
                 getTasks: () => allTasks,
-                getFileColor: (file) => this.callbacks.getFileColor(file),
             });
         };
     }

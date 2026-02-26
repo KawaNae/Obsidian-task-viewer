@@ -45,6 +45,10 @@ export class TaskFilterEngine {
                 return this.evalDate(task.endDate, condition);
             case 'deadline':
                 return this.evalDate(task.deadline, condition);
+            case 'color':
+                return this.evalStringSet(task.color ?? '', condition);
+            case 'linestyle':
+                return this.evalStringSet(task.linestyle ?? '', condition);
             default:
                 return true;
         }

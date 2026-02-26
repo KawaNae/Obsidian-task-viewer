@@ -9,7 +9,7 @@ import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { ViewUriBuilder } from '../../utils/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
-import { TaskStyling } from '../utils/TaskStyling';
+
 import { DateNavigator } from '../ViewToolbar';
 import { FilterMenuComponent } from '../filter/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
@@ -266,7 +266,6 @@ export class ScheduleView extends ItemView {
                     filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
                 },
                 getTasks: () => this.taskIndex.getTasks(),
-                getFileColor: (filePath) => TaskStyling.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color),
             });
         });
     }

@@ -39,7 +39,7 @@ export class PinnedListRenderer {
         const lists = this.plugin.settings.pinnedLists;
         if (lists.length === 0) {
             container.createDiv('pinned-lists-container__empty')
-                .setText('No pinned lists. Add lists in Settings.');
+                .setText('No pinned lists.');
             return;
         }
 
@@ -136,8 +136,8 @@ export class PinnedListRenderer {
         tasks.forEach(task => {
             const card = body.createDiv('task-card');
 
-            TaskStyling.applyFileColor(this.plugin.app, card, task.file, settings.frontmatterTaskKeys.color);
-            TaskStyling.applyFileLinestyle(this.plugin.app, card, task.file, settings.frontmatterTaskKeys.linestyle);
+            TaskStyling.applyTaskColor(card, task.color ?? null);
+            TaskStyling.applyTaskLinestyle(card, task.linestyle ?? 'solid');
 
             this.taskRenderer.render(card, task, owner, settings);
             this.menuHandler.addTaskContextMenu(card, task);

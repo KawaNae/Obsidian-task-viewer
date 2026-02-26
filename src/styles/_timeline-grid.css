@@ -102,6 +102,26 @@
     flex: 1;
 }
 
+.timeline-view__sidebar-add-btn {
+    width: 20px;
+    height: 20px;
+    appearance: none;
+    -webkit-appearance: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--tv-text-muted);
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--tv-radius-s);
+}
+
+.timeline-view__sidebar-add-btn:hover {
+    color: var(--tv-text-accent);
+}
+
 .timeline-view__sidebar-body {
     flex: 1;
     overflow-y: auto;

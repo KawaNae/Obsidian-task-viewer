@@ -2,7 +2,8 @@
 
 export type FilterProperty =
     | 'file' | 'tag' | 'status' | 'content'
-    | 'startDate' | 'endDate' | 'deadline';
+    | 'startDate' | 'endDate' | 'deadline'
+    | 'color' | 'linestyle';
 
 export type FilterOperator =
     | 'includes' | 'excludes'
@@ -149,6 +150,8 @@ export const PROPERTY_OPERATORS: Record<FilterProperty, FilterOperator[]> = {
     startDate: ['isSet', 'isNotSet', 'equals', 'before', 'after', 'onOrBefore', 'onOrAfter'],
     endDate: ['isSet', 'isNotSet', 'equals', 'before', 'after', 'onOrBefore', 'onOrAfter'],
     deadline: ['isSet', 'isNotSet', 'equals', 'before', 'after', 'onOrBefore', 'onOrAfter'],
+    color: ['includes', 'excludes'],
+    linestyle: ['includes', 'excludes'],
 };
 
 /** Display labels for operators */
@@ -175,6 +178,8 @@ export const PROPERTY_LABELS: Record<FilterProperty, string> = {
     startDate: 'Start date',
     endDate: 'End date',
     deadline: 'Deadline',
+    color: 'Color',
+    linestyle: 'Line style',
 };
 
 /** Operators that require no value input */
@@ -189,6 +194,8 @@ export const PROPERTY_ICONS: Record<FilterProperty, string> = {
     startDate: 'calendar',
     endDate: 'calendar-check',
     deadline: 'alarm-clock',
+    color: 'palette',
+    linestyle: 'minus',
 };
 
 /** Display labels for relative date presets */

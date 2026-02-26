@@ -330,7 +330,6 @@ export class CalendarView extends ItemView {
                     filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
                 },
                 getTasks: () => this.taskIndex.getTasks(),
-                getFileColor: (filePath: string) => TaskStyling.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color),
             });
         });
 
@@ -572,8 +571,8 @@ export class CalendarView extends ItemView {
                 barEl.addClass('calendar-multiday-bar--tail');
             }
 
-            TaskStyling.applyFileColor(this.app, barEl, entry.task.file, this.plugin.settings.frontmatterTaskKeys.color);
-            TaskStyling.applyFileLinestyle(this.app, barEl, entry.task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
+            TaskStyling.applyTaskColor(barEl, entry.task.color ?? null);
+            TaskStyling.applyTaskLinestyle(barEl, entry.task.linestyle ?? 'solid');
 
             this.menuHandler.addTaskContextMenu(barEl, entry.task);
             await this.taskRenderer.render(barEl, entry.task, this, this.plugin.settings, { topRight: 'none' });
@@ -588,8 +587,8 @@ export class CalendarView extends ItemView {
         card.style.gridColumn = `${displayColStart} / span ${entry.span}`;
         card.style.gridRow = `${gridRow}`;
 
-        TaskStyling.applyFileColor(this.app, card, entry.task.file, this.plugin.settings.frontmatterTaskKeys.color);
-        TaskStyling.applyFileLinestyle(this.app, card, entry.task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
+        TaskStyling.applyTaskColor(card, entry.task.color ?? null);
+        TaskStyling.applyTaskLinestyle(card, entry.task.linestyle ?? 'solid');
         this.menuHandler.addTaskContextMenu(card, entry.task);
         await this.taskRenderer.render(card, entry.task, this, this.plugin.settings);
     }

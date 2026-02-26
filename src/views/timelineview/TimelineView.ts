@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf } from 'obsidian';
+import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { Task, ViewState, PinnedListDefinition, isCompleteStatusChar } from '../../types';
@@ -11,12 +11,13 @@ import TaskViewerPlugin from '../../main';
 
 import { HandleManager } from './HandleManager';
 import { TimelineToolbar } from './TimelineToolbar';
-import { TaskStyling } from '../utils/TaskStyling';
+
 import { GridRenderer } from './renderers/GridRenderer';
 import { AllDaySectionRenderer } from './renderers/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
 import { PinnedListRenderer } from './renderers/PinnedListRenderer';
 import { FilterMenuComponent } from '../filter/FilterMenuComponent';
+import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import { HabitTrackerRenderer } from './renderers/HabitTrackerRenderer';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
@@ -45,7 +46,7 @@ type SidebarUpdateOptions = {
  * - Core Rendering: render, renderCurrentTimeIndicator
  * - Grid & Layout: renderGrid, getDatesToShow, renderTimeLabels
  * - Section Renderers: renderFutureSection, renderLongTermTasks, renderTimedTasks
- * - Color & Styling: getFileColor, applyTaskColor
+ * - Color & Styling: applyTaskColor
  * - Task Creation: addCreateTaskListeners, handleCreateTaskTrigger
  */
 export class TimelineView extends ItemView {
@@ -204,7 +205,6 @@ export class TimelineView extends ItemView {
             {
                 onRender: () => this.render(),
                 onStateChange: () => { },
-                getFileColor: (filePath) => TaskStyling.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color),
                 getDatesToShow: () => this.getDatesToShow(),
                 onRequestSidebarToggle: (nextOpen, source) => {
                     this.setSidebarOpen(nextOpen, source, {
@@ -482,6 +482,18 @@ export class TimelineView extends ItemView {
         const sidebarHeader = targetColumn.createDiv('timeline-view__sidebar-header');
         sidebarHeader.createEl('p', { cls: 'timeline-view__sidebar-title', text: 'Pinned Lists' });
 
+        const addListBtn = sidebarHeader.createEl('button', { cls: 'timeline-view__sidebar-add-btn' });
+        setIcon(addListBtn, 'plus');
+        addListBtn.addEventListener('click', () => {
+            this.plugin.settings.pinnedLists.push({
+                id: 'pl-' + Date.now(),
+                name: 'New List',
+                filterState: createEmptyFilterState(),
+            });
+            this.plugin.saveSettings();
+            this.render();
+        });
+
         const listContainer = targetColumn.createDiv('timeline-view__sidebar-body');
 
         this.pinnedListRenderer.render(
@@ -511,7 +523,6 @@ export class TimelineView extends ItemView {
                 onStateChange: () => {
                     this.app.workspace.requestSaveLayout();
                 },
-                getFileColor: (file) => this.getFileColor(file),
                 getDatesToShow: () => this.getDatesToShow(),
                 onRequestSidebarToggle: (nextOpen, source) => {
                     this.setSidebarOpen(nextOpen, source, {
@@ -658,7 +669,6 @@ export class TimelineView extends ItemView {
                 this.render();
             },
             getTasks: () => this.taskIndex.getTasks(),
-            getFileColor: (f) => this.getFileColor(f),
         });
     }
 
@@ -687,10 +697,7 @@ export class TimelineView extends ItemView {
 
     // ==================== Color & Styling ====================
 
-    /** Gets the custom color for a file from its frontmatter. */
-    private getFileColor(filePath: string): string | null {
-        return TaskStyling.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color);
-    }
+
 
 
     // ==================== Task Creation ====================

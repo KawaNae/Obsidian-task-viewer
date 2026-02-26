@@ -82,6 +82,10 @@ export interface Task {
      * Used for parser-specific writeback behavior.
      */
     parserId: string;
+
+    // File-level styling from frontmatter (resolved at scan time).
+    color?: string;
+    linestyle?: string;
 }
 
 export interface FlowCommand {

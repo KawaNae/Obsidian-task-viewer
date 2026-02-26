@@ -130,8 +130,8 @@ export class AllDaySectionRenderer {
             if (task.startDateInherited) el.addClass('task-card--inherited');
             el.dataset.id = task.id;
 
-            TaskStyling.applyFileColor(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.color);
-            TaskStyling.applyFileLinestyle(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
+            TaskStyling.applyTaskColor(el, task.color ?? null);
+            TaskStyling.applyTaskLinestyle(el, task.linestyle ?? 'solid');
 
             // Use TaskCardRenderer
             this.taskRenderer.render(el, task, owner, this.plugin.settings, { topRight: 'none' });
