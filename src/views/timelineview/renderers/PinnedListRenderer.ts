@@ -3,8 +3,7 @@
  * and appears as a collapsible group with task cards.
  */
 
-import { Component, Menu } from 'obsidian';
-import { setIcon } from 'obsidian';
+import { Component, Menu, setIcon } from 'obsidian';
 import type { Task, PinnedListDefinition } from '../../../types';
 import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
