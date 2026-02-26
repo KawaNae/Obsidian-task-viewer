@@ -246,7 +246,6 @@ export class ScheduleView extends ItemView {
         const copyBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(copyBtn, 'link');
         copyBtn.setAttribute('aria-label', 'Copy view URI');
-        copyBtn.setAttribute('title', 'Copy view URI');
         copyBtn.onclick = async () => {
             const uri = ViewUriBuilder.build(VIEW_META_SCHEDULE.type, this.filterMenu.getFilterState());
             await navigator.clipboard.writeText(uri);
@@ -256,7 +255,6 @@ export class ScheduleView extends ItemView {
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', 'Filter');
-        filterBtn.setAttribute('title', 'Filter');
         filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
         filterBtn.addEventListener('click', (event: MouseEvent) => {
             this.filterMenu.showMenu(event, {

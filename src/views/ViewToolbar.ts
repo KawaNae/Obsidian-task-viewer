@@ -25,7 +25,6 @@ export class DateNavigator {
         const prevBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(prevBtn, prevIcon);
         prevBtn.setAttribute('aria-label', prevLabel);
-        prevBtn.setAttribute('title', prevLabel);
         prevBtn.onclick = () => onNavigate(-1);
 
         const todayBtn = toolbar.createEl('button', {
@@ -33,13 +32,11 @@ export class DateNavigator {
             text: 'Today'
         });
         todayBtn.setAttribute('aria-label', 'Today');
-        todayBtn.setAttribute('title', 'Today');
         todayBtn.onclick = () => onToday();
 
         const nextBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(nextBtn, nextIcon);
         nextBtn.setAttribute('aria-label', nextLabel);
-        nextBtn.setAttribute('title', nextLabel);
         nextBtn.onclick = () => onNavigate(1);
     }
 }
@@ -68,7 +65,6 @@ export class ViewModeSelector {
             const label = getLabel(value);
             labelEl.setText(label);
             button.setAttribute('aria-label', `View mode: ${label}`);
-            button.setAttribute('title', `View mode: ${label}`);
         };
         applyModeLabel(currentValue);
 
@@ -132,7 +128,6 @@ export class ZoomSelector {
             const pct = `${Math.round(zoom * 100)}%`;
             labelEl.setText(pct);
             button.setAttribute('aria-label', `Zoom: ${pct}`);
-            button.setAttribute('title', `Zoom: ${pct}`);
         };
         applyLabel(currentZoom);
 

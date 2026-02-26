@@ -38,7 +38,7 @@ export class HabitTrackerRenderer {
             container.toggleClass('collapsed', this.isCollapsed);
             setIcon(toggleBtn, this.isCollapsed ? 'plus' : 'minus');
             axisCell.setAttribute('aria-expanded', (!this.isCollapsed).toString());
-            axisCell.setAttribute('title', this.isCollapsed ? 'Expand Habits' : 'Collapse Habits');
+            axisCell.setAttribute('aria-label', this.isCollapsed ? 'Expand Habits' : 'Collapse Habits');
         };
 
         const toggleCollapsed = () => {

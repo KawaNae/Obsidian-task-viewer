@@ -43,7 +43,7 @@ export class ScheduleSectionRenderer {
             row.toggleClass('collapsed', isCollapsed);
             setIcon(toggleBtn, isCollapsed ? 'plus' : 'minus');
             axisCell.setAttribute('aria-expanded', (!isCollapsed).toString());
-            axisCell.setAttribute('title', isCollapsed ? 'Expand All Day' : 'Collapse All Day');
+            axisCell.setAttribute('aria-label', isCollapsed ? 'Expand All Day' : 'Collapse All Day');
         };
 
         const toggleCollapsed = () => {
@@ -92,7 +92,7 @@ export class ScheduleSectionRenderer {
             section.toggleClass('schedule-section--collapsed', isCollapsed);
             setIcon(icon, isCollapsed ? 'plus' : 'minus');
             header.setAttribute('aria-expanded', (!isCollapsed).toString());
-            header.setAttribute('title', isCollapsed ? `Expand ${title}` : `Collapse ${title}`);
+            header.setAttribute('aria-label', isCollapsed ? `Expand ${title}` : `Collapse ${title}`);
         };
 
         const toggleCollapsed = () => {

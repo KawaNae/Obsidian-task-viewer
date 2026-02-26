@@ -192,7 +192,6 @@ export class TimelineToolbar {
         const btn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(btn, 'link');
         btn.setAttribute('aria-label', 'Copy view URI');
-        btn.setAttribute('title', 'Copy view URI');
         btn.onclick = async () => {
             const uri = ViewUriBuilder.build(VIEW_META_TIMELINE.type, {
                 filterState: this.filterMenu.getFilterState(),
@@ -208,7 +207,6 @@ export class TimelineToolbar {
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', 'Filter');
-        filterBtn.setAttribute('title', 'Filter');
         filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
 
         filterBtn.onclick = (e) => {
@@ -263,7 +261,6 @@ export class TimelineToolbar {
 
         const label = isOpen ? 'Hide Sidebar' : 'Show Sidebar';
         toggleBtn.setAttribute('aria-label', label);
-        toggleBtn.setAttribute('title', label);
     }
 
     private navigateDate(days: number): void {

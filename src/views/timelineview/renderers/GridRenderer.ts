@@ -161,7 +161,7 @@ export class GridRenderer {
             setIcon(toggleBtn, this.isAllDayCollapsed ? 'plus' : 'minus');
             allDayRow.toggleClass('collapsed', this.isAllDayCollapsed);
             axisCell.setAttribute('aria-expanded', (!this.isAllDayCollapsed).toString());
-            axisCell.setAttribute('title', this.isAllDayCollapsed ? 'Expand All Day' : 'Collapse All Day');
+            axisCell.setAttribute('aria-label', this.isAllDayCollapsed ? 'Expand All Day' : 'Collapse All Day');
         };
 
         const toggleAllDayCollapsed = () => {
