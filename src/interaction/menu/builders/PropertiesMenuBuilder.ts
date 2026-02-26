@@ -7,6 +7,7 @@ import { PropertyFormatter } from '../PropertyFormatter';
 import { CreateTaskModal, CreateTaskResult } from '../../../modals/CreateTaskModal';
 import { DateUtils } from '../../../utils/DateUtils';
 import { getTaskDisplayName } from '../../../utils/TaskContent';
+import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
 
 type ChangePropertiesFocusField = 'name' | 'start' | 'end' | 'deadline';
 
@@ -77,18 +78,9 @@ export class PropertiesMenuBuilder {
 
             const statusMenu = (sub as any).submenu as Menu;
 
-            const statuses = [
-                { char: ' ', label: '[ ]' },
-                { char: 'x', label: '[x]' },
-                { char: '-', label: '[-]' },
-                { char: '!', label: '[!]' },
-                { char: '?', label: '[?]' },
-                { char: '>', label: '[>]' }
-            ];
-
-            statuses.forEach(s => {
+            buildStatusOptions(this.plugin.settings.statusMenuChars).forEach(s => {
                 statusMenu.addItem(item => {
-                    item.setTitle(s.label)
+                    item.setTitle(createStatusTitle(s))
                         .setChecked(task.statusChar === s.char)
                         .onClick(async () => {
                             await this.taskIndex.updateTask(task.id, {

@@ -95,6 +95,30 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
+            .setName('Enable Status Menu')
+            .setDesc('Show a status selection menu when right-clicking checkboxes on task cards and in the editor.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.enableStatusMenu)
+                .onChange(async (value) => {
+                    this.plugin.settings.enableStatusMenu = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Status Menu Characters')
+            .setDesc('Additional status characters shown in the menu (comma or space separated). [ ] and [x] are always included.')
+            .addText(text => text
+                .setPlaceholder('-, !, ?, >, /')
+                .setValue(this.plugin.settings.statusMenuChars.join(', '))
+                .onChange(async (value) => {
+                    const chars = value.split(/[,\s]+/)
+                        .map(c => c.trim())
+                        .filter(c => c.length === 1);
+                    this.plugin.settings.statusMenuChars = chars.length > 0 ? chars : ['-', '!', '?', '>', '/'];
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
             .setName('Complete Status Characters')
             .setDesc('Characters that represent completed tasks (comma or space separated, e.g., "x, X, -, !").')
             .addText(text => text

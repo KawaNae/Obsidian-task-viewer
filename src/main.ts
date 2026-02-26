@@ -31,6 +31,7 @@ import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
 import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
 import { TimerMenuBuilder } from './interaction/menu/builders/TimerMenuBuilder';
 import { TaskActionsMenuBuilder } from './interaction/menu/builders/TaskActionsMenuBuilder';
+import { EditorCheckboxMenuBuilder } from './interaction/menu/builders/EditorCheckboxMenuBuilder';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
@@ -219,6 +220,7 @@ export default class TaskViewerPlugin extends Plugin {
         );
         const editorTimerBuilder = new TimerMenuBuilder(this);
         const editorActionsBuilder = new TaskActionsMenuBuilder(this.app, this.taskIndex, this);
+        const editorCheckboxBuilder = new EditorCheckboxMenuBuilder();
 
         this.registerEvent(
             this.app.workspace.on('editor-menu', (menu: Menu, editor: Editor, view: MarkdownView) => {
@@ -227,14 +229,17 @@ export default class TaskViewerPlugin extends Plugin {
 
                 const line = editor.getCursor().line;
                 const task = this.taskIndex.getTaskByFileLine(filePath, line);
-                if (!task) return;
 
-                menu.addSeparator();
-                editorPropertiesBuilder.buildPropertiesSubmenu(menu, task, null);
-                menu.addSeparator();
-                editorTimerBuilder.addTimerSubmenu(menu, task);
-                menu.addSeparator();
-                editorActionsBuilder.addTaskActions(menu, task);
+                if (task) {
+                    menu.addSeparator();
+                    editorPropertiesBuilder.buildPropertiesSubmenu(menu, task, null);
+                    menu.addSeparator();
+                    editorTimerBuilder.addTimerSubmenu(menu, task);
+                    menu.addSeparator();
+                    editorActionsBuilder.addTaskActions(menu, task);
+                } else {
+                    editorCheckboxBuilder.addStatusMenu(menu, editor, line, this.settings.enableStatusMenu, this.settings.statusMenuChars);
+                }
             })
         );
 

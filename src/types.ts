@@ -204,6 +204,8 @@ export function validateFrontmatterTaskKeys(keys: FrontmatterTaskKeys): string |
 export interface TaskViewerSettings {
     startHour: number;
     applyGlobalStyles: boolean;
+    enableStatusMenu: boolean;
+    statusMenuChars: string[];
     aiIndex: AiIndexSettings;
     frontmatterTaskKeys: FrontmatterTaskKeys;
     zoomLevel: number;
@@ -234,6 +236,8 @@ export interface TaskViewerSettings {
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
     startHour: 5,
     applyGlobalStyles: false,
+    enableStatusMenu: true,
+    statusMenuChars: ['-', '!', '?', '>', '/'],
     aiIndex: { ...DEFAULT_AI_INDEX_SETTINGS },
     frontmatterTaskKeys: { ...DEFAULT_FRONTMATTER_TASK_KEYS },
     zoomLevel: 1.0,

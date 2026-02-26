@@ -2,15 +2,7 @@ import { App, Menu, Notice, TFile } from 'obsidian';
 import { Task, TaskViewerSettings } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { ChildRenderItem } from './types';
-
-const STATUS_OPTIONS = [
-    { char: 'x', label: '[x]' },
-    { char: '!', label: '[!]' },
-    { char: '?', label: '[?]' },
-    { char: '>', label: '[>]' },
-    { char: '-', label: '[-]' },
-    { char: ' ', label: '[ ]' },
-] as const;
+import { buildStatusOptions, createStatusTitle } from '../../constants/statusOptions';
 
 /**
  * Wires checkbox interactions for parent and child items.
@@ -41,12 +33,12 @@ export class CheckboxWiring {
         });
         checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
 
-        if (!settings.applyGlobalStyles) return;
+        if (!settings.enableStatusMenu) return;
 
         checkbox.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            this.showStatusMenu(e as MouseEvent, async (statusChar) => {
+            this.showStatusMenu(e as MouseEvent, settings, async (statusChar) => {
                 await this.taskIndex.updateTask(taskId, { statusChar });
             });
         });
@@ -97,12 +89,12 @@ export class CheckboxWiring {
         });
         checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
 
-        if (!settings.applyGlobalStyles) return;
+        if (!settings.enableStatusMenu) return;
 
         checkbox.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            this.showStatusMenu(e as MouseEvent, async (statusChar) => {
+            this.showStatusMenu(e as MouseEvent, settings, async (statusChar) => {
                 await this.taskIndex.updateTask(taskId, { statusChar });
             });
         });
@@ -138,13 +130,13 @@ export class CheckboxWiring {
         });
         checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
 
-        if (!settings.applyGlobalStyles) return;
+        if (!settings.enableStatusMenu) return;
 
         checkbox.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             e.stopPropagation();
             const targetEl = e.target as HTMLElement | null;
-            this.showStatusMenu(e as MouseEvent, async (statusChar) => {
+            this.showStatusMenu(e as MouseEvent, settings, async (statusChar) => {
                 if (childLineIndex >= task.childLines.length) return;
 
                 let childLine = task.childLines[childLineIndex];
@@ -166,13 +158,14 @@ export class CheckboxWiring {
         checkbox.addEventListener('touchstart', (e) => e.stopPropagation());
     }
 
-    private showStatusMenu(e: MouseEvent, onSelect: (statusChar: string) => Promise<void>): void {
+    private showStatusMenu(e: MouseEvent, settings: TaskViewerSettings, onSelect: (statusChar: string) => Promise<void>): void {
         const menu = new Menu();
+        const options = buildStatusOptions(settings.statusMenuChars);
 
-        for (const option of STATUS_OPTIONS) {
+        for (const option of options) {
             menu.addItem((item) => {
                 item
-                    .setTitle(option.label)
+                    .setTitle(createStatusTitle(option))
                     .onClick(async () => {
                         await onSelect(option.char);
                     });
