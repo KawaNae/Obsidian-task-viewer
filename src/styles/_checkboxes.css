@@ -53,6 +53,16 @@
     border-color: transparent;
 }
 
+/* / (half-done: left half filled) */
+.task-viewer-global-styles input[data-task="/"].task-list-item-checkbox:checked,
+.task-viewer-global-styles li[data-task="/"]>input.task-list-item-checkbox:checked,
+.task-viewer-global-styles li[data-task="/"]>p>input.task-list-item-checkbox:checked {
+    background: linear-gradient(to right, var(--file-accent, var(--tv-accent)) 50%, transparent 50%) !important;
+    border-color: var(--checkbox-border-color);
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
+}
+
 
 /* after - Icons */
 
@@ -111,6 +121,16 @@
     right: 1px;
     top: 0;
     font-family: var(--tv-font-ui);
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
+    background-color: transparent !important;
+}
+
+/* / (half-done: no icon overlay) */
+.task-viewer-global-styles input[data-task="/"].task-list-item-checkbox:checked::after,
+.task-viewer-global-styles li[data-task="/"]>input.task-list-item-checkbox:checked::after,
+.task-viewer-global-styles li[data-task="/"]>p>input.task-list-item-checkbox:checked::after {
+    content: '';
     -webkit-mask-image: none !important;
     mask-image: none !important;
     background-color: transparent !important;
