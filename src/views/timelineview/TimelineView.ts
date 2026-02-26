@@ -19,24 +19,11 @@ import { PinnedListRenderer } from './renderers/PinnedListRenderer';
 import { FilterMenuComponent } from '../filter/FilterMenuComponent';
 import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import { HabitTrackerRenderer } from './renderers/HabitTrackerRenderer';
+import { SidebarManager } from '../sidebar/SidebarManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 
 export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
-
-type SidebarToggleSource =
-    | 'toolbar'
-    | 'backdrop'
-    | 'escape'
-    | 'render'
-    | 'setState'
-    | 'resize'
-    | 'layout-restore';
-
-type SidebarUpdateOptions = {
-    persist: boolean;
-    animate: boolean;
-};
 
 /**
  * Timeline View - Displays tasks on a time-based grid layout.

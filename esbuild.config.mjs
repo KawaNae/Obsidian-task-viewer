@@ -54,6 +54,7 @@ const copyStaticFiles = {
         const cssFiles = [
           '_variables.css',
           '_base.css',
+          '_sidebar.css',
           '_timeline-grid.css',
           '_timeline-date-header.css',
           '_timeline-allday.css',

@@ -1,0 +1,144 @@
+/* =============================================================================
+   Sidebar — Shared layout for views with a right-side pinned-list panel
+   ============================================================================= */
+
+/* 2-Column Layout Wrapper */
+.view-sidebar-layout {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    overflow: hidden;
+    position: relative;
+}
+
+.view-sidebar-main {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border-right: 0;
+}
+
+.view-sidebar-main--open {
+    margin-right: 300px;
+    border-right: 1px solid var(--tv-border);
+}
+
+.view-sidebar-panel {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 300px;
+    border-left: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--tv-bg-sidebar);
+    overflow: hidden;
+    z-index: var(--z-base);
+}
+
+.view-sidebar-panel--hidden {
+    transform: translateX(100%);
+    box-shadow: none;
+}
+
+.view-sidebar-backdrop {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(var(--tv-shadow-rgb), 0.35);
+    opacity: 0;
+    pointer-events: none;
+    z-index: calc(var(--z-overlay) - 1);
+}
+
+/* Animation rules — applied via JS class toggle */
+.view-sidebar-layout--animate .view-sidebar-main {
+    transition: margin-right 0.3s ease;
+}
+
+.view-sidebar-layout--animate .view-sidebar-panel {
+    transition: transform 0.3s ease;
+}
+
+.view-sidebar-layout--animate .view-sidebar-backdrop {
+    transition: opacity 0.2s ease;
+}
+
+/* Sidebar header */
+.view-sidebar__header {
+    padding: 2px 8px;
+    margin: 0;
+    height: var(--header-height);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--tv-border);
+}
+
+.view-sidebar__title {
+    margin: 0;
+    font-size: 0.8em;
+    color: var(--tv-text-muted);
+    flex: 1;
+}
+
+/* Specificity: override Obsidian's button:not(.clickable-icon) */
+.view-sidebar-panel button.view-sidebar__add-btn {
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 6px !important;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 1px solid transparent !important;
+    border-radius: var(--tv-radius-s);
+    background: transparent !important;
+    color: var(--tv-text-muted);
+    font-size: 0.8em;
+    box-shadow: none;
+    cursor: pointer;
+    transition:
+        background-color 120ms ease,
+        border-color 120ms ease,
+        color 120ms ease;
+}
+
+.view-sidebar-panel button.view-sidebar__add-btn:hover {
+    background-color: var(--tv-bg-hover);
+    border-color: var(--tv-border);
+    color: var(--tv-text);
+}
+
+.view-sidebar__body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+}
+
+/* Mobile / narrow layout overrides */
+.view-sidebar-layout--mobile .view-sidebar-main--open {
+    margin-right: 0;
+    border-right: 0;
+}
+
+.view-sidebar-layout--mobile .view-sidebar-panel {
+    width: min(92vw, 360px);
+    border-left: 1px solid var(--tv-border);
+    box-shadow: -8px 0 24px var(--tv-shadow-medium);
+    z-index: var(--z-overlay);
+}
+
+.view-sidebar-layout--mobile .view-sidebar-panel--hidden {
+    box-shadow: none;
+}
+
+.view-sidebar-layout--mobile .view-sidebar-backdrop--visible {
+    opacity: 1;
+    pointer-events: auto;
+}

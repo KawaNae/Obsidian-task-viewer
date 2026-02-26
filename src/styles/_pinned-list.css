@@ -49,8 +49,8 @@
 
 /* Shared icon button base for filter-btn and more-btn */
 /* Specificity: override Obsidian's button:not(.clickable-icon) */
-.timeline-view button.pinned-list__filter-btn,
-.timeline-view button.pinned-list__more-btn {
+.view-sidebar-panel button.pinned-list__filter-btn,
+.view-sidebar-panel button.pinned-list__more-btn {
     width: 22px;
     height: 22px;
     display: inline-flex;
@@ -71,15 +71,15 @@
         color 120ms ease;
 }
 
-.timeline-view button.pinned-list__filter-btn:hover,
-.timeline-view button.pinned-list__more-btn:hover {
+.view-sidebar-panel button.pinned-list__filter-btn:hover,
+.view-sidebar-panel button.pinned-list__more-btn:hover {
     background-color: var(--tv-bg-hover);
     border-color: var(--tv-border);
     color: var(--tv-text);
 }
 
 /* Filter active: accent color */
-.timeline-view button.pinned-list__filter-btn.is-filtered {
+.view-sidebar-panel button.pinned-list__filter-btn.is-filtered {
     color: var(--tv-text-accent);
 }
 
