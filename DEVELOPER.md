@@ -370,6 +370,19 @@ npm run build     # Production build
 | `src/views/utils/RenderableTaskUtils.ts` | `RenderableTask` and split helpers |
 | Inside each subsystem directory | Subsystem-specific types (do not promote to cross-layer) |
 
+### Tooltip convention
+
+Use `aria-label` for tooltips. **Never set `title`** on interactive elements — Obsidian renders styled tooltips from `aria-label`, and a `title` attribute would cause a duplicate native browser tooltip.
+
+```ts
+// Good
+btn.setAttribute('aria-label', 'Filter');
+
+// Bad — causes double tooltip
+btn.setAttribute('aria-label', 'Filter');
+btn.setAttribute('title', 'Filter');
+```
+
 ### Design patterns in use
 
 | Pattern | Where used |
