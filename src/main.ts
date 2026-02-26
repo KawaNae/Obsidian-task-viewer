@@ -1,4 +1,4 @@
-import { Notice, Plugin, WorkspaceLeaf, setIcon, TFile } from 'obsidian';
+import { Notice, Plugin, WorkspaceLeaf, setIcon, TFile, Menu, Editor, MarkdownView } from 'obsidian';
 import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
@@ -24,8 +24,14 @@ import { AudioUtils } from './utils/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
 import { getViewMeta } from './constants/viewRegistry';
 import type { FilterState } from './services/filter/FilterTypes';
-import { createEmptyFilterState } from './services/filter/FilterTypes';
+import { createEmptyFilterState, hasConditions } from './services/filter/FilterTypes';
 import { FilterSerializer } from './services/filter/FilterSerializer';
+import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
+import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
+import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
+import { TimerMenuBuilder } from './interaction/menu/builders/TimerMenuBuilder';
+import { TaskActionsMenuBuilder } from './interaction/menu/builders/TaskActionsMenuBuilder';
+import { EditorCheckboxMenuBuilder } from './interaction/menu/builders/EditorCheckboxMenuBuilder';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
@@ -207,6 +213,36 @@ export default class TaskViewerPlugin extends Plugin {
         this.registerEditorSuggest(new ColorSuggest(this.app, this));
         this.registerEditorSuggest(new LineStyleSuggest(this.app, this));
 
+        // Register editor context menu for @notation tasks
+        const editorPropertiesBuilder = new PropertiesMenuBuilder(
+            this.app, this.taskIndex, this,
+            new PropertyCalculator(), new PropertyFormatter()
+        );
+        const editorTimerBuilder = new TimerMenuBuilder(this);
+        const editorActionsBuilder = new TaskActionsMenuBuilder(this.app, this.taskIndex, this);
+        const editorCheckboxBuilder = new EditorCheckboxMenuBuilder();
+
+        this.registerEvent(
+            this.app.workspace.on('editor-menu', (menu: Menu, editor: Editor, view: MarkdownView) => {
+                const filePath = view.file?.path;
+                if (!filePath) return;
+
+                const line = editor.getCursor().line;
+                const task = this.taskIndex.getTaskByFileLine(filePath, line);
+
+                if (task) {
+                    menu.addSeparator();
+                    editorPropertiesBuilder.buildPropertiesSubmenu(menu, task, null);
+                    menu.addSeparator();
+                    editorTimerBuilder.addTimerSubmenu(menu, task);
+                    menu.addSeparator();
+                    editorActionsBuilder.addTaskActions(menu, task);
+                } else {
+                    editorCheckboxBuilder.addStatusMenu(menu, editor, line, this.settings.enableStatusMenu, this.settings.statusMenuChars);
+                }
+            })
+        );
+
         // Apply global styles if enabled
         this.updateGlobalStyles();
 
@@ -235,37 +271,23 @@ export default class TaskViewerPlugin extends Plugin {
                 filterState = FilterSerializer.fromURIParam(params.filter);
             }
 
-            // Shorthand: ?tag=work,urgent
-            if (params.tag) {
-                filterState = filterState ?? createEmptyFilterState();
-                filterState.conditions.push({
-                    id: 'uri-tag',
-                    property: 'tag',
-                    operator: 'includes',
-                    value: { type: 'stringSet', values: params.tag.split(',') },
-                });
-            }
+            // Shorthand params → build a single group with conditions
+            const shorthandConditions: { id: string; property: 'tag' | 'status' | 'file'; values: string[] }[] = [];
+            if (params.tag) shorthandConditions.push({ id: 'uri-tag', property: 'tag', values: params.tag.split(',') });
+            if (params.status) shorthandConditions.push({ id: 'uri-status', property: 'status', values: params.status.split(',') });
+            if (params.file) shorthandConditions.push({ id: 'uri-file', property: 'file', values: params.file.split(',') });
 
-            // Shorthand: ?status=x
-            if (params.status) {
+            if (shorthandConditions.length > 0) {
                 filterState = filterState ?? createEmptyFilterState();
-                filterState.conditions.push({
-                    id: 'uri-status',
-                    property: 'status',
-                    operator: 'includes',
-                    value: { type: 'stringSet', values: params.status.split(',') },
-                });
-            }
-
-            // Shorthand: ?file=path.md
-            if (params.file) {
-                filterState = filterState ?? createEmptyFilterState();
-                filterState.conditions.push({
-                    id: 'uri-file',
-                    property: 'file',
-                    operator: 'includes',
-                    value: { type: 'stringSet', values: params.file.split(',') },
-                });
+                for (const sc of shorthandConditions) {
+                    filterState.root.children.push({
+                        type: 'condition',
+                        id: sc.id,
+                        property: sc.property,
+                        operator: 'includes',
+                        value: { type: 'stringSet', values: sc.values },
+                    });
+                }
             }
 
             const uriParams: {
@@ -301,34 +323,20 @@ export default class TaskViewerPlugin extends Plugin {
             frontmatterTaskKeys?: unknown;
             aiIndex?: unknown;
         };
-        const hasExpandCompletedKey = Object.prototype.hasOwnProperty.call(rawObject, 'expandCompletedInDeadlineList');
-        const hasLegacyShowCompletedKey = Object.prototype.hasOwnProperty.call(rawObject, 'showCompletedInDeadlineList');
-        const resolveExpandCompletedInDeadlineList = (): boolean => {
-            if (hasExpandCompletedKey) {
-                const rawValue = rawObject.expandCompletedInDeadlineList;
-                return typeof rawValue === 'boolean'
-                    ? rawValue
-                    : DEFAULT_SETTINGS.expandCompletedInDeadlineList;
+        // Migrate existing pinnedList filterStates from older formats to v4 (recursive tree)
+        if (Array.isArray(merged.pinnedLists)) {
+            for (const list of merged.pinnedLists) {
+                if (list.filterState && !(list.filterState as unknown as Record<string, unknown>).root) {
+                    list.filterState = FilterSerializer.fromJSON(list.filterState);
+                }
             }
-            if (hasLegacyShowCompletedKey) {
-                const rawValue = rawObject.showCompletedInDeadlineList;
-                return typeof rawValue === 'boolean'
-                    ? rawValue
-                    : DEFAULT_SETTINGS.expandCompletedInDeadlineList;
-            }
-            return DEFAULT_SETTINGS.expandCompletedInDeadlineList;
-        };
-        const sanitizedMerged = { ...merged } as TaskViewerSettings & Record<string, unknown>;
-        delete sanitizedMerged.showCompletedInDeadlineList;
-        delete sanitizedMerged.excludedPaths;
-
+        }
         const normalizedFrontmatterKeys = normalizeFrontmatterTaskKeys(merged.frontmatterTaskKeys);
         const keysValidationError = validateFrontmatterTaskKeys(normalizedFrontmatterKeys);
         const normalizedAiIndexSettings = normalizeAiIndexSettings(merged.aiIndex);
 
         this.settings = {
-            ...sanitizedMerged,
-            expandCompletedInDeadlineList: resolveExpandCompletedInDeadlineList(),
+            ...merged,
             frontmatterTaskKeys: keysValidationError
                 ? { ...DEFAULT_FRONTMATTER_TASK_KEYS }
                 : normalizedFrontmatterKeys,
@@ -412,7 +420,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         if (leaf) {
             const state: Record<string, unknown> = {
-                filterState: params?.filterState && params.filterState.conditions.length > 0
+                filterState: params?.filterState && hasConditions(params.filterState)
                     ? FilterSerializer.toJSON(params.filterState)
                     : null,
             };

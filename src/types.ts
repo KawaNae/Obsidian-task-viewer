@@ -1,5 +1,6 @@
 import { DEFAULT_AI_INDEX_SETTINGS } from './services/aiindex/AiIndexSettings';
 import type { AiIndexSettings } from './services/aiindex/AiIndexSettings';
+import type { FilterState } from './services/filter/FilterTypes';
 
 /**
  * Returns true when statusChar is considered completed by settings.
@@ -81,6 +82,10 @@ export interface Task {
      * Used for parser-specific writeback behavior.
      */
     parserId: string;
+
+    // File-level styling from frontmatter (resolved at scan time).
+    color?: string;
+    linestyle?: string;
 }
 
 export interface FlowCommand {
@@ -97,10 +102,17 @@ export interface FlowModifier {
 export interface ViewState {
     startDate: string;
     daysToShow: number;
-    showDeadlineList: boolean;
+    showSidebar: boolean;
     filterFiles: string[] | null;
-    filterState?: import('./services/filter/FilterTypes').FilterState;
+    filterState?: FilterState;
     zoomLevel?: number;
+    pinnedListCollapsed?: Record<string, boolean>;
+}
+
+export interface PinnedListDefinition {
+    id: string;
+    name: string;
+    filterState: FilterState;
 }
 
 export interface FrontmatterTaskKeys {
@@ -192,6 +204,8 @@ export function validateFrontmatterTaskKeys(keys: FrontmatterTaskKeys): string |
 export interface TaskViewerSettings {
     startHour: number;
     applyGlobalStyles: boolean;
+    enableStatusMenu: boolean;
+    statusMenuChars: string[];
     aiIndex: AiIndexSettings;
     frontmatterTaskKeys: FrontmatterTaskKeys;
     zoomLevel: number;
@@ -201,9 +215,7 @@ export interface TaskViewerSettings {
     pomodoroBreakMinutes: number;
     countdownMinutes: number;
     completeStatusChars: string[];
-    defaultDeadlineOffset: number;
-    upcomingDays: number;
-    expandCompletedInDeadlineList: boolean;
+    pinnedLists: PinnedListDefinition[];
     pastDaysToShow: number;
     habits: HabitDefinition[];
     frontmatterTaskHeader: string;
@@ -224,6 +236,8 @@ export interface TaskViewerSettings {
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
     startHour: 5,
     applyGlobalStyles: false,
+    enableStatusMenu: true,
+    statusMenuChars: ['-', '!', '?', '>', '/'],
     aiIndex: { ...DEFAULT_AI_INDEX_SETTINGS },
     frontmatterTaskKeys: { ...DEFAULT_FRONTMATTER_TASK_KEYS },
     zoomLevel: 1.0,
@@ -233,9 +247,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     pomodoroBreakMinutes: 5,
     countdownMinutes: 25,
     completeStatusChars: ['x', 'X', '-', '!'],
-    defaultDeadlineOffset: 0,
-    upcomingDays: 7,
-    expandCompletedInDeadlineList: false,
+    pinnedLists: [],
     pastDaysToShow: 0,
     habits: [],
     frontmatterTaskHeader: 'Tasks',

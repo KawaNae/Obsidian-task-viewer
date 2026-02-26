@@ -9,11 +9,11 @@ import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { ViewUriBuilder } from '../../utils/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
-import { TaskStyling } from '../utils/TaskStyling';
+
 import { DateNavigator } from '../ViewToolbar';
 import { FilterMenuComponent } from '../filter/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
-import { createEmptyFilterState } from '../../services/filter/FilterTypes';
+import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { HabitTrackerRenderer } from '../timelineview/renderers/HabitTrackerRenderer';
@@ -122,13 +122,18 @@ export class ScheduleView extends ItemView {
             const files = state.filterFiles.filter((value: unknown): value is string => typeof value === 'string');
             if (files.length > 0) {
                 this.filterMenu.setFilterState({
-                    conditions: [{
-                        id: 'migrated-file',
-                        property: 'file',
-                        operator: 'includes',
-                        value: { type: 'stringSet', values: files },
-                    }],
-                    logic: 'and',
+                    root: {
+                        type: 'group',
+                        id: 'migrated-file-group',
+                        children: [{
+                            type: 'condition',
+                            id: 'migrated-file',
+                            property: 'file',
+                            operator: 'includes',
+                            value: { type: 'stringSet', values: files },
+                        }],
+                        logic: 'and',
+                    },
                 });
             } else {
                 this.filterMenu.setFilterState(createEmptyFilterState());
@@ -148,7 +153,7 @@ export class ScheduleView extends ItemView {
         const result: Record<string, unknown> = {
             currentDate: this.currentDate,
         };
-        if (filterState.conditions.length > 0) {
+        if (hasConditions(filterState)) {
             result.filterState = FilterSerializer.toJSON(filterState);
         }
         return result;
@@ -241,7 +246,6 @@ export class ScheduleView extends ItemView {
         const copyBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(copyBtn, 'link');
         copyBtn.setAttribute('aria-label', 'Copy view URI');
-        copyBtn.setAttribute('title', 'Copy view URI');
         copyBtn.onclick = async () => {
             const uri = ViewUriBuilder.build(VIEW_META_SCHEDULE.type, this.filterMenu.getFilterState());
             await navigator.clipboard.writeText(uri);
@@ -251,7 +255,6 @@ export class ScheduleView extends ItemView {
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', 'Filter');
-        filterBtn.setAttribute('title', 'Filter');
         filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
         filterBtn.addEventListener('click', (event: MouseEvent) => {
             this.filterMenu.showMenu(event, {
@@ -261,7 +264,6 @@ export class ScheduleView extends ItemView {
                     filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
                 },
                 getTasks: () => this.taskIndex.getTasks(),
-                getFileColor: (filePath) => TaskStyling.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color),
             });
         });
     }

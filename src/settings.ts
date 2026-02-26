@@ -1,6 +1,8 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import TaskViewerPlugin from './main';
-import { FrontmatterTaskKeys, HabitType, validateFrontmatterTaskKeys } from './types';
+import { FrontmatterTaskKeys, HabitType, PinnedListDefinition, validateFrontmatterTaskKeys } from './types';
+import { PROPERTY_LABELS, OPERATOR_LABELS, RELATIVE_DATE_LABELS, createEmptyFilterState, getAllConditions } from './services/filter/FilterTypes';
+import type { DateFilterValue } from './services/filter/FilterTypes';
 import {
     DEFAULT_AI_INDEX_SETTINGS,
     normalizeAiIndexSettings,
@@ -90,6 +92,30 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     this.plugin.settings.applyGlobalStyles = value;
                     await this.plugin.saveSettings();
                     this.plugin.updateGlobalStyles();
+                }));
+
+        new Setting(el)
+            .setName('Enable Status Menu')
+            .setDesc('Show a status selection menu when right-clicking checkboxes on task cards and in the editor.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.enableStatusMenu)
+                .onChange(async (value) => {
+                    this.plugin.settings.enableStatusMenu = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Status Menu Characters')
+            .setDesc('Additional status characters shown in the menu (comma or space separated). [ ] and [x] are always included.')
+            .addText(text => text
+                .setPlaceholder('-, !, ?, >, /')
+                .setValue(this.plugin.settings.statusMenuChars.join(', '))
+                .onChange(async (value) => {
+                    const chars = value.split(/[,\s]+/)
+                        .map(c => c.trim())
+                        .filter(c => c.length === 1);
+                    this.plugin.settings.statusMenuChars = chars.length > 0 ? chars : ['-', '!', '?', '>', '/'];
+                    await this.plugin.saveSettings();
                 }));
 
         new Setting(el)
@@ -230,44 +256,78 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        // Deadline List
-        el.createEl('h3', { text: 'Deadline List', cls: 'setting-section-header' });
+        // Pinned Lists
+        el.createEl('h3', { text: 'Pinned Lists', cls: 'setting-section-header' });
+
+        const pinnedListContainer = el.createDiv('setting-pinned-lists');
+        this.renderPinnedListItems(pinnedListContainer);
 
         new Setting(el)
-            .setName('Default Deadline Offset')
-            .setDesc('Number of days from today to set as the default deadline for new deadline tasks.')
-            .addText(text => text
-                .setPlaceholder('0')
-                .setValue(this.plugin.settings.defaultDeadlineOffset.toString())
-                .onChange(async (value) => {
-                    let days = parseInt(value);
-                    if (isNaN(days)) days = 0;
-                    this.plugin.settings.defaultDeadlineOffset = days;
+            .addButton(btn => btn
+                .setButtonText('+ Add Pinned List')
+                .onClick(async () => {
+                    this.plugin.settings.pinnedLists.push({
+                        id: 'pl-' + Date.now(),
+                        name: 'New List',
+                        filterState: createEmptyFilterState(),
+                    });
                     await this.plugin.saveSettings();
+                    this.renderPinnedListItems(pinnedListContainer);
                 }));
+    }
 
-        new Setting(el)
-            .setName('Upcoming Days')
-            .setDesc('Number of days (from today) to show as "Upcoming" in the Deadline list. Set to 0 to hide the Upcoming group.')
-            .addText(text => text
-                .setPlaceholder('7')
-                .setValue(this.plugin.settings.upcomingDays.toString())
-                .onChange(async (value) => {
-                    let days = parseInt(value);
-                    if (isNaN(days) || days < 0) days = 0;
-                    this.plugin.settings.upcomingDays = days;
-                    await this.plugin.saveSettings();
-                }));
+    private renderPinnedListItems(container: HTMLElement): void {
+        container.empty();
+        const lists = this.plugin.settings.pinnedLists;
 
-        new Setting(el)
-            .setName('Expand Completed Group by Default')
-            .setDesc('If enabled, the Completed group starts expanded in the Deadline list.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.expandCompletedInDeadlineList)
-                .onChange(async (value) => {
-                    this.plugin.settings.expandCompletedInDeadlineList = value;
-                    await this.plugin.saveSettings();
-                }));
+        lists.forEach((listDef, index) => {
+            const summary = this.buildFilterSummary(listDef);
+            new Setting(container)
+                .setName(listDef.name)
+                .setDesc(summary || 'No filter conditions (shows all tasks)')
+                .addText(text => text
+                    .setPlaceholder('List name')
+                    .setValue(listDef.name)
+                    .onChange(async (value) => {
+                        listDef.name = value;
+                        await this.plugin.saveSettings();
+                    }))
+                .addExtraButton(btn => btn
+                    .setIcon('trash')
+                    .setTooltip('Delete list')
+                    .onClick(async () => {
+                        this.plugin.settings.pinnedLists.splice(index, 1);
+                        await this.plugin.saveSettings();
+                        this.renderPinnedListItems(container);
+                    }));
+        });
+    }
+
+    private buildFilterSummary(listDef: PinnedListDefinition): string {
+        const conditions = getAllConditions(listDef.filterState);
+        if (conditions.length === 0) return '';
+
+        const parts = conditions.map(c => {
+            const prop = PROPERTY_LABELS[c.property] ?? c.property;
+            const op = OPERATOR_LABELS[c.operator] ?? c.operator;
+            if (c.value.type === 'stringSet') {
+                return `${prop} ${op} ${c.value.values.join(', ')}`;
+            }
+            if (c.value.type === 'string') {
+                return `${prop} ${op} "${c.value.value}"`;
+            }
+            if (c.value.type === 'date') {
+                const dv = c.value.value as DateFilterValue;
+                const label = dv.mode === 'relative'
+                    ? (dv.preset === 'nextNDays' ? `Next ${dv.n ?? 7} days` : RELATIVE_DATE_LABELS[dv.preset])
+                    : dv.date;
+                return `${prop} ${op} ${label}`;
+            }
+            return `${prop} ${op}`;
+        });
+
+        const logic = listDef.filterState.root.logic === 'or' ? ' OR ' : ', ';
+        return parts.join(logic);
     }
 
     // ─── Notes Tab ───────────────────────────────────────────

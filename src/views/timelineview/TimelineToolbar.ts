@@ -8,16 +8,15 @@ import { DateNavigator, ViewModeSelector, ZoomSelector } from '../ViewToolbar';
 import { FilterMenuComponent } from '../filter/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import type { FilterState } from '../../services/filter/FilterTypes';
-import { createEmptyFilterState } from '../../services/filter/FilterTypes';
+import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import type { Task } from '../../types';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 
 export interface ToolbarCallbacks {
     onRender: () => void;
     onStateChange: () => void;
-    getFileColor: (filePath: string) => string | null;
     getDatesToShow: () => string[];
-    onRequestDeadlineListToggle: (nextOpen: boolean, source: 'toolbar' | 'backdrop' | 'escape') => void;
+    onRequestSidebarToggle: (nextOpen: boolean, source: 'toolbar' | 'backdrop' | 'escape') => void;
 }
 
 /**
@@ -77,13 +76,18 @@ export class TimelineToolbar {
         } else if (this.viewState.filterFiles && this.viewState.filterFiles.length > 0) {
             // Migrate legacy filterFiles to FilterState
             this.filterMenu.setFilterState({
-                conditions: [{
-                    id: 'migrated-file',
-                    property: 'file',
-                    operator: 'includes',
-                    value: { type: 'stringSet', values: this.viewState.filterFiles },
-                }],
-                logic: 'and',
+                root: {
+                    type: 'group',
+                    id: 'migrated-file-group',
+                    children: [{
+                        type: 'condition',
+                        id: 'migrated-file',
+                        property: 'file',
+                        operator: 'includes',
+                        value: { type: 'stringSet', values: this.viewState.filterFiles },
+                    }],
+                    logic: 'and',
+                },
             });
         } else {
             this.filterMenu.setFilterState(createEmptyFilterState());
@@ -188,7 +192,6 @@ export class TimelineToolbar {
         const btn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(btn, 'link');
         btn.setAttribute('aria-label', 'Copy view URI');
-        btn.setAttribute('title', 'Copy view URI');
         btn.onclick = async () => {
             const uri = ViewUriBuilder.build(VIEW_META_TIMELINE.type, {
                 filterState: this.filterMenu.getFilterState(),
@@ -204,16 +207,10 @@ export class TimelineToolbar {
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', 'Filter');
-        filterBtn.setAttribute('title', 'Filter');
         filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
 
         filterBtn.onclick = (e) => {
-            const dates = this.callbacks.getDatesToShow();
-            const allTasksInView = dates.flatMap(date =>
-                this.taskIndex.getTasksForVisualDay(date, this.plugin.settings.startHour)
-            );
-            const deadlineTasks = this.taskIndex.getDeadlineTasks();
-            const allTasks = [...allTasksInView, ...deadlineTasks];
+            const allTasks = this.taskIndex.getTasks();
 
             this.filterMenu.showMenu(e, {
                 onFilterChange: () => {
@@ -222,14 +219,13 @@ export class TimelineToolbar {
                     filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
                 },
                 getTasks: () => allTasks,
-                getFileColor: (file) => this.callbacks.getFileColor(file),
             });
         };
     }
 
     private persistFilterState(): void {
         const state = this.filterMenu.getFilterState();
-        this.viewState.filterState = state.conditions.length > 0
+        this.viewState.filterState = hasConditions(state)
             ? FilterSerializer.fromJSON(FilterSerializer.toJSON(state))
             : undefined;
         this.viewState.filterFiles = null; // Clear legacy field
@@ -244,13 +240,13 @@ export class TimelineToolbar {
         this.updateSidebarToggleButton(toggleBtn);
 
         toggleBtn.onclick = () => {
-            const nextOpen = !this.viewState.showDeadlineList;
-            this.callbacks.onRequestDeadlineListToggle(nextOpen, 'toolbar');
+            const nextOpen = !this.viewState.showSidebar;
+            this.callbacks.onRequestSidebarToggle(nextOpen, 'toolbar');
         };
     }
 
     private updateSidebarToggleButton(toggleBtn: HTMLElement): void {
-        const isOpen = this.viewState.showDeadlineList;
+        const isOpen = this.viewState.showSidebar;
         const primaryIcon = isOpen ? 'panel-right-open' : 'panel-right-close';
         const fallbackIcon = isOpen ? 'sidebar-right' : 'sidebar-left';
 
@@ -263,9 +259,8 @@ export class TimelineToolbar {
         toggleBtn.classList.toggle('is-closed', !isOpen);
         toggleBtn.classList.toggle('is-active', isOpen);
 
-        const label = isOpen ? 'Hide Deadline List' : 'Show Deadline List';
+        const label = isOpen ? 'Hide Sidebar' : 'Show Sidebar';
         toggleBtn.setAttribute('aria-label', label);
-        toggleBtn.setAttribute('title', label);
     }
 
     private navigateDate(days: number): void {

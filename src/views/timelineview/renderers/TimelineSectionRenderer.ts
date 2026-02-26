@@ -122,8 +122,8 @@ export class TimelineSectionRenderer {
             el.dataset.id = task.id;
 
             // Apply Color
-            TaskStyling.applyFileColor(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.color);
-            TaskStyling.applyFileLinestyle(this.plugin.app, el, task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
+            TaskStyling.applyTaskColor(el, task.color ?? null);
+            TaskStyling.applyTaskLinestyle(el, task.linestyle ?? null);
 
             // Calculate position
             let startMinutes = DateUtils.timeToMinutes(task.startTime);

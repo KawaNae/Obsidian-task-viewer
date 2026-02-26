@@ -1,0 +1,119 @@
+/* ==========================================================================
+   Pinned Lists — Sidebar list sections with independent filters
+   ========================================================================== */
+
+.pinned-lists-container {
+    padding: 0 4px;
+}
+
+/* Individual list section */
+.pinned-list {
+    margin-bottom: 8px;
+}
+
+/* Header bar (clickable for collapse) */
+.pinned-list__header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 4px 4px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--tv-text);
+}
+
+.pinned-list__header:hover {
+    color: var(--tv-text-accent);
+}
+
+/* Toggle arrow icon */
+.pinned-list__toggle {
+    font-size: 0.7em;
+    color: var(--tv-text-muted);
+    min-width: 10px;
+    text-align: center;
+}
+
+/* List name */
+.pinned-list__name {
+    flex: 1;
+}
+
+/* Task count badge */
+.pinned-list__count {
+    color: var(--tv-text-muted);
+    font-weight: 400;
+}
+
+/* Shared icon button base for filter-btn and more-btn */
+/* Specificity: override Obsidian's button:not(.clickable-icon) */
+.timeline-view button.pinned-list__filter-btn,
+.timeline-view button.pinned-list__more-btn {
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 1px solid transparent !important;
+    border-radius: var(--tv-radius-s);
+    background: transparent !important;
+    color: var(--tv-text-muted);
+    box-shadow: none;
+    cursor: pointer;
+    transition:
+        background-color 120ms ease,
+        border-color 120ms ease,
+        color 120ms ease;
+}
+
+.timeline-view button.pinned-list__filter-btn:hover,
+.timeline-view button.pinned-list__more-btn:hover {
+    background-color: var(--tv-bg-hover);
+    border-color: var(--tv-border);
+    color: var(--tv-text);
+}
+
+/* Filter active: accent color */
+.timeline-view button.pinned-list__filter-btn.is-filtered {
+    color: var(--tv-text-accent);
+}
+
+/* Inline rename input */
+.pinned-list__name-input {
+    flex: 1;
+    font-size: inherit;
+    font-weight: inherit;
+    padding: 0 2px;
+    border: 1px solid var(--tv-border);
+    border-radius: var(--tv-radius-s);
+    background: var(--tv-bg);
+    color: var(--tv-text);
+    outline: none;
+}
+
+/* Collapsed state: hide the task list */
+.pinned-list--collapsed .pinned-list__body {
+    display: none;
+}
+
+/* Empty state */
+.pinned-lists-container__empty {
+    padding: 16px;
+    text-align: center;
+    color: var(--tv-text-muted);
+    font-size: 0.85em;
+}
+
+/* Danger menu item (Remove) — used across all Obsidian menus */
+.menu-item.is-danger {
+    color: var(--text-error);
+}
+
+.menu-item.is-danger .menu-item-icon {
+    color: var(--text-error);
+}

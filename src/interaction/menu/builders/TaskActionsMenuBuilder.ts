@@ -1,4 +1,4 @@
-import { App, Menu } from 'obsidian';
+import { App, MarkdownView, Menu } from 'obsidian';
 import { Task } from '../../../types';
 import { TaskIndex } from '../../../services/core/TaskIndex';
 import TaskViewerPlugin from '../../../main';
@@ -119,6 +119,20 @@ export class TaskActionsMenuBuilder {
                 .setIcon('document')
                 .onClick(async () => {
                     await this.app.workspace.openLinkText(task.file, '', true);
+                    if (task.line >= 0) {
+                        setTimeout(() => {
+                            const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+                            if (view) {
+                                const editor = view.editor;
+                                const lineText = editor.getLine(task.line);
+                                editor.setSelection(
+                                    { line: task.line, ch: 0 },
+                                    { line: task.line, ch: lineText.length }
+                                );
+                                editor.focus();
+                            }
+                        }, 100);
+                    }
                 });
         });
     }

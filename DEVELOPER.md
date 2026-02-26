@@ -370,6 +370,32 @@ npm run build     # Production build
 | `src/views/utils/RenderableTaskUtils.ts` | `RenderableTask` and split helpers |
 | Inside each subsystem directory | Subsystem-specific types (do not promote to cross-layer) |
 
+### Tooltip convention
+
+Use `aria-label` for tooltips. **Never set `title`** on interactive elements — Obsidian renders styled tooltips from `aria-label`, and a `title` attribute would cause a duplicate native browser tooltip.
+
+```ts
+// Good
+btn.setAttribute('aria-label', 'Filter');
+
+// Bad — causes double tooltip
+btn.setAttribute('aria-label', 'Filter');
+btn.setAttribute('title', 'Filter');
+```
+
+### Wording: "Remove" vs "Delete"
+
+- **Remove** — internal data operations (removing a filter condition, removing an item from a list, removing a DOM element)
+- **Delete** — user-facing actions that erase text in a markdown file (deleting a task line, deleting a child line)
+
+```ts
+// Internal: removing a filter node from the tree
+menu.addItem(item => item.setTitle('Remove condition'));
+
+// User-facing: deleting a task line from the file
+menu.addItem(item => item.setTitle('Delete task'));
+```
+
 ### Design patterns in use
 
 | Pattern | Where used |

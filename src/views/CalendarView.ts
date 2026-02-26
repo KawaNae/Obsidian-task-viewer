@@ -14,7 +14,7 @@ import { TaskStyling } from './utils/TaskStyling';
 import { DateNavigator } from './ViewToolbar';
 import { FilterMenuComponent } from './filter/FilterMenuComponent';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
-import { createEmptyFilterState } from '../services/filter/FilterTypes';
+import { createEmptyFilterState, hasConditions } from '../services/filter/FilterTypes';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../constants/hover';
 import { TaskLinkInteractionManager } from './taskcard/TaskLinkInteractionManager';
 import { VIEW_META_CALENDAR } from '../constants/viewRegistry';
@@ -101,13 +101,18 @@ export class CalendarView extends ItemView {
             const files = state.filterFiles.filter((value: unknown): value is string => typeof value === 'string');
             if (files.length > 0) {
                 this.filterMenu.setFilterState({
-                    conditions: [{
-                        id: 'migrated-file',
-                        property: 'file',
-                        operator: 'includes',
-                        value: { type: 'stringSet', values: files },
-                    }],
-                    logic: 'and',
+                    root: {
+                        type: 'group',
+                        id: 'migrated-file-group',
+                        children: [{
+                            type: 'condition',
+                            id: 'migrated-file',
+                            property: 'file',
+                            operator: 'includes',
+                            value: { type: 'stringSet', values: files },
+                        }],
+                        logic: 'and',
+                    },
                 });
             } else {
                 this.filterMenu.setFilterState(createEmptyFilterState());
@@ -125,7 +130,7 @@ export class CalendarView extends ItemView {
         const result: Record<string, unknown> = {
             windowStart: this.windowStart,
         };
-        if (filterState.conditions.length > 0) {
+        if (hasConditions(filterState)) {
             result.filterState = FilterSerializer.toJSON(filterState);
         }
         return result;
@@ -305,7 +310,6 @@ export class CalendarView extends ItemView {
         const copyBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(copyBtn, 'link');
         copyBtn.setAttribute('aria-label', 'Copy view URI');
-        copyBtn.setAttribute('title', 'Copy view URI');
         copyBtn.onclick = async () => {
             const uri = ViewUriBuilder.build(VIEW_META_CALENDAR.type, this.filterMenu.getFilterState());
             await navigator.clipboard.writeText(uri);
@@ -315,7 +319,6 @@ export class CalendarView extends ItemView {
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', 'Filter');
-        filterBtn.setAttribute('title', 'Filter');
         filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
         filterBtn.addEventListener('click', (event: MouseEvent) => {
             this.filterMenu.showMenu(event, {
@@ -325,7 +328,6 @@ export class CalendarView extends ItemView {
                     filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
                 },
                 getTasks: () => this.taskIndex.getTasks(),
-                getFileColor: (filePath: string) => TaskStyling.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color),
             });
         });
 
@@ -567,8 +569,8 @@ export class CalendarView extends ItemView {
                 barEl.addClass('calendar-multiday-bar--tail');
             }
 
-            TaskStyling.applyFileColor(this.app, barEl, entry.task.file, this.plugin.settings.frontmatterTaskKeys.color);
-            TaskStyling.applyFileLinestyle(this.app, barEl, entry.task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
+            TaskStyling.applyTaskColor(barEl, entry.task.color ?? null);
+            TaskStyling.applyTaskLinestyle(barEl, entry.task.linestyle ?? null);
 
             this.menuHandler.addTaskContextMenu(barEl, entry.task);
             await this.taskRenderer.render(barEl, entry.task, this, this.plugin.settings, { topRight: 'none' });
@@ -583,8 +585,8 @@ export class CalendarView extends ItemView {
         card.style.gridColumn = `${displayColStart} / span ${entry.span}`;
         card.style.gridRow = `${gridRow}`;
 
-        TaskStyling.applyFileColor(this.app, card, entry.task.file, this.plugin.settings.frontmatterTaskKeys.color);
-        TaskStyling.applyFileLinestyle(this.app, card, entry.task.file, this.plugin.settings.frontmatterTaskKeys.linestyle);
+        TaskStyling.applyTaskColor(card, entry.task.color ?? null);
+        TaskStyling.applyTaskLinestyle(card, entry.task.linestyle ?? null);
         this.menuHandler.addTaskContextMenu(card, entry.task);
         await this.taskRenderer.render(card, entry.task, this, this.plugin.settings);
     }

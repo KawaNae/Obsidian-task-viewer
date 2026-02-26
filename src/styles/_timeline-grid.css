@@ -54,7 +54,7 @@
     border-left: 0;
     display: flex;
     flex-direction: column;
-    background-color: var(--tv-bg-deadline-list);
+    background-color: var(--tv-bg-sidebar);
     overflow: hidden;
     z-index: var(--z-base);
 }
@@ -100,6 +100,35 @@
     font-size: 0.8em;
     color: var(--tv-text-muted);
     flex: 1;
+}
+
+/* Specificity: override Obsidian's button:not(.clickable-icon) */
+.timeline-view button.timeline-view__sidebar-add-btn {
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 6px !important;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 1px solid transparent !important;
+    border-radius: var(--tv-radius-s);
+    background: transparent !important;
+    color: var(--tv-text-muted);
+    font-size: 0.8em;
+    box-shadow: none;
+    cursor: pointer;
+    transition:
+        background-color 120ms ease,
+        border-color 120ms ease,
+        color 120ms ease;
+}
+
+.timeline-view button.timeline-view__sidebar-add-btn:hover {
+    background-color: var(--tv-bg-hover);
+    border-color: var(--tv-border);
+    color: var(--tv-text);
 }
 
 .timeline-view__sidebar-body {

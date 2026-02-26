@@ -168,25 +168,9 @@ export class ScheduleTaskRenderer {
             }
         }
 
-        this.applyTaskColor(card, task.file);
-        this.applyTaskLinestyle(card, task.file);
+        TaskStyling.applyTaskColor(card, task.color ?? null);
+        TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
         await this.taskRenderer.render(card, task, this.component, this.getSettings());
         this.menuHandler.addTaskContextMenu(card, task);
-    }
-
-    private getFileLinestyle(filePath: string): string {
-        return TaskStyling.getFileLinestyle(
-            this.app,
-            filePath,
-            this.getSettings().frontmatterTaskKeys.linestyle
-        );
-    }
-
-    private applyTaskColor(el: HTMLElement, filePath: string): void {
-        TaskStyling.applyFileColor(this.app, el, filePath, this.getSettings().frontmatterTaskKeys.color);
-    }
-
-    private applyTaskLinestyle(el: HTMLElement, filePath: string): void {
-        TaskStyling.applyTaskLinestyle(el, this.getFileLinestyle(filePath));
     }
 }

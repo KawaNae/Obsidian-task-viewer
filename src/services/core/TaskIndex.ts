@@ -205,16 +205,18 @@ export class TaskIndex {
         return this.store.getTask(taskId);
     }
 
+    getTaskByFileLine(filePath: string, line: number): Task | undefined {
+        return this.getTasks().find(t =>
+            t.file === filePath && t.line === line && t.parserId === 'at-notation'
+        );
+    }
+
     getTasksForDate(date: string, startHour?: number): Task[] {
         return this.store.getTasksForDate(date, startHour);
     }
 
     getTasksForVisualDay(visualDate: string, startHour: number): Task[] {
         return this.store.getTasksForVisualDay(visualDate, startHour);
-    }
-
-    getDeadlineTasks(): Task[] {
-        return this.store.getDeadlineTasks();
     }
 
     getValidationErrors(): ValidationError[] {

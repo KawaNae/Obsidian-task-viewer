@@ -63,23 +63,19 @@ export class TaskStyling {
 
     /**
      * Gets the custom line style for a file from its frontmatter.
-     * Falls back to "solid" for missing or invalid values.
+     * Returns null when the key is missing or the value is invalid.
      */
-    static getFileLinestyle(app: App, filePath: string, frontmatterKey: string | null): string {
-        if (!frontmatterKey) return 'solid';
+    static getFileLinestyle(app: App, filePath: string, frontmatterKey: string | null): string | null {
+        if (!frontmatterKey) return null;
 
         const cache = app.metadataCache.getCache(filePath);
         const value = cache?.frontmatter?.[frontmatterKey];
-        if (typeof value !== 'string') {
-            return 'solid';
-        }
+        if (typeof value !== 'string') return null;
 
         const normalized = value.trim().toLowerCase();
-        if (!normalized) {
-            return 'solid';
-        }
+        if (!normalized) return null;
 
-        return TaskStyling.VALID_LINE_STYLES.has(normalized) ? normalized : 'solid';
+        return TaskStyling.VALID_LINE_STYLES.has(normalized) ? normalized : null;
     }
 
     /**
@@ -108,8 +104,10 @@ export class TaskStyling {
 
     /**
      * Applies task accent line style to CSS variable.
+     * Null means no linestyle — the default ::before (transparent) is used.
      */
-    static applyTaskLinestyle(el: HTMLElement, linestyle: string): void {
+    static applyTaskLinestyle(el: HTMLElement, linestyle: string | null): void {
+        if (!linestyle) return;
         const normalized = TaskStyling.VALID_LINE_STYLES.has(linestyle) ? linestyle : 'solid';
         el.style.setProperty('--file-linestyle', normalized);
         el.dataset.fileLinestyle = normalized;

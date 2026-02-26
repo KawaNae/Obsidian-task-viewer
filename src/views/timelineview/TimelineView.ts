@@ -1,7 +1,7 @@
-import { ItemView, WorkspaceLeaf } from 'obsidian';
+import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { TaskIndex } from '../../services/core/TaskIndex';
-import { Task, ViewState, isCompleteStatusChar } from '../../types';
+import { Task, ViewState, PinnedListDefinition, isCompleteStatusChar } from '../../types';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 
@@ -11,18 +11,20 @@ import TaskViewerPlugin from '../../main';
 
 import { HandleManager } from './HandleManager';
 import { TimelineToolbar } from './TimelineToolbar';
-import { TaskStyling } from '../utils/TaskStyling';
+
 import { GridRenderer } from './renderers/GridRenderer';
 import { AllDaySectionRenderer } from './renderers/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
-import { DeadlineListRenderer } from './renderers/DeadlineListRenderer';
+import { PinnedListRenderer } from './renderers/PinnedListRenderer';
+import { FilterMenuComponent } from '../filter/FilterMenuComponent';
+import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import { HabitTrackerRenderer } from './renderers/HabitTrackerRenderer';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 
 export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
 
-type DeadlineListToggleSource =
+type SidebarToggleSource =
     | 'toolbar'
     | 'backdrop'
     | 'escape'
@@ -31,7 +33,7 @@ type DeadlineListToggleSource =
     | 'resize'
     | 'layout-restore';
 
-type DeadlineListUpdateOptions = {
+type SidebarUpdateOptions = {
     persist: boolean;
     animate: boolean;
 };
@@ -44,7 +46,7 @@ type DeadlineListUpdateOptions = {
  * - Core Rendering: render, renderCurrentTimeIndicator
  * - Grid & Layout: renderGrid, getDatesToShow, renderTimeLabels
  * - Section Renderers: renderFutureSection, renderLongTermTasks, renderTimedTasks
- * - Color & Styling: getFileColor, applyTaskColor
+ * - Color & Styling: applyTaskColor
  * - Task Creation: addCreateTaskListeners, handleCreateTaskTrigger
  */
 export class TimelineView extends ItemView {
@@ -62,7 +64,8 @@ export class TimelineView extends ItemView {
     private gridRenderer: GridRenderer;
     private allDayRenderer: AllDaySectionRenderer;
     private timelineRenderer: TimelineSectionRenderer;
-    private deadlineRenderer: DeadlineListRenderer;
+    private pinnedListRenderer: PinnedListRenderer;
+    private sidebarFilterMenu = new FilterMenuComponent();
     private habitRenderer: HabitTrackerRenderer;
 
 
@@ -93,7 +96,7 @@ export class TimelineView extends ItemView {
         this.viewState = {
             startDate: DateUtils.getVisualDateOfNow(this.plugin.settings.startHour),
             daysToShow: 3,
-            showDeadlineList: true, // Default: show deadline list
+            showSidebar: true,
             filterFiles: null
         };
         this.taskRenderer = new TaskCardRenderer(this.app, this.taskIndex, {
@@ -135,11 +138,14 @@ export class TimelineView extends ItemView {
                 this.viewState.filterState = undefined;
                 this.viewState.filterFiles = null;
             }
-            if (typeof state.showDeadlineList === 'boolean') {
-                this.setDeadlineListOpen(state.showDeadlineList, 'setState', {
+            if (typeof state.showSidebar === 'boolean') {
+                this.setSidebarOpen(state.showSidebar, 'setState', {
                     persist: false,
                     animate: false,
                 });
+            }
+            if (state.pinnedListCollapsed) {
+                this.viewState.pinnedListCollapsed = state.pinnedListCollapsed;
             }
             // Note: startDate is not restored - always use "Today" logic on reload
         }
@@ -150,8 +156,11 @@ export class TimelineView extends ItemView {
     getState() {
         const state: Record<string, unknown> = {
             daysToShow: this.viewState.daysToShow,
-            showDeadlineList: this.viewState.showDeadlineList,
+            showSidebar: this.viewState.showSidebar,
         };
+        if (this.viewState.pinnedListCollapsed && Object.keys(this.viewState.pinnedListCollapsed).length > 0) {
+            state.pinnedListCollapsed = this.viewState.pinnedListCollapsed;
+        }
         if (this.viewState.zoomLevel != null) {
             state.zoomLevel = this.viewState.zoomLevel;
         }
@@ -173,7 +182,7 @@ export class TimelineView extends ItemView {
         this.container.addClass('timeline-view');
         this.syncSidebarPresentation({ animate: false });
         this.layoutResizeObserver = new ResizeObserver(() => {
-            this.setDeadlineListOpen(this.viewState.showDeadlineList, 'resize', {
+            this.setSidebarOpen(this.viewState.showSidebar, 'resize', {
                 persist: false,
                 animate: false,
             });
@@ -196,10 +205,9 @@ export class TimelineView extends ItemView {
             {
                 onRender: () => this.render(),
                 onStateChange: () => { },
-                getFileColor: (filePath) => TaskStyling.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color),
                 getDatesToShow: () => this.getDatesToShow(),
-                onRequestDeadlineListToggle: (nextOpen, source) => {
-                    this.setDeadlineListOpen(nextOpen, source, {
+                onRequestSidebarToggle: (nextOpen, source) => {
+                    this.setSidebarOpen(nextOpen, source, {
                         persist: true,
                     });
                 }
@@ -212,7 +220,7 @@ export class TimelineView extends ItemView {
         this.allDayRenderer = new AllDaySectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow);
         this.timelineRenderer = new TimelineSectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel());
         this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler, this.taskIndex);
-        this.deadlineRenderer = new DeadlineListRenderer(this.taskRenderer, this.plugin, this.menuHandler);
+        this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.menuHandler, this.taskIndex);
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
 
         // Initialize DragHandler with selection callback, move callback, and view start date provider
@@ -293,9 +301,9 @@ export class TimelineView extends ItemView {
             this.handleManager.updatePositions();
         });
         this.registerDomEvent(win, 'keydown', (event: KeyboardEvent) => {
-            if (event.key === 'Escape' && this.viewState.showDeadlineList) {
+            if (event.key === 'Escape' && this.viewState.showSidebar) {
                 event.preventDefault();
-                this.closeDeadlineList('escape');
+                this.closeSidebar('escape');
             }
         });
 
@@ -465,19 +473,68 @@ export class TimelineView extends ItemView {
         this.executionColumnEl = executionColumn;
 
         const backdrop = layoutContainer.createDiv('timeline-view__sidebar-backdrop');
-        backdrop.addEventListener('click', () => this.closeDeadlineList('backdrop'));
+        backdrop.addEventListener('click', () => this.closeSidebar('backdrop'));
         this.sidebarBackdropEl = backdrop;
 
-        // Sidebar Column (Deadline List)
+        // Sidebar Column (Pinned Lists)
         const targetColumn = layoutContainer.createDiv('timeline-view__sidebar');
 
         const sidebarHeader = targetColumn.createDiv('timeline-view__sidebar-header');
-        sidebarHeader.createEl('p', { cls: 'timeline-view__sidebar-title', text: 'Deadline List' });
+        sidebarHeader.createEl('p', { cls: 'timeline-view__sidebar-title', text: 'Pinned Lists' });
 
-        const listContainer = targetColumn.createDiv('timeline-view__sidebar-body deadline-list-wrapper');
+        const addListBtn = sidebarHeader.createEl('button', { cls: 'timeline-view__sidebar-add-btn' });
+        setIcon(addListBtn, 'plus');
+        addListBtn.appendText('Add List');
+        addListBtn.addEventListener('click', async () => {
+            const newId = 'pl-' + Date.now();
+            this.plugin.settings.pinnedLists.push({
+                id: newId,
+                name: 'New List',
+                filterState: createEmptyFilterState(),
+            });
+            // Save without refreshAllViews — we render ourselves and need
+            // the DOM to stay stable for the inline rename to work.
+            await this.plugin.saveData(this.plugin.settings);
+            this.pinnedListRenderer.scheduleRename(newId);
+            this.render();
+        });
 
-        const deadlineTasks = this.taskIndex.getDeadlineTasks();
-        this.deadlineRenderer.render(listContainer, deadlineTasks, this, this.toolbar.getTaskFilter());
+        const listContainer = targetColumn.createDiv('timeline-view__sidebar-body');
+
+        this.pinnedListRenderer.render(
+            listContainer,
+            this,
+            this.toolbar.getTaskFilter(),
+            this.viewState.pinnedListCollapsed ?? {},
+            {
+                onCollapsedChange: (listId, collapsed) => {
+                    if (!this.viewState.pinnedListCollapsed) this.viewState.pinnedListCollapsed = {};
+                    this.viewState.pinnedListCollapsed[listId] = collapsed;
+                    this.app.workspace.requestSaveLayout();
+                },
+                onFilterEdit: (listDef, anchorEl) => this.openPinnedListFilter(listDef, anchorEl),
+                onDuplicate: (listDef) => {
+                    const lists = this.plugin.settings.pinnedLists;
+                    const idx = lists.indexOf(listDef);
+                    const dup = {
+                        ...listDef,
+                        id: 'pl-' + Date.now(),
+                        name: listDef.name + ' (copy)',
+                        filterState: JSON.parse(JSON.stringify(listDef.filterState)),
+                    };
+                    lists.splice(idx + 1, 0, dup);
+                    this.plugin.saveSettings();
+                    this.render();
+                },
+                onRemove: (listDef) => {
+                    const lists = this.plugin.settings.pinnedLists;
+                    const idx = lists.indexOf(listDef);
+                    if (idx >= 0) lists.splice(idx, 1);
+                    this.plugin.saveSettings();
+                    this.render();
+                },
+            },
+        );
 
         this.targetColumnEl = targetColumn;
 
@@ -493,17 +550,16 @@ export class TimelineView extends ItemView {
                 onStateChange: () => {
                     this.app.workspace.requestSaveLayout();
                 },
-                getFileColor: (file) => this.getFileColor(file),
                 getDatesToShow: () => this.getDatesToShow(),
-                onRequestDeadlineListToggle: (nextOpen, source) => {
-                    this.setDeadlineListOpen(nextOpen, source, {
+                onRequestSidebarToggle: (nextOpen, source) => {
+                    this.setSidebarOpen(nextOpen, source, {
                         persist: true,
                     });
                 }
             }
         );
         this.toolbar.render();
-        this.setDeadlineListOpen(this.viewState.showDeadlineList, 'render', {
+        this.setSidebarOpen(this.viewState.showSidebar, 'render', {
             persist: false,
             animate: false,
         });
@@ -583,7 +639,7 @@ export class TimelineView extends ItemView {
         this.container.classList.toggle('timeline-view--mobile-layout', isNarrowLayout);
     }
 
-    private shouldAnimateSidebar(source: DeadlineListToggleSource): boolean {
+    private shouldAnimateSidebar(source: SidebarToggleSource): boolean {
         return source === 'toolbar' || source === 'backdrop' || source === 'escape';
     }
 
@@ -592,7 +648,7 @@ export class TimelineView extends ItemView {
             return;
         }
         this.applyResponsiveLayoutMode();
-        const isOpen = this.viewState.showDeadlineList;
+        const isOpen = this.viewState.showSidebar;
         this.container.classList.toggle('timeline-view--animate-sidebar', options.animate);
 
         if (this.targetColumnEl) {
@@ -607,27 +663,39 @@ export class TimelineView extends ItemView {
         this.toolbar?.syncSidebarToggleState();
     }
 
-    private setDeadlineListOpen(
+    private setSidebarOpen(
         nextOpen: boolean,
-        source: DeadlineListToggleSource,
-        options: Partial<DeadlineListUpdateOptions> = {},
+        source: SidebarToggleSource,
+        options: Partial<SidebarUpdateOptions> = {},
     ): void {
         const persist = options.persist ?? false;
         const animate = options.animate ?? this.shouldAnimateSidebar(source);
-        const hasChanged = this.viewState.showDeadlineList !== nextOpen;
-        this.viewState.showDeadlineList = nextOpen;
+        const hasChanged = this.viewState.showSidebar !== nextOpen;
+        this.viewState.showSidebar = nextOpen;
         this.syncSidebarPresentation({ animate });
         if (persist && hasChanged) {
             this.app.workspace.requestSaveLayout();
         }
     }
 
-    private closeDeadlineList(source: 'backdrop' | 'escape'): void {
-        if (!this.viewState.showDeadlineList) {
+    private closeSidebar(source: 'backdrop' | 'escape'): void {
+        if (!this.viewState.showSidebar) {
             return;
         }
-        this.setDeadlineListOpen(false, source, {
+        this.setSidebarOpen(false, source, {
             persist: true,
+        });
+    }
+
+    private openPinnedListFilter(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
+        this.sidebarFilterMenu.setFilterState(listDef.filterState);
+        this.sidebarFilterMenu.showMenuAtElement(anchorEl, {
+            onFilterChange: () => {
+                listDef.filterState = this.sidebarFilterMenu.getFilterState();
+                this.plugin.saveSettings();
+                this.render();
+            },
+            getTasks: () => this.taskIndex.getTasks(),
         });
     }
 
@@ -656,10 +724,7 @@ export class TimelineView extends ItemView {
 
     // ==================== Color & Styling ====================
 
-    /** Gets the custom color for a file from its frontmatter. */
-    private getFileColor(filePath: string): string | null {
-        return TaskStyling.getFileColor(this.app, filePath, this.plugin.settings.frontmatterTaskKeys.color);
-    }
+
 
 
     // ==================== Task Creation ====================

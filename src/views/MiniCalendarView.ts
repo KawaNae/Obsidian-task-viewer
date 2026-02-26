@@ -234,12 +234,10 @@ export class MiniCalendarView extends ItemView {
         const prevBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(prevBtn, 'chevron-up');
         prevBtn.setAttribute('aria-label', 'Previous week');
-        prevBtn.setAttribute('title', 'Previous week');
         prevBtn.addEventListener('click', () => this.navigateWeek(-1));
 
         const todayBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--today mini-calendar-toolbar__today', text: 'Today' });
         todayBtn.setAttribute('aria-label', 'Today');
-        todayBtn.setAttribute('title', 'Today');
         todayBtn.addEventListener('click', () => {
             if (this.isAnimating) {
                 return;
@@ -255,7 +253,6 @@ export class MiniCalendarView extends ItemView {
         const nextBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(nextBtn, 'chevron-down');
         nextBtn.setAttribute('aria-label', 'Next week');
-        nextBtn.setAttribute('title', 'Next week');
         nextBtn.addEventListener('click', () => this.navigateWeek(1));
     }
     private renderWeekdayHeader(grid: HTMLElement): void {

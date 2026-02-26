@@ -119,7 +119,7 @@ body {
     --tv-bg-axis: var(--tv-bg-secondary);
     --tv-bg-date-header: var(--tv-bg-secondary);
 
-    --tv-bg-deadline-list: var(--tv-bg-secondary);
+    --tv-bg-sidebar: var(--tv-bg-secondary);
 
     --tv-bg-card: var(--tv-bg-secondary);
     --tv-bg-task-handle: var(--tv-bg-primary);

@@ -46,7 +46,7 @@
 /* Accent Border Variants by tv-linestyle */
 .task-card[data-file-linestyle='solid']::before {
     width: var(--task-card-accent-solid-width, 4px);
-    background-color: var(--file-accent, transparent);
+    background-color: var(--file-accent, var(--tv-accent));
     background-image: none;
 }
 
@@ -148,8 +148,8 @@
     overflow: visible;
 }
 
-/* Deadline Task Card */
-.task-card.task-card--deadline {
+/* Sidebar Task Card (Pinned Lists) */
+.pinned-list .task-card {
     position: relative;
     top: auto;
     left: auto;
