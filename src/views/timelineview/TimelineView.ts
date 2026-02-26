@@ -138,8 +138,8 @@ export class TimelineView extends ItemView {
                 this.viewState.filterState = undefined;
                 this.viewState.filterFiles = null;
             }
-            if (typeof state.showSidebar === 'boolean' || typeof state.showDeadlineList === 'boolean') {
-                this.setSidebarOpen(state.showSidebar ?? state.showDeadlineList, 'setState', {
+            if (typeof state.showSidebar === 'boolean') {
+                this.setSidebarOpen(state.showSidebar, 'setState', {
                     persist: false,
                     animate: false,
                 });

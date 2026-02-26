@@ -323,27 +323,6 @@ export default class TaskViewerPlugin extends Plugin {
             frontmatterTaskKeys?: unknown;
             aiIndex?: unknown;
         };
-        // Migrate legacy DeadlineList settings → pinnedLists
-        if (!Array.isArray(rawObject.pinnedLists)) {
-            merged.pinnedLists = [{
-                id: 'migrated-deadline',
-                name: 'Deadline',
-                filterState: {
-                    root: {
-                        type: 'group' as const,
-                        id: 'migrated-deadline-group',
-                        children: [{
-                            type: 'condition' as const,
-                            id: 'migrated-deadline-cond',
-                            property: 'deadline' as const,
-                            operator: 'isSet' as const,
-                            value: { type: 'boolean' as const, value: true },
-                        }],
-                        logic: 'and' as const,
-                    },
-                },
-            }];
-        }
         // Migrate existing pinnedList filterStates from older formats to v4 (recursive tree)
         if (Array.isArray(merged.pinnedLists)) {
             for (const list of merged.pinnedLists) {
@@ -352,19 +331,12 @@ export default class TaskViewerPlugin extends Plugin {
                 }
             }
         }
-        const sanitizedMerged = { ...merged } as TaskViewerSettings & Record<string, unknown>;
-        delete sanitizedMerged.showCompletedInDeadlineList;
-        delete sanitizedMerged.excludedPaths;
-        delete sanitizedMerged.defaultDeadlineOffset;
-        delete sanitizedMerged.upcomingDays;
-        delete sanitizedMerged.expandCompletedInDeadlineList;
-
         const normalizedFrontmatterKeys = normalizeFrontmatterTaskKeys(merged.frontmatterTaskKeys);
         const keysValidationError = validateFrontmatterTaskKeys(normalizedFrontmatterKeys);
         const normalizedAiIndexSettings = normalizeAiIndexSettings(merged.aiIndex);
 
         this.settings = {
-            ...sanitizedMerged,
+            ...merged,
             frontmatterTaskKeys: keysValidationError
                 ? { ...DEFAULT_FRONTMATTER_TASK_KEYS }
                 : normalizedFrontmatterKeys,
