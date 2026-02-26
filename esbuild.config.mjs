@@ -72,6 +72,7 @@ const copyStaticFiles = {
           '_timer-widget.css',
           '_modal.css',
           '_filter-popover.css',
+          '_sort-popover.css',
           '_settings.css'
         ];
 

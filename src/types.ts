@@ -1,6 +1,7 @@
 import { DEFAULT_AI_INDEX_SETTINGS } from './services/aiindex/AiIndexSettings';
 import type { AiIndexSettings } from './services/aiindex/AiIndexSettings';
 import type { FilterState } from './services/filter/FilterTypes';
+import type { SortState } from './services/sort/SortTypes';
 
 /**
  * Returns true when statusChar is considered completed by settings.
@@ -113,6 +114,7 @@ export interface PinnedListDefinition {
     id: string;
     name: string;
     filterState: FilterState;
+    sortState?: SortState;
 }
 
 export interface FrontmatterTaskKeys {
