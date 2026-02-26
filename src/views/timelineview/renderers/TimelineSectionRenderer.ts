@@ -123,7 +123,7 @@ export class TimelineSectionRenderer {
 
             // Apply Color
             TaskStyling.applyTaskColor(el, task.color ?? null);
-            TaskStyling.applyTaskLinestyle(el, task.linestyle ?? 'solid');
+            TaskStyling.applyTaskLinestyle(el, task.linestyle ?? null);
 
             // Calculate position
             let startMinutes = DateUtils.timeToMinutes(task.startTime);

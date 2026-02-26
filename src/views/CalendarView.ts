@@ -310,7 +310,6 @@ export class CalendarView extends ItemView {
         const copyBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(copyBtn, 'link');
         copyBtn.setAttribute('aria-label', 'Copy view URI');
-        copyBtn.setAttribute('title', 'Copy view URI');
         copyBtn.onclick = async () => {
             const uri = ViewUriBuilder.build(VIEW_META_CALENDAR.type, this.filterMenu.getFilterState());
             await navigator.clipboard.writeText(uri);
@@ -320,7 +319,6 @@ export class CalendarView extends ItemView {
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', 'Filter');
-        filterBtn.setAttribute('title', 'Filter');
         filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
         filterBtn.addEventListener('click', (event: MouseEvent) => {
             this.filterMenu.showMenu(event, {
@@ -572,7 +570,7 @@ export class CalendarView extends ItemView {
             }
 
             TaskStyling.applyTaskColor(barEl, entry.task.color ?? null);
-            TaskStyling.applyTaskLinestyle(barEl, entry.task.linestyle ?? 'solid');
+            TaskStyling.applyTaskLinestyle(barEl, entry.task.linestyle ?? null);
 
             this.menuHandler.addTaskContextMenu(barEl, entry.task);
             await this.taskRenderer.render(barEl, entry.task, this, this.plugin.settings, { topRight: 'none' });
@@ -588,7 +586,7 @@ export class CalendarView extends ItemView {
         card.style.gridRow = `${gridRow}`;
 
         TaskStyling.applyTaskColor(card, entry.task.color ?? null);
-        TaskStyling.applyTaskLinestyle(card, entry.task.linestyle ?? 'solid');
+        TaskStyling.applyTaskLinestyle(card, entry.task.linestyle ?? null);
         this.menuHandler.addTaskContextMenu(card, entry.task);
         await this.taskRenderer.render(card, entry.task, this, this.plugin.settings);
     }

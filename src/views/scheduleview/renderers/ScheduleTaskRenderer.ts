@@ -169,7 +169,7 @@ export class ScheduleTaskRenderer {
         }
 
         TaskStyling.applyTaskColor(card, task.color ?? null);
-        TaskStyling.applyTaskLinestyle(card, task.linestyle ?? 'solid');
+        TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
         await this.taskRenderer.render(card, task, this.component, this.getSettings());
         this.menuHandler.addTaskContextMenu(card, task);
     }

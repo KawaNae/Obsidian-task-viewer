@@ -48,27 +48,35 @@
 }
 
 /* Filter edit button */
-.pinned-list__filter-btn {
-    width: 20px;
-    height: 20px;
-    appearance: none;
-    -webkit-appearance: none;
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--tv-text-muted);
-    padding: 0;
-    display: flex;
+/* Specificity: override Obsidian's button:not(.clickable-icon) */
+.timeline-view button.pinned-list__filter-btn {
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
+    padding: 0 !important;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 1px solid transparent !important;
     border-radius: var(--tv-radius-s);
+    background: transparent !important;
+    color: var(--tv-text-muted);
+    box-shadow: none;
+    cursor: pointer;
+    transition:
+        background-color 120ms ease,
+        border-color 120ms ease,
+        color 120ms ease;
 }
 
-.pinned-list__filter-btn:hover {
-    color: var(--tv-text-accent);
+.timeline-view button.pinned-list__filter-btn:hover {
+    background-color: var(--tv-bg-hover);
+    border-color: var(--tv-border);
+    color: var(--tv-text);
 }
 
-.pinned-list__filter-btn.is-filtered {
+.timeline-view button.pinned-list__filter-btn.is-filtered {
     color: var(--tv-text-accent);
 }
 

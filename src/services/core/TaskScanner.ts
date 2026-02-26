@@ -263,7 +263,7 @@ export class TaskScanner {
         const fileLinestyle = TaskStyling.getFileLinestyle(this.app, file.path, this.settings.frontmatterTaskKeys.linestyle);
         for (const task of newTasks) {
             if (fileColor) task.color = fileColor;
-            if (fileLinestyle && fileLinestyle !== 'solid') task.linestyle = fileLinestyle;
+            if (fileLinestyle) task.linestyle = fileLinestyle;
         }
 
         // 2. 現在の完了カウント

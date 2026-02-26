@@ -131,7 +131,7 @@ export class AllDaySectionRenderer {
             el.dataset.id = task.id;
 
             TaskStyling.applyTaskColor(el, task.color ?? null);
-            TaskStyling.applyTaskLinestyle(el, task.linestyle ?? 'solid');
+            TaskStyling.applyTaskLinestyle(el, task.linestyle ?? null);
 
             // Use TaskCardRenderer
             this.taskRenderer.render(el, task, owner, this.plugin.settings, { topRight: 'none' });
@@ -181,7 +181,7 @@ export class AllDaySectionRenderer {
         arrowEl.style.gridRow = (rowIndex + 2).toString(); // +2 to match task offset
         arrowEl.style.gridColumnStart = taskEndLine.toString();
         arrowEl.style.gridColumnEnd = deadlineLine.toString();
-        arrowEl.title = `Deadline: ${task.deadline}`;
+        arrowEl.setAttribute('aria-label', `Deadline: ${task.deadline}`);
 
         if (isClipped) {
             arrowEl.addClass('deadline-arrow--clipped');

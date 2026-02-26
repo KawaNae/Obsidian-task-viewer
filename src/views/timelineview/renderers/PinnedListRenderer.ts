@@ -137,7 +137,7 @@ export class PinnedListRenderer {
             const card = body.createDiv('task-card');
 
             TaskStyling.applyTaskColor(card, task.color ?? null);
-            TaskStyling.applyTaskLinestyle(card, task.linestyle ?? 'solid');
+            TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
 
             this.taskRenderer.render(card, task, owner, settings);
             this.menuHandler.addTaskContextMenu(card, task);
