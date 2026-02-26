@@ -484,13 +484,18 @@ export class TimelineView extends ItemView {
 
         const addListBtn = sidebarHeader.createEl('button', { cls: 'timeline-view__sidebar-add-btn' });
         setIcon(addListBtn, 'plus');
-        addListBtn.addEventListener('click', () => {
+        addListBtn.appendText('Add List');
+        addListBtn.addEventListener('click', async () => {
+            const newId = 'pl-' + Date.now();
             this.plugin.settings.pinnedLists.push({
-                id: 'pl-' + Date.now(),
+                id: newId,
                 name: 'New List',
                 filterState: createEmptyFilterState(),
             });
-            this.plugin.saveSettings();
+            // Save without refreshAllViews — we render ourselves and need
+            // the DOM to stay stable for the inline rename to work.
+            await this.plugin.saveData(this.plugin.settings);
+            this.pinnedListRenderer.scheduleRename(newId);
             this.render();
         });
 
@@ -501,12 +506,34 @@ export class TimelineView extends ItemView {
             this,
             this.toolbar.getTaskFilter(),
             this.viewState.pinnedListCollapsed ?? {},
-            (listId, collapsed) => {
-                if (!this.viewState.pinnedListCollapsed) this.viewState.pinnedListCollapsed = {};
-                this.viewState.pinnedListCollapsed[listId] = collapsed;
-                this.app.workspace.requestSaveLayout();
+            {
+                onCollapsedChange: (listId, collapsed) => {
+                    if (!this.viewState.pinnedListCollapsed) this.viewState.pinnedListCollapsed = {};
+                    this.viewState.pinnedListCollapsed[listId] = collapsed;
+                    this.app.workspace.requestSaveLayout();
+                },
+                onFilterEdit: (listDef, anchorEl) => this.openPinnedListFilter(listDef, anchorEl),
+                onDuplicate: (listDef) => {
+                    const lists = this.plugin.settings.pinnedLists;
+                    const idx = lists.indexOf(listDef);
+                    const dup = {
+                        ...listDef,
+                        id: 'pl-' + Date.now(),
+                        name: listDef.name + ' (copy)',
+                        filterState: JSON.parse(JSON.stringify(listDef.filterState)),
+                    };
+                    lists.splice(idx + 1, 0, dup);
+                    this.plugin.saveSettings();
+                    this.render();
+                },
+                onRemove: (listDef) => {
+                    const lists = this.plugin.settings.pinnedLists;
+                    const idx = lists.indexOf(listDef);
+                    if (idx >= 0) lists.splice(idx, 1);
+                    this.plugin.saveSettings();
+                    this.render();
+                },
             },
-            (listDef, anchorEl) => this.openPinnedListFilter(listDef, anchorEl),
         );
 
         this.targetColumnEl = targetColumn;
