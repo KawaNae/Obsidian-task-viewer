@@ -2,7 +2,7 @@ import { App, Notice, setIcon } from 'obsidian';
 import { ViewState, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
-import { ViewUriBuilder } from '../../utils/ViewUriBuilder';
+import { ViewUriBuilder, type LeafPosition } from '../../utils/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
 import { DateNavigator, ViewModeSelector, ZoomSelector } from '../ViewToolbar';
 import { FilterMenuComponent } from '../filter/FilterMenuComponent';
@@ -18,6 +18,7 @@ export interface ToolbarCallbacks {
     onStateChange: () => void;
     getDatesToShow: () => string[];
     onRequestSidebarToggle: (nextOpen: boolean, source: 'toolbar' | 'backdrop' | 'escape') => void;
+    getLeafPosition: () => LeafPosition;
 }
 
 /**
@@ -200,6 +201,7 @@ export class TimelineToolbar {
                 zoom: this.viewState.zoomLevel,
                 pinnedLists: this.viewState.pinnedLists,
                 showSidebar: this.viewState.showSidebar,
+                position: this.callbacks.getLeafPosition(),
             });
             await navigator.clipboard.writeText(uri);
             new Notice('URI copied to clipboard');

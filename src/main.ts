@@ -25,7 +25,7 @@ import { AudioUtils } from './utils/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
 import { getViewMeta } from './constants/viewRegistry';
 import type { FilterState } from './services/filter/FilterTypes';
-import { createEmptyFilterState, hasConditions } from './services/filter/FilterTypes';
+import { hasConditions } from './services/filter/FilterTypes';
 import { FilterSerializer } from './services/filter/FilterSerializer';
 import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
 import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
@@ -253,8 +253,7 @@ export default class TaskViewerPlugin extends Plugin {
         // Start Properties View color suggest observer
         this.startPropertiesColorSuggest();
 
-        // Register URI handler: obsidian://task-viewer?view=timeline|calendar|schedule
-        // Supports filter params: ?tag=work,urgent  ?status=x  ?file=path.md  ?filter=<base64>
+        // Register URI handler: obsidian://task-viewer?view=timeline&days=3&filter=<base64>&pinnedLists=<base64>
         this.registerObsidianProtocolHandler('task-viewer', (params) => {
             const viewMap: Record<string, string> = {
                 timeline: VIEW_TYPE_TIMELINE,
@@ -265,49 +264,19 @@ export default class TaskViewerPlugin extends Plugin {
             const viewType = viewMap[params.view];
             if (!viewType) return;
 
-            // Full state param (base64-encoded complete view state)
-            if (params.state) {
-                try {
-                    const stateObj = JSON.parse(atob(params.state)) as Record<string, unknown>;
-                    this.activateView(viewType, {
-                        filterState: stateObj.filterState
-                            ? FilterSerializer.fromJSON(stateObj.filterState) : undefined,
-                        days: typeof stateObj.daysToShow === 'number' ? stateObj.daysToShow : undefined,
-                        zoom: typeof stateObj.zoomLevel === 'number' ? stateObj.zoomLevel : undefined,
-                        date: typeof stateObj.startDate === 'string' ? stateObj.startDate : undefined,
-                        pinnedLists: Array.isArray(stateObj.pinnedLists)
-                            ? stateObj.pinnedLists as PinnedListDefinition[] : undefined,
-                        showSidebar: typeof stateObj.showSidebar === 'boolean'
-                            ? stateObj.showSidebar : undefined,
-                    });
-                    return;
-                } catch { /* fall through to legacy params */ }
-            }
-
+            // Filter (base64)
             let filterState: FilterState | undefined;
-
-            // Full filter (base64-encoded JSON)
             if (params.filter) {
                 filterState = FilterSerializer.fromURIParam(params.filter);
             }
 
-            // Shorthand params → build a single group with conditions
-            const shorthandConditions: { id: string; property: 'tag' | 'status' | 'file'; values: string[] }[] = [];
-            if (params.tag) shorthandConditions.push({ id: 'uri-tag', property: 'tag', values: params.tag.split(',') });
-            if (params.status) shorthandConditions.push({ id: 'uri-status', property: 'status', values: params.status.split(',') });
-            if (params.file) shorthandConditions.push({ id: 'uri-file', property: 'file', values: params.file.split(',') });
-
-            if (shorthandConditions.length > 0) {
-                filterState = filterState ?? createEmptyFilterState();
-                for (const sc of shorthandConditions) {
-                    filterState.root.children.push({
-                        type: 'condition',
-                        id: sc.id,
-                        property: sc.property,
-                        operator: 'includes',
-                        value: { type: 'stringSet', values: sc.values },
-                    });
-                }
+            // PinnedLists (base64)
+            let pinnedLists: PinnedListDefinition[] | undefined;
+            if (params.pinnedLists) {
+                try {
+                    const parsed = JSON.parse(atob(params.pinnedLists));
+                    if (Array.isArray(parsed)) pinnedLists = parsed;
+                } catch { /* ignore */ }
             }
 
             const uriParams: {
@@ -315,21 +284,29 @@ export default class TaskViewerPlugin extends Plugin {
                 days?: number;
                 zoom?: number;
                 date?: string;
-            } = { filterState };
+                pinnedLists?: PinnedListDefinition[];
+                showSidebar?: boolean;
+                position?: 'left' | 'right' | 'tab' | 'window';
+            } = { filterState, pinnedLists };
 
-            // Timeline-specific params
-            if (viewType === VIEW_TYPE_TIMELINE) {
-                if (params.days) {
-                    const days = parseInt(params.days, 10);
-                    if ([1, 3, 7].includes(days)) uriParams.days = days;
-                }
-                if (params.zoom) {
-                    const zoom = parseFloat(params.zoom);
-                    if (zoom >= 0.25 && zoom <= 10.0) uriParams.zoom = zoom;
-                }
-                if (params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date)) {
-                    uriParams.date = params.date;
-                }
+            // View display params
+            if (params.days) {
+                const days = parseInt(params.days, 10);
+                if ([1, 3, 7].includes(days)) uriParams.days = days;
+            }
+            if (params.zoom) {
+                const zoom = parseFloat(params.zoom);
+                if (zoom >= 0.25 && zoom <= 10.0) uriParams.zoom = zoom;
+            }
+            if (params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date)) {
+                uriParams.date = params.date;
+            }
+            if (params.showSidebar === 'true' || params.showSidebar === 'false') {
+                uriParams.showSidebar = params.showSidebar === 'true';
+            }
+            const validPositions = new Set(['left', 'right', 'tab', 'window']);
+            if (params.position && validPositions.has(params.position)) {
+                uriParams.position = params.position as 'left' | 'right' | 'tab' | 'window';
             }
 
             this.activateView(viewType, uriParams);
@@ -420,16 +397,26 @@ export default class TaskViewerPlugin extends Plugin {
         date?: string;
         pinnedLists?: PinnedListDefinition[];
         showSidebar?: boolean;
+        position?: 'left' | 'right' | 'tab' | 'window';
     }) {
         const { workspace } = this.app;
 
         let leaf: WorkspaceLeaf | null = null;
-        const leaves = workspace.getLeavesOfType(viewType);
 
-        if (leaves.length === 0) {
-            leaf = workspace.getRightLeaf(false);
+        if (params?.position) {
+            switch (params.position) {
+                case 'left':   leaf = workspace.getLeftLeaf(false); break;
+                case 'right':  leaf = workspace.getRightLeaf(false); break;
+                case 'tab':    leaf = workspace.getLeaf('tab'); break;
+                case 'window': leaf = workspace.getLeaf('window'); break;
+            }
         } else {
-            leaf = workspace.getLeaf(true);
+            const leaves = workspace.getLeavesOfType(viewType);
+            if (leaves.length === 0) {
+                leaf = workspace.getRightLeaf(false);
+            } else {
+                leaf = workspace.getLeaf(true);
+            }
         }
 
         if (leaf) {

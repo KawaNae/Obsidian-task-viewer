@@ -1,4 +1,5 @@
-import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
+import { ItemView, WorkspaceLeaf, setIcon, type Workspace } from 'obsidian';
+import { ViewUriBuilder } from '../../utils/ViewUriBuilder';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { Task, ViewState, PinnedListDefinition, isCompleteStatusChar } from '../../types';
@@ -206,7 +207,8 @@ export class TimelineView extends ItemView {
                         persist: true,
                     });
                     this.viewState.showSidebar = nextOpen;
-                }
+                },
+                getLeafPosition: () => ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace),
             }
         );
 
@@ -529,7 +531,8 @@ export class TimelineView extends ItemView {
                         persist: true,
                     });
                     this.viewState.showSidebar = nextOpen;
-                }
+                },
+                getLeafPosition: () => ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace),
             }
         );
         this.toolbar.render();

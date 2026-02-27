@@ -247,7 +247,10 @@ export class ScheduleView extends ItemView {
         setIcon(copyBtn, 'link');
         copyBtn.setAttribute('aria-label', 'Copy view URI');
         copyBtn.onclick = async () => {
-            const uri = ViewUriBuilder.build(VIEW_META_SCHEDULE.type, this.filterMenu.getFilterState());
+            const uri = ViewUriBuilder.build(VIEW_META_SCHEDULE.type, {
+                filterState: this.filterMenu.getFilterState(),
+                position: ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace),
+            });
             await navigator.clipboard.writeText(uri);
             new Notice('URI copied to clipboard');
         };

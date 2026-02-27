@@ -366,6 +366,7 @@ export class CalendarView extends ItemView {
                 filterState: this.filterMenu.getFilterState(),
                 pinnedLists: this.pinnedLists,
                 showSidebar: this.sidebarManager.isOpen,
+                position: ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace),
             });
             await navigator.clipboard.writeText(uri);
             new Notice('URI copied to clipboard');
