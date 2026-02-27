@@ -1,8 +1,8 @@
-import { App, Notice, setIcon, type WorkspaceLeaf } from 'obsidian';
+import { App, setIcon, type WorkspaceLeaf } from 'obsidian';
 import { ViewState, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
-import { ViewUriBuilder, type LeafPosition } from '../../utils/ViewUriBuilder';
+import type { LeafPosition } from '../../utils/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
 import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu } from '../ViewToolbar';
 import { FilterMenuComponent } from '../filter/FilterMenuComponent';
@@ -112,19 +112,25 @@ export class TimelineToolbar {
         // Push filter/toggle controls to the right
         toolbar.createDiv('view-toolbar__spacer');
 
+        // Filter Button
+        this.renderFilterButton(toolbar);
+
         // View Settings
         ViewSettingsMenu.renderButton(toolbar, {
             app: this.app,
             leaf: this.callbacks.getLeaf(),
             getCustomName: () => this.callbacks.getCustomName(),
+            getDefaultName: () => VIEW_META_TIMELINE.displayText,
             onRename: (newName) => this.callbacks.onRename(newName),
+            buildUri: () => ({
+                filterState: this.filterMenu.getFilterState(),
+                days: this.viewState.daysToShow,
+                zoom: this.viewState.zoomLevel,
+                pinnedLists: this.viewState.pinnedLists,
+                showSidebar: this.viewState.showSidebar,
+            }),
+            viewType: VIEW_META_TIMELINE.type,
         });
-
-        // Copy URI Button
-        this.renderCopyUriButton(toolbar);
-
-        // Filter Button
-        this.renderFilterButton(toolbar);
 
         // Sidebar Toggle
         this.renderSidebarToggle(toolbar);
@@ -199,24 +205,6 @@ export class TimelineToolbar {
                 this.app.workspace.requestSaveLayout();
             }
         );
-    }
-
-    private renderCopyUriButton(toolbar: HTMLElement): void {
-        const btn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(btn, 'link');
-        btn.setAttribute('aria-label', 'Copy view URI');
-        btn.onclick = async () => {
-            const uri = ViewUriBuilder.build(VIEW_META_TIMELINE.type, {
-                filterState: this.filterMenu.getFilterState(),
-                days: this.viewState.daysToShow,
-                zoom: this.viewState.zoomLevel,
-                pinnedLists: this.viewState.pinnedLists,
-                showSidebar: this.viewState.showSidebar,
-                position: this.callbacks.getLeafPosition(),
-            });
-            await navigator.clipboard.writeText(uri);
-            new Notice('URI copied to clipboard');
-        };
     }
 
     private renderFilterButton(toolbar: HTMLElement): void {

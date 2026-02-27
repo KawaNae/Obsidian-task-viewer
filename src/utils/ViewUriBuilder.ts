@@ -14,6 +14,7 @@ export interface ViewUriOptions {
     pinnedLists?: PinnedListDefinition[];
     showSidebar?: boolean;
     position?: LeafPosition;
+    name?: string;
 }
 
 /**
@@ -39,6 +40,9 @@ export class ViewUriBuilder {
 
         // Position
         if (opts.position) uri += `&position=${opts.position}`;
+
+        // Name
+        if (opts.name) uri += `&name=${encodeURIComponent(opts.name)}`;
 
         // View display params (readable)
         if (opts.days != null) uri += `&days=${opts.days}`;

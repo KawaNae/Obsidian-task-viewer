@@ -287,6 +287,7 @@ export default class TaskViewerPlugin extends Plugin {
                 pinnedLists?: PinnedListDefinition[];
                 showSidebar?: boolean;
                 position?: 'left' | 'right' | 'tab' | 'window';
+                name?: string;
             } = { filterState, pinnedLists };
 
             // View display params
@@ -307,6 +308,9 @@ export default class TaskViewerPlugin extends Plugin {
             const validPositions = new Set(['left', 'right', 'tab', 'window']);
             if (params.position && validPositions.has(params.position)) {
                 uriParams.position = params.position as 'left' | 'right' | 'tab' | 'window';
+            }
+            if (params.name) {
+                uriParams.name = params.name;
             }
 
             this.activateView(viewType, uriParams);
@@ -398,6 +402,7 @@ export default class TaskViewerPlugin extends Plugin {
         pinnedLists?: PinnedListDefinition[];
         showSidebar?: boolean;
         position?: 'left' | 'right' | 'tab' | 'window';
+        name?: string;
     }) {
         const { workspace } = this.app;
 
@@ -430,6 +435,7 @@ export default class TaskViewerPlugin extends Plugin {
             if (params?.date != null) state.startDate = params.date;
             if (params?.pinnedLists) state.pinnedLists = params.pinnedLists;
             if (params?.showSidebar != null) state.showSidebar = params.showSidebar;
+            if (params?.name) state.customName = params.name;
 
             await leaf.setViewState({ type: viewType, active: true, state });
             workspace.revealLeaf(leaf);

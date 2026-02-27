@@ -1,4 +1,4 @@
-import { ItemView, Notice, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
+import { ItemView, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
 import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../services/core/TaskIndex';
 import { MenuHandler } from '../interaction/menu/MenuHandler';
@@ -6,7 +6,6 @@ import { TaskCardRenderer } from './taskcard/TaskCardRenderer';
 import { Task, isCompleteStatusChar, PinnedListDefinition } from '../types';
 import { DateUtils } from '../utils/DateUtils';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
-import { ViewUriBuilder } from '../utils/ViewUriBuilder';
 import { TaskIdGenerator } from '../utils/TaskIdGenerator';
 import { DragHandler } from '../interaction/drag/DragHandler';
 import TaskViewerPlugin from '../main';
@@ -367,32 +366,6 @@ export class CalendarView extends ItemView {
 
         toolbar.createDiv('view-toolbar__spacer');
 
-        // View Settings
-        ViewSettingsMenu.renderButton(toolbar, {
-            app: this.app,
-            leaf: this.leaf,
-            getCustomName: () => this.customName,
-            onRename: (newName) => {
-                this.customName = newName;
-                (this.leaf as any).updateHeader();
-                this.app.workspace.requestSaveLayout();
-            },
-        });
-
-        const copyBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(copyBtn, 'link');
-        copyBtn.setAttribute('aria-label', 'Copy view URI');
-        copyBtn.onclick = async () => {
-            const uri = ViewUriBuilder.build(VIEW_META_CALENDAR.type, {
-                filterState: this.filterMenu.getFilterState(),
-                pinnedLists: this.pinnedLists,
-                showSidebar: this.sidebarManager.isOpen,
-                position: ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace),
-            });
-            await navigator.clipboard.writeText(uri);
-            new Notice('URI copied to clipboard');
-        };
-
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', 'Filter');
@@ -406,6 +379,25 @@ export class CalendarView extends ItemView {
                 },
                 getTasks: () => this.taskIndex.getTasks(),
             });
+        });
+
+        // View Settings
+        ViewSettingsMenu.renderButton(toolbar, {
+            app: this.app,
+            leaf: this.leaf,
+            getCustomName: () => this.customName,
+            getDefaultName: () => VIEW_META_CALENDAR.displayText,
+            onRename: (newName) => {
+                this.customName = newName;
+                (this.leaf as any).updateHeader();
+                this.app.workspace.requestSaveLayout();
+            },
+            buildUri: () => ({
+                filterState: this.filterMenu.getFilterState(),
+                pinnedLists: this.pinnedLists,
+                showSidebar: this.sidebarManager.isOpen,
+            }),
+            viewType: VIEW_META_CALENDAR.type,
         });
 
         const toggleBtn = toolbar.createEl('button', {

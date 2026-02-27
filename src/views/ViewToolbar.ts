@@ -1,6 +1,6 @@
-import { setIcon, Menu } from 'obsidian';
+import { setIcon, Menu, Notice } from 'obsidian';
 import type { App, WorkspaceLeaf } from 'obsidian';
-import { ViewUriBuilder, type LeafPosition } from '../utils/ViewUriBuilder';
+import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../utils/ViewUriBuilder';
 import { InputModal } from '../modals/InputModal';
 
 /**
@@ -168,7 +168,10 @@ export interface ViewSettingsOptions {
     app: App;
     leaf: WorkspaceLeaf;
     getCustomName: () => string | undefined;
+    getDefaultName: () => string;
     onRename: (newName: string | undefined) => void;
+    buildUri: () => ViewUriOptions;
+    viewType: string;
 }
 
 /**
@@ -186,7 +189,7 @@ export class ViewSettingsMenu {
 
     static showMenu(e: MouseEvent, options: ViewSettingsOptions): void {
         const menu = new Menu();
-        const { app, leaf, getCustomName, onRename } = options;
+        const { app, leaf, getCustomName, getDefaultName, onRename, buildUri, viewType } = options;
 
         // Rename
         menu.addItem((item) => {
@@ -200,6 +203,38 @@ export class ViewSettingsMenu {
                         getCustomName() ?? '',
                         (value) => onRename(value.trim() || undefined),
                     ).open();
+                });
+        });
+
+        menu.addSeparator();
+
+        // Copy URI
+        menu.addItem((item) => {
+            item.setTitle('Copy URI')
+                .setIcon('link')
+                .onClick(async () => {
+                    const uriOpts = buildUri();
+                    uriOpts.position = ViewUriBuilder.detectLeafPosition(leaf, app.workspace);
+                    uriOpts.name = getCustomName();
+                    const uri = ViewUriBuilder.build(viewType, uriOpts);
+                    await navigator.clipboard.writeText(uri);
+                    new Notice('URI copied to clipboard');
+                });
+        });
+
+        // Copy as Obsidian link [name](uri)
+        menu.addItem((item) => {
+            item.setTitle('Copy as link')
+                .setIcon('external-link')
+                .onClick(async () => {
+                    const uriOpts = buildUri();
+                    uriOpts.position = ViewUriBuilder.detectLeafPosition(leaf, app.workspace);
+                    uriOpts.name = getCustomName();
+                    const uri = ViewUriBuilder.build(viewType, uriOpts);
+                    const displayName = getCustomName() || getDefaultName();
+                    const link = `[${displayName}](${uri})`;
+                    await navigator.clipboard.writeText(link);
+                    new Notice('Link copied to clipboard');
                 });
         });
 
