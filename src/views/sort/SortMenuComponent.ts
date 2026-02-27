@@ -34,6 +34,14 @@ export class SortMenuComponent {
     private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
     private lastCallbacks: SortMenuCallbacks | null = null;
 
+    // Drag state
+    private dragIndex: number | null = null;
+    private dragOverIndex: number | null = null;
+    private dragRowEl: HTMLElement | null = null;
+    private dragGhostEl: HTMLElement | null = null;
+    private dragStartY = 0;
+    private dragCleanup: (() => void) | null = null;
+
     getSortState(): SortState {
         return this.state;
     }
@@ -127,10 +135,16 @@ export class SortMenuComponent {
 
     private renderRuleRow(parent: HTMLElement, rule: SortRule, index: number): void {
         const row = parent.createDiv('sort-popover__row');
+        row.dataset.index = String(index);
 
-        // Drag handle (visual only for v1)
+        // Drag handle
         const handle = row.createSpan('sort-popover__drag-handle');
         setIcon(handle, 'grip-vertical');
+        handle.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.startDrag(e, index, row);
+        });
 
         // Property dropdown
         const propBtn = row.createEl('button', { cls: 'sort-popover__dropdown' });
@@ -284,6 +298,125 @@ export class SortMenuComponent {
         this.childPopoverCleanup = () => {
             document.removeEventListener('pointerdown', handler, true);
         };
+    }
+
+    // ── Drag Reorder ──
+
+    private startDrag(e: PointerEvent, index: number, rowEl: HTMLElement): void {
+        this.closeChildPopover();
+        this.dragIndex = index;
+        this.dragStartY = e.clientY;
+        this.dragRowEl = rowEl;
+        rowEl.classList.add('is-dragging');
+
+        // Create ghost
+        const rect = rowEl.getBoundingClientRect();
+        const ghost = rowEl.cloneNode(true) as HTMLElement;
+        ghost.className = 'sort-popover__row sort-popover__ghost';
+        ghost.style.width = `${rect.width}px`;
+        ghost.style.left = `${rect.left}px`;
+        ghost.style.top = `${rect.top}px`;
+        document.body.appendChild(ghost);
+        this.dragGhostEl = ghost;
+
+        const onMove = (ev: PointerEvent) => this.onDragMove(ev);
+        const onUp = () => this.endDrag();
+        document.addEventListener('pointermove', onMove, true);
+        document.addEventListener('pointerup', onUp, true);
+        this.dragCleanup = () => {
+            document.removeEventListener('pointermove', onMove, true);
+            document.removeEventListener('pointerup', onUp, true);
+        };
+    }
+
+    private onDragMove(e: PointerEvent): void {
+        if (this.dragGhostEl) {
+            const deltaY = e.clientY - this.dragStartY;
+            const rect = this.dragRowEl!.getBoundingClientRect();
+            this.dragGhostEl.style.top = `${rect.top + deltaY}px`;
+        }
+
+        if (!this.popoverEl) return;
+        const rows = this.popoverEl.querySelectorAll<HTMLElement>('.sort-popover__row');
+
+        // Clear previous indicators
+        rows.forEach(r => {
+            r.classList.remove('is-drag-over-above', 'is-drag-over-below');
+        });
+
+        // Find target index
+        let newOverIndex: number | null = null;
+        for (const row of Array.from(rows)) {
+            const idx = Number(row.dataset.index);
+            if (idx === this.dragIndex) continue;
+            const rowRect = row.getBoundingClientRect();
+            const midY = rowRect.top + rowRect.height / 2;
+            if (e.clientY < midY) {
+                row.classList.add('is-drag-over-above');
+                newOverIndex = idx;
+                break;
+            } else {
+                // Tentatively mark as below; may be overridden by next row
+                newOverIndex = idx + 1;
+                row.classList.add('is-drag-over-below');
+            }
+        }
+
+        // Only keep the last "below" indicator
+        if (newOverIndex !== null) {
+            rows.forEach(r => {
+                const idx = Number(r.dataset.index);
+                if (r.classList.contains('is-drag-over-below') && idx + 1 !== newOverIndex) {
+                    r.classList.remove('is-drag-over-below');
+                }
+            });
+        }
+
+        this.dragOverIndex = newOverIndex;
+    }
+
+    private endDrag(): void {
+        // Perform reorder
+        if (
+            this.dragIndex !== null &&
+            this.dragOverIndex !== null &&
+            this.dragIndex !== this.dragOverIndex
+        ) {
+            const rules = this.state.rules;
+            const [moved] = rules.splice(this.dragIndex, 1);
+            const insertAt = this.dragOverIndex > this.dragIndex
+                ? this.dragOverIndex - 1
+                : this.dragOverIndex;
+            rules.splice(insertAt, 0, moved);
+            this.refreshPopover();
+        } else {
+            // Clean up visual state without re-render
+            if (this.dragRowEl) {
+                this.dragRowEl.classList.remove('is-dragging');
+            }
+            if (this.popoverEl) {
+                this.popoverEl.querySelectorAll('.sort-popover__row').forEach(r => {
+                    r.classList.remove('is-drag-over-above', 'is-drag-over-below');
+                });
+            }
+        }
+
+        // Remove ghost
+        if (this.dragGhostEl) {
+            this.dragGhostEl.remove();
+            this.dragGhostEl = null;
+        }
+
+        // Remove listeners
+        if (this.dragCleanup) {
+            this.dragCleanup();
+            this.dragCleanup = null;
+        }
+
+        this.dragIndex = null;
+        this.dragOverIndex = null;
+        this.dragRowEl = null;
+        this.dragStartY = 0;
     }
 
     // ── Positioning ──
