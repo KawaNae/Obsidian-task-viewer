@@ -1,8 +1,6 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import TaskViewerPlugin from './main';
-import { FrontmatterTaskKeys, HabitType, PinnedListDefinition, validateFrontmatterTaskKeys } from './types';
-import { PROPERTY_LABELS, OPERATOR_LABELS, RELATIVE_DATE_LABELS, createEmptyFilterState, getAllConditions } from './services/filter/FilterTypes';
-import type { DateFilterValue } from './services/filter/FilterTypes';
+import { FrontmatterTaskKeys, HabitType, validateFrontmatterTaskKeys } from './types';
 import {
     DEFAULT_AI_INDEX_SETTINGS,
     normalizeAiIndexSettings,
@@ -256,79 +254,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        // Pinned Lists
-        el.createEl('h3', { text: 'Pinned Lists', cls: 'setting-section-header' });
-
-        const pinnedListContainer = el.createDiv('setting-pinned-lists');
-        this.renderPinnedListItems(pinnedListContainer);
-
-        new Setting(el)
-            .addButton(btn => btn
-                .setButtonText('+ Add Pinned List')
-                .onClick(async () => {
-                    this.plugin.settings.pinnedLists.push({
-                        id: 'pl-' + Date.now(),
-                        name: 'New List',
-                        filterState: createEmptyFilterState(),
-                    });
-                    await this.plugin.saveSettings();
-                    this.renderPinnedListItems(pinnedListContainer);
-                }));
     }
 
-    private renderPinnedListItems(container: HTMLElement): void {
-        container.empty();
-        const lists = this.plugin.settings.pinnedLists;
-
-        lists.forEach((listDef, index) => {
-            const summary = this.buildFilterSummary(listDef);
-            new Setting(container)
-                .setName(listDef.name)
-                .setDesc(summary || 'No filter conditions (shows all tasks)')
-                .addText(text => text
-                    .setPlaceholder('List name')
-                    .setValue(listDef.name)
-                    .onChange(async (value) => {
-                        listDef.name = value;
-                        await this.plugin.saveSettings();
-                    }))
-                .addExtraButton(btn => btn
-                    .setIcon('trash')
-                    .setTooltip('Delete list')
-                    .onClick(async () => {
-                        this.plugin.settings.pinnedLists.splice(index, 1);
-                        await this.plugin.saveSettings();
-                        this.renderPinnedListItems(container);
-                    }));
-        });
-    }
-
-    private buildFilterSummary(listDef: PinnedListDefinition): string {
-        const conditions = getAllConditions(listDef.filterState);
-        if (conditions.length === 0) return '';
-
-        const parts = conditions.map(c => {
-            const prop = PROPERTY_LABELS[c.property] ?? c.property;
-            const op = OPERATOR_LABELS[c.operator] ?? c.operator;
-            if (c.value.type === 'stringSet') {
-                return `${prop} ${op} ${c.value.values.join(', ')}`;
-            }
-            if (c.value.type === 'string') {
-                return `${prop} ${op} "${c.value.value}"`;
-            }
-            if (c.value.type === 'date') {
-                const dv = c.value.value as DateFilterValue;
-                const label = dv.mode === 'relative'
-                    ? (dv.preset === 'nextNDays' ? `Next ${dv.n ?? 7} days` : RELATIVE_DATE_LABELS[dv.preset])
-                    : dv.date;
-                return `${prop} ${op} ${label}`;
-            }
-            return `${prop} ${op}`;
-        });
-
-        const logic = listDef.filterState.root.logic === 'or' ? ' OR ' : ', ';
-        return parts.join(logic);
-    }
 
     // ─── Notes Tab ───────────────────────────────────────────
 

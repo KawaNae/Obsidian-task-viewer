@@ -1,12 +1,15 @@
 import type { FilterState, FilterConditionNode } from '../services/filter/FilterTypes';
 import { hasConditions } from '../services/filter/FilterTypes';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
+import type { PinnedListDefinition } from '../types';
 
 export interface ViewUriOptions {
     filterState?: FilterState;
     days?: number;
     zoom?: number;
     date?: string;
+    pinnedLists?: PinnedListDefinition[];
+    showSidebar?: boolean;
 }
 
 /**
@@ -36,6 +39,11 @@ export class ViewUriBuilder {
             opts = (options as ViewUriOptions) ?? {};
         }
 
+        // Full state encoding when pinnedLists present
+        if (opts.pinnedLists && opts.pinnedLists.length > 0) {
+            return this.buildWithState(shortName, opts);
+        }
+
         let uri = `obsidian://task-viewer?view=${shortName}`;
 
         // View-specific params
@@ -50,6 +58,24 @@ export class ViewUriBuilder {
         if (shorthand) return `${uri}&${shorthand}`;
 
         return `${uri}&filter=${FilterSerializer.toURIParam(opts.filterState)}`;
+    }
+
+    /**
+     * Encodes the full view state (including pinnedLists) as a single base64 param.
+     */
+    private static buildWithState(shortName: string, opts: ViewUriOptions): string {
+        const stateObj: Record<string, unknown> = {};
+        if (opts.filterState && hasConditions(opts.filterState)) {
+            stateObj.filterState = FilterSerializer.toJSON(opts.filterState);
+        }
+        if (opts.days != null) stateObj.daysToShow = opts.days;
+        if (opts.zoom != null) stateObj.zoomLevel = opts.zoom;
+        if (opts.date != null) stateObj.startDate = opts.date;
+        if (opts.showSidebar != null) stateObj.showSidebar = opts.showSidebar;
+        stateObj.pinnedLists = opts.pinnedLists;
+
+        const encoded = btoa(JSON.stringify(stateObj));
+        return `obsidian://task-viewer?view=${shortName}&state=${encoded}`;
     }
 
     /**

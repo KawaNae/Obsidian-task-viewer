@@ -108,6 +108,7 @@ export interface ViewState {
     filterState?: FilterState;
     zoomLevel?: number;
     pinnedListCollapsed?: Record<string, boolean>;
+    pinnedLists?: PinnedListDefinition[];
 }
 
 export interface PinnedListDefinition {
@@ -217,7 +218,6 @@ export interface TaskViewerSettings {
     pomodoroBreakMinutes: number;
     countdownMinutes: number;
     completeStatusChars: string[];
-    pinnedLists: PinnedListDefinition[];
     pastDaysToShow: number;
     habits: HabitDefinition[];
     frontmatterTaskHeader: string;
@@ -249,7 +249,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     pomodoroBreakMinutes: 5,
     countdownMinutes: 25,
     completeStatusChars: ['x', 'X', '-', '!'],
-    pinnedLists: [],
     pastDaysToShow: 0,
     habits: [],
     frontmatterTaskHeader: 'Tasks',

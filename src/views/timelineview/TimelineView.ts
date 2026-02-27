@@ -83,7 +83,8 @@ export class TimelineView extends ItemView {
             startDate: DateUtils.getVisualDateOfNow(this.plugin.settings.startHour),
             daysToShow: 3,
             showSidebar: true,
-            filterFiles: null
+            filterFiles: null,
+            pinnedLists: [],
         };
         this.sidebarManager = new SidebarManager(true, {
             mobileBreakpointPx: TimelineView.MOBILE_BREAKPOINT_PX,
@@ -139,6 +140,9 @@ export class TimelineView extends ItemView {
             if (state.pinnedListCollapsed) {
                 this.viewState.pinnedListCollapsed = state.pinnedListCollapsed;
             }
+            if (Array.isArray(state.pinnedLists)) {
+                this.viewState.pinnedLists = state.pinnedLists;
+            }
             // Note: startDate is not restored - always use "Today" logic on reload
         }
         await super.setState(state, result);
@@ -152,6 +156,10 @@ export class TimelineView extends ItemView {
         };
         if (this.viewState.pinnedListCollapsed && Object.keys(this.viewState.pinnedListCollapsed).length > 0) {
             state.pinnedListCollapsed = this.viewState.pinnedListCollapsed;
+        }
+        const lists = this.viewState.pinnedLists;
+        if (lists && lists.length > 0) {
+            state.pinnedLists = lists;
         }
         if (this.viewState.zoomLevel != null) {
             state.zoomLevel = this.viewState.zoomLevel;
@@ -451,16 +459,15 @@ export class TimelineView extends ItemView {
         const addListBtn = sidebarHeader.createEl('button', { cls: 'view-sidebar__add-btn' });
         setIcon(addListBtn, 'plus');
         addListBtn.appendText('Add List');
-        addListBtn.addEventListener('click', async () => {
+        addListBtn.addEventListener('click', () => {
             const newId = 'pl-' + Date.now();
-            this.plugin.settings.pinnedLists.push({
+            if (!this.viewState.pinnedLists) this.viewState.pinnedLists = [];
+            this.viewState.pinnedLists.push({
                 id: newId,
                 name: 'New List',
                 filterState: createEmptyFilterState(),
             });
-            // Save without refreshAllViews — we render ourselves and need
-            // the DOM to stay stable for the inline rename to work.
-            await this.plugin.saveData(this.plugin.settings);
+            this.app.workspace.requestSaveLayout();
             this.pinnedListRenderer.scheduleRename(newId);
             this.render();
         });
@@ -469,6 +476,7 @@ export class TimelineView extends ItemView {
         this.pinnedListRenderer.render(
             sidebarBody,
             this,
+            this.viewState.pinnedLists ?? [],
             this.toolbar.getTaskFilter(),
             this.viewState.pinnedListCollapsed ?? {},
             {
@@ -480,7 +488,7 @@ export class TimelineView extends ItemView {
                 onSortEdit: (listDef, anchorEl) => this.openPinnedListSort(listDef, anchorEl),
                 onFilterEdit: (listDef, anchorEl) => this.openPinnedListFilter(listDef, anchorEl),
                 onDuplicate: (listDef) => {
-                    const lists = this.plugin.settings.pinnedLists;
+                    const lists = this.viewState.pinnedLists!;
                     const idx = lists.indexOf(listDef);
                     const dup = {
                         ...listDef,
@@ -490,14 +498,14 @@ export class TimelineView extends ItemView {
                         sortState: listDef.sortState ? JSON.parse(JSON.stringify(listDef.sortState)) : undefined,
                     };
                     lists.splice(idx + 1, 0, dup);
-                    this.plugin.saveSettings();
+                    this.app.workspace.requestSaveLayout();
                     this.render();
                 },
                 onRemove: (listDef) => {
-                    const lists = this.plugin.settings.pinnedLists;
+                    const lists = this.viewState.pinnedLists!;
                     const idx = lists.indexOf(listDef);
                     if (idx >= 0) lists.splice(idx, 1);
-                    this.plugin.saveSettings();
+                    this.app.workspace.requestSaveLayout();
                     this.render();
                 },
             },
@@ -596,7 +604,7 @@ export class TimelineView extends ItemView {
         this.sidebarSortMenu.showMenuAtElement(anchorEl, {
             onSortChange: () => {
                 listDef.sortState = this.sidebarSortMenu.getSortState();
-                this.plugin.saveSettings();
+                this.app.workspace.requestSaveLayout();
                 this.render();
             },
         });
@@ -607,7 +615,7 @@ export class TimelineView extends ItemView {
         this.sidebarFilterMenu.showMenuAtElement(anchorEl, {
             onFilterChange: () => {
                 listDef.filterState = this.sidebarFilterMenu.getFilterState();
-                this.plugin.saveSettings();
+                this.app.workspace.requestSaveLayout();
                 this.render();
             },
             getTasks: () => this.taskIndex.getTasks(),

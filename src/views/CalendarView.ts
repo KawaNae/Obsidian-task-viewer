@@ -56,6 +56,7 @@ export class CalendarView extends ItemView {
     private windowStart: string;
     private showSidebar = true;
     private pinnedListCollapsed: Record<string, boolean> = {};
+    private pinnedLists: PinnedListDefinition[] = [];
     private navigateWeekDebounceTimer: number | null = null;
     private pendingWeekOffset: number = 0;
 
@@ -147,6 +148,9 @@ export class CalendarView extends ItemView {
         if (state?.pinnedListCollapsed) {
             this.pinnedListCollapsed = state.pinnedListCollapsed;
         }
+        if (Array.isArray(state?.pinnedLists)) {
+            this.pinnedLists = state.pinnedLists;
+        }
 
         await super.setState(state, result);
         await this.render();
@@ -163,6 +167,9 @@ export class CalendarView extends ItemView {
         result.showSidebar = this.sidebarManager.isOpen;
         if (Object.keys(this.pinnedListCollapsed).length > 0) {
             result.pinnedListCollapsed = this.pinnedListCollapsed;
+        }
+        if (this.pinnedLists.length > 0) {
+            result.pinnedLists = this.pinnedLists;
         }
         return result;
     }
@@ -355,7 +362,11 @@ export class CalendarView extends ItemView {
         setIcon(copyBtn, 'link');
         copyBtn.setAttribute('aria-label', 'Copy view URI');
         copyBtn.onclick = async () => {
-            const uri = ViewUriBuilder.build(VIEW_META_CALENDAR.type, this.filterMenu.getFilterState());
+            const uri = ViewUriBuilder.build(VIEW_META_CALENDAR.type, {
+                filterState: this.filterMenu.getFilterState(),
+                pinnedLists: this.pinnedLists,
+                showSidebar: this.sidebarManager.isOpen,
+            });
             await navigator.clipboard.writeText(uri);
             new Notice('URI copied to clipboard');
         };
@@ -395,19 +406,20 @@ export class CalendarView extends ItemView {
         const addBtn = header.createEl('button', { cls: 'view-sidebar__add-btn' });
         setIcon(addBtn, 'plus');
         addBtn.appendText('Add List');
-        addBtn.addEventListener('click', async () => {
+        addBtn.addEventListener('click', () => {
             const newId = 'pl-' + Date.now();
-            this.plugin.settings.pinnedLists.push({
+            this.pinnedLists.push({
                 id: newId,
                 name: 'New List',
                 filterState: createEmptyFilterState(),
             });
-            await this.plugin.saveData(this.plugin.settings);
+            this.app.workspace.requestSaveLayout();
             this.pinnedListRenderer.scheduleRename(newId);
             void this.render();
         });
 
-        this.pinnedListRenderer.render(body, this, (task) => this.filterMenu.isTaskVisible(task),
+        this.pinnedListRenderer.render(body, this, this.pinnedLists,
+            (task) => this.filterMenu.isTaskVisible(task),
             this.pinnedListCollapsed, {
             onCollapsedChange: (id, collapsed) => {
                 this.pinnedListCollapsed[id] = collapsed;
@@ -416,23 +428,21 @@ export class CalendarView extends ItemView {
             onSortEdit: (listDef, anchorEl) => this.openPinnedListSort(listDef, anchorEl),
             onFilterEdit: (listDef, anchorEl) => this.openPinnedListFilter(listDef, anchorEl),
             onDuplicate: (listDef) => {
-                const lists = this.plugin.settings.pinnedLists;
-                const idx = lists.indexOf(listDef);
-                lists.splice(idx + 1, 0, {
+                const idx = this.pinnedLists.indexOf(listDef);
+                this.pinnedLists.splice(idx + 1, 0, {
                     ...listDef,
                     id: 'pl-' + Date.now(),
                     name: listDef.name + ' (copy)',
                     filterState: JSON.parse(JSON.stringify(listDef.filterState)),
                     sortState: listDef.sortState ? JSON.parse(JSON.stringify(listDef.sortState)) : undefined,
                 });
-                this.plugin.saveSettings();
+                this.app.workspace.requestSaveLayout();
                 void this.render();
             },
             onRemove: (listDef) => {
-                const lists = this.plugin.settings.pinnedLists;
-                const idx = lists.indexOf(listDef);
-                if (idx >= 0) lists.splice(idx, 1);
-                this.plugin.saveSettings();
+                const idx = this.pinnedLists.indexOf(listDef);
+                if (idx >= 0) this.pinnedLists.splice(idx, 1);
+                this.app.workspace.requestSaveLayout();
                 void this.render();
             },
         });
@@ -443,7 +453,7 @@ export class CalendarView extends ItemView {
         this.sidebarSortMenu.showMenuAtElement(anchorEl, {
             onSortChange: () => {
                 listDef.sortState = this.sidebarSortMenu.getSortState();
-                this.plugin.saveSettings();
+                this.app.workspace.requestSaveLayout();
                 void this.render();
             },
         });
@@ -454,7 +464,7 @@ export class CalendarView extends ItemView {
         this.sidebarFilterMenu.showMenuAtElement(anchorEl, {
             onFilterChange: () => {
                 listDef.filterState = this.sidebarFilterMenu.getFilterState();
-                this.plugin.saveSettings();
+                this.app.workspace.requestSaveLayout();
                 void this.render();
             },
             getTasks: () => this.taskIndex.getTasks(),

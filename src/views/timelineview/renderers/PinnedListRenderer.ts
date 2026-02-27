@@ -44,14 +44,13 @@ export class PinnedListRenderer {
     render(
         container: HTMLElement,
         owner: Component,
+        lists: PinnedListDefinition[],
         isTaskVisible: (task: Task) => boolean,
         collapsedState: Record<string, boolean>,
         callbacks: PinnedListCallbacks,
     ): void {
         container.empty();
         container.addClass('pinned-lists-container');
-
-        const lists = this.plugin.settings.pinnedLists;
         if (lists.length === 0) {
             container.createDiv('pinned-lists-container__empty')
                 .setText('No pinned lists.');

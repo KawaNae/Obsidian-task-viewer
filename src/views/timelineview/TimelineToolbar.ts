@@ -198,6 +198,8 @@ export class TimelineToolbar {
                 filterState: this.filterMenu.getFilterState(),
                 days: this.viewState.daysToShow,
                 zoom: this.viewState.zoomLevel,
+                pinnedLists: this.viewState.pinnedLists,
+                showSidebar: this.viewState.showSidebar,
             });
             await navigator.clipboard.writeText(uri);
             new Notice('URI copied to clipboard');

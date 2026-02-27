@@ -13,6 +13,7 @@ import {
     normalizeFrontmatterTaskKeys,
     validateFrontmatterTaskKeys,
 } from './types';
+import type { PinnedListDefinition } from './types';
 import { normalizeAiIndexSettings } from './services/aiindex/AiIndexSettings';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/color/ColorSuggest';
@@ -264,6 +265,25 @@ export default class TaskViewerPlugin extends Plugin {
             const viewType = viewMap[params.view];
             if (!viewType) return;
 
+            // Full state param (base64-encoded complete view state)
+            if (params.state) {
+                try {
+                    const stateObj = JSON.parse(atob(params.state)) as Record<string, unknown>;
+                    this.activateView(viewType, {
+                        filterState: stateObj.filterState
+                            ? FilterSerializer.fromJSON(stateObj.filterState) : undefined,
+                        days: typeof stateObj.daysToShow === 'number' ? stateObj.daysToShow : undefined,
+                        zoom: typeof stateObj.zoomLevel === 'number' ? stateObj.zoomLevel : undefined,
+                        date: typeof stateObj.startDate === 'string' ? stateObj.startDate : undefined,
+                        pinnedLists: Array.isArray(stateObj.pinnedLists)
+                            ? stateObj.pinnedLists as PinnedListDefinition[] : undefined,
+                        showSidebar: typeof stateObj.showSidebar === 'boolean'
+                            ? stateObj.showSidebar : undefined,
+                    });
+                    return;
+                } catch { /* fall through to legacy params */ }
+            }
+
             let filterState: FilterState | undefined;
 
             // Full filter (base64-encoded JSON)
@@ -323,14 +343,6 @@ export default class TaskViewerPlugin extends Plugin {
             frontmatterTaskKeys?: unknown;
             aiIndex?: unknown;
         };
-        // Migrate existing pinnedList filterStates from older formats to v4 (recursive tree)
-        if (Array.isArray(merged.pinnedLists)) {
-            for (const list of merged.pinnedLists) {
-                if (list.filterState && !(list.filterState as unknown as Record<string, unknown>).root) {
-                    list.filterState = FilterSerializer.fromJSON(list.filterState);
-                }
-            }
-        }
         const normalizedFrontmatterKeys = normalizeFrontmatterTaskKeys(merged.frontmatterTaskKeys);
         const keysValidationError = validateFrontmatterTaskKeys(normalizedFrontmatterKeys);
         const normalizedAiIndexSettings = normalizeAiIndexSettings(merged.aiIndex);
@@ -406,6 +418,8 @@ export default class TaskViewerPlugin extends Plugin {
         days?: number;
         zoom?: number;
         date?: string;
+        pinnedLists?: PinnedListDefinition[];
+        showSidebar?: boolean;
     }) {
         const { workspace } = this.app;
 
@@ -427,6 +441,8 @@ export default class TaskViewerPlugin extends Plugin {
             if (params?.days != null) state.daysToShow = params.days;
             if (params?.zoom != null) state.zoomLevel = params.zoom;
             if (params?.date != null) state.startDate = params.date;
+            if (params?.pinnedLists) state.pinnedLists = params.pinnedLists;
+            if (params?.showSidebar != null) state.showSidebar = params.showSidebar;
 
             await leaf.setViewState({ type: viewType, active: true, state });
             workspace.revealLeaf(leaf);
