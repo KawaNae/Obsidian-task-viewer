@@ -1,6 +1,7 @@
 import { DEFAULT_AI_INDEX_SETTINGS } from './services/aiindex/AiIndexSettings';
 import type { AiIndexSettings } from './services/aiindex/AiIndexSettings';
 import type { FilterState } from './services/filter/FilterTypes';
+import type { SortState } from './services/sort/SortTypes';
 
 /**
  * Returns true when statusChar is considered completed by settings.
@@ -107,12 +108,15 @@ export interface ViewState {
     filterState?: FilterState;
     zoomLevel?: number;
     pinnedListCollapsed?: Record<string, boolean>;
+    pinnedLists?: PinnedListDefinition[];
+    customName?: string;
 }
 
 export interface PinnedListDefinition {
     id: string;
     name: string;
     filterState: FilterState;
+    sortState?: SortState;
 }
 
 export interface FrontmatterTaskKeys {
@@ -215,7 +219,6 @@ export interface TaskViewerSettings {
     pomodoroBreakMinutes: number;
     countdownMinutes: number;
     completeStatusChars: string[];
-    pinnedLists: PinnedListDefinition[];
     pastDaysToShow: number;
     habits: HabitDefinition[];
     frontmatterTaskHeader: string;
@@ -247,7 +250,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     pomodoroBreakMinutes: 5,
     countdownMinutes: 25,
     completeStatusChars: ['x', 'X', '-', '!'],
-    pinnedLists: [],
     pastDaysToShow: 0,
     habits: [],
     frontmatterTaskHeader: 'Tasks',

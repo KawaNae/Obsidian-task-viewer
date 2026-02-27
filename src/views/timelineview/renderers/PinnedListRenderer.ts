@@ -10,11 +10,14 @@ import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { TaskFilterEngine } from '../../../services/filter/TaskFilterEngine';
 import { hasConditions } from '../../../services/filter/FilterTypes';
 import { TaskIndex } from '../../../services/core/TaskIndex';
+import { TaskSorter } from '../../../services/sort/TaskSorter';
+import { hasSortRules } from '../../../services/sort/SortTypes';
 import TaskViewerPlugin from '../../../main';
 import { TaskStyling } from '../../utils/TaskStyling';
 
 export interface PinnedListCallbacks {
     onCollapsedChange: (listId: string, collapsed: boolean) => void;
+    onSortEdit: (listDef: PinnedListDefinition, anchorEl: HTMLElement) => void;
     onFilterEdit: (listDef: PinnedListDefinition, anchorEl: HTMLElement) => void;
     onDuplicate: (listDef: PinnedListDefinition) => void;
     onRemove: (listDef: PinnedListDefinition) => void;
@@ -41,14 +44,13 @@ export class PinnedListRenderer {
     render(
         container: HTMLElement,
         owner: Component,
+        lists: PinnedListDefinition[],
         isTaskVisible: (task: Task) => boolean,
         collapsedState: Record<string, boolean>,
         callbacks: PinnedListCallbacks,
     ): void {
         container.empty();
         container.addClass('pinned-lists-container');
-
-        const lists = this.plugin.settings.pinnedLists;
         if (lists.length === 0) {
             container.createDiv('pinned-lists-container__empty')
                 .setText('No pinned lists.');
@@ -63,16 +65,7 @@ export class PinnedListRenderer {
                 TaskFilterEngine.evaluate(task, listDef.filterState) && isTaskVisible(task)
             );
 
-            // Sort: deadline asc → startDate asc → content asc
-            tasks.sort((a, b) => {
-                const da = a.deadline || '';
-                const db = b.deadline || '';
-                if (da !== db) return da.localeCompare(db);
-                const sa = a.startDate || '';
-                const sb = b.startDate || '';
-                if (sa !== sb) return sa.localeCompare(sb);
-                return (a.content || '').localeCompare(b.content || '');
-            });
+            TaskSorter.sort(tasks, listDef.sortState);
 
             this.renderList(container, listDef, tasks, owner, collapsedState, callbacks);
         }
@@ -101,6 +94,17 @@ export class PinnedListRenderer {
         const toggle = header.createSpan({ text: isCollapsed ? '▶' : '▼', cls: 'pinned-list__toggle' });
         const nameEl = header.createSpan({ text: listDef.name, cls: 'pinned-list__name' });
         header.createSpan({ text: ` (${tasks.length})`, cls: 'pinned-list__count' });
+
+        // Sort button
+        const sortBtn = header.createEl('button', { cls: 'pinned-list__sort-btn' });
+        setIcon(sortBtn, 'arrow-up-down');
+        if (listDef.sortState && hasSortRules(listDef.sortState)) {
+            sortBtn.addClass('is-sorted');
+        }
+        sortBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            callbacks.onSortEdit(listDef, sortBtn);
+        });
 
         // Filter button
         const filterBtn = header.createEl('button', { cls: 'pinned-list__filter-btn' });

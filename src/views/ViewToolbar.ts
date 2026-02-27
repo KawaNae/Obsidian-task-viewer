@@ -1,4 +1,7 @@
-import { setIcon } from 'obsidian';
+import { setIcon, Menu, Notice } from 'obsidian';
+import type { App, WorkspaceLeaf } from 'obsidian';
+import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../utils/ViewUriBuilder';
+import { InputModal } from '../modals/InputModal';
 
 /**
  * Date navigation component with prev/next/today buttons.
@@ -148,5 +151,107 @@ export class ZoomSelector {
             }
             menu.showAtPosition({ x: e.pageX, y: e.pageY });
         };
+    }
+}
+
+/**
+ * Position label mapping for display.
+ */
+const POSITION_LABELS: Record<LeafPosition, string> = {
+    left: 'Left sidebar',
+    right: 'Right sidebar',
+    tab: 'Tab',
+    window: 'Window',
+};
+
+export interface ViewSettingsOptions {
+    app: App;
+    leaf: WorkspaceLeaf;
+    getCustomName: () => string | undefined;
+    getDefaultName: () => string;
+    onRename: (newName: string | undefined) => void;
+    buildUri: () => ViewUriOptions;
+    viewType: string;
+}
+
+/**
+ * View settings gear button and menu.
+ * Provides: Rename, Position display (read-only).
+ */
+export class ViewSettingsMenu {
+    static renderButton(toolbar: HTMLElement, options: ViewSettingsOptions): HTMLElement {
+        const btn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(btn, 'settings');
+        btn.setAttribute('aria-label', 'View settings');
+        btn.onclick = (e) => ViewSettingsMenu.showMenu(e, options);
+        return btn;
+    }
+
+    static showMenu(e: MouseEvent, options: ViewSettingsOptions): void {
+        const menu = new Menu();
+        const { app, leaf, getCustomName, getDefaultName, onRename, buildUri, viewType } = options;
+
+        // Rename
+        menu.addItem((item) => {
+            item.setTitle('Rename...')
+                .setIcon('pencil')
+                .onClick(() => {
+                    new InputModal(
+                        app,
+                        'Rename View',
+                        'View name (empty to reset)',
+                        getCustomName() ?? '',
+                        (value) => onRename(value.trim() || undefined),
+                    ).open();
+                });
+        });
+
+        menu.addSeparator();
+
+        // Copy URI
+        menu.addItem((item) => {
+            item.setTitle('Copy URI')
+                .setIcon('link')
+                .onClick(async () => {
+                    const uriOpts = buildUri();
+                    uriOpts.position = ViewUriBuilder.detectLeafPosition(leaf, app.workspace);
+                    uriOpts.name = getCustomName();
+                    const uri = ViewUriBuilder.build(viewType, uriOpts);
+                    await navigator.clipboard.writeText(uri);
+                    new Notice('URI copied to clipboard');
+                });
+        });
+
+        // Copy as Obsidian link [name](uri)
+        menu.addItem((item) => {
+            item.setTitle('Copy as link')
+                .setIcon('external-link')
+                .onClick(async () => {
+                    const uriOpts = buildUri();
+                    uriOpts.position = ViewUriBuilder.detectLeafPosition(leaf, app.workspace);
+                    uriOpts.name = getCustomName();
+                    const uri = ViewUriBuilder.build(viewType, uriOpts);
+                    const displayName = getCustomName() || getDefaultName();
+                    const link = `[${displayName}](${uri})`;
+                    await navigator.clipboard.writeText(link);
+                    new Notice('Link copied to clipboard');
+                });
+        });
+
+        menu.addSeparator();
+
+        // Position (read-only)
+        menu.addItem((item) => {
+            item.setTitle('Position').setDisabled(true);
+        });
+
+        const pos = ViewUriBuilder.detectLeafPosition(leaf, app.workspace);
+        menu.addItem((item) => {
+            item.setTitle(`  ${POSITION_LABELS[pos]}`)
+                .setChecked(true)
+                .setDisabled(true);
+        });
+
+        menu.showAtMouseEvent(e);
     }
 }

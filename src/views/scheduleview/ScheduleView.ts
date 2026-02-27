@@ -1,4 +1,4 @@
-import { ItemView, Notice, WorkspaceLeaf, setIcon } from 'obsidian';
+import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
 import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -7,10 +7,9 @@ import type { RenderableTask } from '../utils/RenderableTaskUtils';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
-import { ViewUriBuilder } from '../../utils/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
 
-import { DateNavigator } from '../ViewToolbar';
+import { DateNavigator, ViewSettingsMenu } from '../ViewToolbar';
 import { FilterMenuComponent } from '../filter/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
@@ -52,6 +51,7 @@ export class ScheduleView extends ItemView {
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private currentDate = '';
+    private customName: string | undefined;
     private collapsedSections: Record<CollapsibleSectionKey, boolean> = {
         allDay: false,
         deadlines: false,
@@ -104,7 +104,7 @@ export class ScheduleView extends ItemView {
     }
 
     getDisplayText(): string {
-        return VIEW_META_SCHEDULE.displayText;
+        return this.customName || VIEW_META_SCHEDULE.displayText;
     }
 
     getIcon(): string {
@@ -142,6 +142,12 @@ export class ScheduleView extends ItemView {
             this.filterMenu.setFilterState(createEmptyFilterState());
         }
 
+        if (typeof state?.customName === 'string' && state.customName.trim()) {
+            this.customName = state.customName;
+        } else {
+            this.customName = undefined;
+        }
+
         await super.setState(state, result);
         if (this.container) {
             await this.render();
@@ -155,6 +161,9 @@ export class ScheduleView extends ItemView {
         };
         if (hasConditions(filterState)) {
             result.filterState = FilterSerializer.toJSON(filterState);
+        }
+        if (this.customName) {
+            result.customName = this.customName;
         }
         return result;
     }
@@ -243,15 +252,6 @@ export class ScheduleView extends ItemView {
 
         toolbar.createDiv('view-toolbar__spacer');
 
-        const copyBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(copyBtn, 'link');
-        copyBtn.setAttribute('aria-label', 'Copy view URI');
-        copyBtn.onclick = async () => {
-            const uri = ViewUriBuilder.build(VIEW_META_SCHEDULE.type, this.filterMenu.getFilterState());
-            await navigator.clipboard.writeText(uri);
-            new Notice('URI copied to clipboard');
-        };
-
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', 'Filter');
@@ -265,6 +265,23 @@ export class ScheduleView extends ItemView {
                 },
                 getTasks: () => this.taskIndex.getTasks(),
             });
+        });
+
+        // View Settings
+        ViewSettingsMenu.renderButton(toolbar, {
+            app: this.app,
+            leaf: this.leaf,
+            getCustomName: () => this.customName,
+            getDefaultName: () => VIEW_META_SCHEDULE.displayText,
+            onRename: (newName) => {
+                this.customName = newName;
+                (this.leaf as any).updateHeader();
+                this.app.workspace.requestSaveLayout();
+            },
+            buildUri: () => ({
+                filterState: this.filterMenu.getFilterState(),
+            }),
+            viewType: VIEW_META_SCHEDULE.type,
         });
     }
 

@@ -50,13 +50,11 @@ export class TaskCloner {
 
     /**
      * インラインタスクを翌日分として複製する。
-     * コピーの @start 日付を +1 日シフトする。
+     * コピーの @start/@end 日付を +1 日シフトする（deadline は保持）。
      */
     async duplicateTaskForTomorrow(task: Task): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;
-
-        const baseDate = task.startDate || DateUtils.getToday();
 
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
@@ -75,8 +73,7 @@ export class TaskCloner {
 
             // Insert before task
             const insertIndex = currentLine;
-            const newDate = DateUtils.addDays(baseDate, 1);
-            const shiftedLines = cleaned.map((line) => line.replace(/@\d{4}-\d{2}-\d{2}/, `@${newDate}`));
+            const shiftedLines = cleaned.map((line) => this.shiftInlineDates(line, 1));
             lines.splice(insertIndex, 0, ...shiftedLines);
 
             return lines.join('\n');
@@ -85,13 +82,11 @@ export class TaskCloner {
 
     /**
      * インラインタスクを1週間分（7日間）複製する。
-     * 各コピーの @start 日付を1日ずつシフトする。
+     * 各コピーの @start/@end 日付を1日ずつシフトする（deadline は保持）。
      */
     async duplicateTaskForWeek(task: Task): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;
-
-        const baseDate = task.startDate || DateUtils.getToday();
 
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
@@ -114,14 +109,7 @@ export class TaskCloner {
 
             // Future-first order: +7 ... +1 so newer dates appear above older ones.
             for (let dayOffset = 7; dayOffset >= 1; dayOffset--) {
-                const newDate = DateUtils.addDays(baseDate, dayOffset);
-
-                // Shift dates for each line
-                const shiftedLines = cleaned.map((line) => {
-                    // Replace @YYYY-MM-DD notation
-                    return line.replace(/@\d{4}-\d{2}-\d{2}/, `@${newDate}`);
-                });
-
+                const shiftedLines = cleaned.map((line) => this.shiftInlineDates(line, dayOffset));
                 newLines.push(...shiftedLines);
             }
 
@@ -224,6 +212,24 @@ export class TaskCloner {
     }
 
     // --- Private helpers ---
+
+    /**
+     * @notation ブロック内の start/end 日付を dayOffset 日シフトする。
+     * deadline（3番目のセグメント）はシフトしない。
+     */
+    private shiftInlineDates(line: string, dayOffset: number): string {
+        return line.replace(
+            /(@(?=[\d>T])(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|T?\d{2}:\d{2})?(?:>(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|\d{2}:\d{2})?)*)/,
+            (block) => {
+                const inner = block.slice(1); // remove '@'
+                const segments = inner.split('>');
+                const shifted = segments.map((seg, i) =>
+                    i < 2 ? seg.replace(/\d{4}-\d{2}-\d{2}/g, (d) => DateUtils.addDays(d, dayOffset)) : seg,
+                );
+                return '@' + shifted.join('>');
+            },
+        );
+    }
 
     /** `Name.md` → `Name copy.md` → `Name copy 2.md` → ... */
     private generateCopyPath(file: TFile): string {

@@ -1,17 +1,27 @@
-import type { FilterState, FilterConditionNode } from '../services/filter/FilterTypes';
+import type { Workspace, WorkspaceLeaf } from 'obsidian';
+import type { FilterState } from '../services/filter/FilterTypes';
 import { hasConditions } from '../services/filter/FilterTypes';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
+import type { PinnedListDefinition } from '../types';
+
+export type LeafPosition = 'left' | 'right' | 'tab' | 'window';
 
 export interface ViewUriOptions {
     filterState?: FilterState;
     days?: number;
     zoom?: number;
     date?: string;
+    pinnedLists?: PinnedListDefinition[];
+    showSidebar?: boolean;
+    position?: LeafPosition;
+    name?: string;
 }
 
 /**
  * Builds obsidian://task-viewer URIs from view type and optional parameters.
- * Prefers shorthand params (?tag=a,b) when possible, falls back to base64.
+ *
+ * View display params are kept as readable query params.
+ * Filter and pinnedLists are base64-encoded.
  */
 export class ViewUriBuilder {
     private static readonly VIEW_SHORT_NAMES: Record<string, string> = {
@@ -21,61 +31,54 @@ export class ViewUriBuilder {
         'mini-calendar-view': 'mini-calendar',
     };
 
-    /** Property names that support shorthand URI params. */
-    private static readonly SHORTHAND_PROPERTIES = new Set(['file', 'tag', 'status']);
-
-    static build(viewType: string, options?: FilterState | ViewUriOptions): string {
+    static build(viewType: string, options?: ViewUriOptions): string {
         const shortName = this.VIEW_SHORT_NAMES[viewType];
         if (!shortName) return '';
-
-        // Normalize: FilterState direct pass (backward compat) or ViewUriOptions
-        let opts: ViewUriOptions;
-        if (options && 'root' in options) {
-            opts = { filterState: options as FilterState };
-        } else {
-            opts = (options as ViewUriOptions) ?? {};
-        }
+        const opts = options ?? {};
 
         let uri = `obsidian://task-viewer?view=${shortName}`;
 
-        // View-specific params
+        // Position
+        if (opts.position) uri += `&position=${opts.position}`;
+
+        // Name
+        if (opts.name) uri += `&name=${encodeURIComponent(opts.name)}`;
+
+        // View display params (readable)
         if (opts.days != null) uri += `&days=${opts.days}`;
         if (opts.zoom != null) uri += `&zoom=${opts.zoom}`;
         if (opts.date != null) uri += `&date=${encodeURIComponent(opts.date)}`;
+        if (opts.showSidebar != null) uri += `&showSidebar=${opts.showSidebar}`;
 
-        // Filter params
-        if (!opts.filterState || !hasConditions(opts.filterState)) return uri;
+        // Filter (base64)
+        if (opts.filterState && hasConditions(opts.filterState)) {
+            uri += `&filter=${FilterSerializer.toURIParam(opts.filterState)}`;
+        }
 
-        const shorthand = this.tryBuildShorthand(opts.filterState);
-        if (shorthand) return `${uri}&${shorthand}`;
+        // PinnedLists (base64)
+        if (opts.pinnedLists && opts.pinnedLists.length > 0) {
+            uri += `&pinnedLists=${btoa(JSON.stringify(opts.pinnedLists))}`;
+        }
 
-        return `${uri}&filter=${FilterSerializer.toURIParam(opts.filterState)}`;
+        return uri;
     }
 
     /**
-     * Converts filter state to shorthand params if root has only condition children
-     * with AND logic, all using includes operators on supported properties.
+     * Detect the current position of a WorkspaceLeaf.
      */
-    private static tryBuildShorthand(state: FilterState): string | null {
-        const root = state.root;
-        if (root.logic !== 'and') return null;
-        // Shorthand only if root has only conditions (no sub-groups)
-        if (root.children.some(c => c.type === 'group')) return null;
-
-        const conditions = root.children as FilterConditionNode[];
-        const parts: string[] = [];
-
-        for (const condition of conditions) {
-            if (condition.operator !== 'includes' || condition.value.type !== 'stringSet') {
-                return null;
-            }
-            if (!this.SHORTHAND_PROPERTIES.has(condition.property)) {
-                return null;
-            }
-            if (condition.value.values.length === 0) continue;
-            parts.push(`${condition.property}=${condition.value.values.map(encodeURIComponent).join(',')}`);
+    static detectLeafPosition(leaf: WorkspaceLeaf, workspace: Workspace): LeafPosition {
+        // Walk up the parent chain to check sidebars
+        let item: any = leaf;
+        while (item?.parent) {
+            if (item === workspace.leftSplit || item.parent === workspace.leftSplit) return 'left';
+            if (item === workspace.rightSplit || item.parent === workspace.rightSplit) return 'right';
+            item = item.parent;
         }
 
-        return parts.length > 0 ? parts.join('&') : null;
+        // If not in a sidebar, check if it's a popout window
+        const container = leaf.getContainer();
+        if (container !== workspace.rootSplit) return 'window';
+
+        return 'tab';
     }
 }

@@ -1,22 +1,27 @@
-import { App, Notice, setIcon } from 'obsidian';
+import { App, setIcon, type WorkspaceLeaf } from 'obsidian';
 import { ViewState, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
-import { ViewUriBuilder } from '../../utils/ViewUriBuilder';
+import type { LeafPosition } from '../../utils/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
-import { DateNavigator, ViewModeSelector, ZoomSelector } from '../ViewToolbar';
+import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu } from '../ViewToolbar';
 import { FilterMenuComponent } from '../filter/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import type { Task } from '../../types';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
+import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 
 export interface ToolbarCallbacks {
     onRender: () => void;
     onStateChange: () => void;
     getDatesToShow: () => string[];
     onRequestSidebarToggle: (nextOpen: boolean, source: 'toolbar' | 'backdrop' | 'escape') => void;
+    getLeafPosition: () => LeafPosition;
+    getCustomName: () => string | undefined;
+    onRename: (newName: string | undefined) => void;
+    getLeaf: () => WorkspaceLeaf;
 }
 
 /**
@@ -62,7 +67,7 @@ export class TimelineToolbar {
      */
     syncSidebarToggleState(): void {
         if (this.sidebarToggleBtn) {
-            this.updateSidebarToggleButton(this.sidebarToggleBtn);
+            this.updateSidebarToggleBtn(this.sidebarToggleBtn);
         }
     }
 
@@ -107,11 +112,25 @@ export class TimelineToolbar {
         // Push filter/toggle controls to the right
         toolbar.createDiv('view-toolbar__spacer');
 
-        // Copy URI Button
-        this.renderCopyUriButton(toolbar);
-
         // Filter Button
         this.renderFilterButton(toolbar);
+
+        // View Settings
+        ViewSettingsMenu.renderButton(toolbar, {
+            app: this.app,
+            leaf: this.callbacks.getLeaf(),
+            getCustomName: () => this.callbacks.getCustomName(),
+            getDefaultName: () => VIEW_META_TIMELINE.displayText,
+            onRename: (newName) => this.callbacks.onRename(newName),
+            buildUri: () => ({
+                filterState: this.filterMenu.getFilterState(),
+                days: this.viewState.daysToShow,
+                zoom: this.viewState.zoomLevel,
+                pinnedLists: this.viewState.pinnedLists,
+                showSidebar: this.viewState.showSidebar,
+            }),
+            viewType: VIEW_META_TIMELINE.type,
+        });
 
         // Sidebar Toggle
         this.renderSidebarToggle(toolbar);
@@ -188,21 +207,6 @@ export class TimelineToolbar {
         );
     }
 
-    private renderCopyUriButton(toolbar: HTMLElement): void {
-        const btn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(btn, 'link');
-        btn.setAttribute('aria-label', 'Copy view URI');
-        btn.onclick = async () => {
-            const uri = ViewUriBuilder.build(VIEW_META_TIMELINE.type, {
-                filterState: this.filterMenu.getFilterState(),
-                days: this.viewState.daysToShow,
-                zoom: this.viewState.zoomLevel,
-            });
-            await navigator.clipboard.writeText(uri);
-            new Notice('URI copied to clipboard');
-        };
-    }
-
     private renderFilterButton(toolbar: HTMLElement): void {
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
@@ -237,7 +241,7 @@ export class TimelineToolbar {
             cls: 'view-toolbar__btn--icon timeline-toolbar__btn--sidebar-toggle sidebar-toggle-button-icon'
         });
         this.sidebarToggleBtn = toggleBtn;
-        this.updateSidebarToggleButton(toggleBtn);
+        this.updateSidebarToggleBtn(toggleBtn);
 
         toggleBtn.onclick = () => {
             const nextOpen = !this.viewState.showSidebar;
@@ -245,22 +249,8 @@ export class TimelineToolbar {
         };
     }
 
-    private updateSidebarToggleButton(toggleBtn: HTMLElement): void {
-        const isOpen = this.viewState.showSidebar;
-        const primaryIcon = isOpen ? 'panel-right-open' : 'panel-right-close';
-        const fallbackIcon = isOpen ? 'sidebar-right' : 'sidebar-left';
-
-        setIcon(toggleBtn, primaryIcon);
-        if (!toggleBtn.querySelector('svg')) {
-            setIcon(toggleBtn, fallbackIcon);
-        }
-
-        toggleBtn.classList.toggle('is-open', isOpen);
-        toggleBtn.classList.toggle('is-closed', !isOpen);
-        toggleBtn.classList.toggle('is-active', isOpen);
-
-        const label = isOpen ? 'Hide Sidebar' : 'Show Sidebar';
-        toggleBtn.setAttribute('aria-label', label);
+    private updateSidebarToggleBtn(toggleBtn: HTMLElement): void {
+        updateSidebarToggleButton(toggleBtn, this.viewState.showSidebar);
     }
 
     private navigateDate(days: number): void {

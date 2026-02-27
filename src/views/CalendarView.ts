@@ -1,24 +1,28 @@
-import { ItemView, Notice, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
+import { ItemView, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
 import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../services/core/TaskIndex';
 import { MenuHandler } from '../interaction/menu/MenuHandler';
 import { TaskCardRenderer } from './taskcard/TaskCardRenderer';
-import { Task, isCompleteStatusChar } from '../types';
+import { Task, isCompleteStatusChar, PinnedListDefinition } from '../types';
 import { DateUtils } from '../utils/DateUtils';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
-import { ViewUriBuilder } from '../utils/ViewUriBuilder';
 import { TaskIdGenerator } from '../utils/TaskIdGenerator';
 import { DragHandler } from '../interaction/drag/DragHandler';
 import TaskViewerPlugin from '../main';
 import { TaskStyling } from './utils/TaskStyling';
-import { DateNavigator } from './ViewToolbar';
+import { DateNavigator, ViewSettingsMenu } from './ViewToolbar';
 import { FilterMenuComponent } from './filter/FilterMenuComponent';
+import { SortMenuComponent } from './sort/SortMenuComponent';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions } from '../services/filter/FilterTypes';
+import { createEmptySortState } from '../services/sort/SortTypes';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../constants/hover';
 import { TaskLinkInteractionManager } from './taskcard/TaskLinkInteractionManager';
 import { VIEW_META_CALENDAR } from '../constants/viewRegistry';
 import { HandleManager } from './timelineview/HandleManager';
+import { SidebarManager } from './sidebar/SidebarManager';
+import { PinnedListRenderer } from './timelineview/renderers/PinnedListRenderer';
+import { updateSidebarToggleButton } from './sidebar/SidebarToggleButton';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
 
@@ -37,15 +41,24 @@ export class CalendarView extends ItemView {
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly filterMenu = new FilterMenuComponent();
+    private readonly sidebarSortMenu = new SortMenuComponent();
 
     private menuHandler: MenuHandler;
     private dragHandler: DragHandler | null = null;
     private handleManager: HandleManager | null = null;
+    private sidebarManager: SidebarManager;
+    private pinnedListRenderer: PinnedListRenderer;
+    private sidebarFilterMenu = new FilterMenuComponent();
+    private syncSidebarToggleBtn: (() => void) | null = null;
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private windowStart: string;
+    private showSidebar = true;
+    private pinnedListCollapsed: Record<string, boolean> = {};
+    private pinnedLists: PinnedListDefinition[] = [];
     private navigateWeekDebounceTimer: number | null = null;
     private pendingWeekOffset: number = 0;
+    private customName: string | undefined;
 
     constructor(leaf: WorkspaceLeaf, taskIndex: TaskIndex, plugin: TaskViewerPlugin) {
         super(leaf);
@@ -56,6 +69,11 @@ export class CalendarView extends ItemView {
             getHoverParent: () => this.leaf,
         });
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app);
+        this.sidebarManager = new SidebarManager(true, {
+            mobileBreakpointPx: 768,
+            onPersist: () => this.app.workspace.requestSaveLayout(),
+            onSyncToggleButton: () => this.syncSidebarToggleBtn?.(),
+        });
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
         const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
@@ -67,7 +85,7 @@ export class CalendarView extends ItemView {
     }
 
     getDisplayText(): string {
-        return VIEW_META_CALENDAR.displayText;
+        return this.customName || VIEW_META_CALENDAR.displayText;
     }
 
     getIcon(): string {
@@ -121,6 +139,24 @@ export class CalendarView extends ItemView {
             this.filterMenu.setFilterState(createEmptyFilterState());
         }
 
+        if (typeof state?.showSidebar === 'boolean') {
+            this.showSidebar = state.showSidebar;
+            this.sidebarManager.setOpen(state.showSidebar, 'setState', {
+                persist: false, animate: false,
+            });
+        }
+        if (state?.pinnedListCollapsed) {
+            this.pinnedListCollapsed = state.pinnedListCollapsed;
+        }
+        if (Array.isArray(state?.pinnedLists)) {
+            this.pinnedLists = state.pinnedLists;
+        }
+        if (typeof state?.customName === 'string' && state.customName.trim()) {
+            this.customName = state.customName;
+        } else {
+            this.customName = undefined;
+        }
+
         await super.setState(state, result);
         await this.render();
     }
@@ -133,6 +169,16 @@ export class CalendarView extends ItemView {
         if (hasConditions(filterState)) {
             result.filterState = FilterSerializer.toJSON(filterState);
         }
+        result.showSidebar = this.sidebarManager.isOpen;
+        if (Object.keys(this.pinnedListCollapsed).length > 0) {
+            result.pinnedListCollapsed = this.pinnedListCollapsed;
+        }
+        if (this.pinnedLists.length > 0) {
+            result.pinnedLists = this.pinnedLists;
+        }
+        if (this.customName) {
+            result.customName = this.customName;
+        }
         return result;
     }
 
@@ -140,8 +186,14 @@ export class CalendarView extends ItemView {
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('calendar-view-container');
+        this.sidebarManager.attach(this.container, (el, ev, handler) =>
+            this.registerDomEvent(el as any, ev as any, handler),
+        );
 
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
+        this.pinnedListRenderer = new PinnedListRenderer(
+            this.taskRenderer, this.plugin, this.menuHandler, this.taskIndex,
+        );
         this.handleManager = new HandleManager(this.container, this.taskIndex);
         this.dragHandler = new DragHandler(
             this.container,
@@ -176,6 +228,8 @@ export class CalendarView extends ItemView {
 
     async onClose(): Promise<void> {
         this.filterMenu.close();
+        this.sidebarFilterMenu.close();
+        this.sidebarManager.detach();
         if (this.navigateWeekDebounceTimer !== null) {
             window.clearTimeout(this.navigateWeekDebounceTimer);
             this.navigateWeekDebounceTimer = null;
@@ -206,10 +260,15 @@ export class CalendarView extends ItemView {
             this.windowStart = normalizedWindowStart;
         }
 
+        this.sidebarManager.syncPresentation({ animate: false });
         this.container.empty();
 
         const toolbar = this.renderToolbar();
-        const calendarHost = this.container.createDiv('calendar-grid');
+        const { main, sidebarHeader, sidebarBody } = this.sidebarManager.buildLayout(this.container);
+
+        this.renderSidebarContent(sidebarHeader, sidebarBody);
+
+        const calendarHost = main.createDiv('calendar-grid');
 
         this.renderWeekdayHeader(calendarHost);
 
@@ -307,15 +366,6 @@ export class CalendarView extends ItemView {
 
         toolbar.createDiv('view-toolbar__spacer');
 
-        const copyBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(copyBtn, 'link');
-        copyBtn.setAttribute('aria-label', 'Copy view URI');
-        copyBtn.onclick = async () => {
-            const uri = ViewUriBuilder.build(VIEW_META_CALENDAR.type, this.filterMenu.getFilterState());
-            await navigator.clipboard.writeText(uri);
-            new Notice('URI copied to clipboard');
-        };
-
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', 'Filter');
@@ -331,7 +381,108 @@ export class CalendarView extends ItemView {
             });
         });
 
+        // View Settings
+        ViewSettingsMenu.renderButton(toolbar, {
+            app: this.app,
+            leaf: this.leaf,
+            getCustomName: () => this.customName,
+            getDefaultName: () => VIEW_META_CALENDAR.displayText,
+            onRename: (newName) => {
+                this.customName = newName;
+                (this.leaf as any).updateHeader();
+                this.app.workspace.requestSaveLayout();
+            },
+            buildUri: () => ({
+                filterState: this.filterMenu.getFilterState(),
+                pinnedLists: this.pinnedLists,
+                showSidebar: this.sidebarManager.isOpen,
+            }),
+            viewType: VIEW_META_CALENDAR.type,
+        });
+
+        const toggleBtn = toolbar.createEl('button', {
+            cls: 'view-toolbar__btn--icon sidebar-toggle-button-icon',
+        });
+        updateSidebarToggleButton(toggleBtn, this.showSidebar);
+        this.syncSidebarToggleBtn = () => updateSidebarToggleButton(toggleBtn, this.sidebarManager.isOpen);
+        toggleBtn.onclick = () => {
+            const nextOpen = !this.sidebarManager.isOpen;
+            this.sidebarManager.setOpen(nextOpen, 'toolbar', { persist: true });
+            this.showSidebar = nextOpen;
+        };
+
         return toolbar;
+    }
+
+    private renderSidebarContent(header: HTMLElement, body: HTMLElement): void {
+        header.createEl('p', { cls: 'view-sidebar__title', text: 'Pinned Lists' });
+
+        const addBtn = header.createEl('button', { cls: 'view-sidebar__add-btn' });
+        setIcon(addBtn, 'plus');
+        addBtn.appendText('Add List');
+        addBtn.addEventListener('click', () => {
+            const newId = 'pl-' + Date.now();
+            this.pinnedLists.push({
+                id: newId,
+                name: 'New List',
+                filterState: createEmptyFilterState(),
+            });
+            this.app.workspace.requestSaveLayout();
+            this.pinnedListRenderer.scheduleRename(newId);
+            void this.render();
+        });
+
+        this.pinnedListRenderer.render(body, this, this.pinnedLists,
+            (task) => this.filterMenu.isTaskVisible(task),
+            this.pinnedListCollapsed, {
+            onCollapsedChange: (id, collapsed) => {
+                this.pinnedListCollapsed[id] = collapsed;
+                this.app.workspace.requestSaveLayout();
+            },
+            onSortEdit: (listDef, anchorEl) => this.openPinnedListSort(listDef, anchorEl),
+            onFilterEdit: (listDef, anchorEl) => this.openPinnedListFilter(listDef, anchorEl),
+            onDuplicate: (listDef) => {
+                const idx = this.pinnedLists.indexOf(listDef);
+                this.pinnedLists.splice(idx + 1, 0, {
+                    ...listDef,
+                    id: 'pl-' + Date.now(),
+                    name: listDef.name + ' (copy)',
+                    filterState: JSON.parse(JSON.stringify(listDef.filterState)),
+                    sortState: listDef.sortState ? JSON.parse(JSON.stringify(listDef.sortState)) : undefined,
+                });
+                this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
+            onRemove: (listDef) => {
+                const idx = this.pinnedLists.indexOf(listDef);
+                if (idx >= 0) this.pinnedLists.splice(idx, 1);
+                this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
+        });
+    }
+
+    private openPinnedListSort(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
+        this.sidebarSortMenu.setSortState(listDef.sortState ?? createEmptySortState());
+        this.sidebarSortMenu.showMenuAtElement(anchorEl, {
+            onSortChange: () => {
+                listDef.sortState = this.sidebarSortMenu.getSortState();
+                this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
+        });
+    }
+
+    private openPinnedListFilter(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
+        this.sidebarFilterMenu.setFilterState(listDef.filterState);
+        this.sidebarFilterMenu.showMenuAtElement(anchorEl, {
+            onFilterChange: () => {
+                listDef.filterState = this.sidebarFilterMenu.getFilterState();
+                this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
+            getTasks: () => this.taskIndex.getTasks(),
+        });
     }
 
     private renderWeekdayHeader(container: HTMLElement): void {

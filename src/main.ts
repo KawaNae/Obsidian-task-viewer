@@ -13,6 +13,7 @@ import {
     normalizeFrontmatterTaskKeys,
     validateFrontmatterTaskKeys,
 } from './types';
+import type { PinnedListDefinition } from './types';
 import { normalizeAiIndexSettings } from './services/aiindex/AiIndexSettings';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/color/ColorSuggest';
@@ -24,7 +25,7 @@ import { AudioUtils } from './utils/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
 import { getViewMeta } from './constants/viewRegistry';
 import type { FilterState } from './services/filter/FilterTypes';
-import { createEmptyFilterState, hasConditions } from './services/filter/FilterTypes';
+import { hasConditions } from './services/filter/FilterTypes';
 import { FilterSerializer } from './services/filter/FilterSerializer';
 import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
 import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
@@ -252,8 +253,7 @@ export default class TaskViewerPlugin extends Plugin {
         // Start Properties View color suggest observer
         this.startPropertiesColorSuggest();
 
-        // Register URI handler: obsidian://task-viewer?view=timeline|calendar|schedule
-        // Supports filter params: ?tag=work,urgent  ?status=x  ?file=path.md  ?filter=<base64>
+        // Register URI handler: obsidian://task-viewer?view=timeline&days=3&filter=<base64>&pinnedLists=<base64>
         this.registerObsidianProtocolHandler('task-viewer', (params) => {
             const viewMap: Record<string, string> = {
                 timeline: VIEW_TYPE_TIMELINE,
@@ -264,30 +264,19 @@ export default class TaskViewerPlugin extends Plugin {
             const viewType = viewMap[params.view];
             if (!viewType) return;
 
+            // Filter (base64)
             let filterState: FilterState | undefined;
-
-            // Full filter (base64-encoded JSON)
             if (params.filter) {
                 filterState = FilterSerializer.fromURIParam(params.filter);
             }
 
-            // Shorthand params → build a single group with conditions
-            const shorthandConditions: { id: string; property: 'tag' | 'status' | 'file'; values: string[] }[] = [];
-            if (params.tag) shorthandConditions.push({ id: 'uri-tag', property: 'tag', values: params.tag.split(',') });
-            if (params.status) shorthandConditions.push({ id: 'uri-status', property: 'status', values: params.status.split(',') });
-            if (params.file) shorthandConditions.push({ id: 'uri-file', property: 'file', values: params.file.split(',') });
-
-            if (shorthandConditions.length > 0) {
-                filterState = filterState ?? createEmptyFilterState();
-                for (const sc of shorthandConditions) {
-                    filterState.root.children.push({
-                        type: 'condition',
-                        id: sc.id,
-                        property: sc.property,
-                        operator: 'includes',
-                        value: { type: 'stringSet', values: sc.values },
-                    });
-                }
+            // PinnedLists (base64)
+            let pinnedLists: PinnedListDefinition[] | undefined;
+            if (params.pinnedLists) {
+                try {
+                    const parsed = JSON.parse(atob(params.pinnedLists));
+                    if (Array.isArray(parsed)) pinnedLists = parsed;
+                } catch { /* ignore */ }
             }
 
             const uriParams: {
@@ -295,21 +284,33 @@ export default class TaskViewerPlugin extends Plugin {
                 days?: number;
                 zoom?: number;
                 date?: string;
-            } = { filterState };
+                pinnedLists?: PinnedListDefinition[];
+                showSidebar?: boolean;
+                position?: 'left' | 'right' | 'tab' | 'window';
+                name?: string;
+            } = { filterState, pinnedLists };
 
-            // Timeline-specific params
-            if (viewType === VIEW_TYPE_TIMELINE) {
-                if (params.days) {
-                    const days = parseInt(params.days, 10);
-                    if ([1, 3, 7].includes(days)) uriParams.days = days;
-                }
-                if (params.zoom) {
-                    const zoom = parseFloat(params.zoom);
-                    if (zoom >= 0.25 && zoom <= 10.0) uriParams.zoom = zoom;
-                }
-                if (params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date)) {
-                    uriParams.date = params.date;
-                }
+            // View display params
+            if (params.days) {
+                const days = parseInt(params.days, 10);
+                if ([1, 3, 7].includes(days)) uriParams.days = days;
+            }
+            if (params.zoom) {
+                const zoom = parseFloat(params.zoom);
+                if (zoom >= 0.25 && zoom <= 10.0) uriParams.zoom = zoom;
+            }
+            if (params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date)) {
+                uriParams.date = params.date;
+            }
+            if (params.showSidebar === 'true' || params.showSidebar === 'false') {
+                uriParams.showSidebar = params.showSidebar === 'true';
+            }
+            const validPositions = new Set(['left', 'right', 'tab', 'window']);
+            if (params.position && validPositions.has(params.position)) {
+                uriParams.position = params.position as 'left' | 'right' | 'tab' | 'window';
+            }
+            if (params.name) {
+                uriParams.name = params.name;
             }
 
             this.activateView(viewType, uriParams);
@@ -323,14 +324,6 @@ export default class TaskViewerPlugin extends Plugin {
             frontmatterTaskKeys?: unknown;
             aiIndex?: unknown;
         };
-        // Migrate existing pinnedList filterStates from older formats to v4 (recursive tree)
-        if (Array.isArray(merged.pinnedLists)) {
-            for (const list of merged.pinnedLists) {
-                if (list.filterState && !(list.filterState as unknown as Record<string, unknown>).root) {
-                    list.filterState = FilterSerializer.fromJSON(list.filterState);
-                }
-            }
-        }
         const normalizedFrontmatterKeys = normalizeFrontmatterTaskKeys(merged.frontmatterTaskKeys);
         const keysValidationError = validateFrontmatterTaskKeys(normalizedFrontmatterKeys);
         const normalizedAiIndexSettings = normalizeAiIndexSettings(merged.aiIndex);
@@ -406,16 +399,29 @@ export default class TaskViewerPlugin extends Plugin {
         days?: number;
         zoom?: number;
         date?: string;
+        pinnedLists?: PinnedListDefinition[];
+        showSidebar?: boolean;
+        position?: 'left' | 'right' | 'tab' | 'window';
+        name?: string;
     }) {
         const { workspace } = this.app;
 
         let leaf: WorkspaceLeaf | null = null;
-        const leaves = workspace.getLeavesOfType(viewType);
 
-        if (leaves.length === 0) {
-            leaf = workspace.getRightLeaf(false);
+        if (params?.position) {
+            switch (params.position) {
+                case 'left':   leaf = workspace.getLeftLeaf(false); break;
+                case 'right':  leaf = workspace.getRightLeaf(false); break;
+                case 'tab':    leaf = workspace.getLeaf('tab'); break;
+                case 'window': leaf = workspace.getLeaf('window'); break;
+            }
         } else {
-            leaf = workspace.getLeaf(true);
+            const leaves = workspace.getLeavesOfType(viewType);
+            if (leaves.length === 0) {
+                leaf = workspace.getRightLeaf(false);
+            } else {
+                leaf = workspace.getLeaf(true);
+            }
         }
 
         if (leaf) {
@@ -427,6 +433,9 @@ export default class TaskViewerPlugin extends Plugin {
             if (params?.days != null) state.daysToShow = params.days;
             if (params?.zoom != null) state.zoomLevel = params.zoom;
             if (params?.date != null) state.startDate = params.date;
+            if (params?.pinnedLists) state.pinnedLists = params.pinnedLists;
+            if (params?.showSidebar != null) state.showSidebar = params.showSidebar;
+            if (params?.name) state.customName = params.name;
 
             await leaf.setViewState({ type: viewType, active: true, state });
             workspace.revealLeaf(leaf);
