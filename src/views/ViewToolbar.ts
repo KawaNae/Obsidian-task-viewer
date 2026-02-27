@@ -1,4 +1,7 @@
-import { setIcon } from 'obsidian';
+import { setIcon, Menu } from 'obsidian';
+import type { App, WorkspaceLeaf } from 'obsidian';
+import { ViewUriBuilder, type LeafPosition } from '../utils/ViewUriBuilder';
+import { InputModal } from '../modals/InputModal';
 
 /**
  * Date navigation component with prev/next/today buttons.
@@ -148,5 +151,72 @@ export class ZoomSelector {
             }
             menu.showAtPosition({ x: e.pageX, y: e.pageY });
         };
+    }
+}
+
+/**
+ * Position label mapping for display.
+ */
+const POSITION_LABELS: Record<LeafPosition, string> = {
+    left: 'Left sidebar',
+    right: 'Right sidebar',
+    tab: 'Tab',
+    window: 'Window',
+};
+
+export interface ViewSettingsOptions {
+    app: App;
+    leaf: WorkspaceLeaf;
+    getCustomName: () => string | undefined;
+    onRename: (newName: string | undefined) => void;
+}
+
+/**
+ * View settings gear button and menu.
+ * Provides: Rename, Position display (read-only).
+ */
+export class ViewSettingsMenu {
+    static renderButton(toolbar: HTMLElement, options: ViewSettingsOptions): HTMLElement {
+        const btn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(btn, 'settings');
+        btn.setAttribute('aria-label', 'View settings');
+        btn.onclick = (e) => ViewSettingsMenu.showMenu(e, options);
+        return btn;
+    }
+
+    static showMenu(e: MouseEvent, options: ViewSettingsOptions): void {
+        const menu = new Menu();
+        const { app, leaf, getCustomName, onRename } = options;
+
+        // Rename
+        menu.addItem((item) => {
+            item.setTitle('Rename...')
+                .setIcon('pencil')
+                .onClick(() => {
+                    new InputModal(
+                        app,
+                        'Rename View',
+                        'View name (empty to reset)',
+                        getCustomName() ?? '',
+                        (value) => onRename(value.trim() || undefined),
+                    ).open();
+                });
+        });
+
+        menu.addSeparator();
+
+        // Position (read-only)
+        menu.addItem((item) => {
+            item.setTitle('Position').setDisabled(true);
+        });
+
+        const pos = ViewUriBuilder.detectLeafPosition(leaf, app.workspace);
+        menu.addItem((item) => {
+            item.setTitle(`  ${POSITION_LABELS[pos]}`)
+                .setChecked(true)
+                .setDisabled(true);
+        });
+
+        menu.showAtMouseEvent(e);
     }
 }

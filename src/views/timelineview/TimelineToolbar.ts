@@ -1,10 +1,10 @@
-import { App, Notice, setIcon } from 'obsidian';
+import { App, Notice, setIcon, type WorkspaceLeaf } from 'obsidian';
 import { ViewState, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
 import { ViewUriBuilder, type LeafPosition } from '../../utils/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
-import { DateNavigator, ViewModeSelector, ZoomSelector } from '../ViewToolbar';
+import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu } from '../ViewToolbar';
 import { FilterMenuComponent } from '../filter/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import type { FilterState } from '../../services/filter/FilterTypes';
@@ -19,6 +19,9 @@ export interface ToolbarCallbacks {
     getDatesToShow: () => string[];
     onRequestSidebarToggle: (nextOpen: boolean, source: 'toolbar' | 'backdrop' | 'escape') => void;
     getLeafPosition: () => LeafPosition;
+    getCustomName: () => string | undefined;
+    onRename: (newName: string | undefined) => void;
+    getLeaf: () => WorkspaceLeaf;
 }
 
 /**
@@ -108,6 +111,14 @@ export class TimelineToolbar {
 
         // Push filter/toggle controls to the right
         toolbar.createDiv('view-toolbar__spacer');
+
+        // View Settings
+        ViewSettingsMenu.renderButton(toolbar, {
+            app: this.app,
+            leaf: this.callbacks.getLeaf(),
+            getCustomName: () => this.callbacks.getCustomName(),
+            onRename: (newName) => this.callbacks.onRename(newName),
+        });
 
         // Copy URI Button
         this.renderCopyUriButton(toolbar);

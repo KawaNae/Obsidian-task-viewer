@@ -11,7 +11,7 @@ import { TaskIdGenerator } from '../utils/TaskIdGenerator';
 import { DragHandler } from '../interaction/drag/DragHandler';
 import TaskViewerPlugin from '../main';
 import { TaskStyling } from './utils/TaskStyling';
-import { DateNavigator } from './ViewToolbar';
+import { DateNavigator, ViewSettingsMenu } from './ViewToolbar';
 import { FilterMenuComponent } from './filter/FilterMenuComponent';
 import { SortMenuComponent } from './sort/SortMenuComponent';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
@@ -59,6 +59,7 @@ export class CalendarView extends ItemView {
     private pinnedLists: PinnedListDefinition[] = [];
     private navigateWeekDebounceTimer: number | null = null;
     private pendingWeekOffset: number = 0;
+    private customName: string | undefined;
 
     constructor(leaf: WorkspaceLeaf, taskIndex: TaskIndex, plugin: TaskViewerPlugin) {
         super(leaf);
@@ -85,7 +86,7 @@ export class CalendarView extends ItemView {
     }
 
     getDisplayText(): string {
-        return VIEW_META_CALENDAR.displayText;
+        return this.customName || VIEW_META_CALENDAR.displayText;
     }
 
     getIcon(): string {
@@ -151,6 +152,11 @@ export class CalendarView extends ItemView {
         if (Array.isArray(state?.pinnedLists)) {
             this.pinnedLists = state.pinnedLists;
         }
+        if (typeof state?.customName === 'string' && state.customName.trim()) {
+            this.customName = state.customName;
+        } else {
+            this.customName = undefined;
+        }
 
         await super.setState(state, result);
         await this.render();
@@ -170,6 +176,9 @@ export class CalendarView extends ItemView {
         }
         if (this.pinnedLists.length > 0) {
             result.pinnedLists = this.pinnedLists;
+        }
+        if (this.customName) {
+            result.customName = this.customName;
         }
         return result;
     }
@@ -357,6 +366,18 @@ export class CalendarView extends ItemView {
         );
 
         toolbar.createDiv('view-toolbar__spacer');
+
+        // View Settings
+        ViewSettingsMenu.renderButton(toolbar, {
+            app: this.app,
+            leaf: this.leaf,
+            getCustomName: () => this.customName,
+            onRename: (newName) => {
+                this.customName = newName;
+                (this.leaf as any).updateHeader();
+                this.app.workspace.requestSaveLayout();
+            },
+        });
 
         const copyBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(copyBtn, 'link');

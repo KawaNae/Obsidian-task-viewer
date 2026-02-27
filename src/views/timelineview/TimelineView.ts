@@ -103,7 +103,7 @@ export class TimelineView extends ItemView {
     }
 
     getDisplayText() {
-        return VIEW_META_TIMELINE.displayText;
+        return this.viewState.customName || VIEW_META_TIMELINE.displayText;
     }
 
     getIcon() {
@@ -144,6 +144,11 @@ export class TimelineView extends ItemView {
             if (Array.isArray(state.pinnedLists)) {
                 this.viewState.pinnedLists = state.pinnedLists;
             }
+            if (typeof state.customName === 'string' && state.customName.trim()) {
+                this.viewState.customName = state.customName;
+            } else {
+                this.viewState.customName = undefined;
+            }
             // Note: startDate is not restored - always use "Today" logic on reload
         }
         await super.setState(state, result);
@@ -169,6 +174,9 @@ export class TimelineView extends ItemView {
             state.filterState = this.viewState.filterState;
         } else if (this.viewState.filterFiles) {
             state.filterFiles = this.viewState.filterFiles;
+        }
+        if (this.viewState.customName) {
+            state.customName = this.viewState.customName;
         }
         return state;
     }
@@ -209,6 +217,13 @@ export class TimelineView extends ItemView {
                     this.viewState.showSidebar = nextOpen;
                 },
                 getLeafPosition: () => ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace),
+                getCustomName: () => this.viewState.customName,
+                onRename: (newName) => {
+                    this.viewState.customName = newName;
+                    (this.leaf as any).updateHeader();
+                    this.app.workspace.requestSaveLayout();
+                },
+                getLeaf: () => this.leaf,
             }
         );
 
@@ -533,6 +548,13 @@ export class TimelineView extends ItemView {
                     this.viewState.showSidebar = nextOpen;
                 },
                 getLeafPosition: () => ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace),
+                getCustomName: () => this.viewState.customName,
+                onRename: (newName) => {
+                    this.viewState.customName = newName;
+                    (this.leaf as any).updateHeader();
+                    this.app.workspace.requestSaveLayout();
+                },
+                getLeaf: () => this.leaf,
             }
         );
         this.toolbar.render();

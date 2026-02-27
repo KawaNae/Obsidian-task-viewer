@@ -109,6 +109,7 @@ export interface ViewState {
     zoomLevel?: number;
     pinnedListCollapsed?: Record<string, boolean>;
     pinnedLists?: PinnedListDefinition[];
+    customName?: string;
 }
 
 export interface PinnedListDefinition {

@@ -408,6 +408,76 @@ menu.addItem(item => item.setTitle('Delete task'));
 
 ---
 
+## URI Scheme
+
+### Protocol
+
+`obsidian://task-viewer`
+
+All parameters are flat query params. No nested encoding (the former `state=<base64 blob>` and shorthand `tag=`/`status=`/`file=` params have been removed).
+
+### Parameters
+
+| Parameter | Format | Description | Example |
+|-----------|--------|-------------|---------|
+| `view` | string | **Required.** View short name | `timeline` / `calendar` / `schedule` / `mini-calendar` |
+| `position` | string | Leaf placement | `left` / `right` / `tab` / `window` |
+| `days` | integer | Display days (validated: 1, 3, 7) | `3` |
+| `zoom` | float | Zoom level (validated: 0.25–10.0) | `1.5` |
+| `date` | YYYY-MM-DD | Start date | `2026-02-28` |
+| `showSidebar` | boolean | Sidebar visibility | `true` / `false` |
+| `filter` | base64 | FilterState JSON (`{ version: 4, root: {...} }`) | `eyJ2ZXJzaW9uIjo0LC...` |
+| `pinnedLists` | base64 | `PinnedListDefinition[]` JSON | `W3siaWQiOiJwbC0xIi...` |
+
+### Example URIs
+
+```
+# Minimal
+obsidian://task-viewer?view=timeline
+
+# With view params
+obsidian://task-viewer?view=timeline&position=right&days=3&zoom=1.5&date=2026-02-28&showSidebar=true
+
+# With filter and pinned lists
+obsidian://task-viewer?view=calendar&position=tab&showSidebar=true&filter=<base64>&pinnedLists=<base64>
+```
+
+### Position values
+
+| Value | Behavior | API used |
+|-------|----------|----------|
+| `left` | Left sidebar | `workspace.getLeftLeaf(false)` |
+| `right` | Right sidebar | `workspace.getRightLeaf(false)` |
+| `tab` | New tab in main area | `workspace.getLeaf('tab')` |
+| `window` | Popout window (desktop) | `workspace.getLeaf('window')` |
+| *(omitted)* | Default: right sidebar if new, new tab if exists | — |
+
+### Implementation
+
+| Component | File | Role |
+|-----------|------|------|
+| **URI builder** | `src/utils/ViewUriBuilder.ts` | `build()` — generates URI from `ViewUriOptions` |
+| **Position detection** | `src/utils/ViewUriBuilder.ts` | `detectLeafPosition()` — auto-detects leaf placement via parent chain |
+| **URI handler** | `src/main.ts` | `registerObsidianProtocolHandler('task-viewer', ...)` — parses params |
+| **View activation** | `src/main.ts` | `activateView()` — creates leaf at specified position and sets view state |
+| **Filter serialization** | `src/services/filter/FilterSerializer.ts` | `toURIParam()` / `fromURIParam()` — base64 encode/decode |
+
+### Copy URI behavior
+
+Each view's toolbar has a link icon button that calls `ViewUriBuilder.build()` with the current view state, including auto-detected `position`. The URI is copied to the clipboard.
+
+- **TimelineView**: passes `filterState`, `days`, `zoom`, `pinnedLists`, `showSidebar`, `position`
+- **CalendarView**: passes `filterState`, `pinnedLists`, `showSidebar`, `position`
+- **ScheduleView**: passes `filterState`, `position`
+
+### Error handling
+
+- Invalid `position` value → ignored, falls back to default behavior
+- Invalid `filter` or `pinnedLists` base64 → silently ignored (empty filter / no pinned lists)
+- Invalid `days`, `zoom`, `date` → ignored (view uses its defaults)
+
+---
+
 ## Sync Detection
 
 ### Mechanism

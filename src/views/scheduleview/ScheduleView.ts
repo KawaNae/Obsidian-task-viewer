@@ -10,7 +10,7 @@ import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { ViewUriBuilder } from '../../utils/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
 
-import { DateNavigator } from '../ViewToolbar';
+import { DateNavigator, ViewSettingsMenu } from '../ViewToolbar';
 import { FilterMenuComponent } from '../filter/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
@@ -52,6 +52,7 @@ export class ScheduleView extends ItemView {
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private currentDate = '';
+    private customName: string | undefined;
     private collapsedSections: Record<CollapsibleSectionKey, boolean> = {
         allDay: false,
         deadlines: false,
@@ -104,7 +105,7 @@ export class ScheduleView extends ItemView {
     }
 
     getDisplayText(): string {
-        return VIEW_META_SCHEDULE.displayText;
+        return this.customName || VIEW_META_SCHEDULE.displayText;
     }
 
     getIcon(): string {
@@ -142,6 +143,12 @@ export class ScheduleView extends ItemView {
             this.filterMenu.setFilterState(createEmptyFilterState());
         }
 
+        if (typeof state?.customName === 'string' && state.customName.trim()) {
+            this.customName = state.customName;
+        } else {
+            this.customName = undefined;
+        }
+
         await super.setState(state, result);
         if (this.container) {
             await this.render();
@@ -155,6 +162,9 @@ export class ScheduleView extends ItemView {
         };
         if (hasConditions(filterState)) {
             result.filterState = FilterSerializer.toJSON(filterState);
+        }
+        if (this.customName) {
+            result.customName = this.customName;
         }
         return result;
     }
@@ -242,6 +252,18 @@ export class ScheduleView extends ItemView {
         );
 
         toolbar.createDiv('view-toolbar__spacer');
+
+        // View Settings
+        ViewSettingsMenu.renderButton(toolbar, {
+            app: this.app,
+            leaf: this.leaf,
+            getCustomName: () => this.customName,
+            onRename: (newName) => {
+                this.customName = newName;
+                (this.leaf as any).updateHeader();
+                this.app.workspace.requestSaveLayout();
+            },
+        });
 
         const copyBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(copyBtn, 'link');
