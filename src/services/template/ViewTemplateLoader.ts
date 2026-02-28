@@ -2,25 +2,16 @@
  * ViewTemplateLoader
  *
  * Loads view templates from a user-configured vault folder.
- * Each template is a .md file with tv-view defined in YAML frontmatter.
+ * Each template is a .md file with tv-view/tv-name in YAML frontmatter
+ * and view data in a ```json code block.
  *
- * Template format:
- * ---
- * tv-view: timeline
- * tv-name: Work Dashboard
- * tv-days: 3
- * tv-zoom: 1.0
- * tv-showSidebar: true
- * tv-filter: { version: 4, root: { ... } }
- * tv-pinnedLists:
- *   - id: pl-1
- *     name: Urgent
- *     filterState: { root: { ... } }
- * ---
+ * Two-phase loading:
+ * - loadTemplates() / findByBasename(): sync, returns summaries (frontmatter only)
+ * - loadFullTemplate(): async, reads JSON code block via cachedRead
  */
 
 import { App, TFile, TFolder } from 'obsidian';
-import type { ViewTemplate, PinnedListDefinition } from '../../types';
+import type { ViewTemplateSummary, ViewTemplate, PinnedListDefinition } from '../../types';
 import { FilterSerializer } from '../filter/FilterSerializer';
 import type { FilterState } from '../filter/FilterTypes';
 import type { SortState } from '../sort/SortTypes';
@@ -31,30 +22,30 @@ export class ViewTemplateLoader {
     constructor(private app: App) {}
 
     /**
-     * Load all view templates from the configured folder.
-     * Synchronous via metadataCache — no async needed.
+     * Load all template summaries from the configured folder.
+     * Synchronous via metadataCache (frontmatter only).
      */
-    loadTemplates(folderPath: string): ViewTemplate[] {
+    loadTemplates(folderPath: string): ViewTemplateSummary[] {
         if (!folderPath) return [];
 
         const folder = this.app.vault.getAbstractFileByPath(folderPath);
         if (!(folder instanceof TFolder)) return [];
 
-        const templates: ViewTemplate[] = [];
+        const summaries: ViewTemplateSummary[] = [];
         for (const child of folder.children) {
             if (!(child instanceof TFile) || child.extension !== 'md') continue;
-            const template = this.loadTemplate(child);
-            if (template) templates.push(template);
+            const summary = this.loadSummary(child);
+            if (summary) summaries.push(summary);
         }
 
-        templates.sort((a, b) => a.name.localeCompare(b.name));
-        return templates;
+        summaries.sort((a, b) => a.name.localeCompare(b.name));
+        return summaries;
     }
 
     /**
-     * Find a template by file basename (used by URI handler).
+     * Find a template summary by file basename (used by URI handler).
      */
-    findByBasename(folderPath: string, basename: string): ViewTemplate | null {
+    findByBasename(folderPath: string, basename: string): ViewTemplateSummary | null {
         if (!folderPath) return null;
 
         const folder = this.app.vault.getAbstractFileByPath(folderPath);
@@ -63,13 +54,35 @@ export class ViewTemplateLoader {
         for (const child of folder.children) {
             if (!(child instanceof TFile) || child.extension !== 'md') continue;
             if (child.basename === basename) {
-                return this.loadTemplate(child);
+                return this.loadSummary(child);
             }
         }
         return null;
     }
 
-    private loadTemplate(file: TFile): ViewTemplate | null {
+    /**
+     * Load full template data including JSON code block.
+     * Async — reads file body via cachedRead.
+     */
+    async loadFullTemplate(filePath: string): Promise<ViewTemplate | null> {
+        const file = this.app.vault.getAbstractFileByPath(filePath);
+        if (!(file instanceof TFile)) return null;
+
+        const summary = this.loadSummary(file);
+        if (!summary) return null;
+
+        const template: ViewTemplate = { ...summary };
+
+        const content = await this.app.vault.cachedRead(file);
+        const jsonData = this.extractJsonBlock(content);
+        if (jsonData) {
+            this.applyJsonData(template, jsonData);
+        }
+
+        return template;
+    }
+
+    private loadSummary(file: TFile): ViewTemplateSummary | null {
         const cache = this.app.metadataCache.getFileCache(file);
         const fm = cache?.frontmatter;
         if (!fm) return null;
@@ -81,23 +94,32 @@ export class ViewTemplateLoader {
             ? fm['tv-name']
             : file.basename;
 
-        const template: ViewTemplate = { filePath: file.path, name, viewType };
+        return { filePath: file.path, name, viewType };
+    }
 
-        if (typeof fm['tv-days'] === 'number') template.days = fm['tv-days'];
-        if (typeof fm['tv-zoom'] === 'number') template.zoom = fm['tv-zoom'];
-        if (typeof fm['tv-showSidebar'] === 'boolean') template.showSidebar = fm['tv-showSidebar'];
+    private extractJsonBlock(content: string): Record<string, unknown> | null {
+        const match = content.match(/```json\s*\n([\s\S]*?)\n```/);
+        if (!match) return null;
+        try {
+            const parsed = JSON.parse(match[1]);
+            return (parsed && typeof parsed === 'object') ? parsed : null;
+        } catch {
+            return null;
+        }
+    }
 
-        // Filter: parse through FilterSerializer for version migration
-        if (fm['tv-filter'] && typeof fm['tv-filter'] === 'object') {
-            template.filterState = FilterSerializer.fromJSON(fm['tv-filter']);
+    private applyJsonData(template: ViewTemplate, data: Record<string, unknown>): void {
+        if (typeof data.days === 'number') template.days = data.days;
+        if (typeof data.zoom === 'number') template.zoom = data.zoom;
+        if (typeof data.showSidebar === 'boolean') template.showSidebar = data.showSidebar;
+
+        if (data.filter && typeof data.filter === 'object') {
+            template.filterState = FilterSerializer.fromJSON(data.filter);
         }
 
-        // PinnedLists
-        if (Array.isArray(fm['tv-pinnedLists'])) {
-            template.pinnedLists = this.parsePinnedLists(fm['tv-pinnedLists']);
+        if (Array.isArray(data.pinnedLists)) {
+            template.pinnedLists = this.parsePinnedLists(data.pinnedLists);
         }
-
-        return template;
     }
 
     private parsePinnedLists(raw: unknown[]): PinnedListDefinition[] {

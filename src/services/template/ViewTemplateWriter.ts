@@ -1,8 +1,8 @@
 /**
  * ViewTemplateWriter
  *
- * Saves view templates as markdown files with YAML frontmatter.
- * Creates or overwrites files in the configured view template folder.
+ * Saves view templates as markdown files.
+ * Format: YAML frontmatter (tv-view, tv-name) + JSON code block (data).
  */
 
 import { App, TFile, TFolder, normalizePath } from 'obsidian';
@@ -34,26 +34,31 @@ export class ViewTemplateWriter {
     }
 
     private buildFileContent(template: ViewTemplate): string {
+        // Frontmatter: metadata only
         const lines: string[] = ['---'];
-
         lines.push(`tv-view: ${template.viewType}`);
         lines.push(`tv-name: "${this.escapeYamlString(template.name)}"`);
-
-        if (template.days != null) lines.push(`tv-days: ${template.days}`);
-        if (template.zoom != null) lines.push(`tv-zoom: ${template.zoom}`);
-        if (template.showSidebar != null) lines.push(`tv-showSidebar: ${template.showSidebar}`);
-
-        if (template.filterState && hasConditions(template.filterState)) {
-            const filterJson = FilterSerializer.toJSON(template.filterState);
-            lines.push(`tv-filter: ${JSON.stringify(filterJson)}`);
-        }
-
-        if (template.pinnedLists && template.pinnedLists.length > 0) {
-            lines.push(`tv-pinnedLists: ${JSON.stringify(template.pinnedLists)}`);
-        }
-
         lines.push('---');
         lines.push('');
+
+        // JSON code block: all data fields
+        const data: Record<string, unknown> = {};
+        if (template.days != null) data.days = template.days;
+        if (template.zoom != null) data.zoom = template.zoom;
+        if (template.showSidebar != null) data.showSidebar = template.showSidebar;
+        if (template.filterState && hasConditions(template.filterState)) {
+            data.filter = FilterSerializer.toJSON(template.filterState);
+        }
+        if (template.pinnedLists && template.pinnedLists.length > 0) {
+            data.pinnedLists = template.pinnedLists;
+        }
+
+        if (Object.keys(data).length > 0) {
+            lines.push('```json');
+            lines.push(JSON.stringify(data, null, 2));
+            lines.push('```');
+            lines.push('');
+        }
 
         return lines.join('\n');
     }

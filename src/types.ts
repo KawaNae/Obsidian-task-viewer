@@ -119,10 +119,13 @@ export interface PinnedListDefinition {
     sortState?: SortState;
 }
 
-export interface ViewTemplate {
+export interface ViewTemplateSummary {
     filePath: string;
     name: string;
     viewType: string;
+}
+
+export interface ViewTemplate extends ViewTemplateSummary {
     days?: number;
     zoom?: number;
     showSidebar?: boolean;

@@ -243,18 +243,22 @@ export class ViewSettingsMenu {
                     sub.setTitle('No folder configured').setDisabled(true));
             } else {
                 const loader = new ViewTemplateLoader(app);
-                const templates = loader.loadTemplates(folder)
+                const summaries = loader.loadTemplates(folder)
                     .filter(t => t.viewType === shortViewType);
 
                 const submenu = (item as any).setSubmenu();
-                if (templates.length === 0) {
+                if (summaries.length === 0) {
                     submenu.addItem((sub: any) =>
                         sub.setTitle('No templates found').setDisabled(true));
                 } else {
-                    for (const tmpl of templates) {
+                    for (const summary of summaries) {
                         submenu.addItem((sub: any) => {
-                            sub.setTitle(tmpl.name)
-                                .onClick(() => onApplyTemplate(tmpl));
+                            sub.setTitle(summary.name)
+                                .onClick(async () => {
+                                    const full = await loader.loadFullTemplate(summary.filePath);
+                                    if (full) onApplyTemplate(full);
+                                    else new Notice('Failed to load template.');
+                                });
                         });
                     }
                 }

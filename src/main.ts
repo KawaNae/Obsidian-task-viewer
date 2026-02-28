@@ -259,6 +259,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Register URI handler: obsidian://task-viewer?view=timeline&days=3&filter=<base64>&pinnedLists=<base64>
         this.registerObsidianProtocolHandler('task-viewer', (params) => {
+            void (async () => {
             const viewMap: Record<string, string> = {
                 timeline: VIEW_TYPE_TIMELINE,
                 calendar: VIEW_TYPE_CALENDAR,
@@ -282,17 +283,20 @@ export default class TaskViewerPlugin extends Plugin {
             // Template resolution (provides base values; inline params override below)
             if (params.template) {
                 const loader = new ViewTemplateLoader(this.app);
-                const template = loader.findByBasename(
+                const summary = loader.findByBasename(
                     this.settings.viewTemplateFolder,
                     params.template,
                 );
-                if (template) {
-                    if (template.filterState) uriParams.filterState = template.filterState;
-                    if (template.pinnedLists) uriParams.pinnedLists = template.pinnedLists;
-                    if (template.days != null) uriParams.days = template.days;
-                    if (template.zoom != null) uriParams.zoom = template.zoom;
-                    if (template.showSidebar != null) uriParams.showSidebar = template.showSidebar;
-                    if (template.name) uriParams.name = template.name;
+                if (summary) {
+                    const template = await loader.loadFullTemplate(summary.filePath);
+                    if (template) {
+                        if (template.filterState) uriParams.filterState = template.filterState;
+                        if (template.pinnedLists) uriParams.pinnedLists = template.pinnedLists;
+                        if (template.days != null) uriParams.days = template.days;
+                        if (template.zoom != null) uriParams.zoom = template.zoom;
+                        if (template.showSidebar != null) uriParams.showSidebar = template.showSidebar;
+                        if (template.name) uriParams.name = template.name;
+                    }
                 } else {
                     new Notice(`View template "${params.template}" not found.`);
                 }
@@ -335,6 +339,7 @@ export default class TaskViewerPlugin extends Plugin {
             }
 
             this.activateView(viewType, uriParams);
+            })();
         });
     }
 
