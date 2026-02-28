@@ -3,7 +3,7 @@ import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
 import { CalendarView, VIEW_TYPE_CALENDAR, MiniCalendarView, VIEW_TYPE_MINI_CALENDAR } from './views/calendar';
-import { PomodoroView, VIEW_TYPE_POMODORO } from './views/PomodoroView';
+import { TimerView, VIEW_TYPE_TIMER } from './views/TimerView';
 import { TimerWidget } from './timer/TimerWidget';
 import {
     TaskViewerSettings,
@@ -81,8 +81,8 @@ export default class TaskViewerPlugin extends Plugin {
         );
 
         this.registerView(
-            VIEW_TYPE_POMODORO,
-            (leaf) => new PomodoroView(leaf, this)
+            VIEW_TYPE_TIMER,
+            (leaf) => new TimerView(leaf, this)
         );
 
         this.registerView(
@@ -97,7 +97,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         const timelineViewMeta = getViewMeta(VIEW_TYPE_TIMELINE);
         const scheduleViewMeta = getViewMeta(VIEW_TYPE_SCHEDULE);
-        const pomodoroViewMeta = getViewMeta(VIEW_TYPE_POMODORO);
+        const timerViewMeta = getViewMeta(VIEW_TYPE_TIMER);
         const calendarViewMeta = getViewMeta(VIEW_TYPE_CALENDAR);
         const miniCalendarViewMeta = getViewMeta(VIEW_TYPE_MINI_CALENDAR);
 
@@ -110,8 +110,8 @@ export default class TaskViewerPlugin extends Plugin {
             this.activateView(VIEW_TYPE_SCHEDULE);
         });
 
-        this.addRibbonIcon(pomodoroViewMeta.icon, pomodoroViewMeta.ribbonTitle, () => {
-            this.activateView(VIEW_TYPE_POMODORO);
+        this.addRibbonIcon(timerViewMeta.icon, timerViewMeta.ribbonTitle, () => {
+            this.activateView(VIEW_TYPE_TIMER);
         });
 
         this.addRibbonIcon(calendarViewMeta.icon, calendarViewMeta.ribbonTitle, () => {
@@ -140,10 +140,10 @@ export default class TaskViewerPlugin extends Plugin {
         });
 
         this.addCommand({
-            id: 'open-pomodoro-view',
-            name: pomodoroViewMeta.commandName,
+            id: 'open-timer-view',
+            name: timerViewMeta.commandName,
             callback: () => {
-                this.activateView(VIEW_TYPE_POMODORO);
+                this.activateView(VIEW_TYPE_TIMER);
             }
         });
 

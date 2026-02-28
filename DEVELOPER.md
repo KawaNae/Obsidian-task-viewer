@@ -105,7 +105,7 @@ src/
 │   ├── utils/                 # View-only utilities (RenderableTaskUtils, etc.)
 │   ├── CalendarView.ts        # Calendar view
 │   ├── MiniCalendarView.ts    # Mini calendar view
-│   └── PomodoroView.ts        # Timer view (Pomodoro / Countdown / Countup modes)
+│   └── TimerView.ts           # Timer view (Pomodoro / Countdown / Countup modes)
 ├── widgets/                   # Floating timer widget
 ├── interaction/
 │   ├── drag/                  # Drag & drop (DragHandler, MoveStrategy, etc.)
@@ -142,7 +142,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **DragHandler** | `interaction/drag/DragHandler.ts` | Dispatches pointer events to Move/Resize strategies |
 | **MenuHandler** | `interaction/menu/MenuHandler.ts` | Context menu facade coordinating multiple Builder classes |
 | **TimerWidget** | `widgets/TimerWidget.ts` | Floating timer UI; manages and persists all timer instances |
-| **PomodoroView** | `views/PomodoroView.ts` | Standalone timer view (Pomodoro / Countdown / Countup) |
+| **TimerView** | `views/TimerView.ts` | Standalone timer view (Pomodoro / Countdown / Countup) |
 | **TaskCardRenderer** | `views/taskcard/TaskCardRenderer.ts` | Task card rendering orchestrator (see section above) |
 | **CreateTaskModal** | `modals/CreateTaskModal.ts` | Task creation modal UI |
 | **AudioUtils** | `utils/AudioUtils.ts` | Web Audio API notifications with serialized context management |

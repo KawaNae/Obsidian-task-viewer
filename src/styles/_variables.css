@@ -127,8 +127,8 @@ body {
 
     --tv-bg-widget: var(--tv-bg-primary);
     --tv-bg-widget-header: var(--tv-bg-primary);
-    --tv-bg-pomodoro-start: var(--tv-bg-primary);
-    --tv-bg-pomodoro-end: var(--tv-bg-secondary);
+    --tv-bg-timer-start: var(--tv-bg-primary);
+    --tv-bg-timer-end: var(--tv-bg-secondary);
 
     --tv-bg-schedule-main: var(--tv-bg-primary);
 
