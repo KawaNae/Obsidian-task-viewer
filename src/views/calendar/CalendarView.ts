@@ -401,6 +401,31 @@ export class CalendarView extends ItemView {
                 showSidebar: this.sidebarManager.isOpen,
             }),
             viewType: VIEW_META_CALENDAR.type,
+            getViewTemplateFolder: () => this.plugin.settings.viewTemplateFolder,
+            getViewTemplate: () => ({
+                filePath: '',
+                name: this.customName || VIEW_META_CALENDAR.displayText,
+                viewType: 'calendar',
+                showSidebar: this.sidebarManager.isOpen,
+                filterState: this.filterMenu.getFilterState(),
+                pinnedLists: this.pinnedLists,
+            }),
+            onApplyTemplate: (template) => {
+                if (template.filterState) {
+                    this.filterMenu.setFilterState(template.filterState);
+                }
+                if (template.pinnedLists) this.pinnedLists = template.pinnedLists;
+                if (template.showSidebar != null) {
+                    this.showSidebar = template.showSidebar;
+                    this.sidebarManager.setOpen(template.showSidebar, 'toolbar', { persist: true });
+                }
+                if (template.name) {
+                    this.customName = template.name;
+                    (this.leaf as any).updateHeader();
+                }
+                this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
         });
 
         const toggleBtn = toolbar.createEl('button', {

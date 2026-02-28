@@ -16,6 +16,7 @@ export interface ViewUriOptions {
     showSidebar?: boolean;
     position?: LeafPosition;
     name?: string;
+    template?: string;
 }
 
 /**
@@ -51,14 +52,19 @@ export class ViewUriBuilder {
         if (opts.date != null) uri += `&date=${encodeURIComponent(opts.date)}`;
         if (opts.showSidebar != null) uri += `&showSidebar=${opts.showSidebar}`;
 
-        // Filter (base64)
-        if (opts.filterState && hasConditions(opts.filterState)) {
-            uri += `&filter=${FilterSerializer.toURIParam(opts.filterState)}`;
-        }
+        // Template reference (compact) or inline base64 (fallback)
+        if (opts.template) {
+            uri += `&template=${encodeURIComponent(opts.template)}`;
+        } else {
+            // Filter (base64)
+            if (opts.filterState && hasConditions(opts.filterState)) {
+                uri += `&filter=${FilterSerializer.toURIParam(opts.filterState)}`;
+            }
 
-        // PinnedLists (base64)
-        if (opts.pinnedLists && opts.pinnedLists.length > 0) {
-            uri += `&pinnedLists=${unicodeBtoa(JSON.stringify(opts.pinnedLists))}`;
+            // PinnedLists (base64)
+            if (opts.pinnedLists && opts.pinnedLists.length > 0) {
+                uri += `&pinnedLists=${unicodeBtoa(JSON.stringify(opts.pinnedLists))}`;
+            }
         }
 
         return uri;

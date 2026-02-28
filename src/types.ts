@@ -119,6 +119,17 @@ export interface PinnedListDefinition {
     sortState?: SortState;
 }
 
+export interface ViewTemplate {
+    filePath: string;
+    name: string;
+    viewType: string;
+    days?: number;
+    zoom?: number;
+    showSidebar?: boolean;
+    filterState?: FilterState;
+    pinnedLists?: PinnedListDefinition[];
+}
+
 export interface FrontmatterTaskKeys {
     start: string;
     end: string;
@@ -234,6 +245,7 @@ export interface TaskViewerSettings {
     yearlyNoteFormat: string;
     yearlyNoteFolder: string;
     intervalTemplateFolder: string;
+    viewTemplateFolder: string;
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -265,4 +277,5 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     yearlyNoteFormat: 'YYYY',
     yearlyNoteFolder: '',
     intervalTemplateFolder: '',
+    viewTemplateFolder: '',
 };

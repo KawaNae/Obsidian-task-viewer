@@ -26,6 +26,7 @@ import type { FilterState } from './services/filter/FilterTypes';
 import { hasConditions } from './services/filter/FilterTypes';
 import { FilterSerializer } from './services/filter/FilterSerializer';
 import { unicodeAtob } from './utils/base64';
+import { ViewTemplateLoader } from './services/template/ViewTemplateLoader';
 import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
 import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
 import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
@@ -267,21 +268,6 @@ export default class TaskViewerPlugin extends Plugin {
             const viewType = viewMap[params.view];
             if (!viewType) return;
 
-            // Filter (base64)
-            let filterState: FilterState | undefined;
-            if (params.filter) {
-                filterState = FilterSerializer.fromURIParam(params.filter);
-            }
-
-            // PinnedLists (base64)
-            let pinnedLists: PinnedListDefinition[] | undefined;
-            if (params.pinnedLists) {
-                try {
-                    const parsed = JSON.parse(unicodeAtob(params.pinnedLists));
-                    if (Array.isArray(parsed)) pinnedLists = parsed;
-                } catch { /* ignore */ }
-            }
-
             const uriParams: {
                 filterState?: FilterState;
                 days?: number;
@@ -291,9 +277,41 @@ export default class TaskViewerPlugin extends Plugin {
                 showSidebar?: boolean;
                 position?: 'left' | 'right' | 'tab' | 'window';
                 name?: string;
-            } = { filterState, pinnedLists };
+            } = {};
 
-            // View display params
+            // Template resolution (provides base values; inline params override below)
+            if (params.template) {
+                const loader = new ViewTemplateLoader(this.app);
+                const template = loader.findByBasename(
+                    this.settings.viewTemplateFolder,
+                    params.template,
+                );
+                if (template) {
+                    if (template.filterState) uriParams.filterState = template.filterState;
+                    if (template.pinnedLists) uriParams.pinnedLists = template.pinnedLists;
+                    if (template.days != null) uriParams.days = template.days;
+                    if (template.zoom != null) uriParams.zoom = template.zoom;
+                    if (template.showSidebar != null) uriParams.showSidebar = template.showSidebar;
+                    if (template.name) uriParams.name = template.name;
+                } else {
+                    new Notice(`View template "${params.template}" not found.`);
+                }
+            }
+
+            // Filter (base64) — overrides template value
+            if (params.filter) {
+                uriParams.filterState = FilterSerializer.fromURIParam(params.filter);
+            }
+
+            // PinnedLists (base64) — overrides template value
+            if (params.pinnedLists) {
+                try {
+                    const parsed = JSON.parse(unicodeAtob(params.pinnedLists));
+                    if (Array.isArray(parsed)) uriParams.pinnedLists = parsed;
+                } catch { /* ignore */ }
+            }
+
+            // View display params — override template values
             if (params.days) {
                 const days = parseInt(params.days, 10);
                 if ([1, 3, 7].includes(days)) uriParams.days = days;

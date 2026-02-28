@@ -407,6 +407,19 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     this.plugin.settings.intervalTemplateFolder = value.trim();
                     await this.plugin.saveSettings();
                 }));
+
+        el.createEl('h3', { text: 'View Templates', cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName('View Template Folder')
+            .setDesc('Vault folder for view template files (.md with tv-view in frontmatter). Used for cross-device sync of view configurations.')
+            .addText(text => text
+                .setPlaceholder('Templates/Views')
+                .setValue(this.plugin.settings.viewTemplateFolder)
+                .onChange(async (value) => {
+                    this.plugin.settings.viewTemplateFolder = value.trim();
+                    await this.plugin.saveSettings();
+                }));
     }
 
     // ─── Frontmatter Tab ─────────────────────────────────────

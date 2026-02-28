@@ -2,6 +2,9 @@ import { setIcon, Menu, Notice } from 'obsidian';
 import type { App, WorkspaceLeaf } from 'obsidian';
 import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../utils/ViewUriBuilder';
 import { InputModal } from '../modals/InputModal';
+import type { ViewTemplate } from '../types';
+import { ViewTemplateLoader } from '../services/template/ViewTemplateLoader';
+import { ViewTemplateWriter } from '../services/template/ViewTemplateWriter';
 
 /**
  * Date navigation component with prev/next/today buttons.
@@ -172,11 +175,14 @@ export interface ViewSettingsOptions {
     onRename: (newName: string | undefined) => void;
     buildUri: () => ViewUriOptions;
     viewType: string;
+    getViewTemplateFolder: () => string;
+    getViewTemplate: () => ViewTemplate;
+    onApplyTemplate: (template: ViewTemplate) => void;
 }
 
 /**
  * View settings gear button and menu.
- * Provides: Rename, Position display (read-only).
+ * Provides: Rename, Save/Load view, Copy URI, Position display.
  */
 export class ViewSettingsMenu {
     static renderButton(toolbar: HTMLElement, options: ViewSettingsOptions): HTMLElement {
@@ -189,7 +195,10 @@ export class ViewSettingsMenu {
 
     static showMenu(e: MouseEvent, options: ViewSettingsOptions): void {
         const menu = new Menu();
-        const { app, leaf, getCustomName, getDefaultName, onRename, buildUri, viewType } = options;
+        const {
+            app, leaf, getCustomName, getDefaultName, onRename,
+            buildUri, viewType, getViewTemplateFolder, getViewTemplate, onApplyTemplate,
+        } = options;
 
         // Rename
         menu.addItem((item) => {
@@ -208,6 +217,67 @@ export class ViewSettingsMenu {
 
         menu.addSeparator();
 
+        // Save view...
+        const folder = getViewTemplateFolder();
+        menu.addItem((item) => {
+            item.setTitle('Save view...')
+                .setIcon('save')
+                .onClick(() => {
+                    if (!folder) {
+                        new Notice('Set "View Template Folder" in Task Viewer settings first.');
+                        return;
+                    }
+                    const defaultName = getCustomName() || getDefaultName();
+                    new InputModal(
+                        app,
+                        'Save View',
+                        'Template name',
+                        defaultName,
+                        async (value) => {
+                            const name = value.trim();
+                            if (!name) return;
+                            const template = getViewTemplate();
+                            template.name = name;
+                            const writer = new ViewTemplateWriter(app);
+                            await writer.saveTemplate(folder, template);
+                            new Notice(`View saved as "${name}".`);
+                        },
+                    ).open();
+                });
+        });
+
+        // Load view... (submenu)
+        menu.addItem((item) => {
+            item.setTitle('Load view...')
+                .setIcon('folder-open');
+
+            const shortViewType = ViewSettingsMenu.toShortViewType(viewType);
+
+            if (!folder) {
+                (item as any).setSubmenu().addItem((sub: any) =>
+                    sub.setTitle('No folder configured').setDisabled(true));
+            } else {
+                const loader = new ViewTemplateLoader(app);
+                const templates = loader.loadTemplates(folder)
+                    .filter(t => t.viewType === shortViewType);
+
+                const submenu = (item as any).setSubmenu();
+                if (templates.length === 0) {
+                    submenu.addItem((sub: any) =>
+                        sub.setTitle('No templates found').setDisabled(true));
+                } else {
+                    for (const tmpl of templates) {
+                        submenu.addItem((sub: any) => {
+                            sub.setTitle(tmpl.name)
+                                .onClick(() => onApplyTemplate(tmpl));
+                        });
+                    }
+                }
+            }
+        });
+
+        menu.addSeparator();
+
         // Copy URI
         menu.addItem((item) => {
             item.setTitle('Copy URI')
@@ -216,6 +286,12 @@ export class ViewSettingsMenu {
                     const uriOpts = buildUri();
                     uriOpts.position = ViewUriBuilder.detectLeafPosition(leaf, app.workspace);
                     uriOpts.name = getCustomName();
+
+                    // Use template reference if folder is configured
+                    if (folder) {
+                        uriOpts.template = getCustomName() || getDefaultName();
+                    }
+
                     const uri = ViewUriBuilder.build(viewType, uriOpts);
                     await navigator.clipboard.writeText(uri);
                     new Notice('URI copied to clipboard');
@@ -230,6 +306,11 @@ export class ViewSettingsMenu {
                     const uriOpts = buildUri();
                     uriOpts.position = ViewUriBuilder.detectLeafPosition(leaf, app.workspace);
                     uriOpts.name = getCustomName();
+
+                    if (folder) {
+                        uriOpts.template = getCustomName() || getDefaultName();
+                    }
+
                     const uri = ViewUriBuilder.build(viewType, uriOpts);
                     const displayName = getCustomName() || getDefaultName();
                     const link = `[${displayName}](${uri})`;
@@ -253,5 +334,9 @@ export class ViewSettingsMenu {
         });
 
         menu.showAtMouseEvent(e);
+    }
+
+    private static toShortViewType(viewType: string): string {
+        return viewType.replace(/-view$/, '');
     }
 }

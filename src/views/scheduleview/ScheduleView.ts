@@ -282,6 +282,24 @@ export class ScheduleView extends ItemView {
                 filterState: this.filterMenu.getFilterState(),
             }),
             viewType: VIEW_META_SCHEDULE.type,
+            getViewTemplateFolder: () => this.plugin.settings.viewTemplateFolder,
+            getViewTemplate: () => ({
+                filePath: '',
+                name: this.customName || VIEW_META_SCHEDULE.displayText,
+                viewType: 'schedule',
+                filterState: this.filterMenu.getFilterState(),
+            }),
+            onApplyTemplate: (template) => {
+                if (template.filterState) {
+                    this.filterMenu.setFilterState(template.filterState);
+                }
+                if (template.name) {
+                    this.customName = template.name;
+                    (this.leaf as any).updateHeader();
+                }
+                this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
         });
     }
 

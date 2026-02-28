@@ -130,6 +130,30 @@ export class TimelineToolbar {
                 showSidebar: this.viewState.showSidebar,
             }),
             viewType: VIEW_META_TIMELINE.type,
+            getViewTemplateFolder: () => this.plugin.settings.viewTemplateFolder,
+            getViewTemplate: () => ({
+                filePath: '',
+                name: this.callbacks.getCustomName() || VIEW_META_TIMELINE.displayText,
+                viewType: 'timeline',
+                days: this.viewState.daysToShow,
+                zoom: this.viewState.zoomLevel,
+                showSidebar: this.viewState.showSidebar,
+                filterState: this.filterMenu.getFilterState(),
+                pinnedLists: this.viewState.pinnedLists,
+            }),
+            onApplyTemplate: (template) => {
+                if (template.days != null) this.viewState.daysToShow = template.days;
+                if (template.zoom != null) this.viewState.zoomLevel = template.zoom;
+                if (template.showSidebar != null) this.viewState.showSidebar = template.showSidebar;
+                if (template.filterState) {
+                    this.filterMenu.setFilterState(template.filterState);
+                    this.viewState.filterState = template.filterState;
+                }
+                if (template.pinnedLists) this.viewState.pinnedLists = template.pinnedLists;
+                if (template.name) this.callbacks.onRename(template.name);
+                this.callbacks.onRender();
+                this.app.workspace.requestSaveLayout();
+            },
         });
 
         // Sidebar Toggle
