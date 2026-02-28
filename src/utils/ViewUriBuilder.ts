@@ -17,6 +17,8 @@ export interface ViewUriOptions {
     position?: LeafPosition;
     name?: string;
     template?: string;
+    mode?: string;
+    intervalTemplate?: string;
 }
 
 /**
@@ -31,6 +33,7 @@ export class ViewUriBuilder {
         'schedule-view': 'schedule',
         'calendar-view': 'calendar',
         'mini-calendar-view': 'mini-calendar',
+        'timer-view': 'timer',
     };
 
     static build(viewType: string, options?: ViewUriOptions): string {
@@ -51,6 +54,10 @@ export class ViewUriBuilder {
         if (opts.zoom != null) uri += `&zoom=${opts.zoom}`;
         if (opts.date != null) uri += `&date=${encodeURIComponent(opts.date)}`;
         if (opts.showSidebar != null) uri += `&showSidebar=${opts.showSidebar}`;
+
+        // Timer-specific params
+        if (opts.mode) uri += `&mode=${opts.mode}`;
+        if (opts.intervalTemplate) uri += `&intervalTemplate=${encodeURIComponent(opts.intervalTemplate)}`;
 
         // Template reference (compact) or inline base64 (fallback)
         if (opts.template) {

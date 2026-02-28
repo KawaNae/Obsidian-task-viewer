@@ -6,7 +6,7 @@
  * TimerInstance 型と TimerProgressUI を再利用。
  */
 
-import { ItemView, WorkspaceLeaf, Notice, Menu, setIcon } from 'obsidian';
+import { ItemView, WorkspaceLeaf, Notice, Menu, setIcon, ViewStateResult } from 'obsidian';
 import TaskViewerPlugin from '../main';
 import { InputModal } from '../modals/InputModal';
 import { VIEW_META_TIMER } from '../constants/viewRegistry';
@@ -23,6 +23,8 @@ import { TimerProgressUI } from '../timer/TimerProgressUI';
 import { IntervalTemplateLoader, IntervalTemplate } from '../timer/IntervalTemplateLoader';
 import { AudioUtils } from '../utils/AudioUtils';
 import { TimeFormatter } from '../utils/TimeFormatter';
+import { ViewUriBuilder } from '../utils/ViewUriBuilder';
+import type { ViewUriOptions } from '../utils/ViewUriBuilder';
 
 export const VIEW_TYPE_TIMER = VIEW_META_TIMER.type;
 
@@ -64,6 +66,22 @@ export class TimerView extends ItemView {
         this.container.empty();
         this.container.addClass('timer-view');
         this.render();
+    }
+
+    async setState(state: any, result: ViewStateResult): Promise<void> {
+        await super.setState(state, result);
+
+        const mode = state?.timerViewMode;
+        if (mode && ['countup', 'countdown', 'pomodoro', 'interval'].includes(mode)) {
+            this.timerViewMode = mode as TimerViewMode;
+        }
+
+        if (state?.intervalTemplate && this.timerViewMode === 'interval') {
+            await this.loadTemplates();
+            this.selectedTemplate = this.templates.find(t => t.name === state.intervalTemplate) ?? null;
+        }
+
+        if (this.container) this.render();
     }
 
     async onClose(): Promise<void> {
@@ -488,13 +506,11 @@ export class TimerView extends ItemView {
             };
         }
 
-        // Settings gear (right, countdown/pomodoro only)
-        if (this.timerViewMode === 'countdown' || this.timerViewMode === 'pomodoro') {
-            const settingsBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-            setIcon(settingsBtn, 'settings');
-            settingsBtn.setAttribute('aria-label', 'Settings');
-            settingsBtn.onclick = (e) => this.showSettingsMenu(e);
-        }
+        // Settings gear (all modes)
+        const settingsBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(settingsBtn, 'settings');
+        settingsBtn.setAttribute('aria-label', 'Settings');
+        settingsBtn.onclick = (e) => this.showSettingsMenu(e);
     }
 
     private updateDisplay(): void {
@@ -576,7 +592,7 @@ export class TimerView extends ItemView {
         if (this.templates.length === 0) {
             parent.createDiv({
                 cls: 'timer-view__template-empty',
-                text: 'No templates found. Add .md files with _tv-segments in frontmatter.',
+                text: 'No templates found. Add .md files with a JSON code block to the template folder.',
             });
             return;
         }
@@ -620,16 +636,56 @@ export class TimerView extends ItemView {
     // ─── Settings Menu ──────────────────────────────────────────
 
     private showSettingsMenu(e: MouseEvent): void {
-        if (this.timerViewMode === 'countdown') {
-            this.showCountdownSettingsMenu(e);
-        } else if (this.timerViewMode === 'pomodoro') {
-            this.showPomodoroSettingsMenu(e);
-        }
-    }
-
-    private showCountdownSettingsMenu(e: MouseEvent): void {
         const menu = new Menu();
 
+        // Mode-specific settings
+        if (this.timerViewMode === 'countdown') {
+            this.addCountdownSettings(menu);
+            menu.addSeparator();
+        } else if (this.timerViewMode === 'pomodoro') {
+            this.addPomodoroSettings(menu);
+            menu.addSeparator();
+        }
+
+        // Copy URI (all modes)
+        menu.addItem((item) => {
+            item.setTitle('Copy URI')
+                .setIcon('link')
+                .onClick(async () => {
+                    const uri = this.buildCurrentUri();
+                    await navigator.clipboard.writeText(uri);
+                    new Notice('URI copied to clipboard');
+                });
+        });
+
+        // Copy as link (all modes)
+        menu.addItem((item) => {
+            item.setTitle('Copy as link')
+                .setIcon('external-link')
+                .onClick(async () => {
+                    const uri = this.buildCurrentUri();
+                    const name = VIEW_META_TIMER.displayText;
+                    const link = `[${name}](${uri})`;
+                    await navigator.clipboard.writeText(link);
+                    new Notice('Link copied to clipboard');
+                });
+        });
+
+        menu.showAtMouseEvent(e);
+    }
+
+    private buildCurrentUri(): string {
+        const opts: ViewUriOptions = {
+            position: ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace),
+            mode: this.timerViewMode,
+        };
+        if (this.timerViewMode === 'interval' && this.selectedTemplate) {
+            opts.intervalTemplate = this.selectedTemplate.name;
+        }
+        return ViewUriBuilder.build(VIEW_TYPE_TIMER, opts);
+    }
+
+    private addCountdownSettings(menu: Menu): void {
         menu.addItem((item) => {
             item.setTitle('Countdown Duration').setDisabled(true);
         });
@@ -674,13 +730,9 @@ export class TimerView extends ItemView {
                     ).open();
                 });
         });
-
-        menu.showAtMouseEvent(e);
     }
 
-    private showPomodoroSettingsMenu(e: MouseEvent): void {
-        const menu = new Menu();
-
+    private addPomodoroSettings(menu: Menu): void {
         menu.addItem((item) => {
             item.setTitle('Work Duration').setDisabled(true);
         });
@@ -760,8 +812,6 @@ export class TimerView extends ItemView {
                     ).open();
                 });
         });
-
-        menu.showAtMouseEvent(e);
     }
 
     private applyPomodoroSettingsToTimer(): void {

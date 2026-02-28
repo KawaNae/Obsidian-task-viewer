@@ -265,6 +265,7 @@ export default class TaskViewerPlugin extends Plugin {
                 calendar: VIEW_TYPE_CALENDAR,
                 schedule: VIEW_TYPE_SCHEDULE,
                 'mini-calendar': VIEW_TYPE_MINI_CALENDAR,
+                timer: VIEW_TYPE_TIMER,
             };
             const viewType = viewMap[params.view];
             if (!viewType) return;
@@ -278,58 +279,67 @@ export default class TaskViewerPlugin extends Plugin {
                 showSidebar?: boolean;
                 position?: 'left' | 'right' | 'tab' | 'window';
                 name?: string;
+                timerMode?: string;
+                intervalTemplate?: string;
             } = {};
 
-            // Template resolution (provides base values; inline params override below)
-            if (params.template) {
-                const loader = new ViewTemplateLoader(this.app);
-                const summary = loader.findByBasename(
-                    this.settings.viewTemplateFolder,
-                    params.template,
-                );
-                if (summary) {
-                    const template = await loader.loadFullTemplate(summary.filePath);
-                    if (template) {
-                        if (template.filterState) uriParams.filterState = template.filterState;
-                        if (template.pinnedLists) uriParams.pinnedLists = template.pinnedLists;
-                        if (template.days != null) uriParams.days = template.days;
-                        if (template.zoom != null) uriParams.zoom = template.zoom;
-                        if (template.showSidebar != null) uriParams.showSidebar = template.showSidebar;
-                        if (template.name) uriParams.name = template.name;
+            // Timer view: mode and interval template params
+            if (viewType === VIEW_TYPE_TIMER) {
+                if (params.mode) uriParams.timerMode = params.mode;
+                if (params.intervalTemplate) uriParams.intervalTemplate = params.intervalTemplate;
+            } else {
+                // Template resolution (provides base values; inline params override below)
+                if (params.template) {
+                    const loader = new ViewTemplateLoader(this.app);
+                    const summary = loader.findByBasename(
+                        this.settings.viewTemplateFolder,
+                        params.template,
+                    );
+                    if (summary) {
+                        const template = await loader.loadFullTemplate(summary.filePath);
+                        if (template) {
+                            if (template.filterState) uriParams.filterState = template.filterState;
+                            if (template.pinnedLists) uriParams.pinnedLists = template.pinnedLists;
+                            if (template.days != null) uriParams.days = template.days;
+                            if (template.zoom != null) uriParams.zoom = template.zoom;
+                            if (template.showSidebar != null) uriParams.showSidebar = template.showSidebar;
+                            if (template.name) uriParams.name = template.name;
+                        }
+                    } else {
+                        new Notice(`View template "${params.template}" not found.`);
                     }
-                } else {
-                    new Notice(`View template "${params.template}" not found.`);
+                }
+
+                // Filter (base64) — overrides template value
+                if (params.filter) {
+                    uriParams.filterState = FilterSerializer.fromURIParam(params.filter);
+                }
+
+                // PinnedLists (base64) — overrides template value
+                if (params.pinnedLists) {
+                    try {
+                        const parsed = JSON.parse(unicodeAtob(params.pinnedLists));
+                        if (Array.isArray(parsed)) uriParams.pinnedLists = parsed;
+                    } catch { /* ignore */ }
+                }
+
+                // View display params — override template values
+                if (params.days) {
+                    const days = parseInt(params.days, 10);
+                    if ([1, 3, 7].includes(days)) uriParams.days = days;
+                }
+                if (params.zoom) {
+                    const zoom = parseFloat(params.zoom);
+                    if (zoom >= 0.25 && zoom <= 10.0) uriParams.zoom = zoom;
+                }
+                if (params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date)) {
+                    uriParams.date = params.date;
+                }
+                if (params.showSidebar === 'true' || params.showSidebar === 'false') {
+                    uriParams.showSidebar = params.showSidebar === 'true';
                 }
             }
 
-            // Filter (base64) — overrides template value
-            if (params.filter) {
-                uriParams.filterState = FilterSerializer.fromURIParam(params.filter);
-            }
-
-            // PinnedLists (base64) — overrides template value
-            if (params.pinnedLists) {
-                try {
-                    const parsed = JSON.parse(unicodeAtob(params.pinnedLists));
-                    if (Array.isArray(parsed)) uriParams.pinnedLists = parsed;
-                } catch { /* ignore */ }
-            }
-
-            // View display params — override template values
-            if (params.days) {
-                const days = parseInt(params.days, 10);
-                if ([1, 3, 7].includes(days)) uriParams.days = days;
-            }
-            if (params.zoom) {
-                const zoom = parseFloat(params.zoom);
-                if (zoom >= 0.25 && zoom <= 10.0) uriParams.zoom = zoom;
-            }
-            if (params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date)) {
-                uriParams.date = params.date;
-            }
-            if (params.showSidebar === 'true' || params.showSidebar === 'false') {
-                uriParams.showSidebar = params.showSidebar === 'true';
-            }
             const validPositions = new Set(['left', 'right', 'tab', 'window']);
             if (params.position && validPositions.has(params.position)) {
                 uriParams.position = params.position as 'left' | 'right' | 'tab' | 'window';
@@ -429,6 +439,8 @@ export default class TaskViewerPlugin extends Plugin {
         showSidebar?: boolean;
         position?: 'left' | 'right' | 'tab' | 'window';
         name?: string;
+        timerMode?: string;
+        intervalTemplate?: string;
     }) {
         const { workspace } = this.app;
 
@@ -462,6 +474,8 @@ export default class TaskViewerPlugin extends Plugin {
             if (params?.pinnedLists) state.pinnedLists = params.pinnedLists;
             if (params?.showSidebar != null) state.showSidebar = params.showSidebar;
             if (params?.name) state.customName = params.name;
+            if (params?.timerMode) state.timerViewMode = params.timerMode;
+            if (params?.intervalTemplate) state.intervalTemplate = params.intervalTemplate;
 
             await leaf.setViewState({ type: viewType, active: true, state });
             workspace.revealLeaf(leaf);
