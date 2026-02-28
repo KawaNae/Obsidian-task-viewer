@@ -2,13 +2,13 @@
  * IntervalTemplateLoader
  *
  * Loads interval timer templates from a user-configured vault folder.
- * Each template is a .md file with tv-segments defined in YAML frontmatter.
+ * Each template is a .md file with _tv-segments defined in YAML frontmatter.
  *
  * Template format:
  * ---
- * tv-name: Deep Work Session
- * tv-icon: brain
- * tv-segments:
+ * _tv-name: Deep Work Session
+ * _tv-icon: brain
+ * _tv-segments:
  *   - x10:
  *       - Deep Work, 00:25:00, work
  *       - Break, 00:05:00, break
@@ -56,18 +56,18 @@ export class IntervalTemplateLoader {
         const fm = cache?.frontmatter;
         if (!fm) return null;
 
-        const rawSegments = fm['tv-segments'];
+        const rawSegments = fm['_tv-segments'];
         if (!Array.isArray(rawSegments) || rawSegments.length === 0) return null;
 
         const groups = this.parseGroups(rawSegments);
         if (groups.length === 0) return null;
 
-        const name = typeof fm['tv-name'] === 'string' && fm['tv-name']
-            ? fm['tv-name']
+        const name = typeof fm['_tv-name'] === 'string' && fm['_tv-name']
+            ? fm['_tv-name']
             : file.basename;
 
-        const icon = typeof fm['tv-icon'] === 'string' && fm['tv-icon']
-            ? fm['tv-icon']
+        const icon = typeof fm['_tv-icon'] === 'string' && fm['_tv-icon']
+            ? fm['_tv-icon']
             : 'rotate-cw';
 
         return {

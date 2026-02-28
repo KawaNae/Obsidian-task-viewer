@@ -576,7 +576,7 @@ export class PomodoroView extends ItemView {
         if (this.templates.length === 0) {
             parent.createDiv({
                 cls: 'pomodoro-view__template-empty',
-                text: 'No templates found. Add .md files with tv-segments in frontmatter.',
+                text: 'No templates found. Add .md files with _tv-segments in frontmatter.',
             });
             return;
         }

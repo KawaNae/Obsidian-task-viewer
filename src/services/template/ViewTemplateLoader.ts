@@ -2,7 +2,7 @@
  * ViewTemplateLoader
  *
  * Loads view templates from a user-configured vault folder.
- * Each template is a .md file with tv-view/tv-name in YAML frontmatter
+ * Each template is a .md file with _tv-view/_tv-name in YAML frontmatter
  * and view data in a ```json code block.
  *
  * Two-phase loading:
@@ -87,11 +87,11 @@ export class ViewTemplateLoader {
         const fm = cache?.frontmatter;
         if (!fm) return null;
 
-        const viewType = fm['tv-view'];
+        const viewType = fm['_tv-view'];
         if (typeof viewType !== 'string' || !VALID_VIEWS.has(viewType)) return null;
 
-        const name = typeof fm['tv-name'] === 'string' && fm['tv-name']
-            ? fm['tv-name']
+        const name = typeof fm['_tv-name'] === 'string' && fm['_tv-name']
+            ? fm['_tv-name']
             : file.basename;
 
         return { filePath: file.path, name, viewType };

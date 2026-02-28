@@ -2,7 +2,7 @@
  * ViewTemplateWriter
  *
  * Saves view templates as markdown files.
- * Format: YAML frontmatter (tv-view, tv-name) + JSON code block (data).
+ * Format: YAML frontmatter (_tv-view, _tv-name) + JSON code block (data).
  */
 
 import { App, TFile, TFolder, normalizePath } from 'obsidian';
@@ -36,8 +36,8 @@ export class ViewTemplateWriter {
     private buildFileContent(template: ViewTemplate): string {
         // Frontmatter: metadata only
         const lines: string[] = ['---'];
-        lines.push(`tv-view: ${template.viewType}`);
-        lines.push(`tv-name: "${this.escapeYamlString(template.name)}"`);
+        lines.push(`_tv-view: ${template.viewType}`);
+        lines.push(`_tv-name: "${this.escapeYamlString(template.name)}"`);
         lines.push('---');
         lines.push('');
 

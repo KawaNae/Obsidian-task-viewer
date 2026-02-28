@@ -399,7 +399,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
         new Setting(el)
             .setName('Interval Template Folder')
-            .setDesc('Vault folder containing interval timer template files (.md with tv-segments in frontmatter). Leave empty to disable.')
+            .setDesc('Vault folder containing interval timer template files (.md with _tv-segments in frontmatter). Leave empty to disable.')
             .addText(text => text
                 .setPlaceholder('Templates/Timers')
                 .setValue(this.plugin.settings.intervalTemplateFolder)
@@ -412,7 +412,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
         new Setting(el)
             .setName('View Template Folder')
-            .setDesc('Vault folder for view template files (.md with tv-view in frontmatter). Used for cross-device sync of view configurations.')
+            .setDesc('Vault folder for view template files (.md with _tv-view in frontmatter). Used for cross-device sync of view configurations.')
             .addText(text => text
                 .setPlaceholder('Templates/Views')
                 .setValue(this.plugin.settings.viewTemplateFolder)
