@@ -277,7 +277,7 @@ export default class TaskViewerPlugin extends Plugin {
                 date?: string;
                 pinnedLists?: PinnedListDefinition[];
                 showSidebar?: boolean;
-                position?: 'left' | 'right' | 'tab' | 'window';
+                position?: 'left' | 'right' | 'tab' | 'window' | 'override';
                 name?: string;
                 timerMode?: string;
                 intervalTemplate?: string;
@@ -340,9 +340,9 @@ export default class TaskViewerPlugin extends Plugin {
                 }
             }
 
-            const validPositions = new Set(['left', 'right', 'tab', 'window']);
+            const validPositions = new Set(['left', 'right', 'tab', 'window', 'override']);
             if (params.position && validPositions.has(params.position)) {
-                uriParams.position = params.position as 'left' | 'right' | 'tab' | 'window';
+                uriParams.position = params.position as 'left' | 'right' | 'tab' | 'window' | 'override';
             }
             if (params.name) {
                 uriParams.name = params.name;
@@ -437,7 +437,7 @@ export default class TaskViewerPlugin extends Plugin {
         date?: string;
         pinnedLists?: PinnedListDefinition[];
         showSidebar?: boolean;
-        position?: 'left' | 'right' | 'tab' | 'window';
+        position?: 'left' | 'right' | 'tab' | 'window' | 'override';
         name?: string;
         timerMode?: string;
         intervalTemplate?: string;
@@ -446,7 +446,14 @@ export default class TaskViewerPlugin extends Plugin {
 
         let leaf: WorkspaceLeaf | null = null;
 
-        if (params?.position) {
+        if (params?.position === 'override') {
+            const leaves = workspace.getLeavesOfType(viewType);
+            if (leaves.length > 0) {
+                leaf = leaves[0];
+            } else {
+                leaf = workspace.getRightLeaf(false);
+            }
+        } else if (params?.position) {
             switch (params.position) {
                 case 'left':   leaf = workspace.getLeftLeaf(false); break;
                 case 'right':  leaf = workspace.getRightLeaf(false); break;

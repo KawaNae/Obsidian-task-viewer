@@ -165,6 +165,7 @@ const POSITION_LABELS: Record<LeafPosition, string> = {
     right: 'Right sidebar',
     tab: 'Tab',
     window: 'Window',
+    override: 'Override',
 };
 
 export interface ViewSettingsOptions {

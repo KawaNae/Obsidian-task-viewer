@@ -5,7 +5,7 @@ import { FilterSerializer } from '../services/filter/FilterSerializer';
 import type { PinnedListDefinition } from '../types';
 import { unicodeBtoa } from './base64';
 
-export type LeafPosition = 'left' | 'right' | 'tab' | 'window';
+export type LeafPosition = 'left' | 'right' | 'tab' | 'window' | 'override';
 
 export interface ViewUriOptions {
     filterState?: FilterState;
