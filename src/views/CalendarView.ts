@@ -11,8 +11,8 @@ import { DragHandler } from '../interaction/drag/DragHandler';
 import TaskViewerPlugin from '../main';
 import { TaskStyling } from './utils/TaskStyling';
 import { DateNavigator, ViewSettingsMenu } from './ViewToolbar';
-import { FilterMenuComponent } from './filter/FilterMenuComponent';
-import { SortMenuComponent } from './sort/SortMenuComponent';
+import { FilterMenuComponent } from './menus/FilterMenuComponent';
+import { SortMenuComponent } from './menus/SortMenuComponent';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions } from '../services/filter/FilterTypes';
 import { createEmptySortState } from '../services/sort/SortTypes';
@@ -21,7 +21,7 @@ import { TaskLinkInteractionManager } from './taskcard/TaskLinkInteractionManage
 import { VIEW_META_CALENDAR } from '../constants/viewRegistry';
 import { HandleManager } from './timelineview/HandleManager';
 import { SidebarManager } from './sidebar/SidebarManager';
-import { PinnedListRenderer } from './timelineview/renderers/PinnedListRenderer';
+import { PinnedListRenderer } from './renderers/PinnedListRenderer';
 import { updateSidebarToggleButton } from './sidebar/SidebarToggleButton';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;

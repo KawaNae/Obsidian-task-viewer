@@ -8,7 +8,7 @@ import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
 import { TagExtractor } from '../../utils/TagExtractor';
-import { TaskStyling } from '../../views/utils/TaskStyling';
+import { TaskStyleResolver } from '../styling/TaskStyleResolver';
 
 /**
  * タスクスキャナー - ファイルのスキャンとパース処理
@@ -259,8 +259,8 @@ export class TaskScanner {
         newTasks.push(...allExtractedTasks);
 
         // Resolve file-level color/linestyle from frontmatter
-        const fileColor = TaskStyling.getFileColor(this.app, file.path, this.settings.frontmatterTaskKeys.color);
-        const fileLinestyle = TaskStyling.getFileLinestyle(this.app, file.path, this.settings.frontmatterTaskKeys.linestyle);
+        const fileColor = TaskStyleResolver.getFileColor(this.app, file.path, this.settings.frontmatterTaskKeys.color);
+        const fileLinestyle = TaskStyleResolver.getFileLinestyle(this.app, file.path, this.settings.frontmatterTaskKeys.linestyle);
         for (const task of newTasks) {
             if (fileColor) task.color = fileColor;
             if (fileLinestyle) task.linestyle = fileLinestyle;

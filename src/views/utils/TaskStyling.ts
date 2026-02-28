@@ -1,8 +1,10 @@
 import { App } from 'obsidian';
+import { TaskStyleResolver } from '../../services/styling/TaskStyleResolver';
 
 /**
- * Task accent color and line style utilities.
- * Reads file frontmatter for color/linestyle and applies CSS custom properties to task elements.
+ * Task accent color and line style DOM utilities.
+ * Applies CSS custom properties to task elements.
+ * Data retrieval is delegated to TaskStyleResolver in the services layer.
  */
 export class TaskStyling {
     private static readonly VALID_LINE_STYLES = new Set(['solid', 'dashed', 'dotted', 'double', 'dashdotted']);
@@ -51,31 +53,12 @@ export class TaskStyling {
         return { h, s, l };
     }
 
-    /**
-     * Gets the custom color for a file from its frontmatter.
-     */
     static getFileColor(app: App, filePath: string, frontmatterKey: string | null): string | null {
-        if (!frontmatterKey) return null;
-
-        const cache = app.metadataCache.getCache(filePath);
-        return cache?.frontmatter?.[frontmatterKey] || null;
+        return TaskStyleResolver.getFileColor(app, filePath, frontmatterKey);
     }
 
-    /**
-     * Gets the custom line style for a file from its frontmatter.
-     * Returns null when the key is missing or the value is invalid.
-     */
     static getFileLinestyle(app: App, filePath: string, frontmatterKey: string | null): string | null {
-        if (!frontmatterKey) return null;
-
-        const cache = app.metadataCache.getCache(filePath);
-        const value = cache?.frontmatter?.[frontmatterKey];
-        if (typeof value !== 'string') return null;
-
-        const normalized = value.trim().toLowerCase();
-        if (!normalized) return null;
-
-        return TaskStyling.VALID_LINE_STYLES.has(normalized) ? normalized : null;
+        return TaskStyleResolver.getFileLinestyle(app, filePath, frontmatterKey);
     }
 
     /**

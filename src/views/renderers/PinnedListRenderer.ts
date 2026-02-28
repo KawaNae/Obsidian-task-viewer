@@ -4,16 +4,16 @@
  */
 
 import { Component, Menu, setIcon } from 'obsidian';
-import type { Task, PinnedListDefinition } from '../../../types';
-import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
-import { MenuHandler } from '../../../interaction/menu/MenuHandler';
-import { TaskFilterEngine } from '../../../services/filter/TaskFilterEngine';
-import { hasConditions } from '../../../services/filter/FilterTypes';
-import { TaskIndex } from '../../../services/core/TaskIndex';
-import { TaskSorter } from '../../../services/sort/TaskSorter';
-import { hasSortRules } from '../../../services/sort/SortTypes';
-import TaskViewerPlugin from '../../../main';
-import { TaskStyling } from '../../utils/TaskStyling';
+import type { Task, PinnedListDefinition } from '../../types';
+import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
+import { MenuHandler } from '../../interaction/menu/MenuHandler';
+import { TaskFilterEngine } from '../../services/filter/TaskFilterEngine';
+import { hasConditions } from '../../services/filter/FilterTypes';
+import { TaskIndex } from '../../services/core/TaskIndex';
+import { TaskSorter } from '../../services/sort/TaskSorter';
+import { hasSortRules } from '../../services/sort/SortTypes';
+import TaskViewerPlugin from '../../main';
+import { TaskStyling } from '../utils/TaskStyling';
 
 export interface PinnedListCallbacks {
     onCollapsedChange: (listId: string, collapsed: boolean) => void;

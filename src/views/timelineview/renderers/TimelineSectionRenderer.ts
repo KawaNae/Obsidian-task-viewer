@@ -4,7 +4,7 @@ import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
 import { TaskStyling } from '../../utils/TaskStyling';
-import { TaskLayout } from '../../utils/TaskLayout';
+import { TaskLayout } from '../TaskLayout';
 import { TaskIndex } from '../../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { HandleManager } from '../HandleManager';

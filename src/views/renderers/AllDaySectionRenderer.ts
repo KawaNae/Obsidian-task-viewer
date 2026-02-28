@@ -1,14 +1,14 @@
 import { Component, Menu } from 'obsidian';
 
-import TaskViewerPlugin from '../../../main';
-import { MenuHandler } from '../../../interaction/menu/MenuHandler';
-import { DateUtils } from '../../../utils/DateUtils';
-import { TaskStyling } from '../../utils/TaskStyling';
-import { TaskIndex } from '../../../services/core/TaskIndex';
-import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
-import { HandleManager } from '../HandleManager';
-import { Task } from '../../../types';
-import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
+import TaskViewerPlugin from '../../main';
+import { MenuHandler } from '../../interaction/menu/MenuHandler';
+import { DateUtils } from '../../utils/DateUtils';
+import { TaskStyling } from '../utils/TaskStyling';
+import { TaskIndex } from '../../services/core/TaskIndex';
+import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
+import { HandleManager } from '../timelineview/HandleManager';
+import { Task } from '../../types';
+import { CreateTaskModal, formatTaskLine } from '../../modals/CreateTaskModal';
 
 export class AllDaySectionRenderer {
     constructor(
@@ -237,7 +237,7 @@ export class AllDaySectionRenderer {
             dateObj.setFullYear(y, m - 1, d);
             dateObj.setHours(0, 0, 0, 0);
 
-            const { DailyNoteUtils } = await import('../../../utils/DailyNoteUtils');
+            const { DailyNoteUtils } = await import('../../utils/DailyNoteUtils');
             await DailyNoteUtils.appendLineToDailyNote(
                 this.plugin.app,
                 dateObj,

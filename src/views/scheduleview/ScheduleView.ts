@@ -10,12 +10,12 @@ import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import TaskViewerPlugin from '../../main';
 
 import { DateNavigator, ViewSettingsMenu } from '../ViewToolbar';
-import { FilterMenuComponent } from '../filter/FilterMenuComponent';
+import { FilterMenuComponent } from '../menus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { HabitTrackerRenderer } from '../timelineview/renderers/HabitTrackerRenderer';
+import { HabitTrackerRenderer } from '../renderers/HabitTrackerRenderer';
 import type { CollapsibleSectionKey, TimedRenderableTask } from './ScheduleTypes';
 import { ScheduleGridCalculator } from './utils/ScheduleGridCalculator';
 import { ScheduleTaskCategorizer } from './utils/ScheduleTaskCategorizer';

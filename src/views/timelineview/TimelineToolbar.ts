@@ -5,7 +5,7 @@ import { DateUtils } from '../../utils/DateUtils';
 import type { LeafPosition } from '../../utils/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
 import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu } from '../ViewToolbar';
-import { FilterMenuComponent } from '../filter/FilterMenuComponent';
+import { FilterMenuComponent } from '../menus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';

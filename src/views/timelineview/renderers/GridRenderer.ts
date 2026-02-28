@@ -9,10 +9,10 @@ import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { TaskLinkInteractionManager } from '../../taskcard/TaskLinkInteractionManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../../constants/hover';
 
-import { AllDaySectionRenderer } from './AllDaySectionRenderer';
+import { AllDaySectionRenderer } from '../../renderers/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './TimelineSectionRenderer';
 import { TaskIndex } from '../../../services/core/TaskIndex';
-import { HabitTrackerRenderer } from './HabitTrackerRenderer';
+import { HabitTrackerRenderer } from '../../renderers/HabitTrackerRenderer';
 
 type DateHeaderDisplayEntry = {
     cell: HTMLElement;
