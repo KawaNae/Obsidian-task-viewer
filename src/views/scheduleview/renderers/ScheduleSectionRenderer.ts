@@ -1,5 +1,5 @@
 import { setIcon } from 'obsidian';
-import type { RenderableTask } from '../../utils/RenderableTaskUtils';
+import type { RenderableTask } from '../../sharedLogic/RenderableTaskUtils';
 import type { CollapsibleSectionKey } from '../ScheduleTypes';
 import type { ScheduleTaskRenderer } from './ScheduleTaskRenderer';
 

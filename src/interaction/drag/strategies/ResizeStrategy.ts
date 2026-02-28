@@ -7,7 +7,7 @@ import {
     toDisplayTopPx,
     toLogicalHeightPx,
     toLogicalTopPx
-} from '../../../views/utils/TimelineCardPosition';
+} from '../../../views/sharedLogic/TimelineCardPosition';
 
 /**
  * リサイズ操作を処理するドラッグストラテジー。

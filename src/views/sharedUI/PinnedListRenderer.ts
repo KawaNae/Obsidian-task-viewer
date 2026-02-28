@@ -13,7 +13,7 @@ import { TaskIndex } from '../../services/core/TaskIndex';
 import { TaskSorter } from '../../services/sort/TaskSorter';
 import { hasSortRules } from '../../services/sort/SortTypes';
 import TaskViewerPlugin from '../../main';
-import { TaskStyling } from '../utils/TaskStyling';
+import { TaskStyling } from './TaskStyling';
 
 export interface PinnedListCallbacks {
     onCollapsedChange: (listId: string, collapsed: boolean) => void;

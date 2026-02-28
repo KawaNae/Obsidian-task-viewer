@@ -33,8 +33,8 @@ src/views/taskcard/
 ### Shared type policy
 
 1. `src/types.ts` is reserved for cross-layer models/settings only.
-2. View-only split helpers moved to `src/views/utils/RenderableTaskUtils.ts`.
-3. `RenderableTask`, `shouldSplitTask`, and `splitTaskAtBoundary` must be imported from `src/views/utils/RenderableTaskUtils.ts`.
+2. View-only split helpers moved to `src/views/sharedLogic/RenderableTaskUtils.ts`.
+3. `RenderableTask`, `shouldSplitTask`, and `splitTaskAtBoundary` must be imported from `src/views/sharedLogic/RenderableTaskUtils.ts`.
 4. Task-card-local render helper types are defined in `src/views/taskcard/types.ts`.
 
 ### Task content invariant
@@ -367,7 +367,7 @@ npm run build     # Production build
 |----------|----------|
 | `src/types.ts` | Cross-layer model types and settings only |
 | `src/views/taskcard/types.ts` | Task-card-local render helper types |
-| `src/views/utils/RenderableTaskUtils.ts` | `RenderableTask` and split helpers |
+| `src/views/sharedLogic/RenderableTaskUtils.ts` | `RenderableTask` and split helpers |
 | Inside each subsystem directory | Subsystem-specific types (do not promote to cross-layer) |
 
 ### Tooltip convention

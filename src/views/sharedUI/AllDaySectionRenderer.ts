@@ -3,13 +3,14 @@ import { Component, Menu } from 'obsidian';
 import TaskViewerPlugin from '../../main';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../utils/DateUtils';
-import { TaskStyling } from '../utils/TaskStyling';
+import { TaskStyling } from './TaskStyling';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { HandleManager } from '../timelineview/HandleManager';
 import { Task } from '../../types';
 import { CreateTaskModal, formatTaskLine } from '../../modals/CreateTaskModal';
-import { computeGridLayout, renderDeadlineArrow, GridTaskEntry } from './GridTaskLayout';
+import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
+import { renderDeadlineArrow } from './DeadlineArrowRenderer';
 
 export class AllDaySectionRenderer {
     constructor(

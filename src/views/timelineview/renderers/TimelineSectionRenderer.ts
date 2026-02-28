@@ -3,13 +3,13 @@ import type { Task } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
-import { TaskStyling } from '../../utils/TaskStyling';
+import { TaskStyling } from '../../sharedUI/TaskStyling';
 import { TaskLayout } from '../TaskLayout';
 import { TaskIndex } from '../../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { HandleManager } from '../HandleManager';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
-import { shouldSplitTask, splitTaskAtBoundary, RenderableTask } from '../../utils/RenderableTaskUtils';
+import { shouldSplitTask, splitTaskAtBoundary, RenderableTask } from '../../sharedLogic/RenderableTaskUtils';
 
 
 export class TimelineSectionRenderer {

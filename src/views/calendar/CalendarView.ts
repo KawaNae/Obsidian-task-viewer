@@ -20,7 +20,7 @@ import {
 } from './CalendarDateUtils';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import TaskViewerPlugin from '../../main';
-import { TaskStyling } from '../utils/TaskStyling';
+import { TaskStyling } from '../sharedUI/TaskStyling';
 import { DateNavigator, ViewSettingsMenu } from '../sharedUI/ViewToolbar';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
@@ -34,7 +34,8 @@ import { HandleManager } from '../timelineview/HandleManager';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
-import { computeGridLayout, renderDeadlineArrow, GridTaskEntry } from '../sharedUI/GridTaskLayout';
+import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
+import { renderDeadlineArrow } from '../sharedUI/DeadlineArrowRenderer';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
 
