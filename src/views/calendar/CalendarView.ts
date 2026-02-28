@@ -426,6 +426,16 @@ export class CalendarView extends ItemView {
                 this.app.workspace.requestSaveLayout();
                 void this.render();
             },
+            onReset: () => {
+                this.filterMenu.setFilterState(createEmptyFilterState());
+                this.pinnedLists = [];
+                this.showSidebar = true;
+                this.sidebarManager.setOpen(true, 'toolbar', { persist: true });
+                this.customName = undefined;
+                (this.leaf as any).updateHeader();
+                this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
         });
 
         const toggleBtn = toolbar.createEl('button', {

@@ -178,6 +178,7 @@ export interface ViewSettingsOptions {
     getViewTemplateFolder: () => string;
     getViewTemplate: () => ViewTemplate;
     onApplyTemplate: (template: ViewTemplate) => void;
+    onReset: () => void;
 }
 
 /**
@@ -197,27 +198,10 @@ export class ViewSettingsMenu {
         const menu = new Menu();
         const {
             app, leaf, getCustomName, getDefaultName, onRename,
-            buildUri, viewType, getViewTemplateFolder, getViewTemplate, onApplyTemplate,
+            buildUri, viewType, getViewTemplateFolder, getViewTemplate, onApplyTemplate, onReset,
         } = options;
 
-        // Rename
-        menu.addItem((item) => {
-            item.setTitle('Rename...')
-                .setIcon('pencil')
-                .onClick(() => {
-                    new InputModal(
-                        app,
-                        'Rename View',
-                        'View name (empty to reset)',
-                        getCustomName() ?? '',
-                        (value) => onRename(value.trim() || undefined),
-                    ).open();
-                });
-        });
-
-        menu.addSeparator();
-
-        // Save view...
+        // Save view... (name required, saves template + updates customName)
         const folder = getViewTemplateFolder();
         menu.addItem((item) => {
             item.setTitle('Save view...')
@@ -231,7 +215,7 @@ export class ViewSettingsMenu {
                     new InputModal(
                         app,
                         'Save View',
-                        'Template name',
+                        'View name',
                         defaultName,
                         async (value) => {
                             const name = value.trim();
@@ -240,6 +224,7 @@ export class ViewSettingsMenu {
                             template.name = name;
                             const writer = new ViewTemplateWriter(app);
                             await writer.saveTemplate(folder, template);
+                            onRename(name);
                             new Notice(`View saved as "${name}".`);
                         },
                     ).open();
@@ -274,6 +259,13 @@ export class ViewSettingsMenu {
                     }
                 }
             }
+        });
+
+        // Reset view
+        menu.addItem((item) => {
+            item.setTitle('Reset view')
+                .setIcon('rotate-ccw')
+                .onClick(() => onReset());
         });
 
         menu.addSeparator();

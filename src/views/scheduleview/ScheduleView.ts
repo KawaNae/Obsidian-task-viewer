@@ -300,6 +300,13 @@ export class ScheduleView extends ItemView {
                 this.app.workspace.requestSaveLayout();
                 void this.render();
             },
+            onReset: () => {
+                this.filterMenu.setFilterState(createEmptyFilterState());
+                this.customName = undefined;
+                (this.leaf as any).updateHeader();
+                this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
         });
     }
 

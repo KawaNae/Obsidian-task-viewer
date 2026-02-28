@@ -154,6 +154,18 @@ export class TimelineToolbar {
                 this.callbacks.onRender();
                 this.app.workspace.requestSaveLayout();
             },
+            onReset: () => {
+                this.viewState.daysToShow = 3;
+                this.viewState.zoomLevel = 1.0;
+                this.viewState.showSidebar = true;
+                this.viewState.filterState = undefined;
+                this.viewState.pinnedLists = undefined;
+                this.viewState.pinnedListCollapsed = undefined;
+                this.filterMenu.setFilterState(createEmptyFilterState());
+                this.callbacks.onRename(undefined);
+                this.callbacks.onRender();
+                this.app.workspace.requestSaveLayout();
+            },
         });
 
         // Sidebar Toggle
