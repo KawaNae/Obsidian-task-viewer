@@ -119,6 +119,20 @@ export interface PinnedListDefinition {
     sortState?: SortState;
 }
 
+export interface ViewTemplateSummary {
+    filePath: string;
+    name: string;
+    viewType: string;
+}
+
+export interface ViewTemplate extends ViewTemplateSummary {
+    days?: number;
+    zoom?: number;
+    showSidebar?: boolean;
+    filterState?: FilterState;
+    pinnedLists?: PinnedListDefinition[];
+}
+
 export interface FrontmatterTaskKeys {
     start: string;
     end: string;
@@ -205,6 +219,8 @@ export function validateFrontmatterTaskKeys(keys: FrontmatterTaskKeys): string |
     return null;
 }
 
+export type DefaultLeafPosition = 'left' | 'right' | 'tab' | 'window';
+
 export interface TaskViewerSettings {
     startHour: number;
     applyGlobalStyles: boolean;
@@ -234,6 +250,14 @@ export interface TaskViewerSettings {
     yearlyNoteFormat: string;
     yearlyNoteFolder: string;
     intervalTemplateFolder: string;
+    viewTemplateFolder: string;
+    defaultViewPositions: {
+        timeline: DefaultLeafPosition;
+        schedule: DefaultLeafPosition;
+        calendar: DefaultLeafPosition;
+        miniCalendar: DefaultLeafPosition;
+        timer: DefaultLeafPosition;
+    };
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -265,4 +289,12 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     yearlyNoteFormat: 'YYYY',
     yearlyNoteFolder: '',
     intervalTemplateFolder: '',
+    viewTemplateFolder: '',
+    defaultViewPositions: {
+        timeline: 'tab',
+        schedule: 'right',
+        calendar: 'tab',
+        miniCalendar: 'left',
+        timer: 'right',
+    },
 };

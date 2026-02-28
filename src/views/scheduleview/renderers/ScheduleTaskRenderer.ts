@@ -1,13 +1,13 @@
 import type { App, Component } from 'obsidian';
 import type { TaskViewerSettings } from '../../../types';
-import { TaskStyling } from '../../utils/TaskStyling';
+import { TaskStyling } from '../../sharedUI/TaskStyling';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import type { GridRow, TaskPlacement, TimedRenderableTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from '../utils/ScheduleGridCalculator';
 import type { ScheduleOverlapLayout } from '../utils/ScheduleOverlapLayout';
-import { toDisplayHeightPx, toDisplayTopPx } from '../../utils/TimelineCardPosition';
-import type { RenderableTask } from '../../utils/RenderableTaskUtils';
+import { toDisplayHeightPx, toDisplayTopPx } from '../../sharedLogic/TimelineCardPosition';
+import type { RenderableTask } from '../../sharedLogic/RenderableTaskUtils';
 
 export interface ScheduleTaskRendererOptions {
     app: App;

@@ -1,39 +1,43 @@
 import { ItemView, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
 import type { HoverParent } from 'obsidian';
-import { TaskIndex } from '../services/core/TaskIndex';
-import { MenuHandler } from '../interaction/menu/MenuHandler';
-import { TaskCardRenderer } from './taskcard/TaskCardRenderer';
-import { Task, isCompleteStatusChar, PinnedListDefinition } from '../types';
-import { DateUtils } from '../utils/DateUtils';
-import { DailyNoteUtils } from '../utils/DailyNoteUtils';
-import { TaskIdGenerator } from '../utils/TaskIdGenerator';
-import { DragHandler } from '../interaction/drag/DragHandler';
-import TaskViewerPlugin from '../main';
-import { TaskStyling } from './utils/TaskStyling';
-import { DateNavigator, ViewSettingsMenu } from './ViewToolbar';
-import { FilterMenuComponent } from './filter/FilterMenuComponent';
-import { SortMenuComponent } from './sort/SortMenuComponent';
-import { FilterSerializer } from '../services/filter/FilterSerializer';
-import { createEmptyFilterState, hasConditions } from '../services/filter/FilterTypes';
-import { createEmptySortState } from '../services/sort/SortTypes';
-import { TASK_VIEWER_HOVER_SOURCE_ID } from '../constants/hover';
-import { TaskLinkInteractionManager } from './taskcard/TaskLinkInteractionManager';
-import { VIEW_META_CALENDAR } from '../constants/viewRegistry';
-import { HandleManager } from './timelineview/HandleManager';
-import { SidebarManager } from './sidebar/SidebarManager';
-import { PinnedListRenderer } from './timelineview/renderers/PinnedListRenderer';
-import { updateSidebarToggleButton } from './sidebar/SidebarToggleButton';
+import { TaskIndex } from '../../services/core/TaskIndex';
+import { MenuHandler } from '../../interaction/menu/MenuHandler';
+import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
+import { Task, PinnedListDefinition } from '../../types';
+import { DateUtils } from '../../utils/DateUtils';
+import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import {
+    getTaskDateRange,
+    isTaskCompleted as isTaskCompletedUtil,
+    parseLocalDateString,
+    getCalendarDateRange,
+    getWeekStart,
+    getNormalizedWindowStart,
+    getReferenceMonth,
+    getColumnOffset,
+    getGridColumnForDay,
+    openOrCreateDailyNote,
+} from './CalendarDateUtils';
+import { DragHandler } from '../../interaction/drag/DragHandler';
+import TaskViewerPlugin from '../../main';
+import { TaskStyling } from '../sharedUI/TaskStyling';
+import { DateNavigator, ViewSettingsMenu } from '../sharedUI/ViewToolbar';
+import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
+import { SortMenuComponent } from '../customMenus/SortMenuComponent';
+import { FilterSerializer } from '../../services/filter/FilterSerializer';
+import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
+import { createEmptySortState } from '../../services/sort/SortTypes';
+import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
+import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
+import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
+import { HandleManager } from '../timelineview/HandleManager';
+import { SidebarManager } from '../sidebar/SidebarManager';
+import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
+import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
+import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
+import { renderDeadlineArrow } from '../sharedUI/DeadlineArrowRenderer';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
-
-interface CalendarTaskEntry {
-    task: Task;
-    segmentId: string;
-    colStart: number;
-    span: number;
-    continuesBefore: boolean;
-    continuesAfter: boolean;
-}
 
 export class CalendarView extends ItemView {
     private readonly taskIndex: TaskIndex;
@@ -398,6 +402,41 @@ export class CalendarView extends ItemView {
                 showSidebar: this.sidebarManager.isOpen,
             }),
             viewType: VIEW_META_CALENDAR.type,
+            getViewTemplateFolder: () => this.plugin.settings.viewTemplateFolder,
+            getViewTemplate: () => ({
+                filePath: '',
+                name: this.customName || VIEW_META_CALENDAR.displayText,
+                viewType: 'calendar',
+                showSidebar: this.sidebarManager.isOpen,
+                filterState: this.filterMenu.getFilterState(),
+                pinnedLists: this.pinnedLists,
+            }),
+            onApplyTemplate: (template) => {
+                if (template.filterState) {
+                    this.filterMenu.setFilterState(template.filterState);
+                }
+                if (template.pinnedLists) this.pinnedLists = template.pinnedLists;
+                if (template.showSidebar != null) {
+                    this.showSidebar = template.showSidebar;
+                    this.sidebarManager.setOpen(template.showSidebar, 'toolbar', { persist: true });
+                }
+                if (template.name) {
+                    this.customName = template.name;
+                    (this.leaf as any).updateHeader();
+                }
+                this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
+            onReset: () => {
+                this.filterMenu.setFilterState(createEmptyFilterState());
+                this.pinnedLists = [];
+                this.showSidebar = true;
+                this.sidebarManager.setOpen(true, 'toolbar', { persist: true });
+                this.customName = undefined;
+                (this.leaf as any).updateHeader();
+                this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
         });
 
         const toggleBtn = toolbar.createEl('button', {
@@ -543,90 +582,30 @@ export class CalendarView extends ItemView {
     }
 
     private async renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: Task[]): Promise<void> {
-        const entries = this.collectWeekTaskEntries(weekDates, allTasks);
-        if (entries.length === 0) {
-            return;
-        }
-
-        const tracks: number[] = [];
-
-        for (const entry of entries) {
-            let trackIndex = -1;
-            for (let i = 0; i < tracks.length; i++) {
-                if (entry.colStart > tracks[i]) {
-                    trackIndex = i;
-                    break;
-                }
-            }
-
-            if (trackIndex === -1) {
-                trackIndex = tracks.length;
-                tracks.push(entry.colStart + entry.span - 1);
-            } else {
-                tracks[trackIndex] = entry.colStart + entry.span - 1;
-            }
-
-            const gridRow = trackIndex + 2;
-            await this.renderGridTask(weekRow, entry, gridRow);
-        }
-    }
-
-    private collectWeekTaskEntries(weekDates: string[], allTasks: Task[]): CalendarTaskEntry[] {
-        if (weekDates.length !== 7) {
-            return [];
-        }
-
-        const weekStart = weekDates[0];
-        const weekEnd = weekDates[6];
-        const entries: CalendarTaskEntry[] = [];
-
-        for (const task of allTasks) {
-            const { effectiveStart, effectiveEnd } = this.getTaskDateRange(task);
-            if (!effectiveStart) {
-                continue;
-            }
-
-            const taskEnd = effectiveEnd || effectiveStart;
-            if (effectiveStart > weekEnd || taskEnd < weekStart) {
-                continue;
-            }
-
-            const clippedStart = effectiveStart < weekStart ? weekStart : effectiveStart;
-            const clippedEnd = taskEnd > weekEnd ? weekEnd : taskEnd;
-
-            const colStart = weekDates.indexOf(clippedStart) + 1;
-            const colEnd = weekDates.indexOf(clippedEnd) + 1;
-            const span = colEnd - colStart + 1;
-            if (colStart < 1 || span < 1) {
-                continue;
-            }
-
-            const isMultiday = this.isMultiDayTask(task);
-            const isSplit = isMultiday && (effectiveStart < weekStart || taskEnd > weekEnd);
-            const segmentId = isSplit
-                ? TaskIdGenerator.makeSegmentId(task.id, clippedStart)
-                : task.id;
-
-            entries.push({
-                task,
-                segmentId,
-                colStart,
-                span,
-                continuesBefore: isMultiday && effectiveStart < weekStart,
-                continuesAfter: isMultiday && taskEnd > weekEnd,
-            });
-        }
-
-        entries.sort((a, b) => {
-            if (a.colStart !== b.colStart) return a.colStart - b.colStart;
-            if (a.span !== b.span) return b.span - a.span;
-            const fileDiff = a.task.file.localeCompare(b.task.file);
-            if (fileDiff !== 0) return fileDiff;
-            if (a.task.line !== b.task.line) return a.task.line - b.task.line;
-            return a.task.id.localeCompare(b.task.id);
+        const startHour = this.plugin.settings.startHour;
+        const entries = computeGridLayout(allTasks, {
+            dates: weekDates,
+            getDateRange: (task) => {
+                const range = getTaskDateRange(task, startHour);
+                if (!range.effectiveStart) return null;
+                return {
+                    effectiveStart: range.effectiveStart,
+                    effectiveEnd: range.effectiveEnd || range.effectiveStart,
+                };
+            },
+            computeDeadlines: true,
         });
 
-        return entries;
+        const columnOffset = this.getColumnOffset();
+        const gridRowOffset = 2;
+
+        for (const entry of entries) {
+            await this.renderGridTask(weekRow, entry, entry.trackIndex + gridRowOffset);
+
+            if (entry.deadlineArrow) {
+                renderDeadlineArrow(weekRow, entry, gridRowOffset, columnOffset);
+            }
+        }
     }
 
     private getVisibleTasksInRange(rangeStart: string, rangeEnd: string): Task[] {
@@ -649,59 +628,14 @@ export class CalendarView extends ItemView {
     }
 
     private getTaskDateRange(task: Task): { effectiveStart: string | null; effectiveEnd: string | null } {
-        if (task.startDate) {
-            if (task.startTime) {
-                const visualDate = DateUtils.getVisualStartDate(
-                    task.startDate,
-                    task.startTime,
-                    this.plugin.settings.startHour
-                );
-                const isAllDay = DateUtils.isAllDayTask(
-                    task.startDate,
-                    task.startTime,
-                    task.endDate,
-                    task.endTime,
-                    this.plugin.settings.startHour
-                );
-
-                if (isAllDay && task.endDate && task.endDate >= task.startDate) {
-                    return { effectiveStart: task.startDate, effectiveEnd: task.endDate };
-                }
-                return { effectiveStart: visualDate, effectiveEnd: visualDate };
-            }
-
-            const effectiveEnd = task.endDate && task.endDate >= task.startDate
-                ? task.endDate
-                : task.startDate;
-            return { effectiveStart: task.startDate, effectiveEnd };
-        }
-
-        return { effectiveStart: null, effectiveEnd: null };
+        return getTaskDateRange(task, this.plugin.settings.startHour);
     }
 
-    private isMultiDayTask(task: Task): boolean {
-        if (!task.startDate) {
-            return false;
-        }
-        if (task.startTime) {
-            return DateUtils.isAllDayTask(
-                task.startDate,
-                task.startTime,
-                task.endDate,
-                task.endTime,
-                this.plugin.settings.startHour
-            ) && !!task.endDate && task.endDate > task.startDate;
-        }
-
-        return !!task.endDate && task.endDate > task.startDate;
-    }
-
-    private async renderGridTask(weekRow: HTMLElement, entry: CalendarTaskEntry, gridRow: number): Promise<void> {
-        const isMultiday = this.isMultiDayTask(entry.task);
+    private async renderGridTask(weekRow: HTMLElement, entry: GridTaskEntry, gridRow: number): Promise<void> {
         const columnOffset = this.getColumnOffset();
         const displayColStart = entry.colStart + columnOffset;
 
-        if (isMultiday) {
+        if (entry.isMultiDay) {
             const barEl = weekRow.createDiv('task-card calendar-task-card calendar-multiday-bar');
             barEl.dataset.id = entry.segmentId;
             barEl.addClass('task-card--allday');
@@ -743,20 +677,7 @@ export class CalendarView extends ItemView {
     }
 
     private isTaskCompleted(task: Task): boolean {
-        let completed = isCompleteStatusChar(task.statusChar || ' ', this.plugin.settings.completeStatusChars);
-        if (!completed || task.childLines.length === 0) {
-            return completed;
-        }
-
-        for (const childLine of task.childLines) {
-            const match = childLine.match(/^\s*-\s*\[(.)\]/);
-            if (match && !isCompleteStatusChar(match[1], this.plugin.settings.completeStatusChars)) {
-                completed = false;
-                break;
-            }
-        }
-
-        return completed;
+        return isTaskCompletedUtil(task, this.plugin.settings.completeStatusChars);
     }
 
     private getViewStartDateString(): string {
@@ -765,18 +686,11 @@ export class CalendarView extends ItemView {
     }
 
     private getCalendarDateRange(): { startDate: Date; endDate: Date } {
-        const parsedStart = this.parseLocalDateString(this.windowStart);
-        const fallbackStart = this.getWeekStart(new Date(), this.plugin.settings.calendarWeekStartDay);
-        const startDate = this.getWeekStart(parsedStart ?? fallbackStart, this.plugin.settings.calendarWeekStartDay);
-        const endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + 41);
-        return { startDate, endDate };
+        return getCalendarDateRange(this.windowStart, this.plugin.settings.calendarWeekStartDay);
     }
 
     private getWeekStart(date: Date, weekStartDay: 0 | 1): Date {
-        const day = date.getDay();
-        const diff = (day - weekStartDay + 7) % 7;
-        return new Date(date.getFullYear(), date.getMonth(), date.getDate() - diff);
+        return getWeekStart(date, weekStartDay);
     }
 
     private getWeekdayNames(): string[] {
@@ -792,11 +706,11 @@ export class CalendarView extends ItemView {
     }
 
     private getColumnOffset(): number {
-        return this.shouldShowWeekNumbers() ? 1 : 0;
+        return getColumnOffset(this.shouldShowWeekNumbers());
     }
 
     private getGridColumnForDay(dayColumn: number): number {
-        return dayColumn + this.getColumnOffset();
+        return getGridColumnForDay(dayColumn, this.shouldShowWeekNumbers());
     }
 
     private renderWeekNumberCell(weekRow: HTMLElement, weekStartDate: Date): void {
@@ -829,10 +743,7 @@ export class CalendarView extends ItemView {
     }
 
     private getReferenceMonth(): { year: number; month: number } {
-        const midDate = this.parseLocalDateString(DateUtils.addDays(this.windowStart, 20));
-        const fallback = this.parseLocalDateString(this.windowStart) ?? new Date();
-        const date = midDate ?? fallback;
-        return { year: date.getFullYear(), month: date.getMonth() };
+        return getReferenceMonth(this.windowStart);
     }
 
     private navigateWeek(offset: number): void {
@@ -855,45 +766,15 @@ export class CalendarView extends ItemView {
     }
 
     private parseLocalDateString(value: string): Date | null {
-        const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-        if (!match) {
-            return null;
-        }
-
-        const year = Number(match[1]);
-        const month = Number(match[2]);
-        const day = Number(match[3]);
-        if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
-            return null;
-        }
-
-        const parsed = new Date(year, month - 1, day);
-        if (
-            parsed.getFullYear() !== year ||
-            parsed.getMonth() !== month - 1 ||
-            parsed.getDate() !== day
-        ) {
-            return null;
-        }
-
-        return parsed;
+        return parseLocalDateString(value);
     }
 
     private getNormalizedWindowStart(value: string): string {
-        const parsed = this.parseLocalDateString(value);
-        const baseDate = parsed ?? new Date();
-        const weekStart = this.getWeekStart(baseDate, this.plugin.settings.calendarWeekStartDay);
-        return DateUtils.getLocalDateString(weekStart);
+        return getNormalizedWindowStart(value, this.plugin.settings.calendarWeekStartDay);
     }
 
     private async openOrCreateDailyNote(date: Date): Promise<void> {
-        let file = DailyNoteUtils.getDailyNote(this.app, date);
-        if (!file) {
-            file = await DailyNoteUtils.createDailyNote(this.app, date);
-        }
-        if (file) {
-            await this.app.workspace.getLeaf(false).openFile(file);
-        }
+        return openOrCreateDailyNote(this.app, date);
     }
 
     private async openOrCreatePeriodicNote(date: Date): Promise<void> {

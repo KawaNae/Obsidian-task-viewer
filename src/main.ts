@@ -1,10 +1,9 @@
-import { Notice, Plugin, WorkspaceLeaf, setIcon, TFile, Menu, Editor, MarkdownView } from 'obsidian';
+import { Notice, Plugin, Workspace, WorkspaceLeaf, TFile, Menu, Editor, MarkdownView } from 'obsidian';
 import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
-import { CalendarView, VIEW_TYPE_CALENDAR } from './views/CalendarView';
-import { MiniCalendarView, VIEW_TYPE_MINI_CALENDAR } from './views/MiniCalendarView';
-import { PomodoroView, VIEW_TYPE_POMODORO } from './views/PomodoroView';
+import { CalendarView, VIEW_TYPE_CALENDAR, MiniCalendarView, VIEW_TYPE_MINI_CALENDAR } from './views/calendar';
+import { TimerView, VIEW_TYPE_TIMER } from './views/TimerView';
 import { TimerWidget } from './timer/TimerWidget';
 import {
     TaskViewerSettings,
@@ -13,13 +12,12 @@ import {
     normalizeFrontmatterTaskKeys,
     validateFrontmatterTaskKeys,
 } from './types';
-import type { PinnedListDefinition } from './types';
+import type { DefaultLeafPosition, PinnedListDefinition } from './types';
 import { normalizeAiIndexSettings } from './services/aiindex/AiIndexSettings';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/color/ColorSuggest';
-import { PropertyColorSuggest } from './suggest/color/PropertyColorSuggest';
 import { LineStyleSuggest } from './suggest/line/LineStyleSuggest';
-import { PropertyLineStyleSuggest } from './suggest/line/PropertyLineStyleSuggest';
+import { PropertySuggestObserver } from './suggest/PropertySuggestObserver';
 import { DateUtils } from './utils/DateUtils';
 import { AudioUtils } from './utils/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
@@ -27,6 +25,8 @@ import { getViewMeta } from './constants/viewRegistry';
 import type { FilterState } from './services/filter/FilterTypes';
 import { hasConditions } from './services/filter/FilterTypes';
 import { FilterSerializer } from './services/filter/FilterSerializer';
+import { unicodeAtob } from './utils/base64';
+import { ViewTemplateLoader } from './services/template/ViewTemplateLoader';
 import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
 import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
 import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
@@ -43,9 +43,8 @@ export default class TaskViewerPlugin extends Plugin {
     private lastVisualDate: string = '';
     private dateCheckInterval: ReturnType<typeof setInterval> | null = null;
 
-    // MutationObserver for Properties View color suggestions
-    private propertiesObserver: MutationObserver | null = null;
-    private attachedInputs: WeakSet<HTMLElement> = new WeakSet();
+    // Properties View color/linestyle suggest observer
+    private propertySuggestObserver: PropertySuggestObserver | null = null;
 
     async onload() {
         console.log('Loading Task Viewer Plugin (Rewrite)');
@@ -82,8 +81,8 @@ export default class TaskViewerPlugin extends Plugin {
         );
 
         this.registerView(
-            VIEW_TYPE_POMODORO,
-            (leaf) => new PomodoroView(leaf, this)
+            VIEW_TYPE_TIMER,
+            (leaf) => new TimerView(leaf, this)
         );
 
         this.registerView(
@@ -98,7 +97,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         const timelineViewMeta = getViewMeta(VIEW_TYPE_TIMELINE);
         const scheduleViewMeta = getViewMeta(VIEW_TYPE_SCHEDULE);
-        const pomodoroViewMeta = getViewMeta(VIEW_TYPE_POMODORO);
+        const timerViewMeta = getViewMeta(VIEW_TYPE_TIMER);
         const calendarViewMeta = getViewMeta(VIEW_TYPE_CALENDAR);
         const miniCalendarViewMeta = getViewMeta(VIEW_TYPE_MINI_CALENDAR);
 
@@ -111,8 +110,8 @@ export default class TaskViewerPlugin extends Plugin {
             this.activateView(VIEW_TYPE_SCHEDULE);
         });
 
-        this.addRibbonIcon(pomodoroViewMeta.icon, pomodoroViewMeta.ribbonTitle, () => {
-            this.activateView(VIEW_TYPE_POMODORO);
+        this.addRibbonIcon(timerViewMeta.icon, timerViewMeta.ribbonTitle, () => {
+            this.activateView(VIEW_TYPE_TIMER);
         });
 
         this.addRibbonIcon(calendarViewMeta.icon, calendarViewMeta.ribbonTitle, () => {
@@ -141,10 +140,10 @@ export default class TaskViewerPlugin extends Plugin {
         });
 
         this.addCommand({
-            id: 'open-pomodoro-view',
-            name: pomodoroViewMeta.commandName,
+            id: 'open-timer-view',
+            name: timerViewMeta.commandName,
             callback: () => {
-                this.activateView(VIEW_TYPE_POMODORO);
+                this.activateView(VIEW_TYPE_TIMER);
             }
         });
 
@@ -251,33 +250,25 @@ export default class TaskViewerPlugin extends Plugin {
         this.startDateBoundaryCheck();
 
         // Start Properties View color suggest observer
-        this.startPropertiesColorSuggest();
+        this.propertySuggestObserver = new PropertySuggestObserver(
+            this.app,
+            () => this.settings,
+            this
+        );
+        this.propertySuggestObserver.start();
 
         // Register URI handler: obsidian://task-viewer?view=timeline&days=3&filter=<base64>&pinnedLists=<base64>
         this.registerObsidianProtocolHandler('task-viewer', (params) => {
+            void (async () => {
             const viewMap: Record<string, string> = {
                 timeline: VIEW_TYPE_TIMELINE,
                 calendar: VIEW_TYPE_CALENDAR,
                 schedule: VIEW_TYPE_SCHEDULE,
                 'mini-calendar': VIEW_TYPE_MINI_CALENDAR,
+                timer: VIEW_TYPE_TIMER,
             };
             const viewType = viewMap[params.view];
             if (!viewType) return;
-
-            // Filter (base64)
-            let filterState: FilterState | undefined;
-            if (params.filter) {
-                filterState = FilterSerializer.fromURIParam(params.filter);
-            }
-
-            // PinnedLists (base64)
-            let pinnedLists: PinnedListDefinition[] | undefined;
-            if (params.pinnedLists) {
-                try {
-                    const parsed = JSON.parse(atob(params.pinnedLists));
-                    if (Array.isArray(parsed)) pinnedLists = parsed;
-                } catch { /* ignore */ }
-            }
 
             const uriParams: {
                 filterState?: FilterState;
@@ -286,34 +277,79 @@ export default class TaskViewerPlugin extends Plugin {
                 date?: string;
                 pinnedLists?: PinnedListDefinition[];
                 showSidebar?: boolean;
-                position?: 'left' | 'right' | 'tab' | 'window';
+                position?: 'left' | 'right' | 'tab' | 'window' | 'override';
                 name?: string;
-            } = { filterState, pinnedLists };
+                timerMode?: string;
+                intervalTemplate?: string;
+            } = {};
 
-            // View display params
-            if (params.days) {
-                const days = parseInt(params.days, 10);
-                if ([1, 3, 7].includes(days)) uriParams.days = days;
+            // Timer view: mode and interval template params
+            if (viewType === VIEW_TYPE_TIMER) {
+                if (params.mode) uriParams.timerMode = params.mode;
+                if (params.intervalTemplate) uriParams.intervalTemplate = params.intervalTemplate;
+            } else {
+                // Template resolution (provides base values; inline params override below)
+                if (params.template) {
+                    const loader = new ViewTemplateLoader(this.app);
+                    const summary = loader.findByBasename(
+                        this.settings.viewTemplateFolder,
+                        params.template,
+                    );
+                    if (summary) {
+                        const template = await loader.loadFullTemplate(summary.filePath);
+                        if (template) {
+                            if (template.filterState) uriParams.filterState = template.filterState;
+                            if (template.pinnedLists) uriParams.pinnedLists = template.pinnedLists;
+                            if (template.days != null) uriParams.days = template.days;
+                            if (template.zoom != null) uriParams.zoom = template.zoom;
+                            if (template.showSidebar != null) uriParams.showSidebar = template.showSidebar;
+                            if (template.name) uriParams.name = template.name;
+                        }
+                    } else {
+                        new Notice(`View template "${params.template}" not found.`);
+                    }
+                }
+
+                // Filter (base64) — overrides template value
+                if (params.filter) {
+                    uriParams.filterState = FilterSerializer.fromURIParam(params.filter);
+                }
+
+                // PinnedLists (base64) — overrides template value
+                if (params.pinnedLists) {
+                    try {
+                        const parsed = JSON.parse(unicodeAtob(params.pinnedLists));
+                        if (Array.isArray(parsed)) uriParams.pinnedLists = parsed;
+                    } catch { /* ignore */ }
+                }
+
+                // View display params — override template values
+                if (params.days) {
+                    const days = parseInt(params.days, 10);
+                    if ([1, 3, 7].includes(days)) uriParams.days = days;
+                }
+                if (params.zoom) {
+                    const zoom = parseFloat(params.zoom);
+                    if (zoom >= 0.25 && zoom <= 10.0) uriParams.zoom = zoom;
+                }
+                if (params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date)) {
+                    uriParams.date = params.date;
+                }
+                if (params.showSidebar === 'true' || params.showSidebar === 'false') {
+                    uriParams.showSidebar = params.showSidebar === 'true';
+                }
             }
-            if (params.zoom) {
-                const zoom = parseFloat(params.zoom);
-                if (zoom >= 0.25 && zoom <= 10.0) uriParams.zoom = zoom;
-            }
-            if (params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date)) {
-                uriParams.date = params.date;
-            }
-            if (params.showSidebar === 'true' || params.showSidebar === 'false') {
-                uriParams.showSidebar = params.showSidebar === 'true';
-            }
-            const validPositions = new Set(['left', 'right', 'tab', 'window']);
+
+            const validPositions = new Set(['left', 'right', 'tab', 'window', 'override']);
             if (params.position && validPositions.has(params.position)) {
-                uriParams.position = params.position as 'left' | 'right' | 'tab' | 'window';
+                uriParams.position = params.position as 'left' | 'right' | 'tab' | 'window' | 'override';
             }
             if (params.name) {
                 uriParams.name = params.name;
             }
 
             this.activateView(viewType, uriParams);
+            })();
         });
     }
 
@@ -358,7 +394,7 @@ export default class TaskViewerPlugin extends Plugin {
     }
 
     getTaskRepository() {
-        return (this.taskIndex as any).repository;
+        return this.taskIndex.getRepository();
     }
 
     getTimerWidget(): TimerWidget {
@@ -401,14 +437,23 @@ export default class TaskViewerPlugin extends Plugin {
         date?: string;
         pinnedLists?: PinnedListDefinition[];
         showSidebar?: boolean;
-        position?: 'left' | 'right' | 'tab' | 'window';
+        position?: 'left' | 'right' | 'tab' | 'window' | 'override';
         name?: string;
+        timerMode?: string;
+        intervalTemplate?: string;
     }) {
         const { workspace } = this.app;
 
         let leaf: WorkspaceLeaf | null = null;
 
-        if (params?.position) {
+        if (params?.position === 'override') {
+            const leaves = workspace.getLeavesOfType(viewType);
+            if (leaves.length > 0) {
+                leaf = leaves[0];
+            } else {
+                leaf = this.getLeafForPosition(workspace, this.getDefaultPosition(viewType));
+            }
+        } else if (params?.position) {
             switch (params.position) {
                 case 'left':   leaf = workspace.getLeftLeaf(false); break;
                 case 'right':  leaf = workspace.getRightLeaf(false); break;
@@ -418,7 +463,7 @@ export default class TaskViewerPlugin extends Plugin {
         } else {
             const leaves = workspace.getLeavesOfType(viewType);
             if (leaves.length === 0) {
-                leaf = workspace.getRightLeaf(false);
+                leaf = this.getLeafForPosition(workspace, this.getDefaultPosition(viewType));
             } else {
                 leaf = workspace.getLeaf(true);
             }
@@ -436,9 +481,32 @@ export default class TaskViewerPlugin extends Plugin {
             if (params?.pinnedLists) state.pinnedLists = params.pinnedLists;
             if (params?.showSidebar != null) state.showSidebar = params.showSidebar;
             if (params?.name) state.customName = params.name;
+            if (params?.timerMode) state.timerViewMode = params.timerMode;
+            if (params?.intervalTemplate) state.intervalTemplate = params.intervalTemplate;
 
             await leaf.setViewState({ type: viewType, active: true, state });
             workspace.revealLeaf(leaf);
+        }
+    }
+
+    private getDefaultPosition(viewType: string): DefaultLeafPosition {
+        const positions = this.settings.defaultViewPositions;
+        const map: Record<string, DefaultLeafPosition | undefined> = {
+            [VIEW_TYPE_TIMELINE]: positions.timeline,
+            [VIEW_TYPE_SCHEDULE]: positions.schedule,
+            [VIEW_TYPE_CALENDAR]: positions.calendar,
+            [VIEW_TYPE_MINI_CALENDAR]: positions.miniCalendar,
+            [VIEW_TYPE_TIMER]: positions.timer,
+        };
+        return map[viewType] ?? 'right';
+    }
+
+    private getLeafForPosition(workspace: Workspace, position: DefaultLeafPosition): WorkspaceLeaf | null {
+        switch (position) {
+            case 'left':   return workspace.getLeftLeaf(false);
+            case 'right':  return workspace.getRightLeaf(false);
+            case 'tab':    return workspace.getLeaf('tab');
+            case 'window': return workspace.getLeaf('window');
         }
     }
 
@@ -456,148 +524,8 @@ export default class TaskViewerPlugin extends Plugin {
         }
 
         // Disconnect Properties color suggest observer
-        if (this.propertiesObserver) {
-            this.propertiesObserver.disconnect();
-            this.propertiesObserver = null;
-        }
+        this.propertySuggestObserver?.destroy();
+        this.propertySuggestObserver = null;
     }
 
-    /**
-     * Start observing Properties View for timeline-color inputs
-     */
-    private startPropertiesColorSuggest(): void {
-        this.propertiesObserver = new MutationObserver(() => {
-            this.attachPropertyColorSuggests();
-        });
-
-        this.propertiesObserver.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-
-        // Initial scan
-        this.attachPropertyColorSuggests();
-    }
-
-    /**
-     * Attach PropertyColorSuggest to timeline-color property value inputs
-     */
-    private attachPropertyColorSuggests(): void {
-        const colorKey = this.settings.frontmatterTaskKeys.color;
-        const linestyleKey = this.settings.frontmatterTaskKeys.linestyle;
-
-        // Find all property key inputs
-        const keyInputs = document.querySelectorAll('.metadata-property-key-input');
-
-        keyInputs.forEach((keyInput) => {
-            const input = keyInput as HTMLInputElement;
-            const isColorKey = input.value === colorKey;
-            const isLineStyleKey = input.value === linestyleKey;
-            if (!isColorKey && !isLineStyleKey) {
-                return;
-            }
-
-            // Find the corresponding value contenteditable div
-            const propertyContainer = input.closest('.metadata-property');
-            if (!propertyContainer) {
-                return;
-            }
-
-            // The value field is a contenteditable div, not an input
-            const valueDiv = propertyContainer.querySelector('.metadata-input-longtext[contenteditable="true"]') as HTMLDivElement;
-            if (!valueDiv || this.attachedInputs.has(valueDiv)) {
-                return;
-            }
-
-            if (isColorKey) {
-                new PropertyColorSuggest(this.app, valueDiv, this);
-                this.addColorPickerIcon(propertyContainer as HTMLElement, valueDiv);
-            } else {
-                new PropertyLineStyleSuggest(this.app, valueDiv, this);
-            }
-
-            this.attachedInputs.add(valueDiv);
-        });
-    }
-
-    /**
-     * Add color picker icon next to the value field
-     */
-    private addColorPickerIcon(container: HTMLElement, valueDiv: HTMLDivElement): void {
-        // Check if icon already exists
-        if (container.querySelector('.task-viewer-color-picker-icon')) {
-            return;
-        }
-
-        // Create icon button with relative positioning
-        const iconBtn = container.createDiv({ cls: 'task-viewer-color-picker-icon clickable-icon' });
-        iconBtn.setAttribute('aria-label', 'カラーピッカーを開く');
-        iconBtn.style.position = 'relative';
-        iconBtn.style.marginLeft = '4px';
-        iconBtn.style.display = 'inline-flex';
-        iconBtn.style.alignItems = 'center';
-        iconBtn.style.cursor = 'pointer';
-        setIcon(iconBtn, 'palette');
-
-        // Create hidden color input inside icon button (so picker appears at icon position)
-        const colorInput = document.createElement('input');
-        colorInput.type = 'color';
-        colorInput.style.position = 'absolute';
-        colorInput.style.top = '0';
-        colorInput.style.left = '0';
-        colorInput.style.width = '100%';
-        colorInput.style.height = '100%';
-        colorInput.style.opacity = '0';
-        colorInput.style.cursor = 'pointer';
-        iconBtn.appendChild(colorInput);
-
-        // Insert after the value container
-        const valueContainer = container.querySelector('.metadata-property-value');
-        if (valueContainer) {
-            valueContainer.after(iconBtn);
-        }
-
-        // Color input change handler
-        colorInput.addEventListener('input', async () => {
-            const activeFile = this.app.workspace.getActiveFile();
-            if (!activeFile) {
-                return;
-            }
-
-            const colorKey = this.settings.frontmatterTaskKeys.color;
-            // @ts-ignore - processFrontMatter
-            await this.app.fileManager.processFrontMatter(activeFile, (frontmatter: any) => {
-                frontmatter[colorKey] = colorInput.value;
-            });
-
-            // Sync UI
-            valueDiv.textContent = colorInput.value;
-        });
-
-        // Set initial value when clicking
-        iconBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const currentValue = valueDiv.textContent?.trim() || '';
-
-            // Convert color name to hex if needed
-            let hexValue = currentValue;
-            if (currentValue && !currentValue.startsWith('#')) {
-                const tempEl = document.createElement('div');
-                tempEl.style.color = currentValue;
-                document.body.appendChild(tempEl);
-                const computedColor = getComputedStyle(tempEl).color;
-                document.body.removeChild(tempEl);
-
-                const rgbMatch = computedColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-                if (rgbMatch) {
-                    const r = parseInt(rgbMatch[1]).toString(16).padStart(2, '0');
-                    const g = parseInt(rgbMatch[2]).toString(16).padStart(2, '0');
-                    const b = parseInt(rgbMatch[3]).toString(16).padStart(2, '0');
-                    hexValue = `#${r}${g}${b}`;
-                }
-            }
-
-            colorInput.value = hexValue || '#000000';
-        });
-    }
 }

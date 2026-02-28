@@ -1,4 +1,4 @@
-export type ViewType = 'timeline-view' | 'schedule-view' | 'pomodoro-view' | 'calendar-view' | 'mini-calendar-view';
+export type ViewType = 'timeline-view' | 'schedule-view' | 'timer-view' | 'calendar-view' | 'mini-calendar-view';
 
 export type ViewMeta = {
     type: ViewType;
@@ -24,8 +24,8 @@ export const VIEW_META_SCHEDULE: ViewMeta = {
     commandName: 'Open Schedule View',
 };
 
-export const VIEW_META_POMODORO: ViewMeta = {
-    type: 'pomodoro-view',
+export const VIEW_META_TIMER: ViewMeta = {
+    type: 'timer-view',
     displayText: 'Timer View',
     icon: 'timer',
     ribbonTitle: 'Open Timer View',
@@ -51,7 +51,7 @@ export const VIEW_META_MINI_CALENDAR: ViewMeta = {
 export const VIEW_REGISTRY: Readonly<Record<ViewType, ViewMeta>> = {
     'timeline-view': VIEW_META_TIMELINE,
     'schedule-view': VIEW_META_SCHEDULE,
-    'pomodoro-view': VIEW_META_POMODORO,
+    'timer-view': VIEW_META_TIMER,
     'calendar-view': VIEW_META_CALENDAR,
     'mini-calendar-view': VIEW_META_MINI_CALENDAR,
 };

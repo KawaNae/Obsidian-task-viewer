@@ -2,19 +2,28 @@
  * IntervalTemplateLoader
  *
  * Loads interval timer templates from a user-configured vault folder.
- * Each template is a .md file with tv-segments defined in YAML frontmatter.
+ * Each template is a .md file with _tv-name in YAML frontmatter
+ * and timer data (icon, groups) in a ```json code block.
  *
  * Template format:
  * ---
- * tv-name: Deep Work Session
- * tv-icon: brain
- * tv-segments:
- *   - x10:
- *       - Deep Work, 00:25:00, work
- *       - Break, 00:05:00, break
- *   - x3:
- *       - Review, 00:10:00
+ * _tv-name: Deep Work Session
  * ---
+ *
+ * ```json
+ * {
+ *   "icon": "brain",
+ *   "groups": [
+ *     {
+ *       "repeatCount": 10,
+ *       "segments": [
+ *         { "label": "Deep Work", "durationSeconds": 1500, "type": "work" },
+ *         { "label": "Break", "durationSeconds": 300, "type": "break" }
+ *       ]
+ *     }
+ *   ]
+ * }
+ * ```
  */
 
 import { App, TFile, TFolder } from 'obsidian';
@@ -28,9 +37,6 @@ export interface IntervalTemplate {
     totalDurationLabel: string;
 }
 
-const GROUP_KEY_REGEX = /^x(\d+)$/;
-const HMS_REGEX = /^\d{2}:\d{2}:\d{2}$/;
-
 export class IntervalTemplateLoader {
     constructor(private app: App) {}
 
@@ -43,7 +49,7 @@ export class IntervalTemplateLoader {
         const templates: IntervalTemplate[] = [];
         for (const child of folder.children) {
             if (!(child instanceof TFile) || child.extension !== 'md') continue;
-            const template = this.loadTemplate(child);
+            const template = await this.loadTemplate(child);
             if (template) templates.push(template);
         }
 
@@ -51,23 +57,38 @@ export class IntervalTemplateLoader {
         return templates;
     }
 
-    private loadTemplate(file: TFile): IntervalTemplate | null {
+    async findByBasename(folderPath: string, basename: string): Promise<IntervalTemplate | null> {
+        if (!folderPath) return null;
+
+        const folder = this.app.vault.getAbstractFileByPath(folderPath);
+        if (!(folder instanceof TFolder)) return null;
+
+        for (const child of folder.children) {
+            if (!(child instanceof TFile) || child.extension !== 'md') continue;
+            if (child.basename === basename) {
+                return await this.loadTemplate(child);
+            }
+        }
+        return null;
+    }
+
+    private async loadTemplate(file: TFile): Promise<IntervalTemplate | null> {
         const cache = this.app.metadataCache.getFileCache(file);
         const fm = cache?.frontmatter;
-        if (!fm) return null;
 
-        const rawSegments = fm['tv-segments'];
-        if (!Array.isArray(rawSegments) || rawSegments.length === 0) return null;
-
-        const groups = this.parseGroups(rawSegments);
-        if (groups.length === 0) return null;
-
-        const name = typeof fm['tv-name'] === 'string' && fm['tv-name']
-            ? fm['tv-name']
+        const name = (fm && typeof fm['_tv-name'] === 'string' && fm['_tv-name'])
+            ? fm['_tv-name']
             : file.basename;
 
-        const icon = typeof fm['tv-icon'] === 'string' && fm['tv-icon']
-            ? fm['tv-icon']
+        const content = await this.app.vault.cachedRead(file);
+        const jsonData = this.extractJsonBlock(content);
+        if (!jsonData) return null;
+
+        const groups = this.parseGroups(jsonData.groups);
+        if (groups.length === 0) return null;
+
+        const icon = typeof jsonData.icon === 'string' && jsonData.icon
+            ? jsonData.icon
             : 'rotate-cw';
 
         return {
@@ -79,28 +100,41 @@ export class IntervalTemplateLoader {
         };
     }
 
-    private parseGroups(rawSegments: unknown[]): IntervalGroup[] {
+    private extractJsonBlock(content: string): Record<string, unknown> | null {
+        const match = content.match(/```json\s*\n([\s\S]*?)\n```/);
+        if (!match) return null;
+        try {
+            const parsed = JSON.parse(match[1]);
+            return (parsed && typeof parsed === 'object') ? parsed : null;
+        } catch {
+            return null;
+        }
+    }
+
+    private parseGroups(raw: unknown): IntervalGroup[] {
+        if (!Array.isArray(raw)) return [];
         const groups: IntervalGroup[] = [];
 
-        for (const entry of rawSegments) {
-            if (typeof entry !== 'object' || entry === null) continue;
+        for (const entry of raw) {
+            if (!entry || typeof entry !== 'object') continue;
+            const obj = entry as Record<string, unknown>;
 
-            const keys = Object.keys(entry as Record<string, unknown>);
-            if (keys.length === 0) continue;
-
-            const key = keys[0];
-            const match = key.match(GROUP_KEY_REGEX);
-            if (!match) continue;
-
-            const repeatCount = parseInt(match[1], 10);
-            const rawLines = (entry as Record<string, unknown>)[key];
-            if (!Array.isArray(rawLines)) continue;
+            const repeatCount = typeof obj.repeatCount === 'number' ? obj.repeatCount : 1;
+            if (!Array.isArray(obj.segments)) continue;
 
             const segments: IntervalSegment[] = [];
-            for (const line of rawLines) {
-                if (typeof line !== 'string') continue;
-                const segment = this.parseSegmentLine(line);
-                if (segment) segments.push(segment);
+            for (const seg of obj.segments) {
+                if (!seg || typeof seg !== 'object') continue;
+                const s = seg as Record<string, unknown>;
+
+                const label = typeof s.label === 'string' ? s.label : '';
+                const durationSeconds = typeof s.durationSeconds === 'number' ? s.durationSeconds : 0;
+                if (!label || durationSeconds <= 0) continue;
+
+                const rawType = typeof s.type === 'string' ? s.type.toLowerCase() : 'work';
+                const type: 'work' | 'break' = rawType === 'break' ? 'break' : 'work';
+
+                segments.push({ label, durationSeconds, type });
             }
 
             if (segments.length > 0) {
@@ -109,23 +143,6 @@ export class IntervalTemplateLoader {
         }
 
         return groups;
-    }
-
-    private parseSegmentLine(line: string): IntervalSegment | null {
-        const parts = line.split(',').map(s => s.trim());
-        if (parts.length < 2) return null;
-
-        const label = parts[0];
-        if (!label) return null;
-
-        const durationStr = parts[1];
-        const seconds = parseHMS(durationStr);
-        if (seconds <= 0) return null;
-
-        const rawType = parts[2]?.toLowerCase();
-        const type: 'work' | 'break' = rawType === 'break' ? 'break' : 'work';
-
-        return { label, durationSeconds: seconds, type };
     }
 
     private formatTotalDuration(groups: IntervalGroup[]): string {
@@ -149,11 +166,4 @@ export class IntervalTemplateLoader {
         if (hours > 0) return `${hours}h`;
         return `${minutes}m`;
     }
-}
-
-/** Parse HH:MM:SS string to total seconds. Returns 0 on invalid input. */
-export function parseHMS(str: string): number {
-    if (!str || !HMS_REGEX.test(str)) return 0;
-    const [h, m, s] = str.split(':').map(Number);
-    return h * 3600 + m * 60 + s;
 }

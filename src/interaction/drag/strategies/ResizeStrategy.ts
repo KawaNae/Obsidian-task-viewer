@@ -7,7 +7,7 @@ import {
     toDisplayTopPx,
     toLogicalHeightPx,
     toLogicalTopPx
-} from '../../../views/utils/TimelineCardPosition';
+} from '../../../views/sharedLogic/TimelineCardPosition';
 
 /**
  * リサイズ操作を処理するドラッグストラテジー。
@@ -60,13 +60,11 @@ export class ResizeStrategy extends BaseDragStrategy {
 
             // 分割タスクの無効なリサイズをブロック
             if (this.resizeDirection === 'top' && el.classList.contains('task-card--split-after')) {
-                console.log('[ResizeStrategy] Blocked resize-top on split-after segment');
                 this.dragTask = null;
                 this.dragEl = null;
                 return;
             }
             if (this.resizeDirection === 'bottom' && el.classList.contains('task-card--split-before')) {
-                console.log('[ResizeStrategy] Blocked resize-bottom on split-before segment');
                 this.dragTask = null;
                 this.dragEl = null;
                 return;

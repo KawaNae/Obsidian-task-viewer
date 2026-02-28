@@ -1,8 +1,8 @@
 import { App, TFile, setIcon } from 'obsidian';
-import TaskViewerPlugin from '../../../main';
-import { HabitDefinition } from '../../../types';
-import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
-import { FrontmatterLineEditor } from '../../../services/persistence/utils/FrontmatterLineEditor';
+import TaskViewerPlugin from '../../main';
+import { HabitDefinition } from '../../types';
+import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import { FrontmatterLineEditor } from '../../services/persistence/utils/FrontmatterLineEditor';
 
 export class HabitTrackerRenderer {
     // Persists collapsed state across re-renders (same pattern as PinnedListRenderer)

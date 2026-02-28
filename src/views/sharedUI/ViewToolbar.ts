@@ -1,7 +1,10 @@
 import { setIcon, Menu, Notice } from 'obsidian';
 import type { App, WorkspaceLeaf } from 'obsidian';
-import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../utils/ViewUriBuilder';
-import { InputModal } from '../modals/InputModal';
+import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../../utils/ViewUriBuilder';
+import { InputModal } from '../../modals/InputModal';
+import type { ViewTemplate } from '../../types';
+import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
+import { ViewTemplateWriter } from '../../services/template/ViewTemplateWriter';
 
 /**
  * Date navigation component with prev/next/today buttons.
@@ -162,6 +165,7 @@ const POSITION_LABELS: Record<LeafPosition, string> = {
     right: 'Right sidebar',
     tab: 'Tab',
     window: 'Window',
+    override: 'Override',
 };
 
 export interface ViewSettingsOptions {
@@ -172,11 +176,15 @@ export interface ViewSettingsOptions {
     onRename: (newName: string | undefined) => void;
     buildUri: () => ViewUriOptions;
     viewType: string;
+    getViewTemplateFolder: () => string;
+    getViewTemplate: () => ViewTemplate;
+    onApplyTemplate: (template: ViewTemplate) => void;
+    onReset: () => void;
 }
 
 /**
  * View settings gear button and menu.
- * Provides: Rename, Position display (read-only).
+ * Provides: Rename, Save/Load view, Copy URI, Position display.
  */
 export class ViewSettingsMenu {
     static renderButton(toolbar: HTMLElement, options: ViewSettingsOptions): HTMLElement {
@@ -189,21 +197,80 @@ export class ViewSettingsMenu {
 
     static showMenu(e: MouseEvent, options: ViewSettingsOptions): void {
         const menu = new Menu();
-        const { app, leaf, getCustomName, getDefaultName, onRename, buildUri, viewType } = options;
+        const {
+            app, leaf, getCustomName, getDefaultName, onRename,
+            buildUri, viewType, getViewTemplateFolder, getViewTemplate, onApplyTemplate, onReset,
+        } = options;
 
-        // Rename
+        // Save view... (name required, saves template + updates customName)
+        const folder = getViewTemplateFolder();
         menu.addItem((item) => {
-            item.setTitle('Rename...')
-                .setIcon('pencil')
+            item.setTitle('Save view...')
+                .setIcon('save')
                 .onClick(() => {
+                    if (!folder) {
+                        new Notice('Set "View Template Folder" in Task Viewer settings first.');
+                        return;
+                    }
+                    const defaultName = getCustomName() || getDefaultName();
                     new InputModal(
                         app,
-                        'Rename View',
-                        'View name (empty to reset)',
-                        getCustomName() ?? '',
-                        (value) => onRename(value.trim() || undefined),
+                        'Save View',
+                        'View name',
+                        defaultName,
+                        async (value) => {
+                            const name = value.trim();
+                            if (!name) return;
+                            const template = getViewTemplate();
+                            template.name = name;
+                            const writer = new ViewTemplateWriter(app);
+                            await writer.saveTemplate(folder, template);
+                            onRename(name);
+                            new Notice(`View saved as "${name}".`);
+                        },
                     ).open();
                 });
+        });
+
+        // Load view... (submenu)
+        menu.addItem((item) => {
+            item.setTitle('Load view...')
+                .setIcon('folder-open');
+
+            const shortViewType = ViewSettingsMenu.toShortViewType(viewType);
+
+            if (!folder) {
+                (item as any).setSubmenu().addItem((sub: any) =>
+                    sub.setTitle('No folder configured').setDisabled(true));
+            } else {
+                const loader = new ViewTemplateLoader(app);
+                const summaries = loader.loadTemplates(folder)
+                    .filter(t => t.viewType === shortViewType);
+
+                const submenu = (item as any).setSubmenu();
+                if (summaries.length === 0) {
+                    submenu.addItem((sub: any) =>
+                        sub.setTitle('No templates found').setDisabled(true));
+                } else {
+                    for (const summary of summaries) {
+                        submenu.addItem((sub: any) => {
+                            sub.setTitle(summary.name)
+                                .onClick(async () => {
+                                    const full = await loader.loadFullTemplate(summary.filePath);
+                                    if (full) onApplyTemplate(full);
+                                    else new Notice('Failed to load template.');
+                                });
+                        });
+                    }
+                }
+            }
+        });
+
+        // Reset view
+        menu.addItem((item) => {
+            item.setTitle('Reset view')
+                .setIcon('rotate-ccw')
+                .onClick(() => onReset());
         });
 
         menu.addSeparator();
@@ -216,6 +283,12 @@ export class ViewSettingsMenu {
                     const uriOpts = buildUri();
                     uriOpts.position = ViewUriBuilder.detectLeafPosition(leaf, app.workspace);
                     uriOpts.name = getCustomName();
+
+                    // Use template reference if folder is configured
+                    if (folder) {
+                        uriOpts.template = getCustomName() || getDefaultName();
+                    }
+
                     const uri = ViewUriBuilder.build(viewType, uriOpts);
                     await navigator.clipboard.writeText(uri);
                     new Notice('URI copied to clipboard');
@@ -230,6 +303,11 @@ export class ViewSettingsMenu {
                     const uriOpts = buildUri();
                     uriOpts.position = ViewUriBuilder.detectLeafPosition(leaf, app.workspace);
                     uriOpts.name = getCustomName();
+
+                    if (folder) {
+                        uriOpts.template = getCustomName() || getDefaultName();
+                    }
+
                     const uri = ViewUriBuilder.build(viewType, uriOpts);
                     const displayName = getCustomName() || getDefaultName();
                     const link = `[${displayName}](${uri})`;
@@ -253,5 +331,9 @@ export class ViewSettingsMenu {
         });
 
         menu.showAtMouseEvent(e);
+    }
+
+    private static toShortViewType(viewType: string): string {
+        return viewType.replace(/-view$/, '');
     }
 }

@@ -3,8 +3,9 @@ import type { FilterState } from '../services/filter/FilterTypes';
 import { hasConditions } from '../services/filter/FilterTypes';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
 import type { PinnedListDefinition } from '../types';
+import { unicodeBtoa } from './base64';
 
-export type LeafPosition = 'left' | 'right' | 'tab' | 'window';
+export type LeafPosition = 'left' | 'right' | 'tab' | 'window' | 'override';
 
 export interface ViewUriOptions {
     filterState?: FilterState;
@@ -15,6 +16,9 @@ export interface ViewUriOptions {
     showSidebar?: boolean;
     position?: LeafPosition;
     name?: string;
+    template?: string;
+    mode?: string;
+    intervalTemplate?: string;
 }
 
 /**
@@ -29,6 +33,7 @@ export class ViewUriBuilder {
         'schedule-view': 'schedule',
         'calendar-view': 'calendar',
         'mini-calendar-view': 'mini-calendar',
+        'timer-view': 'timer',
     };
 
     static build(viewType: string, options?: ViewUriOptions): string {
@@ -50,14 +55,23 @@ export class ViewUriBuilder {
         if (opts.date != null) uri += `&date=${encodeURIComponent(opts.date)}`;
         if (opts.showSidebar != null) uri += `&showSidebar=${opts.showSidebar}`;
 
-        // Filter (base64)
-        if (opts.filterState && hasConditions(opts.filterState)) {
-            uri += `&filter=${FilterSerializer.toURIParam(opts.filterState)}`;
-        }
+        // Timer-specific params
+        if (opts.mode) uri += `&mode=${opts.mode}`;
+        if (opts.intervalTemplate) uri += `&intervalTemplate=${encodeURIComponent(opts.intervalTemplate)}`;
 
-        // PinnedLists (base64)
-        if (opts.pinnedLists && opts.pinnedLists.length > 0) {
-            uri += `&pinnedLists=${btoa(JSON.stringify(opts.pinnedLists))}`;
+        // Template reference (compact) or inline base64 (fallback)
+        if (opts.template) {
+            uri += `&template=${encodeURIComponent(opts.template)}`;
+        } else {
+            // Filter (base64)
+            if (opts.filterState && hasConditions(opts.filterState)) {
+                uri += `&filter=${FilterSerializer.toURIParam(opts.filterState)}`;
+            }
+
+            // PinnedLists (base64)
+            if (opts.pinnedLists && opts.pinnedLists.length > 0) {
+                uri += `&pinnedLists=${unicodeBtoa(JSON.stringify(opts.pinnedLists))}`;
+            }
         }
 
         return uri;

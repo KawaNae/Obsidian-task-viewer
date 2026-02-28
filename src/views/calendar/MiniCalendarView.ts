@@ -1,13 +1,25 @@
 import { ItemView, WorkspaceLeaf, TFile, setIcon } from 'obsidian';
 import type { HoverParent } from 'obsidian';
-import { Task, isCompleteStatusChar } from '../types';
-import { TaskIndex } from '../services/core/TaskIndex';
-import { DateUtils } from '../utils/DateUtils';
-import { DailyNoteUtils } from '../utils/DailyNoteUtils';
-import TaskViewerPlugin from '../main';
-import { TaskLinkInteractionManager } from './taskcard/TaskLinkInteractionManager';
-import { TASK_VIEWER_HOVER_SOURCE_ID } from '../constants/hover';
-import { VIEW_META_MINI_CALENDAR } from '../constants/viewRegistry';
+import { Task } from '../../types';
+import { TaskIndex } from '../../services/core/TaskIndex';
+import { DateUtils } from '../../utils/DateUtils';
+import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import {
+    getTaskDateRange,
+    isTaskCompleted as isTaskCompletedUtil,
+    parseLocalDateString,
+    getCalendarDateRange,
+    getWeekStart,
+    getNormalizedWindowStart,
+    getReferenceMonth,
+    getColumnOffset,
+    getGridColumnForDay,
+    openOrCreateDailyNote,
+} from './CalendarDateUtils';
+import TaskViewerPlugin from '../../main';
+import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
+import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
+import { VIEW_META_MINI_CALENDAR } from '../../constants/viewRegistry';
 
 export const VIEW_TYPE_MINI_CALENDAR = VIEW_META_MINI_CALENDAR.type;
 
@@ -358,66 +370,19 @@ export class MiniCalendarView extends ItemView {
     }
 
     private getTaskDateRange(task: Task): { effectiveStart: string | null; effectiveEnd: string | null } {
-        if (!task.startDate) {
-            return { effectiveStart: null, effectiveEnd: null };
-        }
-
-        if (task.startTime) {
-            const visualDate = DateUtils.getVisualStartDate(
-                task.startDate,
-                task.startTime,
-                this.plugin.settings.startHour
-            );
-            const isAllDay = DateUtils.isAllDayTask(
-                task.startDate,
-                task.startTime,
-                task.endDate,
-                task.endTime,
-                this.plugin.settings.startHour
-            );
-
-            if (isAllDay && task.endDate && task.endDate >= task.startDate) {
-                return { effectiveStart: task.startDate, effectiveEnd: task.endDate };
-            }
-            return { effectiveStart: visualDate, effectiveEnd: visualDate };
-        }
-
-        const effectiveEnd = task.endDate && task.endDate >= task.startDate
-            ? task.endDate
-            : task.startDate;
-        return { effectiveStart: task.startDate, effectiveEnd };
+        return getTaskDateRange(task, this.plugin.settings.startHour);
     }
 
     private isTaskCompleted(task: Task): boolean {
-        let completed = isCompleteStatusChar(task.statusChar || ' ', this.plugin.settings.completeStatusChars);
-        if (!completed || task.childLines.length === 0) {
-            return completed;
-        }
-
-        for (const childLine of task.childLines) {
-            const match = childLine.match(/^\s*-\s*\[(.)\]/);
-            if (match && !isCompleteStatusChar(match[1], this.plugin.settings.completeStatusChars)) {
-                completed = false;
-                break;
-            }
-        }
-
-        return completed;
+        return isTaskCompletedUtil(task, this.plugin.settings.completeStatusChars);
     }
 
     private getCalendarDateRange(): { startDate: Date; endDate: Date } {
-        const parsedStart = this.parseLocalDateString(this.windowStart);
-        const fallbackStart = this.getWeekStart(new Date(), this.plugin.settings.calendarWeekStartDay);
-        const startDate = this.getWeekStart(parsedStart ?? fallbackStart, this.plugin.settings.calendarWeekStartDay);
-        const endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + 41);
-        return { startDate, endDate };
+        return getCalendarDateRange(this.windowStart, this.plugin.settings.calendarWeekStartDay);
     }
 
     private getWeekStart(date: Date, weekStartDay: 0 | 1): Date {
-        const day = date.getDay();
-        const diff = (day - weekStartDay + 7) % 7;
-        return new Date(date.getFullYear(), date.getMonth(), date.getDate() - diff);
+        return getWeekStart(date, weekStartDay);
     }
 
     private getWeekdayNames(): string[] {
@@ -433,11 +398,11 @@ export class MiniCalendarView extends ItemView {
     }
 
     private getColumnOffset(): number {
-        return this.shouldShowWeekNumbers() ? 1 : 0;
+        return getColumnOffset(this.shouldShowWeekNumbers());
     }
 
     private getGridColumnForDay(dayColumn: number): number {
-        return dayColumn + this.getColumnOffset();
+        return getGridColumnForDay(dayColumn, this.shouldShowWeekNumbers());
     }
 
     private renderWeekNumberCell(weekEl: HTMLElement, weekStartDate: Date): void {
@@ -470,10 +435,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     private getReferenceMonth(): { year: number; month: number } {
-        const midDate = this.parseLocalDateString(DateUtils.addDays(this.windowStart, 20));
-        const fallback = this.parseLocalDateString(this.windowStart) ?? new Date();
-        const date = midDate ?? fallback;
-        return { year: date.getFullYear(), month: date.getMonth() };
+        return getReferenceMonth(this.windowStart);
     }
 
     private navigateWeek(offset: number): void {
@@ -513,35 +475,11 @@ export class MiniCalendarView extends ItemView {
     }
 
     private parseLocalDateString(value: string): Date | null {
-        const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-        if (!match) {
-            return null;
-        }
-
-        const year = Number(match[1]);
-        const month = Number(match[2]);
-        const day = Number(match[3]);
-        if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
-            return null;
-        }
-
-        const parsed = new Date(year, month - 1, day);
-        if (
-            parsed.getFullYear() !== year ||
-            parsed.getMonth() !== month - 1 ||
-            parsed.getDate() !== day
-        ) {
-            return null;
-        }
-
-        return parsed;
+        return parseLocalDateString(value);
     }
 
     private getNormalizedWindowStart(value: string): string {
-        const parsed = this.parseLocalDateString(value);
-        const baseDate = parsed ?? new Date();
-        const weekStart = this.getWeekStart(baseDate, this.plugin.settings.calendarWeekStartDay);
-        return DateUtils.getLocalDateString(weekStart);
+        return getNormalizedWindowStart(value, this.plugin.settings.calendarWeekStartDay);
     }
 
     private updateToolbarMonthLabel(): void {
@@ -690,13 +628,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     private async openOrCreateDailyNote(date: Date): Promise<void> {
-        let file = DailyNoteUtils.getDailyNote(this.app, date);
-        if (!file) {
-            file = await DailyNoteUtils.createDailyNote(this.app, date);
-        }
-        if (file) {
-            await this.app.workspace.getLeaf(false).openFile(file);
-        }
+        return openOrCreateDailyNote(this.app, date);
     }
 
     private async openOrCreatePeriodicNote(

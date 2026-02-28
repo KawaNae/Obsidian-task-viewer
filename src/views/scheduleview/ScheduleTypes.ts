@@ -1,4 +1,4 @@
-import type { RenderableTask } from '../utils/RenderableTaskUtils';
+import type { RenderableTask } from '../sharedLogic/RenderableTaskUtils';
 
 export type CollapsibleSectionKey = 'allDay' | 'deadlines';
 

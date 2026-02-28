@@ -6,10 +6,10 @@
  * TimerInstance 型と TimerProgressUI を再利用。
  */
 
-import { ItemView, WorkspaceLeaf, Notice, Menu, setIcon } from 'obsidian';
+import { ItemView, WorkspaceLeaf, Notice, Menu, setIcon, ViewStateResult } from 'obsidian';
 import TaskViewerPlugin from '../main';
 import { InputModal } from '../modals/InputModal';
-import { VIEW_META_POMODORO } from '../constants/viewRegistry';
+import { VIEW_META_TIMER } from '../constants/viewRegistry';
 import {
     CountupTimer,
     CountdownTimer,
@@ -23,14 +23,16 @@ import { TimerProgressUI } from '../timer/TimerProgressUI';
 import { IntervalTemplateLoader, IntervalTemplate } from '../timer/IntervalTemplateLoader';
 import { AudioUtils } from '../utils/AudioUtils';
 import { TimeFormatter } from '../utils/TimeFormatter';
+import { ViewUriBuilder } from '../utils/ViewUriBuilder';
+import type { ViewUriOptions } from '../utils/ViewUriBuilder';
 
-export const VIEW_TYPE_POMODORO = VIEW_META_POMODORO.type;
+export const VIEW_TYPE_TIMER = VIEW_META_TIMER.type;
 
 type TimerViewMode = 'countup' | 'countdown' | 'pomodoro' | 'interval';
 
 const TIMER_VIEW_ID = '__timer-view__';
 
-export class PomodoroView extends ItemView {
+export class TimerView extends ItemView {
     private plugin: TaskViewerPlugin;
     private container: HTMLElement;
     private timerViewMode: TimerViewMode = 'pomodoro';
@@ -48,22 +50,38 @@ export class PomodoroView extends ItemView {
     }
 
     getViewType(): string {
-        return VIEW_TYPE_POMODORO;
+        return VIEW_TYPE_TIMER;
     }
 
     getDisplayText(): string {
-        return VIEW_META_POMODORO.displayText;
+        return VIEW_META_TIMER.displayText;
     }
 
     getIcon(): string {
-        return VIEW_META_POMODORO.icon;
+        return VIEW_META_TIMER.icon;
     }
 
     async onOpen(): Promise<void> {
         this.container = this.contentEl;
         this.container.empty();
-        this.container.addClass('pomodoro-view');
+        this.container.addClass('timer-view');
         this.render();
+    }
+
+    async setState(state: any, result: ViewStateResult): Promise<void> {
+        await super.setState(state, result);
+
+        const mode = state?.timerViewMode;
+        if (mode && ['countup', 'countdown', 'pomodoro', 'interval'].includes(mode)) {
+            this.timerViewMode = mode as TimerViewMode;
+        }
+
+        if (state?.intervalTemplate && this.timerViewMode === 'interval') {
+            await this.loadTemplates();
+            this.selectedTemplate = this.templates.find(t => t.name === state.intervalTemplate) ?? null;
+        }
+
+        if (this.container) this.render();
     }
 
     async onClose(): Promise<void> {
@@ -415,7 +433,7 @@ export class PomodoroView extends ItemView {
         // Toolbar
         this.renderToolbar();
 
-        const mainContainer = this.container.createDiv('pomodoro-view__main');
+        const mainContainer = this.container.createDiv('timer-view__main');
 
         // Interval mode: show template selector when idle
         if (this.timerViewMode === 'interval' && (!this.timer || this.timer.phase === 'idle')) {
@@ -424,12 +442,12 @@ export class PomodoroView extends ItemView {
         }
 
         // Progress ring
-        const progressContainer = mainContainer.createDiv('pomodoro-view__progress-container');
+        const progressContainer = mainContainer.createDiv('timer-view__progress-container');
         const displayTimer = this.timer ?? this.createTimerInstance();
         TimerProgressUI.render(progressContainer, displayTimer, this.formatTime.bind(this), 200);
 
         // Controls
-        const controls = mainContainer.createDiv('pomodoro-view__controls');
+        const controls = mainContainer.createDiv('timer-view__controls');
         this.renderControls(controls);
     }
 
@@ -488,13 +506,11 @@ export class PomodoroView extends ItemView {
             };
         }
 
-        // Settings gear (right, countdown/pomodoro only)
-        if (this.timerViewMode === 'countdown' || this.timerViewMode === 'pomodoro') {
-            const settingsBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-            setIcon(settingsBtn, 'settings');
-            settingsBtn.setAttribute('aria-label', 'Settings');
-            settingsBtn.onclick = (e) => this.showSettingsMenu(e);
-        }
+        // Settings gear (all modes)
+        const settingsBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(settingsBtn, 'settings');
+        settingsBtn.setAttribute('aria-label', 'Settings');
+        settingsBtn.onclick = (e) => this.showSettingsMenu(e);
     }
 
     private updateDisplay(): void {
@@ -506,7 +522,7 @@ export class PomodoroView extends ItemView {
         if (!this.timer || this.timer.phase === 'idle') {
             // Start button
             const startBtn = container.createEl('button', {
-                cls: 'pomodoro-view__btn pomodoro-view__btn--primary',
+                cls: 'timer-view__btn timer-view__btn--primary',
             });
             setIcon(startBtn, 'play');
             startBtn.createSpan({ text: ' Start' });
@@ -517,7 +533,7 @@ export class PomodoroView extends ItemView {
         if (this.timer.isRunning) {
             // Pause button
             const pauseBtn = container.createEl('button', {
-                cls: 'pomodoro-view__btn pomodoro-view__btn--secondary',
+                cls: 'timer-view__btn timer-view__btn--secondary',
             });
             setIcon(pauseBtn, 'pause');
             pauseBtn.createSpan({ text: ' Pause' });
@@ -525,7 +541,7 @@ export class PomodoroView extends ItemView {
 
             // Stop button
             const stopBtn = container.createEl('button', {
-                cls: 'pomodoro-view__btn pomodoro-view__btn--danger',
+                cls: 'timer-view__btn timer-view__btn--danger',
             });
             setIcon(stopBtn, 'square');
             stopBtn.createSpan({ text: ' Stop' });
@@ -535,14 +551,14 @@ export class PomodoroView extends ItemView {
 
         // Paused state
         const resumeBtn = container.createEl('button', {
-            cls: 'pomodoro-view__btn pomodoro-view__btn--primary',
+            cls: 'timer-view__btn timer-view__btn--primary',
         });
         setIcon(resumeBtn, 'play');
         resumeBtn.createSpan({ text: ' Resume' });
         resumeBtn.onclick = () => this.resumeTimer();
 
         const resetBtn = container.createEl('button', {
-            cls: 'pomodoro-view__btn pomodoro-view__btn--danger',
+            cls: 'timer-view__btn timer-view__btn--danger',
         });
         setIcon(resetBtn, 'x');
         resetBtn.createSpan({ text: ' Reset' });
@@ -567,7 +583,7 @@ export class PomodoroView extends ItemView {
 
         if (!folder) {
             parent.createDiv({
-                cls: 'pomodoro-view__template-empty',
+                cls: 'timer-view__template-empty',
                 text: 'Set an interval template folder in plugin settings.',
             });
             return;
@@ -575,25 +591,25 @@ export class PomodoroView extends ItemView {
 
         if (this.templates.length === 0) {
             parent.createDiv({
-                cls: 'pomodoro-view__template-empty',
-                text: 'No templates found. Add .md files with tv-segments in frontmatter.',
+                cls: 'timer-view__template-empty',
+                text: 'No templates found. Add .md files with a JSON code block to the template folder.',
             });
             return;
         }
 
-        const list = parent.createDiv('pomodoro-view__template-list');
+        const list = parent.createDiv('timer-view__template-list');
 
         for (const template of this.templates) {
             const item = list.createDiv({
-                cls: 'pomodoro-view__template-item'
-                    + (this.selectedTemplate === template ? ' pomodoro-view__template-item--selected' : ''),
+                cls: 'timer-view__template-item'
+                    + (this.selectedTemplate === template ? ' timer-view__template-item--selected' : ''),
             });
 
-            const iconEl = item.createSpan('pomodoro-view__template-icon');
+            const iconEl = item.createSpan('timer-view__template-icon');
             setIcon(iconEl, template.icon);
 
-            item.createSpan({ cls: 'pomodoro-view__template-name', text: template.name });
-            item.createSpan({ cls: 'pomodoro-view__template-duration', text: template.totalDurationLabel });
+            item.createSpan({ cls: 'timer-view__template-name', text: template.name });
+            item.createSpan({ cls: 'timer-view__template-duration', text: template.totalDurationLabel });
 
             item.onclick = () => {
                 this.selectedTemplate = template;
@@ -602,15 +618,15 @@ export class PomodoroView extends ItemView {
         }
 
         // Controls below template list
-        const controls = parent.createDiv('pomodoro-view__controls');
+        const controls = parent.createDiv('timer-view__controls');
         const startBtn = controls.createEl('button', {
-            cls: 'pomodoro-view__btn pomodoro-view__btn--primary',
+            cls: 'timer-view__btn timer-view__btn--primary',
         });
         setIcon(startBtn, 'play');
         startBtn.createSpan({ text: ' Start' });
         startBtn.disabled = !this.selectedTemplate;
         if (!this.selectedTemplate) {
-            startBtn.addClass('pomodoro-view__btn--disabled');
+            startBtn.addClass('timer-view__btn--disabled');
         }
         startBtn.onclick = () => {
             if (this.selectedTemplate) this.startTimer();
@@ -620,16 +636,56 @@ export class PomodoroView extends ItemView {
     // ─── Settings Menu ──────────────────────────────────────────
 
     private showSettingsMenu(e: MouseEvent): void {
-        if (this.timerViewMode === 'countdown') {
-            this.showCountdownSettingsMenu(e);
-        } else if (this.timerViewMode === 'pomodoro') {
-            this.showPomodoroSettingsMenu(e);
-        }
-    }
-
-    private showCountdownSettingsMenu(e: MouseEvent): void {
         const menu = new Menu();
 
+        // Mode-specific settings
+        if (this.timerViewMode === 'countdown') {
+            this.addCountdownSettings(menu);
+            menu.addSeparator();
+        } else if (this.timerViewMode === 'pomodoro') {
+            this.addPomodoroSettings(menu);
+            menu.addSeparator();
+        }
+
+        // Copy URI (all modes)
+        menu.addItem((item) => {
+            item.setTitle('Copy URI')
+                .setIcon('link')
+                .onClick(async () => {
+                    const uri = this.buildCurrentUri();
+                    await navigator.clipboard.writeText(uri);
+                    new Notice('URI copied to clipboard');
+                });
+        });
+
+        // Copy as link (all modes)
+        menu.addItem((item) => {
+            item.setTitle('Copy as link')
+                .setIcon('external-link')
+                .onClick(async () => {
+                    const uri = this.buildCurrentUri();
+                    const name = VIEW_META_TIMER.displayText;
+                    const link = `[${name}](${uri})`;
+                    await navigator.clipboard.writeText(link);
+                    new Notice('Link copied to clipboard');
+                });
+        });
+
+        menu.showAtMouseEvent(e);
+    }
+
+    private buildCurrentUri(): string {
+        const opts: ViewUriOptions = {
+            position: ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace),
+            mode: this.timerViewMode,
+        };
+        if (this.timerViewMode === 'interval' && this.selectedTemplate) {
+            opts.intervalTemplate = this.selectedTemplate.name;
+        }
+        return ViewUriBuilder.build(VIEW_TYPE_TIMER, opts);
+    }
+
+    private addCountdownSettings(menu: Menu): void {
         menu.addItem((item) => {
             item.setTitle('Countdown Duration').setDisabled(true);
         });
@@ -674,13 +730,9 @@ export class PomodoroView extends ItemView {
                     ).open();
                 });
         });
-
-        menu.showAtMouseEvent(e);
     }
 
-    private showPomodoroSettingsMenu(e: MouseEvent): void {
-        const menu = new Menu();
-
+    private addPomodoroSettings(menu: Menu): void {
         menu.addItem((item) => {
             item.setTitle('Work Duration').setDisabled(true);
         });
@@ -760,8 +812,6 @@ export class PomodoroView extends ItemView {
                     ).open();
                 });
         });
-
-        menu.showAtMouseEvent(e);
     }
 
     private applyPomodoroSettingsToTimer(): void {

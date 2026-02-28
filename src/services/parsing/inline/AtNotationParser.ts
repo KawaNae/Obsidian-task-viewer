@@ -1,4 +1,4 @@
-import { Task } from '../../../types';
+import type { Task, FlowCommand, FlowModifier } from '../../../types';
 import { ParserStrategy } from '../strategies/ParserStrategy';
 import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
 import { TaskIdGenerator } from '../../../utils/TaskIdGenerator';
@@ -60,7 +60,7 @@ export class AtNotationParser implements ParserStrategy {
         let endDate: string | undefined;
         let deadline: string | undefined;
 
-        let commands: any[] = [];
+        let commands: FlowCommand[] = [];
         let validationWarning: string | undefined;
 
         // Explicit field flags - track which fields were explicitly written
@@ -250,8 +250,8 @@ export class AtNotationParser implements ParserStrategy {
         return { date, time };
     }
 
-    private parseFlowCommands(flowStr: string): any[] {
-        const commands: any[] = [];
+    private parseFlowCommands(flowStr: string): FlowCommand[] {
+        const commands: FlowCommand[] = [];
         let match;
 
         // Reset lastIndex because regex is global
@@ -263,7 +263,7 @@ export class AtNotationParser implements ParserStrategy {
             const modifiersStr = match[3];
 
             const args = argsStr.split(',').map(s => s.trim()).filter(s => s !== '');
-            const modifiers: any[] = [];
+            const modifiers: FlowModifier[] = [];
 
             if (modifiersStr) {
                 let modMatch;

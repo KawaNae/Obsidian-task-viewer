@@ -4,8 +4,8 @@ import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
 import type { LeafPosition } from '../../utils/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
-import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu } from '../ViewToolbar';
-import { FilterMenuComponent } from '../filter/FilterMenuComponent';
+import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu } from '../sharedUI/ViewToolbar';
+import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
@@ -130,6 +130,42 @@ export class TimelineToolbar {
                 showSidebar: this.viewState.showSidebar,
             }),
             viewType: VIEW_META_TIMELINE.type,
+            getViewTemplateFolder: () => this.plugin.settings.viewTemplateFolder,
+            getViewTemplate: () => ({
+                filePath: '',
+                name: this.callbacks.getCustomName() || VIEW_META_TIMELINE.displayText,
+                viewType: 'timeline',
+                days: this.viewState.daysToShow,
+                zoom: this.viewState.zoomLevel,
+                showSidebar: this.viewState.showSidebar,
+                filterState: this.filterMenu.getFilterState(),
+                pinnedLists: this.viewState.pinnedLists,
+            }),
+            onApplyTemplate: (template) => {
+                if (template.days != null) this.viewState.daysToShow = template.days;
+                if (template.zoom != null) this.viewState.zoomLevel = template.zoom;
+                if (template.showSidebar != null) this.viewState.showSidebar = template.showSidebar;
+                if (template.filterState) {
+                    this.filterMenu.setFilterState(template.filterState);
+                    this.viewState.filterState = template.filterState;
+                }
+                if (template.pinnedLists) this.viewState.pinnedLists = template.pinnedLists;
+                if (template.name) this.callbacks.onRename(template.name);
+                this.callbacks.onRender();
+                this.app.workspace.requestSaveLayout();
+            },
+            onReset: () => {
+                this.viewState.daysToShow = 3;
+                this.viewState.zoomLevel = 1.0;
+                this.viewState.showSidebar = true;
+                this.viewState.filterState = undefined;
+                this.viewState.pinnedLists = undefined;
+                this.viewState.pinnedListCollapsed = undefined;
+                this.filterMenu.setFilterState(createEmptyFilterState());
+                this.callbacks.onRename(undefined);
+                this.callbacks.onRender();
+                this.app.workspace.requestSaveLayout();
+            },
         });
 
         // Sidebar Toggle

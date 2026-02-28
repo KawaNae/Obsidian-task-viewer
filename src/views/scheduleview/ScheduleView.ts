@@ -3,19 +3,19 @@ import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { isCompleteStatusChar } from '../../types';
-import type { RenderableTask } from '../utils/RenderableTaskUtils';
+import type { RenderableTask } from '../sharedLogic/RenderableTaskUtils';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import TaskViewerPlugin from '../../main';
 
-import { DateNavigator, ViewSettingsMenu } from '../ViewToolbar';
-import { FilterMenuComponent } from '../filter/FilterMenuComponent';
+import { DateNavigator, ViewSettingsMenu } from '../sharedUI/ViewToolbar';
+import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { HabitTrackerRenderer } from '../timelineview/renderers/HabitTrackerRenderer';
+import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
 import type { CollapsibleSectionKey, TimedRenderableTask } from './ScheduleTypes';
 import { ScheduleGridCalculator } from './utils/ScheduleGridCalculator';
 import { ScheduleTaskCategorizer } from './utils/ScheduleTaskCategorizer';
@@ -282,6 +282,31 @@ export class ScheduleView extends ItemView {
                 filterState: this.filterMenu.getFilterState(),
             }),
             viewType: VIEW_META_SCHEDULE.type,
+            getViewTemplateFolder: () => this.plugin.settings.viewTemplateFolder,
+            getViewTemplate: () => ({
+                filePath: '',
+                name: this.customName || VIEW_META_SCHEDULE.displayText,
+                viewType: 'schedule',
+                filterState: this.filterMenu.getFilterState(),
+            }),
+            onApplyTemplate: (template) => {
+                if (template.filterState) {
+                    this.filterMenu.setFilterState(template.filterState);
+                }
+                if (template.name) {
+                    this.customName = template.name;
+                    (this.leaf as any).updateHeader();
+                }
+                this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
+            onReset: () => {
+                this.filterMenu.setFilterState(createEmptyFilterState());
+                this.customName = undefined;
+                (this.leaf as any).updateHeader();
+                this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
         });
     }
 

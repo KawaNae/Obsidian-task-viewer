@@ -62,6 +62,10 @@ export class TaskIndex {
         );
     }
 
+    getRepository(): TaskRepository {
+        return this.repository;
+    }
+
     async initialize(): Promise<void> {
         // レイアウト準備完了後に初回スキャン
         this.app.workspace.onLayoutReady(async () => {
