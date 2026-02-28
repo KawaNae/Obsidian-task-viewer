@@ -8,22 +8,13 @@ export class DateUtils {
 
     static getVisualDateOfNow(startHour: number): string {
         const now = new Date();
-        let visualDateOfNow = new Date(now);
-        const currentHour = now.getHours();
+        const visualDateOfNow = new Date(now);
 
-        console.log(`[DEBUG] getVisualDateOfNow - current time: ${now.toISOString()}`);
-        console.log(`[DEBUG] getVisualDateOfNow - current hour: ${currentHour}, startHour: ${startHour}`);
-
-        if (currentHour < startHour) {
+        if (now.getHours() < startHour) {
             visualDateOfNow.setDate(visualDateOfNow.getDate() - 1);
-            console.log('[DEBUG] getVisualDateOfNow - hour < startHour, using previous day');
-        } else {
-            console.log('[DEBUG] getVisualDateOfNow - hour >= startHour, using current day');
         }
 
-        const result = this.getLocalDateString(visualDateOfNow);
-        console.log(`[DEBUG] getVisualDateOfNow - result: ${result}`);
-        return result;
+        return this.getLocalDateString(visualDateOfNow);
     }
 
     static getToday(): string {

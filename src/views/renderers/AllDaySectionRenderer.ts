@@ -43,17 +43,9 @@ export class AllDaySectionRenderer {
             // - Tasks without startTime (S-All, SD, ED, E, D types)
             // - Tasks with startTime but duration >= 24 hours
             // Exclude: SE/SED tasks with duration < 24 hours (those go to timeline)
-            if (!t.startTime) return true;
-
-            const durationMs = DateUtils.getTaskDurationMs(
-                t.startDate || visualStart,
-                t.startTime,
-                t.endDate,
-                t.endTime,
-                startHour
+            return DateUtils.isAllDayTask(
+                t.startDate || visualStart, t.startTime, t.endDate, t.endTime, startHour
             );
-            const hours24 = 24 * 60 * 60 * 1000;
-            return durationMs >= hours24;
         });
 
         tasks = tasks.filter(isTaskVisible);
