@@ -9,6 +9,7 @@ import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { HandleManager } from '../timelineview/HandleManager';
 import { Task } from '../../types';
 import { CreateTaskModal, formatTaskLine } from '../../modals/CreateTaskModal';
+import { computeGridLayout, renderDeadlineArrow, GridTaskEntry } from './GridTaskLayout';
 
 export class AllDaySectionRenderer {
     constructor(
@@ -25,6 +26,7 @@ export class AllDaySectionRenderer {
         const viewEnd = dates[dates.length - 1];
         const startHour = this.plugin.settings.startHour;
 
+        // Filter for allDay tasks (AllDay-specific filtering)
         let tasks = this.taskIndex.getTasks().filter(t => {
 
             // Exclude D-type tasks (Deadline only)
@@ -56,136 +58,65 @@ export class AllDaySectionRenderer {
 
         tasks = tasks.filter(isTaskVisible);
 
-        tasks.sort((a, b) => {
-            const startA = a.startDate
-                ? DateUtils.getVisualStartDate(a.startDate, a.startTime, startHour)
-                : viewStart;
-            const startB = b.startDate
-                ? DateUtils.getVisualStartDate(b.startDate, b.startTime, startHour)
-                : viewStart;
-            if (startA !== startB) return startA.localeCompare(startB);
-            const endA = a.endDate || startA;
-            const endB = b.endDate || startB;
-            const durA = DateUtils.getDiffDays(startA, endA);
-            const durB = DateUtils.getDiffDays(startB, endB);
-            return durB - durA;
+        // Use shared layout engine
+        const entries = computeGridLayout(tasks, {
+            dates,
+            getDateRange: (task) => {
+                const effectiveStart = task.startDate
+                    ? DateUtils.getVisualStartDate(task.startDate, task.startTime, startHour)
+                    : viewStart;
+                const effectiveEnd = task.endDate || effectiveStart;
+                return { effectiveStart, effectiveEnd };
+            },
+            computeDeadlines: true,
         });
 
-        const tracks: string[] = [];
+        // Grid offsets: col 1 = time axis, row 1 = padding
+        const gridColOffset = 1;
+        const gridRowOffset = 2;
 
-        tasks.forEach(task => {
-            // Use visual start date for positioning
-            const tStart = task.startDate
-                ? DateUtils.getVisualStartDate(task.startDate, task.startTime, startHour)
-                : viewStart;
-            const tEnd = task.endDate || tStart;
+        for (const entry of entries) {
+            this.renderTaskCard(container, entry, owner, gridColOffset, gridRowOffset);
 
-            // Calculate deadline line for arrow
-            let deadlineLine: number | null = null;
-            let isDeadlineClipped = false;
-            if (task.deadline && task.deadline.match(/^\d{4}-\d{2}-\d{2}/)) {
-                const deadlineDateStr = task.deadline.split('T')[0];
-                const deadlineDiff = DateUtils.getDiffDays(viewStart, deadlineDateStr);
-                const dlLine = deadlineDiff + 3;
-                const gridMax = this.getDaysToShow() + 2;
-
-                if (dlLine > gridMax) {
-                    isDeadlineClipped = true;
-                }
-                deadlineLine = Math.min(dlLine, gridMax);
-
-                const taskEndDiff = DateUtils.getDiffDays(viewStart, tEnd);
-                const taskEndLine = taskEndDiff + 3;
-
-                if (deadlineLine <= taskEndLine) {
-                    deadlineLine = null;
-                }
+            if (entry.deadlineArrow) {
+                renderDeadlineArrow(container, entry, gridRowOffset, gridColOffset);
             }
-
-            const tEndForCollision = deadlineLine
-                ? DateUtils.addDays(viewStart, deadlineLine - 3)
-                : tEnd;
-
-            let trackIndex = -1;
-            for (let i = 0; i < tracks.length; i++) {
-                if (tStart > tracks[i]) {
-                    trackIndex = i;
-                    break;
-                }
-            }
-
-            if (trackIndex === -1) {
-                trackIndex = tracks.length;
-                tracks.push(tEndForCollision);
-            } else {
-                tracks[trackIndex] = tEndForCollision;
-            }
-
-            // Render Task Card
-            const el = container.createDiv('task-card task-card--allday');
-            if (task.endDate && task.endDate !== tStart) {
-                el.addClass('task-card--multi-day'); // Multi-day task marker
-            }
-            if (task.id === this.handleManager.getSelectedTaskId()) el.addClass('selected');
-            if (task.startDateInherited) el.addClass('task-card--inherited');
-            el.dataset.id = task.id;
-
-            TaskStyling.applyTaskColor(el, task.color ?? null);
-            TaskStyling.applyTaskLinestyle(el, task.linestyle ?? null);
-
-            // Use TaskCardRenderer
-            this.taskRenderer.render(el, task, owner, this.plugin.settings, { topRight: 'none' });
-
-            this.menuHandler.addTaskContextMenu(el, task);
-
-            // Positioning
-            const diffStart = DateUtils.getDiffDays(viewStart, tStart);
-            let colStart = 2 + diffStart;
-
-            const durationArr = DateUtils.getDiffDays(tStart, tEnd) + 1;
-            let span = durationArr;
-
-            if (colStart < 2) {
-                span -= (2 - colStart);
-                colStart = 2;
-            }
-
-            const maxCol = 2 + this.getDaysToShow();
-            if (colStart + span > maxCol) {
-                span = maxCol - colStart;
-            }
-
-            if (span < 1) return;
-
-            el.style.gridColumn = `${colStart} / span ${span}`;
-            el.style.gridRow = `${trackIndex + 2}`; // +2 to leave padding row at top
-            el.style.zIndex = '10';
-
-            if (deadlineLine) {
-                const taskEndLine = colStart + span;
-                this.renderDeadlineArrow(container, task, trackIndex, taskEndLine, deadlineLine, isDeadlineClipped);
-            }
-        });
+        }
     }
 
-    private renderDeadlineArrow(
+    private renderTaskCard(
         container: HTMLElement,
-        task: Task,
-        rowIndex: number,
-        taskEndLine: number,
-        deadlineLine: number,
-        isClipped: boolean = false
-    ) {
-        const arrowEl = container.createDiv('deadline-arrow');
-        arrowEl.dataset.taskId = task.id;
-        arrowEl.style.gridRow = (rowIndex + 2).toString(); // +2 to match task offset
-        arrowEl.style.gridColumnStart = taskEndLine.toString();
-        arrowEl.style.gridColumnEnd = deadlineLine.toString();
-        arrowEl.setAttribute('aria-label', `Deadline: ${task.deadline}`);
+        entry: GridTaskEntry,
+        owner: Component,
+        gridColOffset: number,
+        gridRowOffset: number
+    ): void {
+        const { task } = entry;
 
-        if (isClipped) {
-            arrowEl.addClass('deadline-arrow--clipped');
+        const el = container.createDiv('task-card task-card--allday');
+        if (entry.isMultiDay) {
+            el.addClass('task-card--multi-day');
         }
+        if (entry.continuesBefore && entry.continuesAfter) {
+            el.addClass('calendar-multiday-bar--middle');
+        } else if (entry.continuesAfter) {
+            el.addClass('calendar-multiday-bar--head');
+        } else if (entry.continuesBefore) {
+            el.addClass('calendar-multiday-bar--tail');
+        }
+        if (task.id === this.handleManager.getSelectedTaskId()) el.addClass('selected');
+        if (task.startDateInherited) el.addClass('task-card--inherited');
+        el.dataset.id = task.id;
+
+        TaskStyling.applyTaskColor(el, task.color ?? null);
+        TaskStyling.applyTaskLinestyle(el, task.linestyle ?? null);
+
+        this.taskRenderer.render(el, task, owner, this.plugin.settings, { topRight: 'none' });
+        this.menuHandler.addTaskContextMenu(el, task);
+
+        el.style.gridColumn = `${entry.colStart + gridColOffset} / span ${entry.span}`;
+        el.style.gridRow = `${entry.trackIndex + gridRowOffset}`;
+        el.style.zIndex = '10';
     }
 
     /** Add context menu listeners to AllDay section cell */

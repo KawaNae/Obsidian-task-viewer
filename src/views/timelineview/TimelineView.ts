@@ -654,17 +654,12 @@ export class TimelineView extends ItemView {
     private getDatesToShow(): string[] {
         const dates = [];
         const start = new Date(this.viewState.startDate);
-        console.log('[DEBUG] getDatesToShow - viewState.startDate:', this.viewState.startDate);
-        console.log('[DEBUG] getDatesToShow - startHour setting:', this.plugin.settings.startHour);
-        console.log('[DEBUG] getDatesToShow - current visual date:', DateUtils.getVisualDateOfNow(this.plugin.settings.startHour));
-        console.log('[DEBUG] getDatesToShow - actual today:', DateUtils.getToday());
 
         for (let i = 0; i < this.viewState.daysToShow; i++) {
             const d = new Date(start);
             d.setDate(start.getDate() + i);
             dates.push(DateUtils.getLocalDateString(d));
         }
-        console.log('[DEBUG] getDatesToShow - generated dates:', dates);
         return dates;
     }
 

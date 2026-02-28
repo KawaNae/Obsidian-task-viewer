@@ -1,9 +1,8 @@
-import { Notice, Plugin, WorkspaceLeaf, setIcon, TFile, Menu, Editor, MarkdownView } from 'obsidian';
+import { Notice, Plugin, WorkspaceLeaf, TFile, Menu, Editor, MarkdownView } from 'obsidian';
 import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
-import { CalendarView, VIEW_TYPE_CALENDAR } from './views/CalendarView';
-import { MiniCalendarView, VIEW_TYPE_MINI_CALENDAR } from './views/MiniCalendarView';
+import { CalendarView, VIEW_TYPE_CALENDAR, MiniCalendarView, VIEW_TYPE_MINI_CALENDAR } from './views/calendar';
 import { PomodoroView, VIEW_TYPE_POMODORO } from './views/PomodoroView';
 import { TimerWidget } from './timer/TimerWidget';
 import {
@@ -17,9 +16,8 @@ import type { PinnedListDefinition } from './types';
 import { normalizeAiIndexSettings } from './services/aiindex/AiIndexSettings';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/color/ColorSuggest';
-import { PropertyColorSuggest } from './suggest/color/PropertyColorSuggest';
 import { LineStyleSuggest } from './suggest/line/LineStyleSuggest';
-import { PropertyLineStyleSuggest } from './suggest/line/PropertyLineStyleSuggest';
+import { PropertySuggestObserver } from './suggest/PropertySuggestObserver';
 import { DateUtils } from './utils/DateUtils';
 import { AudioUtils } from './utils/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
@@ -44,9 +42,8 @@ export default class TaskViewerPlugin extends Plugin {
     private lastVisualDate: string = '';
     private dateCheckInterval: ReturnType<typeof setInterval> | null = null;
 
-    // MutationObserver for Properties View color suggestions
-    private propertiesObserver: MutationObserver | null = null;
-    private attachedInputs: WeakSet<HTMLElement> = new WeakSet();
+    // Properties View color/linestyle suggest observer
+    private propertySuggestObserver: PropertySuggestObserver | null = null;
 
     async onload() {
         console.log('Loading Task Viewer Plugin (Rewrite)');
@@ -252,7 +249,12 @@ export default class TaskViewerPlugin extends Plugin {
         this.startDateBoundaryCheck();
 
         // Start Properties View color suggest observer
-        this.startPropertiesColorSuggest();
+        this.propertySuggestObserver = new PropertySuggestObserver(
+            this.app,
+            () => this.settings,
+            this
+        );
+        this.propertySuggestObserver.start();
 
         // Register URI handler: obsidian://task-viewer?view=timeline&days=3&filter=<base64>&pinnedLists=<base64>
         this.registerObsidianProtocolHandler('task-viewer', (params) => {
@@ -359,7 +361,7 @@ export default class TaskViewerPlugin extends Plugin {
     }
 
     getTaskRepository() {
-        return (this.taskIndex as any).repository;
+        return this.taskIndex.getRepository();
     }
 
     getTimerWidget(): TimerWidget {
@@ -457,148 +459,8 @@ export default class TaskViewerPlugin extends Plugin {
         }
 
         // Disconnect Properties color suggest observer
-        if (this.propertiesObserver) {
-            this.propertiesObserver.disconnect();
-            this.propertiesObserver = null;
-        }
+        this.propertySuggestObserver?.destroy();
+        this.propertySuggestObserver = null;
     }
 
-    /**
-     * Start observing Properties View for timeline-color inputs
-     */
-    private startPropertiesColorSuggest(): void {
-        this.propertiesObserver = new MutationObserver(() => {
-            this.attachPropertyColorSuggests();
-        });
-
-        this.propertiesObserver.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-
-        // Initial scan
-        this.attachPropertyColorSuggests();
-    }
-
-    /**
-     * Attach PropertyColorSuggest to timeline-color property value inputs
-     */
-    private attachPropertyColorSuggests(): void {
-        const colorKey = this.settings.frontmatterTaskKeys.color;
-        const linestyleKey = this.settings.frontmatterTaskKeys.linestyle;
-
-        // Find all property key inputs
-        const keyInputs = document.querySelectorAll('.metadata-property-key-input');
-
-        keyInputs.forEach((keyInput) => {
-            const input = keyInput as HTMLInputElement;
-            const isColorKey = input.value === colorKey;
-            const isLineStyleKey = input.value === linestyleKey;
-            if (!isColorKey && !isLineStyleKey) {
-                return;
-            }
-
-            // Find the corresponding value contenteditable div
-            const propertyContainer = input.closest('.metadata-property');
-            if (!propertyContainer) {
-                return;
-            }
-
-            // The value field is a contenteditable div, not an input
-            const valueDiv = propertyContainer.querySelector('.metadata-input-longtext[contenteditable="true"]') as HTMLDivElement;
-            if (!valueDiv || this.attachedInputs.has(valueDiv)) {
-                return;
-            }
-
-            if (isColorKey) {
-                new PropertyColorSuggest(this.app, valueDiv, this);
-                this.addColorPickerIcon(propertyContainer as HTMLElement, valueDiv);
-            } else {
-                new PropertyLineStyleSuggest(this.app, valueDiv, this);
-            }
-
-            this.attachedInputs.add(valueDiv);
-        });
-    }
-
-    /**
-     * Add color picker icon next to the value field
-     */
-    private addColorPickerIcon(container: HTMLElement, valueDiv: HTMLDivElement): void {
-        // Check if icon already exists
-        if (container.querySelector('.task-viewer-color-picker-icon')) {
-            return;
-        }
-
-        // Create icon button with relative positioning
-        const iconBtn = container.createDiv({ cls: 'task-viewer-color-picker-icon clickable-icon' });
-        iconBtn.setAttribute('aria-label', 'カラーピッカーを開く');
-        iconBtn.style.position = 'relative';
-        iconBtn.style.marginLeft = '4px';
-        iconBtn.style.display = 'inline-flex';
-        iconBtn.style.alignItems = 'center';
-        iconBtn.style.cursor = 'pointer';
-        setIcon(iconBtn, 'palette');
-
-        // Create hidden color input inside icon button (so picker appears at icon position)
-        const colorInput = document.createElement('input');
-        colorInput.type = 'color';
-        colorInput.style.position = 'absolute';
-        colorInput.style.top = '0';
-        colorInput.style.left = '0';
-        colorInput.style.width = '100%';
-        colorInput.style.height = '100%';
-        colorInput.style.opacity = '0';
-        colorInput.style.cursor = 'pointer';
-        iconBtn.appendChild(colorInput);
-
-        // Insert after the value container
-        const valueContainer = container.querySelector('.metadata-property-value');
-        if (valueContainer) {
-            valueContainer.after(iconBtn);
-        }
-
-        // Color input change handler
-        colorInput.addEventListener('input', async () => {
-            const activeFile = this.app.workspace.getActiveFile();
-            if (!activeFile) {
-                return;
-            }
-
-            const colorKey = this.settings.frontmatterTaskKeys.color;
-            // @ts-ignore - processFrontMatter
-            await this.app.fileManager.processFrontMatter(activeFile, (frontmatter: any) => {
-                frontmatter[colorKey] = colorInput.value;
-            });
-
-            // Sync UI
-            valueDiv.textContent = colorInput.value;
-        });
-
-        // Set initial value when clicking
-        iconBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const currentValue = valueDiv.textContent?.trim() || '';
-
-            // Convert color name to hex if needed
-            let hexValue = currentValue;
-            if (currentValue && !currentValue.startsWith('#')) {
-                const tempEl = document.createElement('div');
-                tempEl.style.color = currentValue;
-                document.body.appendChild(tempEl);
-                const computedColor = getComputedStyle(tempEl).color;
-                document.body.removeChild(tempEl);
-
-                const rgbMatch = computedColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-                if (rgbMatch) {
-                    const r = parseInt(rgbMatch[1]).toString(16).padStart(2, '0');
-                    const g = parseInt(rgbMatch[2]).toString(16).padStart(2, '0');
-                    const b = parseInt(rgbMatch[3]).toString(16).padStart(2, '0');
-                    hexValue = `#${r}${g}${b}`;
-                }
-            }
-
-            colorInput.value = hexValue || '#000000';
-        });
-    }
 }

@@ -136,6 +136,10 @@
     display: none;
 }
 
+.calendar-week-row .deadline-arrow {
+    z-index: 5;
+}
+
 .calendar-date-header {
     display: flex;
     justify-content: flex-end;
