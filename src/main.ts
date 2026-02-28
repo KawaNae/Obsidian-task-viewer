@@ -1,4 +1,4 @@
-import { Notice, Plugin, WorkspaceLeaf, TFile, Menu, Editor, MarkdownView } from 'obsidian';
+import { Notice, Plugin, Workspace, WorkspaceLeaf, TFile, Menu, Editor, MarkdownView } from 'obsidian';
 import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
@@ -12,7 +12,7 @@ import {
     normalizeFrontmatterTaskKeys,
     validateFrontmatterTaskKeys,
 } from './types';
-import type { PinnedListDefinition } from './types';
+import type { DefaultLeafPosition, PinnedListDefinition } from './types';
 import { normalizeAiIndexSettings } from './services/aiindex/AiIndexSettings';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/color/ColorSuggest';
@@ -451,7 +451,7 @@ export default class TaskViewerPlugin extends Plugin {
             if (leaves.length > 0) {
                 leaf = leaves[0];
             } else {
-                leaf = workspace.getRightLeaf(false);
+                leaf = this.getLeafForPosition(workspace, this.getDefaultPosition(viewType));
             }
         } else if (params?.position) {
             switch (params.position) {
@@ -463,7 +463,7 @@ export default class TaskViewerPlugin extends Plugin {
         } else {
             const leaves = workspace.getLeavesOfType(viewType);
             if (leaves.length === 0) {
-                leaf = workspace.getRightLeaf(false);
+                leaf = this.getLeafForPosition(workspace, this.getDefaultPosition(viewType));
             } else {
                 leaf = workspace.getLeaf(true);
             }
@@ -486,6 +486,27 @@ export default class TaskViewerPlugin extends Plugin {
 
             await leaf.setViewState({ type: viewType, active: true, state });
             workspace.revealLeaf(leaf);
+        }
+    }
+
+    private getDefaultPosition(viewType: string): DefaultLeafPosition {
+        const positions = this.settings.defaultViewPositions;
+        const map: Record<string, DefaultLeafPosition | undefined> = {
+            [VIEW_TYPE_TIMELINE]: positions.timeline,
+            [VIEW_TYPE_SCHEDULE]: positions.schedule,
+            [VIEW_TYPE_CALENDAR]: positions.calendar,
+            [VIEW_TYPE_MINI_CALENDAR]: positions.miniCalendar,
+            [VIEW_TYPE_TIMER]: positions.timer,
+        };
+        return map[viewType] ?? 'right';
+    }
+
+    private getLeafForPosition(workspace: Workspace, position: DefaultLeafPosition): WorkspaceLeaf | null {
+        switch (position) {
+            case 'left':   return workspace.getLeftLeaf(false);
+            case 'right':  return workspace.getRightLeaf(false);
+            case 'tab':    return workspace.getLeaf('tab');
+            case 'window': return workspace.getLeaf('window');
         }
     }
 

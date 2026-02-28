@@ -1,6 +1,6 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import TaskViewerPlugin from './main';
-import { FrontmatterTaskKeys, HabitType, validateFrontmatterTaskKeys } from './types';
+import { DefaultLeafPosition, FrontmatterTaskKeys, HabitType, TaskViewerSettings, validateFrontmatterTaskKeys } from './types';
 import {
     DEFAULT_AI_INDEX_SETTINGS,
     normalizeAiIndexSettings,
@@ -254,6 +254,50 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
+        // Default Open Position
+        el.createEl('h3', { text: 'Default Open Position', cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setDesc('Where each view opens when launched from the command palette, ribbon icon, or a URI without a position parameter. In URIs, use position=override to reuse an existing view in place instead of opening a new one.')
+            .setClass('setting-item--desc-only');
+
+        type ViewPositionKey = keyof TaskViewerSettings['defaultViewPositions'];
+        const positionEntries: { label: string; key: ViewPositionKey }[] = [
+            { label: 'Timeline', key: 'timeline' },
+            { label: 'Schedule', key: 'schedule' },
+            { label: 'Calendar', key: 'calendar' },
+            { label: 'Mini Calendar', key: 'miniCalendar' },
+            { label: 'Timer', key: 'timer' },
+        ];
+
+        for (const entry of positionEntries) {
+            new Setting(el)
+                .setName(entry.label)
+                .addDropdown(dropdown => dropdown
+                    .addOption('left', 'Left sidebar')
+                    .addOption('right', 'Right sidebar')
+                    .addOption('tab', 'Tab')
+                    .addOption('window', 'Window')
+                    .setValue(this.plugin.settings.defaultViewPositions[entry.key])
+                    .onChange(async (value) => {
+                        this.plugin.settings.defaultViewPositions[entry.key] = value as DefaultLeafPosition;
+                        await this.plugin.saveSettings();
+                    }));
+        }
+
+        // View Templates (moved from Timer tab)
+        el.createEl('h3', { text: 'View Templates', cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName('View Template Folder')
+            .setDesc('Vault folder for view template files (.md with _tv-view in frontmatter). Used for cross-device sync of view configurations.')
+            .addText(text => text
+                .setPlaceholder('Templates/Views')
+                .setValue(this.plugin.settings.viewTemplateFolder)
+                .onChange(async (value) => {
+                    this.plugin.settings.viewTemplateFolder = value.trim();
+                    await this.plugin.saveSettings();
+                }));
     }
 
 
@@ -408,18 +452,6 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        el.createEl('h3', { text: 'View Templates', cls: 'setting-section-header' });
-
-        new Setting(el)
-            .setName('View Template Folder')
-            .setDesc('Vault folder for view template files (.md with _tv-view in frontmatter). Used for cross-device sync of view configurations.')
-            .addText(text => text
-                .setPlaceholder('Templates/Views')
-                .setValue(this.plugin.settings.viewTemplateFolder)
-                .onChange(async (value) => {
-                    this.plugin.settings.viewTemplateFolder = value.trim();
-                    await this.plugin.saveSettings();
-                }));
     }
 
     // ─── Frontmatter Tab ─────────────────────────────────────

@@ -219,6 +219,8 @@ export function validateFrontmatterTaskKeys(keys: FrontmatterTaskKeys): string |
     return null;
 }
 
+export type DefaultLeafPosition = 'left' | 'right' | 'tab' | 'window';
+
 export interface TaskViewerSettings {
     startHour: number;
     applyGlobalStyles: boolean;
@@ -249,6 +251,13 @@ export interface TaskViewerSettings {
     yearlyNoteFolder: string;
     intervalTemplateFolder: string;
     viewTemplateFolder: string;
+    defaultViewPositions: {
+        timeline: DefaultLeafPosition;
+        schedule: DefaultLeafPosition;
+        calendar: DefaultLeafPosition;
+        miniCalendar: DefaultLeafPosition;
+        timer: DefaultLeafPosition;
+    };
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -281,4 +290,11 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     yearlyNoteFolder: '',
     intervalTemplateFolder: '',
     viewTemplateFolder: '',
+    defaultViewPositions: {
+        timeline: 'tab',
+        schedule: 'right',
+        calendar: 'tab',
+        miniCalendar: 'left',
+        timer: 'right',
+    },
 };
