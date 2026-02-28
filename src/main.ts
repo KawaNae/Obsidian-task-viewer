@@ -27,6 +27,7 @@ import { getViewMeta } from './constants/viewRegistry';
 import type { FilterState } from './services/filter/FilterTypes';
 import { hasConditions } from './services/filter/FilterTypes';
 import { FilterSerializer } from './services/filter/FilterSerializer';
+import { unicodeAtob } from './utils/base64';
 import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
 import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
 import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
@@ -274,7 +275,7 @@ export default class TaskViewerPlugin extends Plugin {
             let pinnedLists: PinnedListDefinition[] | undefined;
             if (params.pinnedLists) {
                 try {
-                    const parsed = JSON.parse(atob(params.pinnedLists));
+                    const parsed = JSON.parse(unicodeAtob(params.pinnedLists));
                     if (Array.isArray(parsed)) pinnedLists = parsed;
                 } catch { /* ignore */ }
             }

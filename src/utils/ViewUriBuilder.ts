@@ -3,6 +3,7 @@ import type { FilterState } from '../services/filter/FilterTypes';
 import { hasConditions } from '../services/filter/FilterTypes';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
 import type { PinnedListDefinition } from '../types';
+import { unicodeBtoa } from './base64';
 
 export type LeafPosition = 'left' | 'right' | 'tab' | 'window';
 
@@ -57,7 +58,7 @@ export class ViewUriBuilder {
 
         // PinnedLists (base64)
         if (opts.pinnedLists && opts.pinnedLists.length > 0) {
-            uri += `&pinnedLists=${btoa(JSON.stringify(opts.pinnedLists))}`;
+            uri += `&pinnedLists=${unicodeBtoa(JSON.stringify(opts.pinnedLists))}`;
         }
 
         return uri;

@@ -1,5 +1,6 @@
 import type { FilterState, FilterConditionNode, FilterGroupNode, FilterNode } from './FilterTypes';
 import { createEmptyFilterState } from './FilterTypes';
+import { unicodeBtoa, unicodeAtob } from '../../utils/base64';
 
 /**
  * Serialization utilities for FilterState (JSON persistence and URI encoding).
@@ -36,13 +37,13 @@ export class FilterSerializer {
     static toURIParam(state: FilterState): string {
         if (!hasAnyCondition(state.root)) return '';
         const json = JSON.stringify({ version: 4, root: state.root });
-        return btoa(json);
+        return unicodeBtoa(json);
     }
 
     static fromURIParam(param: string): FilterState {
         if (!param) return createEmptyFilterState();
         try {
-            const json = atob(param);
+            const json = unicodeAtob(param);
             const parsed = JSON.parse(json);
             return this.fromJSON(parsed);
         } catch {
