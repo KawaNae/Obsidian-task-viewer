@@ -1,10 +1,10 @@
 import { setIcon, Menu, Notice } from 'obsidian';
 import type { App, WorkspaceLeaf } from 'obsidian';
-import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../utils/ViewUriBuilder';
-import { InputModal } from '../modals/InputModal';
-import type { ViewTemplate } from '../types';
-import { ViewTemplateLoader } from '../services/template/ViewTemplateLoader';
-import { ViewTemplateWriter } from '../services/template/ViewTemplateWriter';
+import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../../utils/ViewUriBuilder';
+import { InputModal } from '../../modals/InputModal';
+import type { ViewTemplate } from '../../types';
+import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
+import { ViewTemplateWriter } from '../../services/template/ViewTemplateWriter';
 
 /**
  * Date navigation component with prev/next/today buttons.

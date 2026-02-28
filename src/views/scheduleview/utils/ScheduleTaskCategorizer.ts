@@ -2,7 +2,7 @@ import type { Task } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
 import type { TaskIndex } from '../../../services/core/TaskIndex';
 import { shouldSplitTask, splitTaskAtBoundary, type RenderableTask } from '../../utils/RenderableTaskUtils';
-import type { FilterMenuComponent } from '../../menus/FilterMenuComponent';
+import type { FilterMenuComponent } from '../../customMenus/FilterMenuComponent';
 import type { CategorizedTasks, TimedRenderableTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from './ScheduleGridCalculator';
 

@@ -21,9 +21,9 @@ import {
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import TaskViewerPlugin from '../../main';
 import { TaskStyling } from '../utils/TaskStyling';
-import { DateNavigator, ViewSettingsMenu } from '../ViewToolbar';
-import { FilterMenuComponent } from '../menus/FilterMenuComponent';
-import { SortMenuComponent } from '../menus/SortMenuComponent';
+import { DateNavigator, ViewSettingsMenu } from '../sharedUI/ViewToolbar';
+import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
+import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { createEmptySortState } from '../../services/sort/SortTypes';
@@ -32,9 +32,9 @@ import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManag
 import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
 import { HandleManager } from '../timelineview/HandleManager';
 import { SidebarManager } from '../sidebar/SidebarManager';
-import { PinnedListRenderer } from '../renderers/PinnedListRenderer';
+import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
-import { computeGridLayout, renderDeadlineArrow, GridTaskEntry } from '../renderers/GridTaskLayout';
+import { computeGridLayout, renderDeadlineArrow, GridTaskEntry } from '../sharedUI/GridTaskLayout';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
 
