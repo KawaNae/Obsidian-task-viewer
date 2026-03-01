@@ -24,6 +24,9 @@ export class DragHandler implements DragContext {
     private boundTouchStart: (e: TouchEvent) => void;
     private boundTouchMove: (e: TouchEvent) => void;
 
+    private lastClickTaskId: string | null = null;
+    private lastClickTime: number = 0;
+
     constructor(container: HTMLElement, taskIndex: TaskIndex, plugin: TaskViewerPlugin, onTaskClick: (taskId: string) => void, onTaskMove: () => void, getViewStartDate: () => string, getZoomLevel: () => number) {
         this.container = container;
         this.taskIndex = taskIndex;
@@ -122,7 +125,19 @@ export class DragHandler implements DragContext {
 
         // AllDay/Timeline両方でハンドルからのドラッグが必要
         if (!isFromHandle) {
-            this.onTaskClick(taskId);
+            if (this.plugin.settings.taskSelectAction === 'dblclick') {
+                const now = Date.now();
+                if (this.lastClickTaskId === taskId && now - this.lastClickTime < 400) {
+                    this.lastClickTaskId = null;
+                    this.lastClickTime = 0;
+                    this.onTaskClick(taskId);
+                } else {
+                    this.lastClickTaskId = taskId;
+                    this.lastClickTime = now;
+                }
+            } else {
+                this.onTaskClick(taskId);
+            }
             return;
         }
 

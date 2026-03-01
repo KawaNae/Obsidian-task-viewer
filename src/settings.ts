@@ -142,6 +142,18 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
+        new Setting(el)
+            .setName('Task Select Action')
+            .setDesc('How to select a task card to show drag handles. Double click can help prevent accidental selections.')
+            .addDropdown(dropdown => dropdown
+                .addOption('click', 'Single Click')
+                .addOption('dblclick', 'Double Click')
+                .setValue(this.plugin.settings.taskSelectAction)
+                .onChange(async (value) => {
+                    this.plugin.settings.taskSelectAction = value as 'click' | 'dblclick';
+                    await this.plugin.saveSettings();
+                }));
+
         // Child Tasks
         el.createEl('h3', { text: 'Child Tasks', cls: 'setting-section-header' });
 

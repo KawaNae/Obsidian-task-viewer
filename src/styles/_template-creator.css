@@ -1,0 +1,318 @@
+/* ── Template Creator Popover ── */
+
+.template-creator {
+    position: fixed;
+    z-index: var(--z-overlay);
+    background: var(--tv-bg-secondary);
+    border: 1px solid var(--tv-border);
+    border-radius: var(--tv-radius-s);
+    box-shadow: 0 4px 12px var(--tv-shadow-medium);
+    width: 340px;
+    max-width: calc(100vw - 16px);
+    max-height: 480px;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Header ── */
+
+.template-creator__header {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--tv-border);
+}
+
+.template-creator__title {
+    flex: 1;
+    font-size: var(--font-ui-small);
+    font-weight: 600;
+    color: var(--tv-text);
+}
+
+button.template-creator__close-btn {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    color: var(--tv-text-muted);
+    cursor: pointer;
+    border-radius: var(--tv-radius-s);
+    flex-shrink: 0;
+}
+
+button.template-creator__close-btn:hover {
+    color: var(--tv-text);
+    background-color: var(--tv-bg-hover);
+    box-shadow: none;
+}
+
+.template-creator__close-btn .svg-icon {
+    width: 14px;
+    height: 14px;
+}
+
+/* ── Body (scrollable) ── */
+
+.template-creator__body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* ── Fields ── */
+
+.template-creator__field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.template-creator__label {
+    font-size: var(--font-ui-small);
+    color: var(--tv-text-muted);
+}
+
+.template-creator__input {
+    font-size: var(--font-ui-small);
+    padding: 4px 8px;
+    border: 1px solid var(--tv-border);
+    border-radius: var(--tv-radius-s);
+    background: var(--tv-bg-primary);
+    color: var(--tv-text);
+    min-width: 0;
+}
+
+.template-creator__input:focus {
+    border-color: var(--tv-accent);
+    outline: none;
+}
+
+/* ── Groups ── */
+
+.template-creator__groups {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.template-creator__group {
+    border-left: 2px solid var(--tv-accent);
+    padding-left: 8px;
+}
+
+.template-creator__group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.template-creator__group-label {
+    font-size: var(--font-ui-small);
+    font-weight: 600;
+    color: var(--tv-text);
+}
+
+.template-creator__repeat-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.template-creator__repeat-label {
+    font-size: var(--font-ui-small);
+    color: var(--tv-text-muted);
+}
+
+.template-creator__repeat-input {
+    width: 48px;
+    font-size: var(--font-ui-small);
+    padding: 2px 4px;
+    border: 1px solid var(--tv-border);
+    border-radius: var(--tv-radius-s);
+    background: var(--tv-bg-primary);
+    color: var(--tv-text);
+    text-align: center;
+}
+
+.template-creator__repeat-input:focus {
+    border-color: var(--tv-accent);
+    outline: none;
+}
+
+/* ── Segments ── */
+
+.template-creator__segments {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.template-creator__segment {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.template-creator__seg-label {
+    flex: 1;
+    min-width: 60px;
+}
+
+/* Duration: hh : mm : ss */
+
+.template-creator__duration {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.template-creator__dur-input {
+    width: 36px;
+    font-size: var(--font-ui-small);
+    padding: 2px 2px;
+    border: 1px solid var(--tv-border);
+    border-radius: var(--tv-radius-s);
+    background: var(--tv-bg-primary);
+    color: var(--tv-text);
+    text-align: center;
+}
+
+.template-creator__dur-input:focus {
+    border-color: var(--tv-accent);
+    outline: none;
+}
+
+.template-creator__dur-sep {
+    font-size: var(--font-ui-small);
+    color: var(--tv-text-muted);
+}
+
+/* Type select */
+
+.template-creator__type-select {
+    font-size: var(--font-ui-small);
+    padding: 2px 4px;
+    border: 1px solid var(--tv-border);
+    border-radius: var(--tv-radius-s);
+    background: var(--tv-bg-primary);
+    color: var(--tv-text);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.template-creator__type-select:focus {
+    border-color: var(--tv-accent);
+    outline: none;
+}
+
+/* ── Add / Remove Buttons ── */
+
+button.template-creator__add-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    font-size: var(--font-ui-small);
+    color: var(--tv-text-muted);
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    cursor: pointer;
+}
+
+button.template-creator__add-btn:hover {
+    color: var(--tv-text);
+    background-color: transparent;
+    box-shadow: none;
+}
+
+button.template-creator__add-btn--inline {
+    padding: 2px 8px;
+}
+
+.template-creator__add-btn-icon {
+    display: inline-flex;
+}
+
+.template-creator__add-btn-icon .svg-icon {
+    width: 14px;
+    height: 14px;
+}
+
+button.template-creator__remove-btn {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    box-shadow: none;
+    color: var(--tv-text-muted);
+    cursor: pointer;
+    border-radius: var(--tv-radius-s);
+    flex-shrink: 0;
+}
+
+button.template-creator__remove-btn:hover {
+    color: var(--text-error);
+    background-color: var(--tv-bg-hover);
+    box-shadow: none;
+}
+
+.template-creator__remove-btn .svg-icon {
+    width: 14px;
+    height: 14px;
+}
+
+/* ── Footer ── */
+
+.template-creator__footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--tv-border);
+}
+
+.template-creator__error {
+    flex: 1;
+    font-size: 0.75em;
+    color: var(--text-error);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+button.template-creator__save-btn {
+    margin-left: auto;
+    padding: 4px 16px;
+    font-size: var(--font-ui-small);
+    font-weight: 600;
+    background-color: var(--tv-accent);
+    color: var(--tv-bg-primary);
+    border: none;
+    border-radius: var(--tv-radius-s);
+    cursor: pointer;
+    box-shadow: none;
+    flex-shrink: 0;
+}
+
+button.template-creator__save-btn:hover {
+    opacity: 0.9;
+    box-shadow: none;
+}

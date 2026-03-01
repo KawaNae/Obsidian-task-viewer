@@ -69,6 +69,7 @@ const copyStaticFiles = {
           '_toolbar.css',
           '_timeline-toolbar.css',
           '_timer-view.css',
+          '_template-creator.css',
           '_timer-widget.css',
           '_modal.css',
           '_filter-popover.css',

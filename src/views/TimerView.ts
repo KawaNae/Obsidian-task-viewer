@@ -25,6 +25,7 @@ import { AudioUtils } from '../utils/AudioUtils';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { ViewUriBuilder } from '../utils/ViewUriBuilder';
 import type { ViewUriOptions } from '../utils/ViewUriBuilder';
+import { IntervalTemplateCreator } from './customMenus/IntervalTemplateCreator';
 
 export const VIEW_TYPE_TIMER = VIEW_META_TIMER.type;
 
@@ -40,6 +41,7 @@ export class TimerView extends ItemView {
     private tickIntervalId: number | null = null;
 
     private templateLoader: IntervalTemplateLoader;
+    private templateCreator: IntervalTemplateCreator | null = null;
     private templates: IntervalTemplate[] = [];
     private selectedTemplate: IntervalTemplate | null = null;
 
@@ -592,45 +594,66 @@ export class TimerView extends ItemView {
         if (this.templates.length === 0) {
             parent.createDiv({
                 cls: 'timer-view__template-empty',
-                text: 'No templates found. Add .md files with a JSON code block to the template folder.',
+                text: 'No templates found.',
             });
-            return;
+        } else {
+            const list = parent.createDiv('timer-view__template-list');
+
+            for (const template of this.templates) {
+                const item = list.createDiv({
+                    cls: 'timer-view__template-item'
+                        + (this.selectedTemplate === template ? ' timer-view__template-item--selected' : ''),
+                });
+
+                const iconEl = item.createSpan('timer-view__template-icon');
+                setIcon(iconEl, template.icon);
+
+                item.createSpan({ cls: 'timer-view__template-name', text: template.name });
+                item.createSpan({ cls: 'timer-view__template-duration', text: template.totalDurationLabel });
+
+                item.onclick = () => {
+                    this.selectedTemplate = template;
+                    this.render();
+                };
+            }
         }
 
-        const list = parent.createDiv('timer-view__template-list');
-
-        for (const template of this.templates) {
-            const item = list.createDiv({
-                cls: 'timer-view__template-item'
-                    + (this.selectedTemplate === template ? ' timer-view__template-item--selected' : ''),
+        // "New Template" button
+        const addBtn = parent.createEl('button', {
+            cls: 'timer-view__btn timer-view__btn--secondary timer-view__add-template-btn',
+        });
+        const addIcon = addBtn.createSpan('timer-view__add-template-icon');
+        setIcon(addIcon, 'plus');
+        addBtn.createSpan({ text: ' New Template' });
+        addBtn.onclick = () => {
+            if (!this.templateCreator) {
+                this.templateCreator = new IntervalTemplateCreator(this.app);
+            }
+            this.templateCreator.show(addBtn, folder, {
+                onCreated: async (filePath: string) => {
+                    await this.loadTemplates();
+                    this.selectedTemplate = this.templates.find(t => t.filePath === filePath) ?? null;
+                    this.render();
+                },
             });
+        };
 
-            const iconEl = item.createSpan('timer-view__template-icon');
-            setIcon(iconEl, template.icon);
-
-            item.createSpan({ cls: 'timer-view__template-name', text: template.name });
-            item.createSpan({ cls: 'timer-view__template-duration', text: template.totalDurationLabel });
-
-            item.onclick = () => {
-                this.selectedTemplate = template;
-                this.render();
+        // Controls below (Start button)
+        if (this.templates.length > 0) {
+            const controls = parent.createDiv('timer-view__controls');
+            const startBtn = controls.createEl('button', {
+                cls: 'timer-view__btn timer-view__btn--primary',
+            });
+            setIcon(startBtn, 'play');
+            startBtn.createSpan({ text: ' Start' });
+            startBtn.disabled = !this.selectedTemplate;
+            if (!this.selectedTemplate) {
+                startBtn.addClass('timer-view__btn--disabled');
+            }
+            startBtn.onclick = () => {
+                if (this.selectedTemplate) this.startTimer();
             };
         }
-
-        // Controls below template list
-        const controls = parent.createDiv('timer-view__controls');
-        const startBtn = controls.createEl('button', {
-            cls: 'timer-view__btn timer-view__btn--primary',
-        });
-        setIcon(startBtn, 'play');
-        startBtn.createSpan({ text: ' Start' });
-        startBtn.disabled = !this.selectedTemplate;
-        if (!this.selectedTemplate) {
-            startBtn.addClass('timer-view__btn--disabled');
-        }
-        startBtn.onclick = () => {
-            if (this.selectedTemplate) this.startTimer();
-        };
     }
 
     // ─── Settings Menu ──────────────────────────────────────────
