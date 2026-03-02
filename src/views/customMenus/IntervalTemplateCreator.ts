@@ -20,7 +20,7 @@ interface FormSegment {
     hours: number;
     minutes: number;
     seconds: number;
-    type: 'work' | 'break';
+    type: 'work' | 'break' | 'prepare';
 }
 
 interface FormGroup {
@@ -352,10 +352,11 @@ export class IntervalTemplateCreator {
             onChange: (v) => { seg.seconds = v; },
         });
 
-        // Type toggle button
+        // Type toggle button (cycles work → break → work)
+        const typeLabel = seg.type === 'work' ? 'Work' : seg.type === 'break' ? 'Break' : 'Prep';
         const typeBtn = row.createEl('button', {
             cls: `template-creator__type-btn template-creator__type-btn--${seg.type}`,
-            text: seg.type === 'work' ? 'Work' : 'Break',
+            text: typeLabel,
         });
         typeBtn.addEventListener('click', () => {
             seg.type = seg.type === 'work' ? 'break' : 'work';
