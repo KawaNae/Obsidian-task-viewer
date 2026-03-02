@@ -286,8 +286,11 @@ export class TimerView extends ItemView {
                 const prevRemaining = this.timer.timeRemaining;
                 this.timer.timeRemaining = this.timer.totalTime - totalElapsed;
                 this.timer.phase = this.timer.timeRemaining < 0 ? 'idle' : 'work';
+                if (this.timer.timeRemaining > 0 && this.timer.timeRemaining <= 3) {
+                    AudioUtils.playWarningBeep();
+                }
                 if (prevRemaining > 0 && this.timer.timeRemaining <= 0) {
-                    AudioUtils.playWorkCompleteChime();
+                    AudioUtils.playFinishSound();
                     new Notice('Timer complete!');
                 }
                 this.updateDisplay();
@@ -305,6 +308,9 @@ export class TimerView extends ItemView {
                 this.timer.totalElapsedTime = completedBefore + Math.min(segment.durationSeconds, segmentElapsed);
 
                 if (this.timer.segmentTimeRemaining > 0) {
+                    if (this.timer.segmentTimeRemaining <= 3) {
+                        AudioUtils.playWarningBeep();
+                    }
                     this.updateDisplay();
                 } else {
                     this.handleSegmentComplete();
@@ -329,20 +335,19 @@ export class TimerView extends ItemView {
         // Update totalElapsedTime
         this.timer.totalElapsedTime = this.computeCompletedDuration(this.timer) + currentSegment.durationSeconds;
 
-        // Play transition chime
-        if (currentSegment.type === 'work') {
-            AudioUtils.playWorkCompleteChime();
-            new Notice('Work complete! Time for a break.');
-        } else if (currentSegment.type === 'break') {
-            AudioUtils.playBreakCompleteChime();
-            new Notice('Break complete! Ready to work.');
-        }
-
-        // Advance to next segment
+        // Advance to next segment first to decide which sound to play
         const moved = this.advanceSegment(this.timer);
         if (!moved) {
             this.handleIntervalFinish();
             return;
+        }
+
+        // Play transition confirm chime (only when continuing to next segment)
+        AudioUtils.playTransitionConfirm();
+        if (currentSegment.type === 'work') {
+            new Notice('Work complete! Time for a break.');
+        } else if (currentSegment.type === 'break') {
+            new Notice('Break complete! Ready to work.');
         }
 
         const nextSegment = this.getCurrentSegment(this.timer);
@@ -362,7 +367,7 @@ export class TimerView extends ItemView {
 
     private handleIntervalFinish(): void {
         this.stopTicker();
-        AudioUtils.playWorkCompleteChime();
+        AudioUtils.playFinishSound();
         new Notice('All intervals complete!');
         this.timer = null;
         this.render();
@@ -591,14 +596,14 @@ export class TimerView extends ItemView {
             return;
         }
 
+        const list = parent.createDiv('timer-view__template-list');
+
         if (this.templates.length === 0) {
-            parent.createDiv({
+            list.createDiv({
                 cls: 'timer-view__template-empty',
                 text: 'No templates found.',
             });
         } else {
-            const list = parent.createDiv('timer-view__template-list');
-
             for (const template of this.templates) {
                 const item = list.createDiv({
                     cls: 'timer-view__template-item'
@@ -618,13 +623,13 @@ export class TimerView extends ItemView {
             }
         }
 
-        // "New Template" button
-        const addBtn = parent.createEl('button', {
-            cls: 'timer-view__btn timer-view__btn--secondary timer-view__add-template-btn',
+        // "New Template" button — inside template list, filter-popover__add-btn style
+        const addBtn = list.createEl('button', {
+            cls: 'timer-view__add-template-btn',
         });
         const addIcon = addBtn.createSpan('timer-view__add-template-icon');
         setIcon(addIcon, 'plus');
-        addBtn.createSpan({ text: ' New Template' });
+        addBtn.createSpan({ text: 'New Template' });
         addBtn.onclick = () => {
             if (!this.templateCreator) {
                 this.templateCreator = new IntervalTemplateCreator(this.app);

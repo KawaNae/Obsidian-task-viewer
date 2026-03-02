@@ -31,7 +31,7 @@
 }
 
 /* Logic button (AND / OR toggle) */
-button.filter-popover__logic-btn {
+.filter-popover .filter-popover__logic-btn {
     font-size: var(--font-ui-small);
     font-weight: 600;
     color: var(--tv-accent);
@@ -43,14 +43,14 @@ button.filter-popover__logic-btn {
     border-radius: var(--tv-radius-s);
 }
 
-button.filter-popover__logic-btn:hover {
+.filter-popover .filter-popover__logic-btn:hover {
     background-color: var(--tv-bg-hover);
     box-shadow: none;
 }
 
 /* Dropdown buttons (property, operator, value) — flat Notion style */
 /* Specificity: override Obsidian's button:not(.clickable-icon) */
-button.filter-popover__dropdown {
+.filter-popover .filter-popover__dropdown {
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -67,7 +67,7 @@ button.filter-popover__dropdown {
     text-overflow: ellipsis;
 }
 
-button.filter-popover__dropdown:hover {
+.filter-popover .filter-popover__dropdown:hover {
     background-color: var(--tv-bg-hover);
     box-shadow: none;
 }
@@ -90,7 +90,7 @@ button.filter-popover__dropdown:hover {
 }
 
 /* Text input for content filter */
-.filter-popover__text-input {
+.filter-popover .filter-popover__text-input {
     font-size: var(--font-ui-small);
     padding: 4px 8px;
     border: 1px solid var(--tv-border);
@@ -101,13 +101,13 @@ button.filter-popover__dropdown:hover {
     min-width: 0;
 }
 
-.filter-popover__text-input:focus {
+.filter-popover .filter-popover__text-input:focus {
     border-color: var(--tv-accent);
     outline: none;
 }
 
 /* More menu button (...) — pushed to right edge via margin-left: auto */
-button.filter-popover__more-btn {
+.filter-popover .filter-popover__more-btn {
     margin-left: auto;
     width: 24px;
     height: 24px;
@@ -126,21 +126,21 @@ button.filter-popover__more-btn {
     flex-shrink: 0;
 }
 
-button.filter-popover__more-btn:hover {
+.filter-popover .filter-popover__more-btn:hover {
     color: var(--tv-text);
     background-color: var(--tv-bg-hover);
     border-color: var(--tv-border);
     box-shadow: none;
 }
 
-button.filter-popover__more-btn .svg-icon {
+.filter-popover .filter-popover__more-btn .svg-icon {
     width: 14px;
     height: 14px;
 }
 
 /* Add filter button — toolbar-style, blends with background */
 /* Specificity: override Obsidian's button:not(.clickable-icon) */
-button.filter-popover__add-btn {
+.filter-popover .filter-popover__add-btn {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -154,13 +154,13 @@ button.filter-popover__add-btn {
     margin-top: 2px;
 }
 
-button.filter-popover__add-btn:hover {
+.filter-popover .filter-popover__add-btn:hover {
     color: var(--tv-text);
     background-color: transparent;
     box-shadow: none;
 }
 
-button.filter-popover__add-btn--inline {
+.filter-popover .filter-popover__add-btn--inline {
     margin-top: 0;
     padding: 2px 8px;
 }
@@ -242,14 +242,14 @@ button.filter-popover__add-btn--inline {
     min-width: 0;
 }
 
-button.filter-popover__date-mode-btn {
+.filter-popover .filter-popover__date-mode-btn {
     flex-shrink: 0;
     font-size: 10px;
     padding: 2px 6px;
     color: var(--tv-text-muted);
 }
 
-.filter-popover__date-input {
+.filter-popover .filter-popover__date-input {
     font-size: var(--font-ui-small);
     padding: 4px 6px;
     border: 1px solid var(--tv-border);
@@ -260,12 +260,12 @@ button.filter-popover__date-mode-btn {
     flex: 1;
 }
 
-.filter-popover__date-input:focus {
+.filter-popover .filter-popover__date-input:focus {
     border-color: var(--tv-accent);
     outline: none;
 }
 
-.filter-popover__n-input {
+.filter-popover .filter-popover__n-input {
     width: 52px;
     font-size: var(--font-ui-small);
     padding: 4px 6px;
@@ -275,7 +275,7 @@ button.filter-popover__date-mode-btn {
     color: var(--tv-text);
 }
 
-.filter-popover__n-input:focus {
+.filter-popover .filter-popover__n-input:focus {
     border-color: var(--tv-accent);
     outline: none;
 }

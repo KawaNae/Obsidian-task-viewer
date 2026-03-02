@@ -39,7 +39,7 @@
 }
 
 /* Dropdown buttons (property, direction) — same style as filter */
-button.sort-popover__dropdown {
+.sort-popover .sort-popover__dropdown {
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -56,7 +56,7 @@ button.sort-popover__dropdown {
     text-overflow: ellipsis;
 }
 
-button.sort-popover__dropdown:hover {
+.sort-popover .sort-popover__dropdown:hover {
     background-color: var(--tv-bg-hover);
     box-shadow: none;
 }
@@ -74,16 +74,18 @@ button.sort-popover__dropdown:hover {
 }
 
 /* Remove button (×) — pushed to right */
-button.sort-popover__remove-btn {
+.sort-popover .sort-popover__remove-btn {
     margin-left: auto;
     width: 24px;
     height: 24px;
-    padding: 0;
+    padding: 0 !important;
+    appearance: none;
+    -webkit-appearance: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background-color: transparent;
-    border: none;
+    background: transparent !important;
+    border: 1px solid transparent !important;
     box-shadow: none;
     color: var(--tv-text-muted);
     cursor: pointer;
@@ -91,13 +93,13 @@ button.sort-popover__remove-btn {
     flex-shrink: 0;
 }
 
-button.sort-popover__remove-btn:hover {
+.sort-popover .sort-popover__remove-btn:hover {
     color: var(--tv-text);
     background-color: var(--tv-bg-hover);
     box-shadow: none;
 }
 
-button.sort-popover__remove-btn .svg-icon {
+.sort-popover .sort-popover__remove-btn .svg-icon {
     width: 14px;
     height: 14px;
 }
@@ -112,7 +114,7 @@ button.sort-popover__remove-btn .svg-icon {
 }
 
 /* Add sort button */
-button.sort-popover__add-btn {
+.sort-popover .sort-popover__add-btn {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -125,7 +127,7 @@ button.sort-popover__add-btn {
     cursor: pointer;
 }
 
-button.sort-popover__add-btn:hover {
+.sort-popover .sort-popover__add-btn:hover {
     color: var(--tv-text);
     background-color: transparent;
     box-shadow: none;
@@ -137,7 +139,7 @@ button.sort-popover__add-btn:hover {
 }
 
 /* Delete sort button (danger) */
-button.sort-popover__delete-btn {
+.sort-popover .sort-popover__delete-btn {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -150,7 +152,7 @@ button.sort-popover__delete-btn {
     cursor: pointer;
 }
 
-button.sort-popover__delete-btn:hover {
+.sort-popover .sort-popover__delete-btn:hover {
     background-color: transparent;
     box-shadow: none;
 }

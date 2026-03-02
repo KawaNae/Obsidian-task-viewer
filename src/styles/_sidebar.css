@@ -86,8 +86,7 @@
     flex: 1;
 }
 
-/* Specificity: override Obsidian's button:not(.clickable-icon) */
-.view-sidebar-panel button.view-sidebar__add-btn {
+.view-sidebar-panel .view-sidebar__add-btn {
     height: 22px;
     display: inline-flex;
     align-items: center;
@@ -103,13 +102,14 @@
     font-size: 0.8em;
     box-shadow: none;
     cursor: pointer;
+    flex-shrink: 0;
     transition:
         background-color 120ms ease,
         border-color 120ms ease,
         color 120ms ease;
 }
 
-.view-sidebar-panel button.view-sidebar__add-btn:hover {
+.view-sidebar-panel .view-sidebar__add-btn:hover {
     background-color: var(--tv-bg-hover);
     border-color: var(--tv-border);
     color: var(--tv-text);

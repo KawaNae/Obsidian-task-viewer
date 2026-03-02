@@ -318,7 +318,7 @@ export class TimerRenderer {
             stopBtn.createSpan({ text: ' Stop' });
             stopBtn.onclick = async () => {
                 this.lifecycle.pauseTimer(timer);
-                AudioUtils.playWorkCompleteChime();
+                AudioUtils.playStopSound();
 
                 if (timer.recordMode === 'self') {
                     await this.ctx.recorder.updateTaskDirectly(timer);
@@ -370,7 +370,7 @@ export class TimerRenderer {
             stopBtn.createSpan({ text: ' Stop' });
             stopBtn.onclick = async () => {
                 this.lifecycle.pauseTimer(timer);
-                AudioUtils.playWorkCompleteChime();
+                AudioUtils.playStopSound();
                 if (timer.recordMode === 'self') {
                     await this.ctx.recorder.updateTaskDirectly(timer);
                 } else {
@@ -432,7 +432,7 @@ export class TimerRenderer {
             stopBtn.createSpan({ text: ' Stop' });
             stopBtn.onclick = async () => {
                 this.lifecycle.pauseOrSnapshotIntervalForStop(timer);
-                AudioUtils.playWorkCompleteChime();
+                AudioUtils.playStopSound();
                 if (timer.recordMode === 'self') {
                     await this.ctx.recorder.updateTaskDirectly(timer);
                 } else {
@@ -473,7 +473,7 @@ export class TimerRenderer {
         stopBtn.createSpan({ text: ' Stop' });
         stopBtn.onclick = async () => {
             this.lifecycle.pauseOrSnapshotIntervalForStop(timer);
-            AudioUtils.playWorkCompleteChime();
+            AudioUtils.playStopSound();
             if (timer.recordMode === 'self') {
                 await this.ctx.recorder.updateTaskDirectly(timer);
             } else {

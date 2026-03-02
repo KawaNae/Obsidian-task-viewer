@@ -6,7 +6,7 @@
  * appended to document.body, outside-click to close.
  */
 
-import { App, Notice, setIcon } from 'obsidian';
+import { App, Notice, setIcon, getIconIds } from 'obsidian';
 import { IntervalTemplateWriter } from '../../timer/IntervalTemplateWriter';
 import type { IntervalGroup } from '../../timer/TimerInstance';
 
@@ -35,7 +35,9 @@ interface FormState {
 
 export class IntervalTemplateCreator {
     private popoverEl: HTMLElement | null = null;
+    private iconPopoverEl: HTMLElement | null = null;
     private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
+    private iconOutsideClickHandler: ((e: MouseEvent) => void) | null = null;
     private state: FormState = this.createDefaultState();
     private callbacks: TemplateCreatorCallbacks | null = null;
     private folderPath = '';
@@ -60,6 +62,7 @@ export class IntervalTemplateCreator {
                 const target = e.target as Node;
                 if (!this.popoverEl) return;
                 if (this.popoverEl.contains(target)) return;
+                if (this.iconPopoverEl?.contains(target)) return;
                 this.close();
             };
             document.addEventListener('pointerdown', this.outsideClickHandler, true);
@@ -67,6 +70,7 @@ export class IntervalTemplateCreator {
     }
 
     close(): void {
+        this.closeIconPopover();
         if (this.popoverEl) {
             this.popoverEl.remove();
             this.popoverEl = null;
@@ -74,6 +78,17 @@ export class IntervalTemplateCreator {
         if (this.outsideClickHandler) {
             document.removeEventListener('pointerdown', this.outsideClickHandler, true);
             this.outsideClickHandler = null;
+        }
+    }
+
+    private closeIconPopover(): void {
+        if (this.iconPopoverEl) {
+            this.iconPopoverEl.remove();
+            this.iconPopoverEl = null;
+        }
+        if (this.iconOutsideClickHandler) {
+            document.removeEventListener('pointerdown', this.iconOutsideClickHandler, true);
+            this.iconOutsideClickHandler = null;
         }
     }
 
@@ -120,13 +135,108 @@ export class IntervalTemplateCreator {
     private renderIconField(parent: HTMLElement): void {
         const field = parent.createDiv('template-creator__field');
         field.createEl('label', { cls: 'template-creator__label', text: 'Icon' });
-        const input = field.createEl('input', {
+
+        const row = field.createDiv('template-creator__icon-row');
+
+        const input = row.createEl('input', {
             cls: 'template-creator__input',
             type: 'text',
             placeholder: 'rotate-cw',
         });
         input.value = this.state.icon;
-        input.addEventListener('input', () => { this.state.icon = input.value; });
+
+        const preview = row.createSpan('template-creator__icon-preview');
+        const updatePreview = () => {
+            preview.empty();
+            const iconName = this.state.icon.trim() || 'rotate-cw';
+            setIcon(preview, iconName);
+        };
+        updatePreview();
+
+        input.addEventListener('input', () => {
+            this.state.icon = input.value;
+            updatePreview();
+        });
+
+        const browseBtn = row.createEl('button', {
+            cls: 'template-creator__browse-btn',
+            text: 'Browse',
+        });
+        browseBtn.addEventListener('click', () => {
+            this.showIconPopover(browseBtn, (iconName) => {
+                this.state.icon = iconName;
+                input.value = iconName;
+                updatePreview();
+            });
+        });
+    }
+
+    private showIconPopover(anchorEl: HTMLElement, onSelect: (iconName: string) => void): void {
+        this.closeIconPopover();
+
+        const allIcons = getIconIds()
+            .filter(id => id.startsWith('lucide-'))
+            .map(id => id.slice(7)); // remove 'lucide-' prefix
+
+        this.iconPopoverEl = document.createElement('div');
+        this.iconPopoverEl.className = 'template-creator__icon-popover';
+
+        // Search input
+        const searchInput = this.iconPopoverEl.createEl('input', {
+            cls: 'template-creator__icon-search',
+            type: 'text',
+            placeholder: 'Search icons...',
+        });
+
+        // Icon grid
+        const grid = this.iconPopoverEl.createDiv('template-creator__icon-grid');
+
+        const renderIcons = (filter: string) => {
+            grid.empty();
+            const filtered = filter
+                ? allIcons.filter(name => name.includes(filter.toLowerCase()))
+                : allIcons;
+            const limited = filtered.slice(0, 200); // limit for performance
+
+            for (const name of limited) {
+                const btn = grid.createEl('button', { cls: 'template-creator__icon-option' });
+                btn.setAttribute('aria-label', name);
+                setIcon(btn.createSpan(), name);
+                btn.addEventListener('click', () => {
+                    onSelect(name);
+                    this.closeIconPopover();
+                });
+            }
+        };
+
+        renderIcons('');
+        searchInput.addEventListener('input', () => renderIcons(searchInput.value));
+
+        document.body.appendChild(this.iconPopoverEl);
+
+        // Position below anchor
+        const anchorRect = anchorEl.getBoundingClientRect();
+        const popRect = this.iconPopoverEl.getBoundingClientRect();
+        let x = anchorRect.left;
+        let y = anchorRect.bottom + 4;
+        if (x + popRect.width > window.innerWidth) {
+            x = window.innerWidth - popRect.width - 8;
+        }
+        if (y + popRect.height > window.innerHeight) {
+            y = anchorRect.top - popRect.height - 4;
+        }
+        this.iconPopoverEl.style.left = `${Math.max(8, x)}px`;
+        this.iconPopoverEl.style.top = `${Math.max(8, y)}px`;
+
+        // Outside click closes icon popover only
+        setTimeout(() => {
+            this.iconOutsideClickHandler = (e: MouseEvent) => {
+                const target = e.target as Node;
+                if (this.iconPopoverEl?.contains(target)) return;
+                this.closeIconPopover();
+            };
+            document.addEventListener('pointerdown', this.iconOutsideClickHandler, true);
+        }, 0);
     }
 
     private renderGroups(parent: HTMLElement): void {
@@ -158,15 +268,10 @@ export class IntervalTemplateCreator {
 
         const repeatWrap = header.createSpan('template-creator__repeat-wrap');
         repeatWrap.createSpan({ cls: 'template-creator__repeat-label', text: 'Repeat' });
-        const repeatInput = repeatWrap.createEl('input', {
+        const repeatInput = this.createNumericInput(repeatWrap, {
+            value: group.repeatCount, min: 0, placeholder: '1',
             cls: 'template-creator__repeat-input',
-            type: 'number',
-        });
-        repeatInput.value = String(group.repeatCount);
-        repeatInput.min = '0';
-        repeatInput.addEventListener('change', () => {
-            const val = parseInt(repeatInput.value, 10);
-            group.repeatCount = isNaN(val) ? 1 : Math.max(0, val);
+            onChange: (v) => { group.repeatCount = v; },
         });
 
         if (this.state.groups.length > 1) {
@@ -210,53 +315,33 @@ export class IntervalTemplateCreator {
         // Duration: hh : mm : ss
         const durWrap = row.createDiv('template-creator__duration');
 
-        const hInput = durWrap.createEl('input', {
-            cls: 'template-creator__dur-input',
-            type: 'number',
-        });
-        hInput.value = String(seg.hours);
-        hInput.min = '0';
-        hInput.placeholder = 'h';
-        hInput.addEventListener('change', () => {
-            seg.hours = Math.max(0, parseInt(hInput.value, 10) || 0);
+        const hInput = this.createNumericInput(durWrap, {
+            value: seg.hours, min: 0, placeholder: 'h',
+            onChange: (v) => { seg.hours = v; },
         });
 
         durWrap.createSpan({ cls: 'template-creator__dur-sep', text: ':' });
 
-        const mInput = durWrap.createEl('input', {
-            cls: 'template-creator__dur-input',
-            type: 'number',
-        });
-        mInput.value = String(seg.minutes);
-        mInput.min = '0';
-        mInput.max = '59';
-        mInput.placeholder = 'm';
-        mInput.addEventListener('change', () => {
-            seg.minutes = Math.max(0, Math.min(59, parseInt(mInput.value, 10) || 0));
+        const mInput = this.createNumericInput(durWrap, {
+            value: seg.minutes, min: 0, max: 59, placeholder: 'm',
+            onChange: (v) => { seg.minutes = v; },
         });
 
         durWrap.createSpan({ cls: 'template-creator__dur-sep', text: ':' });
 
-        const sInput = durWrap.createEl('input', {
-            cls: 'template-creator__dur-input',
-            type: 'number',
-        });
-        sInput.value = String(seg.seconds);
-        sInput.min = '0';
-        sInput.max = '59';
-        sInput.placeholder = 's';
-        sInput.addEventListener('change', () => {
-            seg.seconds = Math.max(0, Math.min(59, parseInt(sInput.value, 10) || 0));
+        const sInput = this.createNumericInput(durWrap, {
+            value: seg.seconds, min: 0, max: 59, placeholder: 's',
+            onChange: (v) => { seg.seconds = v; },
         });
 
-        // Type select
-        const typeSelect = row.createEl('select', { cls: 'template-creator__type-select' });
-        const workOpt = typeSelect.createEl('option', { text: 'Work', value: 'work' });
-        const breakOpt = typeSelect.createEl('option', { text: 'Break', value: 'break' });
-        if (seg.type === 'break') breakOpt.selected = true;
-        else workOpt.selected = true;
-        typeSelect.addEventListener('change', () => {
-            seg.type = typeSelect.value as 'work' | 'break';
+        // Type toggle button
+        const typeBtn = row.createEl('button', {
+            cls: `template-creator__type-btn template-creator__type-btn--${seg.type}`,
+            text: seg.type === 'work' ? 'Work' : 'Break',
+        });
+        typeBtn.addEventListener('click', () => {
+            seg.type = seg.type === 'work' ? 'break' : 'work';
+            this.refreshContent();
         });
 
         // Remove segment
@@ -307,6 +392,31 @@ export class IntervalTemplateCreator {
     }
 
     // ── Helpers ──
+
+    private createNumericInput(
+        parent: HTMLElement,
+        opts: { value: number; min?: number; max?: number; placeholder?: string; cls?: string; onChange: (v: number) => void },
+    ): HTMLInputElement {
+        const input = parent.createEl('input', {
+            cls: opts.cls ?? 'template-creator__dur-input',
+            type: 'number',
+        });
+        input.value = String(opts.value);
+        if (opts.min != null) input.min = String(opts.min);
+        if (opts.max != null) input.max = String(opts.max);
+        if (opts.placeholder) input.placeholder = opts.placeholder;
+        input.inputMode = 'numeric';
+        input.pattern = '[0-9]*';
+        input.addEventListener('focus', () => input.select());
+        input.addEventListener('change', () => {
+            let val = parseInt(input.value, 10);
+            if (isNaN(val)) val = 0;
+            if (opts.min != null) val = Math.max(opts.min, val);
+            if (opts.max != null) val = Math.min(opts.max, val);
+            opts.onChange(val);
+        });
+        return input;
+    }
 
     private createDefaultState(): FormState {
         return {
