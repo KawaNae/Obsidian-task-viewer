@@ -382,6 +382,7 @@ export class CalendarView extends ItemView {
                     filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
                 },
                 getTasks: () => this.taskIndex.getTasks(),
+                getStartHour: () => this.plugin.settings.startHour,
             });
         });
 
@@ -521,6 +522,7 @@ export class CalendarView extends ItemView {
                 void this.render();
             },
             getTasks: () => this.taskIndex.getTasks(),
+            getStartHour: () => this.plugin.settings.startHour,
         });
     }
 

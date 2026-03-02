@@ -280,6 +280,14 @@
     outline: none;
 }
 
+/* Number Value Selector (Length filter) */
+.filter-popover__number-value {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
 /* Empty state */
 .filter-popover__empty {
     padding: 12px 8px;

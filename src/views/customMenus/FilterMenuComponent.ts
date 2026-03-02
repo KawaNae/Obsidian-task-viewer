@@ -3,6 +3,7 @@ import type { Task } from '../../types';
 import type {
     FilterState, FilterConditionNode, FilterGroupNode, FilterNode,
     FilterProperty, FilterOperator, DateFilterValue, RelativeDatePreset,
+    FilterContext,
 } from '../../services/filter/FilterTypes';
 import {
     MAX_FILTER_DEPTH,
@@ -12,6 +13,7 @@ import {
     PROPERTY_ICONS,
     NO_VALUE_OPERATORS,
     DATE_PROPERTIES,
+    NUMBER_PROPERTIES,
     RELATIVE_DATE_LABELS,
     createDefaultCondition,
     createEmptyFilterState,
@@ -25,6 +27,7 @@ import { FilterValueCollector } from '../../services/filter/FilterValueCollector
 export interface FilterMenuCallbacks {
     onFilterChange: () => void;
     getTasks: () => Task[];
+    getStartHour?: () => number;
 }
 
 interface SelectItem {
@@ -47,6 +50,7 @@ export class FilterMenuComponent {
     private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
     private lastTasks: Task[] = [];
     private lastCallbacks: FilterMenuCallbacks | null = null;
+    private startHourProvider: (() => number) | null = null;
 
     getFilterState(): FilterState {
         return this.state;
@@ -56,8 +60,15 @@ export class FilterMenuComponent {
         this.state = JSON.parse(JSON.stringify(state));
     }
 
+    setStartHourProvider(provider: () => number): void {
+        this.startHourProvider = provider;
+    }
+
     isTaskVisible(task: Task): boolean {
-        return TaskFilterEngine.evaluate(task, this.state);
+        const context: FilterContext | undefined = this.startHourProvider
+            ? { startHour: this.startHourProvider() }
+            : undefined;
+        return TaskFilterEngine.evaluate(task, this.state, context);
     }
 
     hasActiveFilters(): boolean {
@@ -77,6 +88,7 @@ export class FilterMenuComponent {
 
         this.lastTasks = callbacks.getTasks();
         this.lastCallbacks = callbacks;
+        if (callbacks.getStartHour) this.startHourProvider = callbacks.getStartHour;
 
         this.popoverEl = document.createElement('div');
         this.popoverEl.className = 'filter-popover';
@@ -311,6 +323,8 @@ export class FilterMenuComponent {
             const valueLine = row.createDiv('filter-popover__row-value');
             if (DATE_PROPERTIES.has(condition.property)) {
                 this.renderDateValueSelector(valueLine, condition);
+            } else if (NUMBER_PROPERTIES.has(condition.property)) {
+                this.renderNumberValueSelector(valueLine, condition);
             } else {
                 this.renderValueSelector(valueLine, condition);
             }
@@ -457,6 +471,50 @@ export class FilterMenuComponent {
         });
     }
 
+    // ── Number Value Selector (Length filter) ──
+
+    private renderNumberValueSelector(row: HTMLElement, condition: FilterConditionNode): void {
+        const container = row.createDiv('filter-popover__number-value');
+
+        if (condition.value.type !== 'number') {
+            condition.value = { type: 'number', value: 1, unit: 'hours' };
+        }
+        const unit = condition.value.unit ?? 'hours';
+
+        // Unit toggle button (Hours / Minutes)
+        const unitBtn = container.createEl('button', {
+            cls: 'filter-popover__dropdown filter-popover__unit-btn',
+            text: unit === 'hours' ? 'Hours' : 'Minutes',
+        });
+        unitBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (condition.value.type === 'number') {
+                condition.value = {
+                    type: 'number',
+                    value: condition.value.value,
+                    unit: unit === 'hours' ? 'minutes' : 'hours',
+                };
+            }
+            this.refreshPopover();
+        });
+
+        // Number input
+        const input = container.createEl('input', {
+            cls: 'filter-popover__n-input',
+            type: 'number',
+        });
+        input.value = String(condition.value.value);
+        input.min = '0';
+        input.step = unit === 'hours' ? '0.5' : '1';
+        input.addEventListener('change', () => {
+            const n = parseFloat(input.value);
+            if (Number.isFinite(n) && n >= 0 && condition.value.type === 'number') {
+                condition.value = { type: 'number', value: n, unit: condition.value.unit ?? 'hours' };
+                this.lastCallbacks?.onFilterChange();
+            }
+        });
+    }
+
     private formatValueLabel(property: FilterProperty, values: string[]): string {
         if (values.length === 0) return 'Select...';
         if (values.length === 1) {
@@ -464,6 +522,7 @@ export class FilterMenuComponent {
             if (property === 'file') return v.split('/').pop() || v;
             if (property === 'tag') return `#${v}`;
             if (property === 'status') return v === ' ' ? 'Todo' : this.getStatusLabel(v);
+            if (property === 'taskType') return v === 'at-notation' ? '@notation' : 'Frontmatter';
             return v;
         }
         return `${values.length} selected`;
@@ -559,7 +618,7 @@ export class FilterMenuComponent {
         const properties: FilterProperty[] = [
             'file', 'tag', 'status', 'content',
             'startDate', 'endDate', 'deadline',
-            'color', 'linestyle',
+            'length', 'color', 'linestyle', 'taskType',
         ];
         const items: SelectItem[] = properties.map(p => ({
             label: PROPERTY_LABELS[p],
@@ -576,6 +635,8 @@ export class FilterMenuComponent {
                 condition.value = { type: 'boolean', value: true };
             } else if (DATE_PROPERTIES.has(prop)) {
                 condition.value = { type: 'date', value: { mode: 'relative', preset: 'today' } };
+            } else if (NUMBER_PROPERTIES.has(prop)) {
+                condition.value = { type: 'number', value: 1, unit: 'hours' };
             } else if (prop === 'content') {
                 condition.value = { type: 'string', value: '' };
             } else {
@@ -690,6 +751,7 @@ export class FilterMenuComponent {
             case 'status': return FilterValueCollector.collectStatuses(this.lastTasks);
             case 'color': return FilterValueCollector.collectColors(this.lastTasks);
             case 'linestyle': return FilterValueCollector.collectLineStyles(this.lastTasks);
+            case 'taskType': return FilterValueCollector.collectParserIds(this.lastTasks);
             default: return [];
         }
     }
@@ -699,6 +761,9 @@ export class FilterMenuComponent {
         if (property === 'tag') return `#${value}`;
         if (property === 'status') {
             return value === ' ' ? '[ ] Todo' : `[${value}] ${this.getStatusLabel(value)}`;
+        }
+        if (property === 'taskType') {
+            return value === 'at-notation' ? '@notation' : 'Frontmatter';
         }
         return value;
     }

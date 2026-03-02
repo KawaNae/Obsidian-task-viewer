@@ -1,33 +1,34 @@
 import type { Task } from '../../types';
-import type { FilterState, FilterConditionNode, FilterGroupNode, FilterNode } from './FilterTypes';
+import type { FilterState, FilterConditionNode, FilterGroupNode, FilterNode, FilterContext } from './FilterTypes';
 import { DateResolver } from './DateResolver';
+import { DateUtils } from '../../utils/DateUtils';
 
 /**
  * Evaluates whether a task passes a recursive filter tree.
  * Groups can contain both conditions and sub-groups at any depth.
  */
 export class TaskFilterEngine {
-    static evaluate(task: Task, filterState: FilterState): boolean {
-        return this.evaluateGroup(task, filterState.root);
+    static evaluate(task: Task, filterState: FilterState, context?: FilterContext): boolean {
+        return this.evaluateGroup(task, filterState.root, context);
     }
 
-    private static evaluateGroup(task: Task, group: FilterGroupNode): boolean {
+    private static evaluateGroup(task: Task, group: FilterGroupNode, context?: FilterContext): boolean {
         if (group.children.length === 0) return true;
 
         if (group.logic === 'or') {
-            return group.children.some(child => this.evaluateNode(task, child));
+            return group.children.some(child => this.evaluateNode(task, child, context));
         }
-        return group.children.every(child => this.evaluateNode(task, child));
+        return group.children.every(child => this.evaluateNode(task, child, context));
     }
 
-    private static evaluateNode(task: Task, node: FilterNode): boolean {
+    private static evaluateNode(task: Task, node: FilterNode, context?: FilterContext): boolean {
         if (node.type === 'condition') {
-            return this.evalCondition(task, node);
+            return this.evalCondition(task, node, context);
         }
-        return this.evaluateGroup(task, node);
+        return this.evaluateGroup(task, node, context);
     }
 
-    private static evalCondition(task: Task, condition: FilterConditionNode): boolean {
+    private static evalCondition(task: Task, condition: FilterConditionNode, context?: FilterContext): boolean {
         // Skip conditions with empty stringSet values (value not yet selected)
         if (condition.value.type === 'stringSet' && condition.value.values.length === 0) return true;
         switch (condition.property) {
@@ -49,6 +50,10 @@ export class TaskFilterEngine {
                 return this.evalStringSet(task.color ?? '', condition);
             case 'linestyle':
                 return this.evalStringSet(task.linestyle ?? '', condition);
+            case 'length':
+                return this.evalLength(task, condition, context?.startHour ?? 0);
+            case 'taskType':
+                return this.evalStringSet(task.parserId, condition);
             default:
                 return true;
         }
@@ -95,6 +100,34 @@ export class TaskFilterEngine {
             case 'after':      return taskDate > end;
             case 'onOrBefore': return taskDate <= end;
             case 'onOrAfter':  return taskDate >= start;
+            default: return true;
+        }
+    }
+
+    private static evalLength(task: Task, c: FilterConditionNode, startHour: number): boolean {
+        const hasDuration = !!task.startDate;
+        if (c.operator === 'isSet') return hasDuration;
+        if (c.operator === 'isNotSet') return !hasDuration;
+
+        if (c.value.type !== 'number') return true;
+        if (!task.startDate) return false;
+
+        const durationMs = DateUtils.getTaskDurationMs(
+            task.startDate, task.startTime, task.endDate, task.endTime, startHour,
+        );
+        if (!Number.isFinite(durationMs) || durationMs < 0) return false;
+
+        const unit = c.value.unit ?? 'hours';
+        const divisor = unit === 'minutes' ? 60_000 : 3_600_000;
+        const durationValue = durationMs / divisor;
+        const threshold = c.value.value;
+
+        switch (c.operator) {
+            case 'lessThan':            return durationValue < threshold;
+            case 'lessThanOrEqual':     return durationValue <= threshold;
+            case 'greaterThan':         return durationValue > threshold;
+            case 'greaterThanOrEqual':  return durationValue >= threshold;
+            case 'equals':              return Math.abs(durationValue - threshold) < 0.001;
             default: return true;
         }
     }

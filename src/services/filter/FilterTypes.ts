@@ -3,13 +3,15 @@
 export type FilterProperty =
     | 'file' | 'tag' | 'status' | 'content'
     | 'startDate' | 'endDate' | 'deadline'
-    | 'color' | 'linestyle';
+    | 'color' | 'linestyle'
+    | 'length' | 'taskType';
 
 export type FilterOperator =
     | 'includes' | 'excludes'
     | 'isSet' | 'isNotSet'
     | 'contains' | 'notContains'
-    | 'equals' | 'before' | 'after' | 'onOrBefore' | 'onOrAfter';
+    | 'equals' | 'before' | 'after' | 'onOrBefore' | 'onOrAfter'
+    | 'lessThan' | 'lessThanOrEqual' | 'greaterThan' | 'greaterThanOrEqual';
 
 // ── Value types ──
 
@@ -17,7 +19,8 @@ export type FilterValue =
     | { type: 'stringSet'; values: string[] }
     | { type: 'boolean'; value: boolean }
     | { type: 'string'; value: string }
-    | { type: 'date'; value: DateFilterValue };
+    | { type: 'date'; value: DateFilterValue }
+    | { type: 'number'; value: number; unit?: 'hours' | 'minutes' };
 
 export type RelativeDatePreset = 'today' | 'thisWeek' | 'nextWeek' | 'pastWeek' | 'nextNDays';
 
@@ -48,6 +51,11 @@ export interface FilterGroupNode {
 
 export interface FilterState {
     root: FilterGroupNode;
+}
+
+/** Optional context for filter evaluation (e.g., view-level settings). */
+export interface FilterContext {
+    startHour?: number;
 }
 
 /** @deprecated Use FilterConditionNode */
@@ -141,6 +149,9 @@ export function deepCloneNode(node: FilterNode): FilterNode {
 /** Date properties that use date comparison operators */
 export const DATE_PROPERTIES: Set<FilterProperty> = new Set(['startDate', 'endDate', 'deadline']);
 
+/** Number properties that use numeric comparison operators */
+export const NUMBER_PROPERTIES: Set<FilterProperty> = new Set(['length']);
+
 /** Available operators per property */
 export const PROPERTY_OPERATORS: Record<FilterProperty, FilterOperator[]> = {
     file: ['includes', 'excludes'],
@@ -152,6 +163,8 @@ export const PROPERTY_OPERATORS: Record<FilterProperty, FilterOperator[]> = {
     deadline: ['isSet', 'isNotSet', 'equals', 'before', 'after', 'onOrBefore', 'onOrAfter'],
     color: ['includes', 'excludes'],
     linestyle: ['includes', 'excludes'],
+    length: ['lessThan', 'lessThanOrEqual', 'greaterThan', 'greaterThanOrEqual', 'equals', 'isSet', 'isNotSet'],
+    taskType: ['includes', 'excludes'],
 };
 
 /** Display labels for operators */
@@ -167,6 +180,10 @@ export const OPERATOR_LABELS: Record<FilterOperator, string> = {
     after: 'is after',
     onOrBefore: 'is on or before',
     onOrAfter: 'is on or after',
+    lessThan: 'is less than',
+    lessThanOrEqual: 'is at most',
+    greaterThan: 'is greater than',
+    greaterThanOrEqual: 'is at least',
 };
 
 /** Display labels for properties */
@@ -180,6 +197,8 @@ export const PROPERTY_LABELS: Record<FilterProperty, string> = {
     deadline: 'Deadline',
     color: 'Color',
     linestyle: 'Line style',
+    length: 'Length',
+    taskType: 'Task type',
 };
 
 /** Operators that require no value input */
@@ -196,6 +215,8 @@ export const PROPERTY_ICONS: Record<FilterProperty, string> = {
     deadline: 'alarm-clock',
     color: 'palette',
     linestyle: 'minus',
+    length: 'timer',
+    taskType: 'file-type',
 };
 
 /** Display labels for relative date presets */

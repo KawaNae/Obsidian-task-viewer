@@ -14,7 +14,7 @@ export class DateNavigator {
      * Renders date navigation buttons.
      * @param toolbar - Parent element to render into
      * @param onNavigate - Callback when navigating by days (e.g., -1 or +1)
-     * @param onToday - Callback when clicking Today button
+     * @param onToday - Callback when clicking Now button
      */
     static render(
         toolbar: HTMLElement,
@@ -35,9 +35,9 @@ export class DateNavigator {
 
         const todayBtn = toolbar.createEl('button', {
             cls: 'view-toolbar__btn--today',
-            text: 'Today'
+            text: 'Now'
         });
-        todayBtn.setAttribute('aria-label', 'Today');
+        todayBtn.setAttribute('aria-label', 'Now');
         todayBtn.onclick = () => onToday();
 
         const nextBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
