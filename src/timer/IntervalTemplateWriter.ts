@@ -17,6 +17,16 @@ export interface TemplateCreateData {
 export class IntervalTemplateWriter {
     constructor(private app: App) {}
 
+    async updateTemplate(filePath: string, data: TemplateCreateData): Promise<TFile> {
+        const existing = this.app.vault.getAbstractFileByPath(filePath);
+        if (!(existing instanceof TFile)) {
+            throw new Error('Template file not found.');
+        }
+        const content = this.buildFileContent(data);
+        await this.app.vault.modify(existing, content);
+        return existing;
+    }
+
     async saveTemplate(folderPath: string, data: TemplateCreateData): Promise<TFile> {
         await this.ensureFolder(folderPath);
 

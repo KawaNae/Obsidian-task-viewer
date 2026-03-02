@@ -544,7 +544,10 @@ export class TimerView extends ItemView {
             });
             setIcon(pauseBtn, 'pause');
             pauseBtn.createSpan({ text: ' Pause' });
-            pauseBtn.onclick = () => this.pauseTimer();
+            pauseBtn.onclick = () => {
+                this.pauseTimer();
+                AudioUtils.playPauseSound();
+            };
 
             // Stop button
             const stopBtn = container.createEl('button', {
@@ -552,7 +555,10 @@ export class TimerView extends ItemView {
             });
             setIcon(stopBtn, 'square');
             stopBtn.createSpan({ text: ' Stop' });
-            stopBtn.onclick = () => this.resetTimer();
+            stopBtn.onclick = () => {
+                AudioUtils.playFinishSound();
+                this.resetTimer();
+            };
             return;
         }
 
@@ -616,6 +622,23 @@ export class TimerView extends ItemView {
                 item.createSpan({ cls: 'timer-view__template-name', text: template.name });
                 item.createSpan({ cls: 'timer-view__template-duration', text: template.totalDurationLabel });
 
+                // Edit gear button
+                const editBtn = item.createEl('button', { cls: 'timer-view__template-edit-btn' });
+                setIcon(editBtn.createSpan(), 'settings');
+                editBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (!this.templateCreator) {
+                        this.templateCreator = new IntervalTemplateCreator(this.app);
+                    }
+                    this.templateCreator.showEdit(editBtn, folder, template, {
+                        onSaved: async (filePath: string) => {
+                            await this.loadTemplates();
+                            this.selectedTemplate = this.templates.find(t => t.filePath === filePath) ?? null;
+                            this.render();
+                        },
+                    });
+                });
+
                 item.onclick = () => {
                     this.selectedTemplate = template;
                     this.render();
@@ -635,7 +658,7 @@ export class TimerView extends ItemView {
                 this.templateCreator = new IntervalTemplateCreator(this.app);
             }
             this.templateCreator.show(addBtn, folder, {
-                onCreated: async (filePath: string) => {
+                onSaved: async (filePath: string) => {
                     await this.loadTemplates();
                     this.selectedTemplate = this.templates.find(t => t.filePath === filePath) ?? null;
                     this.render();

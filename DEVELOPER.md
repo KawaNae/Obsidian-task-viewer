@@ -617,6 +617,26 @@ Timer phases: `'idle'` | `'work'` | `'break'` | `'prepare'`
 - `IntervalParser` — parses interval notation
 - `IntervalTemplateLoader` / `IntervalTemplateWriter` — interval template read/write (markdown files with `_tv-*` frontmatter keys)
 
+### Audio notifications (`utils/AudioUtils.ts`)
+
+State-transition-based sound mapping. All sounds use Web Audio API scheduling (no `setTimeout`).
+
+| Action | Sound | Method | Notes |
+|--------|-------|--------|-------|
+| Start (initial) | Long × 2 (660 Hz, 0.35 s each) | `playStartSound()` | — |
+| Resume | Long × 2 | `playStartSound()` | Same as Start |
+| Pause | G5→E5→C5 descending 3-note | `playPauseSound()` | Mirrors finish sound in reverse |
+| Stop (manual) | C5→E5→G5 ascending 3-note | `playFinishSound()` | Same as auto-complete |
+| Auto-complete | C5→E5→G5 ascending 3-note | `playFinishSound()` | Interval finish / countdown expire |
+| Segment transition | Long × 2 | `playTransitionConfirm()` | Same pattern as Start |
+| Warning (3, 2, 1 s) | Short × 1 per tick (660 Hz, 0.25 s) | `playWarningBeep()` | Called each tick when remaining ≤ 3 s |
+
+**Design notes**:
+- Multi-note patterns prevent wireless earphone auto-sleep from swallowing notifications.
+- Ascending = completion/stop, descending = pause, rhythmic = start/resume/transition.
+- 10 ms gain envelope (fade-in/fade-out) on every note prevents audible clicks.
+- `getReadyContext()` serializes concurrent `resume()` calls to avoid AudioContext race conditions.
+
 ---
 
 ## AI Index Service

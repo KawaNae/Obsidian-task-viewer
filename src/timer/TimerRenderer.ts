@@ -318,7 +318,7 @@ export class TimerRenderer {
             stopBtn.createSpan({ text: ' Stop' });
             stopBtn.onclick = async () => {
                 this.lifecycle.pauseTimer(timer);
-                AudioUtils.playStopSound();
+                AudioUtils.playFinishSound();
 
                 if (timer.recordMode === 'self') {
                     await this.ctx.recorder.updateTaskDirectly(timer);
@@ -370,7 +370,7 @@ export class TimerRenderer {
             stopBtn.createSpan({ text: ' Stop' });
             stopBtn.onclick = async () => {
                 this.lifecycle.pauseTimer(timer);
-                AudioUtils.playStopSound();
+                AudioUtils.playFinishSound();
                 if (timer.recordMode === 'self') {
                     await this.ctx.recorder.updateTaskDirectly(timer);
                 } else {
@@ -432,7 +432,7 @@ export class TimerRenderer {
             stopBtn.createSpan({ text: ' Stop' });
             stopBtn.onclick = async () => {
                 this.lifecycle.pauseOrSnapshotIntervalForStop(timer);
-                AudioUtils.playStopSound();
+                AudioUtils.playFinishSound();
                 if (timer.recordMode === 'self') {
                     await this.ctx.recorder.updateTaskDirectly(timer);
                 } else {
@@ -451,6 +451,7 @@ export class TimerRenderer {
             pauseBtn.createSpan({ text: ' Pause' });
             pauseBtn.onclick = () => {
                 this.lifecycle.pauseIntervalToPrepare(timer);
+                AudioUtils.playPauseSound();
                 this.render();
                 this.ctx.persistTimersToStorage();
             };
@@ -473,7 +474,7 @@ export class TimerRenderer {
         stopBtn.createSpan({ text: ' Stop' });
         stopBtn.onclick = async () => {
             this.lifecycle.pauseOrSnapshotIntervalForStop(timer);
-            AudioUtils.playStopSound();
+            AudioUtils.playFinishSound();
             if (timer.recordMode === 'self') {
                 await this.ctx.recorder.updateTaskDirectly(timer);
             } else {

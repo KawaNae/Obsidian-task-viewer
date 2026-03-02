@@ -9,9 +9,10 @@
 import { App, Notice, setIcon, getIconIds } from 'obsidian';
 import { IntervalTemplateWriter } from '../../timer/IntervalTemplateWriter';
 import type { IntervalGroup } from '../../timer/TimerInstance';
+import type { IntervalTemplate } from '../../timer/IntervalTemplateLoader';
 
 export interface TemplateCreatorCallbacks {
-    onCreated: (filePath: string) => void;
+    onSaved: (filePath: string) => void;
 }
 
 interface FormSegment {
@@ -41,6 +42,7 @@ export class IntervalTemplateCreator {
     private state: FormState = this.createDefaultState();
     private callbacks: TemplateCreatorCallbacks | null = null;
     private folderPath = '';
+    private editingFilePath: string | null = null;
 
     constructor(private app: App) {}
 
@@ -48,8 +50,21 @@ export class IntervalTemplateCreator {
         this.close();
         this.folderPath = folderPath;
         this.callbacks = callbacks;
+        this.editingFilePath = null;
         this.state = this.createDefaultState();
+        this.openPopover(anchorEl);
+    }
 
+    showEdit(anchorEl: HTMLElement, folderPath: string, template: IntervalTemplate, callbacks: TemplateCreatorCallbacks): void {
+        this.close();
+        this.folderPath = folderPath;
+        this.callbacks = callbacks;
+        this.editingFilePath = template.filePath;
+        this.state = this.templateToFormState(template);
+        this.openPopover(anchorEl);
+    }
+
+    private openPopover(anchorEl: HTMLElement): void {
         this.popoverEl = document.createElement('div');
         this.popoverEl.className = 'template-creator';
 
@@ -113,7 +128,10 @@ export class IntervalTemplateCreator {
 
     private renderHeader(parent: HTMLElement): void {
         const header = parent.createDiv('template-creator__header');
-        header.createSpan({ cls: 'template-creator__title', text: 'New Template' });
+        header.createSpan({
+            cls: 'template-creator__title',
+            text: this.editingFilePath ? 'Edit Template' : 'New Template',
+        });
 
         const closeBtn = header.createEl('button', { cls: 'template-creator__close-btn' });
         setIcon(closeBtn, 'x');
@@ -360,9 +378,10 @@ export class IntervalTemplateCreator {
 
         const errorEl = footer.createSpan('template-creator__error');
 
+        const isEditing = !!this.editingFilePath;
         const saveBtn = footer.createEl('button', {
             cls: 'template-creator__save-btn',
-            text: 'Create',
+            text: isEditing ? 'Save' : 'Create',
         });
         saveBtn.addEventListener('click', async () => {
             const error = this.validate();
@@ -374,18 +393,21 @@ export class IntervalTemplateCreator {
 
             const groups = this.buildGroups();
             const writer = new IntervalTemplateWriter(this.app);
+            const data = {
+                name: this.state.name.trim(),
+                icon: this.state.icon.trim() || 'rotate-cw',
+                groups,
+            };
 
             try {
-                const file = await writer.saveTemplate(this.folderPath, {
-                    name: this.state.name.trim(),
-                    icon: this.state.icon.trim() || 'rotate-cw',
-                    groups,
-                });
+                const file = isEditing
+                    ? await writer.updateTemplate(this.editingFilePath!, data)
+                    : await writer.saveTemplate(this.folderPath, data);
                 this.close();
-                this.callbacks?.onCreated(file.path);
+                this.callbacks?.onSaved(file.path);
             } catch (e) {
                 const msg = e instanceof Error ? e.message : String(e);
-                new Notice(`Failed to create template: ${msg}`);
+                new Notice(`Failed to ${isEditing ? 'save' : 'create'} template: ${msg}`);
                 errorEl.setText(msg);
             }
         });
@@ -416,6 +438,23 @@ export class IntervalTemplateCreator {
             opts.onChange(val);
         });
         return input;
+    }
+
+    private templateToFormState(template: IntervalTemplate): FormState {
+        return {
+            name: template.name,
+            icon: template.icon,
+            groups: template.groups.map(g => ({
+                repeatCount: g.repeatCount,
+                segments: g.segments.map(s => ({
+                    label: s.label,
+                    hours: Math.floor(s.durationSeconds / 3600),
+                    minutes: Math.floor((s.durationSeconds % 3600) / 60),
+                    seconds: s.durationSeconds % 60,
+                    type: s.type,
+                })),
+            })),
+        };
     }
 
     private createDefaultState(): FormState {

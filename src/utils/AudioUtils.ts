@@ -13,7 +13,8 @@
  * - 予告ビープ (playWarningBeep):      短×1/tick — 残り3,2,1秒で毎秒再生
  * - 切替確認音 (playTransitionConfirm): 長×2 — セグメント切替直後
  * - 完全終了音 (playFinishSound):    C-E-G上昇3音 — 全interval完了/countdown満了
- * - 手動停止音 (playStopSound):      短×1    — ユーザー停止操作
+ * - 一時停止音 (playPauseSound):     G-E-C下降3音 — ユーザー一時停止操作
+ * - 手動停止音: playFinishSound と共用（上昇3音）
  *
  * 短音 = 0.25s発音 (660Hz) — tick毎に1回再生
  * 長音 = 0.35s発音 (660Hz) — 2音連続で0.7s
@@ -154,11 +155,13 @@ export class AudioUtils {
     }
 
     /**
-     * 手動停止音（短×1）
+     * 一時停止音（G-E-C下降3音）
      */
-    static playStopSound(): void {
+    static playPauseSound(): void {
         void this.playChime([
-            { frequency: FREQ, delay: 0, duration: SHORT_DUR, volume: VOLUME },
+            { frequency: 784, delay: 0,    duration: 0.3, volume: VOLUME }, // G5
+            { frequency: 659, delay: 0.15, duration: 0.3, volume: VOLUME }, // E5
+            { frequency: 523, delay: 0.30, duration: 0.3, volume: VOLUME }, // C5
         ]);
     }
 
