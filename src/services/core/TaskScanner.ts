@@ -347,6 +347,16 @@ export class TaskScanner {
     }
 
     /**
+     * ファイルリネーム時の内部状態クリーンアップ。
+     * oldPath に紐づく scanQueue / processedCompletions / visitedFiles を除去する。
+     */
+    handleFileRenamed(oldPath: string): void {
+        this.scanQueue.delete(oldPath);
+        this.clearProcessedCompletionsForFile(oldPath);
+        this.visitedFiles.delete(oldPath);
+    }
+
+    /**
      * 初期化状態を設定
      */
     setInitializing(value: boolean): void {
