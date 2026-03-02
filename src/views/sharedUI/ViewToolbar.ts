@@ -20,9 +20,10 @@ export class DateNavigator {
         toolbar: HTMLElement,
         onNavigate: (days: number) => void,
         onToday: () => void,
-        options?: { vertical?: boolean }
+        options?: { vertical?: boolean; label?: string }
     ): void {
         const vertical = options?.vertical ?? false;
+        const label = options?.label ?? 'Today';
         const prevIcon = vertical ? 'chevron-up' : 'chevron-left';
         const nextIcon = vertical ? 'chevron-down' : 'chevron-right';
         const prevLabel = vertical ? 'Previous week' : 'Previous day';
@@ -35,9 +36,9 @@ export class DateNavigator {
 
         const todayBtn = toolbar.createEl('button', {
             cls: 'view-toolbar__btn--today',
-            text: 'Now'
+            text: label
         });
-        todayBtn.setAttribute('aria-label', 'Now');
+        todayBtn.setAttribute('aria-label', label);
         todayBtn.onclick = () => onToday();
 
         const nextBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });

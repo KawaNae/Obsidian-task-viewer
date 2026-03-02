@@ -183,7 +183,8 @@ export class TimelineToolbar {
                 const pastDate = DateUtils.addDays(today, -this.plugin.settings.pastDaysToShow);
                 this.viewState.startDate = (oldestOverdueDate && oldestOverdueDate < pastDate) ? oldestOverdueDate : pastDate;
                 this.callbacks.onScrollToNow();
-            }
+            },
+            { label: 'Now' }
         );
     }
 

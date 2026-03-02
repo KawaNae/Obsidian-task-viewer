@@ -257,7 +257,8 @@ export class ScheduleView extends ItemView {
                 this.scrollToNowOnNextRender = true;
                 void this.app.workspace.requestSaveLayout();
                 void this.render();
-            }
+            },
+            { label: 'Now' }
         );
 
         toolbar.createDiv('view-toolbar__spacer');
