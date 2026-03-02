@@ -8,6 +8,7 @@
     background: var(--tv-bg-widget);
     border: 1px solid var(--tv-border);
     border-radius: 8px;
+    overflow: hidden;
     box-shadow: 0 4px 10px var(--tv-shadow-strong);
     min-width: 220px;
     max-width: 280px;
