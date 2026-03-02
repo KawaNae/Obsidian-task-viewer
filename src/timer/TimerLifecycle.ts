@@ -84,6 +84,9 @@ export class TimerLifecycle {
                 );
 
                 if (timer.segmentTimeRemaining > 0) {
+                    if (timer.segmentTimeRemaining <= 3) {
+                        AudioUtils.playWarningBeep();
+                    }
                     this.ctx.renderTimerItem(taskId);
                 } else {
                     void this.handleIntervalSegmentComplete(taskId, timer);
@@ -108,17 +111,13 @@ export class TimerLifecycle {
             this.creator.computeIntervalCompletedDuration(timer) + currentSegment.durationSeconds
         );
 
-        if (currentSegment.type === 'work') {
-            AudioUtils.playWorkCompleteChime();
-        } else if (currentSegment.type === 'break') {
-            AudioUtils.playBreakCompleteChime();
-        }
-
         const moved = this.creator.advanceIntervalSegment(timer);
         if (!moved) {
             await this.finishIntervalTimer(taskId, timer);
             return;
         }
+
+        AudioUtils.playTransitionConfirm();
 
         const nextSegment = this.creator.getCurrentIntervalSegment(timer);
         if (!nextSegment) {
@@ -148,7 +147,7 @@ export class TimerLifecycle {
         timer.pausedElapsedTime = timer.totalElapsedTime;
         this.stopTimerTick(taskId);
 
-        AudioUtils.playWorkCompleteChime();
+        AudioUtils.playFinishSound();
         if (timer.recordMode === 'self') {
             await this.ctx.recorder.updateTaskDirectly(timer);
         } else {

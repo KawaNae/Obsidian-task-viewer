@@ -240,6 +240,7 @@ export interface TaskViewerSettings {
     frontmatterTaskHeader: string;
     frontmatterTaskHeaderLevel: number;
     longPressThreshold: number;
+    taskSelectAction: 'click' | 'dblclick';
     calendarWeekStartDay: 0 | 1;
     calendarShowCompleted: boolean;
     calendarShowWeekNumbers: boolean;
@@ -279,6 +280,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     frontmatterTaskHeader: 'Tasks',
     frontmatterTaskHeaderLevel: 2,
     longPressThreshold: 400,
+    taskSelectAction: 'click',
     calendarWeekStartDay: 0,
     calendarShowCompleted: true,
     calendarShowWeekNumbers: false,

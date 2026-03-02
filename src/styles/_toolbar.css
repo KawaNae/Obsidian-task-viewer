@@ -51,6 +51,7 @@
     justify-content: center;
     cursor: pointer;
     padding: 0 !important;
+    flex-shrink: 0;
 }
 
 .view-toolbar__btn--today {
@@ -62,6 +63,7 @@
     padding: 0 8px !important;
     font-size: 0.82em;
     min-width: 3.2em;
+    flex-shrink: 0;
 }
 
 .view-toolbar__spacer {

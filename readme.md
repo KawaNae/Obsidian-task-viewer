@@ -103,6 +103,10 @@ tv-content: プロジェクト名
 | `tv-deadline` | | 締切日時 | `2026-02-10` または `2026-02-10T23:59` |
 | `tv-status` | | タスクステータス（省略時は` `） | `x`, `-`, `!` など |
 | `tv-content` | | タスク名（省略時は空。表示時はファイル名がフォールバック） | `プロジェクト名` |
+| `tv-color` | | タスクカードの色 | `red`, `#ff0000` |
+| `tv-linestyle` | | タスクカードの線スタイル | |
+| `tv-timer-target-id` | | タイマー連携用ID（自動設定） | |
+| `tv-ignore` | | `true` でスキャン対象から除外 | `true` |
 
 > [!NOTE]
 > `tv-start`, `tv-end`, `tv-deadline`のいずれか1つは必須です。
@@ -208,11 +212,11 @@ frontmatterタスクでは、子要素の表示範囲を次のように定義し
 
 ---
 
-## タイムラインビュー
+## タイムラインビューの操作
 
 ### 基本操作
 
-**すべてのタスクで共通**
+**すべてのビューで共通**
 - **タスク完了**: チェックボックスをクリック
 - **削除**: 右クリック → Delete
 - **複製**: 右クリック → Duplicate
@@ -241,17 +245,42 @@ frontmatterタスクでは、子要素の表示範囲を次のように定義し
 
 ---
 
+## ビュー
+
+本プラグインは5つのビューを提供します。いずれもコマンドパレットから開けます。
+
+| ビュー | コマンド | 説明 |
+|--------|---------|------|
+| Timeline View | `Task Viewer: Open Timeline View` | 24時間タイムライン＋終日タスク欄 |
+| Schedule View | `Task Viewer: Open Schedule View` | リスト形式のスケジュール表示 |
+| Calendar View | `Task Viewer: Open Calendar View` | 月間カレンダー表示 |
+| Mini Calendar | `Task Viewer: Open Mini Calendar View` | コンパクトなカレンダー（サイドバー向け） |
+| Timer View | `Task Viewer: Open Timer View` | ポモドーロ / カウントダウン / カウントアップ / インターバルタイマー |
+
+---
+
 ## 設定
+
+設定は7つのタブに分かれています: General / Views / Notes / Timer / Frontmatter / AI Index / Habits
 
 ### 主要設定
 
 | 設定項目 | 説明 | デフォルト |
 |---------|------|-----------|
 | Start Hour | 1日の開始時刻（0-23） | 5 |
-| Frontmatter Task Keys | Configurable frontmatter keys for task metadata | `tv-start` / `tv-end` / `tv-deadline` / `tv-status` / `tv-content` / `tv-timer-target-id` / `tv-color` |
-| Pomodoro Work Minutes | ポモドーロの作業時間 | 25 |
 | Complete Status Chars | 完了を示すステータス文字 | `['x', 'X', '-', '!']` |
-| Excluded Paths | スキャンから除外するパス | `[]` |
+| Enable Status Menu | チェックボックス長押しでステータスメニュー表示 | `true` |
+| Task Select Action | タスク選択操作（click / dblclick） | `click` |
+| Long Press Threshold | 長押し判定時間（ms） | 400 |
+| Frontmatter Task Header | 子タスク挿入先の見出しテキスト | `Tasks` |
+| Frontmatter Task Header Level | 見出しレベル（2 = `##`） | 2 |
+| Frontmatter Task Keys | Frontmatterキー名（個別にカスタマイズ可） | `tv-start` / `tv-end` / `tv-deadline` / `tv-status` / `tv-content` / `tv-timer-target-id` / `tv-color` / `tv-linestyle` / `tv-ignore` |
+| Default View Positions | ビューごとのデフォルト表示位置 | Timeline: tab, Schedule: right, Calendar: tab, Mini Calendar: left, Timer: right |
+| Pomodoro Work/Break Minutes | ポモドーロの作業/休憩時間 | 25 / 5 |
+| Countdown Minutes | カウントダウンのデフォルト時間 | 25 |
+| Calendar Week Start Day | カレンダーの週開始曜日 | 0（日曜） |
+| View Template Folder | ビューテンプレートの保存先 | *(空)* |
+| Interval Template Folder | インターバルテンプレートの保存先 | *(空)* |
 
 ### AI Index 出力スキーマ（v6）
 

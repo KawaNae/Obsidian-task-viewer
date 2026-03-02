@@ -89,9 +89,9 @@
     margin-left: 4px;
 }
 
-.timer-widget button.timer-widget__toggle-btn,
-.timer-widget button.timer-widget__close-btn,
-.timer-widget button.timer-widget__settings-btn {
+.timer-widget .timer-widget__toggle-btn,
+.timer-widget .timer-widget__close-btn,
+.timer-widget .timer-widget__settings-btn {
     width: 24px;
     height: 24px;
     appearance: none;
@@ -107,39 +107,40 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
     transition:
         background-color 120ms ease,
         border-color 120ms ease,
         color 120ms ease;
 }
 
-.timer-widget button.timer-widget__toggle-btn:hover,
-.timer-widget button.timer-widget__close-btn:hover,
-.timer-widget button.timer-widget__settings-btn:hover {
+.timer-widget .timer-widget__toggle-btn:hover,
+.timer-widget .timer-widget__close-btn:hover,
+.timer-widget .timer-widget__settings-btn:hover {
     background: var(--tv-bg-hover);
     border-color: var(--tv-border);
     color: var(--tv-text);
 }
 
-.timer-widget button.timer-widget__close-btn:hover {
+.timer-widget .timer-widget__close-btn:hover {
     color: var(--tv-text-danger);
 }
 
-.timer-widget button.timer-widget__close-btn--confirming {
+.timer-widget .timer-widget__close-btn--confirming {
     background: var(--tv-text-danger);
     border-color: var(--tv-text-danger);
     color: var(--tv-bg-widget);
     transition: none;
 }
 
-.timer-widget button.timer-widget__close-btn--confirming:hover {
+.timer-widget .timer-widget__close-btn--confirming:hover {
     background: var(--tv-text-danger);
     border-color: var(--tv-text-danger);
     color: var(--tv-bg-widget);
     opacity: 0.75;
 }
 
-.timer-widget button.timer-widget__close-btn--fading {
+.timer-widget .timer-widget__close-btn--fading {
     transition:
         background-color 500ms ease,
         border-color 500ms ease,
@@ -157,7 +158,7 @@
     margin-bottom: 12px;
 }
 
-.timer-widget input.timer-widget__label-input {
+.timer-widget .timer-widget__label-input {
     width: 100%;
     height: var(--input-height);
     padding: var(--input-padding);
@@ -168,16 +169,16 @@
     border-radius: var(--input-radius);
 }
 
-.timer-widget input.timer-widget__label-input:hover {
+.timer-widget .timer-widget__label-input:hover {
     background: var(--tv-bg-secondary) !important;
 }
 
-.timer-widget input.timer-widget__label-input::placeholder {
+.timer-widget .timer-widget__label-input::placeholder {
     color: var(--tv-text-muted);
     font-size: 11px;
 }
 
-.timer-widget input.timer-widget__label-input:focus {
+.timer-widget .timer-widget__label-input:focus {
     background: var(--tv-bg-secondary) !important;
     border-color: var(--tv-accent);
     box-shadow: 0 0 0 2px rgba(var(--tv-accent-rgb), 0.25);
@@ -263,7 +264,7 @@
     gap: 8px;
 }
 
-.timer-widget button.timer-widget__btn {
+.timer-widget .timer-widget__btn {
     height: 28px;
     display: flex;
     align-items: center;
@@ -281,41 +282,42 @@
     cursor: pointer;
     color: var(--tv-text);
     box-shadow: 0 1px 2px var(--tv-shadow-medium);
+    flex-shrink: 0;
     transition:
         background-color 120ms ease,
         border-color 120ms ease,
         color 120ms ease;
 }
 
-.timer-widget button.timer-widget__btn:hover {
+.timer-widget .timer-widget__btn:hover {
     background: var(--tv-bg-hover);
     border-color: var(--tv-border);
 }
 
-.timer-widget button.timer-widget__btn:focus-visible,
-.timer-widget button.timer-widget__toggle-btn:focus-visible,
-.timer-widget button.timer-widget__close-btn:focus-visible,
-.timer-widget button.timer-widget__settings-btn:focus-visible {
+.timer-widget .timer-widget__btn:focus-visible,
+.timer-widget .timer-widget__toggle-btn:focus-visible,
+.timer-widget .timer-widget__close-btn:focus-visible,
+.timer-widget .timer-widget__settings-btn:focus-visible {
     outline: 2px solid rgba(var(--tv-accent-rgb), 0.35);
     outline-offset: 1px;
 }
 
-.timer-widget button.timer-widget__btn--primary {
+.timer-widget .timer-widget__btn--primary {
     background: var(--tv-bg-secondary);
     color: var(--tv-text);
 }
 
-.timer-widget button.timer-widget__btn--secondary {
+.timer-widget .timer-widget__btn--secondary {
     background: var(--tv-bg-secondary);
     color: var(--tv-text);
 }
 
-.timer-widget button.timer-widget__btn--danger {
+.timer-widget .timer-widget__btn--danger {
     background: var(--tv-bg-secondary);
     color: var(--tv-text-danger);
 }
 
-.timer-widget button.timer-widget__btn--danger:hover {
+.timer-widget .timer-widget__btn--danger:hover {
     background: var(--tv-bg-hover);
     border-color: var(--tv-border);
 }

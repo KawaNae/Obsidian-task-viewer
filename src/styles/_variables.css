@@ -168,7 +168,6 @@ body.theme-light {
     --tv-shadow-a-strong: 0.1;
     --tv-shadow-a-medium: 0.08;
     --tv-shadow-a-light: 0.05;
-    --tv-bg-settings-active: var(--tv-bg-primary);
 }
 
 body.theme-dark {
@@ -178,5 +177,4 @@ body.theme-dark {
     --tv-shadow-a-strong: 0.4;
     --tv-shadow-a-medium: 0.28;
     --tv-shadow-a-light: 0.22;
-    --tv-bg-settings-active: var(--tv-bg-secondary);
 }

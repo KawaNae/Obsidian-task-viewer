@@ -6,12 +6,13 @@
 
 ```
 src/views/taskcard/
-  TaskCardRenderer.ts      # Orchestrator for one task card
-  ChildItemBuilder.ts      # Task/childLines -> ChildRenderItem[]
-  ChildSectionRenderer.ts  # Child markdown/toggle rendering
-  CheckboxWiring.ts        # Parent/child checkbox interaction and status menu
-  NotationUtils.ts         # @notation label formatting helpers
-  types.ts                 # ChildRenderItem / CheckboxHandler (taskcard-local types)
+  TaskCardRenderer.ts              # Orchestrator for one task card
+  ChildItemBuilder.ts              # Task/childLines -> ChildRenderItem[]
+  ChildSectionRenderer.ts          # Child markdown/toggle rendering
+  CheckboxWiring.ts                # Parent/child checkbox interaction and status menu
+  NotationUtils.ts                 # @notation label formatting helpers
+  TaskLinkInteractionManager.ts    # Internal link click/hover handling
+  types.ts                         # ChildRenderItem / CheckboxHandler (taskcard-local types)
 ```
 
 ### Responsibility boundaries
@@ -78,9 +79,7 @@ graph TB
 
 ---
 
-## Directory Structure (v0.18.0+)
-
-> The earlier tree in this document reflected an older layout. The actual `src/` structure is:
+## Directory Structure
 
 ```
 src/
@@ -90,30 +89,36 @@ src/
 ├── constants/                 # Constants and view registry
 ├── services/
 │   ├── core/                  # Core services (TaskIndex, TaskStore, WikiLinkResolver, etc.)
-│   ├── parsing/               # Parser layer (ParserChain, AtNotationParser, etc.)
-│   │   ├── inline/            # Line-level parsers (AtNotationParser, etc.)
-│   │   └── file/              # File-level parsers (FrontmatterTaskBuilder, etc.)
-│   ├── persistence/           # Write layer (TaskRepository, FrontmatterWriter, etc.)
+│   ├── parsing/               # Parser layer
+│   │   ├── inline/            # Line-level parsers (AtNotationParser)
+│   │   ├── file/              # File-level parsers (FrontmatterTaskBuilder)
+│   │   └── strategies/        # ParserChain, ParserStrategy
+│   ├── persistence/           # Write layer (TaskRepository, TaskCloner, TaskConverter)
 │   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter
-│   │   └── utils/             # FrontmatterLineEditor, etc.
-│   ├── execution/             # Task conversion (InlineToFrontmatterConversionService)
+│   │   └── utils/             # FrontmatterLineEditor, FileOperations
+│   ├── filter/                # Filter engine, serializer, types, value collector
+│   ├── sort/                  # Task sorting (TaskSorter, SortTypes)
+│   ├── styling/               # Task style resolution (TaskStyleResolver)
+│   ├── template/              # View template load/save (ViewTemplateLoader/Writer)
 │   └── aiindex/               # AI Index generation service
 ├── views/
 │   ├── timelineview/          # Timeline view (including renderers/)
-│   ├── scheduleview/          # Schedule view
+│   ├── scheduleview/          # Schedule view (including renderers/, utils/)
+│   ├── calendar/              # CalendarView, MiniCalendarView
 │   ├── taskcard/              # Task card rendering (see section above)
-│   ├── utils/                 # View-only utilities (RenderableTaskUtils, etc.)
-│   ├── CalendarView.ts        # Calendar view
-│   ├── MiniCalendarView.ts    # Mini calendar view
-│   └── TimerView.ts           # Timer view (Pomodoro / Countdown / Countup modes)
-├── widgets/                   # Floating timer widget
+│   ├── sharedUI/              # Shared UI components (ViewToolbar, PinnedListRenderer, etc.)
+│   ├── sharedLogic/           # Shared logic (RenderableTaskUtils, GridTaskLayout, etc.)
+│   ├── customMenus/           # Filter/Sort popover menus, IntervalTemplateCreator
+│   ├── sidebar/               # SidebarManager, SidebarToggleButton
+│   └── TimerView.ts           # Timer view (Pomodoro / Countdown / Countup / Interval)
+├── timer/                     # Timer widget and all timer services
 ├── interaction/
-│   ├── drag/                  # Drag & drop (DragHandler, MoveStrategy, etc.)
-│   └── menu/                  # Context menus (MenuHandler, Builder classes)
+│   ├── drag/                  # Drag & drop (DragHandler, strategies/, ghost/)
+│   └── menu/                  # Context menus (MenuHandler, builders/)
 ├── commands/                  # Flow command execution (next / repeat / move)
-├── modals/                    # Modal UI (CreateTaskModal, etc.)
-├── suggest/                   # Obsidian property panel autocomplete
-├── utils/                     # General utilities (AudioUtils, DateUtils, etc.)
+├── modals/                    # Modal UI (CreateTaskModal, ConfirmModal, etc.)
+├── suggest/                   # Obsidian property panel autocomplete (color/, line/)
+├── utils/                     # General utilities (AudioUtils, DateUtils, ViewUriBuilder, etc.)
 └── styles/                    # CSS (BEM naming, --tv-* tokens)
 ```
 
@@ -130,20 +135,28 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskScanner** | `services/core/TaskScanner.ts` | File scanning → ParserChain invocation |
 | **WikiLinkResolver** | `services/core/WikiLinkResolver.ts` | Resolves frontmatter wikilink parent–child relationships (`wikiLinkTargets` / `childLines`) |
 | **SyncDetector / EditorObserver** | `services/core/SyncDetector.ts` et al. | Distinguishes local edits from remote sync changes |
-| **ParserChain** | `services/parsing/ParserChain.ts` | Tries multiple parsers in order (Strategy chain) |
+| **ParserChain** | `services/parsing/strategies/ParserChain.ts` | Tries multiple parsers in order (Strategy chain) |
 | **AtNotationParser** | `services/parsing/inline/AtNotationParser.ts` | Parses `@date` inline notation (line-level) |
 | **FrontmatterTaskBuilder** | `services/parsing/file/FrontmatterTaskBuilder.ts` | Converts YAML frontmatter to Task objects (file-level) |
 | **TaskRepository** | `services/persistence/TaskRepository.ts` | Write facade; dispatches to the correct writer based on `parserId` |
 | **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical YAML edits + heading-based child insertion |
 | **FrontmatterLineEditor** | `services/persistence/utils/FrontmatterLineEditor.ts` | Low-level YAML line operations; never touches unrelated lines |
 | **InlineTaskWriter** | `services/persistence/writers/InlineTaskWriter.ts` | Direct inline task line rewriting |
+| **TaskFilterEngine** | `services/filter/TaskFilterEngine.ts` | Filter condition evaluation |
+| **FilterSerializer** | `services/filter/FilterSerializer.ts` | Filter state serialization (v4 recursive group format) |
+| **TaskSorter** | `services/sort/TaskSorter.ts` | Task sort processing |
+| **TaskStyleResolver** | `services/styling/TaskStyleResolver.ts` | Resolves per-task visual styles (color, linestyle) |
+| **ViewTemplateLoader/Writer** | `services/template/` | View template read/write |
 | **AiIndexService** | `services/aiindex/AiIndexService.ts` | NDJSON task index output with debounce, retry, and hash-based diff |
 | **TaskCommandExecutor** | `commands/TaskCommandExecutor.ts` | Executes `==>` flow commands (next / repeat / move) |
 | **DragHandler** | `interaction/drag/DragHandler.ts` | Dispatches pointer events to Move/Resize strategies |
 | **MenuHandler** | `interaction/menu/MenuHandler.ts` | Context menu facade coordinating multiple Builder classes |
-| **TimerWidget** | `widgets/TimerWidget.ts` | Floating timer UI; manages and persists all timer instances |
-| **TimerView** | `views/TimerView.ts` | Standalone timer view (Pomodoro / Countdown / Countup) |
+| **TimerWidget** | `timer/TimerWidget.ts` | Floating timer UI; manages and persists all timer instances |
+| **IntervalTemplateLoader/Writer** | `timer/IntervalTemplateLoader.ts` et al. | Interval template read/write |
+| **TimerView** | `views/TimerView.ts` | Standalone timer view (Pomodoro / Countdown / Countup / Interval) |
 | **TaskCardRenderer** | `views/taskcard/TaskCardRenderer.ts` | Task card rendering orchestrator (see section above) |
+| **TaskLinkInteractionManager** | `views/taskcard/TaskLinkInteractionManager.ts` | Internal link click/hover handling within task cards |
+| **SidebarManager** | `views/sidebar/SidebarManager.ts` | Sidebar visibility and pinned list management |
 | **CreateTaskModal** | `modals/CreateTaskModal.ts` | Task creation modal UI |
 | **AudioUtils** | `utils/AudioUtils.ts` | Web Audio API notifications with serialized context management |
 
@@ -309,7 +322,7 @@ This project follows [BEM (Block Element Modifier)](https://getbem.com/).
 
 ```
 src/styles/
-├── _variables.css            # CSS variable definitions
+├── _variables.css            # CSS variable definitions (--tv-* tokens)
 ├── _base.css                 # Global styles
 ├── _task-card.css            # Task card component
 ├── _checkboxes.css           # Checkbox icons
@@ -317,7 +330,21 @@ src/styles/
 ├── _timeline-date-header.css # Date header
 ├── _timeline-allday.css      # All-day lane
 ├── _timeline-drag.css        # Drag-related styles
-└── _schedule.css             # Schedule view
+├── _timeline-toolbar.css     # Timeline toolbar
+├── _toolbar.css              # Shared toolbar styles
+├── _schedule.css             # Schedule view
+├── _calendar.css             # Calendar view
+├── _mini-calendar.css        # Mini calendar view
+├── _timer-view.css           # Timer view
+├── _timer-widget.css         # Floating timer widget
+├── _filter-popover.css       # Filter menu popover
+├── _sort-popover.css         # Sort menu popover
+├── _pinned-list.css          # Pinned list component
+├── _sidebar.css              # Sidebar styles
+├── _settings.css             # Settings tab
+├── _modal.css                # Modal dialogs
+├── _habits.css               # Habit tracker
+└── _template-creator.css     # Template creator UI
 ```
 
 ---
@@ -357,9 +384,9 @@ npm run build     # Production build
 
 ### File naming
 
-- **Parsers**: `<Target>Parser.ts` (e.g. `FrontmatterParser.ts`, `InlineTaskParser.ts`)
-- **Services**: `<Feature>Service.ts` (e.g. `PomodoroService.ts`)
-- **Views**: `<Name>View.ts` (e.g. `TimelineView.ts`)
+- **Parsers**: `<Target>Parser.ts` (e.g. `AtNotationParser.ts`)
+- **Services**: `<Feature>Service.ts` (e.g. `AiIndexService.ts`)
+- **Views**: `<Name>View.ts` (e.g. `TimelineView.ts`, `TimerView.ts`)
 
 ### Type placement rules
 
@@ -420,8 +447,8 @@ All parameters are flat query params. No nested encoding (the former `state=<bas
 
 | Parameter | Format | Description | Example |
 |-----------|--------|-------------|---------|
-| `view` | string | **Required.** View short name | `timeline` / `calendar` / `schedule` / `mini-calendar` |
-| `position` | string | Leaf placement | `left` / `right` / `tab` / `window` |
+| `view` | string | **Required.** View short name | `timeline` / `calendar` / `schedule` / `mini-calendar` / `timer` |
+| `position` | string | Leaf placement | `left` / `right` / `tab` / `window` / `override` |
 | `name` | string | Custom view name (URL-encoded) | `My%20Timeline` |
 | `days` | integer | Display days (validated: 1, 3, 7) | `3` |
 | `zoom` | float | Zoom level (validated: 0.25–10.0) | `1.5` |
@@ -429,6 +456,9 @@ All parameters are flat query params. No nested encoding (the former `state=<bas
 | `showSidebar` | boolean | Sidebar visibility | `true` / `false` |
 | `filter` | base64 | FilterState JSON (`{ version: 4, root: {...} }`) | `eyJ2ZXJzaW9uIjo0LC...` |
 | `pinnedLists` | base64 | `PinnedListDefinition[]` JSON | `W3siaWQiOiJwbC0xIi...` |
+| `template` | string | View template name (URL-encoded). When set, `filter`/`pinnedLists` are omitted | `My%20Template` |
+| `mode` | string | Timer view mode | `countup` / `countdown` / `pomodoro` / `interval` |
+| `intervalTemplate` | string | Interval template name (URL-encoded) | `Deep%20Work` |
 
 ### Example URIs
 
@@ -454,7 +484,8 @@ obsidian://task-viewer?view=calendar&position=tab&showSidebar=true&filter=<base6
 | `right` | Right sidebar | `workspace.getRightLeaf(false)` |
 | `tab` | New tab in main area | `workspace.getLeaf('tab')` |
 | `window` | Popout window (desktop) | `workspace.getLeaf('window')` |
-| *(omitted)* | Default: right sidebar if new, new tab if exists | — |
+| `override` | Reuse existing leaf of same view type | Finds existing leaf and updates state in place |
+| *(omitted)* | Default: uses per-view default position from settings | — |
 
 ### Implementation
 
@@ -462,7 +493,7 @@ obsidian://task-viewer?view=calendar&position=tab&showSidebar=true&filter=<base6
 |-----------|------|------|
 | **URI builder** | `src/utils/ViewUriBuilder.ts` | `build()` — generates URI from `ViewUriOptions` |
 | **Position detection** | `src/utils/ViewUriBuilder.ts` | `detectLeafPosition()` — auto-detects leaf placement via parent chain |
-| **Settings menu** | `src/views/ViewToolbar.ts` | `ViewSettingsMenu` — gear icon menu with Rename, Copy URI, Copy as link, Position |
+| **Settings menu** | `src/views/sharedUI/ViewToolbar.ts` | `ViewSettingsMenu` — gear icon menu with Save/Load view, Copy URI, Copy as link, Position |
 | **URI handler** | `src/main.ts` | `registerObsidianProtocolHandler('task-viewer', ...)` — parses params |
 | **View activation** | `src/main.ts` | `activateView()` — creates leaf at specified position and sets view state |
 | **Filter serialization** | `src/services/filter/FilterSerializer.ts` | `toURIParam()` / `fromURIParam()` — base64 encode/decode |
@@ -473,7 +504,9 @@ Each view's toolbar has a gear icon (settings) button. The menu provides:
 
 | Item | Action |
 |------|--------|
-| **Rename...** | Opens `InputModal` to set a custom view name (stored in `ViewState.customName`, per-leaf) |
+| **Save view...** | Saves current view state as a named template (stored in configured `viewTemplateFolder`) |
+| **Load view...** | Submenu listing saved templates; applies selected template to current view |
+| **Reset view** | Resets view state to defaults |
 | **Copy URI** | Copies `obsidian://task-viewer?...` with current state including auto-detected `position` and `name` |
 | **Copy as link** | Copies `[View Name](obsidian://task-viewer?...)` — Obsidian markdown link format |
 | **Position** | Read-only display of current leaf position with checkmark |
@@ -483,6 +516,8 @@ Each view's toolbar has a gear icon (settings) button. The menu provides:
 - **TimelineView**: `filterState`, `days`, `zoom`, `pinnedLists`, `showSidebar`, `position`, `name`
 - **CalendarView**: `filterState`, `pinnedLists`, `showSidebar`, `position`, `name`
 - **ScheduleView**: `filterState`, `position`, `name`
+- **TimerView**: `mode`, `intervalTemplate`, `position`, `name`
+- All views support `template` (when set, `filter`/`pinnedLists` are omitted from URI)
 
 ### Toolbar icon order
 
@@ -550,9 +585,9 @@ MIT License
 
 ## Timer Widget
 
-`src/widgets/` — A fully independent floating UI. Operates separately from the Timeline and Schedule views.
+`src/timer/` — A fully independent floating UI. Operates separately from the Timeline and Schedule views.
 
-### Timer types (defined in `widgets/TimerInstance.ts`)
+### Timer types (defined in `timer/TimerInstance.ts`)
 
 | Type | Description |
 |------|-------------|
@@ -575,11 +610,32 @@ Timer phases: `'idle'` | `'work'` | `'break'` | `'prepare'`
 - `TimerRecorder` — inserts a child task line or calls `updateTask()` directly
 - `timerTargetId` (frontmatter key `tv-timer-target-id`) — tracks the task across file renames
 
-### Components
+### Components (all in `src/timer/`)
 
 - `TimerProgressUI` — circular progress ring + time display
 - `TimerSettingsMenu` — Pomodoro settings context menu
 - `IntervalParser` — parses interval notation
+- `IntervalTemplateLoader` / `IntervalTemplateWriter` — interval template read/write (markdown files with `_tv-*` frontmatter keys)
+
+### Audio notifications (`utils/AudioUtils.ts`)
+
+State-transition-based sound mapping. All sounds use Web Audio API scheduling (no `setTimeout`).
+
+| Action | Sound | Method | Notes |
+|--------|-------|--------|-------|
+| Start (initial) | Long × 2 (660 Hz, 0.35 s each) | `playStartSound()` | — |
+| Resume | Long × 2 | `playStartSound()` | Same as Start |
+| Pause | G5→E5→C5 descending 3-note | `playPauseSound()` | Mirrors finish sound in reverse |
+| Stop (manual) | C5→E5→G5 ascending 3-note | `playFinishSound()` | Same as auto-complete |
+| Auto-complete | C5→E5→G5 ascending 3-note | `playFinishSound()` | Interval finish / countdown expire |
+| Segment transition | Long × 2 | `playTransitionConfirm()` | Same pattern as Start |
+| Warning (3, 2, 1 s) | Short × 1 per tick (660 Hz, 0.25 s) | `playWarningBeep()` | Called each tick when remaining ≤ 3 s |
+
+**Design notes**:
+- Multi-note patterns prevent wireless earphone auto-sleep from swallowing notifications.
+- Ascending = completion/stop, descending = pause, rhythmic = start/resume/transition.
+- 10 ms gain envelope (fade-in/fade-out) on every note prevents audible clicks.
+- `getReadyContext()` serializes concurrent `resume()` calls to avoid AudioContext race conditions.
 
 ---
 
@@ -619,8 +675,8 @@ Timer phases: `'idle'` | `'work'` | `'break'` | `'prepare'`
 |---------|------|
 | `PropertiesMenuBuilder` | Date/time property editing |
 | `TimerMenuBuilder` | Timer launch shortcuts |
-| `MoveMenuBuilder` | Move and clone operations |
-| `TaskActionsMenuBuilder` | Complete, delete, and convert actions |
+| `TaskActionsMenuBuilder` | Complete, delete, convert, and move/clone actions |
+| `EditorCheckboxMenuBuilder` | Editor-level checkbox status menu |
 
 Touch support: `TouchEventHandler` detects long-press (configurable via `longPressThreshold`, default 400 ms) to open the menu.
 
@@ -662,16 +718,35 @@ Defined in `src/types.ts` as `TaskViewerSettings`. Defaults are in `DEFAULT_SETT
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `startHour` | number | 5 | Day boundary hour (used for visual date calculation) |
+| `applyGlobalStyles` | boolean | `false` | Apply plugin CSS globally |
+| `enableStatusMenu` | boolean | `true` | Show status menu on checkbox long-press |
+| `statusMenuChars` | string[] | `['-','!','?','>','/']` | Status characters shown in status menu |
 | `frontmatterTaskKeys` | FrontmatterTaskKeys | `tv-*` family | Frontmatter key names (all fields are individually customisable) |
 | `completeStatusChars` | string[] | `['x','X','-','!']` | Status characters considered "complete" |
 | `habits` | HabitDefinition[] | `[]` | Habit tracking definitions (boolean / number / string) |
 | `frontmatterTaskHeader` | string | `'Tasks'` | Heading text under which child tasks are inserted |
 | `frontmatterTaskHeaderLevel` | number | 2 | Heading level for the above (2 = `##`) |
 | `longPressThreshold` | number | 400 | Long-press detection time (ms) |
+| `taskSelectAction` | `'click'` \| `'dblclick'` | `'click'` | Task card select action to open file |
+| `zoomLevel` | number | 1.0 | Default timeline zoom level |
+| `pastDaysToShow` | number | 0 | Number of past days to show in timeline |
 | `aiIndex` | AiIndexSettings | — | AI Index generation settings (`services/aiindex/AiIndexSettings.ts`) |
 | `pomodoroWorkMinutes` | number | 25 | Pomodoro work segment length |
 | `pomodoroBreakMinutes` | number | 5 | Pomodoro break segment length |
 | `countdownMinutes` | number | 25 | Default countdown duration |
+| `dailyNoteHeader` | string | `'Tasks'` | Heading for daily note task insertion |
+| `dailyNoteHeaderLevel` | number | 2 | Heading level for daily note (2 = `##`) |
+| `calendarWeekStartDay` | 0 \| 1 | 0 | Calendar week start day (0=Sun, 1=Mon) |
+| `calendarShowCompleted` | boolean | `true` | Show completed tasks in calendar view |
+| `calendarShowWeekNumbers` | boolean | `false` | Show ISO week numbers in calendar |
+| `weeklyNoteFormat` | string | `'gggg-[W]ww'` | Weekly note filename format |
+| `monthlyNoteFormat` | string | `'YYYY-MM'` | Monthly note filename format |
+| `yearlyNoteFormat` | string | `'YYYY'` | Yearly note filename format |
+| `intervalTemplateFolder` | string | `''` | Folder for interval timer templates |
+| `viewTemplateFolder` | string | `''` | Folder for view templates |
+| `defaultViewPositions` | object | *(see below)* | Per-view default leaf position |
+
+**`defaultViewPositions` defaults**: `{ timeline: 'tab', schedule: 'right', calendar: 'tab', miniCalendar: 'left', timer: 'right' }`
 
 All `FrontmatterTaskKeys` fields (`start`, `end`, `deadline`, `status`, `content`, `timerTargetId`, `color`, `linestyle`, `ignore`) are independently customisable. Duplicate key values are not allowed.
 
@@ -683,3 +758,36 @@ All `FrontmatterTaskKeys` fields (`start`, `end`, `deadline`, `status`, `content
 2. `:root` is for theme-independent constants only (sizes, z-index values).
 3. Component stylesheets must reference only `--tv-*` tokens (never Obsidian variables directly).
 4. Drag visuals: use `--tv-drop-*` for drop zones and `--tv-ghost-*` for drag ghosts.
+
+### Button and input selector specificity
+
+Obsidian applies global styles to bare `button` and `input` elements (e.g. `button` at specificity 0,0,1, `input[type="text"]` at 0,1,1). Plugin selectors must reliably beat these.
+
+**Rule: always scope `button` and `input` elements under their block root class.**
+
+Use the `.block .block__element` pattern (specificity 0,2,0) instead of `button.block__element` (0,1,1) or bare `.block__element` (0,1,0).
+
+```css
+/* Good — specificity 0,2,0, beats Obsidian globals */
+.filter-popover .filter-popover__dropdown { ... }
+.filter-popover .filter-popover__text-input { ... }
+.timer-view .timer-view__btn { ... }
+
+/* Bad — specificity 0,1,1, ties with Obsidian's button styles */
+button.filter-popover__dropdown { ... }
+
+/* Bad — specificity 0,1,0, loses to input[type="text"] (0,1,1) */
+.filter-popover__text-input { ... }
+```
+
+This applies to all interactive elements (`<button>`, `<input>`) in:
+- Popovers mounted to `document.body` (filter, sort, template-creator)
+- View-scoped components (timer-view buttons)
+
+Modifiers and pseudo-classes follow the same pattern:
+
+```css
+.sort-popover .sort-popover__add-btn:hover { ... }
+.timer-view .timer-view__btn--primary { ... }
+.template-creator .template-creator__type-btn--work { ... }
+```

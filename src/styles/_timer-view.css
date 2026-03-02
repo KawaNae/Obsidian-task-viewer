@@ -141,7 +141,7 @@
     justify-content: center;
 }
 
-.timer-view__btn {
+.timer-view .timer-view__btn {
     padding: clamp(8px, 2vw, 12px) clamp(16px, 4vw, 24px);
     border-radius: 8px;
     border: none;
@@ -151,35 +151,35 @@
     transition: all 0.2s ease;
 }
 
-.timer-view__btn:hover {
+.timer-view .timer-view__btn:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px var(--tv-shadow-light);
 }
 
-.timer-view__btn--primary {
+.timer-view .timer-view__btn--primary {
     background: var(--tv-accent);
     color: var(--tv-text-on-accent);
 }
 
-.timer-view__btn--primary:hover {
+.timer-view .timer-view__btn--primary:hover {
     background: var(--tv-accent-hover);
 }
 
-.timer-view__btn--secondary {
+.timer-view .timer-view__btn--secondary {
     background: var(--tv-border);
     color: var(--tv-text);
 }
 
-.timer-view__btn--secondary:hover {
+.timer-view .timer-view__btn--secondary:hover {
     background: var(--tv-bg-hover);
 }
 
-.timer-view__btn--danger {
+.timer-view .timer-view__btn--danger {
     background: var(--tv-border-error);
     color: var(--tv-text-on-accent);
 }
 
-.timer-view__btn--danger:hover {
+.timer-view .timer-view__btn--danger:hover {
     opacity: 0.9;
 }
 
@@ -287,6 +287,36 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* Template edit gear button */
+.timer-view .timer-view__template-edit-btn {
+    width: 24px;
+    height: 24px;
+    padding: 0 !important;
+    appearance: none;
+    -webkit-appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    box-shadow: none;
+    color: var(--tv-text-muted);
+    cursor: pointer;
+    border-radius: var(--tv-radius-s);
+    flex-shrink: 0;
+}
+
+.timer-view .timer-view__template-edit-btn:hover {
+    color: var(--tv-text);
+    background-color: var(--tv-bg-hover) !important;
+    box-shadow: none;
+}
+
+.timer-view__template-edit-btn .svg-icon {
+    width: 14px;
+    height: 14px;
+}
+
 .timer-view__template-empty {
     text-align: center;
     color: var(--tv-text-muted);
@@ -294,12 +324,45 @@
     padding: 24px 16px;
 }
 
-.timer-view__btn--disabled {
+/* Add-template button — blends with background like filter-popover__add-btn */
+.timer-view .timer-view__add-template-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    font-size: var(--font-ui-small);
+    color: var(--tv-text-muted);
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.timer-view .timer-view__add-template-btn:hover {
+    color: var(--tv-text);
+    background-color: var(--tv-bg-hover);
+    border-radius: var(--tv-radius-s);
+    box-shadow: none;
+}
+
+.timer-view__add-template-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+.timer-view__add-template-icon .svg-icon {
+    width: 14px;
+    height: 14px;
+}
+
+.timer-view .timer-view__btn--disabled {
     opacity: 0.4;
     cursor: not-allowed;
 }
 
-.timer-view__btn--disabled:hover {
+.timer-view .timer-view__btn--disabled:hover {
     transform: none;
     box-shadow: none;
 }

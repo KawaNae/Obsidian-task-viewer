@@ -22,6 +22,7 @@
     color: var(--tv-text-muted);
     width: 14px;
     height: 14px;
+    flex-shrink: 0;
 }
 
 .timeline-toolbar__btn-icon svg {

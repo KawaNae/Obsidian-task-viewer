@@ -7,7 +7,23 @@
  * - getReadyContext() は Promise でシリアライズされ、並行 resume() 競合を防止
  * - コンテキスト初回起動時のみサイレントパルスでオーディオスレッド稼働を確認
  * - チャイムは単一セッションで全音をスケジュールし、setTimeout を使わない
+ *
+ * 【音パターン一覧】
+ * - 開始音 (playStartSound):        長×2    — タイマー開始・再開
+ * - 予告ビープ (playWarningBeep):      短×1/tick — 残り3,2,1秒で毎秒再生
+ * - 切替確認音 (playTransitionConfirm): 長×2 — セグメント切替直後
+ * - 完全終了音 (playFinishSound):    C-E-G上昇3音 — 全interval完了/countdown満了
+ * - 一時停止音 (playPauseSound):     G-E-C下降3音 — ユーザー一時停止操作
+ * - 手動停止音: playFinishSound と共用（上昇3音）
+ *
+ * 短音 = 0.25s発音 (660Hz) — tick毎に1回再生
+ * 長音 = 0.35s発音 (660Hz) — 2音連続で0.7s
  */
+
+const FREQ = 660;
+const SHORT_DUR = 0.25;
+const LONG_DUR = 0.35;
+const VOLUME = 0.25;
 
 export class AudioUtils {
     private static audioContext: AudioContext | null = null;
@@ -63,41 +79,6 @@ export class AudioUtils {
     }
 
     /**
-     * ビープ音を再生
-     * @param frequency - 周波数 (Hz)
-     * @param duration - 再生時間 (秒)
-     * @param volume - 音量 (0.0 - 1.0)
-     */
-    static async playBeep(frequency = 800, duration = 0.2, volume = 0.3): Promise<void> {
-        try {
-            const ctx = await this.getReadyContext();
-
-            // スケジューリングマージン（ウォームアップはgetReadyContext側で保証済み）
-            const startTime = ctx.currentTime + 0.05;
-
-            const oscillator = ctx.createOscillator();
-            const gainNode = ctx.createGain();
-
-            oscillator.connect(gainNode);
-            gainNode.connect(ctx.destination);
-
-            oscillator.frequency.value = frequency;
-            oscillator.type = 'sine';
-
-            // クリック音防止のためフェードイン/アウト
-            gainNode.gain.setValueAtTime(0, startTime);
-            gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.01);
-            gainNode.gain.setValueAtTime(volume, startTime + duration - 0.01);
-            gainNode.gain.linearRampToValueAtTime(0, startTime + duration);
-
-            oscillator.start(startTime);
-            oscillator.stop(startTime + duration);
-        } catch (e) {
-            console.warn('Failed to play beep:', e);
-        }
-    }
-
-    /**
      * 複数音を単一セッションでスケジュールする。
      * setTimeout不使用、Web Audioスケジューラで精密配置。
      */
@@ -133,32 +114,55 @@ export class AudioUtils {
     }
 
     /**
-     * ポモドーロ完了時のチャイム音（上昇音）
+     * タイマー開始・再開時の音（長×2）
      */
-    static playWorkCompleteChime(): void {
+    static playStartSound(): void {
         void this.playChime([
-            { frequency: 523, delay: 0,    duration: 0.3, volume: 0.25 }, // C5
-            { frequency: 659, delay: 0.15, duration: 0.3, volume: 0.25 }, // E5
-            { frequency: 784, delay: 0.30, duration: 0.3, volume: 0.25 }, // G5
+            { frequency: FREQ, delay: 0, duration: LONG_DUR, volume: VOLUME },
+            { frequency: FREQ, delay: LONG_DUR, duration: LONG_DUR, volume: VOLUME },
         ]);
     }
 
     /**
-     * 休憩完了時のチャイム音（下降音）
+     * 予告ビープ（短×1、残り3,2,1秒で毎tick呼び出し）
      */
-    static playBreakCompleteChime(): void {
+    static playWarningBeep(): void {
         void this.playChime([
-            { frequency: 784, delay: 0,    duration: 0.3, volume: 0.25 }, // G5
-            { frequency: 659, delay: 0.15, duration: 0.3, volume: 0.25 }, // E5
-            { frequency: 523, delay: 0.30, duration: 0.3, volume: 0.25 }, // C5
+            { frequency: FREQ, delay: 0, duration: SHORT_DUR, volume: VOLUME },
         ]);
     }
 
     /**
-     * タイマー開始時の短い音
+     * セグメント切替確認音（長×2、切替直後）
      */
-    static async playStartSound(): Promise<void> {
-        await this.playBeep(660, 0.15, 0.2);
+    static playTransitionConfirm(): void {
+        void this.playChime([
+            { frequency: FREQ, delay: 0, duration: LONG_DUR, volume: VOLUME },
+            { frequency: FREQ, delay: LONG_DUR, duration: LONG_DUR, volume: VOLUME },
+        ]);
+    }
+
+    /**
+     * 完全終了音（C-E-G上昇3音）
+     * interval全完了、countdown満了時に使用
+     */
+    static playFinishSound(): void {
+        void this.playChime([
+            { frequency: 523, delay: 0,    duration: 0.3, volume: VOLUME }, // C5
+            { frequency: 659, delay: 0.15, duration: 0.3, volume: VOLUME }, // E5
+            { frequency: 784, delay: 0.30, duration: 0.3, volume: VOLUME }, // G5
+        ]);
+    }
+
+    /**
+     * 一時停止音（G-E-C下降3音）
+     */
+    static playPauseSound(): void {
+        void this.playChime([
+            { frequency: 784, delay: 0,    duration: 0.3, volume: VOLUME }, // G5
+            { frequency: 659, delay: 0.15, duration: 0.3, volume: VOLUME }, // E5
+            { frequency: 523, delay: 0.30, duration: 0.3, volume: VOLUME }, // C5
+        ]);
     }
 
     /**
