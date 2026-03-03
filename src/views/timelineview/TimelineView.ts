@@ -400,12 +400,12 @@ export class TimelineView extends ItemView {
                 this.isPinching = false;
                 void this.app.workspace.requestSaveLayout();
             }
-        });
+        }, { passive: true });
         this.registerDomEvent(this.container, 'touchcancel', () => {
             if (!this.isPinching) return;
             this.isPinching = false;
             void this.app.workspace.requestSaveLayout();
-        });
+        }, { passive: true });
 
         // Start Current Time Interval
         this.currentTimeInterval = window.setInterval(() => {

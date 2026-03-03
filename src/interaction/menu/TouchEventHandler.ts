@@ -26,15 +26,15 @@ export class TouchEventHandler {
                     onContextMenu(touch.clientX, touch.clientY, task);
                 }
             }, this.getThreshold());
-        });
+        }, { passive: false });
 
-        el.addEventListener('touchend', (e) => {
+        el.addEventListener('touchend', () => {
             this.cancelLongPress();
-        });
+        }, { passive: true });
 
-        el.addEventListener('touchmove', (e) => {
+        el.addEventListener('touchmove', () => {
             this.cancelLongPress();
-        });
+        }, { passive: true });
 
         // Mouse context menu
         el.addEventListener('contextmenu', (e) => {
