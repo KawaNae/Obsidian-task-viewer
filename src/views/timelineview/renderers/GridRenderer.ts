@@ -65,7 +65,7 @@ export class GridRenderer {
 
         // Day Headers
         const headerCells: DateHeaderDisplayEntry[] = [];
-        const dateLinkInteractionManager = new TaskLinkInteractionManager(this.plugin.app);
+        const dateLinkInteractionManager = new TaskLinkInteractionManager(this.plugin.app, () => this.plugin.settings);
         dates.forEach(date => {
             const cell = headerRow.createDiv('date-header__cell');
             const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });

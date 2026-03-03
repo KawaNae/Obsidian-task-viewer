@@ -4,7 +4,7 @@ import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
 import { getFileBaseName, hasTaskContent, isContentMatchingBaseName } from '../../utils/TaskContent';
 import { ChildItemBuilder } from './ChildItemBuilder';
-import { ChildSectionRenderer } from './ChildSectionRenderer';
+import { ChildSectionRenderer, ChildMenuCallback } from './ChildSectionRenderer';
 import { CheckboxWiring } from './CheckboxWiring';
 import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
 import type { TaskCardLinkRuntime } from './types';
@@ -18,11 +18,15 @@ export class TaskCardRenderer {
     private checkboxWiring: CheckboxWiring;
     private linkInteractionManager: TaskLinkInteractionManager;
 
-    constructor(private app: App, taskIndex: TaskIndex, private linkRuntime: TaskCardLinkRuntime) {
+    constructor(private app: App, taskIndex: TaskIndex, private linkRuntime: TaskCardLinkRuntime, getSettings: () => TaskViewerSettings) {
         this.checkboxWiring = new CheckboxWiring(app, taskIndex);
         this.childItemBuilder = new ChildItemBuilder(taskIndex);
         this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring);
-        this.linkInteractionManager = new TaskLinkInteractionManager(app);
+        this.linkInteractionManager = new TaskLinkInteractionManager(app, getSettings);
+    }
+
+    setChildMenuCallback(cb: ChildMenuCallback): void {
+        this.childSectionRenderer.setChildMenuCallback(cb);
     }
 
     async render(

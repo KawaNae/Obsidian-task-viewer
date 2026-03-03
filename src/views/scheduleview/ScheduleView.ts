@@ -65,10 +65,11 @@ export class ScheduleView extends ItemView {
         this.taskRenderer = new TaskCardRenderer(this.app, this.taskIndex, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.leaf,
-        });
-        this.linkInteractionManager = new TaskLinkInteractionManager(this.app);
+        }, () => this.plugin.settings);
+        this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
+        this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         this.gridCalculator = new ScheduleGridCalculator({
             getStartHour: () => this.plugin.settings.startHour,
             hoursPerDay: ScheduleView.HOURS_PER_DAY,

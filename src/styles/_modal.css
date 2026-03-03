@@ -69,6 +69,18 @@
    Create Task Modal Styles
    ====================================================== */
 
+.create-task-modal__name-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.create-task-modal__name-section label {
+    font-size: 0.9em;
+    color: var(--tv-text-muted);
+}
+
 .create-task-modal__section-label {
     margin-top: 16px;
     margin-bottom: 4px;

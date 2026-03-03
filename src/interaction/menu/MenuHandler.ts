@@ -62,6 +62,15 @@ export class MenuHandler {
     }
 
     /**
+     * Show context menu for a task by its ID at the given position.
+     */
+    showMenuForTask(taskId: string, x: number, y: number): void {
+        const task = this.taskIndex.getTask(taskId);
+        if (!task) return;
+        this.showContextMenu(x, y, task);
+    }
+
+    /**
      * Show context menu
      */
     private showContextMenu(x: number, y: number, taskInput: Task) {
@@ -76,15 +85,19 @@ export class MenuHandler {
 
         const menu = new Menu();
 
-        // 1. Properties Submenu
+        // 1. Status (root level)
+        this.propertiesMenuBuilder.addStatusSubmenu(menu, task);
+        menu.addSeparator();
+
+        // 2. Properties Submenu
         this.propertiesMenuBuilder.buildPropertiesSubmenu(menu, task, this.viewStartDate);
         menu.addSeparator();
 
-        // 2. Start Timer (submenu)
+        // 3. Start Timer (submenu)
         this.timerMenuBuilder.addTimerSubmenu(menu, task);
         menu.addSeparator();
 
-        // 3. Task Actions (child tasks, editor, duplicate, convert, delete)
+        // 4. Task Actions (child tasks, editor, duplicate, convert, switch, delete)
         this.taskActionsMenuBuilder.addTaskActions(menu, task);
 
         menu.showAtPosition({ x, y });

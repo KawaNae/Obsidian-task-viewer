@@ -116,7 +116,13 @@ export class TaskScanner {
             for (let i = 0; i < linesToProcess.length; i++) {
                 const line = linesToProcess[i];
                 const actualLineNumber = baseLineNumber + i;
-                const task = TaskParser.parse(line, file.path, actualLineNumber);
+                let task = TaskParser.parse(line, file.path, actualLineNumber);
+
+                // 非デイリーノートで時刻のみ（日付なし）のタスクはプレーンチェックボックスとして扱う
+                if (task && !parentStartDate && !task.startDate && !task.endDate && !task.deadline
+                    && (!task.commands || task.commands.length === 0)) {
+                    task = null;
+                }
 
                 if (task) {
                     // 親のstartDateを継承（子に時刻のみがある場合）

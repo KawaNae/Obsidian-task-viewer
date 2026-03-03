@@ -12,7 +12,7 @@ import {
     normalizeFrontmatterTaskKeys,
     validateFrontmatterTaskKeys,
 } from './types';
-import type { DefaultLeafPosition, PinnedListDefinition } from './types';
+import type { DefaultLeafPosition, PinnedListDefinition, Task } from './types';
 import { normalizeAiIndexSettings } from './services/aiindex/AiIndexSettings';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/color/ColorSuggest';
@@ -224,7 +224,44 @@ export default class TaskViewerPlugin extends Plugin {
         );
         const editorTimerBuilder = new TimerMenuBuilder(this);
         const editorActionsBuilder = new TaskActionsMenuBuilder(this.app, this.taskIndex, this);
-        const editorCheckboxBuilder = new EditorCheckboxMenuBuilder();
+        const editorCheckboxBuilder = new EditorCheckboxMenuBuilder(
+            this.app,
+            () => this.settings.startHour,
+            async (result, statusChar) => {
+                const repository = this.getTaskRepository();
+                const tempTask: Task = {
+                    id: 'convert-temp',
+                    file: '',
+                    line: -1,
+                    indent: 0,
+                    content: result.content,
+                    statusChar,
+                    childIds: [],
+                    childLines: [],
+                    startDate: result.startDate,
+                    startTime: result.startTime,
+                    endDate: result.endDate,
+                    endTime: result.endTime,
+                    deadline: result.deadline,
+                    explicitStartDate: !!result.startDate,
+                    explicitStartTime: !!result.startTime,
+                    explicitEndDate: !!result.endDate,
+                    explicitEndTime: !!result.endTime,
+                    commands: [],
+                    originalText: '',
+                    childLineBodyOffsets: [],
+                    tags: [],
+                    parserId: 'at-notation',
+                };
+                return await repository.createFrontmatterTaskFile(
+                    tempTask,
+                    this.settings.frontmatterTaskHeader,
+                    this.settings.frontmatterTaskHeaderLevel,
+                    undefined,
+                    this.settings.frontmatterTaskKeys
+                );
+            }
+        );
 
         // Register inline menu button on checkbox lines (CM6 extension)
         const taskMenuResult = createTaskMenuExtension(

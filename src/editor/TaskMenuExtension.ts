@@ -76,6 +76,8 @@ export function createTaskMenuExtension(
         const menu = new Menu();
 
         if (task) {
+            // Recognized task: full menu
+            propertiesBuilder.addStatusSubmenu(menu, task);
             menu.addSeparator();
             propertiesBuilder.buildPropertiesSubmenu(menu, task, null);
             menu.addSeparator();
@@ -83,12 +85,12 @@ export function createTaskMenuExtension(
             menu.addSeparator();
             actionsBuilder.addTaskActions(menu, task);
         } else {
+            // Plain checkbox: status + basic actions
             const editorInfo = info as any;
             if (editorInfo?.editor) {
-                checkboxBuilder.addStatusMenu(
+                checkboxBuilder.addFullMenu(
                     menu, editorInfo.editor, lineNumber,
-                    getSettings().enableStatusMenu,
-                    getSettings().statusMenuChars
+                    getSettings()
                 );
             }
         }

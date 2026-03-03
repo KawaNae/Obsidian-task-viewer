@@ -44,7 +44,7 @@ export class MiniCalendarView extends ItemView {
         super(leaf);
         this.taskIndex = taskIndex;
         this.plugin = plugin;
-        this.linkInteractionManager = new TaskLinkInteractionManager(this.app);
+        this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
 
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);

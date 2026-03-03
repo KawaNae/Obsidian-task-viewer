@@ -1,17 +1,25 @@
-import { App, MarkdownRenderer, Component } from 'obsidian';
+import { App, MarkdownRenderer, Component, setIcon } from 'obsidian';
 import { TaskViewerSettings } from '../../types';
 import { ChildRenderItem } from './types';
 import { CheckboxWiring } from './CheckboxWiring';
 import { NotationUtils } from './NotationUtils';
 
+export type ChildMenuCallback = (taskId: string, x: number, y: number) => void;
+
 /**
  * Renders child sections from ChildRenderItem[].
  */
 export class ChildSectionRenderer {
+    private onChildMenuClick: ChildMenuCallback | null = null;
+
     constructor(
         private app: App,
         private checkboxWiring: CheckboxWiring
     ) {}
+
+    setChildMenuCallback(cb: ChildMenuCallback): void {
+        this.onChildMenuClick = cb;
+    }
 
     async renderCollapsed(
         contentContainer: HTMLElement,
@@ -116,31 +124,67 @@ export class ChildSectionRenderer {
         for (let i = 0; i < items.length; i++) {
             if (!items[i].isCheckbox) continue;
 
-            const notation = items[i].notation;
+            const item = items[i];
             const domIndex = checkboxOffset + checkboxIndex;
             checkboxIndex++;
 
-            if (!notation || domIndex >= taskListItems.length) continue;
+            if (domIndex >= taskListItems.length) continue;
 
-            const span = document.createElement('span');
-            span.className = 'task-card__child-notation';
-            span.textContent = NotationUtils.formatChildNotation(notation, parentStartDate);
+            const handler = item.handler;
+            const isTask = handler && handler.type === 'task';
+
+            // For recognized tasks: show ⋯ menu button (if callback set)
+            // For plain childLines with notation: show notation text
+            let el: HTMLElement;
+            if (isTask && this.onChildMenuClick) {
+                el = this.createChildMenuButton(handler.taskId);
+            } else if (item.notation) {
+                el = document.createElement('span');
+                el.className = 'task-card__child-notation';
+                el.textContent = NotationUtils.formatChildNotation(item.notation, parentStartDate);
+            } else {
+                continue;
+            }
 
             const targetItem = taskListItems[domIndex] as HTMLElement;
             const notationHost = this.findNotationHost(targetItem);
 
             if (notationHost !== targetItem) {
-                notationHost.appendChild(span);
+                notationHost.appendChild(el);
                 continue;
             }
 
             const nestedBoundary = this.findNestedBoundary(targetItem);
             if (nestedBoundary) {
-                targetItem.insertBefore(span, nestedBoundary);
+                targetItem.insertBefore(el, nestedBoundary);
             } else {
-                targetItem.appendChild(span);
+                targetItem.appendChild(el);
             }
         }
+    }
+
+    private createChildMenuButton(taskId: string): HTMLButtonElement {
+        const btn = document.createElement('button');
+        btn.className = 'task-card__child-menu-btn';
+        btn.setAttribute('aria-label', 'Task menu');
+        btn.setAttribute('tabindex', '-1');
+
+        const span = document.createElement('span');
+        btn.appendChild(span);
+        setIcon(span, 'more-horizontal');
+
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const rect = btn.getBoundingClientRect();
+            this.onChildMenuClick?.(taskId, rect.left, rect.bottom);
+        });
+
+        btn.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+        });
+
+        return btn;
     }
 
     private findNotationHost(taskListItem: HTMLElement): HTMLElement {

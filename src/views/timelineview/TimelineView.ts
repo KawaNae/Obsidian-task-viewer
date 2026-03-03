@@ -96,7 +96,7 @@ export class TimelineView extends ItemView {
         this.taskRenderer = new TaskCardRenderer(this.app, this.taskIndex, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.leaf,
-        });
+        }, () => this.plugin.settings);
     }
 
     getViewType() {
@@ -196,6 +196,7 @@ export class TimelineView extends ItemView {
 
         // Initialize MenuHandler
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
+        this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
 
         // Initialize HandleManager
         this.handleManager = new HandleManager(this.container, this.taskIndex);
