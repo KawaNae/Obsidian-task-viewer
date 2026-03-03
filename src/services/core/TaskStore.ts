@@ -133,6 +133,16 @@ export class TaskStore {
     }
 
     /**
+     * 全リスナーに変更を通知（各リスナーを個別の rAF に分散）。
+     * 初回スキャン等の重い通知で Chrome の Long Task 警告を回避するために使用。
+     */
+    notifyListenersStaggered(taskId?: string, changes?: string[]): void {
+        for (const listener of this.listeners) {
+            requestAnimationFrame(() => listener(taskId, changes));
+        }
+    }
+
+    /**
      * 設定を更新
      */
     updateSettings(settings: TaskViewerSettings): void {

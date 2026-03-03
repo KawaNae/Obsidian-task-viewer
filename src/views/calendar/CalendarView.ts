@@ -763,7 +763,7 @@ export class CalendarView extends ItemView {
             this.navigateWeekDebounceTimer = null;
             const nextOffset = this.pendingWeekOffset;
             this.pendingWeekOffset = 0;
-            this.navigateWeek(nextOffset);
+            requestAnimationFrame(() => this.navigateWeek(nextOffset));
         }, 200);
     }
 

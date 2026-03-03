@@ -469,7 +469,7 @@ export class MiniCalendarView extends ItemView {
             const nextOffset = this.pendingWeekOffset;
             this.pendingWeekOffset = 0;
             if (!this.isAnimating) {
-                this.navigateWeek(nextOffset);
+                requestAnimationFrame(() => this.navigateWeek(nextOffset));
             }
         }, 50);
     }

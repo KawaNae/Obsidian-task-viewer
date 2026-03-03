@@ -112,8 +112,6 @@ export class TaskCardRenderer {
         if (!isCompleteStatusChar(task.statusChar, settings.completeStatusChars)) {
             if (task.deadline && DateUtils.isPastDeadline(task.deadline, settings.startHour)) {
                 overdueIcon = '🚨 ';
-            } else if (task.startDate && DateUtils.isPastDate(task.startDate, task.startTime, settings.startHour)) {
-                overdueIcon = '⚠️ ';
             } else if (task.endDate) {
                 const endTime = task.endTime?.includes('T') ? task.endTime.split('T')[1] : task.endTime;
                 if (DateUtils.isPastDate(task.endDate, endTime, settings.startHour)) {
