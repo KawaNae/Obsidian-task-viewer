@@ -127,6 +127,42 @@ export class TaskIndex {
                 });
             }
         });
+
+        this.app.vault.on('rename', async (file, oldPath) => {
+            // md → 非md（拡張子変更）: delete 扱い
+            if (!(file instanceof TFile) || file.extension !== 'md') {
+                this.store.removeTasksByFile(oldPath);
+                this.scanner.handleFileRenamed(oldPath);
+                this.debouncedNotify();
+                this.aiIndexService.scheduleDeletePath(oldPath);
+                return;
+            }
+
+            // 非md → md: create 扱い
+            if (!oldPath.endsWith('.md')) {
+                await this.scanner.queueScan(file);
+                WikiLinkResolver.resolve(this.store.getTasksMap(), this.app);
+                this.debouncedNotify();
+                this.aiIndexService.schedulePath(file.path);
+                return;
+            }
+
+            // md → md（通常のリネーム）
+            if (this.draggingFilePath === oldPath) {
+                this.draggingFilePath = null;
+            }
+            this.syncDetector.clearLocalEditFlag(oldPath);
+
+            this.store.removeTasksByFile(oldPath);
+            this.scanner.handleFileRenamed(oldPath);
+
+            await this.scanner.queueScan(file);
+            WikiLinkResolver.resolve(this.store.getTasksMap(), this.app);
+            this.debouncedNotify();
+
+            this.aiIndexService.scheduleDeletePath(oldPath);
+            this.aiIndexService.schedulePath(file.path);
+        });
     }
 
     // ===== 通知制御 =====
@@ -213,6 +249,16 @@ export class TaskIndex {
         return this.getTasks().find(t =>
             t.file === filePath && t.line === line && t.parserId === 'at-notation'
         );
+    }
+
+    getTaskLineNumbersForFile(filePath: string): Set<number> {
+        const lines = new Set<number>();
+        for (const task of this.getTasks()) {
+            if (task.file === filePath && task.line >= 0) {
+                lines.add(task.line);
+            }
+        }
+        return lines;
     }
 
     getTasksForDate(date: string, startHour?: number): Task[] {

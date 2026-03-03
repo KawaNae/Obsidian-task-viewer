@@ -49,7 +49,7 @@ export interface Task {
     endTime?: string;
     deadline?: string;
 
-    // True when startDate/startTime were inherited from parent.
+    // True when startDate was inherited from the daily note filename.
     startDateInherited?: boolean;
 
     // Explicitly written markers for UI styling.
@@ -241,6 +241,7 @@ export interface TaskViewerSettings {
     frontmatterTaskHeaderLevel: number;
     longPressThreshold: number;
     taskSelectAction: 'click' | 'dblclick';
+    reuseExistingTab: boolean;
     calendarWeekStartDay: 0 | 1;
     calendarShowCompleted: boolean;
     calendarShowWeekNumbers: boolean;
@@ -281,6 +282,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     frontmatterTaskHeaderLevel: 2,
     longPressThreshold: 400,
     taskSelectAction: 'click',
+    reuseExistingTab: true,
     calendarWeekStartDay: 0,
     calendarShowCompleted: true,
     calendarShowWeekNumbers: false,

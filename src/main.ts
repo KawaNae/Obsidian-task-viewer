@@ -1,4 +1,4 @@
-import { Notice, Plugin, Workspace, WorkspaceLeaf, TFile, Menu, Editor, MarkdownView } from 'obsidian';
+import { Notice, Plugin, Workspace, WorkspaceLeaf, TFile } from 'obsidian';
 import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
@@ -12,7 +12,7 @@ import {
     normalizeFrontmatterTaskKeys,
     validateFrontmatterTaskKeys,
 } from './types';
-import type { DefaultLeafPosition, PinnedListDefinition } from './types';
+import type { DefaultLeafPosition, PinnedListDefinition, Task } from './types';
 import { normalizeAiIndexSettings } from './services/aiindex/AiIndexSettings';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/color/ColorSuggest';
@@ -33,6 +33,7 @@ import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
 import { TimerMenuBuilder } from './interaction/menu/builders/TimerMenuBuilder';
 import { TaskActionsMenuBuilder } from './interaction/menu/builders/TaskActionsMenuBuilder';
 import { EditorCheckboxMenuBuilder } from './interaction/menu/builders/EditorCheckboxMenuBuilder';
+import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
@@ -45,6 +46,9 @@ export default class TaskViewerPlugin extends Plugin {
 
     // Properties View color/linestyle suggest observer
     private propertySuggestObserver: PropertySuggestObserver | null = null;
+
+    // Editor inline menu button cleanup
+    private taskMenuCleanup: (() => void) | null = null;
 
     async onload() {
         console.log('Loading Task Viewer Plugin (Rewrite)');
@@ -213,35 +217,64 @@ export default class TaskViewerPlugin extends Plugin {
         this.registerEditorSuggest(new ColorSuggest(this.app, this));
         this.registerEditorSuggest(new LineStyleSuggest(this.app, this));
 
-        // Register editor context menu for @notation tasks
+        // Menu builders for inline task menu button
         const editorPropertiesBuilder = new PropertiesMenuBuilder(
             this.app, this.taskIndex, this,
             new PropertyCalculator(), new PropertyFormatter()
         );
         const editorTimerBuilder = new TimerMenuBuilder(this);
         const editorActionsBuilder = new TaskActionsMenuBuilder(this.app, this.taskIndex, this);
-        const editorCheckboxBuilder = new EditorCheckboxMenuBuilder();
-
-        this.registerEvent(
-            this.app.workspace.on('editor-menu', (menu: Menu, editor: Editor, view: MarkdownView) => {
-                const filePath = view.file?.path;
-                if (!filePath) return;
-
-                const line = editor.getCursor().line;
-                const task = this.taskIndex.getTaskByFileLine(filePath, line);
-
-                if (task) {
-                    menu.addSeparator();
-                    editorPropertiesBuilder.buildPropertiesSubmenu(menu, task, null);
-                    menu.addSeparator();
-                    editorTimerBuilder.addTimerSubmenu(menu, task);
-                    menu.addSeparator();
-                    editorActionsBuilder.addTaskActions(menu, task);
-                } else {
-                    editorCheckboxBuilder.addStatusMenu(menu, editor, line, this.settings.enableStatusMenu, this.settings.statusMenuChars);
-                }
-            })
+        const editorCheckboxBuilder = new EditorCheckboxMenuBuilder(
+            this.app,
+            () => this.settings.startHour,
+            async (result, statusChar) => {
+                const repository = this.getTaskRepository();
+                const tempTask: Task = {
+                    id: 'convert-temp',
+                    file: '',
+                    line: -1,
+                    indent: 0,
+                    content: result.content,
+                    statusChar,
+                    childIds: [],
+                    childLines: [],
+                    startDate: result.startDate,
+                    startTime: result.startTime,
+                    endDate: result.endDate,
+                    endTime: result.endTime,
+                    deadline: result.deadline,
+                    explicitStartDate: !!result.startDate,
+                    explicitStartTime: !!result.startTime,
+                    explicitEndDate: !!result.endDate,
+                    explicitEndTime: !!result.endTime,
+                    commands: [],
+                    originalText: '',
+                    childLineBodyOffsets: [],
+                    tags: [],
+                    parserId: 'at-notation',
+                };
+                return await repository.createFrontmatterTaskFile(
+                    tempTask,
+                    this.settings.frontmatterTaskHeader,
+                    this.settings.frontmatterTaskHeaderLevel,
+                    undefined,
+                    this.settings.frontmatterTaskKeys
+                );
+            }
         );
+
+        // Register inline menu button on checkbox lines (CM6 extension)
+        const taskMenuResult = createTaskMenuExtension(
+            this.app,
+            this.taskIndex,
+            editorPropertiesBuilder,
+            editorTimerBuilder,
+            editorActionsBuilder,
+            editorCheckboxBuilder,
+            () => this.settings
+        );
+        this.registerEditorExtension(taskMenuResult.extension);
+        this.taskMenuCleanup = taskMenuResult.cleanup;
 
         // Apply global styles if enabled
         this.updateGlobalStyles();
@@ -512,6 +545,7 @@ export default class TaskViewerPlugin extends Plugin {
 
     onunload() {
         console.log('Unloading Task Viewer Plugin');
+        this.taskMenuCleanup?.();
         this.taskIndex?.dispose();
         AudioUtils.dispose();
         document.body.classList.remove('task-viewer-global-styles');

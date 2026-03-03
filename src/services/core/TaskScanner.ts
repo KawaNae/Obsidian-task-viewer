@@ -9,6 +9,7 @@ import { SyncDetector } from './SyncDetector';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
 import { TagExtractor } from '../../utils/TagExtractor';
 import { TaskStyleResolver } from '../styling/TaskStyleResolver';
+import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 
 /**
  * タスクスキャナー - ファイルのスキャンとパース処理
@@ -48,7 +49,7 @@ export class TaskScanner {
             await this.queueScan(file);
         }
         WikiLinkResolver.resolve(this.store.getTasksMap(), this.app);
-        this.store.notifyListeners();
+        this.store.notifyListenersStaggered();
         this.isInitializing = false;
     }
 
@@ -115,7 +116,13 @@ export class TaskScanner {
             for (let i = 0; i < linesToProcess.length; i++) {
                 const line = linesToProcess[i];
                 const actualLineNumber = baseLineNumber + i;
-                const task = TaskParser.parse(line, file.path, actualLineNumber);
+                let task = TaskParser.parse(line, file.path, actualLineNumber);
+
+                // 非デイリーノートで時刻のみ（日付なし）のタスクはプレーンチェックボックスとして扱う
+                if (task && !parentStartDate && !task.startDate && !task.endDate && !task.deadline
+                    && (!task.commands || task.commands.length === 0)) {
+                    task = null;
+                }
 
                 if (task) {
                     // 親のstartDateを継承（子に時刻のみがある場合）
@@ -183,7 +190,7 @@ export class TaskScanner {
                     // 再帰的に子タスクを抽出（@記法を持つ子）
                     if (children.length > 0) {
                         const childLineNumber = actualLineNumber + 1;
-                        const childTasks = extractTasksFromLines(children, childLineNumber, task.startDate);
+                        const childTasks = extractTasksFromLines(children, childLineNumber, parentStartDate);
 
                         // 親子関係を設定
                         for (const childTask of childTasks) {
@@ -235,8 +242,9 @@ export class TaskScanner {
             this.settings.frontmatterTaskHeaderLevel
         );
 
-        // インラインタスク抽出（ボディ行のみ）
-        const allExtractedTasks = extractTasksFromLines(bodyLines, bodyStartIndex, fmTask?.startDate);
+        // デイリーノートのファイル名から日付を抽出（親タスクからの継承は廃止）
+        const dailyNoteDate = DailyNoteUtils.parseDateFromFilePath(this.app, file.path);
+        const allExtractedTasks = extractTasksFromLines(bodyLines, bodyStartIndex, dailyNoteDate ?? undefined);
 
         if (fmTask) {
             // MetadataCacheからファイル全体のタグを取得してマージ（frontmatterタスクのみ）
@@ -344,6 +352,16 @@ export class TaskScanner {
                 await this.commandExecutor.handleTaskCompletion(task);
             }
         }
+    }
+
+    /**
+     * ファイルリネーム時の内部状態クリーンアップ。
+     * oldPath に紐づく scanQueue / processedCompletions / visitedFiles を除去する。
+     */
+    handleFileRenamed(oldPath: string): void {
+        this.scanQueue.delete(oldPath);
+        this.clearProcessedCompletionsForFile(oldPath);
+        this.visitedFiles.delete(oldPath);
     }
 
     /**

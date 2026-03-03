@@ -15,6 +15,7 @@ import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 
 export interface ToolbarCallbacks {
     onRender: () => void;
+    onScrollToNow: () => void;
     onStateChange: () => void;
     getDatesToShow: () => string[];
     onRequestSidebarToggle: (nextOpen: boolean, source: 'toolbar' | 'backdrop' | 'escape') => void;
@@ -181,8 +182,9 @@ export class TimelineToolbar {
                 const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
                 const pastDate = DateUtils.addDays(today, -this.plugin.settings.pastDaysToShow);
                 this.viewState.startDate = (oldestOverdueDate && oldestOverdueDate < pastDate) ? oldestOverdueDate : pastDate;
-                this.callbacks.onRender();
-            }
+                this.callbacks.onScrollToNow();
+            },
+            { label: 'Now' }
         );
     }
 
@@ -259,6 +261,7 @@ export class TimelineToolbar {
                     filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
                 },
                 getTasks: () => allTasks,
+                getStartHour: () => this.plugin.settings.startHour,
             });
         };
     }

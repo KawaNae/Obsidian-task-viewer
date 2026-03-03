@@ -1,4 +1,6 @@
 import { App } from 'obsidian';
+import type { TaskViewerSettings } from '../../types';
+import { openLinkInExistingOrNewTab } from '../../utils/NavigationUtils';
 import type { HoverLinkPayload, TaskLinkBindContext } from './types';
 
 type TaskLinkBindOptions = {
@@ -8,7 +10,7 @@ type TaskLinkBindOptions = {
 export class TaskLinkInteractionManager {
     private boundLinks: WeakSet<HTMLElement> = new WeakSet();
 
-    constructor(private app: App) { }
+    constructor(private app: App, private getSettings: () => TaskViewerSettings) { }
 
     bind(container: HTMLElement, context: TaskLinkBindContext, options: TaskLinkBindOptions = {}): void {
         const bindClick = options.bindClick ?? true;
@@ -49,7 +51,11 @@ export class TaskLinkInteractionManager {
             return;
         }
 
-        void this.app.workspace.openLinkText(target, context.sourcePath, true);
+        if (this.getSettings().reuseExistingTab) {
+            openLinkInExistingOrNewTab(this.app, target, context.sourcePath);
+        } else {
+            void this.app.workspace.openLinkText(target, context.sourcePath, true);
+        }
     }
 
     private emitHoverLink(

@@ -118,14 +118,7 @@ export class WikiLinkResolver {
             parentTask.childIds.push(childTaskId);
         }
 
-        // 日付継承: 子が時刻のみ（日付なし）なら親の startDate を継承
-        if (parentTask.startDate && !childTask.startDate && childTask.startTime) {
-            childTask.startDate = parentTask.startDate;
-            childTask.startDateInherited = true;
-        }
-        if (parentTask.startDate && !childTask.endDate && childTask.endTime) {
-            childTask.endDate = parentTask.startDate;
-        }
+        // 日付継承はデイリーノートベースに移行（TaskScanner側で処理済み）
 
         return childTaskId;
     }

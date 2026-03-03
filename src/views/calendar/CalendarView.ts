@@ -71,8 +71,8 @@ export class CalendarView extends ItemView {
         this.taskRenderer = new TaskCardRenderer(this.app, this.taskIndex, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.leaf,
-        });
-        this.linkInteractionManager = new TaskLinkInteractionManager(this.app);
+        }, () => this.plugin.settings);
+        this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.sidebarManager = new SidebarManager(true, {
             mobileBreakpointPx: 768,
             onPersist: () => this.app.workspace.requestSaveLayout(),
@@ -195,6 +195,7 @@ export class CalendarView extends ItemView {
         );
 
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
+        this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         this.pinnedListRenderer = new PinnedListRenderer(
             this.taskRenderer, this.plugin, this.menuHandler, this.taskIndex,
         );
@@ -382,6 +383,7 @@ export class CalendarView extends ItemView {
                     filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
                 },
                 getTasks: () => this.taskIndex.getTasks(),
+                getStartHour: () => this.plugin.settings.startHour,
             });
         });
 
@@ -521,6 +523,7 @@ export class CalendarView extends ItemView {
                 void this.render();
             },
             getTasks: () => this.taskIndex.getTasks(),
+            getStartHour: () => this.plugin.settings.startHour,
         });
     }
 
@@ -761,7 +764,7 @@ export class CalendarView extends ItemView {
             this.navigateWeekDebounceTimer = null;
             const nextOffset = this.pendingWeekOffset;
             this.pendingWeekOffset = 0;
-            this.navigateWeek(nextOffset);
+            requestAnimationFrame(() => this.navigateWeek(nextOffset));
         }, 200);
     }
 

@@ -66,6 +66,7 @@ export class TimelineView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private currentTimeInterval: number | null = null;
     private lastScrollTop: number = 0;
+    private scrollToNowOnNextRender = false;
     private hasInitializedStartDate: boolean = false;
     // ==================== Pinch zoom state ====================
     private pinchInitialDistance: number = 0;
@@ -95,7 +96,7 @@ export class TimelineView extends ItemView {
         this.taskRenderer = new TaskCardRenderer(this.app, this.taskIndex, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.leaf,
-        });
+        }, () => this.plugin.settings);
     }
 
     getViewType() {
@@ -195,6 +196,7 @@ export class TimelineView extends ItemView {
 
         // Initialize MenuHandler
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
+        this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
 
         // Initialize HandleManager
         this.handleManager = new HandleManager(this.container, this.taskIndex);
@@ -208,6 +210,10 @@ export class TimelineView extends ItemView {
             this.taskIndex,
             {
                 onRender: () => this.render(),
+                onScrollToNow: () => {
+                    this.scrollToNowOnNextRender = true;
+                    this.render();
+                },
                 onStateChange: () => { },
                 getDatesToShow: () => this.getDatesToShow(),
                 onRequestSidebarToggle: (nextOpen, source) => {
@@ -262,13 +268,14 @@ export class TimelineView extends ItemView {
 
         // Subscribe to data changes
         this.unsubscribe = this.taskIndex.onChange((taskId, changes) => {
-            // On first data load, re-evaluate startDate using Today button logic
+            // On first data load, re-evaluate startDate and scroll to now
             if (!this.hasInitializedStartDate && this.taskIndex.getTasks().length > 0) {
                 this.hasInitializedStartDate = true;
                 const oldestOverdue = this.findOldestOverdueDate();
                 const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
                 const pastDate = DateUtils.addDays(today, -this.plugin.settings.pastDaysToShow);
                 this.viewState.startDate = (oldestOverdue && oldestOverdue < pastDate) ? oldestOverdue : pastDate;
+                this.scrollToNowOnNextRender = true;
             }
 
             if (taskId && changes) {
@@ -394,19 +401,20 @@ export class TimelineView extends ItemView {
                 this.isPinching = false;
                 void this.app.workspace.requestSaveLayout();
             }
-        });
+        }, { passive: true });
         this.registerDomEvent(this.container, 'touchcancel', () => {
             if (!this.isPinching) return;
             this.isPinching = false;
             void this.app.workspace.requestSaveLayout();
-        });
+        }, { passive: true });
 
         // Start Current Time Interval
         this.currentTimeInterval = window.setInterval(() => {
             this.renderCurrentTimeIndicator();
         }, 60000); // Every minute
 
-        // Initial render
+        // Initial render — scroll to current time
+        this.scrollToNowOnNextRender = true;
         this.render();
     }
 
@@ -434,15 +442,32 @@ export class TimelineView extends ItemView {
         const pastDate = DateUtils.addDays(today, -this.plugin.settings.pastDaysToShow);
         this.viewState.startDate = (oldestOverdue && oldestOverdue < pastDate) ? oldestOverdue : pastDate;
 
+        this.scrollToNowOnNextRender = true;
         this.render();
     }
 
     // ==================== Core Rendering ====================
 
     /** Renders the "now" indicator line on today's column. */
-    /** Renders the "now" indicator line on today's column. */
     private renderCurrentTimeIndicator() {
         this.gridRenderer.renderCurrentTimeIndicator();
+    }
+
+    /** Scrolls the timeline to center the current time vertically. */
+    private scrollToCurrentTime(): void {
+        const scrollArea = this.container.querySelector('.timeline-scroll-area') as HTMLElement | null;
+        if (!scrollArea) return;
+        // Only scroll if today is visible (indicator was rendered)
+        if (!this.container.querySelector('.current-time-indicator')) return;
+
+        const now = new Date();
+        const startHour = this.plugin.settings.startHour;
+        let minutesFromStart = now.getHours() * 60 + now.getMinutes() - startHour * 60;
+        if (minutesFromStart < 0) minutesFromStart += 1440;
+
+        const hourHeight = 60 * this.getEffectiveZoomLevel();
+        const nowPx = minutesFromStart * hourHeight / 60;
+        scrollArea.scrollTop = nowPx - scrollArea.clientHeight / 2;
     }
 
     private render() {
@@ -537,6 +562,10 @@ export class TimelineView extends ItemView {
             this.taskIndex,
             {
                 onRender: () => this.render(),
+                onScrollToNow: () => {
+                    this.scrollToNowOnNextRender = true;
+                    this.render();
+                },
                 onStateChange: () => {
                     this.app.workspace.requestSaveLayout();
                 },
@@ -578,10 +607,15 @@ export class TimelineView extends ItemView {
         this.handleManager.createOverlay();
         this.renderCurrentTimeIndicator();
 
-        // Restore scroll position
+        // Restore scroll position or scroll to now
         const newScrollArea = this.container.querySelector('.timeline-scroll-area');
-        if (newScrollArea && this.lastScrollTop > 0) {
-            newScrollArea.scrollTop = this.lastScrollTop;
+        if (newScrollArea) {
+            if (this.scrollToNowOnNextRender) {
+                this.scrollToNowOnNextRender = false;
+                requestAnimationFrame(() => this.scrollToCurrentTime());
+            } else if (this.lastScrollTop > 0) {
+                newScrollArea.scrollTop = this.lastScrollTop;
+            }
         }
 
         // Restore selected task handles AFTER scroll restoration
@@ -644,6 +678,7 @@ export class TimelineView extends ItemView {
                 this.render();
             },
             getTasks: () => this.taskIndex.getTasks(),
+            getStartHour: () => this.plugin.settings.startHour,
         });
     }
 

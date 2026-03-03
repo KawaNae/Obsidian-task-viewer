@@ -42,7 +42,7 @@ export class CheckboxWiring {
                 await this.taskIndex.updateTask(taskId, { statusChar });
             });
         });
-        checkbox.addEventListener('touchstart', (e) => e.stopPropagation());
+        checkbox.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
     }
 
     /**
@@ -98,7 +98,7 @@ export class CheckboxWiring {
                 await this.taskIndex.updateTask(taskId, { statusChar });
             });
         });
-        checkbox.addEventListener('touchstart', (e) => e.stopPropagation());
+        checkbox.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
     }
 
     private wireChildLineCheckbox(
@@ -155,7 +155,7 @@ export class CheckboxWiring {
                 await this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
             });
         });
-        checkbox.addEventListener('touchstart', (e) => e.stopPropagation());
+        checkbox.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
     }
 
     private showStatusMenu(e: MouseEvent, settings: TaskViewerSettings, onSelect: (statusChar: string) => Promise<void>): void {

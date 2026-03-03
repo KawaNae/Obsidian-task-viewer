@@ -58,11 +58,12 @@ export class PinnedListRenderer {
         }
 
         const allTasks = this.taskIndex.getTasks();
+        const filterContext = { startHour: this.plugin.settings.startHour };
 
         for (const listDef of lists) {
             // Apply pinned list filter, then main toolbar filter
             const tasks = allTasks.filter(task =>
-                TaskFilterEngine.evaluate(task, listDef.filterState) && isTaskVisible(task)
+                TaskFilterEngine.evaluate(task, listDef.filterState, filterContext) && isTaskVisible(task)
             );
 
             TaskSorter.sort(tasks, listDef.sortState);

@@ -64,37 +64,7 @@ export class ScheduleTaskRenderer {
             wrapper.style.width = `${widthPct}%`;
             wrapper.style.left = `${placement.column * widthPct}%`;
 
-            if (placement.columnCount > 1) {
-                console.debug('[ScheduleView][WidthDebug][render-before]', {
-                    taskId: placement.task.id,
-                    taskFile: placement.task.file,
-                    startTime: placement.startTime,
-                    column: placement.column,
-                    columnCount: placement.columnCount,
-                    widthPct,
-                    inlineWidth: wrapper.style.width,
-                    inlineLeft: wrapper.style.left,
-                });
-            }
-
             await this.renderTaskCard(wrapper, placement.task, true);
-
-            if (placement.columnCount > 1) {
-                const wrapperRect = wrapper.getBoundingClientRect();
-                const containerRect = tasksContainer.getBoundingClientRect();
-                const computedWrapper = getComputedStyle(wrapper);
-                console.debug('[ScheduleView][WidthDebug][render-after]', {
-                    taskId: placement.task.id,
-                    startTime: placement.startTime,
-                    column: placement.column,
-                    columnCount: placement.columnCount,
-                    computedWidth: computedWrapper.width,
-                    computedLeft: computedWrapper.left,
-                    wrapperPxWidth: wrapperRect.width,
-                    containerPxWidth: containerRect.width,
-                    widthRatio: containerRect.width > 0 ? wrapperRect.width / containerRect.width : null,
-                });
-            }
         }
     }
 
@@ -104,21 +74,6 @@ export class ScheduleTaskRenderer {
 
         for (const cluster of clusters) {
             const assignments = this.overlapLayout.assignClusterColumns(cluster);
-            const columnCount = assignments[0]?.columnCount ?? 1;
-
-            if (columnCount > 1) {
-                const clusterStart = Math.min(...cluster.map((task) => task.visualStartMinute));
-                const clusterEnd = Math.max(...cluster.map((task) => task.visualEndMinute));
-                console.debug('[ScheduleView][WidthDebug][cluster]', {
-                    clusterStartMinute: clusterStart,
-                    clusterEndMinute: clusterEnd,
-                    clusterStartTime: this.gridCalculator.visualMinuteToTime(clusterStart),
-                    clusterEndTime: this.gridCalculator.visualMinuteToTime(clusterEnd),
-                    taskCount: cluster.length,
-                    taskIds: cluster.map((task) => task.id),
-                    columnCount,
-                });
-            }
 
             for (const assignment of assignments) {
                 const task = assignment.task;
@@ -135,16 +90,6 @@ export class ScheduleTaskRenderer {
                     columnCount: assignment.columnCount,
                 });
 
-                if (assignment.columnCount > 1) {
-                    console.debug('[ScheduleView][WidthDebug][placement]', {
-                        taskId: task.id,
-                        startTime: task.startTime,
-                        column: assignment.column,
-                        columnCount: assignment.columnCount,
-                        top,
-                        height,
-                    });
-                }
             }
         }
 

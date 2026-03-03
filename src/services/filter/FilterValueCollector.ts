@@ -45,4 +45,12 @@ export class FilterValueCollector {
         }
         return Array.from(set).sort();
     }
+
+    static collectParserIds(tasks: Task[]): string[] {
+        const set = new Set<string>();
+        for (const task of tasks) {
+            set.add(task.parserId);
+        }
+        return Array.from(set).sort();
+    }
 }

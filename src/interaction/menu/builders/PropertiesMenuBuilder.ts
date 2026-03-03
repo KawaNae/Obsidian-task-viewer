@@ -8,6 +8,7 @@ import { CreateTaskModal, CreateTaskResult } from '../../../modals/CreateTaskMod
 import { DateUtils } from '../../../utils/DateUtils';
 import { getTaskDisplayName } from '../../../utils/TaskContent';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
+import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
 
 type ChangePropertiesFocusField = 'name' | 'start' | 'end' | 'deadline';
 
@@ -41,8 +42,8 @@ export class PropertiesMenuBuilder {
             };
 
             // Requested order:
-            // status / file / --- / name / start / end / deadline / --- / length
-            this.addStatusItem(subMenu, task);
+            // file / --- / name / start / end / deadline / --- / length
+            // (Status is now added at root level by the caller)
             this.addFileItem(subMenu, task);
             subMenu.addSeparator();
             this.addNameItem(subMenu, task, openModal);
@@ -65,9 +66,9 @@ export class PropertiesMenuBuilder {
     }
 
     /**
-     * Add Status item.
+     * Add Status submenu to the given menu.
      */
-    private addStatusItem(menu: Menu, task: Task): void {
+    addStatusSubmenu(menu: Menu, task: Task): void {
         menu.addItem((sub) => {
             const statusChar = task.statusChar;
             const statusDisplay = `[${statusChar}]`;
@@ -100,7 +101,11 @@ export class PropertiesMenuBuilder {
             sub.setTitle(`File: ${task.file.split('/').pop()}`)
                 .setIcon('file-text')
                 .onClick(() => {
-                    this.app.workspace.openLinkText(task.file, '', true);
+                    if (this.plugin.settings.reuseExistingTab) {
+                        openFileInExistingOrNewTab(this.app, task.file);
+                    } else {
+                        void this.app.workspace.openLinkText(task.file, '', true);
+                    }
                 });
         });
     }

@@ -5,6 +5,7 @@ import TaskViewerPlugin from '../../../main';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { ConfirmModal } from '../../../modals/ConfirmModal';
 import { getTaskDisplayName } from '../../../utils/TaskContent';
+import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
 
 /**
  * Task操作メニューの構築
@@ -30,6 +31,7 @@ export class TaskActionsMenuBuilder {
         this.addOpenInEditorItem(menu, task);
         this.addDuplicateSubmenu(menu, task);
         this.addConvertSubmenu(menu, task);
+        this.addSwitchToSubmenu(menu, task);
         this.addDeleteItem(menu, task);
     }
 
@@ -118,7 +120,11 @@ export class TaskActionsMenuBuilder {
             item.setTitle('Open in Editor')
                 .setIcon('document')
                 .onClick(async () => {
-                    await this.app.workspace.openLinkText(task.file, '', true);
+                    if (this.plugin.settings.reuseExistingTab) {
+                        openFileInExistingOrNewTab(this.app, task.file);
+                    } else {
+                        await this.app.workspace.openLinkText(task.file, '', true);
+                    }
                     if (task.line >= 0) {
                         setTimeout(() => {
                             const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -174,43 +180,85 @@ export class TaskActionsMenuBuilder {
     }
 
     /**
-     * "Convert to" サブメニュー（Move + Convert 統合）
+     * "Convert to" サブメニュー — ストレージ形式変換（全操作 ConfirmModal）
      */
     private addConvertSubmenu(menu: Menu, task: Task): void {
+        // Frontmatter tasks have no convert options (reverse conversion is too complex)
+        if (task.parserId !== 'at-notation') return;
+
         menu.addItem((item) => {
             const subMenu = (item as any)
                 .setTitle('Convert to')
                 .setIcon('arrow-right-left')
                 .setSubmenu() as Menu;
 
-            const isTime = !!task.startTime;
+            // Inline Task → Plain Checkbox
+            subMenu.addItem((sub) => {
+                sub.setTitle('Plain Checkbox')
+                    .setIcon('square')
+                    .onClick(() => {
+                        menu.close();
+                        new ConfirmModal(
+                            this.app,
+                            'Convert to Plain Checkbox',
+                            'Date/time fields will be removed. Continue?',
+                            async () => {
+                                await this.taskIndex.updateTask(task.id, {
+                                    startDate: undefined,
+                                    startTime: undefined,
+                                    endDate: undefined,
+                                    endTime: undefined,
+                                    deadline: undefined,
+                                });
+                            },
+                            { confirmLabel: 'Convert' }
+                        ).open();
+                    });
+            });
 
-            if (isTime) {
+            // Inline Task → Frontmatter Task
+            subMenu.addItem((sub) => {
+                sub.setTitle('Frontmatter Task')
+                    .setIcon('file-plus')
+                    .onClick(() => {
+                        menu.close();
+                        new ConfirmModal(
+                            this.app,
+                            'Convert to Frontmatter Task',
+                            'This will create a new file for the task. Continue?',
+                            async () => {
+                                await this.taskIndex.convertToFrontmatterTask(task.id);
+                            },
+                            { confirmLabel: 'Convert' }
+                        ).open();
+                    });
+            });
+        });
+    }
+
+    /**
+     * "Switch to" サブメニュー — 時刻属性の切替（確認なし）
+     */
+    private addSwitchToSubmenu(menu: Menu, task: Task): void {
+        const isTimed = !!task.startTime;
+
+        menu.addItem((item) => {
+            const subMenu = (item as any)
+                .setTitle('Switch to')
+                .setIcon('repeat')
+                .setSubmenu() as Menu;
+
+            if (isTimed) {
                 subMenu.addItem((sub) => {
                     sub.setTitle('All Day')
                         .setIcon('calendar-with-checkmark')
                         .onClick(async () => {
                             await this.taskIndex.updateTask(task.id, {
                                 startTime: undefined,
-                                endTime: undefined
+                                endTime: undefined,
                             });
                         });
                 });
-
-                if (task.deadline) {
-                    subMenu.addItem((sub) => {
-                        sub.setTitle('All Day (Deadline only)')
-                            .setIcon('calendar-clock')
-                            .onClick(async () => {
-                                await this.taskIndex.updateTask(task.id, {
-                                    startDate: undefined,
-                                    startTime: undefined,
-                                    endDate: undefined,
-                                    endTime: undefined
-                                });
-                            });
-                    });
-                }
             } else {
                 subMenu.addItem((sub) => {
                     sub.setTitle('Timeline')
@@ -220,18 +268,8 @@ export class TaskActionsMenuBuilder {
                             const h = startHour.toString().padStart(2, '0');
                             await this.taskIndex.updateTask(task.id, {
                                 startTime: `${h}:00`,
-                                endTime: undefined
+                                endTime: undefined,
                             });
-                        });
-                });
-            }
-
-            if (task.parserId === 'at-notation') {
-                subMenu.addItem((sub) => {
-                    sub.setTitle('Frontmatter Task')
-                        .setIcon('file-plus')
-                        .onClick(async () => {
-                            await this.taskIndex.convertToFrontmatterTask(task.id);
                         });
                 });
             }
@@ -254,7 +292,8 @@ export class TaskActionsMenuBuilder {
                         'Are you sure you want to delete this task?',
                         async () => {
                             await this.taskIndex.deleteTask(task.id);
-                        }
+                        },
+                        { confirmLabel: 'Delete', warning: true }
                     ).open();
                 });
         });

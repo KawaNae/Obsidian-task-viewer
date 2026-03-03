@@ -51,6 +51,7 @@ export class ScheduleView extends ItemView {
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private currentDate = '';
+    private scrollToNowOnNextRender = false;
     private customName: string | undefined;
     private collapsedSections: Record<CollapsibleSectionKey, boolean> = {
         allDay: false,
@@ -64,10 +65,11 @@ export class ScheduleView extends ItemView {
         this.taskRenderer = new TaskCardRenderer(this.app, this.taskIndex, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.leaf,
-        });
-        this.linkInteractionManager = new TaskLinkInteractionManager(this.app);
+        }, () => this.plugin.settings);
+        this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
+        this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         this.gridCalculator = new ScheduleGridCalculator({
             getStartHour: () => this.plugin.settings.startHour,
             hoursPerDay: ScheduleView.HOURS_PER_DAY,
@@ -178,6 +180,7 @@ export class ScheduleView extends ItemView {
         }
 
         this.registerKeyboardNavigation();
+        this.scrollToNowOnNextRender = true;
         await this.render();
 
         this.unsubscribe = this.taskIndex.onChange(() => {
@@ -194,6 +197,8 @@ export class ScheduleView extends ItemView {
     }
 
     public refresh(): void {
+        this.currentDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        this.scrollToNowOnNextRender = true;
         void this.render();
     }
 
@@ -236,6 +241,11 @@ export class ScheduleView extends ItemView {
         const bodyContainer = bodyScroll.createDiv('schedule-view__container schedule-view__scroll-content');
 
         await this.renderDayTimeline(fixedContainer, bodyContainer, this.currentDate, tasks);
+
+        if (this.scrollToNowOnNextRender) {
+            this.scrollToNowOnNextRender = false;
+            requestAnimationFrame(() => this.scrollToCurrentTime());
+        }
     }
 
     private renderToolbar(parent: HTMLElement): void {
@@ -245,9 +255,11 @@ export class ScheduleView extends ItemView {
             (days) => this.navigateDate(days),
             () => {
                 this.currentDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+                this.scrollToNowOnNextRender = true;
                 void this.app.workspace.requestSaveLayout();
                 void this.render();
-            }
+            },
+            { label: 'Now' }
         );
 
         toolbar.createDiv('view-toolbar__spacer');
@@ -264,6 +276,7 @@ export class ScheduleView extends ItemView {
                     filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
                 },
                 getTasks: () => this.taskIndex.getTasks(),
+                getStartHour: () => this.plugin.settings.startHour,
             });
         });
 
@@ -423,6 +436,22 @@ export class ScheduleView extends ItemView {
 
     private isCurrentVisualDate(dateStr: string): boolean {
         return dateStr === DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+    }
+
+    /** Scrolls the schedule body to center the now-line vertically. */
+    private scrollToCurrentTime(): void {
+        if (!this.isCurrentVisualDate(this.currentDate)) return;
+        const bodyScroll = this.container.querySelector('.schedule-view__body-scroll') as HTMLElement | null;
+        if (!bodyScroll) return;
+        const nowLine = bodyScroll.querySelector('.schedule-grid__now-line') as HTMLElement | null;
+        if (!nowLine) return;
+
+        const nowTopPx = parseFloat(nowLine.style.top);
+        if (isNaN(nowTopPx)) return;
+        const grid = nowLine.parentElement;
+        if (!grid) return;
+
+        bodyScroll.scrollTop = (grid.offsetTop + nowTopPx) - bodyScroll.clientHeight / 2;
     }
 
     private isValidDateKey(value: string): boolean {

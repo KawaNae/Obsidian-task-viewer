@@ -154,6 +154,16 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
+        new Setting(el)
+            .setName('Reuse Existing Tab')
+            .setDesc('When opening a file from a task card, switch to the existing tab if the file is already open, instead of opening a new tab.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.reuseExistingTab)
+                .onChange(async (value) => {
+                    this.plugin.settings.reuseExistingTab = value;
+                    await this.plugin.saveSettings();
+                }));
+
         // Child Tasks
         el.createEl('h3', { text: 'Child Tasks', cls: 'setting-section-header' });
 

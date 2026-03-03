@@ -210,21 +210,21 @@ export class TimelineSectionRenderer {
                     this.showEmptySpaceMenu(touchStartX, touchStartY, offsetY, date);
                 }, this.plugin.settings.longPressThreshold);
             }
-        });
+        }, { passive: true });
 
         col.addEventListener('touchend', () => {
             if (touchTimer) {
                 clearTimeout(touchTimer);
                 touchTimer = null;
             }
-        });
+        }, { passive: true });
 
         col.addEventListener('touchmove', () => {
             if (touchTimer) {
                 clearTimeout(touchTimer);
                 touchTimer = null;
             }
-        });
+        }, { passive: true });
     }
 
     private handleCreateTaskTrigger(offsetY: number, date: string) {

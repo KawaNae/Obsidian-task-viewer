@@ -82,19 +82,20 @@ export class CreateTaskModal extends Modal {
         contentEl.createEl('h2', { text: this.options.title ?? 'Create New Task' });
 
         // --- Task Name ---
-        new Setting(contentEl)
-            .setName('Task Name')
-            .addText((text) => {
-                text.setValue(this.result.content ?? '');
-                text.onChange((value) => {
-                    this.result.content = value;
-                    this.validateInputs();
-                });
-                text.inputEl.addEventListener('keydown', (e: KeyboardEvent) => {
-                    if (e.key === 'Enter') this.submit();
-                });
-                this.nameInput = text.inputEl;
-            });
+        const nameSection = contentEl.createDiv({ cls: 'create-task-modal__name-section' });
+        nameSection.createEl('label', { text: 'Task Name' });
+        this.nameInput = nameSection.createEl('input', {
+            type: 'text',
+            cls: 'create-task-modal__text-input',
+        });
+        this.nameInput.value = this.result.content ?? '';
+        this.nameInput.addEventListener('input', () => {
+            this.result.content = this.nameInput.value;
+            this.validateInputs();
+        });
+        this.nameInput.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key === 'Enter') this.submit();
+        });
 
         // --- Start ---
         this.renderDateTimeSection(

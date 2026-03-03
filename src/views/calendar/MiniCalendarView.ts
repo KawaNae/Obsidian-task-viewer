@@ -44,7 +44,7 @@ export class MiniCalendarView extends ItemView {
         super(leaf);
         this.taskIndex = taskIndex;
         this.plugin = plugin;
-        this.linkInteractionManager = new TaskLinkInteractionManager(this.app);
+        this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
 
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -469,7 +469,7 @@ export class MiniCalendarView extends ItemView {
             const nextOffset = this.pendingWeekOffset;
             this.pendingWeekOffset = 0;
             if (!this.isAnimating) {
-                this.navigateWeek(nextOffset);
+                requestAnimationFrame(() => this.navigateWeek(nextOffset));
             }
         }, 50);
     }
