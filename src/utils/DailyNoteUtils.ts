@@ -20,6 +20,29 @@ export class DailyNoteUtils {
         return { format: 'YYYY-MM-DD', folder: '', template: '' };
     }
 
+    /**
+     * ファイルパスからデイリーノートの日付を抽出する。
+     * デイリーノートでなければ null を返す。
+     */
+    static parseDateFromFilePath(app: App, filePath: string): string | null {
+        const settings = this.getDailyNoteSettings(app);
+        const folder = settings.folder ? settings.folder + '/' : '';
+
+        // フォルダが一致するかチェック
+        if (folder && !filePath.startsWith(folder)) return null;
+
+        // ファイル名（拡張子なし）を取得
+        const relativePath = folder ? filePath.slice(folder.length) : filePath;
+        const fileName = relativePath.replace(/\.md$/, '');
+
+        // サブフォルダ内のファイルは除外（デイリーノートはフォルダ直下のみ）
+        if (fileName.includes('/')) return null;
+
+        // moment で strict パース
+        const m = moment(fileName, settings.format, true);
+        return m.isValid() ? m.format('YYYY-MM-DD') : null;
+    }
+
     static getDailyNotePath(date: Date, settings: { format: string, folder: string }): string {
         const dateStr = moment(date).format(settings.format);
         const folder = settings.folder ? `${settings.folder}/` : '';

@@ -49,7 +49,7 @@ export interface Task {
     endTime?: string;
     deadline?: string;
 
-    // True when startDate/startTime were inherited from parent.
+    // True when startDate was inherited from the daily note filename.
     startDateInherited?: boolean;
 
     // Explicitly written markers for UI styling.
