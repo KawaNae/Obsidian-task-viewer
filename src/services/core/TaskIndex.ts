@@ -251,6 +251,16 @@ export class TaskIndex {
         );
     }
 
+    getTaskLineNumbersForFile(filePath: string): Set<number> {
+        const lines = new Set<number>();
+        for (const task of this.getTasks()) {
+            if (task.file === filePath && task.line >= 0) {
+                lines.add(task.line);
+            }
+        }
+        return lines;
+    }
+
     getTasksForDate(date: string, startHour?: number): Task[] {
         return this.store.getTasksForDate(date, startHour);
     }
