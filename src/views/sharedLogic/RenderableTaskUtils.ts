@@ -9,7 +9,7 @@ export interface RenderableTask extends Task {
     id: string;
     originalTaskId: string;
     isSplit: boolean;
-    splitSegment?: 'before' | 'after';
+    splitSegment?: 'head' | 'tail';
     _isReadOnly?: boolean;
 }
 
@@ -71,7 +71,7 @@ export function splitTaskAtBoundary(task: Task, startHour: number): [RenderableT
         id: TaskIdGenerator.makeSegmentId(task.id, beforeSegmentDate),
         originalTaskId: task.id,
         isSplit: true,
-        splitSegment: 'before',
+        splitSegment: 'head',
         endDate: boundaryDate,
         endTime: boundaryTime,
     };
@@ -81,7 +81,7 @@ export function splitTaskAtBoundary(task: Task, startHour: number): [RenderableT
         id: TaskIdGenerator.makeSegmentId(task.id, afterSegmentDate),
         originalTaskId: task.id,
         isSplit: true,
-        splitSegment: 'after',
+        splitSegment: 'tail',
         startDate: boundaryDate,
         startTime: boundaryTime,
     };

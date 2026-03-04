@@ -189,7 +189,7 @@ export class CalendarView extends ItemView {
     async onOpen(): Promise<void> {
         this.container = this.contentEl;
         this.container.empty();
-        this.container.addClass('calendar-view-container');
+        this.container.addClass('calendar-view');
         this.sidebarManager.attach(this.container, (el, ev, handler) =>
             this.registerDomEvent(el as any, ev as any, handler),
         );
@@ -570,6 +570,7 @@ export class CalendarView extends ItemView {
         dateLink.setAttribute('href', linkTarget);
         dateLink.addEventListener('click', (event: MouseEvent) => {
             event.preventDefault();
+            void this.openOrCreateDailyNote(date);
         });
 
         this.linkInteractionManager.bind(header, {
@@ -577,10 +578,6 @@ export class CalendarView extends ItemView {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             hoverParent: this.leaf as HoverParent,
         }, { bindClick: false });
-
-        header.addEventListener('click', () => {
-            void this.openOrCreateDailyNote(date);
-        });
     }
 
     private async renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: Task[]): Promise<void> {
@@ -598,14 +595,26 @@ export class CalendarView extends ItemView {
             computeDeadlines: true,
         });
 
-        const columnOffset = this.getColumnOffset();
-        const gridRowOffset = 2;
+        // Set grid-template-rows based on track count
+        let maxTrackIndex = -1;
+        for (const entry of entries) {
+            if (entry.trackIndex > maxTrackIndex) maxTrackIndex = entry.trackIndex;
+        }
+        if (maxTrackIndex >= 0) {
+            const trackCount = maxTrackIndex + 1;
+            weekRow.style.gridTemplateRows = `var(--calendar-header-height) repeat(${trackCount}, var(--calendar-track-height))`;
+        }
+
+        const colOffset = getColumnOffset(this.shouldShowWeekNumbers());
 
         for (const entry of entries) {
-            await this.renderGridTask(weekRow, entry, entry.trackIndex + gridRowOffset);
+            await this.renderGridTask(weekRow, entry, colOffset);
 
             if (entry.deadlineArrow) {
-                renderDeadlineArrow(weekRow, entry, gridRowOffset, columnOffset);
+                renderDeadlineArrow(weekRow, entry, {
+                    gridRowOffset: 2,
+                    gridColOffset: colOffset,
+                });
             }
         }
     }
@@ -633,49 +642,51 @@ export class CalendarView extends ItemView {
         return getTaskDateRange(task, this.plugin.settings.startHour);
     }
 
-    private async renderGridTask(weekRow: HTMLElement, entry: GridTaskEntry, gridRow: number): Promise<void> {
-        const columnOffset = this.getColumnOffset();
-        const displayColStart = entry.colStart + columnOffset;
+    private async renderGridTask(
+        weekRow: HTMLElement,
+        entry: GridTaskEntry,
+        colOffset: number,
+    ): Promise<void> {
+        const applyGridPosition = (el: HTMLElement) => {
+            el.style.gridColumn = `${entry.colStart + colOffset} / span ${entry.span}`;
+            el.style.gridRow = `${entry.trackIndex + 2}`;
+            el.dataset.colStart = `${entry.colStart}`;
+            el.dataset.span = `${entry.span}`;
+            el.dataset.trackIndex = `${entry.trackIndex}`;
+        };
 
         if (entry.isMultiDay) {
-            const barEl = weekRow.createDiv('task-card calendar-task-card calendar-multiday-bar');
+            const barEl = weekRow.createDiv('task-card task-card--multi-day');
             barEl.dataset.id = entry.segmentId;
-            barEl.addClass('task-card--allday');
-            barEl.addClass('task-card--multi-day');
             if (entry.continuesBefore || entry.continuesAfter) {
                 barEl.dataset.splitOriginalId = entry.task.id;
             }
-            barEl.style.gridColumn = `${displayColStart} / span ${entry.span}`;
-            barEl.style.gridRow = `${gridRow}`;
+            applyGridPosition(barEl);
 
             if (entry.continuesBefore && entry.continuesAfter) {
-                barEl.addClass('calendar-multiday-bar--middle');
+                barEl.addClass('task-card--split-middle');
             } else if (entry.continuesAfter) {
-                barEl.addClass('calendar-multiday-bar--head');
+                barEl.addClass('task-card--split-head');
             } else if (entry.continuesBefore) {
-                barEl.addClass('calendar-multiday-bar--tail');
+                barEl.addClass('task-card--split-tail');
             }
 
             TaskStyling.applyTaskColor(barEl, entry.task.color ?? null);
             TaskStyling.applyTaskLinestyle(barEl, entry.task.linestyle ?? null);
 
             this.menuHandler.addTaskContextMenu(barEl, entry.task);
-            await this.taskRenderer.render(barEl, entry.task, this, this.plugin.settings, { topRight: 'none' });
+            await this.taskRenderer.render(barEl, entry.task, this, this.plugin.settings, { topRight: 'none', compact: true });
             return;
         }
 
-        const card = weekRow.createDiv('task-card calendar-task-card');
+        const card = weekRow.createDiv('task-card');
         card.dataset.id = entry.task.id;
-        if (!entry.task.startTime) {
-            card.addClass('task-card--allday');
-        }
-        card.style.gridColumn = `${displayColStart} / span ${entry.span}`;
-        card.style.gridRow = `${gridRow}`;
+        applyGridPosition(card);
 
         TaskStyling.applyTaskColor(card, entry.task.color ?? null);
         TaskStyling.applyTaskLinestyle(card, entry.task.linestyle ?? null);
         this.menuHandler.addTaskContextMenu(card, entry.task);
-        await this.taskRenderer.render(card, entry.task, this, this.plugin.settings);
+        await this.taskRenderer.render(card, entry.task, this, this.plugin.settings, { compact: true });
     }
 
     private isTaskCompleted(task: Task): boolean {

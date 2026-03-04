@@ -32,7 +32,10 @@
     scrollbar-width: none;
 }
 
-/* Accent Border */
+/* ==========================================================================
+   2. ACCENT BORDER (::before linestyle variants)
+   ========================================================================== */
+
 .task-card::before {
     content: '';
     position: absolute;
@@ -45,7 +48,6 @@
     border-radius: 4px 0 0 4px;
 }
 
-/* Accent Border Variants by tv-linestyle */
 .task-card[data-file-linestyle='solid']::before {
     width: var(--task-card-accent-solid-width, 4px);
     background-color: var(--file-accent, var(--tv-accent));
@@ -100,184 +102,7 @@
 }
 
 /* ==========================================================================
-   2. CONTEXT VARIANTS (View-specific overrides)
-   ========================================================================== */
-
-/* Timeline View: Absolute Positioning for time-based placement */
-.timeline-view .task-card {
-    position: absolute;
-}
-
-/* Timeline View timed tasks: derive placement from logical minutes and --hour-height */
-.timeline-view .day-timeline-column > .task-card {
-    top: calc(var(--start-minutes, 0) * var(--hour-height) / 60 + 1px);
-    height: max(0px, calc(var(--duration-minutes, 0) * var(--hour-height) / 60 - 3px));
-}
-
-/* Enable container query on timeline timed cards */
-.timeline-view .day-timeline-column > .task-card {
-    container-type: size;
-}
-
-/* Short timeline cards: hide time label and reduce spacing */
-@container (max-height: 32px) {
-    .task-card__time {
-        display: none;
-    }
-    .task-card .task-card__content {
-        margin-top: 0;
-    }
-}
-
-
-/* Timeline View: AllDay needs relative (Grid-based) */
-.timeline-view .task-card.task-card--allday {
-    position: relative;
-}
-
-/* ==========================================================================
-   3. MODIFIERS (--variant)
-   ========================================================================== */
-
-/* AllDay Task Card */
-.task-card.task-card--allday {
-    position: relative;
-    left: 4px;
-    width: calc(100% - 8px);
-    padding: 4px 2px 4px 8px;
-    z-index: var(--z-task-card-allday);
-}
-
-.task-card.task-card--allday > .task-card__content {
-    margin-top: 0;
-}
-
-.task-card--allday.task-card--multi-day {
-    height: auto !important;
-}
-
-/* Future Task Card */
-.task-card--future {
-    position: relative !important;
-    top: auto !important;
-    left: auto !important;
-    width: 100% !important;
-    height: auto !important;
-    margin-bottom: 0 !important;
-    transform: none !important;
-    min-height: auto;
-    min-width: 0;
-    overflow: visible;
-}
-
-/* Sidebar Task Card (Pinned Lists) */
-.pinned-list .task-card {
-    position: relative;
-    top: auto;
-    left: auto;
-    width: 100%;
-    height: auto;
-    margin-bottom: var(--task-card-gap);
-    transform: none;
-    min-height: auto;
-    overflow: visible;
-}
-
-/* Inherited Task Card - use the same accent border style as standard cards. */
-
-/* Split Task Cards - tasks that cross day boundary */
-.task-card--split {
-    /* Reset default border to ensure we only style the cut edges */
-    border-style: none;
-    border-width: 0;
-}
-
-/* Before segment - Cut is at the bottom */
-.task-card--split-before {
-    /* Dashed border at the bottom to indicate continuation */
-    border-bottom: 2px dashed var(--file-accent, var(--tv-accent));
-    /* Square off bottom corners */
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-}
-
-/* Square off the bottom-left of the accent border */
-.task-card--split-before::before {
-    border-bottom-left-radius: 0;
-}
-
-/* After segment - Cut is at the top */
-.task-card--split-after {
-    /* Dashed border at the top to indicate continuation */
-    border-top: 2px dashed var(--file-accent, var(--tv-accent));
-    /* Square off top corners */
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
-}
-
-/* Square off the top-left of the accent border */
-.task-card--split-after::before {
-    border-top-left-radius: 0;
-}
-
-/* ==========================================================================
-   4. STATES (:hover, .selected, .is-dragging)
-   ========================================================================== */
-
-.task-card:hover {
-    filter: brightness(0.95);
-}
-
-.task-card.is-dragging {
-    opacity: 0.5;
-    cursor: grabbing;
-}
-
-/* Drag Ghost Task Card */
-.task-card--drag-ghost {
-    position: fixed;
-    z-index: var(--z-task-card-drag-ghost);
-    pointer-events: none;
-    opacity: 0.8;
-    box-shadow: 0 4px 12px var(--tv-ghost-shadow);
-    border-radius: var(--tv-radius-s);
-    transition: opacity 0.15s ease;
-}
-
-.task-card--drag-ghost .task-card__handle {
-    display: none;
-}
-
-/* Selection Border using ::after */
-.task-card.selected::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border: 2px solid var(--file-accent, var(--tv-accent));
-    border-radius: var(--task-card-border-radius);
-    pointer-events: none;
-    z-index: 5;
-    /* Above content background but below context menus if any */
-}
-
-/* For split cards: remove selection border on the cut side */
-.task-card--split-before.selected::after {
-    border-bottom: none;
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-}
-
-.task-card--split-after.selected::after {
-    border-top: none;
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
-}
-
-/* ==========================================================================
-   5. ELEMENTS (__element)
+   3. ELEMENTS (__element)
    ========================================================================== */
 
 /* --- Content Container --- */
@@ -290,20 +115,20 @@
 
 .task-card__content>ul,
 .task-card__content>ol {
-    padding-inline-start: 1.9em;
+    padding-inline-start: 30px;
 }
 
 .task-card__content li>ul,
 .task-card__content li>ol {
-    padding-inline-start: 1.5em;
+    padding-inline-start: 24px;
 }
 
 .task-card__content p,
 .task-card__content ul,
 .task-card__content ol,
 .task-card__content li {
-    margin-block-start: 0.2em;
-    margin-block-end: 0.2em;
+    margin-block-start: 7px;
+    margin-block-end: 7px;
 }
 
 .task-card__content .task-list-item {
@@ -334,8 +159,83 @@
     text-align: right;
 }
 
+/* --- Children Toggle --- */
+.task-card__children-toggle {
+    cursor: pointer;
+    color: var(--tv-text-muted);
+    font-size: 0.85em;
+    padding: 4px 0 2px 1.5em;
+    user-select: none;
+}
+
+.task-card__children-toggle:hover {
+    color: var(--tv-text);
+    background-color: var(--tv-bg-hover);
+}
+
+.task-card__children-toggle-icon {
+    font-size: 0.8em;
+    margin-right: 4px;
+}
+
+.task-card__children--collapsed {
+    display: none;
+}
+
+.task-card__children--expanded {
+    display: block;
+    margin-top: 4px;
+}
+
+/* --- Child Notation --- */
+.task-card__child-notation {
+    font-size: 0.8em;
+    color: var(--tv-text-muted);
+    margin-left: 0.4em;
+}
+
+.task-card__child-badge {
+    font-size: 0.75em;
+    color: var(--tv-text-muted);
+    padding: 0 4px;
+    white-space: nowrap;
+}
+
+/* Child task menu button */
+.task-card .task-card__child-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin-left: 0.3em;
+    padding: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    border: 1px solid transparent;
+    box-shadow: none;
+    cursor: pointer;
+    border-radius: var(--tv-radius-s);
+    vertical-align: middle;
+    color: var(--tv-text-muted);
+    opacity: 0.6;
+    transition: color 120ms ease, opacity 120ms ease;
+}
+
+.task-card .task-card__child-menu-btn:hover {
+    opacity: 1;
+    color: var(--tv-text);
+    background-color: var(--tv-bg-hover);
+}
+
+.task-card .task-card__child-menu-btn .svg-icon {
+    width: 12px;
+    height: 12px;
+}
+
 /* ==========================================================================
-   6. HANDLES (Resize/Move Controls)
+   4. HANDLES (Resize/Move Controls)
    ========================================================================== */
 
 .task-card__handle {
@@ -345,15 +245,6 @@
     align-items: center;
     justify-content: center;
     pointer-events: auto;
-}
-
-/* Higher z-index for handles in specific contexts */
-.task-card--allday .task-card__handle {
-    z-index: var(--z-task-card-allday-handle);
-}
-
-.task-card--future .task-card__handle {
-    z-index: var(--z-task-card-future-handle);
 }
 
 .task-card__handle--resize-top {
@@ -437,7 +328,181 @@
 }
 
 /* ==========================================================================
-   7. DEADLINE VISUALIZATION
+   5. SCROLLBAR
+   ========================================================================== */
+
+.task-card::-webkit-scrollbar,
+.task-card__content::-webkit-scrollbar {
+    display: none;
+}
+
+/* ==========================================================================
+   6. MODIFIERS (--variant)
+   ========================================================================== */
+
+/* --- Split (cross-day boundary) --- */
+.task-card--split {
+    border-style: none;
+    border-width: 0;
+}
+
+.task-card--split-head {
+    border-bottom: 2px dashed var(--file-accent, var(--tv-accent));
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.task-card--split-head::before {
+    border-bottom-left-radius: 0;
+}
+
+.task-card--split-tail {
+    border-top: 2px dashed var(--file-accent, var(--tv-accent));
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+.task-card--split-tail::before {
+    border-top-left-radius: 0;
+}
+
+/* --- Drag Preview --- */
+.task-card--drag-preview {
+    pointer-events: none !important;
+    opacity: 0.82;
+    z-index: 10;
+}
+
+.task-card--drag-preview::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 2px solid var(--file-accent, var(--tv-accent));
+    border-radius: var(--task-card-border-radius);
+    pointer-events: none;
+}
+
+.task-card--drag-preview .task-card__handle {
+    display: none !important;
+}
+
+/* --- Drag Ghost --- */
+.task-card--drag-ghost {
+    position: fixed;
+    z-index: var(--z-task-card-drag-ghost);
+    pointer-events: none;
+    opacity: 0.8;
+    box-shadow: 0 4px 12px var(--tv-ghost-shadow);
+    border-radius: var(--tv-radius-s);
+    transition: opacity 0.15s ease;
+}
+
+.task-card--drag-ghost .task-card__handle {
+    display: none;
+}
+
+/* ==========================================================================
+   7. STATES (:hover, .selected, .is-dragging)
+   ========================================================================== */
+
+.task-card:hover {
+    filter: brightness(0.95);
+}
+
+.task-card.is-dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+/* Selection Border using ::after */
+.task-card.selected::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 2px solid var(--file-accent, var(--tv-accent));
+    border-radius: var(--task-card-border-radius);
+    pointer-events: none;
+    z-index: 5;
+}
+
+.task-card--split-head.selected::after {
+    border-bottom: none;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.task-card--split-tail.selected::after {
+    border-top: none;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+/* ==========================================================================
+   8. CONTEXT VARIANTS (View-specific overrides)
+   ========================================================================== */
+
+/* --- Timeline View --- */
+.timeline-view .task-card {
+    position: absolute;
+}
+
+.timeline-view .day-timeline-column > .task-card {
+    top: calc(var(--start-minutes, 0) * var(--hour-height) / 60 + 1px);
+    height: max(0px, calc(var(--duration-minutes, 0) * var(--hour-height) / 60 - 3px));
+    container-type: size;
+}
+
+@container (max-height: 32px) {
+    .task-card__time {
+        display: none;
+    }
+    .task-card .task-card__content {
+        margin-top: 0;
+    }
+}
+
+/* --- Timeline AllDay --- */
+.timeline-view .allday-section .task-card {
+    position: relative;
+    left: 4px;
+    width: calc(100% - 8px);
+    padding: 4px 2px 4px 8px;
+    z-index: var(--z-task-card-allday);
+}
+
+.timeline-view .allday-section .task-card > .task-card__content {
+    margin-top: 0;
+}
+
+.timeline-view .allday-section .task-card--multi-day {
+    height: auto !important;
+}
+
+.timeline-view .allday-section .task-card__handle {
+    z-index: var(--z-task-card-allday-handle);
+}
+
+/* --- Pinned Lists --- */
+.pinned-list .task-card {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 100%;
+    height: auto;
+    margin-bottom: var(--task-card-gap);
+    transform: none;
+    min-height: auto;
+    overflow: visible;
+}
+
+/* ==========================================================================
+   9. DEADLINE VISUALIZATION
    ========================================================================== */
 
 .deadline-arrow {
@@ -473,88 +538,5 @@
 }
 
 .deadline-arrow--clipped::before {
-    display: none;
-}
-
-/* ==========================================================================
-   8. COLLAPSIBLE CHILDREN
-   ========================================================================== */
-
-.task-card__children-toggle {
-    cursor: pointer;
-    color: var(--tv-text-muted);
-    font-size: 0.85em;
-    padding: 4px 0 2px 1.5em;
-    user-select: none;
-}
-
-.task-card__children-toggle:hover {
-    color: var(--tv-text);
-    background-color: var(--tv-bg-hover);
-}
-
-.task-card__children-toggle-icon {
-    font-size: 0.8em;
-    margin-right: 4px;
-}
-
-/* Hidden state */
-.task-card__children--collapsed {
-    display: none;
-}
-
-/* Expanded state */
-.task-card__children--expanded {
-    display: block;
-    margin-top: 4px;
-}
-
-/* ==========================================================================
-   9. CHILD NOTATION & COMPACT CARD
-   ========================================================================== */
-
-/* Child @notation label — small muted text after checkbox content */
-.task-card__child-notation {
-    font-size: 0.8em;
-    color: var(--tv-text-muted);
-    margin-left: 0.4em;
-}
-
-/* Child task ⋯ menu button — replaces @notation for recognized tasks */
-.task-card .task-card__child-menu-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    margin-left: 0.3em;
-    padding: 0;
-    appearance: none;
-    -webkit-appearance: none;
-    background: transparent;
-    border: 1px solid transparent;
-    box-shadow: none;
-    cursor: pointer;
-    border-radius: var(--tv-radius-s);
-    vertical-align: middle;
-    color: var(--tv-text-muted);
-    opacity: 0.6;
-    transition: color 120ms ease, opacity 120ms ease;
-}
-
-.task-card .task-card__child-menu-btn:hover {
-    opacity: 1;
-    color: var(--tv-text);
-    background-color: var(--tv-bg-hover);
-}
-
-.task-card .task-card__child-menu-btn .svg-icon {
-    width: 12px;
-    height: 12px;
-}
-
-/* Hide scrollbars while preserving scroll ability */
-.task-card::-webkit-scrollbar,
-.task-card__content::-webkit-scrollbar {
     display: none;
 }

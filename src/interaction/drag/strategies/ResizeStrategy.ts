@@ -59,12 +59,12 @@ export class ResizeStrategy extends BaseDragStrategy {
             }
 
             // 分割タスクの無効なリサイズをブロック
-            if (this.resizeDirection === 'top' && el.classList.contains('task-card--split-after')) {
+            if (this.resizeDirection === 'top' && el.classList.contains('task-card--split-tail')) {
                 this.dragTask = null;
                 this.dragEl = null;
                 return;
             }
-            if (this.resizeDirection === 'bottom' && el.classList.contains('task-card--split-before')) {
+            if (this.resizeDirection === 'bottom' && el.classList.contains('task-card--split-head')) {
                 this.dragTask = null;
                 this.dragEl = null;
                 return;
@@ -256,13 +256,9 @@ export class ResizeStrategy extends BaseDragStrategy {
         this.initialDate = task.startDate || viewStartDate || DateUtils.getToday();
         this.initialEndDate = task.endDate || this.initialDate;
 
-        const gridCol = el.style.gridColumn;
-        const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
-        const displayStartCol = colMatch
-            ? parseInt(colMatch[1], 10)
-            : this.getCalendarColumnOffset(weekRow) + 1;
-        this.startCol = this.toCalendarDayColumn(displayStartCol, weekRow);
-        this.initialSpan = colMatch ? parseInt(colMatch[2], 10) : 1;
+        // Read position from data attributes
+        this.startCol = Number.parseInt(el.dataset.colStart || '1', 10);
+        this.initialSpan = Number.parseInt(el.dataset.span || '1', 10);
         this.initialGridColumn = el.style.gridColumn;
         this.calendarPreviewTargetDate = null;
         this.hiddenElements = [];
@@ -281,7 +277,7 @@ export class ResizeStrategy extends BaseDragStrategy {
         if (!this.dragEl) return;
 
         const sourceWeekRow = this.container as HTMLElement;
-        const columnOffset = this.getCalendarColumnOffset(sourceWeekRow);
+        const colOffset = this.getCalendarColumnOffset(sourceWeekRow);
         const sourceWeekStart = sourceWeekRow?.dataset.weekStart || context.getViewStartDate();
         const target = this.resolveCalendarPointerTarget(e.clientX, e.clientY, context);
         if (!target) {
@@ -305,7 +301,7 @@ export class ResizeStrategy extends BaseDragStrategy {
             this.clearCalendarPreviewGhosts();
             this.dragEl.style.opacity = '';
             const newSpan = Math.max(1, target.col - this.startCol + 1);
-            this.dragEl.style.gridColumn = `${this.startCol + columnOffset} / span ${newSpan}`;
+            this.dragEl.style.gridColumn = `${this.startCol + colOffset} / span ${newSpan}`;
         } else if (this.resizeDirection === 'left') {
             const boundedStart = target.targetDate > this.initialEndDate ? this.initialEndDate : target.targetDate;
             this.calendarPreviewTargetDate = boundedStart;
@@ -325,18 +321,14 @@ export class ResizeStrategy extends BaseDragStrategy {
             targetStartCol = Math.min(targetStartCol, currentEndCol);
             targetStartCol = Math.max(targetStartCol, 1);
             const newSpan = Math.max(1, currentEndCol - targetStartCol + 1);
-            this.dragEl.style.gridColumn = `${targetStartCol + columnOffset} / span ${newSpan}`;
+            this.dragEl.style.gridColumn = `${targetStartCol + colOffset} / span ${newSpan}`;
         }
     }
 
     private async finishCalendarResize(e: PointerEvent, context: DragContext) {
-        this.clearCalendarPreviewGhosts();
-        this.hiddenElements.forEach(el => el.style.opacity = '');
-        if (this.dragEl) {
-            this.dragEl.style.opacity = '';
-        }
-
         if (!this.dragTask || !this.dragEl) {
+            this.clearCalendarPreviewGhosts();
+            this.hiddenElements.forEach(el => el.style.opacity = '');
             this.cleanup();
             return;
         }
@@ -344,6 +336,9 @@ export class ResizeStrategy extends BaseDragStrategy {
         const target = this.resolveCalendarPointerTarget(e.clientX, e.clientY, context);
         const targetDate = this.calendarPreviewTargetDate || target?.targetDate;
         if (!targetDate) {
+            this.clearCalendarPreviewGhosts();
+            this.hiddenElements.forEach(el => el.style.opacity = '');
+            if (this.dragEl) this.dragEl.style.opacity = '';
             this.cleanup();
             return;
         }
@@ -365,9 +360,33 @@ export class ResizeStrategy extends BaseDragStrategy {
             }
         }
 
-        if (Object.keys(updates).length > 0) {
-            await context.taskIndex.updateTask(this.dragTask.id, updates);
+        if (Object.keys(updates).length === 0) {
+            this.clearCalendarPreviewGhosts();
+            this.hiddenElements.forEach(el => el.style.opacity = '');
+            if (this.dragEl) this.dragEl.style.opacity = '';
+            this.cleanup();
+            return;
         }
+
+        const taskIdToRestore = this.dragTask.id;
+        const containerRef = context.container;
+        const hiddenEls = [...this.hiddenElements];
+
+        await context.taskIndex.updateTask(this.dragTask.id, updates);
+
+        // DOM更新後にゴースト・opacity復元（再レンダリング完了を待つ）
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                this.clearCalendarPreviewGhosts();
+                hiddenEls.forEach(el => el.style.opacity = '');
+                const selector = `.task-card[data-id="${taskIdToRestore}"], .task-card[data-split-original-id="${taskIdToRestore}"]`;
+                containerRef.querySelectorAll(selector).forEach(el => {
+                    if (el instanceof HTMLElement) {
+                        el.style.opacity = '';
+                    }
+                });
+            });
+        });
 
         this.cleanup();
     }

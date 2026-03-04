@@ -34,15 +34,23 @@ export class TaskCardRenderer {
         task: Task,
         component: Component,
         settings: TaskViewerSettings,
-        options?: { topRight?: 'time' | 'deadline' | 'none' }
+        options?: { topRight?: 'time' | 'deadline' | 'none'; compact?: boolean }
     ): Promise<void> {
         const topRight = options?.topRight ?? 'time';
+        const compact = options?.compact ?? false;
+
         this.renderTopRightMeta(container, task, settings, topRight);
 
         const contentContainer = container.createDiv('task-card__content');
         const parentMarkdown = this.buildParentMarkdown(task, settings);
 
-        if (task.parserId === 'frontmatter') {
+        if (compact) {
+            await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
+            const childCount = this.getChildCount(task);
+            if (childCount > 0) {
+                container.createDiv('task-card__child-badge').setText(`▶ ${childCount}`);
+            }
+        } else if (task.parserId === 'frontmatter') {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
             await this.renderFrontmatterChildren(contentContainer, task, component, settings);
         } else if (task.childLines.length > 0) {
@@ -53,6 +61,13 @@ export class TaskCardRenderer {
 
         this.bindInternalLinks(contentContainer, task.file);
         this.bindParentCheckbox(contentContainer, task.id, settings);
+    }
+
+    private getChildCount(task: Task): number {
+        if (task.parserId === 'frontmatter') {
+            return task.childIds.length + task.childLines.length;
+        }
+        return task.childLines.length;
     }
 
     private renderTopRightMeta(

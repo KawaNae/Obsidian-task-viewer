@@ -342,13 +342,10 @@ export class MoveStrategy extends BaseDragStrategy {
         this.initialEndDate = task.endDate || this.initialDate;
         this.initialSpan = DateUtils.getDiffDays(this.initialDate, this.initialEndDate) + 1;
 
-        const gridCol = el.style.gridColumn;
-        const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
-        const displayStartCol = colMatch
-            ? parseInt(colMatch[1], 10)
-            : this.getCalendarColumnOffset(weekRow) + 1;
-        this.startCol = this.toCalendarDayColumn(displayStartCol, weekRow);
-        const span = colMatch ? parseInt(colMatch[2], 10) : 1;
+        // Read position from data attributes (absolute positioning)
+        const colStart = Number.parseInt(el.dataset.colStart || '1', 10);
+        const span = Number.parseInt(el.dataset.span || '1', 10);
+        this.startCol = colStart;
         const target = e.target as HTMLElement;
         if (target.closest('.task-card__handle--move-top-right')) {
             this.grabCol = Math.min(7, this.startCol + span - 1);
@@ -398,14 +395,10 @@ export class MoveStrategy extends BaseDragStrategy {
     private async finishCalendarMove(e: PointerEvent, context: DragContext) {
         removeGhostElement(this.ghostEl);
         this.ghostEl = null;
-        this.clearCalendarPreviewGhosts();
-        this.hiddenElements.forEach(el => el.style.opacity = '');
-        if (this.dragEl) {
-            this.dragEl.style.opacity = '';
-            this.dragEl.style.transform = '';
-        }
 
         if (!this.dragTask || !this.dragEl) {
+            this.clearCalendarPreviewGhosts();
+            this.hiddenElements.forEach(el => el.style.opacity = '');
             this.cleanup();
             return;
         }
@@ -420,6 +413,8 @@ export class MoveStrategy extends BaseDragStrategy {
         }
 
         if (dayDelta === 0) {
+            this.clearCalendarPreviewGhosts();
+            this.hiddenElements.forEach(el => el.style.opacity = '');
             this.cleanup();
             return;
         }
@@ -428,10 +423,28 @@ export class MoveStrategy extends BaseDragStrategy {
         const duration = DateUtils.getDiffDays(this.initialDate, this.initialEndDate);
         const newEnd = DateUtils.addDays(newStart, duration);
 
+        const taskIdToRestore = this.dragTask.id;
+        const containerRef = context.container;
+        const hiddenEls = [...this.hiddenElements];
+
         const updates: Partial<Task> = this.buildAllDayMoveUpdates(newStart, newEnd);
         if (Object.keys(updates).length > 0) {
             await context.taskIndex.updateTask(this.dragTask.id, updates);
         }
+
+        // DOM更新後にゴースト・opacity復元（再レンダリング完了を待つ）
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                this.clearCalendarPreviewGhosts();
+                hiddenEls.forEach(el => el.style.opacity = '');
+                const selector = `.task-card[data-id="${taskIdToRestore}"], .task-card[data-split-original-id="${taskIdToRestore}"]`;
+                containerRef.querySelectorAll(selector).forEach(el => {
+                    if (el instanceof HTMLElement) {
+                        el.style.opacity = '';
+                    }
+                });
+            });
+        });
 
         this.cleanup();
     }

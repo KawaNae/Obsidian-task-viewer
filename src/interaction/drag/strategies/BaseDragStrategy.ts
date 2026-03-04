@@ -104,65 +104,86 @@ export abstract class BaseDragStrategy implements DragStrategy {
     }
 
     protected updateCalendarSplitPreview(context: DragContext, rangeStart: string, rangeEnd: string): void {
-        if (!this.dragEl) {
-            return;
-        }
-
-        this.clearCalendarPreviewGhosts();
+        if (!this.dragEl) return;
 
         const start = rangeStart <= rangeEnd ? rangeStart : rangeEnd;
         const end = rangeStart <= rangeEnd ? rangeEnd : rangeStart;
-        const gridRow = this.extractGridRow(this.dragEl.style.gridRow);
+        const trackIndex = Number.parseInt(this.dragEl.dataset.trackIndex || '0', 10);
         const weekRows = this.getCalendarWeekRows(context);
-        if (weekRows.length === 0) {
-            return;
-        }
+        if (weekRows.length === 0) return;
 
+        // Compute desired segments
+        const segments: { weekRow: HTMLElement; colStart: number; span: number; splitClass: string }[] = [];
         for (const weekRow of weekRows) {
             const weekStart = weekRow.dataset.weekStart;
-            if (!weekStart) {
-                continue;
-            }
-
+            if (!weekStart) continue;
             const weekEnd = DateUtils.addDays(weekStart, 6);
-            if (start > weekEnd || end < weekStart) {
-                continue;
-            }
+            if (start > weekEnd || end < weekStart) continue;
 
             const segStart = start < weekStart ? weekStart : start;
             const segEnd = end > weekEnd ? weekEnd : end;
             const colStart = DateUtils.getDiffDays(weekStart, segStart) + 1;
             const span = DateUtils.getDiffDays(segStart, segEnd) + 1;
-            if (colStart < 1 || span < 1) {
-                continue;
-            }
-            const columnOffset = this.getCalendarColumnOffset(weekRow);
+            if (colStart < 1 || span < 1) continue;
 
             const continuesBefore = start < weekStart;
             const continuesAfter = end > weekEnd;
+            let splitClass = '';
+            if (continuesBefore && continuesAfter) splitClass = 'task-card--split-middle';
+            else if (continuesAfter) splitClass = 'task-card--split-head';
+            else if (continuesBefore) splitClass = 'task-card--split-tail';
 
-            const preview = this.dragEl.cloneNode(true) as HTMLElement;
-            preview.querySelectorAll('.task-card__handle').forEach((handle) => handle.remove());
-            preview.removeClass('selected', 'is-dragging');
-            preview.removeClass('calendar-multiday-bar--head', 'calendar-multiday-bar--middle', 'calendar-multiday-bar--tail');
-            preview.addClass('calendar-task-card--drag-preview');
-            preview.style.gridColumn = `${colStart + columnOffset} / span ${span}`;
-            preview.style.gridRow = `${gridRow}`;
-            preview.style.transform = '';
-            preview.style.opacity = '';
-            preview.style.zIndex = '1001';
-            preview.style.pointerEvents = 'none';
-            if (continuesBefore && continuesAfter) {
-                preview.addClass('calendar-multiday-bar--middle');
-            } else if (continuesAfter) {
-                preview.addClass('calendar-multiday-bar--head');
-            } else if (continuesBefore) {
-                preview.addClass('calendar-multiday-bar--tail');
+            segments.push({ weekRow, colStart, span, splitClass });
+        }
+
+        // Diff-update: reuse existing ghosts to avoid remove→append reflow jitter
+        const oldCount = this.calendarPreviewGhosts.length;
+        const newCount = segments.length;
+
+        for (let i = 0; i < Math.min(oldCount, newCount); i++) {
+            const ghost = this.calendarPreviewGhosts[i];
+            const seg = segments[i];
+            const colOffset = this.getCalendarColumnOffset(seg.weekRow);
+            if (ghost.parentElement !== seg.weekRow) {
+                seg.weekRow.appendChild(ghost);
             }
+            ghost.style.gridColumn = `${seg.colStart + colOffset} / span ${seg.span}`;
+            ghost.style.gridRow = `${trackIndex + 2}`;
+            ghost.removeClass('task-card--split-head', 'task-card--split-middle', 'task-card--split-tail');
+            if (seg.splitClass) ghost.addClass(seg.splitClass);
+        }
 
-            weekRow.appendChild(preview);
+        // Remove excess ghosts
+        for (let i = newCount; i < oldCount; i++) {
+            this.calendarPreviewGhosts[i].remove();
+        }
+
+        // Create missing ghosts
+        for (let i = oldCount; i < newCount; i++) {
+            const seg = segments[i];
+            const colOffset = this.getCalendarColumnOffset(seg.weekRow);
+            const preview = this.createPreviewGhost(seg.colStart, seg.span, trackIndex, colOffset, seg.splitClass);
+            seg.weekRow.appendChild(preview);
             this.calendarPreviewGhosts.push(preview);
         }
+
+        this.calendarPreviewGhosts.length = newCount;
+    }
+
+    private createPreviewGhost(colStart: number, span: number, trackIndex: number, colOffset: number, splitClass: string): HTMLElement {
+        const preview = this.dragEl!.cloneNode(true) as HTMLElement;
+        preview.querySelectorAll('.task-card__handle').forEach(h => h.remove());
+        preview.removeClass('selected', 'is-dragging');
+        preview.removeClass('task-card--split-head', 'task-card--split-middle', 'task-card--split-tail');
+        preview.addClass('task-card--drag-preview');
+        preview.style.gridColumn = `${colStart + colOffset} / span ${span}`;
+        preview.style.gridRow = `${trackIndex + 2}`;
+        preview.style.transform = '';
+        preview.style.opacity = '';
+        preview.style.zIndex = '1001';
+        preview.style.pointerEvents = 'none';
+        if (splitClass) preview.addClass(splitClass);
+        return preview;
     }
 
     protected clearCalendarPreviewGhosts(): void {
@@ -170,11 +191,6 @@ export abstract class BaseDragStrategy implements DragStrategy {
             ghost.remove();
         }
         this.calendarPreviewGhosts = [];
-    }
-
-    protected extractGridRow(gridRowStyle: string): number {
-        const parsed = Number.parseInt(gridRowStyle, 10);
-        return Number.isFinite(parsed) && parsed > 0 ? parsed : 2;
     }
 
     protected getCalendarWeekRows(context: DragContext): HTMLElement[] {

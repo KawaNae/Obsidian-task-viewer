@@ -173,7 +173,7 @@ export class ScheduleView extends ItemView {
     async onOpen(): Promise<void> {
         this.container = this.contentEl;
         this.container.empty();
-        this.container.addClass('schedule-view-container');
+        this.container.addClass('schedule-view');
 
         if (!this.currentDate) {
             this.currentDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);

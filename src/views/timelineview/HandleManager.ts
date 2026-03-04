@@ -122,18 +122,18 @@ export class HandleManager {
             const isAllDay = taskEl.classList.contains('task-card--allday');
 
             // Split checks
-            const isSplitBefore = taskEl.classList.contains('task-card--split-before');
-            const isSplitAfter = taskEl.classList.contains('task-card--split-after');
+            const isSplitHead = taskEl.classList.contains('task-card--split-head');
+            const isSplitTail = taskEl.classList.contains('task-card--split-tail');
 
             // --- Render Handles ---
             if (isCalendar) {
-                const isMiddle = taskEl.classList.contains('calendar-multiday-bar--middle');
+                const isMiddle = taskEl.classList.contains('task-card--split-middle');
                 if (isMiddle) {
                     return;
                 }
 
-                const isHead = taskEl.classList.contains('calendar-multiday-bar--head');
-                const isTail = taskEl.classList.contains('calendar-multiday-bar--tail');
+                const isHead = taskEl.classList.contains('task-card--split-head');
+                const isTail = taskEl.classList.contains('task-card--split-tail');
 
                 // Left edge = start
                 if (!isTail) {
@@ -158,10 +158,10 @@ export class HandleManager {
 
                 // 1. Check if touching Top Boundary (Start Hour)
                 // Logic: If task startTime matches startHour:00 exactly, it touches the top.
-                // However, visually, 'split-after' ALWAYS touches the top.
+                // However, visually, 'split-tail' ALWAYS touches the top.
                 // But user requirement says: "Boundary touching tasks" -> Hide Top Handles.
-                // For a split-after task, it effectively starts at StartHour.
-                // So split-after should HIDE Top Resize & Top Move.
+                // For a split-tail task, it effectively starts at StartHour.
+                // So split-tail should HIDE Top Resize & Top Move.
 
                 // Let's rely on time check for generic case, and class for split case if easier.
                 // But time check is more robust for non-split tasks that just happen to start at boundary.
@@ -170,14 +170,14 @@ export class HandleManager {
                 const [startH, startM] = (task.startTime || '00:00').split(':').map(Number);
 
                 // Touching Top Boundary if:
-                // 1. It is a 'split-after' segment (always starts at boundary)
+                // 1. It is a 'split-tail' segment (always starts at boundary)
                 // 2. OR it starts exactly at StartHour:00 (for normal tasks)
-                const isTouchingTop = isSplitAfter || (startH === startHour && startM === 0);
+                const isTouchingTop = isSplitTail || (startH === startHour && startM === 0);
 
                 // Check if touching Bottom Boundary (Next Start Hour)
                 // Logic: If task ends exactly at next day's StartHour:00
-                // 'split-before' segment always ends at boundary.
-                let isTouchingBottom = isSplitBefore;
+                // 'split-head' segment always ends at boundary.
+                let isTouchingBottom = isSplitHead;
 
                 if (!isTouchingBottom && task.endTime) {
                     const [endH, endM] = task.endTime.split(':').map(Number);

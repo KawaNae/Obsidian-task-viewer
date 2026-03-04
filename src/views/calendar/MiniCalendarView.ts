@@ -492,12 +492,18 @@ export class MiniCalendarView extends ItemView {
         const yearEl = this.container?.querySelector('.mini-calendar-toolbar__year');
 
         if (monthEl instanceof HTMLElement) {
-            monthEl.setText(`${String(referenceMonth.month + 1).padStart(2, '0')}`);
+            const monthLink = monthEl.querySelector('.internal-link');
+            if (monthLink) {
+                monthLink.textContent = String(referenceMonth.month + 1).padStart(2, '0');
+            }
             monthEl.toggleClass('is-current', isCurrentMonth);
         }
 
         if (yearEl instanceof HTMLElement) {
-            yearEl.setText(`${referenceMonth.year}`);
+            const yearLink = yearEl.querySelector('.internal-link');
+            if (yearLink) {
+                yearLink.textContent = `${referenceMonth.year}`;
+            }
             yearEl.toggleClass('is-current', isCurrentYear);
         }
     }

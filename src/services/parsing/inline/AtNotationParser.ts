@@ -4,6 +4,19 @@ import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
 import { TaskIdGenerator } from '../../../utils/TaskIdGenerator';
 import { TagExtractor } from '../../../utils/TagExtractor';
 
+interface DateBlockResult {
+    date: string;
+    startTime?: string;
+    endDate?: string;
+    endTime?: string;
+    deadline?: string;
+    explicitStartDate: boolean;
+    explicitStartTime: boolean;
+    explicitEndDate: boolean;
+    explicitEndTime: boolean;
+    validationWarning?: string;
+}
+
 /**
  * Task Viewer native notation parser.
  * Supports: @start>end>deadline format with time support.
@@ -19,15 +32,12 @@ export class AtNotationParser implements ParserStrategy {
     // Rejects non-date @ patterns like @user, @notation
     private static readonly DATE_BLOCK_REGEX =
         /(@(?=[\d>T])(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|T?\d{2}:\d{2})?(?:>(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|\d{2}:\d{2})?)*)/;
-
-
     // Regex for Command: Name(Args)
     private static readonly COMMAND_REGEX = /([a-zA-Z0-9_]+)\((.*?)\)((?:\.[a-zA-Z0-9_]+\(.*?\))*)/g;
     private static readonly MODIFIER_REGEX = /\.([a-zA-Z0-9_]+)\((.*?)\)/g;
 
     parse(line: string, filePath: string, lineNumber: number): Task | null {
         // Extract trailing block ID (^id) before parsing task structure.
-        // Keep original line unchanged in task.originalText.
         let lineForParse = line;
         let blockId: string | undefined;
         let timerTargetId: string | undefined;
@@ -40,7 +50,7 @@ export class AtNotationParser implements ParserStrategy {
             lineForParse = lineForParse.slice(0, blockIdMatch.index).trimEnd();
         }
 
-        // 1. Split Flow (==>)
+        // 1. Split flow commands (==>)
         const flowSplit = lineForParse.split(/==>(.+)/);
         const taskPart = flowSplit[0];
         const flowPart = flowSplit[1] || '';
@@ -50,142 +60,42 @@ export class AtNotationParser implements ParserStrategy {
             return null;
         }
 
-        const [, indent, statusChar, rawContent] = match;
+        const [, , statusChar, rawContent] = match;
 
-        // Extraction
+        // 2. Parse flow commands
+        const commands = flowPart ? this.parseFlowCommands(flowPart) : [];
+
+        // 3. Parse date block (@start>end>deadline)
         let content = rawContent;
         let date = '';
         let startTime: string | undefined;
-        let endTime: string | undefined;
         let endDate: string | undefined;
+        let endTime: string | undefined;
         let deadline: string | undefined;
-
-        let commands: FlowCommand[] = [];
-        let validationWarning: string | undefined;
-
-        // Explicit field flags - track which fields were explicitly written
         let explicitStartDate = false;
         let explicitStartTime = false;
         let explicitEndDate = false;
         let explicitEndTime = false;
+        let validationWarning: string | undefined;
 
-        // 2. Parse Flow Commands if present
-        if (flowPart) {
-            commands = this.parseFlowCommands(flowPart);
+        const dateBlock = this.parseDateBlock(rawContent);
+        if (dateBlock) {
+            ({ date, startTime, endDate, endTime, deadline,
+               explicitStartDate, explicitStartTime, explicitEndDate, explicitEndTime,
+               validationWarning } = dateBlock.fields);
+            content = dateBlock.content;
         }
 
-        // 3. Extract Date Block
-        const dateBlockMatch = content.match(AtNotationParser.DATE_BLOCK_REGEX);
-
-        if (dateBlockMatch) {
-            const fullDateBlock = dateBlockMatch[1];
-            content = content.replace(fullDateBlock, '').trim();
-
-            const rawBlock = fullDateBlock.substring(1); // Remove leading @
-
-            // Split by '>'
-            const parts = rawBlock.split('>');
-
-            const rawStart = parts[0];
-            const rawEnd = parts[1];
-            const rawDeadline = parts[2];
-
-            // --- 0. Start ---
-            if (rawStart === '') {
-
-                // Empty Start (@>...)
-                // Do NOT set date = today. Leave undefined to indicate implicit start at Today.
-                // date = undefined;
-            } else {
-                const parsed = this.parseDateTime(rawStart);
-                if (parsed.date) {
-                    date = parsed.date;
-                    explicitStartDate = true;
-                }
-                if (parsed.time) {
-                    startTime = parsed.time;
-                    explicitStartTime = true;
-                }
-                if (!parsed.date) {
-                    // If only time provided? Implies Today?
-                    // Let's assume undefined logic applies here too if we want dynamic "Today"
-                    // BUT legacy behavior might expect fixed date?
-                    // Actually, @T10:00 -> Implicit "Today"
-                    // So we also leave date undefined.
-                }
-            }
-
-            // --- 1. End ---
-            if (parts.length > 1) { // Has > separator
-                if (rawEnd === undefined || rawEnd === '') {
-                    // Empty End (@Start>>...) -> SD/D type: end = start
-                    if (date) endDate = date;
-                } else {
-                    const parsed = this.parseDateTime(rawEnd);
-                    if (parsed.date) {
-                        endDate = parsed.date;
-                        explicitEndDate = true;
-                    }
-                    if (parsed.time) {
-                        endTime = parsed.time;
-                        explicitEndTime = true;
-                    }
-
-                    if (!parsed.date && date) {
-                        endDate = date;
-                        // Date is inherited from start, not explicit
-                    }
-                }
-            }
-
-            // --- 2. Deadline ---
-            if (parts.length > 2) {
-                if (rawDeadline) {
-                    const parsed = this.parseDateTime(rawDeadline);
-                    deadline = parsed.date;
-                    if (parsed.date && parsed.time) {
-                        deadline += `T${parsed.time}`;
-                    }
-                }
-            }
-
-            // --- 3. Excess separator check ---
-            if (parts.length > 3) {
-                validationWarning = `Too many '>' separators in date block. Expected at most 2 (start>end>deadline), found ${parts.length - 1}.`;
-            }
-        }
-
-        // Filter: Must have Date/Time OR EndDate/Time OR Deadline OR Future OR Commands to be considered a "Task"
-        // Added startTime and endTime to allow time-only notation for child task inheritance
-        if (!date && !startTime && !endDate && !endTime && !deadline && commands.length === 0) {
-
+        // A task must have at least one scheduling field or a flow command
+        const hasSchedulingData = !!(date || startTime || endDate || endTime || deadline);
+        if (!hasSchedulingData && commands.length === 0) {
             return null;
         }
 
-
-
-        // Validate task data during parse
-
-        // Rule 1: Check for invalid same-day time range (endTime < startTime)
-        if (date && startTime && endTime && endDate && date === endDate) {
-            const [startH, startM] = startTime.split(':').map(Number);
-            const [endH, endM] = endTime.split(':').map(Number);
-            const startMinutes = startH * 60 + startM;
-            const endMinutes = endH * 60 + endM;
-
-            if (endMinutes < startMinutes) {
-                validationWarning = `Invalid time range: end time (${endTime}) is before start time (${startTime}) on the same day. Use explicit end date for overnight tasks (e.g., @${date}T${startTime}>${endDate + ' next day'}T${endTime}).`;
-            }
-        }
-
-        // Rule 2: End time without start time
-        if (endTime && !startTime) {
-            validationWarning = `End time specified without start time.`;
-        }
-
-        // Rule 3: Deadline must have a date
-        if (deadline && !deadline.match(/\d{4}-\d{2}-\d{2}/)) {
-            validationWarning = `Deadline must include a date (YYYY-MM-DD).`;
+        // 4. Validate date/time constraints
+        const fieldWarning = this.validateDateBlock(date, startTime, endDate, endTime, deadline);
+        if (fieldWarning) {
+            validationWarning = fieldWarning;
         }
 
         return {
@@ -203,9 +113,9 @@ export class AtNotationParser implements ParserStrategy {
             line: lineNumber,
             content: content.trim(),
             statusChar,
-            indent: 0,          // Will be set by TaskIndex
-            childIds: [],       // Will be set by TaskIndex
-            startDate: date, // Map parsed date to startDate
+            indent: 0,          // Will be set by TaskScanner
+            childIds: [],       // Will be set by TaskScanner
+            startDate: date,
             startTime,
             endDate,
             endTime,
@@ -222,8 +132,128 @@ export class AtNotationParser implements ParserStrategy {
             parserId: this.id,
             blockId,
             timerTargetId,
-            validationWarning
+            validationWarning,
         };
+    }
+
+    /**
+     * Parse the @start>end>deadline date block into structured fields.
+     * Returns null if no date block was found in the content.
+     */
+    private parseDateBlock(content: string): { fields: DateBlockResult; content: string } | null {
+        const dateBlockMatch = content.match(AtNotationParser.DATE_BLOCK_REGEX);
+        if (!dateBlockMatch) {
+            return null;
+        }
+
+        const fullDateBlock = dateBlockMatch[1];
+        const cleanedContent = content.replace(fullDateBlock, '').trim();
+        const rawBlock = fullDateBlock.substring(1); // Remove leading @
+        const parts = rawBlock.split('>');
+
+        let date = '';
+        let startTime: string | undefined;
+        let endDate: string | undefined;
+        let endTime: string | undefined;
+        let deadline: string | undefined;
+        let explicitStartDate = false;
+        let explicitStartTime = false;
+        let explicitEndDate = false;
+        let explicitEndTime = false;
+        let validationWarning: string | undefined;
+
+        // --- Start segment ---
+        const rawStart = parts[0];
+        if (rawStart !== '') {
+            const parsed = this.parseDateTime(rawStart);
+            if (parsed.date) {
+                date = parsed.date;
+                explicitStartDate = true;
+            }
+            if (parsed.time) {
+                startTime = parsed.time;
+                explicitStartTime = true;
+            }
+        }
+
+        // --- End segment ---
+        if (parts.length > 1) {
+            const rawEnd = parts[1];
+            if (!rawEnd) {
+                // Empty end (@start>>deadline): inherit start date
+                if (date) endDate = date;
+            } else {
+                const parsed = this.parseDateTime(rawEnd);
+                if (parsed.date) {
+                    endDate = parsed.date;
+                    explicitEndDate = true;
+                }
+                if (parsed.time) {
+                    endTime = parsed.time;
+                    explicitEndTime = true;
+                }
+                // Inherit start date when only time is specified
+                if (!parsed.date && date) {
+                    endDate = date;
+                }
+            }
+        }
+
+        // --- Deadline segment ---
+        if (parts.length > 2 && parts[2]) {
+            const parsed = this.parseDateTime(parts[2]);
+            deadline = parsed.date;
+            if (parsed.date && parsed.time) {
+                deadline += `T${parsed.time}`;
+            }
+        }
+
+        // --- Excess separator check ---
+        if (parts.length > 3) {
+            validationWarning = `Too many '>' separators in date block. Expected at most 2 (start>end>deadline), found ${parts.length - 1}.`;
+        }
+
+        return {
+            fields: {
+                date, startTime, endDate, endTime, deadline,
+                explicitStartDate, explicitStartTime, explicitEndDate, explicitEndTime,
+                validationWarning,
+            },
+            content: cleanedContent,
+        };
+    }
+
+    /**
+     * Validate parsed date/time fields.
+     * Returns a warning string if any rule is violated, undefined otherwise.
+     */
+    private validateDateBlock(
+        date: string,
+        startTime: string | undefined,
+        endDate: string | undefined,
+        endTime: string | undefined,
+        deadline: string | undefined,
+    ): string | undefined {
+        // Same-day time range: end before start
+        if (date && startTime && endTime && endDate && date === endDate) {
+            const [startH, startM] = startTime.split(':').map(Number);
+            const [endH, endM] = endTime.split(':').map(Number);
+            if (endH * 60 + endM < startH * 60 + startM) {
+                return `Invalid time range: end time (${endTime}) is before start time (${startTime}) on the same day.`;
+            }
+        }
+
+        // End time without start time
+        if (endTime && !startTime) {
+            return `End time specified without start time.`;
+        }
+
+        // Deadline must include a date
+        if (deadline && !deadline.match(/\d{4}-\d{2}-\d{2}/)) {
+            return `Deadline must include a date (YYYY-MM-DD).`;
+        }
+
+        return undefined;
     }
 
     private parseDateTime(str: string): { date?: string, time?: string } {

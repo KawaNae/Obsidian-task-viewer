@@ -104,7 +104,6 @@ export class TimelineSectionRenderer {
 
             const el = container.createDiv('task-card');
             if (task.id === this.handleManager.getSelectedTaskId()) el.addClass('selected');
-            if (task.startDateInherited) el.addClass('task-card--inherited');
 
             // Add split segment classes if applicable
             // Cast to RenderableTask to access split properties if they exist

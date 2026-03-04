@@ -72,7 +72,10 @@ export class AllDaySectionRenderer {
             this.renderTaskCard(container, entry, owner, gridColOffset, gridRowOffset);
 
             if (entry.deadlineArrow) {
-                renderDeadlineArrow(container, entry, gridRowOffset, gridColOffset);
+                renderDeadlineArrow(container, entry, {
+                    gridRowOffset,
+                    gridColOffset,
+                });
             }
         }
     }
@@ -91,14 +94,13 @@ export class AllDaySectionRenderer {
             el.addClass('task-card--multi-day');
         }
         if (entry.continuesBefore && entry.continuesAfter) {
-            el.addClass('calendar-multiday-bar--middle');
+            el.addClass('task-card--split-middle');
         } else if (entry.continuesAfter) {
-            el.addClass('calendar-multiday-bar--head');
+            el.addClass('task-card--split-head');
         } else if (entry.continuesBefore) {
-            el.addClass('calendar-multiday-bar--tail');
+            el.addClass('task-card--split-tail');
         }
         if (task.id === this.handleManager.getSelectedTaskId()) el.addClass('selected');
-        if (task.startDateInherited) el.addClass('task-card--inherited');
         el.dataset.id = task.id;
 
         TaskStyling.applyTaskColor(el, task.color ?? null);

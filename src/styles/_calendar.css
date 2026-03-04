@@ -2,7 +2,7 @@
    Calendar View
    ========================================================================== */
 
-.calendar-view-container {
+.calendar-view {
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -50,10 +50,13 @@
 }
 
 .calendar-week-row {
+    --calendar-header-height: 28px;
+    --calendar-track-height: 44px;
     position: relative;
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
-    align-content: start;
+    grid-template-rows: var(--calendar-header-height);
+    grid-auto-rows: var(--calendar-track-height);
     min-height: 140px;
     border-bottom: 1px solid var(--tv-border);
 }
@@ -100,20 +103,41 @@
     z-index: 0;
 }
 
-.calendar-multiday-bar {
+/* --- Calendar task card (grid positioned, scoped to week-row) --- */
+.calendar-week-row > .task-card {
+    box-sizing: border-box;
+    min-height: 0;
+    margin: 2px;
+    font-size: 0.78em;
+    overflow: visible;
+}
+
+.calendar-week-row > .task-card .task-card__content {
+    margin-top: 0;
+    overflow: hidden;
+}
+
+.calendar-week-row > .task-card .task-card__content ul,
+.calendar-week-row > .task-card .task-card__content ol {
+    margin-block-start: 0.1em;
+    margin-block-end: 0.1em;
+}
+
+.calendar-week-row > .task-card--multi-day {
     min-height: 20px;
-    height: auto !important;
     cursor: pointer;
 }
 
-.calendar-multiday-bar--head {
+/* --- Split direction (horizontal for calendar) --- */
+.calendar-view .task-card--split-head {
+    border-bottom: none;
     border-right: 2px dashed var(--file-accent, var(--tv-accent));
     border-top-right-radius: 0 !important;
     border-bottom-right-radius: 0 !important;
     margin-right: 0;
 }
 
-.calendar-multiday-bar--middle {
+.calendar-view .task-card--split-middle {
     border-left: 2px dashed var(--file-accent, var(--tv-accent));
     border-right: 2px dashed var(--file-accent, var(--tv-accent));
     border-top-left-radius: 0 !important;
@@ -124,16 +148,34 @@
     margin-right: 0;
 }
 
-.calendar-multiday-bar--tail {
+.calendar-view .task-card--split-tail {
+    border-top: none;
     border-left: 2px dashed var(--file-accent, var(--tv-accent));
     border-top-left-radius: 0 !important;
     border-bottom-left-radius: 0 !important;
     margin-left: 0;
 }
 
-.calendar-multiday-bar--middle::before,
-.calendar-multiday-bar--tail::before {
+.calendar-view .task-card--split-middle::before,
+.calendar-view .task-card--split-tail::before {
     display: none;
+}
+
+/* Selection border direction for horizontal split */
+.calendar-view .task-card--split-head.selected::after {
+    border-bottom: 2px solid var(--file-accent, var(--tv-accent));
+    border-bottom-left-radius: var(--task-card-border-radius);
+    border-right: none;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.calendar-view .task-card--split-tail.selected::after {
+    border-top: 2px solid var(--file-accent, var(--tv-accent));
+    border-top-right-radius: var(--task-card-border-radius);
+    border-left: none;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
 }
 
 .calendar-week-row .deadline-arrow {
@@ -143,8 +185,8 @@
 .calendar-date-header {
     display: flex;
     justify-content: flex-end;
-    align-items: center;
-    min-height: 24px;
+    align-items: flex-start;
+    min-height: var(--calendar-header-height, 28px);
     padding: 4px;
     font-size: 0.82em;
     font-weight: 700;
@@ -171,51 +213,7 @@
     text-decoration: underline;
 }
 
-.calendar-task-card {
-    position: relative !important;
-    left: auto !important;
-    top: auto !important;
-    width: auto !important;
-    height: auto !important;
-    min-height: 0;
-    margin: 1px 2px;
-    padding: 4px 3px 4px 7px;
-    font-size: 0.78em;
-    box-shadow: 0 2px 6px var(--tv-shadow-medium);
-}
-
-.calendar-task-card--drag-preview {
-    pointer-events: none !important;
-    opacity: 0.82;
-    z-index: 10;
-}
-
-.calendar-task-card--drag-preview::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border: 2px solid var(--file-accent, var(--tv-accent));
-    border-radius: var(--task-card-border-radius);
-    pointer-events: none;
-}
-
-.calendar-task-card--drag-preview .task-card__handle {
-    display: none !important;
-}
-
-.calendar-task-card .task-card__content {
-    overflow: hidden;
-}
-
-.calendar-task-card .task-card__content ul,
-.calendar-task-card .task-card__content ol {
-    margin-block-start: 0.1em;
-    margin-block-end: 0.1em;
-}
-
+/* --- Calendar modal --- */
 .calendar-task-modal {
     padding: 12px;
 }
@@ -233,22 +231,17 @@
     overflow: auto;
 }
 
-.calendar-modal-task-wrapper .task-card {
-    position: relative !important;
-    width: 100% !important;
-    height: auto !important;
-}
-
 @media (max-width: 900px) {
     .calendar-week-row {
+        --calendar-track-height: 36px;
         min-height: 112px;
     }
 
-    .calendar-multiday-bar {
+    .calendar-week-row > .task-card--multi-day {
         min-height: 18px;
     }
 
-    .calendar-task-card {
+    .calendar-week-row > .task-card {
         font-size: 0.72em;
         padding: 3px 2px 3px 6px;
     }
