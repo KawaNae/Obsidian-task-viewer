@@ -11,10 +11,12 @@
     position: relative;
     z-index: var(--z-task-card);
 
-    /* Display & Box Model */
+    /* Layout */
     display: flex;
     flex-direction: column;
-    padding: var(--task-card-padding);
+
+    /* Box Model */
+    padding: 2px 2px 2px 8px;
     margin-bottom: var(--task-card-gap);
 
     /* Typography */
@@ -112,6 +114,22 @@
     height: max(0px, calc(var(--duration-minutes, 0) * var(--hour-height) / 60 - 3px));
 }
 
+/* Enable container query on timeline timed cards */
+.timeline-view .day-timeline-column > .task-card {
+    container-type: size;
+}
+
+/* Short timeline cards: hide time label and reduce spacing */
+@container (max-height: 32px) {
+    .task-card__time {
+        display: none;
+    }
+    .task-card .task-card__content {
+        margin-top: 0;
+    }
+}
+
+
 /* Timeline View: AllDay needs relative (Grid-based) */
 .timeline-view .task-card.task-card--allday {
     position: relative;
@@ -128,6 +146,10 @@
     width: calc(100% - 8px);
     padding: 4px 2px 4px 8px;
     z-index: var(--z-task-card-allday);
+}
+
+.task-card.task-card--allday > .task-card__content {
+    margin-top: 0;
 }
 
 .task-card--allday.task-card--multi-day {
@@ -263,6 +285,7 @@
     flex: 1;
     overflow-y: auto;
     scrollbar-width: none;
+    margin-top: calc(0.8em - 2px);
 }
 
 .task-card__content>ul,

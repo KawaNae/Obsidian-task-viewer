@@ -301,6 +301,8 @@ export class TimelineView extends ItemView {
                             // Partial Update: Re-render content only
                             const contentContainer = card.querySelector('.task-card__content');
                             if (contentContainer) contentContainer.remove();
+                            const timeEl = card.querySelector('.task-card__time');
+                            if (timeEl) timeEl.remove();
 
                             this.taskRenderer.render(card, task, this, this.plugin.settings);
                             return;
