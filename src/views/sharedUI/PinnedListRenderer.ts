@@ -45,7 +45,6 @@ export class PinnedListRenderer {
         container: HTMLElement,
         owner: Component,
         lists: PinnedListDefinition[],
-        isTaskVisible: (task: Task) => boolean,
         collapsedState: Record<string, boolean>,
         callbacks: PinnedListCallbacks,
     ): void {
@@ -61,9 +60,9 @@ export class PinnedListRenderer {
         const filterContext = { startHour: this.plugin.settings.startHour };
 
         for (const listDef of lists) {
-            // Apply pinned list filter, then main toolbar filter
+            // Apply pinned list's own filter only (independent of toolbar filter)
             const tasks = allTasks.filter(task =>
-                TaskFilterEngine.evaluate(task, listDef.filterState, filterContext) && isTaskVisible(task)
+                TaskFilterEngine.evaluate(task, listDef.filterState, filterContext)
             );
 
             TaskSorter.sort(tasks, listDef.sortState);

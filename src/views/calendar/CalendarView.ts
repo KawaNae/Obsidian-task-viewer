@@ -474,7 +474,6 @@ export class CalendarView extends ItemView {
         });
 
         this.pinnedListRenderer.render(body, this, this.pinnedLists,
-            (task) => this.filterMenu.isTaskVisible(task),
             this.pinnedListCollapsed, {
             onCollapsedChange: (id, collapsed) => {
                 this.pinnedListCollapsed[id] = collapsed;

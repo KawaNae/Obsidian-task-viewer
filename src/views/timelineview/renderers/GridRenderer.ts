@@ -104,10 +104,13 @@ export class GridRenderer {
                 cell.addClass('is-today');
             }
 
-            // Check if this date has incomplete overdue tasks
+            // Check if this date has incomplete overdue tasks (respecting toolbar filter)
             if (date < todayVisualDate) {
                 const tasksForDate = this.taskIndex.getTasksForVisualDay(date, this.plugin.settings.startHour);
-                const hasOverdueTasks = tasksForDate.some(t => !isCompleteStatusChar(t.statusChar, this.plugin.settings.completeStatusChars));
+                const hasOverdueTasks = tasksForDate.some(t =>
+                    isTaskVisible(t) &&
+                    !isCompleteStatusChar(t.statusChar, this.plugin.settings.completeStatusChars)
+                );
                 if (hasOverdueTasks) {
                     cell.addClass('has-overdue');
                 }

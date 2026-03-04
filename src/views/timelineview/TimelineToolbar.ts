@@ -195,11 +195,12 @@ export class TimelineToolbar {
     private findOldestOverdueDate(): string | null {
         const startHour = this.plugin.settings.startHour;
         const today = DateUtils.getVisualDateOfNow(startHour);
+        const isVisible = this.getTaskFilter();
 
-        // Get all incomplete tasks with dates before today
+        // Get all incomplete, visible tasks with dates before today
         const tasks = this.taskIndex.getTasks().filter(t =>
+            isVisible(t) &&
             !isCompleteStatusChar(t.statusChar, this.plugin.settings.completeStatusChars) &&
-
             t.startDate
         );
 
