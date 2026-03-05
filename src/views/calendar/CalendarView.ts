@@ -36,6 +36,7 @@ import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDeadlineArrow } from '../sharedUI/DeadlineArrowRenderer';
+import { TaskDetailModal } from '../../modals/TaskDetailModal';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
 
@@ -72,6 +73,9 @@ export class CalendarView extends ItemView {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.leaf,
         }, () => this.plugin.settings);
+        this.taskRenderer.setDetailCallback((task) => {
+            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.taskIndex).open();
+        });
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.sidebarManager = new SidebarManager(true, {
             mobileBreakpointPx: 768,
@@ -602,12 +606,12 @@ export class CalendarView extends ItemView {
         }
         if (maxTrackIndex >= 0) {
             const trackCount = maxTrackIndex + 1;
-            weekRow.style.gridTemplateRows = `var(--calendar-header-height) repeat(${trackCount}, var(--calendar-track-height))`;
+            weekRow.style.gridTemplateRows = `var(--calendar-header-height) repeat(${trackCount}, minmax(var(--calendar-track-height), auto))`;
         }
 
         const colOffset = getColumnOffset(this.shouldShowWeekNumbers());
 
-        for (const entry of entries) {
+        await Promise.all(entries.map(async (entry) => {
             await this.renderGridTask(weekRow, entry, colOffset);
 
             if (entry.deadlineArrow) {
@@ -616,7 +620,7 @@ export class CalendarView extends ItemView {
                     gridColOffset: colOffset,
                 });
             }
-        }
+        }));
     }
 
     private getVisibleTasksInRange(rangeStart: string, rangeEnd: string): Task[] {

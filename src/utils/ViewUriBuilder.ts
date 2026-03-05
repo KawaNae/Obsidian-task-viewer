@@ -13,6 +13,7 @@ export interface ViewUriOptions {
     zoom?: number;
     date?: string;
     pinnedLists?: PinnedListDefinition[];
+    grid?: PinnedListDefinition[][];
     showSidebar?: boolean;
     position?: LeafPosition;
     name?: string;
@@ -34,6 +35,7 @@ export class ViewUriBuilder {
         'calendar-view': 'calendar',
         'mini-calendar-view': 'mini-calendar',
         'timer-view': 'timer',
+        'kanban-view': 'kanban',
     };
 
     static build(viewType: string, options?: ViewUriOptions): string {
@@ -71,6 +73,11 @@ export class ViewUriBuilder {
             // PinnedLists (base64)
             if (opts.pinnedLists && opts.pinnedLists.length > 0) {
                 uri += `&pinnedLists=${unicodeBtoa(JSON.stringify(opts.pinnedLists))}`;
+            }
+
+            // Grid (base64)
+            if (opts.grid && opts.grid.length > 0) {
+                uri += `&grid=${unicodeBtoa(JSON.stringify(opts.grid))}`;
             }
         }
 

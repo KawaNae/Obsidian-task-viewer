@@ -1,10 +1,37 @@
 import { App, MarkdownRenderer, Component, setIcon } from 'obsidian';
-import { TaskViewerSettings } from '../../types';
+import { TaskViewerSettings, isCompleteStatusChar } from '../../types';
+import { TaskIndex } from '../../services/core/TaskIndex';
 import { ChildRenderItem } from './types';
 import { CheckboxWiring } from './CheckboxWiring';
 import { NotationUtils } from './NotationUtils';
 
 export type ChildMenuCallback = (taskId: string, x: number, y: number) => void;
+
+function countChildCompletion(
+    items: ChildRenderItem[],
+    taskIndex: TaskIndex,
+    settings: TaskViewerSettings
+): { completed: number; total: number } {
+    let completed = 0;
+    let total = 0;
+    for (const item of items) {
+        if (!item.isCheckbox || !item.handler) continue;
+        total++;
+        if (item.handler.type === 'task') {
+            const child = taskIndex.getTask(item.handler.taskId);
+            if (child && isCompleteStatusChar(child.statusChar, settings.completeStatusChars)) {
+                completed++;
+            }
+        } else {
+            const line = item.handler.parentTask.childLines[item.handler.childLineIndex];
+            const match = line?.match(/\[(.)\]/);
+            if (match && isCompleteStatusChar(match[1], settings.completeStatusChars)) {
+                completed++;
+            }
+        }
+    }
+    return { completed, total };
+}
 
 /**
  * Renders child sections from ChildRenderItem[].
@@ -14,7 +41,8 @@ export class ChildSectionRenderer {
 
     constructor(
         private app: App,
-        private checkboxWiring: CheckboxWiring
+        private checkboxWiring: CheckboxWiring,
+        private taskIndex: TaskIndex
     ) {}
 
     setChildMenuCallback(cb: ChildMenuCallback): void {
@@ -31,18 +59,19 @@ export class ChildSectionRenderer {
         settings: TaskViewerSettings,
         parentStartDate?: string
     ): Promise<void> {
-        const childTaskCount = items.filter((item) => item.isCheckbox).length;
+        const { completed, total } = countChildCompletion(items, this.taskIndex, settings);
+        const label = `${completed}/${total}`;
         const wasExpanded = expandedTaskIds.has(expandKey);
 
         const toggle = contentContainer.createDiv('task-card__children-toggle');
         const childrenContainer = contentContainer.createDiv('task-card__children');
 
         if (wasExpanded) {
-            toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${childTaskCount}件の子タスク`;
+            toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${label}`;
             toggle.dataset.collapsed = 'false';
             childrenContainer.addClass('task-card__children--expanded');
         } else {
-            toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${childTaskCount}件の子タスク`;
+            toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${label}`;
             toggle.dataset.collapsed = 'true';
             childrenContainer.addClass('task-card__children--collapsed');
         }
@@ -55,13 +84,13 @@ export class ChildSectionRenderer {
             const isCollapsed = toggle.dataset.collapsed === 'true';
             if (isCollapsed) {
                 toggle.dataset.collapsed = 'false';
-                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${childTaskCount}件の子タスク`;
+                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${label}`;
                 childrenContainer.removeClass('task-card__children--collapsed');
                 childrenContainer.addClass('task-card__children--expanded');
                 expandedTaskIds.add(expandKey);
             } else {
                 toggle.dataset.collapsed = 'true';
-                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${childTaskCount}件の子タスク`;
+                toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${label}`;
                 childrenContainer.removeClass('task-card__children--expanded');
                 childrenContainer.addClass('task-card__children--collapsed');
                 expandedTaskIds.delete(expandKey);

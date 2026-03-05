@@ -52,6 +52,9 @@ export class ViewTemplateWriter {
         if (template.pinnedLists && template.pinnedLists.length > 0) {
             data.pinnedLists = template.pinnedLists;
         }
+        if (template.grid && template.grid.length > 0) {
+            data.grid = template.grid;
+        }
 
         if (Object.keys(data).length > 0) {
             lines.push('```json');

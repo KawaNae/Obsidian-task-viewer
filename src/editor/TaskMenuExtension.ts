@@ -10,6 +10,7 @@ import type { TaskActionsMenuBuilder } from '../interaction/menu/builders/TaskAc
 import type { EditorCheckboxMenuBuilder } from '../interaction/menu/builders/EditorCheckboxMenuBuilder';
 
 const taskIndexChanged = StateEffect.define<void>();
+const settingsChanged = StateEffect.define<void>();
 const CHECKBOX_LINE_REGEX = /^\s*-\s*\[.\]/;
 
 class TaskMenuWidget extends WidgetType {
@@ -55,6 +56,7 @@ class TaskMenuWidget extends WidgetType {
 export interface TaskMenuExtensionResult {
     extension: Extension;
     cleanup: () => void;
+    notifySettingsChanged: () => void;
 }
 
 export function createTaskMenuExtension(
@@ -100,6 +102,18 @@ export function createTaskMenuExtension(
     };
 
     const buildDecorations = (view: EditorView): DecorationSet => {
+        const settings = getSettings();
+        if (!settings.editorMenuForTasks && !settings.editorMenuForCheckboxes) {
+            return RangeSet.of([]);
+        }
+
+        const needsFilter = !settings.editorMenuForTasks || !settings.editorMenuForCheckboxes;
+        let filePath: string | undefined;
+        if (needsFilter) {
+            const info = view.state.field(editorInfoField);
+            filePath = info?.file?.path;
+        }
+
         const widgets: { from: number; deco: Decoration }[] = [];
 
         for (const { from, to } of view.visibleRanges) {
@@ -110,13 +124,20 @@ export function createTaskMenuExtension(
                 const lineText = view.state.doc.sliceString(line.from, line.to);
 
                 if (CHECKBOX_LINE_REGEX.test(lineText)) {
-                    widgets.push({
-                        from: line.to,
-                        deco: Decoration.widget({
-                            widget: new TaskMenuWidget(lineNumber, showMenu),
-                            side: 1,
-                        }),
-                    });
+                    let show = true;
+                    if (needsFilter && filePath) {
+                        const isTask = !!taskIndex.getTaskByFileLine(filePath, lineNumber);
+                        show = isTask ? settings.editorMenuForTasks : settings.editorMenuForCheckboxes;
+                    }
+                    if (show) {
+                        widgets.push({
+                            from: line.to,
+                            deco: Decoration.widget({
+                                widget: new TaskMenuWidget(lineNumber, showMenu),
+                                side: 1,
+                            }),
+                        });
+                    }
                 }
 
                 pos = line.to + 1;
@@ -140,7 +161,7 @@ export function createTaskMenuExtension(
                     update.docChanged ||
                     update.viewportChanged ||
                     update.transactions.some(tr =>
-                        tr.effects.some(e => e.is(taskIndexChanged))
+                        tr.effects.some(e => e.is(taskIndexChanged) || e.is(settingsChanged))
                     )
                 ) {
                     this.decorations = buildDecorations(update.view);
@@ -163,8 +184,18 @@ export function createTaskMenuExtension(
         });
     });
 
+    const notifySettingsChanged = () => {
+        app.workspace.iterateAllLeaves((leaf) => {
+            if (leaf.view instanceof MarkdownView) {
+                const cm = (leaf.view.editor as any).cm as EditorView | undefined;
+                cm?.dispatch({ effects: settingsChanged.of(undefined) });
+            }
+        });
+    };
+
     return {
         extension: plugin,
         cleanup: unsubscribe,
+        notifySettingsChanged,
     };
 }

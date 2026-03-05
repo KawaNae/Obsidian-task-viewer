@@ -106,7 +106,7 @@ export class AllDaySectionRenderer {
         TaskStyling.applyTaskColor(el, task.color ?? null);
         TaskStyling.applyTaskLinestyle(el, task.linestyle ?? null);
 
-        this.taskRenderer.render(el, task, owner, this.plugin.settings, { topRight: 'none' });
+        this.taskRenderer.render(el, task, owner, this.plugin.settings, { topRight: 'none', compact: true });
         this.menuHandler.addTaskContextMenu(el, task);
 
         el.style.gridColumn = `${entry.colStart + gridColOffset} / span ${entry.span}`;

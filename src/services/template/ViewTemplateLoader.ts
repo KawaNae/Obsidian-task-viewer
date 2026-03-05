@@ -16,7 +16,7 @@ import { FilterSerializer } from '../filter/FilterSerializer';
 import type { FilterState } from '../filter/FilterTypes';
 import type { SortState } from '../sort/SortTypes';
 
-const VALID_VIEWS = new Set(['timeline', 'calendar', 'schedule', 'mini-calendar']);
+const VALID_VIEWS = new Set(['timeline', 'calendar', 'schedule', 'mini-calendar', 'kanban']);
 
 export class ViewTemplateLoader {
     constructor(private app: App) {}
@@ -120,6 +120,10 @@ export class ViewTemplateLoader {
         if (Array.isArray(data.pinnedLists)) {
             template.pinnedLists = this.parsePinnedLists(data.pinnedLists);
         }
+
+        if (Array.isArray(data.grid)) {
+            template.grid = this.parseGrid(data.grid);
+        }
     }
 
     private parsePinnedLists(raw: unknown[]): PinnedListDefinition[] {
@@ -149,5 +153,15 @@ export class ViewTemplateLoader {
         }
 
         return result;
+    }
+
+    private parseGrid(raw: unknown[]): PinnedListDefinition[][] {
+        const grid: PinnedListDefinition[][] = [];
+        for (const row of raw) {
+            if (!Array.isArray(row)) continue;
+            const parsedRow = this.parsePinnedLists(row);
+            if (parsedRow.length > 0) grid.push(parsedRow);
+        }
+        return grid;
     }
 }

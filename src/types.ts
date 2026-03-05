@@ -131,6 +131,7 @@ export interface ViewTemplate extends ViewTemplateSummary {
     showSidebar?: boolean;
     filterState?: FilterState;
     pinnedLists?: PinnedListDefinition[];
+    grid?: PinnedListDefinition[][];
 }
 
 export interface FrontmatterTaskKeys {
@@ -242,6 +243,8 @@ export interface TaskViewerSettings {
     longPressThreshold: number;
     taskSelectAction: 'click' | 'dblclick';
     reuseExistingTab: boolean;
+    editorMenuForTasks: boolean;
+    editorMenuForCheckboxes: boolean;
     calendarWeekStartDay: 0 | 1;
     calendarShowCompleted: boolean;
     calendarShowWeekNumbers: boolean;
@@ -259,6 +262,7 @@ export interface TaskViewerSettings {
         calendar: DefaultLeafPosition;
         miniCalendar: DefaultLeafPosition;
         timer: DefaultLeafPosition;
+        kanban: DefaultLeafPosition;
     };
 }
 
@@ -283,6 +287,8 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     longPressThreshold: 400,
     taskSelectAction: 'click',
     reuseExistingTab: true,
+    editorMenuForTasks: true,
+    editorMenuForCheckboxes: true,
     calendarWeekStartDay: 0,
     calendarShowCompleted: true,
     calendarShowWeekNumbers: false,
@@ -300,5 +306,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
         calendar: 'tab',
         miniCalendar: 'left',
         timer: 'right',
+        kanban: 'tab',
     },
 };

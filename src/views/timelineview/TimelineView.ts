@@ -5,6 +5,7 @@ import { TaskIndex } from '../../services/core/TaskIndex';
 import { Task, ViewState, PinnedListDefinition, isCompleteStatusChar } from '../../types';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
+import { TaskDetailModal } from '../../modals/TaskDetailModal';
 
 import { DateUtils } from '../../utils/DateUtils';
 
@@ -197,6 +198,9 @@ export class TimelineView extends ItemView {
         // Initialize MenuHandler
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
+        this.taskRenderer.setDetailCallback((task) => {
+            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.taskIndex).open();
+        });
 
         // Initialize HandleManager
         this.handleManager = new HandleManager(this.container, this.taskIndex);

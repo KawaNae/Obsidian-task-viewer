@@ -17,6 +17,10 @@ export class ChildItemBuilder {
 
     constructor(private taskIndex: TaskIndex) {}
 
+    getTaskIndex(): TaskIndex {
+        return this.taskIndex;
+    }
+
     /**
      * Inline task childLines -> ChildRenderItem[]
      * @param indent Prefix added to every generated markdown line.

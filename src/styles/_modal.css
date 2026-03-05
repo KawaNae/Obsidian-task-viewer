@@ -217,3 +217,17 @@
     font-size: 0.85em;
     margin-bottom: 12px;
 }
+
+/* ======================================================
+   Task Detail Modal
+   ====================================================== */
+.task-detail-modal {
+    padding: 0;
+}
+
+.task-detail-modal .task-card {
+    position: relative;
+    box-shadow: none;
+    margin: 0;
+    font-size: var(--task-card-font-size);
+}

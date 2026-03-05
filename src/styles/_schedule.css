@@ -18,6 +18,7 @@
 .schedule-view__body-scroll {
     flex: 1;
     min-height: 0;
+    overflow-x: hidden;
     overflow-y: auto;
     scrollbar-width: none;
     -ms-overflow-style: none;
@@ -61,6 +62,7 @@
 .schedule-view__fixed-rows .allday-section__cell:not(.allday-section__axis) {
     padding-left: 6px;
     padding-right: 6px;
+    gap: var(--task-card-gap);
 }
 
 .schedule-view__fixed-rows .date-header__cell:first-child {
@@ -265,7 +267,6 @@
     min-height: 0;
     margin-bottom: 0;
     overflow: hidden;
-    box-shadow: 0 2px 6px var(--tv-shadow-medium);
     transition: filter 120ms ease;
 }
 

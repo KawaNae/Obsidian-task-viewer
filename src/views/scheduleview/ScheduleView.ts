@@ -5,6 +5,7 @@ import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { isCompleteStatusChar } from '../../types';
 import type { RenderableTask } from '../sharedLogic/RenderableTaskUtils';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
+import { TaskDetailModal } from '../../modals/TaskDetailModal';
 import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import TaskViewerPlugin from '../../main';
@@ -70,6 +71,9 @@ export class ScheduleView extends ItemView {
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
+        this.taskRenderer.setDetailCallback((task) => {
+            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.taskIndex).open();
+        });
         this.gridCalculator = new ScheduleGridCalculator({
             getStartHour: () => this.plugin.settings.startHour,
             hoursPerDay: ScheduleView.HOURS_PER_DAY,
