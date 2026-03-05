@@ -115,6 +115,7 @@ export function createTaskMenuExtension(
         }
 
         const widgets: { from: number; deco: Decoration }[] = [];
+        const seen = new Set<number>();
 
         for (const { from, to } of view.visibleRanges) {
             let pos = from;
@@ -123,7 +124,8 @@ export function createTaskMenuExtension(
                 const lineNumber = line.number - 1; // CM6 is 1-based, Task.line is 0-based
                 const lineText = view.state.doc.sliceString(line.from, line.to);
 
-                if (CHECKBOX_LINE_REGEX.test(lineText)) {
+                if (CHECKBOX_LINE_REGEX.test(lineText) && !seen.has(line.number)) {
+                    seen.add(line.number);
                     let show = true;
                     if (needsFilter && filePath) {
                         const isTask = !!taskIndex.getTaskByFileLine(filePath, lineNumber);
