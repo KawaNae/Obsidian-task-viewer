@@ -3,6 +3,7 @@ import { Task, TaskViewerSettings, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
 import { getFileBaseName, hasTaskContent, isContentMatchingBaseName } from '../../utils/TaskContent';
+import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
 import { ChildItemBuilder } from './ChildItemBuilder';
 import { ChildSectionRenderer, ChildMenuCallback } from './ChildSectionRenderer';
 import { CheckboxWiring } from './CheckboxWiring';
@@ -163,10 +164,15 @@ export class TaskCardRenderer {
         if (!isCompleteStatusChar(task.statusChar, settings.completeStatusChars)) {
             if (task.deadline && DateUtils.isPastDeadline(task.deadline, settings.startHour)) {
                 overdueIcon = '🚨 ';
-            } else if (task.endDate) {
-                const endTime = task.endTime?.includes('T') ? task.endTime.split('T')[1] : task.endTime;
-                if (DateUtils.isPastDate(task.endDate, endTime, settings.startHour)) {
-                    overdueIcon = '⚠️ ';
+            } else {
+                const effectiveEnd = task.endDate
+                    ? { endDate: task.endDate, endTime: task.endTime }
+                    : ImplicitCalendarDateResolver.resolveImplicitEnd(task, settings.startHour);
+                if (effectiveEnd) {
+                    const endTime = effectiveEnd.endTime?.includes('T') ? effectiveEnd.endTime.split('T')[1] : effectiveEnd.endTime;
+                    if (DateUtils.isPastDate(effectiveEnd.endDate, endTime, settings.startHour)) {
+                        overdueIcon = '⚠️ ';
+                    }
                 }
             }
         }

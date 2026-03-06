@@ -136,7 +136,7 @@ export class ScheduleTaskCategorizer {
     private calculateDurationMinutes(task: RenderableTask): number {
         const effective = this.resolveEffectiveStart(task);
         if (!effective || !effective.startTime) {
-            return 60;
+            return DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
         }
 
         const durationMs = DateUtils.getTaskDurationMs(
@@ -148,7 +148,7 @@ export class ScheduleTaskCategorizer {
         );
 
         if (!Number.isFinite(durationMs) || durationMs <= 0) {
-            return 60;
+            return DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
         }
 
         return Math.max(1, Math.round(durationMs / (1000 * 60)));

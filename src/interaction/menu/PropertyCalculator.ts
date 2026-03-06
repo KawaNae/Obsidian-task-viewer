@@ -96,7 +96,6 @@ export class PropertyCalculator {
         const { task, startHour, viewStartDate } = context;
         const hasExplicitStart = task.explicitStartDate ?? false;
         const hasExplicitEnd = task.explicitEndDate ?? false;
-        const hasStartTime = task.explicitStartTime ?? false;
         const hasEndTime = task.explicitEndTime ?? false;
 
         const endHourStr = this.calculateEndHourStr(startHour);
@@ -134,26 +133,21 @@ export class PropertyCalculator {
             };
         }
 
-        // Case 3: S-Timed - implicit end = start + 1 hour
-        if (hasStartTime && !hasEndTime) {
-            const [h, m] = task.startTime!.split(':').map(Number);
-            let endH = h + 1;
-            const endM = m;
-            let endDateStr = effectiveVisualStartDate;
-            if (endH >= 24) {
-                endH -= 24;
-                endDateStr = DateUtils.addDays(effectiveVisualStartDate, 1);
-            }
-            const implicitEndTime = `${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
+        // Case 3-4: Derive implicit end via resolveImplicitEnd (S-Timed, S-All, SD, D types)
+        const implicitEnd = ImplicitCalendarDateResolver.resolveImplicitEnd(
+            { startDate: effectiveVisualStartDate, startTime: task.startTime, endDate: undefined, endTime: undefined },
+            startHour
+        );
+        if (implicitEnd) {
             return {
-                date: endDateStr,
-                time: implicitEndTime,
+                date: implicitEnd.endDate,
+                time: implicitEnd.endTime || endHourStr,
                 dateImplicit: true,
                 timeImplicit: true
             };
         }
 
-        // Case 4: No endDate and no endTime (SD, S-All, D types)
+        // D type (no startDate): use effectiveVisualStartDate + 1day as fallback
         const nextDay = DateUtils.addDays(effectiveVisualStartDate, 1);
         return {
             date: nextDay,

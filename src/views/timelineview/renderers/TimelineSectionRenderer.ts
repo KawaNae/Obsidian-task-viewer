@@ -156,7 +156,7 @@ export class TimelineSectionRenderer {
                     }
                 }
             } else {
-                endMinutes = startMinutes + 60;
+                endMinutes = startMinutes + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
             }
 
             // Adjust for startHour

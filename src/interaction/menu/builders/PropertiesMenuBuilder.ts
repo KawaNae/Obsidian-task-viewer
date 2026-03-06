@@ -39,7 +39,7 @@ export class PropertiesMenuBuilder {
             // On mobile, Obsidian menus stay open until explicitly closed.
             const openModal = (focusField: ChangePropertiesFocusField) => {
                 menu.close();
-                this.openChangePropertiesModal(task, focusField);
+                this.openChangePropertiesModal(task, focusField, viewStartDate);
             };
 
             // Requested order:
@@ -171,7 +171,7 @@ export class PropertiesMenuBuilder {
         });
     }
 
-    private openChangePropertiesModal(task: Task, focusField: ChangePropertiesFocusField): void {
+    private openChangePropertiesModal(task: Task, focusField: ChangePropertiesFocusField, viewStartDate: string | null = null): void {
         const initialValues: Partial<CreateTaskResult> = {
             content: task.content ?? '',
             startDate: task.startDate,
@@ -180,6 +180,21 @@ export class PropertiesMenuBuilder {
             endTime: task.endTime,
             deadline: task.deadline,
         };
+
+        // Build implicit placeholders from PropertyCalculator results
+        const context: PropertyCalculationContext = {
+            task,
+            startHour: this.plugin.settings.startHour,
+            viewStartDate
+        };
+        const startCalc = this.propertyCalculator.calculateStart(context);
+        const endCalc = this.propertyCalculator.calculateEnd(context);
+
+        const implicitPlaceholders: { startDate?: string; startTime?: string; endDate?: string; endTime?: string } = {};
+        if (startCalc.dateImplicit && startCalc.date) implicitPlaceholders.startDate = startCalc.date;
+        if (startCalc.timeImplicit && startCalc.time) implicitPlaceholders.startTime = startCalc.time;
+        if (endCalc.dateImplicit && endCalc.date) implicitPlaceholders.endDate = endCalc.date;
+        if (endCalc.timeImplicit && endCalc.time) implicitPlaceholders.endTime = endCalc.time;
 
         new CreateTaskModal(
             this.app,
@@ -191,6 +206,7 @@ export class PropertiesMenuBuilder {
                 title: 'Change Properties',
                 submitLabel: 'Save',
                 focusField,
+                implicitPlaceholders,
             }
         ).open();
     }

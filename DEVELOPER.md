@@ -179,25 +179,52 @@ The plugin recognizes eight task types internally.
 | **E** | `@>2001-11-12` | — | ✓ | — |
 | **D** | `@>>2001-11-13` | — | — | ✓ |
 
-### Duration calculation
+### Display-based task classification
 
-Duration is calculated relative to the configured `startHour`.
+Tasks are classified by **display behavior** — where they appear and what values are inferred.
+All times are relative to the configured `startHour` (default 5 → visual day 05:00–04:59).
+Implicit value resolution is centralised in `ImplicitCalendarDateResolver`.
 
-1. **SED / SE**: actual elapsed time from `start` to `end`
-2. **SD / S-All**: from `startHour` on the start day to `startHour + 23:59` (= 24 h)
-3. **S-Timed**: always 1 hour from `start` (fixed for timeline display)
-4. **E / ED**: `startHour` on the leftmost visible date is used as implicit start
-5. **D**: `startHour` on the leftmost visible date is start; `start + 23:59` is end
+#### 1. Timed tasks (S-Timed / E-Timed / SD-Timed / ED-Timed)
 
-### Task placement rules
+At least one side has an explicit time, and only one side (start or end) is specified.
 
-| Type | Has time | Duration | Placed in |
-|------|----------|----------|-----------|
-| SED / SE | yes | ≥ 24 h | All-day lane |
-| SED / SE | yes | < 24 h | Timeline lane |
-| SED / SE | no | ≥ 24 h | All-day lane |
-| SD / S-All / ED / E / D | — | always ≥ 24 h | All-day lane |
-| S-Timed | yes | always 1 h | Timeline lane |
+- **Display**: Timeline lane, 1 h fixed duration
+- **Inference**: reverse time on the missing side (startTime + 1 h → endTime, or endTime − 1 h → startTime)
+- Examples: `@2026-03-09T10:00`, `@>2026-03-09T11:00`, `@2026-03-09T10:00>>deadline`
+
+#### 2. All-day tasks (S-All / E-All / SD-All / ED-All)
+
+Only one side specified, no time on that side.
+
+- **Display**: Calendar (all-day) lane, 1 visual-day duration
+- **Inference**: implicit time = startHour:00 / (startHour−1):59; reverse date = same day
+- Examples: `@2026-03-09`, `@>2026-03-09`, `@2026-03-09>>deadline`
+
+#### 3. SE / SED All-day (no time on either side)
+
+Both start and end are specified, neither has a time.
+
+- **Display**: Calendar (all-day) lane, spanning the specified days
+- **Inference**: implicit times = startHour:00 / (startHour−1):59
+- Examples: `@2026-03-09>2026-03-11`, `@2026-03-09>2026-03-11>deadline`
+
+#### 4. SE / SED Timed (at least one side has time)
+
+Both start and end are specified, at least one has an explicit time.
+
+- **Display**: < 24 h → Timeline lane; ≥ 24 h → Calendar (all-day) lane
+- **Inference**: if one side's time is missing, infer from startHour:00 / (startHour−1):59
+- Daily-note special case: startDate can be omitted (inherited from filename)
+- Examples: `@2026-03-09T10:00>12:00`, `@2026-03-09T10:00>2026-03-10T18:00`
+
+#### 5. D (deadline only)
+
+Only a deadline is specified, no start or end.
+
+- **Display**: Calendar (all-day) lane on the deadline date (display only)
+- **Inference**: none — D does not affect display position or duration inference
+- Example: `@>>2026-03-13`
 
 ### 24-hour boundary
 

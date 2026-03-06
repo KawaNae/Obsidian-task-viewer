@@ -544,7 +544,7 @@ export class MoveStrategy extends BaseDragStrategy {
                 const startHourMinutes = startHour * 60;
                 const minutesFromStart = snappedTop / zoomLevel;
                 const totalMinutes = startHourMinutes + minutesFromStart;
-                const totalEndMinutes = totalMinutes + 60;
+                const totalEndMinutes = totalMinutes + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
 
                 const startDayOffset = Math.floor(totalMinutes / 1440);
                 const endDayOffset = Math.floor(totalEndMinutes / 1440);
