@@ -3,6 +3,7 @@ import type { Task } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
+import { ImplicitCalendarDateResolver } from '../../../utils/ImplicitCalendarDateResolver';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
 import { TaskLayout } from '../TaskLayout';
 import { TaskIndex } from '../../../services/core/TaskIndex';
@@ -27,12 +28,19 @@ export class TimelineSectionRenderer {
 
         // Get all tasks and filter for those that should appear in this timeline column
         let tasks = this.taskIndex.getTasks().filter(t => {
+            // Resolve effective start for E/ED types
+            const implicit = !t.startDate
+                ? ImplicitCalendarDateResolver.resolveImplicitStart(t, startHour)
+                : null;
+            const effectiveStartTime = t.startTime || implicit?.startTime;
 
-            if (!t.startTime) return false; // No startTime = not a timed task
+            if (!effectiveStartTime) return false; // No startTime = not a timed task
+
+            const effectiveStartDate = t.startDate || implicit?.startDate;
 
             // Calculate visual date range for this task
-            const visualStart = t.startDate
-                ? DateUtils.getVisualStartDate(t.startDate, t.startTime, startHour)
+            const visualStart = effectiveStartDate
+                ? DateUtils.getVisualStartDate(effectiveStartDate, effectiveStartTime, startHour)
                 : date;
 
             // For tasks with endDate/endTime, check if they span into this visual day
@@ -60,8 +68,8 @@ export class TimelineSectionRenderer {
             }
 
             // Check if it's an all-day task (>= 24 hours)
-            const tStart = t.startDate || date;
-            const isAllDay = DateUtils.isAllDayTask(tStart, t.startTime, t.endDate, t.endTime, startHour);
+            const tStart = effectiveStartDate || date;
+            const isAllDay = DateUtils.isAllDayTask(tStart, effectiveStartTime, t.endDate, t.endTime, startHour);
             return !isAllDay;
         });
 

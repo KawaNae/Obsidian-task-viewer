@@ -8,6 +8,7 @@ import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
 
 import { DateUtils } from '../../utils/DateUtils';
+import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
 
 import TaskViewerPlugin from '../../main';
 
@@ -736,18 +737,20 @@ export class TimelineView extends ItemView {
         const visualToday = DateUtils.getVisualDateOfNow(startHour);
         const isVisible = this.toolbar.getTaskFilter();
 
-        // Get all incomplete, visible tasks with dates before today
+        // Get all incomplete, visible tasks with dates (including E/ED types)
         const tasks = this.taskIndex.getTasks().filter(t =>
             isVisible(t) &&
             !isCompleteStatusChar(t.statusChar, this.plugin.settings.completeStatusChars) &&
-            t.startDate
+            (t.startDate || t.endDate)
         );
 
         // Find the oldest past date among incomplete tasks
         let oldestDate: string | null = null;
 
         for (const task of tasks) {
-            const taskDate = task.startDate!;
+            const taskDate = task.startDate
+                || ImplicitCalendarDateResolver.resolveImplicitStart(task, startHour)?.startDate;
+            if (!taskDate) continue;
 
             // Only consider tasks that are before today (visual date)
             if (taskDate < visualToday) {

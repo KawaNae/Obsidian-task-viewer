@@ -6,6 +6,7 @@ import { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } fr
 import { PropertyFormatter } from '../PropertyFormatter';
 import { CreateTaskModal, CreateTaskResult } from '../../../modals/CreateTaskModal';
 import { DateUtils } from '../../../utils/DateUtils';
+import { ImplicitCalendarDateResolver } from '../../../utils/ImplicitCalendarDateResolver';
 import { getTaskDisplayName } from '../../../utils/TaskContent';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
 import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
@@ -199,7 +200,7 @@ export class PropertiesMenuBuilder {
         const startTime = result.startTime?.trim() || undefined;
         const endTime = result.endTime?.trim() || undefined;
         const explicitEndDate = result.endDate?.trim() || undefined;
-        const endDate = !explicitEndDate && endTime ? startDate : explicitEndDate;
+        const endDate = ImplicitCalendarDateResolver.resolveEndDate(explicitEndDate, endTime, startDate);
         const deadline = result.deadline?.trim() || undefined;
 
         return {
@@ -218,7 +219,8 @@ export class PropertiesMenuBuilder {
     private addLengthItem(menu: Menu, task: Task, context: PropertyCalculationContext): void {
         const { startHour, viewStartDate } = context;
         const implicitVisualStartDate = viewStartDate || DateUtils.getVisualDateOfNow(startHour);
-        const effectiveVisualStartDate = task.startDate || implicitVisualStartDate;
+        const implicit = !task.startDate ? ImplicitCalendarDateResolver.resolveImplicitStart(task, startHour) : null;
+        const effectiveVisualStartDate = task.startDate || implicit?.startDate || implicitVisualStartDate;
 
         const durationMs = DateUtils.getTaskDurationMs(
             effectiveVisualStartDate,

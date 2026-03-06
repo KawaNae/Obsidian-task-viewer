@@ -315,9 +315,10 @@ export class CreateTaskModal extends Modal {
             }
         }
 
-        // Business rules
-        if (!sd && st) { this.startTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('Start: date is required when time is specified.'); return false; }
-        if (!ed && et && !sd) { this.endTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('End: date is required when there is no start date.'); return false; }
+        // Business rules (dailyNoteDate provides an implicit startDate when omitted)
+        const hasImplicitStartDate = !!this.options.dailyNoteDate;
+        if (!sd && st && !hasImplicitStartDate) { this.startTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('Start: date is required when time is specified.'); return false; }
+        if (!ed && et && !sd && !hasImplicitStartDate) { this.endTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('End: date is required when there is no start date.'); return false; }
         if (!dd && dt) { this.deadlineTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('Deadline: date is required when time is specified.'); return false; }
 
         // Warning: empty task won't appear in viewer

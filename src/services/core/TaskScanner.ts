@@ -10,6 +10,7 @@ import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
 import { TagExtractor } from '../../utils/TagExtractor';
 import { TaskStyleResolver } from '../styling/TaskStyleResolver';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
 
 /**
  * タスクスキャナー - ファイルのスキャンとパース処理
@@ -125,14 +126,9 @@ export class TaskScanner {
                 }
 
                 if (task) {
-                    // 親のstartDateを継承（子に時刻のみがある場合）
-                    if (parentStartDate && !task.startDate && task.startTime) {
-                        task.startDate = parentStartDate;
-                        task.startDateInherited = true;
-                    }
-                    // endDateも継承
-                    if (parentStartDate && !task.endDate && task.endTime) {
-                        task.endDate = parentStartDate;
+                    // デイリーノートの日付を継承（startDate/endDate が未指定の場合）
+                    if (parentStartDate) {
+                        Object.assign(task, ImplicitCalendarDateResolver.resolveDailyNoteDates(task, parentStartDate));
                     }
 
                     // インデントを設定

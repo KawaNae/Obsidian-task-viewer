@@ -3,6 +3,7 @@ import { Component, Menu } from 'obsidian';
 import TaskViewerPlugin from '../../main';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../utils/DateUtils';
+import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
 import { TaskStyling } from './TaskStyling';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -29,23 +30,26 @@ export class AllDaySectionRenderer {
 
         // Filter for allDay tasks (AllDay-specific filtering)
         let tasks = this.taskIndex.getTasks().filter(t => {
+            // Resolve effective start (E/ED types derive from endDate)
+            const implicit = !t.startDate
+                ? ImplicitCalendarDateResolver.resolveImplicitStart(t, startHour)
+                : null;
+            const effectiveStartDate = t.startDate || implicit?.startDate;
+            if (!effectiveStartDate) return false;  // D type: excluded
 
-            // Exclude D-type tasks (Deadline only)
-            if (!t.startDate && !t.startTime && t.deadline) return false;
+            const effectiveStartTime = t.startTime || implicit?.startTime;
 
             // Use visual start date considering startHour
-            const visualStart = t.startDate
-                ? DateUtils.getVisualStartDate(t.startDate, t.startTime, startHour)
-                : viewStart;
+            const visualStart = DateUtils.getVisualStartDate(effectiveStartDate, effectiveStartTime, startHour);
             const tEnd = t.endDate || visualStart;
             if (!(visualStart <= viewEnd && tEnd >= viewStart)) return false;
 
             // Filter for allDay tasks:
-            // - Tasks without startTime (S-All, SD, ED, E, D types)
+            // - Tasks without startTime (S-All, SD, ED, E types)
             // - Tasks with startTime but duration >= 24 hours
             // Exclude: SE/SED tasks with duration < 24 hours (those go to timeline)
             return DateUtils.isAllDayTask(
-                t.startDate || visualStart, t.startTime, t.endDate, t.endTime, startHour
+                effectiveStartDate, effectiveStartTime, t.endDate, t.endTime, startHour
             );
         });
 
@@ -55,9 +59,12 @@ export class AllDaySectionRenderer {
         const entries = computeGridLayout(tasks, {
             dates,
             getDateRange: (task) => {
-                const effectiveStart = task.startDate
-                    ? DateUtils.getVisualStartDate(task.startDate, task.startTime, startHour)
-                    : viewStart;
+                const implicit = !task.startDate
+                    ? ImplicitCalendarDateResolver.resolveImplicitStart(task, startHour)
+                    : null;
+                const effectiveStartDate = task.startDate || implicit?.startDate || viewStart;
+                const effectiveStartTime = task.startTime || implicit?.startTime;
+                const effectiveStart = DateUtils.getVisualStartDate(effectiveStartDate, effectiveStartTime, startHour);
                 const effectiveEnd = task.endDate || effectiveStart;
                 return { effectiveStart, effectiveEnd };
             },

@@ -2,6 +2,7 @@ import { App, TFile } from 'obsidian';
 import type { Task } from '../../types';
 import { isCompleteStatusChar } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
+import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 
 /**
@@ -12,34 +13,43 @@ export function getTaskDateRange(
     task: Task,
     startHour: number
 ): { effectiveStart: string | null; effectiveEnd: string | null } {
-    if (!task.startDate) {
-        return { effectiveStart: null, effectiveEnd: null };
+    // Resolve effective startDate (E/ED types derive from endDate)
+    let effectiveStartDate = task.startDate;
+    let effectiveStartTime = task.startTime;
+
+    if (!effectiveStartDate) {
+        const implicit = ImplicitCalendarDateResolver.resolveImplicitStart(task, startHour);
+        if (!implicit) {
+            return { effectiveStart: null, effectiveEnd: null };  // D type
+        }
+        effectiveStartDate = implicit.startDate;
+        effectiveStartTime = implicit.startTime;
     }
 
-    if (task.startTime) {
+    if (effectiveStartTime) {
         const visualDate = DateUtils.getVisualStartDate(
-            task.startDate,
-            task.startTime,
+            effectiveStartDate,
+            effectiveStartTime,
             startHour
         );
         const isAllDay = DateUtils.isAllDayTask(
-            task.startDate,
-            task.startTime,
+            effectiveStartDate,
+            effectiveStartTime,
             task.endDate,
             task.endTime,
             startHour
         );
 
-        if (isAllDay && task.endDate && task.endDate >= task.startDate) {
-            return { effectiveStart: task.startDate, effectiveEnd: task.endDate };
+        if (isAllDay && task.endDate && task.endDate >= effectiveStartDate) {
+            return { effectiveStart: effectiveStartDate, effectiveEnd: task.endDate };
         }
         return { effectiveStart: visualDate, effectiveEnd: visualDate };
     }
 
-    const effectiveEnd = task.endDate && task.endDate >= task.startDate
+    const effectiveEnd = task.endDate && task.endDate >= effectiveStartDate
         ? task.endDate
-        : task.startDate;
-    return { effectiveStart: task.startDate, effectiveEnd };
+        : effectiveStartDate;
+    return { effectiveStart: effectiveStartDate, effectiveEnd };
 }
 
 export function isTaskCompleted(
