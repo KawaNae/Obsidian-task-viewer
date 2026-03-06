@@ -185,8 +185,8 @@ export class TimelineView extends ItemView {
 
     async onOpen() {
         // Set initial startDate - will be re-evaluated in onChange when tasks are loaded
-        const initialToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-        this.viewState.startDate = DateUtils.addDays(initialToday, -this.plugin.settings.pastDaysToShow);
+        const initialVisualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        this.viewState.startDate = DateUtils.addDays(initialVisualToday, -this.plugin.settings.pastDaysToShow);
 
         this.container = this.contentEl;
         this.container.empty();
@@ -276,9 +276,9 @@ export class TimelineView extends ItemView {
             if (!this.hasInitializedStartDate && this.taskIndex.getTasks().length > 0) {
                 this.hasInitializedStartDate = true;
                 const oldestOverdue = this.findOldestOverdueDate();
-                const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-                const pastDate = DateUtils.addDays(today, -this.plugin.settings.pastDaysToShow);
-                this.viewState.startDate = (oldestOverdue && oldestOverdue < pastDate) ? oldestOverdue : pastDate;
+                const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+                const visualPastDate = DateUtils.addDays(visualToday, -this.plugin.settings.pastDaysToShow);
+                this.viewState.startDate = (oldestOverdue && oldestOverdue < visualPastDate) ? oldestOverdue : visualPastDate;
                 this.scrollToNowOnNextRender = true;
             }
 
@@ -307,8 +307,14 @@ export class TimelineView extends ItemView {
                             if (contentContainer) contentContainer.remove();
                             const timeEl = card.querySelector('.task-card__time');
                             if (timeEl) timeEl.remove();
+                            const expandBar = card.querySelector('.task-card__expand-bar');
+                            if (expandBar) expandBar.remove();
 
-                            this.taskRenderer.render(card, task, this, this.plugin.settings);
+                            const isAllDay = card.classList.contains('task-card--allday');
+                            const opts = isAllDay
+                                ? { topRight: 'none' as const, compact: true }
+                                : undefined;
+                            this.taskRenderer.render(card, task, this, this.plugin.settings, opts);
                             return;
                         }
                     }
@@ -444,9 +450,9 @@ export class TimelineView extends ItemView {
     public refresh() {
         // Re-evaluate startDate (Today button logic) for day boundary crossing or settings change
         const oldestOverdue = this.findOldestOverdueDate();
-        const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-        const pastDate = DateUtils.addDays(today, -this.plugin.settings.pastDaysToShow);
-        this.viewState.startDate = (oldestOverdue && oldestOverdue < pastDate) ? oldestOverdue : pastDate;
+        const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        const visualPastDate = DateUtils.addDays(visualToday, -this.plugin.settings.pastDaysToShow);
+        this.viewState.startDate = (oldestOverdue && oldestOverdue < visualPastDate) ? oldestOverdue : visualPastDate;
 
         this.scrollToNowOnNextRender = true;
         this.render();
@@ -555,7 +561,13 @@ export class TimelineView extends ItemView {
                     this.app.workspace.requestSaveLayout();
                     this.render();
                 },
+                onToggleApplyViewFilter: (listDef) => {
+                    listDef.applyViewFilter = !listDef.applyViewFilter;
+                    this.app.workspace.requestSaveLayout();
+                    this.render();
+                },
             },
+            this.toolbar?.getTaskFilter(),
         );
 
         // Render Toolbar (above both columns)
@@ -721,7 +733,7 @@ export class TimelineView extends ItemView {
      */
     private findOldestOverdueDate(): string | null {
         const startHour = this.plugin.settings.startHour;
-        const today = DateUtils.getVisualDateOfNow(startHour);
+        const visualToday = DateUtils.getVisualDateOfNow(startHour);
         const isVisible = this.toolbar.getTaskFilter();
 
         // Get all incomplete, visible tasks with dates before today
@@ -738,7 +750,7 @@ export class TimelineView extends ItemView {
             const taskDate = task.startDate!;
 
             // Only consider tasks that are before today (visual date)
-            if (taskDate < today) {
+            if (taskDate < visualToday) {
                 if (!oldestDate || taskDate < oldestDate) {
                     oldestDate = taskDate;
                 }

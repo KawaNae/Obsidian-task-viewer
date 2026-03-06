@@ -35,7 +35,7 @@ export class PropertyCalculator {
         const hasStartTime = task.explicitStartTime ?? false;
 
         const startHourStr = startHour.toString().padStart(2, '0') + ':00';
-        const implicitStartDate = viewStartDate || DateUtils.getVisualDateOfNow(startHour);
+        const implicitVisualStartDate = viewStartDate || DateUtils.getVisualDateOfNow(startHour);
 
         if (hasExplicitStart) {
             if (hasStartTime) {
@@ -60,7 +60,7 @@ export class PropertyCalculator {
             if (hasStartTime) {
                 // Time-only notation: startTime is explicit but date is inherited/implicit
                 return {
-                    date: task.startDate || implicitStartDate,
+                    date: task.startDate || implicitVisualStartDate,
                     time: task.startTime,
                     dateImplicit: true,
                     timeImplicit: false
@@ -68,7 +68,7 @@ export class PropertyCalculator {
             } else {
                 // E, ED, D types: implicit date and implicit time
                 return {
-                    date: implicitStartDate,
+                    date: implicitVisualStartDate,
                     time: startHourStr,
                     dateImplicit: true,
                     timeImplicit: true
@@ -88,8 +88,8 @@ export class PropertyCalculator {
         const hasEndTime = task.explicitEndTime ?? false;
 
         const endHourStr = this.calculateEndHourStr(startHour);
-        const implicitStartDate = viewStartDate || DateUtils.getVisualDateOfNow(startHour);
-        const effectiveStartDate = task.startDate || implicitStartDate;
+        const implicitVisualStartDate = viewStartDate || DateUtils.getVisualDateOfNow(startHour);
+        const effectiveVisualStartDate = task.startDate || implicitVisualStartDate;
 
         // Case 1: Explicit end date + time
         if (hasExplicitEnd) {
@@ -114,7 +114,7 @@ export class PropertyCalculator {
         // Case 2: Has endTime but no endDate
         if (hasEndTime) {
             return {
-                date: effectiveStartDate,
+                date: effectiveVisualStartDate,
                 time: task.endTime,
                 dateImplicit: true,
                 timeImplicit: false
@@ -126,10 +126,10 @@ export class PropertyCalculator {
             const [h, m] = task.startTime!.split(':').map(Number);
             let endH = h + 1;
             const endM = m;
-            let endDateStr = effectiveStartDate;
+            let endDateStr = effectiveVisualStartDate;
             if (endH >= 24) {
                 endH -= 24;
-                endDateStr = DateUtils.addDays(effectiveStartDate, 1);
+                endDateStr = DateUtils.addDays(effectiveVisualStartDate, 1);
             }
             const implicitEndTime = `${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
             return {
@@ -141,7 +141,7 @@ export class PropertyCalculator {
         }
 
         // Case 4: No endDate and no endTime (SD, S-All, D types)
-        const nextDay = DateUtils.addDays(effectiveStartDate, 1);
+        const nextDay = DateUtils.addDays(effectiveVisualStartDate, 1);
         return {
             date: nextDay,
             time: endHourStr,

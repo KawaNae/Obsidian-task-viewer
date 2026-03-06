@@ -161,13 +161,13 @@ export class ScheduleTaskCategorizer {
 
         if (shouldSplitTask(task, startHour)) {
             const [before, after] = splitTaskAtBoundary(task, startHour);
-            const beforeDate = DateUtils.getVisualStartDate(before.startDate!, before.startTime!, startHour);
-            const afterDate = DateUtils.getVisualStartDate(after.startDate!, after.startTime!, startHour);
+            const beforeVisualDate = DateUtils.getVisualStartDate(before.startDate!, before.startTime!, startHour);
+            const afterVisualDate = DateUtils.getVisualStartDate(after.startDate!, after.startTime!, startHour);
 
-            if (beforeDate === dateStr) {
+            if (beforeVisualDate === dateStr) {
                 segments.push(this.toRenderableTask(before));
             }
-            if (afterDate === dateStr) {
+            if (afterVisualDate === dateStr) {
                 segments.push(this.toRenderableTask(after));
             }
             return segments;

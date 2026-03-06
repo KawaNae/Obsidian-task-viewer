@@ -217,11 +217,11 @@ export class PropertiesMenuBuilder {
      */
     private addLengthItem(menu: Menu, task: Task, context: PropertyCalculationContext): void {
         const { startHour, viewStartDate } = context;
-        const implicitStartDate = viewStartDate || DateUtils.getVisualDateOfNow(startHour);
-        const effectiveStartDate = task.startDate || implicitStartDate;
+        const implicitVisualStartDate = viewStartDate || DateUtils.getVisualDateOfNow(startHour);
+        const effectiveVisualStartDate = task.startDate || implicitVisualStartDate;
 
         const durationMs = DateUtils.getTaskDurationMs(
-            effectiveStartDate,
+            effectiveVisualStartDate,
             task.startTime,
             task.endDate,
             task.endTime,

@@ -29,8 +29,8 @@ export class ResizeStrategy extends BaseDragStrategy {
     private colWidth: number = 0;
     private startCol: number = 0;
     private initialSpan: number = 0;
-    private initialDate: string = '';
-    private initialEndDate: string = '';
+    private initialCalendarDate: string = '';
+    private initialCalendarEndDate: string = '';
     private initialGridColumn: string = '';
     private container: HTMLElement | null = null;
     private refHeaderCell: HTMLElement | null = null;
@@ -253,8 +253,8 @@ export class ResizeStrategy extends BaseDragStrategy {
         this.colWidth = this.getCalendarDayColumnWidth(weekRow);
 
         const viewStartDate = context.getViewStartDate();
-        this.initialDate = task.startDate || viewStartDate || DateUtils.getToday();
-        this.initialEndDate = task.endDate || this.initialDate;
+        this.initialCalendarDate = task.startDate || viewStartDate || DateUtils.getToday();
+        this.initialCalendarEndDate = task.endDate || this.initialCalendarDate;
 
         // Read position from data attributes
         this.startCol = Number.parseInt(el.dataset.colStart || '1', 10);
@@ -287,13 +287,13 @@ export class ResizeStrategy extends BaseDragStrategy {
         const crossWeek = target.weekStart !== sourceWeekStart;
 
         if (this.resizeDirection === 'right') {
-            const boundedEnd = target.targetDate < this.initialDate ? this.initialDate : target.targetDate;
+            const boundedEnd = target.targetDate < this.initialCalendarDate ? this.initialCalendarDate : target.targetDate;
             this.calendarPreviewTargetDate = boundedEnd;
 
             if (crossWeek) {
                 this.hiddenElements.forEach(el => el.style.opacity = '0');
                 this.dragEl.style.opacity = '0.15';
-                this.updateCalendarSplitPreview(context, this.initialDate, boundedEnd);
+                this.updateCalendarSplitPreview(context, this.initialCalendarDate, boundedEnd);
                 return;
             }
 
@@ -303,13 +303,13 @@ export class ResizeStrategy extends BaseDragStrategy {
             const newSpan = Math.max(1, target.col - this.startCol + 1);
             this.dragEl.style.gridColumn = `${this.startCol + colOffset} / span ${newSpan}`;
         } else if (this.resizeDirection === 'left') {
-            const boundedStart = target.targetDate > this.initialEndDate ? this.initialEndDate : target.targetDate;
+            const boundedStart = target.targetDate > this.initialCalendarEndDate ? this.initialCalendarEndDate : target.targetDate;
             this.calendarPreviewTargetDate = boundedStart;
 
             if (crossWeek) {
                 this.hiddenElements.forEach(el => el.style.opacity = '0');
                 this.dragEl.style.opacity = '0.15';
-                this.updateCalendarSplitPreview(context, boundedStart, this.initialEndDate);
+                this.updateCalendarSplitPreview(context, boundedStart, this.initialCalendarEndDate);
                 return;
             }
 
@@ -345,16 +345,16 @@ export class ResizeStrategy extends BaseDragStrategy {
 
         const updates: Partial<Task> = {};
         if (this.resizeDirection === 'right') {
-            const newEnd = targetDate < this.initialDate ? this.initialDate : targetDate;
-            if (newEnd >= this.initialDate) {
-                if (newEnd !== this.initialEndDate) {
+            const newEnd = targetDate < this.initialCalendarDate ? this.initialCalendarDate : targetDate;
+            if (newEnd >= this.initialCalendarDate) {
+                if (newEnd !== this.initialCalendarEndDate) {
                     updates.endDate = newEnd;
                 }
             }
         } else if (this.resizeDirection === 'left') {
-            const newStart = targetDate > this.initialEndDate ? this.initialEndDate : targetDate;
-            if (newStart <= this.initialEndDate) {
-                if (newStart !== this.initialDate) {
+            const newStart = targetDate > this.initialCalendarEndDate ? this.initialCalendarEndDate : targetDate;
+            if (newStart <= this.initialCalendarEndDate) {
+                if (newStart !== this.initialCalendarDate) {
                     updates.startDate = newStart;
                 }
             }
@@ -402,9 +402,9 @@ export class ResizeStrategy extends BaseDragStrategy {
         this.colWidth = headerCell?.getBoundingClientRect().width || 100;
 
         const viewStartDate = context.getViewStartDate();
-        this.initialDate = task.startDate || viewStartDate || DateUtils.getToday();
-        this.initialEndDate = task.endDate || this.initialDate;
-        this.initialSpan = DateUtils.getDiffDays(this.initialDate, this.initialEndDate) + 1;
+        this.initialCalendarDate = task.startDate || viewStartDate || DateUtils.getToday();
+        this.initialCalendarEndDate = task.endDate || this.initialCalendarDate;
+        this.initialSpan = DateUtils.getDiffDays(this.initialCalendarDate, this.initialCalendarEndDate) + 1;
 
         const gridCol = el.style.gridColumn;
         const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
@@ -466,15 +466,15 @@ export class ResizeStrategy extends BaseDragStrategy {
         if (this.resizeDirection === 'right') {
             // 右リサイズ: end日付を変更
             const spanDelta = currentSpan - this.initialSpan;
-            const newEnd = DateUtils.addDays(this.initialEndDate, spanDelta);
-            if (newEnd >= this.initialDate) {
+            const newEnd = DateUtils.addDays(this.initialCalendarEndDate, spanDelta);
+            if (newEnd >= this.initialCalendarDate) {
                 updates.endDate = newEnd;
             }
         } else if (this.resizeDirection === 'left') {
             // 左リサイズ: start日付を変更
             const startColDelta = currentStartCol - this.startCol;
-            const newStart = DateUtils.addDays(this.initialDate, startColDelta);
-            if (newStart <= this.initialEndDate) {
+            const newStart = DateUtils.addDays(this.initialCalendarDate, startColDelta);
+            if (newStart <= this.initialCalendarEndDate) {
                 updates.startDate = newStart;
             }
         }

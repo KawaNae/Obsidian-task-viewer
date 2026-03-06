@@ -21,6 +21,7 @@ export interface PinnedListCallbacks {
     onFilterEdit: (listDef: PinnedListDefinition, anchorEl: HTMLElement) => void;
     onDuplicate: (listDef: PinnedListDefinition) => void;
     onRemove: (listDef: PinnedListDefinition) => void;
+    onToggleApplyViewFilter?: (listDef: PinnedListDefinition) => void;
 }
 
 export class PinnedListRenderer {
@@ -47,6 +48,7 @@ export class PinnedListRenderer {
         lists: PinnedListDefinition[],
         collapsedState: Record<string, boolean>,
         callbacks: PinnedListCallbacks,
+        viewFilter?: (task: Task) => boolean,
     ): void {
         container.empty();
         container.addClass('pinned-lists-container');
@@ -60,10 +62,11 @@ export class PinnedListRenderer {
         const filterContext = { startHour: this.plugin.settings.startHour };
 
         for (const listDef of lists) {
-            // Apply pinned list's own filter only (independent of toolbar filter)
-            const tasks = allTasks.filter(task =>
-                TaskFilterEngine.evaluate(task, listDef.filterState, filterContext)
-            );
+            const tasks = allTasks.filter(task => {
+                if (!TaskFilterEngine.evaluate(task, listDef.filterState, filterContext)) return false;
+                if (listDef.applyViewFilter && viewFilter && !viewFilter(task)) return false;
+                return true;
+            });
 
             TaskSorter.sort(tasks, listDef.sortState);
 
@@ -182,6 +185,16 @@ export class PinnedListRenderer {
                 .setIcon('copy')
                 .onClick(() => callbacks.onDuplicate(listDef));
         });
+
+        if (callbacks.onToggleApplyViewFilter) {
+            menu.addItem(item => {
+                (item as any)
+                    .setTitle('Apply view filter')
+                    .setIcon('filter')
+                    .setChecked(!!listDef.applyViewFilter)
+                    .onClick(() => callbacks.onToggleApplyViewFilter!(listDef));
+            });
+        }
 
         menu.addSeparator();
 

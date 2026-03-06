@@ -51,20 +51,20 @@ export function splitTaskAtBoundary(task: Task, startHour: number): [RenderableT
         throw new Error('Task must have start and end date/time to split');
     }
 
-    let boundaryDate: string;
+    let boundaryCalendarDate: string;
     const boundaryTime = `${startHour.toString().padStart(2, '0')}:00`;
 
     if (task.startDate === task.endDate) {
-        boundaryDate = task.startDate;
+        boundaryCalendarDate = task.startDate;
     } else {
         const startDateObj = new Date(task.startDate);
-        const boundaryDateObj = new Date(startDateObj);
-        boundaryDateObj.setDate(boundaryDateObj.getDate() + 1);
-        boundaryDate = boundaryDateObj.toISOString().split('T')[0];
+        const boundaryCalendarDateObj = new Date(startDateObj);
+        boundaryCalendarDateObj.setDate(boundaryCalendarDateObj.getDate() + 1);
+        boundaryCalendarDate = boundaryCalendarDateObj.toISOString().split('T')[0];
     }
 
     const beforeSegmentDate = DateUtils.getVisualStartDate(task.startDate, task.startTime, startHour);
-    const afterSegmentDate = DateUtils.getVisualStartDate(boundaryDate, boundaryTime, startHour);
+    const afterSegmentDate = DateUtils.getVisualStartDate(boundaryCalendarDate, boundaryTime, startHour);
 
     const beforeSegment: RenderableTask = {
         ...task,
@@ -72,7 +72,7 @@ export function splitTaskAtBoundary(task: Task, startHour: number): [RenderableT
         originalTaskId: task.id,
         isSplit: true,
         splitSegment: 'head',
-        endDate: boundaryDate,
+        endDate: boundaryCalendarDate,
         endTime: boundaryTime,
     };
 
@@ -82,7 +82,7 @@ export function splitTaskAtBoundary(task: Task, startHour: number): [RenderableT
         originalTaskId: task.id,
         isSplit: true,
         splitSegment: 'tail',
-        startDate: boundaryDate,
+        startDate: boundaryCalendarDate,
         startTime: boundaryTime,
     };
 

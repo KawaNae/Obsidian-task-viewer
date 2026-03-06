@@ -107,8 +107,8 @@ export function getWeekStart(date: Date, weekStartDay: 0 | 1): Date {
 
 export function getNormalizedWindowStart(value: string, weekStartDay: 0 | 1): string {
     const parsed = parseLocalDateString(value);
-    const baseDate = parsed ?? new Date();
-    const weekStart = getWeekStart(baseDate, weekStartDay);
+    const baseCalendarDate = parsed ?? new Date();
+    const weekStart = getWeekStart(baseCalendarDate, weekStartDay);
     return DateUtils.getLocalDateString(weekStart);
 }
 

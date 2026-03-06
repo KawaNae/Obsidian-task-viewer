@@ -3,6 +3,7 @@ import { ParserStrategy } from '../strategies/ParserStrategy';
 import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
 import { TaskIdGenerator } from '../../../utils/TaskIdGenerator';
 import { TagExtractor } from '../../../utils/TagExtractor';
+import { DateUtils } from '../../../utils/DateUtils';
 
 interface DateBlockResult {
     date: string;
@@ -270,11 +271,8 @@ export class AtNotationParser implements ParserStrategy {
         }
 
         let time: string | undefined;
-        if (timeMatch) {
-            const [h, m] = timeMatch[1].split(':').map(Number);
-            if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
-                time = timeMatch[1];
-            }
+        if (timeMatch && DateUtils.isValidTimeString(timeMatch[1])) {
+            time = timeMatch[1];
         }
 
         return { date, time };

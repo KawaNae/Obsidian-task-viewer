@@ -171,7 +171,7 @@ export class AllDaySectionRenderer {
                 this.plugin.settings.dailyNoteHeader,
                 this.plugin.settings.dailyNoteHeaderLevel
             );
-        }, { startDate: date }, { warnOnEmptyTask: true }).open();
+        }, { startDate: date }, { warnOnEmptyTask: true, dailyNoteDate: date }).open();
     }
 
     /** Open timer for daily note */

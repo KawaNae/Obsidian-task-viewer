@@ -124,6 +124,7 @@ export class ViewTemplateLoader {
         if (Array.isArray(data.grid)) {
             template.grid = this.parseGrid(data.grid);
         }
+
     }
 
     private parsePinnedLists(raw: unknown[]): PinnedListDefinition[] {
@@ -147,6 +148,10 @@ export class ViewTemplateLoader {
 
             if (obj.sortState && typeof obj.sortState === 'object') {
                 def.sortState = obj.sortState as SortState;
+            }
+
+            if (typeof obj.applyViewFilter === 'boolean') {
+                def.applyViewFilter = obj.applyViewFilter;
             }
 
             result.push(def);

@@ -30,8 +30,8 @@ export class MoveStrategy extends BaseDragStrategy {
     private startCol: number = 0;
     private grabCol: number = 0;
     private initialSpan: number = 0;
-    private initialDate: string = '';
-    private initialEndDate: string = '';
+    private initialCalendarDate: string = '';
+    private initialCalendarEndDate: string = '';
     private initialGridColumn: string = '';
     private container: HTMLElement | null = null;
     private isOutsideSection: boolean = false;
@@ -338,9 +338,9 @@ export class MoveStrategy extends BaseDragStrategy {
         this.colWidth = this.getCalendarDayColumnWidth(weekRow);
 
         const viewStartDate = context.getViewStartDate();
-        this.initialDate = task.startDate || viewStartDate || DateUtils.getToday();
-        this.initialEndDate = task.endDate || this.initialDate;
-        this.initialSpan = DateUtils.getDiffDays(this.initialDate, this.initialEndDate) + 1;
+        this.initialCalendarDate = task.startDate || viewStartDate || DateUtils.getToday();
+        this.initialCalendarEndDate = task.endDate || this.initialCalendarDate;
+        this.initialSpan = DateUtils.getDiffDays(this.initialCalendarDate, this.initialCalendarEndDate) + 1;
 
         // Read position from data attributes (absolute positioning)
         const colStart = Number.parseInt(el.dataset.colStart || '1', 10);
@@ -386,8 +386,8 @@ export class MoveStrategy extends BaseDragStrategy {
             this.ghostEl.style.left = '-9999px';
         }
 
-        const movedStart = DateUtils.addDays(this.initialDate, dayDelta);
-        const movedEnd = DateUtils.addDays(this.initialEndDate, dayDelta);
+        const movedStart = DateUtils.addDays(this.initialCalendarDate, dayDelta);
+        const movedEnd = DateUtils.addDays(this.initialCalendarEndDate, dayDelta);
         this.updateCalendarSplitPreview(context, movedStart, movedEnd);
         this.dragEl.style.transform = '';
     }
@@ -419,8 +419,8 @@ export class MoveStrategy extends BaseDragStrategy {
             return;
         }
 
-        const newStart = DateUtils.addDays(this.initialDate, dayDelta);
-        const duration = DateUtils.getDiffDays(this.initialDate, this.initialEndDate);
+        const newStart = DateUtils.addDays(this.initialCalendarDate, dayDelta);
+        const duration = DateUtils.getDiffDays(this.initialCalendarDate, this.initialCalendarEndDate);
         const newEnd = DateUtils.addDays(newStart, duration);
 
         const taskIdToRestore = this.dragTask.id;
@@ -460,9 +460,9 @@ export class MoveStrategy extends BaseDragStrategy {
         this.colWidth = headerCell?.getBoundingClientRect().width || 100;
 
         const viewStartDate = context.getViewStartDate();
-        this.initialDate = task.startDate || viewStartDate || DateUtils.getToday();
-        this.initialEndDate = task.endDate || this.initialDate;
-        this.initialSpan = DateUtils.getDiffDays(this.initialDate, this.initialEndDate) + 1;
+        this.initialCalendarDate = task.startDate || viewStartDate || DateUtils.getToday();
+        this.initialCalendarEndDate = task.endDate || this.initialCalendarDate;
+        this.initialSpan = DateUtils.getDiffDays(this.initialCalendarDate, this.initialCalendarEndDate) + 1;
 
         const gridCol = el.style.gridColumn;
         const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
@@ -571,8 +571,8 @@ export class MoveStrategy extends BaseDragStrategy {
             return;
         }
 
-        const newStart = DateUtils.addDays(this.initialDate, dayDelta);
-        const duration = DateUtils.getDiffDays(this.initialDate, this.initialEndDate);
+        const newStart = DateUtils.addDays(this.initialCalendarDate, dayDelta);
+        const duration = DateUtils.getDiffDays(this.initialCalendarDate, this.initialCalendarEndDate);
         const newEnd = DateUtils.addDays(newStart, duration);
 
         const updates: Partial<Task> = this.buildAllDayMoveUpdates(newStart, newEnd);

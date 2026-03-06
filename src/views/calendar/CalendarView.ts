@@ -164,7 +164,6 @@ export class CalendarView extends ItemView {
         } else {
             this.customName = undefined;
         }
-
         await super.setState(state, result);
         await this.render();
     }
@@ -503,7 +502,14 @@ export class CalendarView extends ItemView {
                 this.app.workspace.requestSaveLayout();
                 void this.render();
             },
-        });
+            onToggleApplyViewFilter: (listDef) => {
+                listDef.applyViewFilter = !listDef.applyViewFilter;
+                this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
+        },
+            (task) => this.filterMenu.isTaskVisible(task),
+        );
     }
 
     private openPinnedListSort(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {

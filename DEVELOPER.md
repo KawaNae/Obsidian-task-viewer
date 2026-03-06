@@ -711,13 +711,28 @@ task.parserId === 'at-notation'   →  InlineTaskWriter
 
 ---
 
+## Terminology
+
+### Date boundary concepts
+
+| Term | Meaning | Determined by |
+|------|---------|---------------|
+| **calendarDate** | The date as defined by midnight (00:00). `task.startDate`, `task.endDate`, `task.deadline` are all calendar dates. | Fixed (midnight) |
+| **visualDate** | The date as perceived by the user, shifted by `startHour`. A task at 03:00 with `startHour=5` belongs to the previous visual day. | `startHour` setting |
+
+- `getVisualDateOfNow()`, `getVisualStartDate()` return **visualDate**
+- `DateUtils.getToday()`, `DateUtils.addDays()` operate on **calendarDate**
+- `startHour` is the boundary between two visual days (default: 5:00 AM)
+
+---
+
 ## Settings Schema
 
 Defined in `src/types.ts` as `TaskViewerSettings`. Defaults are in `DEFAULT_SETTINGS` in the same file.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `startHour` | number | 5 | Day boundary hour (used for visual date calculation) |
+| `startHour` | number | 5 | Visual day boundary hour. Times before this hour belong to the previous visualDate. |
 | `applyGlobalStyles` | boolean | `false` | Apply plugin CSS globally |
 | `enableStatusMenu` | boolean | `true` | Show status menu on checkbox long-press |
 | `statusMenuChars` | string[] | `['-','!','?','>','/']` | Status characters shown in status menu |

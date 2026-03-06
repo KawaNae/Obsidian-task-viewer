@@ -1,6 +1,7 @@
 import { App, Modal, Setting, setIcon } from 'obsidian';
 import { Task } from '../types';
 import { TaskParser } from '../services/parsing/TaskParser';
+import { DateUtils } from '../utils/DateUtils';
 
 export interface CreateTaskResult {
     content: string;
@@ -52,6 +53,8 @@ export interface CreateTaskModalOptions {
     submitLabel?: string;
     /** Initial focus field */
     focusField?: 'name' | 'start' | 'end' | 'deadline';
+    /** Daily note date (YYYY-MM-DD). Shown as Start Date placeholder when startDate is omitted (inherited from filename). */
+    dailyNoteDate?: string;
 }
 
 export class CreateTaskModal extends Modal {
@@ -147,13 +150,22 @@ export class CreateTaskModal extends Modal {
 
         const row = container.createDiv({ cls: 'create-task-modal__date-row' });
 
+        // Determine date placeholder based on section and implicit values
+        let datePlaceholder = 'YYYY-MM-DD';
+        if (section === 'start' && this.options.dailyNoteDate) {
+            datePlaceholder = this.options.dailyNoteDate;
+        } else if (section === 'end') {
+            // End Date inherits from Start Date (same-day inference)
+            datePlaceholder = this.result.startDate || this.options.dailyNoteDate || 'YYYY-MM-DD';
+        }
+
         // Date field
         const dateDiv = row.createDiv({ cls: 'create-task-modal__date-row__field' });
         dateDiv.createEl('label', { text: 'Date' });
         const dateInput = this.createPickerTextInput(
             dateDiv,
             'date',
-            'YYYY-MM-DD',
+            datePlaceholder,
             initialDate || ''
         );
 
@@ -177,9 +189,19 @@ export class CreateTaskModal extends Modal {
             const d = dateInput.value.trim() || undefined;
             const t = timeInput.value.trim() || undefined;
 
-            if (section === 'start') { this.result.startDate = d; this.result.startTime = t; }
-            else if (section === 'end') { this.result.endDate = d; this.result.endTime = t; }
-            else { this.result.deadline = d ? (t ? `${d}T${t}` : d) : undefined; }
+            if (section === 'start') {
+                this.result.startDate = d;
+                this.result.startTime = t;
+                // Dynamically update End Date placeholder to track Start Date
+                if (this.endDateInput) {
+                    this.endDateInput.placeholder = d || this.options.dailyNoteDate || 'YYYY-MM-DD';
+                }
+            } else if (section === 'end') {
+                this.result.endDate = d;
+                this.result.endTime = t;
+            } else {
+                this.result.deadline = d ? (t ? `${d}T${t}` : d) : undefined;
+            }
 
             this.validateInputs();
         };
@@ -267,18 +289,6 @@ export class CreateTaskModal extends Modal {
         inputs.forEach(el => el?.classList.remove('create-task-modal__input--invalid'));
         this.errorEl.style.display = 'none';
 
-        const isValidDate = (v: string): boolean => {
-            if (!v) return true;
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
-            return !isNaN(new Date(v).getTime());
-        };
-        const isValidTime = (v: string): boolean => {
-            if (!v) return true;
-            if (!/^\d{2}:\d{2}$/.test(v)) return false;
-            const [h, m] = v.split(':').map(Number);
-            return h >= 0 && h <= 23 && m >= 0 && m <= 59;
-        };
-
         const sd = this.startDateInput?.value.trim() || '';
         const st = this.startTimeInput?.value.trim() || '';
         const ed = this.endDateInput?.value.trim() || '';
@@ -287,12 +297,23 @@ export class CreateTaskModal extends Modal {
         const dt = this.deadlineTimeInput?.value.trim() || '';
 
         // Format checks
-        if (!isValidDate(sd)) { this.startDateInput.classList.add('create-task-modal__input--invalid'); this.showError('Start: invalid date format (YYYY-MM-DD).'); return false; }
-        if (!isValidTime(st)) { this.startTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('Start: invalid time format (HH:mm).'); return false; }
-        if (!isValidDate(ed)) { this.endDateInput.classList.add('create-task-modal__input--invalid'); this.showError('End: invalid date format (YYYY-MM-DD).'); return false; }
-        if (!isValidTime(et)) { this.endTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('End: invalid time format (HH:mm).'); return false; }
-        if (!isValidDate(dd)) { this.deadlineDateInput.classList.add('create-task-modal__input--invalid'); this.showError('Deadline: invalid date format (YYYY-MM-DD).'); return false; }
-        if (!isValidTime(dt)) { this.deadlineTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('Deadline: invalid time format (HH:mm).'); return false; }
+        const fields: Array<{ value: string; input: HTMLInputElement; label: string; type: 'date' | 'time' }> = [
+            { value: sd, input: this.startDateInput, label: 'Start', type: 'date' },
+            { value: st, input: this.startTimeInput, label: 'Start', type: 'time' },
+            { value: ed, input: this.endDateInput, label: 'End', type: 'date' },
+            { value: et, input: this.endTimeInput, label: 'End', type: 'time' },
+            { value: dd, input: this.deadlineDateInput, label: 'Deadline', type: 'date' },
+            { value: dt, input: this.deadlineTimeInput, label: 'Deadline', type: 'time' },
+        ];
+        for (const f of fields) {
+            if (!f.value) continue;
+            const valid = f.type === 'date' ? DateUtils.isValidDateString(f.value) : DateUtils.isValidTimeString(f.value);
+            if (!valid) {
+                f.input.classList.add('create-task-modal__input--invalid');
+                this.showError(`${f.label}: invalid ${f.type} format (${f.type === 'date' ? 'YYYY-MM-DD' : 'HH:mm'}).`);
+                return false;
+            }
+        }
 
         // Business rules
         if (!sd && st) { this.startTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('Start: date is required when time is specified.'); return false; }

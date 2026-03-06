@@ -9,6 +9,7 @@ import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { ViewSettingsMenu } from '../sharedUI/ViewToolbar';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
+import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState, hasSortRules } from '../../services/sort/SortTypes';
 import { TaskFilterEngine } from '../../services/filter/TaskFilterEngine';
 import { TaskSorter } from '../../services/sort/TaskSorter';
@@ -28,10 +29,12 @@ export class KanbanView extends ItemView {
     private readonly menuHandler: MenuHandler;
     private readonly filterMenu = new FilterMenuComponent();
     private readonly sortMenu = new SortMenuComponent();
+    private readonly viewFilterMenu = new FilterMenuComponent();
 
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private customName: string | undefined;
+    private viewFilterState: FilterState | undefined;
     private grid: PinnedListDefinition[][] = [];
     private gridCollapsed: Record<string, boolean> = {};
 
@@ -73,6 +76,11 @@ export class KanbanView extends ItemView {
         if (typeof state?.customName === 'string' && state.customName.trim()) {
             this.customName = state.customName;
         }
+        if (state?.filterState) {
+            const fs = FilterSerializer.fromJSON(state.filterState);
+            this.viewFilterState = fs;
+            this.viewFilterMenu.setFilterState(fs);
+        }
 
         await super.setState(state, result);
 
@@ -101,6 +109,10 @@ export class KanbanView extends ItemView {
             result.customName = this.customName;
         }
 
+        if (this.viewFilterState && hasConditions(this.viewFilterState)) {
+            result.filterState = FilterSerializer.toJSON(this.viewFilterState);
+        }
+
         return result;
     }
 
@@ -122,6 +134,7 @@ export class KanbanView extends ItemView {
     async onClose(): Promise<void> {
         this.filterMenu.close();
         this.sortMenu.close();
+        this.viewFilterMenu.close();
         this.unsubscribe?.();
         this.unsubscribe = null;
     }
@@ -151,22 +164,29 @@ export class KanbanView extends ItemView {
             }
         }
 
-        // Footer: add row / add column buttons
-        const footer = gridHost.createDiv('kanban-view__grid-footer');
-
-        const addRowBtn = footer.createEl('button', { cls: 'kanban-view__add-row-btn' });
-        setIcon(addRowBtn.createSpan(), 'plus');
-        addRowBtn.createSpan({ text: ' Add Row' });
-        addRowBtn.addEventListener('click', () => this.addRow());
-
-        const addColBtn = footer.createEl('button', { cls: 'kanban-view__add-col-btn' });
-        setIcon(addColBtn.createSpan(), 'plus');
-        addColBtn.createSpan({ text: ' Add Column' });
-        addColBtn.addEventListener('click', () => this.addColumn());
     }
 
     private renderToolbar(host: HTMLElement): void {
         const toolbar = host.createDiv('view-toolbar');
+
+        toolbar.createDiv('view-toolbar__spacer');
+
+        // View-level filter button
+        const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(filterBtn, 'filter');
+        filterBtn.setAttribute('aria-label', 'Filter');
+        filterBtn.classList.toggle('is-filtered', this.viewFilterMenu.hasActiveFilters());
+        filterBtn.onclick = (e) => {
+            this.viewFilterMenu.showMenu(e as MouseEvent, {
+                onFilterChange: () => {
+                    this.persistViewFilterState();
+                    this.render();
+                    filterBtn.classList.toggle('is-filtered', this.viewFilterMenu.hasActiveFilters());
+                },
+                getTasks: () => this.taskIndex.getTasks(),
+                getStartHour: () => this.plugin.settings.startHour,
+            });
+        };
 
         ViewSettingsMenu.renderButton(toolbar, {
             app: this.app,
@@ -180,6 +200,7 @@ export class KanbanView extends ItemView {
             },
             buildUri: () => ({
                 grid: this.grid,
+                filterState: this.viewFilterMenu.getFilterState(),
             }),
             viewType: VIEW_META_KANBAN.type,
             getViewTemplateFolder: () => this.plugin.settings.viewTemplateFolder,
@@ -188,11 +209,16 @@ export class KanbanView extends ItemView {
                 name: this.customName || VIEW_META_KANBAN.displayText,
                 viewType: 'kanban',
                 grid: this.grid,
+                filterState: this.viewFilterMenu.getFilterState(),
             }),
             onApplyTemplate: (template) => {
                 if (template.grid && template.grid.length > 0) {
                     this.grid = template.grid;
                     this.gridCollapsed = {};
+                }
+                if (template.filterState) {
+                    this.viewFilterState = template.filterState;
+                    this.viewFilterMenu.setFilterState(template.filterState);
                 }
                 this.requestSaveLayout();
                 this.render();
@@ -201,6 +227,8 @@ export class KanbanView extends ItemView {
                 this.grid = [[this.createDefaultList()]];
                 this.gridCollapsed = {};
                 this.customName = undefined;
+                this.viewFilterState = undefined;
+                this.viewFilterMenu.setFilterState(createEmptyFilterState());
                 this.requestSaveLayout();
                 this.render();
             },
@@ -219,7 +247,13 @@ export class KanbanView extends ItemView {
         // Get task count for this cell
         const allTasks = this.taskIndex.getTasks();
         const filterContext = { startHour: this.plugin.settings.startHour };
-        const tasks = allTasks.filter(t => TaskFilterEngine.evaluate(t, listDef.filterState, filterContext));
+        const tasks = allTasks.filter(t => {
+            if (!TaskFilterEngine.evaluate(t, listDef.filterState, filterContext)) return false;
+            if (listDef.applyViewFilter && this.viewFilterState && hasConditions(this.viewFilterState)) {
+                if (!TaskFilterEngine.evaluate(t, this.viewFilterState, filterContext)) return false;
+            }
+            return true;
+        });
         TaskSorter.sort(tasks, listDef.sortState);
 
         const toggle = header.createSpan({ text: isCollapsed ? '▶' : '▼', cls: 'kanban-view__cell-toggle' });
@@ -326,6 +360,18 @@ export class KanbanView extends ItemView {
             item.setTitle('Duplicate')
                 .setIcon('copy')
                 .onClick(() => this.duplicateCell(listDef, row, col));
+        });
+
+        menu.addItem(item => {
+            (item as any)
+                .setTitle('Apply view filter')
+                .setIcon('filter')
+                .setChecked(!!listDef.applyViewFilter)
+                .onClick(() => {
+                    listDef.applyViewFilter = !listDef.applyViewFilter;
+                    this.requestSaveLayout();
+                    this.render();
+                });
         });
 
         menu.addSeparator();
@@ -507,5 +553,13 @@ export class KanbanView extends ItemView {
 
     private requestSaveLayout(): void {
         this.app.workspace.requestSaveLayout();
+    }
+
+    private persistViewFilterState(): void {
+        const state = this.viewFilterMenu.getFilterState();
+        this.viewFilterState = hasConditions(state)
+            ? FilterSerializer.fromJSON(FilterSerializer.toJSON(state))
+            : undefined;
+        this.requestSaveLayout();
     }
 }

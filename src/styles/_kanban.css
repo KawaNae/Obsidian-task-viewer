@@ -160,49 +160,6 @@
     color: var(--tv-accent);
 }
 
-/* Add row / add column buttons */
-.kanban-view__add-row-btn,
-.kanban-view__add-col-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    padding: 6px 12px;
-    margin-top: 8px;
-    border: 2px dashed var(--tv-border);
-    border-radius: var(--tv-radius-m);
-    background: transparent;
-    color: var(--tv-text-muted);
-    font-size: 0.85em;
-    cursor: pointer;
-    transition:
-        background-color 120ms ease,
-        border-color 120ms ease,
-        color 120ms ease;
-}
-
-.kanban-view__add-row-btn:hover,
-.kanban-view__add-col-btn:hover {
-    background-color: var(--tv-bg-hover);
-    border-color: var(--tv-accent);
-    color: var(--tv-text);
-}
-
-.kanban-view__grid-footer {
-    display: flex;
-    gap: 8px;
-    padding: 0 8px 8px;
-}
-
-.kanban-view__grid-footer .kanban-view__add-row-btn {
-    flex: 1;
-    margin-top: 0;
-}
-
-.kanban-view__grid-footer .kanban-view__add-col-btn {
-    margin-top: 0;
-}
-
 /* Task cards in kanban cells */
 .kanban-view__cell-body .task-card {
     position: relative;

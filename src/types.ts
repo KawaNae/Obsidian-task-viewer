@@ -117,6 +117,7 @@ export interface PinnedListDefinition {
     name: string;
     filterState: FilterState;
     sortState?: SortState;
+    applyViewFilter?: boolean;
 }
 
 export interface ViewTemplateSummary {
