@@ -38,6 +38,7 @@
 /* Timeline Scroll Area */
 .timeline-scroll-area {
     flex: 1;
+    overflow-x: hidden;
     overflow-y: scroll;
     position: relative;
     /* Hide scrollbar but keep scroll functionality */

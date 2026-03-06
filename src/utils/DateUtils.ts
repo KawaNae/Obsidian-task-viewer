@@ -1,4 +1,7 @@
 export class DateUtils {
+    /** Default duration in minutes for single-sided timed tasks (S-Timed / E-Timed). */
+    static readonly DEFAULT_TIMED_DURATION_MINUTES = 60;
+
     static getLocalDateString(date: Date): string {
         const year = date.getFullYear();
         const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -80,6 +83,17 @@ export class DateUtils {
     }
 
 
+    static isValidDateString(value: string): boolean {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+        return !isNaN(new Date(value).getTime());
+    }
+
+    static isValidTimeString(value: string): boolean {
+        if (!/^\d{2}:\d{2}$/.test(value)) return false;
+        const [h, m] = value.split(':').map(Number);
+        return h >= 0 && h <= 23 && m >= 0 && m <= 59;
+    }
+
     static timeToMinutes(time: string): number {
         const [h, m] = time.split(':').map(Number);
         return h * 60 + m;
@@ -144,7 +158,7 @@ export class DateUtils {
             // Same date or no end date: depends on whether there's a start time
             if (startTime) {
                 // S-Timed: +1 hour
-                endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
+                endDateTime = new Date(startDateTime.getTime() + DateUtils.DEFAULT_TIMED_DURATION_MINUTES * 60 * 1000);
             } else {
                 // S-All, SD, etc: next day at startHour-1:59 (24 hours)
                 const nextDay = this.addDays(startDate, 1);

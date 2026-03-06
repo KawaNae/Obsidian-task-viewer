@@ -179,9 +179,9 @@ export class TimelineToolbar {
             (days) => this.navigateDate(days),
             () => {
                 const oldestOverdueDate = this.findOldestOverdueDate();
-                const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-                const pastDate = DateUtils.addDays(today, -this.plugin.settings.pastDaysToShow);
-                this.viewState.startDate = (oldestOverdueDate && oldestOverdueDate < pastDate) ? oldestOverdueDate : pastDate;
+                const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+                const visualPastDate = DateUtils.addDays(visualToday, -this.plugin.settings.pastDaysToShow);
+                this.viewState.startDate = (oldestOverdueDate && oldestOverdueDate < visualPastDate) ? oldestOverdueDate : visualPastDate;
                 this.callbacks.onScrollToNow();
             },
             { label: 'Now' }
@@ -194,12 +194,13 @@ export class TimelineToolbar {
      */
     private findOldestOverdueDate(): string | null {
         const startHour = this.plugin.settings.startHour;
-        const today = DateUtils.getVisualDateOfNow(startHour);
+        const visualToday = DateUtils.getVisualDateOfNow(startHour);
+        const isVisible = this.getTaskFilter();
 
-        // Get all incomplete tasks with dates before today
+        // Get all incomplete, visible tasks with dates before visualToday
         const tasks = this.taskIndex.getTasks().filter(t =>
+            isVisible(t) &&
             !isCompleteStatusChar(t.statusChar, this.plugin.settings.completeStatusChars) &&
-
             t.startDate
         );
 
@@ -210,7 +211,7 @@ export class TimelineToolbar {
             const taskDate = task.startDate!;
 
             // Only consider tasks that are before today (visual date)
-            if (taskDate < today) {
+            if (taskDate < visualToday) {
                 if (!oldestDate || taskDate < oldestDate) {
                     oldestDate = taskDate;
                 }

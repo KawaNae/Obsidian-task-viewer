@@ -82,6 +82,65 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
     private renderGeneralTab(el: HTMLElement): void {
         new Setting(el)
+            .setName('Long Press Threshold')
+            .setDesc('Duration in milliseconds to trigger context menu on touch/stylus long press (100-2000). Lower values make it faster.')
+            .addSlider(slider => slider
+                .setLimits(100, 2000, 50)
+                .setValue(this.plugin.settings.longPressThreshold)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.longPressThreshold = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Task Select Action')
+            .setDesc('How to select a task card to show drag handles. Double click can help prevent accidental selections.')
+            .addDropdown(dropdown => dropdown
+                .addOption('click', 'Single Click')
+                .addOption('dblclick', 'Double Click')
+                .setValue(this.plugin.settings.taskSelectAction)
+                .onChange(async (value) => {
+                    this.plugin.settings.taskSelectAction = value as 'click' | 'dblclick';
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Reuse Existing Tab')
+            .setDesc('When opening a file from a task card, switch to the existing tab if the file is already open, instead of opening a new tab.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.reuseExistingTab)
+                .onChange(async (value) => {
+                    this.plugin.settings.reuseExistingTab = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Show Editor Menu for Tasks')
+            .setDesc('Show a ··· menu button on recognized inline task lines in the editor.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.editorMenuForTasks)
+                .onChange(async (value) => {
+                    this.plugin.settings.editorMenuForTasks = value;
+                    await this.plugin.saveSettings();
+                    this.plugin.notifyEditorMenuSettingsChanged();
+                }));
+
+        new Setting(el)
+            .setName('Show Editor Menu for Checkboxes')
+            .setDesc('Show a ··· menu button on plain checkbox lines in the editor.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.editorMenuForCheckboxes)
+                .onChange(async (value) => {
+                    this.plugin.settings.editorMenuForCheckboxes = value;
+                    await this.plugin.saveSettings();
+                    this.plugin.notifyEditorMenuSettingsChanged();
+                }));
+
+        // Checkboxes
+        el.createEl('h3', { text: 'Checkboxes', cls: 'setting-section-header' });
+
+        new Setting(el)
             .setName('Apply Custom Checkboxes Styles')
             .setDesc('If enabled, the plugin will apply its checkbox styles to the entire Obsidian editor, replacing the need for a separate CSS snippet.')
             .addToggle(toggle => toggle
@@ -127,40 +186,6 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                         .map(c => c.trim())
                         .filter(c => c.length > 0);
                     this.plugin.settings.completeStatusChars = chars.length > 0 ? chars : ['x', 'X', '-', '!'];
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(el)
-            .setName('Long Press Threshold')
-            .setDesc('Duration in milliseconds to trigger context menu on touch/stylus long press (100-2000). Lower values make it faster.')
-            .addSlider(slider => slider
-                .setLimits(100, 2000, 50)
-                .setValue(this.plugin.settings.longPressThreshold)
-                .setDynamicTooltip()
-                .onChange(async (value) => {
-                    this.plugin.settings.longPressThreshold = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(el)
-            .setName('Task Select Action')
-            .setDesc('How to select a task card to show drag handles. Double click can help prevent accidental selections.')
-            .addDropdown(dropdown => dropdown
-                .addOption('click', 'Single Click')
-                .addOption('dblclick', 'Double Click')
-                .setValue(this.plugin.settings.taskSelectAction)
-                .onChange(async (value) => {
-                    this.plugin.settings.taskSelectAction = value as 'click' | 'dblclick';
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(el)
-            .setName('Reuse Existing Tab')
-            .setDesc('When opening a file from a task card, switch to the existing tab if the file is already open, instead of opening a new tab.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.reuseExistingTab)
-                .onChange(async (value) => {
-                    this.plugin.settings.reuseExistingTab = value;
                     await this.plugin.saveSettings();
                 }));
 
@@ -290,6 +315,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             { label: 'Calendar', key: 'calendar' },
             { label: 'Mini Calendar', key: 'miniCalendar' },
             { label: 'Timer', key: 'timer' },
+            { label: 'Kanban', key: 'kanban' },
         ];
 
         for (const entry of positionEntries) {

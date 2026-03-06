@@ -6,18 +6,18 @@ import type { ScheduleTaskRenderer } from './ScheduleTaskRenderer';
 export interface ScheduleSectionRendererOptions {
     taskRenderer: ScheduleTaskRenderer;
     collapsedSections: Record<CollapsibleSectionKey, boolean>;
-    currentDateProvider: () => string;
+    currentVisualDateProvider: () => string;
 }
 
 export class ScheduleSectionRenderer {
     private readonly taskRenderer: ScheduleTaskRenderer;
     private readonly collapsedSections: Record<CollapsibleSectionKey, boolean>;
-    private readonly currentDateProvider: () => string;
+    private readonly currentVisualDateProvider: () => string;
 
     constructor(options: ScheduleSectionRendererOptions) {
         this.taskRenderer = options.taskRenderer;
         this.collapsedSections = options.collapsedSections;
-        this.currentDateProvider = options.currentDateProvider;
+        this.currentVisualDateProvider = options.currentVisualDateProvider;
     }
 
     async renderAllDaySection(container: HTMLElement, tasks: RenderableTask[]): Promise<void> {
@@ -36,7 +36,7 @@ export class ScheduleSectionRenderer {
         axisCell.createEl('span', { cls: 'allday-section__label', text: 'All Day' });
 
         const taskCell = row.createDiv('allday-section__cell is-first-cell is-last-cell');
-        taskCell.dataset.date = this.currentDateProvider();
+        taskCell.dataset.date = this.currentVisualDateProvider();
 
         const applyCollapsedState = () => {
             const isCollapsed = this.collapsedSections.allDay;

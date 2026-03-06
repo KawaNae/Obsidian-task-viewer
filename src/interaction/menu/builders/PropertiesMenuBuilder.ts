@@ -6,6 +6,7 @@ import { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } fr
 import { PropertyFormatter } from '../PropertyFormatter';
 import { CreateTaskModal, CreateTaskResult } from '../../../modals/CreateTaskModal';
 import { DateUtils } from '../../../utils/DateUtils';
+import { ImplicitCalendarDateResolver } from '../../../utils/ImplicitCalendarDateResolver';
 import { getTaskDisplayName } from '../../../utils/TaskContent';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
 import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
@@ -38,7 +39,7 @@ export class PropertiesMenuBuilder {
             // On mobile, Obsidian menus stay open until explicitly closed.
             const openModal = (focusField: ChangePropertiesFocusField) => {
                 menu.close();
-                this.openChangePropertiesModal(task, focusField);
+                this.openChangePropertiesModal(task, focusField, viewStartDate);
             };
 
             // Requested order:
@@ -170,7 +171,7 @@ export class PropertiesMenuBuilder {
         });
     }
 
-    private openChangePropertiesModal(task: Task, focusField: ChangePropertiesFocusField): void {
+    private openChangePropertiesModal(task: Task, focusField: ChangePropertiesFocusField, viewStartDate: string | null = null): void {
         const initialValues: Partial<CreateTaskResult> = {
             content: task.content ?? '',
             startDate: task.startDate,
@@ -179,6 +180,21 @@ export class PropertiesMenuBuilder {
             endTime: task.endTime,
             deadline: task.deadline,
         };
+
+        // Build implicit placeholders from PropertyCalculator results
+        const context: PropertyCalculationContext = {
+            task,
+            startHour: this.plugin.settings.startHour,
+            viewStartDate
+        };
+        const startCalc = this.propertyCalculator.calculateStart(context);
+        const endCalc = this.propertyCalculator.calculateEnd(context);
+
+        const implicitPlaceholders: { startDate?: string; startTime?: string; endDate?: string; endTime?: string } = {};
+        if (startCalc.dateImplicit && startCalc.date) implicitPlaceholders.startDate = startCalc.date;
+        if (startCalc.timeImplicit && startCalc.time) implicitPlaceholders.startTime = startCalc.time;
+        if (endCalc.dateImplicit && endCalc.date) implicitPlaceholders.endDate = endCalc.date;
+        if (endCalc.timeImplicit && endCalc.time) implicitPlaceholders.endTime = endCalc.time;
 
         new CreateTaskModal(
             this.app,
@@ -190,6 +206,7 @@ export class PropertiesMenuBuilder {
                 title: 'Change Properties',
                 submitLabel: 'Save',
                 focusField,
+                implicitPlaceholders,
             }
         ).open();
     }
@@ -199,7 +216,7 @@ export class PropertiesMenuBuilder {
         const startTime = result.startTime?.trim() || undefined;
         const endTime = result.endTime?.trim() || undefined;
         const explicitEndDate = result.endDate?.trim() || undefined;
-        const endDate = !explicitEndDate && endTime ? startDate : explicitEndDate;
+        const endDate = ImplicitCalendarDateResolver.resolveEndDate(explicitEndDate, endTime, startDate);
         const deadline = result.deadline?.trim() || undefined;
 
         return {
@@ -217,11 +234,12 @@ export class PropertiesMenuBuilder {
      */
     private addLengthItem(menu: Menu, task: Task, context: PropertyCalculationContext): void {
         const { startHour, viewStartDate } = context;
-        const implicitStartDate = viewStartDate || DateUtils.getVisualDateOfNow(startHour);
-        const effectiveStartDate = task.startDate || implicitStartDate;
+        const implicitVisualStartDate = viewStartDate || DateUtils.getVisualDateOfNow(startHour);
+        const implicit = !task.startDate ? ImplicitCalendarDateResolver.resolveImplicitStart(task, startHour) : null;
+        const effectiveVisualStartDate = task.startDate || implicit?.startDate || implicitVisualStartDate;
 
         const durationMs = DateUtils.getTaskDurationMs(
-            effectiveStartDate,
+            effectiveVisualStartDate,
             task.startTime,
             task.endDate,
             task.endTime,

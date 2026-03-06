@@ -2,6 +2,7 @@ import type { Task } from '../../types';
 import type { FilterState, FilterConditionNode, FilterGroupNode, FilterNode, FilterContext } from './FilterTypes';
 import { DateResolver } from './DateResolver';
 import { DateUtils } from '../../utils/DateUtils';
+import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
 
 /**
  * Evaluates whether a task passes a recursive filter tree.
@@ -105,15 +106,19 @@ export class TaskFilterEngine {
     }
 
     private static evalLength(task: Task, c: FilterConditionNode, startHour: number): boolean {
-        const hasDuration = !!task.startDate;
+        const implicit = ImplicitCalendarDateResolver.resolveImplicitStart(task, startHour);
+        const effectiveStartDate = task.startDate || implicit?.startDate;
+        const effectiveStartTime = task.startTime || implicit?.startTime;
+
+        const hasDuration = !!effectiveStartDate;
         if (c.operator === 'isSet') return hasDuration;
         if (c.operator === 'isNotSet') return !hasDuration;
 
         if (c.value.type !== 'number') return true;
-        if (!task.startDate) return false;
+        if (!effectiveStartDate) return false;
 
         const durationMs = DateUtils.getTaskDurationMs(
-            task.startDate, task.startTime, task.endDate, task.endTime, startHour,
+            effectiveStartDate, effectiveStartTime, task.endDate, task.endTime, startHour,
         );
         if (!Number.isFinite(durationMs) || durationMs < 0) return false;
 

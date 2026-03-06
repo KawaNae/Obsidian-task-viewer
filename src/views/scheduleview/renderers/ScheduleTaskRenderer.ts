@@ -102,9 +102,6 @@ export class ScheduleTaskRenderer {
     async renderTaskCard(container: HTMLElement, task: RenderableTask, flowCard: boolean): Promise<void> {
         const wrapper = container.createDiv(flowCard ? 'schedule-tasks__card-wrap' : 'schedule-section__task-wrap');
         const card = wrapper.createDiv('task-card');
-        if (!task.startTime) {
-            card.addClass('task-card--allday');
-        }
 
         if (task.isSplit) {
             card.addClass('task-card--split');
@@ -115,7 +112,8 @@ export class ScheduleTaskRenderer {
 
         TaskStyling.applyTaskColor(card, task.color ?? null);
         TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
-        await this.taskRenderer.render(card, task, this.component, this.getSettings());
+        const options = flowCard ? {} : { compact: true };
+        await this.taskRenderer.render(card, task, this.component, this.getSettings(), options);
         this.menuHandler.addTaskContextMenu(card, task);
     }
 }

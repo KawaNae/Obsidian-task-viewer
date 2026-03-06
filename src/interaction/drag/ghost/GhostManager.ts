@@ -67,7 +67,7 @@ export class GhostManager {
 
                 // --- Manage Split Classes and Inline Styles Dynamically ---
                 // Remove relevant classes inherited from sourceEl
-                ghost.classList.remove('task-card--split', 'task-card--split-before', 'task-card--split-after');
+                ghost.classList.remove('task-card--split', 'task-card--split-head', 'task-card--split-tail');
 
                 // Reset split-related inline styles (GhostFactory sets these, which override CSS classes)
                 ghost.style.borderTop = '';
@@ -87,22 +87,22 @@ export class GhostManager {
 
                     if (index === 0) {
                         // First segment (Earliest time) -> Bottom cut
-                        ghost.classList.add('task-card--split-before');
+                        ghost.classList.add('task-card--split-head');
                         // Apply inline styles to override GhostFactory defaults
                         ghost.style.borderBottom = `2px dashed ${accentColor}`;
                         ghost.style.borderBottomLeftRadius = '0';
                         ghost.style.borderBottomRightRadius = '0';
                     } else if (index === segments.length - 1) {
                         // Last segment (Latest time) -> Top cut
-                        ghost.classList.add('task-card--split-after');
+                        ghost.classList.add('task-card--split-tail');
                         // Apply inline styles to override GhostFactory defaults
                         ghost.style.borderTop = `2px dashed ${accentColor}`;
                         ghost.style.borderTopLeftRadius = '0';
                         ghost.style.borderTopRightRadius = '0';
                     } else {
                         // Middle segment -> Both cut
-                        ghost.classList.add('task-card--split-before');
-                        ghost.classList.add('task-card--split-after');
+                        ghost.classList.add('task-card--split-head');
+                        ghost.classList.add('task-card--split-tail');
                         ghost.style.borderTop = `2px dashed ${accentColor}`;
                         ghost.style.borderBottom = `2px dashed ${accentColor}`;
                         ghost.style.borderRadius = '0';

@@ -17,6 +17,10 @@ export class ChildItemBuilder {
 
     constructor(private taskIndex: TaskIndex) {}
 
+    getTaskIndex(): TaskIndex {
+        return this.taskIndex;
+    }
+
     /**
      * Inline task childLines -> ChildRenderItem[]
      * @param indent Prefix added to every generated markdown line.
@@ -273,27 +277,20 @@ export class ChildItemBuilder {
 
     /**
      * Converts plain child line to ChildRenderItem.
+     * This path is only reached for lines NOT recognized as tasks by the parser,
+     * so no @notation extraction or removal is performed — the line is rendered as-is.
      */
     private processChildLine(line: string, idx: number, task: Task, indent: string): ChildRenderItem {
         const isCb = /^\s*-\s*\[.\]/.test(line);
-        let notation: string | null = null;
 
-        if (isCb) {
-            const m = line.match(/@[\w\-:>T]+/);
-            notation = m ? m[0] : null;
-        }
-
-        let cleaned = line
-            .replace(/\s*@[\w\-:>T]+(?:\s*==>.*)?/g, '')
-            .trimEnd();
-
+        let cleaned = line.trimEnd();
         if (/^\s*-\s*\[.\]$/.test(cleaned)) {
             cleaned += ' \u200B';
         }
 
         return {
             markdown: indent + cleaned,
-            notation,
+            notation: null,
             isCheckbox: isCb,
             handler: isCb
                 ? { type: 'childLine', parentTask: task, childLineIndex: idx }

@@ -5,8 +5,10 @@ import { TaskIndex } from '../../services/core/TaskIndex';
 import { Task, ViewState, PinnedListDefinition, isCompleteStatusChar } from '../../types';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
+import { TaskDetailModal } from '../../modals/TaskDetailModal';
 
 import { DateUtils } from '../../utils/DateUtils';
+import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
 
 import TaskViewerPlugin from '../../main';
 
@@ -184,8 +186,8 @@ export class TimelineView extends ItemView {
 
     async onOpen() {
         // Set initial startDate - will be re-evaluated in onChange when tasks are loaded
-        const initialToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-        this.viewState.startDate = DateUtils.addDays(initialToday, -this.plugin.settings.pastDaysToShow);
+        const initialVisualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        this.viewState.startDate = DateUtils.addDays(initialVisualToday, -this.plugin.settings.pastDaysToShow);
 
         this.container = this.contentEl;
         this.container.empty();
@@ -197,6 +199,9 @@ export class TimelineView extends ItemView {
         // Initialize MenuHandler
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
+        this.taskRenderer.setDetailCallback((task) => {
+            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.taskIndex).open();
+        });
 
         // Initialize HandleManager
         this.handleManager = new HandleManager(this.container, this.taskIndex);
@@ -272,9 +277,9 @@ export class TimelineView extends ItemView {
             if (!this.hasInitializedStartDate && this.taskIndex.getTasks().length > 0) {
                 this.hasInitializedStartDate = true;
                 const oldestOverdue = this.findOldestOverdueDate();
-                const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-                const pastDate = DateUtils.addDays(today, -this.plugin.settings.pastDaysToShow);
-                this.viewState.startDate = (oldestOverdue && oldestOverdue < pastDate) ? oldestOverdue : pastDate;
+                const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+                const visualPastDate = DateUtils.addDays(visualToday, -this.plugin.settings.pastDaysToShow);
+                this.viewState.startDate = (oldestOverdue && oldestOverdue < visualPastDate) ? oldestOverdue : visualPastDate;
                 this.scrollToNowOnNextRender = true;
             }
 
@@ -301,8 +306,16 @@ export class TimelineView extends ItemView {
                             // Partial Update: Re-render content only
                             const contentContainer = card.querySelector('.task-card__content');
                             if (contentContainer) contentContainer.remove();
+                            const timeEl = card.querySelector('.task-card__time');
+                            if (timeEl) timeEl.remove();
+                            const expandBar = card.querySelector('.task-card__expand-bar');
+                            if (expandBar) expandBar.remove();
 
-                            this.taskRenderer.render(card, task, this, this.plugin.settings);
+                            const isAllDay = card.classList.contains('task-card--allday');
+                            const opts = isAllDay
+                                ? { topRight: 'none' as const, compact: true }
+                                : undefined;
+                            this.taskRenderer.render(card, task, this, this.plugin.settings, opts);
                             return;
                         }
                     }
@@ -438,9 +451,9 @@ export class TimelineView extends ItemView {
     public refresh() {
         // Re-evaluate startDate (Today button logic) for day boundary crossing or settings change
         const oldestOverdue = this.findOldestOverdueDate();
-        const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-        const pastDate = DateUtils.addDays(today, -this.plugin.settings.pastDaysToShow);
-        this.viewState.startDate = (oldestOverdue && oldestOverdue < pastDate) ? oldestOverdue : pastDate;
+        const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        const visualPastDate = DateUtils.addDays(visualToday, -this.plugin.settings.pastDaysToShow);
+        this.viewState.startDate = (oldestOverdue && oldestOverdue < visualPastDate) ? oldestOverdue : visualPastDate;
 
         this.scrollToNowOnNextRender = true;
         this.render();
@@ -519,7 +532,6 @@ export class TimelineView extends ItemView {
             sidebarBody,
             this,
             this.viewState.pinnedLists ?? [],
-            this.toolbar.getTaskFilter(),
             this.viewState.pinnedListCollapsed ?? {},
             {
                 onCollapsedChange: (listId, collapsed) => {
@@ -550,7 +562,13 @@ export class TimelineView extends ItemView {
                     this.app.workspace.requestSaveLayout();
                     this.render();
                 },
+                onToggleApplyViewFilter: (listDef) => {
+                    listDef.applyViewFilter = !listDef.applyViewFilter;
+                    this.app.workspace.requestSaveLayout();
+                    this.render();
+                },
             },
+            this.toolbar?.getTaskFilter(),
         );
 
         // Render Toolbar (above both columns)
@@ -716,22 +734,26 @@ export class TimelineView extends ItemView {
      */
     private findOldestOverdueDate(): string | null {
         const startHour = this.plugin.settings.startHour;
-        const today = DateUtils.getVisualDateOfNow(startHour);
+        const visualToday = DateUtils.getVisualDateOfNow(startHour);
+        const isVisible = this.toolbar.getTaskFilter();
 
-        // Get all incomplete tasks with dates before today
+        // Get all incomplete, visible tasks with dates (including E/ED types)
         const tasks = this.taskIndex.getTasks().filter(t =>
+            isVisible(t) &&
             !isCompleteStatusChar(t.statusChar, this.plugin.settings.completeStatusChars) &&
-            t.startDate
+            (t.startDate || t.endDate)
         );
 
         // Find the oldest past date among incomplete tasks
         let oldestDate: string | null = null;
 
         for (const task of tasks) {
-            const taskDate = task.startDate!;
+            const taskDate = task.startDate
+                || ImplicitCalendarDateResolver.resolveImplicitStart(task, startHour)?.startDate;
+            if (!taskDate) continue;
 
             // Only consider tasks that are before today (visual date)
-            if (taskDate < today) {
+            if (taskDate < visualToday) {
                 if (!oldestDate || taskDate < oldestDate) {
                     oldestDate = taskDate;
                 }

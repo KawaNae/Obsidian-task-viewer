@@ -30,8 +30,8 @@ export class MoveStrategy extends BaseDragStrategy {
     private startCol: number = 0;
     private grabCol: number = 0;
     private initialSpan: number = 0;
-    private initialDate: string = '';
-    private initialEndDate: string = '';
+    private initialCalendarDate: string = '';
+    private initialCalendarEndDate: string = '';
     private initialGridColumn: string = '';
     private container: HTMLElement | null = null;
     private isOutsideSection: boolean = false;
@@ -338,17 +338,14 @@ export class MoveStrategy extends BaseDragStrategy {
         this.colWidth = this.getCalendarDayColumnWidth(weekRow);
 
         const viewStartDate = context.getViewStartDate();
-        this.initialDate = task.startDate || viewStartDate || DateUtils.getToday();
-        this.initialEndDate = task.endDate || this.initialDate;
-        this.initialSpan = DateUtils.getDiffDays(this.initialDate, this.initialEndDate) + 1;
+        this.initialCalendarDate = task.startDate || viewStartDate || DateUtils.getToday();
+        this.initialCalendarEndDate = task.endDate || this.initialCalendarDate;
+        this.initialSpan = DateUtils.getDiffDays(this.initialCalendarDate, this.initialCalendarEndDate) + 1;
 
-        const gridCol = el.style.gridColumn;
-        const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
-        const displayStartCol = colMatch
-            ? parseInt(colMatch[1], 10)
-            : this.getCalendarColumnOffset(weekRow) + 1;
-        this.startCol = this.toCalendarDayColumn(displayStartCol, weekRow);
-        const span = colMatch ? parseInt(colMatch[2], 10) : 1;
+        // Read position from data attributes (absolute positioning)
+        const colStart = Number.parseInt(el.dataset.colStart || '1', 10);
+        const span = Number.parseInt(el.dataset.span || '1', 10);
+        this.startCol = colStart;
         const target = e.target as HTMLElement;
         if (target.closest('.task-card__handle--move-top-right')) {
             this.grabCol = Math.min(7, this.startCol + span - 1);
@@ -389,8 +386,8 @@ export class MoveStrategy extends BaseDragStrategy {
             this.ghostEl.style.left = '-9999px';
         }
 
-        const movedStart = DateUtils.addDays(this.initialDate, dayDelta);
-        const movedEnd = DateUtils.addDays(this.initialEndDate, dayDelta);
+        const movedStart = DateUtils.addDays(this.initialCalendarDate, dayDelta);
+        const movedEnd = DateUtils.addDays(this.initialCalendarEndDate, dayDelta);
         this.updateCalendarSplitPreview(context, movedStart, movedEnd);
         this.dragEl.style.transform = '';
     }
@@ -398,14 +395,10 @@ export class MoveStrategy extends BaseDragStrategy {
     private async finishCalendarMove(e: PointerEvent, context: DragContext) {
         removeGhostElement(this.ghostEl);
         this.ghostEl = null;
-        this.clearCalendarPreviewGhosts();
-        this.hiddenElements.forEach(el => el.style.opacity = '');
-        if (this.dragEl) {
-            this.dragEl.style.opacity = '';
-            this.dragEl.style.transform = '';
-        }
 
         if (!this.dragTask || !this.dragEl) {
+            this.clearCalendarPreviewGhosts();
+            this.hiddenElements.forEach(el => el.style.opacity = '');
             this.cleanup();
             return;
         }
@@ -420,18 +413,38 @@ export class MoveStrategy extends BaseDragStrategy {
         }
 
         if (dayDelta === 0) {
+            this.clearCalendarPreviewGhosts();
+            this.hiddenElements.forEach(el => el.style.opacity = '');
             this.cleanup();
             return;
         }
 
-        const newStart = DateUtils.addDays(this.initialDate, dayDelta);
-        const duration = DateUtils.getDiffDays(this.initialDate, this.initialEndDate);
+        const newStart = DateUtils.addDays(this.initialCalendarDate, dayDelta);
+        const duration = DateUtils.getDiffDays(this.initialCalendarDate, this.initialCalendarEndDate);
         const newEnd = DateUtils.addDays(newStart, duration);
+
+        const taskIdToRestore = this.dragTask.id;
+        const containerRef = context.container;
+        const hiddenEls = [...this.hiddenElements];
 
         const updates: Partial<Task> = this.buildAllDayMoveUpdates(newStart, newEnd);
         if (Object.keys(updates).length > 0) {
             await context.taskIndex.updateTask(this.dragTask.id, updates);
         }
+
+        // DOM更新後にゴースト・opacity復元（再レンダリング完了を待つ）
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                this.clearCalendarPreviewGhosts();
+                hiddenEls.forEach(el => el.style.opacity = '');
+                const selector = `.task-card[data-id="${taskIdToRestore}"], .task-card[data-split-original-id="${taskIdToRestore}"]`;
+                containerRef.querySelectorAll(selector).forEach(el => {
+                    if (el instanceof HTMLElement) {
+                        el.style.opacity = '';
+                    }
+                });
+            });
+        });
 
         this.cleanup();
     }
@@ -447,9 +460,9 @@ export class MoveStrategy extends BaseDragStrategy {
         this.colWidth = headerCell?.getBoundingClientRect().width || 100;
 
         const viewStartDate = context.getViewStartDate();
-        this.initialDate = task.startDate || viewStartDate || DateUtils.getToday();
-        this.initialEndDate = task.endDate || this.initialDate;
-        this.initialSpan = DateUtils.getDiffDays(this.initialDate, this.initialEndDate) + 1;
+        this.initialCalendarDate = task.startDate || viewStartDate || DateUtils.getToday();
+        this.initialCalendarEndDate = task.endDate || this.initialCalendarDate;
+        this.initialSpan = DateUtils.getDiffDays(this.initialCalendarDate, this.initialCalendarEndDate) + 1;
 
         const gridCol = el.style.gridColumn;
         const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
@@ -531,7 +544,7 @@ export class MoveStrategy extends BaseDragStrategy {
                 const startHourMinutes = startHour * 60;
                 const minutesFromStart = snappedTop / zoomLevel;
                 const totalMinutes = startHourMinutes + minutesFromStart;
-                const totalEndMinutes = totalMinutes + 60;
+                const totalEndMinutes = totalMinutes + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
 
                 const startDayOffset = Math.floor(totalMinutes / 1440);
                 const endDayOffset = Math.floor(totalEndMinutes / 1440);
@@ -558,8 +571,8 @@ export class MoveStrategy extends BaseDragStrategy {
             return;
         }
 
-        const newStart = DateUtils.addDays(this.initialDate, dayDelta);
-        const duration = DateUtils.getDiffDays(this.initialDate, this.initialEndDate);
+        const newStart = DateUtils.addDays(this.initialCalendarDate, dayDelta);
+        const duration = DateUtils.getDiffDays(this.initialCalendarDate, this.initialCalendarEndDate);
         const newEnd = DateUtils.addDays(newStart, duration);
 
         const updates: Partial<Task> = this.buildAllDayMoveUpdates(newStart, newEnd);

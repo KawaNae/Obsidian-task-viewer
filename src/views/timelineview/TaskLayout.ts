@@ -33,7 +33,7 @@ export class TaskLayout {
         // 1. Prepare tasks with calculated start/end for sorting
         const preparedTasks = tasks.map(task => {
             const start = getAdjustedMinutes(task, task.startTime!, false);
-            let end = task.endTime ? getAdjustedMinutes(task, task.endTime, true) : start + 60;
+            let end = task.endTime ? getAdjustedMinutes(task, task.endTime, true) : start + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
             // Fix simple wrap for end time if needed
             if (!task.endTime?.includes('T') && end < start) end += 24 * 60;
 

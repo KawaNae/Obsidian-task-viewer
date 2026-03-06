@@ -1,4 +1,4 @@
-export type ViewType = 'timeline-view' | 'schedule-view' | 'timer-view' | 'calendar-view' | 'mini-calendar-view';
+export type ViewType = 'timeline-view' | 'schedule-view' | 'timer-view' | 'calendar-view' | 'mini-calendar-view' | 'kanban-view';
 
 export type ViewMeta = {
     type: ViewType;
@@ -48,12 +48,21 @@ export const VIEW_META_MINI_CALENDAR: ViewMeta = {
     commandName: 'Open Mini Calendar View',
 };
 
+export const VIEW_META_KANBAN: ViewMeta = {
+    type: 'kanban-view',
+    displayText: 'Kanban View',
+    icon: 'layout-grid',
+    ribbonTitle: 'Open Kanban',
+    commandName: 'Open Kanban View',
+};
+
 export const VIEW_REGISTRY: Readonly<Record<ViewType, ViewMeta>> = {
     'timeline-view': VIEW_META_TIMELINE,
     'schedule-view': VIEW_META_SCHEDULE,
     'timer-view': VIEW_META_TIMER,
     'calendar-view': VIEW_META_CALENDAR,
     'mini-calendar-view': VIEW_META_MINI_CALENDAR,
+    'kanban-view': VIEW_META_KANBAN,
 };
 
 export function getViewMeta(viewType: string): ViewMeta {

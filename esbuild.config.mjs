@@ -75,6 +75,7 @@ const copyStaticFiles = {
           '_modal.css',
           '_filter-popover.css',
           '_sort-popover.css',
+          '_kanban.css',
           '_settings.css'
         ];
 

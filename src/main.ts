@@ -3,6 +3,7 @@ import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
 import { CalendarView, VIEW_TYPE_CALENDAR, MiniCalendarView, VIEW_TYPE_MINI_CALENDAR } from './views/calendar';
+import { KanbanView, VIEW_TYPE_KANBAN } from './views/kanban';
 import { TimerView, VIEW_TYPE_TIMER } from './views/TimerView';
 import { TimerWidget } from './timer/TimerWidget';
 import {
@@ -47,8 +48,9 @@ export default class TaskViewerPlugin extends Plugin {
     // Properties View color/linestyle suggest observer
     private propertySuggestObserver: PropertySuggestObserver | null = null;
 
-    // Editor inline menu button cleanup
+    // Editor inline menu button
     private taskMenuCleanup: (() => void) | null = null;
+    private taskMenuNotifySettingsChanged: (() => void) | null = null;
 
     async onload() {
         console.log('Loading Task Viewer Plugin (Rewrite)');
@@ -99,11 +101,17 @@ export default class TaskViewerPlugin extends Plugin {
             (leaf) => new MiniCalendarView(leaf, this.taskIndex, this)
         );
 
+        this.registerView(
+            VIEW_TYPE_KANBAN,
+            (leaf) => new KanbanView(leaf, this.taskIndex, this)
+        );
+
         const timelineViewMeta = getViewMeta(VIEW_TYPE_TIMELINE);
         const scheduleViewMeta = getViewMeta(VIEW_TYPE_SCHEDULE);
         const timerViewMeta = getViewMeta(VIEW_TYPE_TIMER);
         const calendarViewMeta = getViewMeta(VIEW_TYPE_CALENDAR);
         const miniCalendarViewMeta = getViewMeta(VIEW_TYPE_MINI_CALENDAR);
+        const kanbanViewMeta = getViewMeta(VIEW_TYPE_KANBAN);
 
         // Add Ribbon Icon
         this.addRibbonIcon(timelineViewMeta.icon, timelineViewMeta.ribbonTitle, () => {
@@ -124,6 +132,10 @@ export default class TaskViewerPlugin extends Plugin {
 
         this.addRibbonIcon(miniCalendarViewMeta.icon, miniCalendarViewMeta.ribbonTitle, () => {
             this.activateView(VIEW_TYPE_MINI_CALENDAR);
+        });
+
+        this.addRibbonIcon(kanbanViewMeta.icon, kanbanViewMeta.ribbonTitle, () => {
+            this.activateView(VIEW_TYPE_KANBAN);
         });
 
         // Add Command
@@ -164,6 +176,14 @@ export default class TaskViewerPlugin extends Plugin {
             name: miniCalendarViewMeta.commandName,
             callback: () => {
                 this.activateView(VIEW_TYPE_MINI_CALENDAR);
+            }
+        });
+
+        this.addCommand({
+            id: 'open-kanban-view',
+            name: kanbanViewMeta.commandName,
+            callback: () => {
+                this.activateView(VIEW_TYPE_KANBAN);
             }
         });
 
@@ -275,6 +295,7 @@ export default class TaskViewerPlugin extends Plugin {
         );
         this.registerEditorExtension(taskMenuResult.extension);
         this.taskMenuCleanup = taskMenuResult.cleanup;
+        this.taskMenuNotifySettingsChanged = taskMenuResult.notifySettingsChanged;
 
         // Apply global styles if enabled
         this.updateGlobalStyles();
@@ -299,6 +320,7 @@ export default class TaskViewerPlugin extends Plugin {
                 schedule: VIEW_TYPE_SCHEDULE,
                 'mini-calendar': VIEW_TYPE_MINI_CALENDAR,
                 timer: VIEW_TYPE_TIMER,
+                kanban: VIEW_TYPE_KANBAN,
             };
             const viewType = viewMap[params.view];
             if (!viewType) return;
@@ -309,6 +331,7 @@ export default class TaskViewerPlugin extends Plugin {
                 zoom?: number;
                 date?: string;
                 pinnedLists?: PinnedListDefinition[];
+                grid?: PinnedListDefinition[][];
                 showSidebar?: boolean;
                 position?: 'left' | 'right' | 'tab' | 'window' | 'override';
                 name?: string;
@@ -333,6 +356,7 @@ export default class TaskViewerPlugin extends Plugin {
                         if (template) {
                             if (template.filterState) uriParams.filterState = template.filterState;
                             if (template.pinnedLists) uriParams.pinnedLists = template.pinnedLists;
+                            if (template.grid) uriParams.grid = template.grid;
                             if (template.days != null) uriParams.days = template.days;
                             if (template.zoom != null) uriParams.zoom = template.zoom;
                             if (template.showSidebar != null) uriParams.showSidebar = template.showSidebar;
@@ -353,6 +377,14 @@ export default class TaskViewerPlugin extends Plugin {
                     try {
                         const parsed = JSON.parse(unicodeAtob(params.pinnedLists));
                         if (Array.isArray(parsed)) uriParams.pinnedLists = parsed;
+                    } catch { /* ignore */ }
+                }
+
+                // Grid (base64) — overrides template value
+                if (params.grid) {
+                    try {
+                        const parsed = JSON.parse(unicodeAtob(params.grid));
+                        if (Array.isArray(parsed)) uriParams.grid = parsed;
                     } catch { /* ignore */ }
                 }
 
@@ -421,6 +453,10 @@ export default class TaskViewerPlugin extends Plugin {
         }
     }
 
+    notifyEditorMenuSettingsChanged() {
+        this.taskMenuNotifySettingsChanged?.();
+    }
+
     // Public accessors for services
     getTaskIndex(): TaskIndex {
         return this.taskIndex;
@@ -456,7 +492,7 @@ export default class TaskViewerPlugin extends Plugin {
      * Refresh all task viewer views
      */
     public refreshAllViews(): void {
-        [VIEW_TYPE_TIMELINE, VIEW_TYPE_SCHEDULE, VIEW_TYPE_CALENDAR, VIEW_TYPE_MINI_CALENDAR].forEach(viewType => {
+        [VIEW_TYPE_TIMELINE, VIEW_TYPE_SCHEDULE, VIEW_TYPE_CALENDAR, VIEW_TYPE_MINI_CALENDAR, VIEW_TYPE_KANBAN].forEach(viewType => {
             this.app.workspace.getLeavesOfType(viewType).forEach(leaf => {
                 (leaf.view as any).refresh?.();
             });
@@ -469,6 +505,7 @@ export default class TaskViewerPlugin extends Plugin {
         zoom?: number;
         date?: string;
         pinnedLists?: PinnedListDefinition[];
+        grid?: PinnedListDefinition[][];
         showSidebar?: boolean;
         position?: 'left' | 'right' | 'tab' | 'window' | 'override';
         name?: string;
@@ -512,6 +549,7 @@ export default class TaskViewerPlugin extends Plugin {
             if (params?.zoom != null) state.zoomLevel = params.zoom;
             if (params?.date != null) state.startDate = params.date;
             if (params?.pinnedLists) state.pinnedLists = params.pinnedLists;
+            if (params?.grid) state.grid = params.grid;
             if (params?.showSidebar != null) state.showSidebar = params.showSidebar;
             if (params?.name) state.customName = params.name;
             if (params?.timerMode) state.timerViewMode = params.timerMode;
@@ -530,6 +568,7 @@ export default class TaskViewerPlugin extends Plugin {
             [VIEW_TYPE_CALENDAR]: positions.calendar,
             [VIEW_TYPE_MINI_CALENDAR]: positions.miniCalendar,
             [VIEW_TYPE_TIMER]: positions.timer,
+            [VIEW_TYPE_KANBAN]: positions.kanban,
         };
         return map[viewType] ?? 'right';
     }

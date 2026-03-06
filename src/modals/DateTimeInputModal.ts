@@ -1,4 +1,5 @@
 import { App, Modal, Setting } from 'obsidian';
+import { DateUtils } from '../utils/DateUtils';
 
 export type DateTimeType = 'start' | 'end' | 'deadline';
 
@@ -113,13 +114,13 @@ export class DateTimeInputModal extends Modal {
         this.errorEl.style.display = 'none';
 
         // Format validation
-        if (dateValue && !this.isValidDate(dateValue)) {
+        if (dateValue && !DateUtils.isValidDateString(dateValue)) {
             this.dateInput.addClass('datetime-input-modal__input--invalid');
             this.showError('Invalid date format. Use YYYY-MM-DD.');
             return { valid: false, errorMessage: 'Invalid date format' };
         }
 
-        if (timeValue && !this.isValidTime(timeValue)) {
+        if (timeValue && !DateUtils.isValidTimeString(timeValue)) {
             this.timeInput.addClass('datetime-input-modal__input--invalid');
             this.showError('Invalid time format. Use HH:mm (00:00-23:59).');
             return { valid: false, errorMessage: 'Invalid time format' };
@@ -158,20 +159,6 @@ export class DateTimeInputModal extends Modal {
     private showError(message: string) {
         this.errorEl.setText(message);
         this.errorEl.style.display = 'block';
-    }
-
-    private isValidDate(value: string): boolean {
-        const regex = /^\d{4}-\d{2}-\d{2}$/;
-        if (!regex.test(value)) return false;
-        const date = new Date(value);
-        return !isNaN(date.getTime());
-    }
-
-    private isValidTime(value: string): boolean {
-        const regex = /^\d{2}:\d{2}$/;
-        if (!regex.test(value)) return false;
-        const [h, m] = value.split(':').map(Number);
-        return h >= 0 && h <= 23 && m >= 0 && m <= 59;
     }
 
     private submit() {

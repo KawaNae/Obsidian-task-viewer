@@ -1,6 +1,8 @@
 import { App, Modal, Setting, setIcon } from 'obsidian';
 import { Task } from '../types';
 import { TaskParser } from '../services/parsing/TaskParser';
+import { DateUtils } from '../utils/DateUtils';
+import { ImplicitCalendarDateResolver } from '../utils/ImplicitCalendarDateResolver';
 
 export interface CreateTaskResult {
     content: string;
@@ -52,6 +54,15 @@ export interface CreateTaskModalOptions {
     submitLabel?: string;
     /** Initial focus field */
     focusField?: 'name' | 'start' | 'end' | 'deadline';
+    /** Daily note date (YYYY-MM-DD). Shown as Start Date placeholder when startDate is omitted (inherited from filename). */
+    dailyNoteDate?: string;
+    /** Pre-calculated implicit placeholders from PropertyCalculator. Takes priority over dynamic calculation. */
+    implicitPlaceholders?: {
+        startDate?: string;
+        startTime?: string;
+        endDate?: string;
+        endTime?: string;
+    };
 }
 
 export class CreateTaskModal extends Modal {
@@ -120,6 +131,9 @@ export class CreateTaskModal extends Modal {
             'deadline'
         );
 
+        // Set initial placeholders based on initialValues
+        this.updatePlaceholders();
+
         // --- Error / Warning display ---
         this.errorEl = contentEl.createDiv({ cls: 'create-task-modal__error' });
         this.errorEl.style.display = 'none';
@@ -147,7 +161,7 @@ export class CreateTaskModal extends Modal {
 
         const row = container.createDiv({ cls: 'create-task-modal__date-row' });
 
-        // Date field
+        // Date field (placeholder set later by updatePlaceholders())
         const dateDiv = row.createDiv({ cls: 'create-task-modal__date-row__field' });
         dateDiv.createEl('label', { text: 'Date' });
         const dateInput = this.createPickerTextInput(
@@ -157,7 +171,7 @@ export class CreateTaskModal extends Modal {
             initialDate || ''
         );
 
-        // Time field
+        // Time field (placeholder set later by updatePlaceholders())
         const timeDiv = row.createDiv({ cls: 'create-task-modal__date-row__field' });
         timeDiv.createEl('label', { text: 'Time' });
         const timeInput = this.createPickerTextInput(
@@ -177,10 +191,17 @@ export class CreateTaskModal extends Modal {
             const d = dateInput.value.trim() || undefined;
             const t = timeInput.value.trim() || undefined;
 
-            if (section === 'start') { this.result.startDate = d; this.result.startTime = t; }
-            else if (section === 'end') { this.result.endDate = d; this.result.endTime = t; }
-            else { this.result.deadline = d ? (t ? `${d}T${t}` : d) : undefined; }
+            if (section === 'start') {
+                this.result.startDate = d;
+                this.result.startTime = t;
+            } else if (section === 'end') {
+                this.result.endDate = d;
+                this.result.endTime = t;
+            } else {
+                this.result.deadline = d ? (t ? `${d}T${t}` : d) : undefined;
+            }
 
+            this.updatePlaceholders();
             this.validateInputs();
         };
 
@@ -267,18 +288,6 @@ export class CreateTaskModal extends Modal {
         inputs.forEach(el => el?.classList.remove('create-task-modal__input--invalid'));
         this.errorEl.style.display = 'none';
 
-        const isValidDate = (v: string): boolean => {
-            if (!v) return true;
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
-            return !isNaN(new Date(v).getTime());
-        };
-        const isValidTime = (v: string): boolean => {
-            if (!v) return true;
-            if (!/^\d{2}:\d{2}$/.test(v)) return false;
-            const [h, m] = v.split(':').map(Number);
-            return h >= 0 && h <= 23 && m >= 0 && m <= 59;
-        };
-
         const sd = this.startDateInput?.value.trim() || '';
         const st = this.startTimeInput?.value.trim() || '';
         const ed = this.endDateInput?.value.trim() || '';
@@ -287,16 +296,28 @@ export class CreateTaskModal extends Modal {
         const dt = this.deadlineTimeInput?.value.trim() || '';
 
         // Format checks
-        if (!isValidDate(sd)) { this.startDateInput.classList.add('create-task-modal__input--invalid'); this.showError('Start: invalid date format (YYYY-MM-DD).'); return false; }
-        if (!isValidTime(st)) { this.startTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('Start: invalid time format (HH:mm).'); return false; }
-        if (!isValidDate(ed)) { this.endDateInput.classList.add('create-task-modal__input--invalid'); this.showError('End: invalid date format (YYYY-MM-DD).'); return false; }
-        if (!isValidTime(et)) { this.endTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('End: invalid time format (HH:mm).'); return false; }
-        if (!isValidDate(dd)) { this.deadlineDateInput.classList.add('create-task-modal__input--invalid'); this.showError('Deadline: invalid date format (YYYY-MM-DD).'); return false; }
-        if (!isValidTime(dt)) { this.deadlineTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('Deadline: invalid time format (HH:mm).'); return false; }
+        const fields: Array<{ value: string; input: HTMLInputElement; label: string; type: 'date' | 'time' }> = [
+            { value: sd, input: this.startDateInput, label: 'Start', type: 'date' },
+            { value: st, input: this.startTimeInput, label: 'Start', type: 'time' },
+            { value: ed, input: this.endDateInput, label: 'End', type: 'date' },
+            { value: et, input: this.endTimeInput, label: 'End', type: 'time' },
+            { value: dd, input: this.deadlineDateInput, label: 'Deadline', type: 'date' },
+            { value: dt, input: this.deadlineTimeInput, label: 'Deadline', type: 'time' },
+        ];
+        for (const f of fields) {
+            if (!f.value) continue;
+            const valid = f.type === 'date' ? DateUtils.isValidDateString(f.value) : DateUtils.isValidTimeString(f.value);
+            if (!valid) {
+                f.input.classList.add('create-task-modal__input--invalid');
+                this.showError(`${f.label}: invalid ${f.type} format (${f.type === 'date' ? 'YYYY-MM-DD' : 'HH:mm'}).`);
+                return false;
+            }
+        }
 
-        // Business rules
-        if (!sd && st) { this.startTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('Start: date is required when time is specified.'); return false; }
-        if (!ed && et && !sd) { this.endTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('End: date is required when there is no start date.'); return false; }
+        // Business rules (dailyNoteDate provides an implicit startDate when omitted)
+        const hasImplicitStartDate = !!this.options.dailyNoteDate;
+        if (!sd && st && !hasImplicitStartDate) { this.startTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('Start: date is required when time is specified.'); return false; }
+        if (!ed && et && !sd && !hasImplicitStartDate) { this.endTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('End: date is required when there is no start date.'); return false; }
         if (!dd && dt) { this.deadlineTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('Deadline: date is required when time is specified.'); return false; }
 
         // Warning: empty task won't appear in viewer
@@ -313,6 +334,66 @@ export class CreateTaskModal extends Modal {
     private showError(message: string) {
         this.errorEl.setText(message);
         this.errorEl.style.display = 'block';
+    }
+
+    /**
+     * Recalculate all implicit placeholders based on current result values.
+     * Priority: implicitPlaceholders (from PropertyCalculator) > dynamic calculation > defaults.
+     * Dynamic calculation uses ImplicitCalendarDateResolver rules:
+     * - End Date: inherits from Start Date (same-day inference)
+     * - Start Date: inherits from End Date for E/ED types, or dailyNoteDate
+     * - End Time: startTime + 1h (S-Timed default duration)
+     * - Start Time: endTime - 1h (E-Timed reverse)
+     */
+    private updatePlaceholders(): void {
+        const sd = this.result.startDate;
+        const st = this.result.startTime;
+        const ed = this.result.endDate;
+        const et = this.result.endTime;
+        const ip = this.options.implicitPlaceholders;
+
+        // --- Start Date placeholder ---
+        if (this.startDateInput) {
+            if (!sd && ed) {
+                const implicit = ImplicitCalendarDateResolver.resolveImplicitStart(
+                    { endDate: ed, endTime: et }, 0
+                );
+                this.startDateInput.placeholder = implicit?.startDate || ip?.startDate || this.options.dailyNoteDate || 'YYYY-MM-DD';
+            } else {
+                this.startDateInput.placeholder = ip?.startDate || this.options.dailyNoteDate || 'YYYY-MM-DD';
+            }
+        }
+
+        // --- End Date placeholder ---
+        if (this.endDateInput) {
+            this.endDateInput.placeholder = sd || ip?.endDate || this.options.dailyNoteDate || 'YYYY-MM-DD';
+        }
+
+        // --- Start Time placeholder ---
+        if (this.startTimeInput) {
+            if (!st && et) {
+                const endMinutes = DateUtils.timeToMinutes(et);
+                const startMinutes = endMinutes - DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
+                this.startTimeInput.placeholder = DateUtils.minutesToTime(
+                    startMinutes >= 0 ? startMinutes : startMinutes + 24 * 60
+                );
+            } else {
+                this.startTimeInput.placeholder = ip?.startTime || 'HH:mm';
+            }
+        }
+
+        // --- End Time placeholder ---
+        if (this.endTimeInput) {
+            if (!et && st) {
+                const startMinutes = DateUtils.timeToMinutes(st);
+                const endMinutes = startMinutes + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
+                this.endTimeInput.placeholder = DateUtils.minutesToTime(
+                    endMinutes < 24 * 60 ? endMinutes : endMinutes - 24 * 60
+                );
+            } else {
+                this.endTimeInput.placeholder = ip?.endTime || 'HH:mm';
+            }
+        }
     }
 
     /** Split a deadline string ("YYYY-MM-DD" or "YYYY-MM-DDThh:mm") into date and time parts */

@@ -1,8 +1,9 @@
-import { App, MarkdownRenderer, Component } from 'obsidian';
+import { App, MarkdownRenderer, Component, setIcon } from 'obsidian';
 import { Task, TaskViewerSettings, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
 import { getFileBaseName, hasTaskContent, isContentMatchingBaseName } from '../../utils/TaskContent';
+import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
 import { ChildItemBuilder } from './ChildItemBuilder';
 import { ChildSectionRenderer, ChildMenuCallback } from './ChildSectionRenderer';
 import { CheckboxWiring } from './CheckboxWiring';
@@ -17,11 +18,12 @@ export class TaskCardRenderer {
     private childSectionRenderer: ChildSectionRenderer;
     private checkboxWiring: CheckboxWiring;
     private linkInteractionManager: TaskLinkInteractionManager;
+    private onDetailClick: ((task: Task) => void) | null = null;
 
     constructor(private app: App, taskIndex: TaskIndex, private linkRuntime: TaskCardLinkRuntime, getSettings: () => TaskViewerSettings) {
         this.checkboxWiring = new CheckboxWiring(app, taskIndex);
         this.childItemBuilder = new ChildItemBuilder(taskIndex);
-        this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring);
+        this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, taskIndex);
         this.linkInteractionManager = new TaskLinkInteractionManager(app, getSettings);
     }
 
@@ -29,30 +31,76 @@ export class TaskCardRenderer {
         this.childSectionRenderer.setChildMenuCallback(cb);
     }
 
+    setDetailCallback(cb: (task: Task) => void): void {
+        this.onDetailClick = cb;
+    }
+
     async render(
         container: HTMLElement,
         task: Task,
         component: Component,
         settings: TaskViewerSettings,
-        options?: { topRight?: 'time' | 'deadline' | 'none' }
+        options?: { topRight?: 'time' | 'deadline' | 'none'; compact?: boolean; forceExpand?: boolean }
     ): Promise<void> {
         const topRight = options?.topRight ?? 'time';
+        const compact = options?.compact ?? false;
+        const forceExpand = options?.forceExpand ?? false;
+
         this.renderTopRightMeta(container, task, settings, topRight);
 
         const contentContainer = container.createDiv('task-card__content');
         const parentMarkdown = this.buildParentMarkdown(task, settings);
 
-        if (task.parserId === 'frontmatter') {
+        if (compact) {
+            const strippedMarkdown = parentMarkdown
+                .replace(/!\[\[([^\]]*)\]\]/g, '')
+                .replace(/!\[([^\]]*)\]\([^)]*\)/g, '');
+            await MarkdownRenderer.render(this.app, strippedMarkdown, contentContainer, task.file, component);
+
+            const { completed, total } = this.getChildCompletion(task, settings);
+            const expandBar = container.createDiv('task-card__expand-bar');
+            setIcon(expandBar.createSpan(), 'expand');
+            if (total > 0) {
+                expandBar.createSpan().setText(` ${completed}/${total}`);
+            }
+            expandBar.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.onDetailClick?.(task);
+            });
+        } else if (task.parserId === 'frontmatter') {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
-            await this.renderFrontmatterChildren(contentContainer, task, component, settings);
+            await this.renderFrontmatterChildren(contentContainer, task, component, settings, forceExpand);
         } else if (task.childLines.length > 0) {
-            await this.renderInlineChildren(contentContainer, task, component, settings, parentMarkdown);
+            await this.renderInlineChildren(contentContainer, task, component, settings, parentMarkdown, forceExpand);
         } else {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
         }
 
         this.bindInternalLinks(contentContainer, task.file);
         this.bindParentCheckbox(contentContainer, task.id, settings);
+    }
+
+    private getChildCompletion(task: Task, settings: TaskViewerSettings): { completed: number; total: number } {
+        let completed = 0;
+        let total = 0;
+
+        if (task.parserId === 'frontmatter') {
+            for (const childId of task.childIds) {
+                const child = this.childItemBuilder.getTaskIndex().getTask(childId);
+                if (!child) continue;
+                total++;
+                if (isCompleteStatusChar(child.statusChar, settings.completeStatusChars)) completed++;
+            }
+        }
+
+        for (const line of task.childLines) {
+            const match = line.match(/\[(.)\]/);
+            if (!match) continue;
+            total++;
+            if (isCompleteStatusChar(match[1], settings.completeStatusChars)) completed++;
+        }
+
+        return { completed, total };
     }
 
     private renderTopRightMeta(
@@ -116,10 +164,15 @@ export class TaskCardRenderer {
         if (!isCompleteStatusChar(task.statusChar, settings.completeStatusChars)) {
             if (task.deadline && DateUtils.isPastDeadline(task.deadline, settings.startHour)) {
                 overdueIcon = '🚨 ';
-            } else if (task.endDate) {
-                const endTime = task.endTime?.includes('T') ? task.endTime.split('T')[1] : task.endTime;
-                if (DateUtils.isPastDate(task.endDate, endTime, settings.startHour)) {
-                    overdueIcon = '⚠️ ';
+            } else {
+                const effectiveEnd = task.endDate
+                    ? { endDate: task.endDate, endTime: task.endTime }
+                    : ImplicitCalendarDateResolver.resolveImplicitEnd(task, settings.startHour);
+                if (effectiveEnd) {
+                    const endTime = effectiveEnd.endTime?.includes('T') ? effectiveEnd.endTime.split('T')[1] : effectiveEnd.endTime;
+                    if (DateUtils.isPastDate(effectiveEnd.endDate, endTime, settings.startHour)) {
+                        overdueIcon = '⚠️ ';
+                    }
                 }
             }
         }
@@ -141,10 +194,11 @@ export class TaskCardRenderer {
         task: Task,
         component: Component,
         settings: TaskViewerSettings,
-        parentMarkdown: string
+        parentMarkdown: string,
+        forceExpand = false
     ): Promise<void> {
         const items = this.childItemBuilder.buildInlineChildItems(task, '');
-        if (items.length >= TaskCardRenderer.COLLAPSE_THRESHOLD) {
+        if (!forceExpand && items.length >= TaskCardRenderer.COLLAPSE_THRESHOLD) {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
             await this.childSectionRenderer.renderCollapsed(
                 contentContainer,
@@ -175,7 +229,8 @@ export class TaskCardRenderer {
         contentContainer: HTMLElement,
         task: Task,
         component: Component,
-        settings: TaskViewerSettings
+        settings: TaskViewerSettings,
+        forceExpand = false
     ): Promise<void> {
         if (task.childIds.length === 0 && task.childLines.length === 0) {
             return;
@@ -186,7 +241,7 @@ export class TaskCardRenderer {
             return;
         }
 
-        const shouldCollapse = items.length >= TaskCardRenderer.COLLAPSE_THRESHOLD;
+        const shouldCollapse = !forceExpand && items.length >= TaskCardRenderer.COLLAPSE_THRESHOLD;
         if (shouldCollapse) {
             await this.childSectionRenderer.renderCollapsed(
                 contentContainer,

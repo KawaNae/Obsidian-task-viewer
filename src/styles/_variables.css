@@ -14,7 +14,6 @@
     --allday-min-height: 40px;
 
     /* Task Card */
-    --task-card-padding: 0.8em 2px 4px 8px;
     --task-card-border-radius: 4px;
 
     --task-card-accent-solid-width: 4px;
@@ -63,7 +62,6 @@
     --z-allday-cell-drag-over: 50;
     --z-timer-widget: 65;
     --z-task-card-allday-handle: 100;
-    --z-task-card-future-handle: 100;
     --z-task-card-selected: 200;
     --z-overlay: 1000;
     --z-task-card-drag-ghost: 9999;

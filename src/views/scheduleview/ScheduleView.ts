@@ -5,6 +5,7 @@ import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { isCompleteStatusChar } from '../../types';
 import type { RenderableTask } from '../sharedLogic/RenderableTaskUtils';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
+import { TaskDetailModal } from '../../modals/TaskDetailModal';
 import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import TaskViewerPlugin from '../../main';
@@ -50,7 +51,7 @@ export class ScheduleView extends ItemView {
 
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
-    private currentDate = '';
+    private currentVisualDate = '';
     private scrollToNowOnNextRender = false;
     private customName: string | undefined;
     private collapsedSections: Record<CollapsibleSectionKey, boolean> = {
@@ -70,6 +71,9 @@ export class ScheduleView extends ItemView {
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
+        this.taskRenderer.setDetailCallback((task) => {
+            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.taskIndex).open();
+        });
         this.gridCalculator = new ScheduleGridCalculator({
             getStartHour: () => this.plugin.settings.startHour,
             hoursPerDay: ScheduleView.HOURS_PER_DAY,
@@ -97,7 +101,7 @@ export class ScheduleView extends ItemView {
         this.sectionRenderer = new ScheduleSectionRenderer({
             taskRenderer: this.scheduleTaskRenderer,
             collapsedSections: this.collapsedSections,
-            currentDateProvider: () => this.currentDate,
+            currentVisualDateProvider: () => this.currentVisualDate,
         });
     }
 
@@ -115,7 +119,7 @@ export class ScheduleView extends ItemView {
 
     async setState(state: any, result: any): Promise<void> {
         if (state && typeof state.currentDate === 'string' && this.isValidDateKey(state.currentDate)) {
-            this.currentDate = state.currentDate;
+            this.currentVisualDate = state.currentDate;
         }
 
         if (state && state.filterState) {
@@ -159,7 +163,7 @@ export class ScheduleView extends ItemView {
     getState(): Record<string, unknown> {
         const filterState = this.filterMenu.getFilterState();
         const result: Record<string, unknown> = {
-            currentDate: this.currentDate,
+            currentDate: this.currentVisualDate,
         };
         if (hasConditions(filterState)) {
             result.filterState = FilterSerializer.toJSON(filterState);
@@ -173,10 +177,10 @@ export class ScheduleView extends ItemView {
     async onOpen(): Promise<void> {
         this.container = this.contentEl;
         this.container.empty();
-        this.container.addClass('schedule-view-container');
+        this.container.addClass('schedule-view');
 
-        if (!this.currentDate) {
-            this.currentDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        if (!this.currentVisualDate) {
+            this.currentVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
         }
 
         this.registerKeyboardNavigation();
@@ -197,7 +201,7 @@ export class ScheduleView extends ItemView {
     }
 
     public refresh(): void {
-        this.currentDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        this.currentVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
         this.scrollToNowOnNextRender = true;
         void this.render();
     }
@@ -231,8 +235,8 @@ export class ScheduleView extends ItemView {
         const toolbarHost = this.container.createDiv('schedule-view__toolbar-host');
         this.renderToolbar(toolbarHost);
 
-        const tasks = this.taskCategorizer.getTasksForDate(this.currentDate);
-        this.menuHandler.setViewStartDate(this.currentDate);
+        const tasks = this.taskCategorizer.getTasksForDate(this.currentVisualDate);
+        this.menuHandler.setViewStartDate(this.currentVisualDate);
 
         const fixedHost = this.container.createDiv('schedule-view__fixed-host');
         const fixedContainer = fixedHost.createDiv('schedule-view__container schedule-view__fixed-rows');
@@ -240,7 +244,7 @@ export class ScheduleView extends ItemView {
         const bodyScroll = this.container.createDiv('schedule-view__body-scroll schedule-body-scroll');
         const bodyContainer = bodyScroll.createDiv('schedule-view__container schedule-view__scroll-content');
 
-        await this.renderDayTimeline(fixedContainer, bodyContainer, this.currentDate, tasks);
+        await this.renderDayTimeline(fixedContainer, bodyContainer, this.currentVisualDate, tasks);
 
         if (this.scrollToNowOnNextRender) {
             this.scrollToNowOnNextRender = false;
@@ -254,7 +258,7 @@ export class ScheduleView extends ItemView {
             toolbar,
             (days) => this.navigateDate(days),
             () => {
-                this.currentDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+                this.currentVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
                 this.scrollToNowOnNextRender = true;
                 void this.app.workspace.requestSaveLayout();
                 void this.render();
@@ -358,7 +362,7 @@ export class ScheduleView extends ItemView {
         const placements = this.scheduleTaskRenderer.placeTasksOnGrid(tasks, layout.rows);
         await this.scheduleTaskRenderer.renderTaskCards(main, placements, timelineHeight);
 
-        if (this.isCurrentVisualDate(this.currentDate)) {
+        if (this.isCurrentVisualDate(this.currentVisualDate)) {
             this.gridRenderer.renderNowLine(main, layout.rows, timelineHeight);
         }
     }
@@ -427,9 +431,9 @@ export class ScheduleView extends ItemView {
     }
 
     private navigateDate(offset: number): void {
-        const date = this.parseLocalDate(this.currentDate);
+        const date = this.parseLocalDate(this.currentVisualDate);
         date.setDate(date.getDate() + offset);
-        this.currentDate = DateUtils.getLocalDateString(date);
+        this.currentVisualDate = DateUtils.getLocalDateString(date);
         void this.app.workspace.requestSaveLayout();
         void this.render();
     }
@@ -440,7 +444,7 @@ export class ScheduleView extends ItemView {
 
     /** Scrolls the schedule body to center the now-line vertically. */
     private scrollToCurrentTime(): void {
-        if (!this.isCurrentVisualDate(this.currentDate)) return;
+        if (!this.isCurrentVisualDate(this.currentVisualDate)) return;
         const bodyScroll = this.container.querySelector('.schedule-view__body-scroll') as HTMLElement | null;
         if (!bodyScroll) return;
         const nowLine = bodyScroll.querySelector('.schedule-grid__now-line') as HTMLElement | null;
