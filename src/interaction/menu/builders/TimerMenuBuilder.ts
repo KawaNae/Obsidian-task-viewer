@@ -2,6 +2,7 @@ import { Menu } from 'obsidian';
 import { Task } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { getTaskDisplayName } from '../../../utils/TaskContent';
+import { DateUtils } from '../../../utils/DateUtils';
 
 /**
  * Builder for timer-related menu items.
@@ -92,9 +93,7 @@ export class TimerMenuBuilder {
 
         // 日付跨ぎ対応: startDate と endDate が異なる場合、日数差を加算
         if (task.startDate && task.endDate && task.startDate !== task.endDate) {
-            const dayDiff = Math.round(
-                (new Date(task.endDate).getTime() - new Date(task.startDate).getTime()) / 86400000
-            );
+            const dayDiff = DateUtils.getDiffDays(task.startDate, task.endDate);
             if (dayDiff > 0) {
                 diffMinutes += dayDiff * 24 * 60;
             }

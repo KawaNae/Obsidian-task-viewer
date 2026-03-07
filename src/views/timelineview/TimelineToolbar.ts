@@ -41,7 +41,9 @@ export class TimelineToolbar {
         private plugin: TaskViewerPlugin,
         private taskIndex: TaskIndex,
         private callbacks: ToolbarCallbacks
-    ) { }
+    ) {
+        this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
+    }
 
     /**
      * Returns a predicate that checks if a task passes the current filter.

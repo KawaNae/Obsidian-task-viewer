@@ -123,10 +123,7 @@ export function splitDisplayTaskAtBoundary(dt: DisplayTask, startHour: number): 
     if (dt.effectiveStartDate === dt.effectiveEndDate) {
         boundaryCalendarDate = dt.effectiveStartDate;
     } else {
-        const startDateObj = new Date(dt.effectiveStartDate);
-        const boundaryCalendarDateObj = new Date(startDateObj);
-        boundaryCalendarDateObj.setDate(boundaryCalendarDateObj.getDate() + 1);
-        boundaryCalendarDate = boundaryCalendarDateObj.toISOString().split('T')[0];
+        boundaryCalendarDate = DateUtils.addDays(dt.effectiveStartDate, 1);
     }
 
     const beforeSegmentDate = DateUtils.getVisualStartDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);

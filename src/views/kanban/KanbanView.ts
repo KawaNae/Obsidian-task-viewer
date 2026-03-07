@@ -17,7 +17,7 @@ import { TaskStyling } from '../sharedUI/TaskStyling';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
-import type { PinnedListDefinition } from '../../types';
+import type { PinnedListDefinition, DisplayTask } from '../../types';
 import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
 
 export const VIEW_TYPE_KANBAN = VIEW_META_KANBAN.type;
@@ -53,6 +53,8 @@ export class KanbanView extends ItemView {
         this.taskRenderer.setDetailCallback((task) => {
             new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.taskIndex).open();
         });
+        this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
+        this.viewFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
     }
 
     getViewType(): string {
@@ -159,9 +161,12 @@ export class KanbanView extends ItemView {
         const gridEl = gridHost.createDiv('kanban-view__grid');
         gridEl.style.gridTemplateColumns = `repeat(${cols}, minmax(250px, 1fr))`;
 
+        const startHour = this.plugin.settings.startHour;
+        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
+
         for (let r = 0; r < this.grid.length; r++) {
             for (let c = 0; c < this.grid[r].length; c++) {
-                this.renderCell(gridEl, this.grid[r][c], r, c);
+                this.renderCell(gridEl, this.grid[r][c], r, c, allDisplayTasks, startHour);
             }
         }
 
@@ -236,7 +241,7 @@ export class KanbanView extends ItemView {
         });
     }
 
-    private renderCell(gridEl: HTMLElement, listDef: PinnedListDefinition, row: number, col: number): void {
+    private renderCell(gridEl: HTMLElement, listDef: PinnedListDefinition, row: number, col: number, allDisplayTasks: DisplayTask[], startHour: number): void {
         const isCollapsed = this.gridCollapsed[listDef.id] ?? false;
 
         const cell = gridEl.createDiv('kanban-view__cell');
@@ -245,9 +250,6 @@ export class KanbanView extends ItemView {
         // ─── Header ─────────────────────────
         const header = cell.createDiv('kanban-view__cell-header');
 
-        // Get task count for this cell
-        const startHour = this.plugin.settings.startHour;
-        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
         const filterContext = { startHour };
         const tasks = allDisplayTasks.filter(t => {
             if (!TaskFilterEngine.evaluate(t, listDef.filterState, filterContext)) return false;

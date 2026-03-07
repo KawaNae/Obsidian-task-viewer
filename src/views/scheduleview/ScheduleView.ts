@@ -104,6 +104,7 @@ export class ScheduleView extends ItemView {
             collapsedSections: this.collapsedSections,
             currentVisualDateProvider: () => this.currentVisualDate,
         });
+        this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
     }
 
     getViewType(): string {

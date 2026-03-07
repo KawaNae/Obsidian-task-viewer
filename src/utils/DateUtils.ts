@@ -24,15 +24,21 @@ export class DateUtils {
         return this.getLocalDateString(new Date());
     }
 
+    /** Parse 'YYYY-MM-DD' as local midnight (not UTC). */
+    private static parseLocalDate(dateStr: string): Date {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    }
+
     static getDiffDays(start: string, end: string): number {
-        const d1 = new Date(start);
-        const d2 = new Date(end);
+        const d1 = DateUtils.parseLocalDate(start);
+        const d2 = DateUtils.parseLocalDate(end);
         const diffTime = d2.getTime() - d1.getTime();
         return Math.round(diffTime / (1000 * 60 * 60 * 24));
     }
 
     static addDays(date: string, days: number): string {
-        const d = new Date(date);
+        const d = DateUtils.parseLocalDate(date);
         d.setDate(d.getDate() + days);
         return this.getLocalDateString(d);
     }
