@@ -380,7 +380,8 @@ export class TaskIndex {
         Object.assign(task, updates);
 
         // startDate が明示的に更新された → 継承フラグをクリア
-        if ('startDate' in updates) {
+        // (undefined = Propertiesモーダル未変更 → フラグ維持)
+        if ('startDate' in updates && updates.startDate !== undefined) {
             task.startDateInherited = false;
         }
 

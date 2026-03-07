@@ -200,7 +200,10 @@ export class PropertiesMenuBuilder {
         new CreateTaskModal(
             this.app,
             async (result) => {
-                await this.taskIndex.updateTask(task.id, this.buildTaskUpdatesFromResult(result));
+                await this.taskIndex.updateTask(
+                    task.id,
+                    this.buildTaskUpdatesFromResult(result, task, startCalc, endCalc)
+                );
             },
             initialValues,
             {
@@ -212,21 +215,37 @@ export class PropertiesMenuBuilder {
         ).open();
     }
 
-    private buildTaskUpdatesFromResult(result: CreateTaskResult): Partial<Task> {
+    private buildTaskUpdatesFromResult(
+        result: CreateTaskResult,
+        task: DisplayTask,
+        startCalc: CalculatedProperty,
+        endCalc: CalculatedProperty
+    ): Partial<Task> {
         const startDate = result.startDate?.trim() || undefined;
         const startTime = result.startTime?.trim() || undefined;
-        const endTime = result.endTime?.trim() || undefined;
         const endDate = result.endDate?.trim() || undefined;
+        const endTime = result.endTime?.trim() || undefined;
         const deadline = result.deadline?.trim() || undefined;
 
-        return {
-            content: result.content ?? '',
-            startDate,
-            startTime,
-            endDate,
-            endTime,
-            deadline,
-        };
+        const updates: Partial<Task> = { content: result.content ?? '' };
+
+        if (task.parserId === 'frontmatter') {
+            // frontmatter: 常に解決済み値を書く（空欄→暗黙値で埋める）
+            updates.startDate = startDate ?? startCalc.date;
+            updates.startTime = startTime ?? startCalc.time;
+            updates.endDate = endDate ?? endCalc.date;
+            updates.endTime = endTime ?? endCalc.time;
+            if (deadline !== undefined) updates.deadline = deadline;
+        } else {
+            // inline: 空欄は省略維持（startDateInherited 保護）
+            if (startDate !== undefined) updates.startDate = startDate;
+            if (startTime !== undefined) updates.startTime = startTime;
+            if (endDate !== undefined) updates.endDate = endDate;
+            if (endTime !== undefined) updates.endTime = endTime;
+            if (deadline !== undefined) updates.deadline = deadline;
+        }
+
+        return updates;
     }
 
     /**

@@ -8,6 +8,7 @@ import { SyncDetector } from './SyncDetector';
 export class EditorObserver {
     private currentEditorEl: HTMLElement | null = null;
     private editorListenerBound: ((e: InputEvent) => void) | null = null;
+    private mousedownListenerBound: ((e: MouseEvent) => void) | null = null;
 
     constructor(
         private app: App,
@@ -33,10 +34,16 @@ export class EditorObserver {
      */
     private attachEditorListener(leaf: WorkspaceLeaf | null): void {
         // 既存のリスナーを解除
-        if (this.currentEditorEl && this.editorListenerBound) {
-            this.currentEditorEl.removeEventListener('beforeinput', this.editorListenerBound as any);
+        if (this.currentEditorEl) {
+            if (this.editorListenerBound) {
+                this.currentEditorEl.removeEventListener('beforeinput', this.editorListenerBound as any);
+            }
+            if (this.mousedownListenerBound) {
+                this.currentEditorEl.removeEventListener('mousedown', this.mousedownListenerBound);
+            }
             this.currentEditorEl = null;
             this.editorListenerBound = null;
+            this.mousedownListenerBound = null;
         }
 
         if (!leaf) return;
@@ -59,7 +66,17 @@ export class EditorObserver {
                 }
             }
         };
-
         editorEl.addEventListener('beforeinput', this.editorListenerBound as any);
+
+        // mousedown: チェックボックスクリック対応
+        // Obsidianのチェックボックスクリックはbeforeinputを発火しないため、
+        // mousedownでローカル編集をマーキングする
+        this.mousedownListenerBound = () => {
+            const file = view.file;
+            if (file) {
+                this.syncDetector.markLocalEdit(file.path);
+            }
+        };
+        editorEl.addEventListener('mousedown', this.mousedownListenerBound);
     }
 }

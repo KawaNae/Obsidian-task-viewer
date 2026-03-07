@@ -37,7 +37,7 @@ export class FrontmatterWriter {
         }
 
         if ('endDate' in updates || 'endTime' in updates) {
-            fmUpdates[frontmatterKeys.end] = this.formatFrontmatterDateTime(task.endDate, task.endTime);
+            fmUpdates[frontmatterKeys.end] = this.formatFrontmatterDateTime(task.endDate, task.endTime, task.startDate);
         }
 
         if ('deadline' in updates) {
@@ -113,11 +113,11 @@ export class FrontmatterWriter {
         return needsQuoting ? `"${statusChar}"` : statusChar;
     }
 
-    /** 日時 → frontmatter 値文字列。時刻オンリーは sexagesimal 回避のためquoted。 */
-    private formatFrontmatterDateTime(date?: string, time?: string): string | null {
-        if (date && time) return `${date}T${time}`;
-        if (date) return date;
-        if (time) return `"${time}"`;
+    /** 日時 → frontmatter 値文字列。時刻のみは出力しない（YAML sexagesimal / Obsidian 非互換）。 */
+    private formatFrontmatterDateTime(date?: string, time?: string, fallbackDate?: string): string | null {
+        const effectiveDate = date || fallbackDate;
+        if (effectiveDate && time) return `${effectiveDate}T${time}`;
+        if (effectiveDate) return effectiveDate;
         return null;
     }
 }
