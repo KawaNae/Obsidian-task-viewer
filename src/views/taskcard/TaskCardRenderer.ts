@@ -3,7 +3,6 @@ import { Task, DisplayTask, TaskViewerSettings, isCompleteStatusChar } from '../
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
 import { getFileBaseName, hasTaskContent, isContentMatchingBaseName } from '../../utils/TaskContent';
-import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
 import { ChildItemBuilder } from './ChildItemBuilder';
 import { ChildSectionRenderer, ChildMenuCallback } from './ChildSectionRenderer';
 import { CheckboxWiring } from './CheckboxWiring';
@@ -167,10 +166,8 @@ export class TaskCardRenderer {
             } else {
                 // Use DisplayTask effective fields if available, otherwise fallback
                 const dt = task as Partial<DisplayTask>;
-                const endDate = dt.effectiveEndDate ?? task.endDate
-                    ?? ImplicitCalendarDateResolver.resolveImplicitEnd(task, settings.startHour)?.endDate;
-                const endTime = dt.effectiveEndTime ?? task.endTime
-                    ?? ImplicitCalendarDateResolver.resolveImplicitEnd(task, settings.startHour)?.endTime;
+                const endDate = dt.effectiveEndDate ?? task.endDate;
+                const endTime = dt.effectiveEndTime ?? task.endTime;
                 if (endDate) {
                     const cleanEndTime = endTime?.includes('T') ? endTime.split('T')[1] : endTime;
                     if (DateUtils.isPastDate(endDate, cleanEndTime, settings.startHour)) {

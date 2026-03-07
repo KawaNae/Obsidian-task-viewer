@@ -6,7 +6,6 @@ import { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } fr
 import { PropertyFormatter } from '../PropertyFormatter';
 import { CreateTaskModal, CreateTaskResult } from '../../../modals/CreateTaskModal';
 import { DateUtils } from '../../../utils/DateUtils';
-import { ImplicitCalendarDateResolver } from '../../../utils/ImplicitCalendarDateResolver';
 import { getTaskDisplayName } from '../../../utils/TaskContent';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
 import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
@@ -129,7 +128,7 @@ export class PropertiesMenuBuilder {
         this.addEndItem(menu, task, endParts, openModal);
         this.addDeadlineItem(menu, task, deadlineParts, openModal);
         menu.addSeparator();
-        this.addLengthItem(menu, task, context);
+        this.addLengthItem(menu, startParts, endParts, context.startHour);
     }
 
     /**
@@ -233,33 +232,30 @@ export class PropertiesMenuBuilder {
     /**
      * Add Length (Duration) item.
      */
-    private addLengthItem(menu: Menu, task: Task, context: PropertyCalculationContext): void {
-        const { startHour, viewStartDate } = context;
-        const implicitVisualStartDate = viewStartDate || DateUtils.getVisualDateOfNow(startHour);
-        const implicit = !task.startDate ? ImplicitCalendarDateResolver.resolveImplicitStart(task, startHour) : null;
-        const effectiveVisualStartDate = task.startDate || implicit?.startDate || implicitVisualStartDate;
-
-        const durationMs = DateUtils.getTaskDurationMs(
-            effectiveVisualStartDate,
-            task.startTime,
-            task.endDate,
-            task.endTime,
-            startHour
-        );
-
+    private addLengthItem(menu: Menu, startParts: CalculatedProperty, endParts: CalculatedProperty, startHour: number): void {
         let lengthText = '-';
-        if (!Number.isNaN(durationMs) && durationMs > 0) {
-            const totalMinutes = Math.round(durationMs / 60000);
-            const days = Math.floor(totalMinutes / 1440);
-            const hours = Math.floor((totalMinutes % 1440) / 60);
-            const minutes = totalMinutes % 60;
 
-            const parts: string[] = [];
-            if (days > 0) parts.push(`${days}d`);
-            if (hours > 0) parts.push(`${hours}h`);
-            if (minutes > 0) parts.push(`${minutes}m`);
+        if (startParts.date) {
+            const durationMs = DateUtils.getTaskDurationMs(
+                startParts.date,
+                startParts.time,
+                endParts.date,
+                endParts.time,
+                startHour
+            );
+            if (!Number.isNaN(durationMs) && durationMs > 0) {
+                const totalMinutes = Math.round(durationMs / 60000);
+                const days = Math.floor(totalMinutes / 1440);
+                const hours = Math.floor((totalMinutes % 1440) / 60);
+                const minutes = totalMinutes % 60;
 
-            lengthText = parts.length > 0 ? parts.join(' ') : '0m';
+                const parts: string[] = [];
+                if (days > 0) parts.push(`${days}d`);
+                if (hours > 0) parts.push(`${hours}h`);
+                if (minutes > 0) parts.push(`${minutes}m`);
+
+                lengthText = parts.length > 0 ? parts.join(' ') : '0m';
+            }
         }
 
         menu.addItem((item) => {

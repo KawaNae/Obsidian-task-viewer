@@ -1,6 +1,5 @@
 import { Task, DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
 
 export interface CalculatedProperty {
     date?: string;
@@ -19,8 +18,8 @@ export interface PropertyCalculationContext {
 /**
  * タスクプロパティの暗黙的値を計算
  *
- * DisplayTask が渡された場合は effective フィールドと implicit フラグを直接使用。
- * raw Task の場合は従来通り ImplicitCalendarDateResolver で計算。
+ * DisplayTask の effective フィールドと implicit フラグを直接使用。
+ * 呼び出し元（MenuHandler.showContextMenu）が toDisplayTask() で変換済み。
  *
  * README Period Calculation Rulesに従う:
  * 1. SED, SE: actual time from start to end
@@ -59,53 +58,14 @@ export class PropertyCalculator {
             };
         }
 
-        // Fallback: raw Task path (legacy)
-        const hasExplicitStart = !!task.startDate && !task.startDateInherited;
-        const hasStartTime = !!task.startTime;
-
-        if (hasExplicitStart) {
-            if (hasStartTime) {
-                return {
-                    date: task.startDate,
-                    time: task.startTime,
-                    dateImplicit: false,
-                    timeImplicit: false
-                };
-            } else {
-                return {
-                    date: task.startDate,
-                    time: startHourStr,
-                    dateImplicit: false,
-                    timeImplicit: true
-                };
-            }
-        } else {
-            const implicit = ImplicitCalendarDateResolver.resolveImplicitStart(task, startHour);
-            if (implicit) {
-                return {
-                    date: implicit.startDate,
-                    time: implicit.startTime || startHourStr,
-                    dateImplicit: true,
-                    timeImplicit: !implicit.startTime,
-                };
-            }
-
-            if (hasStartTime) {
-                return {
-                    date: task.startDate || implicitVisualStartDate,
-                    time: task.startTime,
-                    dateImplicit: true,
-                    timeImplicit: false
-                };
-            } else {
-                return {
-                    date: implicitVisualStartDate,
-                    time: startHourStr,
-                    dateImplicit: true,
-                    timeImplicit: true
-                };
-            }
-        }
+        // All callers pass DisplayTask (via MenuHandler.showContextMenu → toDisplayTask).
+        // effectiveStartDate is always defined. This fallback should be unreachable.
+        return {
+            date: implicitVisualStartDate,
+            time: startHourStr,
+            dateImplicit: true,
+            timeImplicit: true
+        };
     }
 
     /**
@@ -139,54 +99,10 @@ export class PropertyCalculator {
             };
         }
 
-        // Fallback: raw Task path (legacy)
-        const hasExplicitEnd = !!task.endDate;
-        const hasEndTime = !!task.endTime;
-
-        const implicit = !task.startDate ? ImplicitCalendarDateResolver.resolveImplicitStart(task, startHour) : null;
-        const effectiveVisualStartDate = task.startDate || implicit?.startDate || implicitVisualStartDate;
-
-        if (hasExplicitEnd) {
-            if (hasEndTime) {
-                return {
-                    date: task.endDate,
-                    time: task.endTime,
-                    dateImplicit: false,
-                    timeImplicit: false
-                };
-            } else {
-                return {
-                    date: task.endDate,
-                    time: endHourStr,
-                    dateImplicit: false,
-                    timeImplicit: true
-                };
-            }
-        }
-
-        if (hasEndTime) {
-            return {
-                date: effectiveVisualStartDate,
-                time: task.endTime,
-                dateImplicit: true,
-                timeImplicit: false
-            };
-        }
-
-        const implicitEnd = ImplicitCalendarDateResolver.resolveImplicitEnd(
-            { startDate: effectiveVisualStartDate, startTime: task.startTime, endDate: undefined, endTime: undefined },
-            startHour
-        );
-        if (implicitEnd) {
-            return {
-                date: implicitEnd.endDate,
-                time: implicitEnd.endTime || endHourStr,
-                dateImplicit: true,
-                timeImplicit: true
-            };
-        }
-
-        const nextDay = DateUtils.addDays(effectiveVisualStartDate, 1);
+        // All callers pass DisplayTask (via MenuHandler.showContextMenu → toDisplayTask).
+        // effectiveStartDate is always defined. This fallback should be unreachable.
+        const effectiveBase = implicitVisualStartDate;
+        const nextDay = DateUtils.addDays(effectiveBase, 1);
         return {
             date: nextDay,
             time: endHourStr,
