@@ -74,13 +74,13 @@ export abstract class GenerationCommand implements CommandStrategy {
         return {
             ...task,
             id: '',
-
             statusChar: ' ',
             startDate: task.startDate ? this.shiftDate(task.startDate, shiftDays) : undefined,
+            startDateInherited: false, // Generated task has explicit dates
             endDate: task.endDate ? this.shiftDate(task.endDate, shiftDays) : undefined,
             deadline: task.deadline ? this.shiftDate(task.deadline, shiftDays) : undefined,
             originalText: '',
-            childLines: [...task.childLines] // Preserve children for recurrence
+            childLines: [] // Children are re-collected from file by insertRecurrenceForTask
         };
     }
 
