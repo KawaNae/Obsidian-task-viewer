@@ -1,5 +1,5 @@
 import { App, MarkdownRenderer, Component, setIcon } from 'obsidian';
-import { Task, TaskViewerSettings, isCompleteStatusChar } from '../../types';
+import { Task, DisplayTask, TaskViewerSettings, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
 import { getFileBaseName, hasTaskContent, isContentMatchingBaseName } from '../../utils/TaskContent';
@@ -165,12 +165,15 @@ export class TaskCardRenderer {
             if (task.deadline && DateUtils.isPastDeadline(task.deadline, settings.startHour)) {
                 overdueIcon = '🚨 ';
             } else {
-                const effectiveEnd = task.endDate
-                    ? { endDate: task.endDate, endTime: task.endTime }
-                    : ImplicitCalendarDateResolver.resolveImplicitEnd(task, settings.startHour);
-                if (effectiveEnd) {
-                    const endTime = effectiveEnd.endTime?.includes('T') ? effectiveEnd.endTime.split('T')[1] : effectiveEnd.endTime;
-                    if (DateUtils.isPastDate(effectiveEnd.endDate, endTime, settings.startHour)) {
+                // Use DisplayTask effective fields if available, otherwise fallback
+                const dt = task as Partial<DisplayTask>;
+                const endDate = dt.effectiveEndDate ?? task.endDate
+                    ?? ImplicitCalendarDateResolver.resolveImplicitEnd(task, settings.startHour)?.endDate;
+                const endTime = dt.effectiveEndTime ?? task.endTime
+                    ?? ImplicitCalendarDateResolver.resolveImplicitEnd(task, settings.startHour)?.endTime;
+                if (endDate) {
+                    const cleanEndTime = endTime?.includes('T') ? endTime.split('T')[1] : endTime;
+                    if (DateUtils.isPastDate(endDate, cleanEndTime, settings.startHour)) {
                         overdueIcon = '⚠️ ';
                     }
                 }

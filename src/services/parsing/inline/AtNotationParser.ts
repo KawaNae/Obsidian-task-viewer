@@ -11,10 +11,6 @@ interface DateBlockResult {
     endDate?: string;
     endTime?: string;
     deadline?: string;
-    explicitStartDate: boolean;
-    explicitStartTime: boolean;
-    explicitEndDate: boolean;
-    explicitEndTime: boolean;
     validationWarning?: string;
 }
 
@@ -73,16 +69,11 @@ export class AtNotationParser implements ParserStrategy {
         let endDate: string | undefined;
         let endTime: string | undefined;
         let deadline: string | undefined;
-        let explicitStartDate = false;
-        let explicitStartTime = false;
-        let explicitEndDate = false;
-        let explicitEndTime = false;
         let validationWarning: string | undefined;
 
         const dateBlock = this.parseDateBlock(rawContent);
         if (dateBlock) {
             ({ date, startTime, endDate, endTime, deadline,
-               explicitStartDate, explicitStartTime, explicitEndDate, explicitEndTime,
                validationWarning } = dateBlock.fields);
             content = dateBlock.content;
         }
@@ -121,10 +112,6 @@ export class AtNotationParser implements ParserStrategy {
             endDate,
             endTime,
             deadline,
-            explicitStartDate,
-            explicitStartTime,
-            explicitEndDate,
-            explicitEndTime,
             commands,
             tags: TagExtractor.fromContent(content.trim()),
             originalText: line,
@@ -157,10 +144,6 @@ export class AtNotationParser implements ParserStrategy {
         let endDate: string | undefined;
         let endTime: string | undefined;
         let deadline: string | undefined;
-        let explicitStartDate = false;
-        let explicitStartTime = false;
-        let explicitEndDate = false;
-        let explicitEndTime = false;
         let validationWarning: string | undefined;
 
         // --- Start segment ---
@@ -169,33 +152,27 @@ export class AtNotationParser implements ParserStrategy {
             const parsed = this.parseDateTime(rawStart);
             if (parsed.date) {
                 date = parsed.date;
-                explicitStartDate = true;
             }
             if (parsed.time) {
                 startTime = parsed.time;
-                explicitStartTime = true;
             }
         }
 
         // --- End segment ---
+        // endDate is only set when explicitly written (e.g. >2026-02-16T08:00).
+        // Time-only end (>08:00) or empty end (>>deadline) leave endDate undefined;
+        // DisplayTaskConverter resolves the implicit endDate at display time.
         if (parts.length > 1) {
             const rawEnd = parts[1];
             if (!rawEnd) {
-                // Empty end (@start>>deadline): inherit start date
-                if (date) endDate = date;
+                // Empty end (@start>>deadline): endDate stays undefined
             } else {
                 const parsed = this.parseDateTime(rawEnd);
                 if (parsed.date) {
                     endDate = parsed.date;
-                    explicitEndDate = true;
                 }
                 if (parsed.time) {
                     endTime = parsed.time;
-                    explicitEndTime = true;
-                }
-                // Inherit start date when only time is specified
-                if (!parsed.date && date) {
-                    endDate = date;
                 }
             }
         }
@@ -217,7 +194,6 @@ export class AtNotationParser implements ParserStrategy {
         return {
             fields: {
                 date, startTime, endDate, endTime, deadline,
-                explicitStartDate, explicitStartTime, explicitEndDate, explicitEndTime,
                 validationWarning,
             },
             content: cleanedContent,

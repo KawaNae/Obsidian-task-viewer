@@ -1,9 +1,10 @@
-import type { Task } from '../../types';
+import type { Task, DisplayTask } from '../../types';
 import type { SortState, SortRule, SortProperty } from './SortTypes';
 
 /**
  * Sorts tasks according to a user-defined SortState.
  * Falls back to default sort (deadline → startDate → content) when no rules are set.
+ * When DisplayTask is passed, startDate/endDate sort uses effective values.
  */
 export class TaskSorter {
     static sort(tasks: Task[], state: SortState | undefined): void {
@@ -25,8 +26,10 @@ export class TaskSorter {
             const da = a.deadline || '';
             const db = b.deadline || '';
             if (da !== db) return da.localeCompare(db);
-            const sa = a.startDate || '';
-            const sb = b.startDate || '';
+            const dta = a as Partial<DisplayTask>;
+            const dtb = b as Partial<DisplayTask>;
+            const sa = dta.effectiveStartDate ?? a.startDate ?? '';
+            const sb = dtb.effectiveStartDate ?? b.startDate ?? '';
             if (sa !== sb) return sa.localeCompare(sb);
             return (a.content || '').localeCompare(b.content || '');
         });
@@ -40,11 +43,12 @@ export class TaskSorter {
     }
 
     private static getValue(task: Task, property: SortProperty): string {
+        const dt = task as Partial<DisplayTask>;
         switch (property) {
             case 'content': return task.content || '';
             case 'deadline': return task.deadline || '';
-            case 'startDate': return task.startDate || '';
-            case 'endDate': return task.endDate || '';
+            case 'startDate': return dt.effectiveStartDate ?? task.startDate ?? '';
+            case 'endDate': return dt.effectiveEndDate ?? task.endDate ?? '';
             case 'file': return task.file || '';
             case 'status': return task.statusChar || '';
             case 'tag': return task.tags[0] || '';

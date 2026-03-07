@@ -3,7 +3,7 @@ import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { isCompleteStatusChar } from '../../types';
-import type { RenderableTask } from '../sharedLogic/RenderableTaskUtils';
+import type { DisplayTask } from '../../types';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
 import { DateUtils } from '../../utils/DateUtils';
@@ -17,7 +17,7 @@ import { createEmptyFilterState, hasConditions } from '../../services/filter/Fil
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
-import type { CollapsibleSectionKey, TimedRenderableTask } from './ScheduleTypes';
+import type { CollapsibleSectionKey, TimedDisplayTask } from './ScheduleTypes';
 import { ScheduleGridCalculator } from './utils/ScheduleGridCalculator';
 import { ScheduleTaskCategorizer } from './utils/ScheduleTaskCategorizer';
 import { ScheduleOverlapLayout } from './utils/ScheduleOverlapLayout';
@@ -331,7 +331,7 @@ export class ScheduleView extends ItemView {
         fixedContainer: HTMLElement,
         bodyContainer: HTMLElement,
         date: string,
-        tasks: RenderableTask[]
+        tasks: DisplayTask[]
     ): Promise<void> {
         const categorized = this.taskCategorizer.categorizeTasksBySection(tasks, date);
 
@@ -352,7 +352,7 @@ export class ScheduleView extends ItemView {
         }
     }
 
-    private async renderTimelineMain(container: HTMLElement, tasks: TimedRenderableTask[]): Promise<void> {
+    private async renderTimelineMain(container: HTMLElement, tasks: TimedDisplayTask[]): Promise<void> {
         const main = container.createDiv('schedule-grid');
         const layout = this.gridCalculator.buildAdaptiveGrid(tasks);
         const timelineHeight = layout.totalHeight + ScheduleView.TIMELINE_TOP_PADDING_PX + ScheduleView.TIMELINE_BOTTOM_PADDING_PX;

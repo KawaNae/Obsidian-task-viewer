@@ -1,8 +1,9 @@
 import { ItemView, WorkspaceLeaf, TFile, setIcon } from 'obsidian';
 import type { HoverParent } from 'obsidian';
-import { Task } from '../../types';
+import { Task, DisplayTask } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
+import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import {
     getTaskDateRange,
@@ -338,10 +339,11 @@ export class MiniCalendarView extends ItemView {
 
     private computeIndicators(rangeStart: string, rangeEnd: string): Map<string, IndicatorState> {
         const indicatorMap = new Map<string, IndicatorState>();
-        const allTasks = this.taskIndex.getTasks();
+        const startHour = this.plugin.settings.startHour;
+        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
 
-        for (const task of allTasks) {
-            const { effectiveStart, effectiveEnd } = this.getTaskDateRange(task);
+        for (const dt of allDisplayTasks) {
+            const { effectiveStart, effectiveEnd } = getTaskDateRange(dt, startHour);
             if (!effectiveStart) {
                 continue;
             }
@@ -353,7 +355,7 @@ export class MiniCalendarView extends ItemView {
 
             const clippedStart = effectiveStart < rangeStart ? rangeStart : effectiveStart;
             const clippedEnd = taskEnd > rangeEnd ? rangeEnd : taskEnd;
-            const isCompleted = this.isTaskCompleted(task);
+            const isCompleted = this.isTaskCompleted(dt);
 
             let dateCursor = clippedStart;
             while (dateCursor <= clippedEnd) {
@@ -367,10 +369,6 @@ export class MiniCalendarView extends ItemView {
         }
 
         return indicatorMap;
-    }
-
-    private getTaskDateRange(task: Task): { effectiveStart: string | null; effectiveEnd: string | null } {
-        return getTaskDateRange(task, this.plugin.settings.startHour);
     }
 
     private isTaskCompleted(task: Task): boolean {

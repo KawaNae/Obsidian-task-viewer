@@ -378,6 +378,12 @@ export class TaskIndex {
 
         this.syncDetector.markLocalEdit(task.file);
         Object.assign(task, updates);
+
+        // startDate が明示的に更新された → 継承フラグをクリア
+        if ('startDate' in updates) {
+            task.startDateInherited = false;
+        }
+
         // ドラッグ中のファイルはnotifyをスキップ（ドラッグ終了時にsetDraggingFile(null)で一括通知）
         if (this.draggingFilePath !== task.file) {
             this.store.notifyListeners(taskId, Object.keys(updates));

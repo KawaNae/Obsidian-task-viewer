@@ -1,5 +1,5 @@
 import { toLogicalHeightPx } from '../../sharedLogic/TimelineCardPosition';
-import type { AdaptiveGridLayout, GridRow, TimedRenderableTask } from '../ScheduleTypes';
+import type { AdaptiveGridLayout, GridRow, TimedDisplayTask } from '../ScheduleTypes';
 
 export interface ScheduleGridCalculatorOptions {
     getStartHour: () => number;
@@ -21,7 +21,7 @@ export class ScheduleGridCalculator {
         this.maxGapHeightPx = options.maxGapHeightPx;
     }
 
-    buildAdaptiveGrid(tasks: TimedRenderableTask[]): AdaptiveGridLayout {
+    buildAdaptiveGrid(tasks: TimedDisplayTask[]): AdaptiveGridLayout {
         const dayStart = this.getDayStartMinute();
         const dayEnd = this.getDayEndMinute();
         const boundaries = new Set<number>();
@@ -97,7 +97,7 @@ export class ScheduleGridCalculator {
         return rows[rows.length - 1].top;
     }
 
-    getTaskSpannedMinutes(tasks: TimedRenderableTask[]): Set<number> {
+    getTaskSpannedMinutes(tasks: TimedDisplayTask[]): Set<number> {
         const spanned = new Set<number>();
 
         for (const task of tasks) {
@@ -111,7 +111,7 @@ export class ScheduleGridCalculator {
         return spanned;
     }
 
-    isTaskBoundary(minute: number, tasks: TimedRenderableTask[]): boolean {
+    isTaskBoundary(minute: number, tasks: TimedDisplayTask[]): boolean {
         return tasks.some((task) => task.visualStartMinute === minute || task.visualEndMinute === minute);
     }
 

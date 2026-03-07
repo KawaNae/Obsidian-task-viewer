@@ -32,10 +32,6 @@ export function formatTaskLine(result: CreateTaskResult): string {
         endDate: result.endDate,
         endTime: result.endTime,
         deadline: result.deadline,
-        explicitStartDate: !!result.startDate,
-        explicitStartTime: !!result.startTime,
-        explicitEndDate: !!result.endDate,
-        explicitEndTime: !!result.endTime,
         commands: [],
         originalText: '',
         childLineBodyOffsets: [],
@@ -366,7 +362,7 @@ export class CreateTaskModal extends Modal {
 
         // --- End Date placeholder ---
         if (this.endDateInput) {
-            this.endDateInput.placeholder = sd || ip?.endDate || this.options.dailyNoteDate || 'YYYY-MM-DD';
+            this.endDateInput.placeholder = ip?.endDate || sd || this.options.dailyNoteDate || 'YYYY-MM-DD';
         }
 
         // --- Start Time placeholder ---

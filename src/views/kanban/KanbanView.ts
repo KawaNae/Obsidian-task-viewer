@@ -18,6 +18,7 @@ import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
 import type { PinnedListDefinition } from '../../types';
+import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
 
 export const VIEW_TYPE_KANBAN = VIEW_META_KANBAN.type;
 
@@ -245,9 +246,10 @@ export class KanbanView extends ItemView {
         const header = cell.createDiv('kanban-view__cell-header');
 
         // Get task count for this cell
-        const allTasks = this.taskIndex.getTasks();
-        const filterContext = { startHour: this.plugin.settings.startHour };
-        const tasks = allTasks.filter(t => {
+        const startHour = this.plugin.settings.startHour;
+        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
+        const filterContext = { startHour };
+        const tasks = allDisplayTasks.filter(t => {
             if (!TaskFilterEngine.evaluate(t, listDef.filterState, filterContext)) return false;
             if (listDef.applyViewFilter && this.viewFilterState && hasConditions(this.viewFilterState)) {
                 if (!TaskFilterEngine.evaluate(t, this.viewFilterState, filterContext)) return false;

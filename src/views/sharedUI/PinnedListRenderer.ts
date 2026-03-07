@@ -4,7 +4,7 @@
  */
 
 import { Component, Menu, setIcon } from 'obsidian';
-import type { Task, PinnedListDefinition } from '../../types';
+import type { Task, DisplayTask, PinnedListDefinition } from '../../types';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskFilterEngine } from '../../services/filter/TaskFilterEngine';
@@ -14,6 +14,7 @@ import { TaskSorter } from '../../services/sort/TaskSorter';
 import { hasSortRules } from '../../services/sort/SortTypes';
 import TaskViewerPlugin from '../../main';
 import { TaskStyling } from './TaskStyling';
+import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
 
 export interface PinnedListCallbacks {
     onCollapsedChange: (listId: string, collapsed: boolean) => void;
@@ -58,11 +59,12 @@ export class PinnedListRenderer {
             return;
         }
 
-        const allTasks = this.taskIndex.getTasks();
-        const filterContext = { startHour: this.plugin.settings.startHour };
+        const startHour = this.plugin.settings.startHour;
+        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
+        const filterContext = { startHour };
 
         for (const listDef of lists) {
-            const tasks = allTasks.filter(task => {
+            const tasks = allDisplayTasks.filter(task => {
                 if (!TaskFilterEngine.evaluate(task, listDef.filterState, filterContext)) return false;
                 if (listDef.applyViewFilter && viewFilter && !viewFilter(task)) return false;
                 return true;

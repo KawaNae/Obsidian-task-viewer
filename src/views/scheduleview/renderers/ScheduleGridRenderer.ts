@@ -1,4 +1,4 @@
-import type { GridRow, TimedRenderableTask } from '../ScheduleTypes';
+import type { GridRow, TimedDisplayTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from '../utils/ScheduleGridCalculator';
 
 export class ScheduleGridRenderer {
@@ -10,7 +10,7 @@ export class ScheduleGridRenderer {
         this.timelineTopPaddingPx = timelineTopPaddingPx;
     }
 
-    renderTimeMarkers(container: HTMLElement, rows: GridRow[], tasks: TimedRenderableTask[]): void {
+    renderTimeMarkers(container: HTMLElement, rows: GridRow[], tasks: TimedDisplayTask[]): void {
         const markersLayer = container.createDiv('schedule-grid__markers');
         const spannedMinutes = this.gridCalculator.getTaskSpannedMinutes(tasks);
 

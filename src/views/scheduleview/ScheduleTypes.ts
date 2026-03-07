@@ -1,16 +1,16 @@
-import type { RenderableTask } from '../sharedLogic/RenderableTaskUtils';
+import type { DisplayTask } from '../../types';
 
 export type CollapsibleSectionKey = 'allDay' | 'deadlines';
 
-export interface TimedRenderableTask extends RenderableTask {
+export interface TimedDisplayTask extends DisplayTask {
     visualStartMinute: number;
     visualEndMinute: number;
 }
 
 export interface CategorizedTasks {
-    allDay: RenderableTask[];
-    timed: TimedRenderableTask[];
-    deadlines: RenderableTask[];
+    allDay: DisplayTask[];
+    timed: TimedDisplayTask[];
+    deadlines: DisplayTask[];
 }
 
 export interface GridRow {
@@ -27,7 +27,7 @@ export interface AdaptiveGridLayout {
 }
 
 export interface TaskPlacement {
-    task: TimedRenderableTask;
+    task: TimedDisplayTask;
     startTime: string;
     top: number;
     height: number;
@@ -36,7 +36,7 @@ export interface TaskPlacement {
 }
 
 export interface ClusteredTaskAssignment {
-    task: TimedRenderableTask;
+    task: TimedDisplayTask;
     column: number;
     columnCount: number;
 }

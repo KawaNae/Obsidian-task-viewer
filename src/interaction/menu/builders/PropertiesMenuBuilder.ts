@@ -172,15 +172,6 @@ export class PropertiesMenuBuilder {
     }
 
     private openChangePropertiesModal(task: Task, focusField: ChangePropertiesFocusField, viewStartDate: string | null = null): void {
-        const initialValues: Partial<CreateTaskResult> = {
-            content: task.content ?? '',
-            startDate: task.startDate,
-            startTime: task.startTime,
-            endDate: task.endDate,
-            endTime: task.endTime,
-            deadline: task.deadline,
-        };
-
         // Build implicit placeholders from PropertyCalculator results
         const context: PropertyCalculationContext = {
             task,
@@ -190,6 +181,17 @@ export class PropertiesMenuBuilder {
         const startCalc = this.propertyCalculator.calculateStart(context);
         const endCalc = this.propertyCalculator.calculateEnd(context);
 
+        // initialValues: explicit values only (implicit values excluded → shown as placeholders)
+        const initialValues: Partial<CreateTaskResult> = {
+            content: task.content ?? '',
+            startDate: startCalc.dateImplicit ? undefined : task.startDate,
+            startTime: startCalc.timeImplicit ? undefined : task.startTime,
+            endDate: endCalc.dateImplicit ? undefined : task.endDate,
+            endTime: endCalc.timeImplicit ? undefined : task.endTime,
+            deadline: task.deadline,
+        };
+
+        // implicitPlaceholders: implicit values only
         const implicitPlaceholders: { startDate?: string; startTime?: string; endDate?: string; endTime?: string } = {};
         if (startCalc.dateImplicit && startCalc.date) implicitPlaceholders.startDate = startCalc.date;
         if (startCalc.timeImplicit && startCalc.time) implicitPlaceholders.startTime = startCalc.time;
@@ -215,8 +217,7 @@ export class PropertiesMenuBuilder {
         const startDate = result.startDate?.trim() || undefined;
         const startTime = result.startTime?.trim() || undefined;
         const endTime = result.endTime?.trim() || undefined;
-        const explicitEndDate = result.endDate?.trim() || undefined;
-        const endDate = ImplicitCalendarDateResolver.resolveEndDate(explicitEndDate, endTime, startDate);
+        const endDate = result.endDate?.trim() || undefined;
         const deadline = result.deadline?.trim() || undefined;
 
         return {

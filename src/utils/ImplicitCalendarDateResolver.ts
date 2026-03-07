@@ -7,21 +7,6 @@ import { DateUtils } from './DateUtils';
  */
 export class ImplicitCalendarDateResolver {
     /**
-     * Resolve implicit End Date.
-     * When endDate is unset but endTime exists, inherit from startDate (same-day inference).
-     */
-    static resolveEndDate(
-        endDate: string | undefined,
-        endTime: string | undefined,
-        startDate: string | undefined
-    ): string | undefined {
-        if (!endDate && endTime && startDate) {
-            return startDate;
-        }
-        return endDate;
-    }
-
-    /**
      * Resolve implicit dates for tasks inside a daily note.
      * When startDate is unset but startTime exists, inherit from the daily note's date.
      * Returns only the fields that need to be overwritten (sparse update).
@@ -29,16 +14,14 @@ export class ImplicitCalendarDateResolver {
     static resolveDailyNoteDates(
         task: { startDate?: string; startTime?: string; endDate?: string; endTime?: string },
         dailyNoteDate: string
-    ): { startDate?: string; startDateInherited?: boolean; endDate?: string } {
-        const result: { startDate?: string; startDateInherited?: boolean; endDate?: string } = {};
+    ): { startDate?: string; startDateInherited?: boolean } {
+        const result: { startDate?: string; startDateInherited?: boolean } = {};
 
         if (!task.startDate && task.startTime) {
             result.startDate = dailyNoteDate;
             result.startDateInherited = true;
         }
-        if (!task.endDate && task.endTime) {
-            result.endDate = task.startDate || dailyNoteDate;
-        }
+        // endDate resolution is handled by DisplayTaskConverter (implicit endDate from startDate)
 
         return result;
     }

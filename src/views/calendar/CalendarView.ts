@@ -3,8 +3,9 @@ import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import { Task, PinnedListDefinition } from '../../types';
+import { Task, DisplayTask, PinnedListDefinition } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
+import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import {
     getTaskDateRange,
@@ -590,12 +591,12 @@ export class CalendarView extends ItemView {
         }, { bindClick: false });
     }
 
-    private async renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: Task[]): Promise<void> {
+    private async renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: DisplayTask[]): Promise<void> {
         const startHour = this.plugin.settings.startHour;
         const entries = computeGridLayout(allTasks, {
             dates: weekDates,
             getDateRange: (task) => {
-                const range = getTaskDateRange(task, startHour);
+                const range = getTaskDateRange(task as DisplayTask, startHour);
                 if (!range.effectiveStart) return null;
                 return {
                     effectiveStart: range.effectiveStart,
@@ -629,27 +630,24 @@ export class CalendarView extends ItemView {
         }));
     }
 
-    private getVisibleTasksInRange(rangeStart: string, rangeEnd: string): Task[] {
-        const allTasks = this.taskIndex.getTasks();
-        return allTasks.filter((task) => {
-            if (!this.plugin.settings.calendarShowCompleted && this.isTaskCompleted(task)) {
+    private getVisibleTasksInRange(rangeStart: string, rangeEnd: string): DisplayTask[] {
+        const startHour = this.plugin.settings.startHour;
+        const allTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
+        return allTasks.filter((dt) => {
+            if (!this.plugin.settings.calendarShowCompleted && this.isTaskCompleted(dt)) {
                 return false;
             }
-            if (!this.filterMenu.isTaskVisible(task)) {
+            if (!this.filterMenu.isTaskVisible(dt)) {
                 return false;
             }
 
-            const { effectiveStart, effectiveEnd } = this.getTaskDateRange(task);
+            const { effectiveStart, effectiveEnd } = getTaskDateRange(dt, startHour);
             if (!effectiveStart) {
                 return false;
             }
             const taskEnd = effectiveEnd || effectiveStart;
             return effectiveStart <= rangeEnd && taskEnd >= rangeStart;
         });
-    }
-
-    private getTaskDateRange(task: Task): { effectiveStart: string | null; effectiveEnd: string | null } {
-        return getTaskDateRange(task, this.plugin.settings.startHour);
     }
 
     private async renderGridTask(

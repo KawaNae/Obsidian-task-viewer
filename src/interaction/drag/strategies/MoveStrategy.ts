@@ -147,9 +147,10 @@ export class MoveStrategy extends BaseDragStrategy {
         let originalTaskStartMinutes: number | null = null;
         let originalTaskEndMinutes: number | null = null;
 
-        if (originalTask?.startDate && originalTask.startTime && originalTask.endDate && originalTask.endTime) {
+        const effectiveEndDate = originalTask?.endDate || originalTask?.startDate;
+        if (originalTask?.startDate && originalTask.startTime && effectiveEndDate && originalTask.endTime) {
             const start = new Date(`${originalTask.startDate}T${originalTask.startTime}`);
-            const end = new Date(`${originalTask.endDate}T${originalTask.endTime}`);
+            const end = new Date(`${effectiveEndDate}T${originalTask.endTime}`);
             if (end < start) end.setDate(end.getDate() + 1);
 
             const durationMinutes = (end.getTime() - start.getTime()) / 60000;
@@ -589,7 +590,7 @@ export class MoveStrategy extends BaseDragStrategy {
 
         const updates: Partial<Task> = {};
         const hasExplicitStart = !!this.dragTask.startDate;
-        const hasExplicitEnd = !!this.dragTask.endDate;
+        const hasExplicitEnd = !!this.dragTask.endDate || !!this.dragTask.endTime;
         const hasDeadline = !!this.dragTask.deadline;
 
         if (hasExplicitStart && hasExplicitEnd) {
@@ -610,7 +611,7 @@ export class MoveStrategy extends BaseDragStrategy {
             updates.startDate = newStart;
         } else {
             updates.startDate = newStart;
-            if (this.dragTask.endDate) {
+            if (this.dragTask.endDate || this.dragTask.endTime) {
                 updates.endDate = newEnd;
             }
         }
