@@ -3,7 +3,7 @@ import type { Task, DisplayTask } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
-import { toDisplayTasks, shouldSplitDisplayTask, splitDisplayTaskAtBoundary } from '../../../utils/DisplayTaskConverter';
+import { shouldSplitDisplayTask, splitDisplayTaskAtBoundary } from '../../../utils/DisplayTaskConverter';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
 import { TaskLayout } from '../TaskLayout';
 import { TaskIndex } from '../../../services/core/TaskIndex';
@@ -22,11 +22,10 @@ export class TimelineSectionRenderer {
         private getZoomLevel: () => number
     ) { }
 
-    public render(container: HTMLElement, date: string, owner: Component, isTaskVisible: (task: Task) => boolean) {
+    public render(container: HTMLElement, date: string, owner: Component, isTaskVisible: (task: Task) => boolean, allDisplayTasks: DisplayTask[]) {
         const startHour = this.plugin.settings.startHour;
 
-        // Convert to DisplayTask and filter for timed tasks in this column
-        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
+        // Filter for timed tasks in this column
         let tasks = allDisplayTasks.filter(dt => {
             if (!dt.effectiveStartTime) return false; // No startTime = not a timed task
 

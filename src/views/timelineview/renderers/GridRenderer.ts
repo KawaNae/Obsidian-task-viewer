@@ -13,6 +13,7 @@ import { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './TimelineSectionRenderer';
 import { TaskIndex } from '../../../services/core/TaskIndex';
 import { toDisplayTasks, isDisplayTaskOnVisualDate } from '../../../utils/DisplayTaskConverter';
+import type { DisplayTask } from '../../../types';
 import { HabitTrackerRenderer } from '../../sharedUI/HabitTrackerRenderer';
 
 type DateHeaderDisplayEntry = {
@@ -53,7 +54,9 @@ export class GridRenderer {
         // Set view start date for MenuHandler (for E, ED, D type implicit start display)
         this.menuHandler.setViewStartDate(dates[0]);
 
-
+        // Convert all tasks to DisplayTask once for the entire render pass
+        const startHour = this.plugin.settings.startHour;
+        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
 
         // 1. Date Header Row
         const headerRow = grid.createDiv('timeline-row date-header');
@@ -107,8 +110,6 @@ export class GridRenderer {
 
             // Check if this date has incomplete overdue tasks (respecting toolbar filter)
             if (date < todayVisualDate) {
-                const startHour = this.plugin.settings.startHour;
-                const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
                 const hasOverdueTasks = allDisplayTasks.some(dt =>
                     isDisplayTaskOnVisualDate(dt, date, startHour) &&
                     isTaskVisible(dt) &&
@@ -209,7 +210,7 @@ export class GridRenderer {
         });
 
         // Render Tasks (Overlaid)
-        allDayRenderer.render(allDayRow, dates, owner, isTaskVisible);
+        allDayRenderer.render(allDayRow, dates, owner, isTaskVisible, allDisplayTasks);
 
         // 3. Timeline Row (Scrollable)
         const scrollArea = grid.createDiv('timeline-row timeline-scroll-area');
@@ -227,7 +228,7 @@ export class GridRenderer {
         dates.forEach(date => {
             const col = scrollArea.createDiv('day-timeline-column');
             col.dataset.date = date;
-            timelineRenderer.render(col, date, owner, isTaskVisible);
+            timelineRenderer.render(col, date, owner, isTaskVisible, allDisplayTasks);
 
             // Add interaction listeners for creating tasks
             timelineRenderer.addCreateTaskListeners(col, date);

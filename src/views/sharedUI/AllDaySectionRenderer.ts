@@ -3,7 +3,6 @@ import { Component, Menu } from 'obsidian';
 import TaskViewerPlugin from '../../main';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../utils/DateUtils';
-import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
 import { TaskStyling } from './TaskStyling';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -23,13 +22,12 @@ export class AllDaySectionRenderer {
         private getDaysToShow: () => number
     ) { }
 
-    public render(container: HTMLElement, dates: string[], owner: Component, isTaskVisible: (task: Task) => boolean) {
+    public render(container: HTMLElement, dates: string[], owner: Component, isTaskVisible: (task: Task) => boolean, allDisplayTasks: DisplayTask[]) {
         const viewStart = dates[0];
         const viewEnd = dates[dates.length - 1];
         const startHour = this.plugin.settings.startHour;
 
-        // Convert to DisplayTask and filter for allDay tasks
-        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
+        // Filter for allDay tasks
         let tasks = allDisplayTasks.filter(dt => {
             if (!dt.effectiveStartDate) return false;  // D type: excluded
 
