@@ -91,10 +91,10 @@ export class ScheduleTaskCategorizer {
         const startHour = this.getStartHour();
         const allTasks = this.taskIndex.getTasks();
         for (const task of allTasks) {
-            if (!this.filterMenu.isTaskVisible(task)) {
+            const dt = toDisplayTask(task, startHour);
+            if (!this.filterMenu.isTaskVisible(dt)) {
                 continue;
             }
-            const dt = toDisplayTask(task, startHour);
             result.push(...this.getDisplayTasksForDate(dt, dateStr));
         }
         return result;
@@ -145,8 +145,8 @@ export class ScheduleTaskCategorizer {
         const durationMs = DateUtils.getTaskDurationMs(
             dt.effectiveStartDate,
             dt.effectiveStartTime,
-            dt.endDate,
-            dt.endTime,
+            dt.effectiveEndDate,
+            dt.effectiveEndTime,
             this.getStartHour()
         );
 

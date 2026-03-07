@@ -1,6 +1,7 @@
 import { App, TFile } from 'obsidian';
 import { DEFAULT_FRONTMATTER_TASK_KEYS, FrontmatterTaskKeys, Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
+import { DateUtils } from '../../utils/DateUtils';
 
 /**
  * Inline タスクを Frontmatter タスクファイルに変換する。
@@ -80,13 +81,13 @@ export class TaskConverter {
         const lines = ['---'];
 
         // start
-        const startValue = this.formatDateTime(task.startDate, task.startTime);
+        const startValue = DateUtils.formatDateTimeForStorage(task.startDate, task.startTime);
         if (startValue) {
             lines.push(`${frontmatterKeys.start}: ${startValue}`);
         }
 
         // end (endDate が未設定の場合は startDate をフォールバック — same-day 推論)
-        const endValue = this.formatDateTime(task.endDate, task.endTime, task.startDate);
+        const endValue = DateUtils.formatDateTimeForStorage(task.endDate, task.endTime, task.startDate);
         if (endValue) {
             lines.push(`${frontmatterKeys.end}: ${endValue}`);
         }
@@ -127,18 +128,6 @@ export class TaskConverter {
         lines.push(...task.childLines);
 
         return lines.join('\n');
-    }
-
-    /**
-     * 日付 + 時刻を結合してフォーマット。
-     */
-    private formatDateTime(date?: string, time?: string, fallbackDate?: string): string | null {
-        if (!date && !time) return null;
-        const effectiveDate = date || fallbackDate;
-        if (effectiveDate && time) return `${effectiveDate}T${time}`;
-        if (effectiveDate) return effectiveDate;
-        // 時刻のみは出力しない（frontmatter に書く際の安全策）
-        return null;
     }
 
     /**

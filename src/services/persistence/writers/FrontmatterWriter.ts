@@ -3,6 +3,7 @@ import type { FrontmatterTaskKeys, Task } from '../../../types';
 import { FileOperations } from '../utils/FileOperations';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 import { HeadingInserter } from '../../../utils/HeadingInserter';
+import { DateUtils } from '../../../utils/DateUtils';
 
 
 /**
@@ -33,11 +34,11 @@ export class FrontmatterWriter {
         }
 
         if ('startDate' in updates || 'startTime' in updates) {
-            fmUpdates[frontmatterKeys.start] = this.formatFrontmatterDateTime(task.startDate, task.startTime);
+            fmUpdates[frontmatterKeys.start] = DateUtils.formatDateTimeForStorage(task.startDate, task.startTime);
         }
 
         if ('endDate' in updates || 'endTime' in updates) {
-            fmUpdates[frontmatterKeys.end] = this.formatFrontmatterDateTime(task.endDate, task.endTime, task.startDate);
+            fmUpdates[frontmatterKeys.end] = DateUtils.formatDateTimeForStorage(task.endDate, task.endTime, task.startDate);
         }
 
         if ('deadline' in updates) {
@@ -113,11 +114,4 @@ export class FrontmatterWriter {
         return needsQuoting ? `"${statusChar}"` : statusChar;
     }
 
-    /** 日時 → frontmatter 値文字列。時刻のみは出力しない（YAML sexagesimal / Obsidian 非互換）。 */
-    private formatFrontmatterDateTime(date?: string, time?: string, fallbackDate?: string): string | null {
-        const effectiveDate = date || fallbackDate;
-        if (effectiveDate && time) return `${effectiveDate}T${time}`;
-        if (effectiveDate) return effectiveDate;
-        return null;
-    }
 }

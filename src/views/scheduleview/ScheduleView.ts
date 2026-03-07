@@ -24,6 +24,7 @@ import { ScheduleOverlapLayout } from './utils/ScheduleOverlapLayout';
 import { ScheduleGridRenderer } from './renderers/ScheduleGridRenderer';
 import { ScheduleTaskRenderer } from './renderers/ScheduleTaskRenderer';
 import { ScheduleSectionRenderer } from './renderers/ScheduleSectionRenderer';
+import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 
 export const VIEW_TYPE_SCHEDULE = VIEW_META_SCHEDULE.type;
@@ -394,8 +395,10 @@ export class ScheduleView extends ItemView {
         }
         if (date < todayVisualDate) {
             const tasksForDate = this.taskIndex.getTasksForVisualDay(date, this.plugin.settings.startHour);
-            const hasOverdueTasks = tasksForDate.some((task) =>
-                !isCompleteStatusChar(task.statusChar, this.plugin.settings.completeStatusChars)
+            const displayTasks = toDisplayTasks(tasksForDate, this.plugin.settings.startHour);
+            const hasOverdueTasks = displayTasks.some(dt =>
+                this.filterMenu.isTaskVisible(dt) &&
+                !isCompleteStatusChar(dt.statusChar, this.plugin.settings.completeStatusChars)
             );
             if (hasOverdueTasks) {
                 dateCell.addClass('has-overdue');

@@ -109,6 +109,18 @@ export class DateUtils {
     }
 
     /**
+     * 日付+時刻を frontmatter/YAML 互換の文字列にフォーマット。
+     * - time-only 禁止（YAML sexagesimal / Obsidian 非互換）
+     * - endDate 未設定時は fallbackDate（通常 startDate）で same-day 推論
+     */
+    static formatDateTimeForStorage(date?: string, time?: string, fallbackDate?: string): string | null {
+        const effectiveDate = date || fallbackDate;
+        if (effectiveDate && time) return `${effectiveDate}T${time}`;
+        if (effectiveDate) return effectiveDate;
+        return null;
+    }
+
+    /**
      * Calculate task duration in milliseconds based on README spec.
      * Returns the duration considering start/end dates and times.
      * 
