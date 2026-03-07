@@ -76,7 +76,7 @@ export class TaskCardRenderer {
         }
 
         this.bindInternalLinks(contentContainer, task.file);
-        this.bindParentCheckbox(contentContainer, task.id, settings);
+        this.bindParentCheckbox(contentContainer, task.originalTaskId ?? task.id, settings);
     }
 
     private getChildCompletion(task: Task, settings: TaskViewerSettings): { completed: number; total: number } {
