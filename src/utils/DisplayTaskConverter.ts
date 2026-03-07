@@ -160,6 +160,24 @@ export function splitDisplayTaskAtBoundary(dt: DisplayTask, startHour: number): 
 }
 
 /**
+ * Returns true when a DisplayTask belongs to the given visual date.
+ * Timed tasks: check visual start date. AllDay tasks: check date range.
+ */
+export function isDisplayTaskOnVisualDate(
+    dt: DisplayTask, visualDate: string, startHour: number
+): boolean {
+    if (!dt.effectiveStartDate) return false;
+    if (dt.effectiveStartTime) {
+        return DateUtils.getVisualStartDate(
+            dt.effectiveStartDate, dt.effectiveStartTime, startHour
+        ) === visualDate;
+    }
+    // AllDay: effectiveStartDate ≤ visualDate ≤ effectiveEndDate
+    const end = dt.effectiveEndDate || dt.effectiveStartDate;
+    return dt.effectiveStartDate <= visualDate && visualDate <= end;
+}
+
+/**
  * Convert a Task to DisplayTask(s), splitting at the visual day boundary if needed.
  * Returns 1 element for non-split tasks, 2 for split tasks.
  */

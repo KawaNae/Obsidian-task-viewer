@@ -261,14 +261,6 @@ export class TaskIndex {
         return lines;
     }
 
-    getTasksForDate(date: string, startHour?: number): Task[] {
-        return this.store.getTasksForDate(date, startHour);
-    }
-
-    getTasksForVisualDay(visualDate: string, startHour: number): Task[] {
-        return this.store.getTasksForVisualDay(visualDate, startHour);
-    }
-
     getValidationErrors(): ValidationError[] {
         return this.validator.getValidationErrors();
     }

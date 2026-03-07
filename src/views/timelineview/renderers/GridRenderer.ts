@@ -12,7 +12,7 @@ import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../../constants/hover';
 import { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './TimelineSectionRenderer';
 import { TaskIndex } from '../../../services/core/TaskIndex';
-import { toDisplayTasks } from '../../../utils/DisplayTaskConverter';
+import { toDisplayTasks, isDisplayTaskOnVisualDate } from '../../../utils/DisplayTaskConverter';
 import { HabitTrackerRenderer } from '../../sharedUI/HabitTrackerRenderer';
 
 type DateHeaderDisplayEntry = {
@@ -107,9 +107,10 @@ export class GridRenderer {
 
             // Check if this date has incomplete overdue tasks (respecting toolbar filter)
             if (date < todayVisualDate) {
-                const tasksForDate = this.taskIndex.getTasksForVisualDay(date, this.plugin.settings.startHour);
-                const displayTasks = toDisplayTasks(tasksForDate, this.plugin.settings.startHour);
-                const hasOverdueTasks = displayTasks.some(dt =>
+                const startHour = this.plugin.settings.startHour;
+                const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
+                const hasOverdueTasks = allDisplayTasks.some(dt =>
+                    isDisplayTaskOnVisualDate(dt, date, startHour) &&
                     isTaskVisible(dt) &&
                     !isCompleteStatusChar(dt.statusChar, this.plugin.settings.completeStatusChars)
                 );
