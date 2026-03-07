@@ -36,7 +36,7 @@ export class TaskCardRenderer {
 
     async render(
         container: HTMLElement,
-        task: Task,
+        task: DisplayTask,
         component: Component,
         settings: TaskViewerSettings,
         options?: { topRight?: 'time' | 'deadline' | 'none'; compact?: boolean; forceExpand?: boolean }
@@ -156,7 +156,7 @@ export class TaskCardRenderer {
         }
     }
 
-    private buildParentMarkdown(task: Task, settings: TaskViewerSettings): string {
+    private buildParentMarkdown(task: DisplayTask, settings: TaskViewerSettings): string {
         const statusChar = task.statusChar || ' ';
 
         let overdueIcon = '';
@@ -164,10 +164,8 @@ export class TaskCardRenderer {
             if (task.deadline && DateUtils.isPastDeadline(task.deadline, settings.startHour)) {
                 overdueIcon = '🚨 ';
             } else {
-                // Use DisplayTask effective fields if available, otherwise fallback
-                const dt = task as Partial<DisplayTask>;
-                const endDate = dt.effectiveEndDate ?? task.endDate;
-                const endTime = dt.effectiveEndTime ?? task.endTime;
+                const endDate = task.effectiveEndDate ?? task.endDate;
+                const endTime = task.effectiveEndTime ?? task.endTime;
                 if (endDate) {
                     const cleanEndTime = endTime?.includes('T') ? endTime.split('T')[1] : endTime;
                     if (DateUtils.isPastDate(endDate, cleanEndTime, settings.startHour)) {

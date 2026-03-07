@@ -79,7 +79,7 @@ export class PinnedListRenderer {
     private renderList(
         container: HTMLElement,
         listDef: PinnedListDefinition,
-        tasks: Task[],
+        tasks: DisplayTask[],
         owner: Component,
         collapsedState: Record<string, boolean>,
         callbacks: PinnedListCallbacks,
@@ -250,7 +250,7 @@ export class PinnedListRenderer {
         input.addEventListener('pointerdown', (e) => e.stopPropagation());
     }
 
-    private renderTaskCards(body: HTMLElement, tasks: Task[], owner: Component): void {
+    private renderTaskCards(body: HTMLElement, tasks: DisplayTask[], owner: Component): void {
         const settings = this.plugin.settings;
         tasks.forEach(task => {
             const card = body.createDiv('task-card');

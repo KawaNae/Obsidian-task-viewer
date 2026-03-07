@@ -4,6 +4,7 @@ import { editorInfoField, Menu, setIcon, MarkdownView } from 'obsidian';
 import type { App } from 'obsidian';
 import type { TaskIndex } from '../services/core/TaskIndex';
 import type { TaskViewerSettings } from '../types';
+import { toDisplayTask } from '../utils/DisplayTaskConverter';
 import type { PropertiesMenuBuilder } from '../interaction/menu/builders/PropertiesMenuBuilder';
 import type { TimerMenuBuilder } from '../interaction/menu/builders/TimerMenuBuilder';
 import type { TaskActionsMenuBuilder } from '../interaction/menu/builders/TaskActionsMenuBuilder';
@@ -79,9 +80,10 @@ export function createTaskMenuExtension(
 
         if (task) {
             // Recognized task: full menu
+            const dt = toDisplayTask(task, getSettings().startHour);
             propertiesBuilder.addStatusSubmenu(menu, task);
             menu.addSeparator();
-            propertiesBuilder.buildPropertiesSubmenu(menu, task, null);
+            propertiesBuilder.buildPropertiesSubmenu(menu, dt, null);
             menu.addSeparator();
             timerBuilder.addTimerSubmenu(menu, task);
             menu.addSeparator();

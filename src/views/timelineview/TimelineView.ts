@@ -8,7 +8,7 @@ import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
 
 import { DateUtils } from '../../utils/DateUtils';
-import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
+import { toDisplayTask, toDisplayTasks } from '../../utils/DisplayTaskConverter';
 
 import TaskViewerPlugin from '../../main';
 
@@ -315,7 +315,8 @@ export class TimelineView extends ItemView {
                             const opts = isAllDay
                                 ? { topRight: 'none' as const, compact: true }
                                 : undefined;
-                            this.taskRenderer.render(card, task, this, this.plugin.settings, opts);
+                            const dt = toDisplayTask(task, this.plugin.settings.startHour);
+                            this.taskRenderer.render(card, dt, this, this.plugin.settings, opts);
                             return;
                         }
                     }

@@ -6,8 +6,13 @@ import { DateUtils } from '../../utils/DateUtils';
 /**
  * Evaluates whether a task passes a recursive filter tree.
  * Groups can contain both conditions and sub-groups at any depth.
- * Accepts both Task and DisplayTask — when DisplayTask is passed,
- * date filters use effective (resolved) values.
+ *
+ * Accepts both Task and DisplayTask:
+ * - DisplayTask: date filters use effective (resolved) values via effectiveStartDate/effectiveEndDate
+ * - Raw Task: date filters fall back to raw startDate/endDate (E/ED implicit dates not available)
+ *
+ * Callers passing DisplayTask: KanbanView, PinnedListRenderer
+ * Callers passing raw Task: FilterMenuComponent, ScheduleTaskCategorizer, GridRenderer
  */
 export class TaskFilterEngine {
     static evaluate(task: Task, filterState: FilterState, context?: FilterContext): boolean {

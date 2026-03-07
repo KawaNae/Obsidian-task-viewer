@@ -4,6 +4,7 @@ import { TaskCardRenderer } from '../views/taskcard/TaskCardRenderer';
 import { TaskStyling } from '../views/sharedUI/TaskStyling';
 import { MenuHandler } from '../interaction/menu/MenuHandler';
 import { TaskIndex } from '../services/core/TaskIndex';
+import { toDisplayTask } from '../utils/DisplayTaskConverter';
 
 export class TaskDetailModal extends Modal {
     private renderComponent: Component;
@@ -46,7 +47,8 @@ export class TaskDetailModal extends Modal {
         TaskStyling.applyTaskLinestyle(card, this.task.linestyle ?? null);
         this.menuHandler.addTaskContextMenu(card, this.task);
 
-        await this.taskRenderer.render(card, this.task, this.renderComponent, this.settings, { forceExpand: true });
+        const dt = toDisplayTask(this.task, this.settings.startHour);
+        await this.taskRenderer.render(card, dt, this.renderComponent, this.settings, { forceExpand: true });
     }
 
     onClose(): void {

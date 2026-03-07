@@ -336,7 +336,7 @@ export class KanbanView extends ItemView {
         }
     }
 
-    private renderTaskCards(body: HTMLElement, tasks: import('../../types').Task[]): void {
+    private renderTaskCards(body: HTMLElement, tasks: import('../../types').DisplayTask[]): void {
         const settings = this.plugin.settings;
         for (const task of tasks) {
             const card = body.createDiv('task-card');

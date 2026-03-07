@@ -1,4 +1,4 @@
-import { Task, DisplayTask } from '../../types';
+import { DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 
 export interface CalculatedProperty {
@@ -10,7 +10,7 @@ export interface CalculatedProperty {
 }
 
 export interface PropertyCalculationContext {
-    task: Task;
+    task: DisplayTask;
     startHour: number;
     viewStartDate: string | null;
 }
@@ -34,37 +34,24 @@ export class PropertyCalculator {
      */
     calculateStart(context: PropertyCalculationContext): CalculatedProperty {
         const { task, startHour, viewStartDate } = context;
-        const dt = task as Partial<DisplayTask>;
 
         const startHourStr = startHour.toString().padStart(2, '0') + ':00';
         const implicitVisualStartDate = viewStartDate || DateUtils.getVisualDateOfNow(startHour);
 
-        // DisplayTask path: use effective fields + implicit flags
-        if (dt.effectiveStartDate !== undefined) {
-            // D type: effectiveStartDate is "" — use viewStartDate fallback
-            if (!dt.effectiveStartDate) {
-                return {
-                    date: implicitVisualStartDate,
-                    time: startHourStr,
-                    dateImplicit: true,
-                    timeImplicit: true
-                };
-            }
+        // D type: effectiveStartDate is "" — use viewStartDate fallback
+        if (!task.effectiveStartDate) {
             return {
-                date: dt.effectiveStartDate,
-                time: dt.effectiveStartTime || startHourStr,
-                dateImplicit: dt.startDateImplicit ?? false,
-                timeImplicit: dt.startTimeImplicit ?? !dt.effectiveStartTime,
+                date: implicitVisualStartDate,
+                time: startHourStr,
+                dateImplicit: true,
+                timeImplicit: true
             };
         }
-
-        // All callers pass DisplayTask (via MenuHandler.showContextMenu → toDisplayTask).
-        // effectiveStartDate is always defined. This fallback should be unreachable.
         return {
-            date: implicitVisualStartDate,
-            time: startHourStr,
-            dateImplicit: true,
-            timeImplicit: true
+            date: task.effectiveStartDate,
+            time: task.effectiveStartTime || startHourStr,
+            dateImplicit: task.startDateImplicit,
+            timeImplicit: task.startTimeImplicit,
         };
     }
 
@@ -73,35 +60,20 @@ export class PropertyCalculator {
      */
     calculateEnd(context: PropertyCalculationContext): CalculatedProperty {
         const { task, startHour, viewStartDate } = context;
-        const dt = task as Partial<DisplayTask>;
 
         const endHourStr = this.calculateEndHourStr(startHour);
         const implicitVisualStartDate = viewStartDate || DateUtils.getVisualDateOfNow(startHour);
 
-        // DisplayTask path: use effective fields + implicit flags
-        if (dt.effectiveStartDate !== undefined) {
-            if (dt.effectiveEndDate) {
-                return {
-                    date: dt.effectiveEndDate,
-                    time: dt.effectiveEndTime || endHourStr,
-                    dateImplicit: dt.endDateImplicit ?? false,
-                    timeImplicit: dt.endTimeImplicit ?? !dt.effectiveEndTime,
-                };
-            }
-            // D type or no effective end: use viewStartDate + 1day fallback
-            const effectiveBase = dt.effectiveStartDate || implicitVisualStartDate;
-            const nextDay = DateUtils.addDays(effectiveBase, 1);
+        if (task.effectiveEndDate) {
             return {
-                date: nextDay,
-                time: endHourStr,
-                dateImplicit: true,
-                timeImplicit: true
+                date: task.effectiveEndDate,
+                time: task.effectiveEndTime || endHourStr,
+                dateImplicit: task.endDateImplicit,
+                timeImplicit: task.endTimeImplicit,
             };
         }
-
-        // All callers pass DisplayTask (via MenuHandler.showContextMenu → toDisplayTask).
-        // effectiveStartDate is always defined. This fallback should be unreachable.
-        const effectiveBase = implicitVisualStartDate;
+        // D type or no effective end: use viewStartDate + 1day fallback
+        const effectiveBase = task.effectiveStartDate || implicitVisualStartDate;
         const nextDay = DateUtils.addDays(effectiveBase, 1);
         return {
             date: nextDay,
@@ -114,7 +86,7 @@ export class PropertyCalculator {
     /**
      * Deadline プロパティの計算
      */
-    calculateDeadline(task: Task): CalculatedProperty {
+    calculateDeadline(task: DisplayTask): CalculatedProperty {
         if (!task.deadline) {
             return { dateImplicit: false, timeImplicit: false, isUnset: true };
         }

@@ -1,5 +1,5 @@
 import { App, Menu } from 'obsidian';
-import { Task } from '../../../types';
+import { Task, DisplayTask } from '../../../types';
 import { TaskIndex } from '../../../services/core/TaskIndex';
 import TaskViewerPlugin from '../../../main';
 import { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } from '../PropertyCalculator';
@@ -27,7 +27,7 @@ export class PropertiesMenuBuilder {
     /**
      * Build Properties submenu.
      */
-    buildPropertiesSubmenu(menu: Menu, task: Task, viewStartDate: string | null): void {
+    buildPropertiesSubmenu(menu: Menu, task: DisplayTask, viewStartDate: string | null): void {
         menu.addItem((item) => {
             const subMenu = (item as any)
                 .setTitle('Properties')
@@ -113,7 +113,7 @@ export class PropertiesMenuBuilder {
     /**
      * Add Start, End, Deadline, Length items.
      */
-    private addPropertyItems(menu: Menu, task: Task, viewStartDate: string | null, openModal: (focusField: ChangePropertiesFocusField) => void): void {
+    private addPropertyItems(menu: Menu, task: DisplayTask, viewStartDate: string | null, openModal: (focusField: ChangePropertiesFocusField) => void): void {
         const context: PropertyCalculationContext = {
             task,
             startHour: this.plugin.settings.startHour,
@@ -170,7 +170,7 @@ export class PropertiesMenuBuilder {
         });
     }
 
-    private openChangePropertiesModal(task: Task, focusField: ChangePropertiesFocusField, viewStartDate: string | null = null): void {
+    private openChangePropertiesModal(task: DisplayTask, focusField: ChangePropertiesFocusField, viewStartDate: string | null = null): void {
         // Build implicit placeholders from PropertyCalculator results
         const context: PropertyCalculationContext = {
             task,
