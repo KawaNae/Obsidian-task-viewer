@@ -163,10 +163,19 @@ export class KanbanView extends ItemView {
 
         const startHour = this.plugin.settings.startHour;
         const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
+        const filterContext = { startHour };
+
+        // Pre-apply view-level filter once (instead of per-cell)
+        const hasViewFilter = !!this.viewFilterState && hasConditions(this.viewFilterState);
+        const viewFiltered = hasViewFilter
+            ? allDisplayTasks.filter(t => TaskFilterEngine.evaluate(t, this.viewFilterState!, filterContext))
+            : allDisplayTasks;
 
         for (let r = 0; r < this.grid.length; r++) {
             for (let c = 0; c < this.grid[r].length; c++) {
-                this.renderCell(gridEl, this.grid[r][c], r, c, allDisplayTasks, startHour);
+                const listDef = this.grid[r][c];
+                const baseTasks = (listDef.applyViewFilter && hasViewFilter) ? viewFiltered : allDisplayTasks;
+                this.renderCell(gridEl, listDef, r, c, baseTasks, startHour);
             }
         }
 
@@ -251,13 +260,9 @@ export class KanbanView extends ItemView {
         const header = cell.createDiv('kanban-view__cell-header');
 
         const filterContext = { startHour };
-        const tasks = allDisplayTasks.filter(t => {
-            if (!TaskFilterEngine.evaluate(t, listDef.filterState, filterContext)) return false;
-            if (listDef.applyViewFilter && this.viewFilterState && hasConditions(this.viewFilterState)) {
-                if (!TaskFilterEngine.evaluate(t, this.viewFilterState, filterContext)) return false;
-            }
-            return true;
-        });
+        const tasks = allDisplayTasks.filter(t =>
+            TaskFilterEngine.evaluate(t, listDef.filterState, filterContext)
+        );
         TaskSorter.sort(tasks, listDef.sortState);
 
         const toggle = header.createSpan({ text: isCollapsed ? '▶' : '▼', cls: 'kanban-view__cell-toggle' });

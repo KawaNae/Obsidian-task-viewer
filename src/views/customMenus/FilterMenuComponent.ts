@@ -88,7 +88,6 @@ export class FilterMenuComponent {
 
         this.lastTasks = callbacks.getTasks();
         this.lastCallbacks = callbacks;
-        if (callbacks.getStartHour) this.startHourProvider = callbacks.getStartHour;
 
         this.popoverEl = document.createElement('div');
         this.popoverEl.className = 'filter-popover';

@@ -710,12 +710,8 @@ export class TimelineView extends ItemView {
 
     private getDatesToShow(): string[] {
         const dates = [];
-        const start = new Date(this.viewState.startDate);
-
         for (let i = 0; i < this.viewState.daysToShow; i++) {
-            const d = new Date(start);
-            d.setDate(start.getDate() + i);
-            dates.push(DateUtils.getLocalDateString(d));
+            dates.push(DateUtils.addDays(this.viewState.startDate, i));
         }
         return dates;
     }

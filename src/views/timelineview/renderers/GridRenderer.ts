@@ -26,6 +26,7 @@ type DateHeaderDisplayEntry = {
 
 export class GridRenderer {
     private isAllDayCollapsed: boolean = false;
+    private headerResizeObserver: ResizeObserver | null = null;
 
     constructor(
         private container: HTMLElement,
@@ -255,12 +256,14 @@ export class GridRenderer {
     }
 
     private applyDateHeaderCompactBehavior(entries: DateHeaderDisplayEntry[]) {
+        this.headerResizeObserver?.disconnect();
+
         const compactThresholdPx = 120;
         const narrowThresholdPx = 90;
         const entryMap = new Map<HTMLElement, DateHeaderDisplayEntry>();
         entries.forEach((entry) => entryMap.set(entry.cell, entry));
 
-        const observer = new ResizeObserver((entries) => {
+        this.headerResizeObserver = new ResizeObserver((entries) => {
             for (const entry of entries) {
                 const cell = entry.target as HTMLElement;
                 const displayEntry = entryMap.get(cell);
@@ -284,7 +287,7 @@ export class GridRenderer {
                 }
             }
         });
-        entries.forEach((entry) => observer.observe(entry.cell));
+        entries.forEach((entry) => this.headerResizeObserver!.observe(entry.cell));
     }
 
     private parseLocalDate(date: string): Date {

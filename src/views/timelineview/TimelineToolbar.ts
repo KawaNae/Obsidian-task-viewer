@@ -298,9 +298,7 @@ export class TimelineToolbar {
     }
 
     private navigateDate(days: number): void {
-        const date = new Date(this.viewState.startDate);
-        date.setDate(date.getDate() + days);
-        this.viewState.startDate = DateUtils.getLocalDateString(date);
+        this.viewState.startDate = DateUtils.addDays(this.viewState.startDate, days);
         this.callbacks.onRender();
     }
 }

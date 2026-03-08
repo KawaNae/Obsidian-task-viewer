@@ -92,7 +92,7 @@ export class TimelineSectionRenderer {
         const layout = TaskLayout.calculateTaskLayout(renderableTasks, date, startHour);
 
         renderableTasks.forEach(task => {
-            if (!task.startTime) return;
+            if (!task.effectiveStartTime) return;
 
             const el = container.createDiv('task-card');
             if (task.id === this.handleManager.getSelectedTaskId()) el.addClass('selected');
@@ -115,11 +115,11 @@ export class TimelineSectionRenderer {
             TaskStyling.applyTaskLinestyle(el, task.linestyle ?? null);
 
             // Calculate position
-            let startMinutes = DateUtils.timeToMinutes(task.startTime);
+            let startMinutes = DateUtils.timeToMinutes(task.effectiveStartTime);
             let endMinutes: number;
 
-            if (task.endTime) {
-                if (task.endTime.includes('T')) {
+            if (task.effectiveEndTime) {
+                if (task.effectiveEndTime.includes('T')) {
                     // Full ISO: Calculate minutes relative to task.date's 00:00
                     // But wait, we need minutes relative to visual day start for rendering?
                     // No, render logic below uses (startMinutes - startHourMinutes).
@@ -127,11 +127,11 @@ export class TimelineSectionRenderer {
 
                     // If endTime is next day, we need total minutes from start of 'date'.
                     const startDate = new Date(`${date}T00:00:00`);
-                    const endDate = new Date(task.endTime);
+                    const endDate = new Date(task.effectiveEndTime);
                     const diffMs = endDate.getTime() - startDate.getTime();
                     endMinutes = Math.floor(diffMs / 60000);
                 } else {
-                    endMinutes = DateUtils.timeToMinutes(task.endTime);
+                    endMinutes = DateUtils.timeToMinutes(task.effectiveEndTime);
                     // Handle wrap around midnight if needed (simple case)
                     if (endMinutes < startMinutes) {
                         endMinutes += 24 * 60;
