@@ -350,7 +350,10 @@ export class CalendarView extends ItemView {
                 void this.app.workspace.requestSaveLayout();
                 void this.render();
             },
-            { vertical: true }
+            {
+                vertical: true,
+                onNavigateFast: (direction) => this.navigateMonth(direction),
+            }
         );
 
         toolbar.createDiv('view-toolbar__spacer');
@@ -487,6 +490,9 @@ export class CalendarView extends ItemView {
                 listDef.applyViewFilter = !listDef.applyViewFilter;
                 this.app.workspace.requestSaveLayout();
                 void this.render();
+            },
+            onRename: () => {
+                this.app.workspace.requestSaveLayout();
             },
         },
             (task) => this.filterMenu.isTaskVisible(task),
@@ -749,6 +755,15 @@ export class CalendarView extends ItemView {
 
     private navigateWeek(offset: number): void {
         this.windowStart = DateUtils.addDays(this.windowStart, offset * 7);
+        void this.app.workspace.requestSaveLayout();
+        void this.render();
+    }
+
+    private navigateMonth(offset: number): void {
+        const ref = this.getReferenceMonth();
+        const monthStart = new Date(ref.year, ref.month + offset, 1);
+        const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
+        this.windowStart = DateUtils.getLocalDateString(weekStart);
         void this.app.workspace.requestSaveLayout();
         void this.render();
     }

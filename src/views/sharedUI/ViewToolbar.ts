@@ -20,7 +20,7 @@ export class DateNavigator {
         toolbar: HTMLElement,
         onNavigate: (days: number) => void,
         onToday: () => void,
-        options?: { vertical?: boolean; label?: string }
+        options?: { vertical?: boolean; label?: string; onNavigateFast?: (direction: number) => void }
     ): void {
         const vertical = options?.vertical ?? false;
         const label = options?.label ?? 'Today';
@@ -28,6 +28,15 @@ export class DateNavigator {
         const nextIcon = vertical ? 'chevron-down' : 'chevron-right';
         const prevLabel = vertical ? 'Previous week' : 'Previous day';
         const nextLabel = vertical ? 'Next week' : 'Next day';
+
+        if (options?.onNavigateFast) {
+            const fastPrevIcon = vertical ? 'chevrons-up' : 'chevrons-left';
+            const fastPrevBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+            setIcon(fastPrevBtn, fastPrevIcon);
+            fastPrevBtn.setAttribute('aria-label', 'Previous month');
+            const onFastPrev = options.onNavigateFast;
+            fastPrevBtn.onclick = () => onFastPrev(-1);
+        }
 
         const prevBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(prevBtn, prevIcon);
@@ -45,6 +54,15 @@ export class DateNavigator {
         setIcon(nextBtn, nextIcon);
         nextBtn.setAttribute('aria-label', nextLabel);
         nextBtn.onclick = () => onNavigate(1);
+
+        if (options?.onNavigateFast) {
+            const fastNextIcon = vertical ? 'chevrons-down' : 'chevrons-right';
+            const fastNextBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+            setIcon(fastNextBtn, fastNextIcon);
+            fastNextBtn.setAttribute('aria-label', 'Next month');
+            const onFastNext = options.onNavigateFast;
+            fastNextBtn.onclick = () => onFastNext(1);
+        }
     }
 }
 
