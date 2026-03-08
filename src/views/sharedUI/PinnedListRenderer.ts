@@ -23,6 +23,7 @@ export interface PinnedListCallbacks {
     onDuplicate: (listDef: PinnedListDefinition) => void;
     onRemove: (listDef: PinnedListDefinition) => void;
     onToggleApplyViewFilter?: (listDef: PinnedListDefinition) => void;
+    onRename?: (listDef: PinnedListDefinition, newName: string) => void;
 }
 
 export class PinnedListRenderer {
@@ -130,7 +131,7 @@ export class PinnedListRenderer {
         setIcon(moreBtn, 'more-horizontal');
         moreBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.showMoreMenu(e as MouseEvent, listDef, nameEl, callbacks);
+            this.showMoreMenu(e as MouseEvent, listDef, moreBtn, callbacks);
         });
 
         // Task list body
@@ -167,7 +168,8 @@ export class PinnedListRenderer {
             this.pendingRenameId = null;
             // Defer enough for Obsidian's layout/focus to settle
             setTimeout(() => {
-                this.startRename(nameEl, listDef);
+                const currentNameEl = listEl.querySelector('.pinned-list__name') as HTMLElement | null;
+                if (currentNameEl) this.startRename(currentNameEl, listDef, callbacks);
             }, 50);
         }
     }
@@ -175,7 +177,7 @@ export class PinnedListRenderer {
     private showMoreMenu(
         e: MouseEvent,
         listDef: PinnedListDefinition,
-        nameEl: HTMLElement,
+        anchorEl: HTMLElement,
         callbacks: PinnedListCallbacks,
     ): void {
         const menu = new Menu();
@@ -183,7 +185,11 @@ export class PinnedListRenderer {
         menu.addItem(item => {
             item.setTitle('Rename')
                 .setIcon('pencil')
-                .onClick(() => this.startRename(nameEl, listDef));
+                .onClick(() => {
+                    const listEl = anchorEl.closest('.pinned-list');
+                    const nameEl = listEl?.querySelector('.pinned-list__name') as HTMLElement | null;
+                    if (nameEl) this.startRename(nameEl, listDef, callbacks);
+                });
         });
 
         menu.addItem(item => {
@@ -217,6 +223,7 @@ export class PinnedListRenderer {
     private startRename(
         nameEl: HTMLElement,
         listDef: PinnedListDefinition,
+        callbacks: PinnedListCallbacks,
     ): void {
         const input = document.createElement('input');
         input.type = 'text';
@@ -231,7 +238,7 @@ export class PinnedListRenderer {
             if (committed) return;
             committed = true;
             listDef.name = newName;
-            this.plugin.saveData(this.plugin.settings);
+            callbacks.onRename?.(listDef, newName);
             // Replace input with span (no full re-render needed)
             const span = document.createElement('span');
             span.className = 'pinned-list__name';

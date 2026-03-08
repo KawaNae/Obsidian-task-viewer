@@ -568,6 +568,9 @@ export class TimelineView extends ItemView {
                     this.app.workspace.requestSaveLayout();
                     this.render();
                 },
+                onRename: () => {
+                    this.app.workspace.requestSaveLayout();
+                },
             },
             this.toolbar?.getTaskFilter(),
         );
