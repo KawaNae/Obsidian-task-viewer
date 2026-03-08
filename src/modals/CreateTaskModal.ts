@@ -3,6 +3,7 @@ import { Task } from '../types';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { DateUtils } from '../utils/DateUtils';
 import { ImplicitCalendarDateResolver } from '../utils/ImplicitCalendarDateResolver';
+import { TaskNameSuggest } from '../suggest/TaskNameSuggest';
 
 export interface CreateTaskResult {
     content: string;
@@ -72,9 +73,9 @@ export class CreateTaskModal extends Modal {
     private endTimeInput: HTMLInputElement;
     private deadlineDateInput: HTMLInputElement;
     private deadlineTimeInput: HTMLInputElement;
+    private nameInput: HTMLInputElement;
     private errorEl: HTMLElement;
     private warningEl: HTMLElement;
-    private nameInput: HTMLInputElement;
 
     constructor(app: App, onSubmit: (result: CreateTaskResult) => void, initialValues: Partial<CreateTaskResult> = {}, options: CreateTaskModalOptions = {}) {
         super(app);
@@ -88,20 +89,23 @@ export class CreateTaskModal extends Modal {
 
         contentEl.createEl('h2', { text: this.options.title ?? 'Create New Task' });
 
-        // --- Task Name ---
+        // --- Task Name (input with [[wikilink]] / #tag suggest) ---
         const nameSection = contentEl.createDiv({ cls: 'create-task-modal__name-section' });
         nameSection.createEl('label', { text: 'Task Name' });
         this.nameInput = nameSection.createEl('input', {
             type: 'text',
+            placeholder: 'Task Name',
             cls: 'create-task-modal__text-input',
         });
         this.nameInput.value = this.result.content ?? '';
+        new TaskNameSuggest(this.app, this.nameInput);
         this.nameInput.addEventListener('input', () => {
             this.result.content = this.nameInput.value;
             this.validateInputs();
         });
         this.nameInput.addEventListener('keydown', (e: KeyboardEvent) => {
             if (e.key === 'Enter') this.submit();
+            this.handleBracketPairing(e);
         });
 
         // --- Start ---
@@ -400,6 +404,47 @@ export class CreateTaskModal extends Modal {
             return { date, time };
         }
         return { date: deadline, time: undefined };
+    }
+
+    private static readonly BRACKET_PAIRS: Record<string, string> = { '[': ']', '(': ')' };
+
+    private handleBracketPairing(e: KeyboardEvent): void {
+        const input = this.nameInput;
+        const start = input.selectionStart!;
+        const end = input.selectionEnd!;
+        const val = input.value;
+
+        // Opening bracket: insert pair
+        const closing = CreateTaskModal.BRACKET_PAIRS[e.key];
+        if (closing) {
+            e.preventDefault();
+            const newVal = val.slice(0, start) + e.key + val.slice(start, end) + closing + val.slice(end);
+            input.value = newVal;
+            input.setSelectionRange(start + 1, end + 1);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            return;
+        }
+
+        // Closing bracket: skip over if next char matches
+        if (e.key === ']' || e.key === ')') {
+            if (val[start] === e.key && start === end) {
+                e.preventDefault();
+                input.setSelectionRange(start + 1, start + 1);
+                return;
+            }
+        }
+
+        // Backspace: delete pair if cursor is between empty brackets
+        if (e.key === 'Backspace' && start === end && start > 0) {
+            const before = val[start - 1];
+            const after = val[start];
+            if ((before === '[' && after === ']') || (before === '(' && after === ')')) {
+                e.preventDefault();
+                input.value = val.slice(0, start - 1) + val.slice(start + 1);
+                input.setSelectionRange(start - 1, start - 1);
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
     }
 
     submit() {
