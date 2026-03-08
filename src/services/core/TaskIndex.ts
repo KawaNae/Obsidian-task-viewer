@@ -68,7 +68,6 @@ export class TaskIndex {
     }
 
     async initialize(): Promise<void> {
-        // レイアウト準備完了後に初回スキャン
         this.app.workspace.onLayoutReady(async () => {
             await this.scanner.scanVault();
             this.scanner.setInitializing(false);

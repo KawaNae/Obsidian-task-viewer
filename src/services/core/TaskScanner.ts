@@ -95,7 +95,7 @@ export class TaskScanner {
      */
     private async scanFile(file: TFile, isLocalChange: boolean = false): Promise<void> {
         const content = await this.app.vault.read(file);
-        const lines = content.split('\n');
+        const lines = content.split('\n').map(l => l.replace(/\r$/, ''));
 
         // 1. 新しいタスクをパース（再帰的に子タスクを抽出）
         const newTasks: Task[] = [];
