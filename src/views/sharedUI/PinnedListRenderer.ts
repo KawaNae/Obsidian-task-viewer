@@ -30,6 +30,8 @@ export class PinnedListRenderer {
     private collapsedGroups = new Set<string>();
     // ID of list to start renaming immediately after render
     private pendingRenameId: string | null = null;
+    // Tracks how many tasks are currently visible per list (for "Show more")
+    private visibleCounts = new Map<string, number>();
 
     constructor(
         private taskRenderer: TaskCardRenderer,
@@ -53,6 +55,7 @@ export class PinnedListRenderer {
     ): void {
         container.empty();
         container.addClass('pinned-lists-container');
+        this.visibleCounts.clear();
         if (lists.length === 0) {
             container.createDiv('pinned-lists-container__empty')
                 .setText('No pinned lists.');
@@ -133,7 +136,7 @@ export class PinnedListRenderer {
         // Task list body
         const body = listEl.createDiv('pinned-list__body');
         if (!isCollapsed) {
-            this.renderTaskCards(body, tasks, owner);
+            this.renderPagedTasks(body, tasks, listDef.id, owner);
         }
 
         // Collapse toggle
@@ -149,9 +152,10 @@ export class PinnedListRenderer {
                 this.collapsedGroups.delete(listDef.id);
                 listEl.removeClass('pinned-list--collapsed');
                 toggle.textContent = '▼';
-                // Lazy render on expand
+                // Lazy render on expand (reset to first page)
                 if (body.childElementCount === 0 && tasks.length > 0) {
-                    this.renderTaskCards(body, tasks, owner);
+                    this.visibleCounts.delete(listDef.id);
+                    this.renderPagedTasks(body, tasks, listDef.id, owner);
                 }
             }
 
@@ -248,6 +252,47 @@ export class PinnedListRenderer {
         input.addEventListener('click', (e) => e.stopPropagation());
         input.addEventListener('mousedown', (e) => e.stopPropagation());
         input.addEventListener('pointerdown', (e) => e.stopPropagation());
+    }
+
+    private renderPagedTasks(
+        body: HTMLElement,
+        allTasks: DisplayTask[],
+        listId: string,
+        owner: Component,
+    ): void {
+        const pageSize = this.plugin.settings.pinnedListPageSize;
+        const visibleCount = this.visibleCounts.get(listId) ?? pageSize;
+        const tasksToShow = allTasks.slice(0, visibleCount);
+
+        this.renderTaskCards(body, tasksToShow, owner);
+
+        if (visibleCount < allTasks.length) {
+            this.appendShowMoreButton(body, allTasks, visibleCount, listId, owner);
+        }
+    }
+
+    private appendShowMoreButton(
+        body: HTMLElement,
+        allTasks: DisplayTask[],
+        shownCount: number,
+        listId: string,
+        owner: Component,
+    ): void {
+        const pageSize = this.plugin.settings.pinnedListPageSize;
+        const remaining = allTasks.length - shownCount;
+        const btn = body.createDiv('pinned-list__show-more');
+        btn.setText(`Show more (${remaining})`);
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            btn.remove();
+            const newCount = Math.min(shownCount + pageSize, allTasks.length);
+            this.visibleCounts.set(listId, newCount);
+            const nextBatch = allTasks.slice(shownCount, newCount);
+            this.renderTaskCards(body, nextBatch, owner);
+            if (newCount < allTasks.length) {
+                this.appendShowMoreButton(body, allTasks, newCount, listId, owner);
+            }
+        });
     }
 
     private renderTaskCards(body: HTMLElement, tasks: DisplayTask[], owner: Component): void {

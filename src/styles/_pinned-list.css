@@ -103,6 +103,22 @@
     outline: none;
 }
 
+/* "Show more" pagination button */
+.pinned-list__show-more {
+    padding: 6px 8px;
+    text-align: center;
+    font-size: 0.8em;
+    color: var(--tv-text-muted);
+    cursor: pointer;
+    border-radius: var(--tv-radius-s);
+    transition: background-color 120ms ease, color 120ms ease;
+}
+
+.pinned-list__show-more:hover {
+    background-color: var(--tv-bg-hover);
+    color: var(--tv-text-accent);
+}
+
 /* Collapsed state: hide the task list */
 .pinned-list--collapsed .pinned-list__body {
     display: none;
