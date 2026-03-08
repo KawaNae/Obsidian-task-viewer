@@ -244,6 +244,7 @@ export class TimelineView extends ItemView {
         this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler, this.taskIndex);
         this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.menuHandler, this.taskIndex);
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
+        this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
 
         // Initialize DragHandler with selection callback, move callback, and view start date provider
         this.dragHandler = new DragHandler(this.container, this.taskIndex, this.plugin,
