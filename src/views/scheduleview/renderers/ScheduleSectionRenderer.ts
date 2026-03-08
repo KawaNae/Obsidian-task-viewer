@@ -1,5 +1,5 @@
 import { setIcon } from 'obsidian';
-import type { RenderableTask } from '../../sharedLogic/RenderableTaskUtils';
+import type { DisplayTask } from '../../../types';
 import type { CollapsibleSectionKey } from '../ScheduleTypes';
 import type { ScheduleTaskRenderer } from './ScheduleTaskRenderer';
 
@@ -20,7 +20,7 @@ export class ScheduleSectionRenderer {
         this.currentVisualDateProvider = options.currentVisualDateProvider;
     }
 
-    async renderAllDaySection(container: HTMLElement, tasks: RenderableTask[]): Promise<void> {
+    async renderAllDaySection(container: HTMLElement, tasks: DisplayTask[]): Promise<void> {
         const row = container.createDiv('timeline-row allday-section');
         row.style.gridTemplateColumns = this.getScheduleRowColumns();
 
@@ -73,7 +73,7 @@ export class ScheduleSectionRenderer {
         container: HTMLElement,
         sectionClass: string,
         title: string,
-        tasks: RenderableTask[],
+        tasks: DisplayTask[],
         sectionKey: CollapsibleSectionKey
     ): Promise<void> {
         const section = container.createDiv(`schedule-section schedule-section--collapsible ${sectionClass}`);

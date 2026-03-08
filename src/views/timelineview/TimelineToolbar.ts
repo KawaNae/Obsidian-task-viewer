@@ -10,6 +10,7 @@ import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import type { Task } from '../../types';
+import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 
@@ -40,7 +41,9 @@ export class TimelineToolbar {
         private plugin: TaskViewerPlugin,
         private taskIndex: TaskIndex,
         private callbacks: ToolbarCallbacks
-    ) { }
+    ) {
+        this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
+    }
 
     /**
      * Returns a predicate that checks if a task passes the current filter.
@@ -197,23 +200,24 @@ export class TimelineToolbar {
         const visualToday = DateUtils.getVisualDateOfNow(startHour);
         const isVisible = this.getTaskFilter();
 
-        // Get all incomplete, visible tasks with dates before visualToday
-        const tasks = this.taskIndex.getTasks().filter(t =>
+        // Get all incomplete, visible tasks with dates (including E/ED types)
+        const rawTasks = this.taskIndex.getTasks().filter(t =>
             isVisible(t) &&
             !isCompleteStatusChar(t.statusChar, this.plugin.settings.completeStatusChars) &&
-            t.startDate
+            (t.startDate || t.endDate)
         );
+
+        const displayTasks = toDisplayTasks(rawTasks, startHour);
 
         // Find the oldest past date among incomplete tasks
         let oldestDate: string | null = null;
 
-        for (const task of tasks) {
-            const taskDate = task.startDate!;
+        for (const dt of displayTasks) {
+            if (!dt.effectiveStartDate) continue;
 
-            // Only consider tasks that are before today (visual date)
-            if (taskDate < visualToday) {
-                if (!oldestDate || taskDate < oldestDate) {
-                    oldestDate = taskDate;
+            if (dt.effectiveStartDate < visualToday) {
+                if (!oldestDate || dt.effectiveStartDate < oldestDate) {
+                    oldestDate = dt.effectiveStartDate;
                 }
             }
         }
@@ -294,9 +298,7 @@ export class TimelineToolbar {
     }
 
     private navigateDate(days: number): void {
-        const date = new Date(this.viewState.startDate);
-        date.setDate(date.getDate() + days);
-        this.viewState.startDate = DateUtils.getLocalDateString(date);
+        this.viewState.startDate = DateUtils.addDays(this.viewState.startDate, days);
         this.callbacks.onRender();
     }
 }

@@ -1,4 +1,4 @@
-import { Task } from '../../types';
+import { DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
 
@@ -14,7 +14,7 @@ export interface TaskDateRange {
  * A task placed on the grid with all positional metadata computed.
  */
 export interface GridTaskEntry {
-    task: Task;
+    task: DisplayTask;
     /** 1-based column index relative to the dates array */
     colStart: number;
     /** Number of columns occupied */
@@ -55,13 +55,13 @@ export interface GridLayoutConfig {
     /** Date strings (YYYY-MM-DD) representing visible columns */
     dates: string[];
     /** Returns the effective date range for a task, or null to skip */
-    getDateRange: (task: Task) => TaskDateRange | null;
+    getDateRange: (task: DisplayTask) => TaskDateRange | null;
     /** Whether to compute deadline arrows (default: true) */
     computeDeadlines?: boolean;
 }
 
 interface RawEntry {
-    task: Task;
+    task: DisplayTask;
     colStart: number;
     span: number;
     segmentId: string;
@@ -76,7 +76,7 @@ interface RawEntry {
  * Pure function: no DOM, no side effects.
  */
 export function computeGridLayout(
-    tasks: Task[],
+    tasks: DisplayTask[],
     config: GridLayoutConfig
 ): GridTaskEntry[] {
     const { dates } = config;

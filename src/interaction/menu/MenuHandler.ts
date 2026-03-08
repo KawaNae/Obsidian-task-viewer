@@ -8,6 +8,7 @@ import { PropertyFormatter } from './PropertyFormatter';
 import { PropertiesMenuBuilder } from './builders/PropertiesMenuBuilder';
 import { TimerMenuBuilder } from './builders/TimerMenuBuilder';
 import { TaskActionsMenuBuilder } from './builders/TaskActionsMenuBuilder';
+import { toDisplayTask } from '../../utils/DisplayTaskConverter';
 
 /**
  * MenuHandler - タスクコンテキストメニューの統括ファサード
@@ -83,14 +84,17 @@ export class MenuHandler {
             return;
         }
 
+        // Convert to DisplayTask for property display (implicit/explicit flags)
+        const displayTask = toDisplayTask(task, this.plugin.settings.startHour);
+
         const menu = new Menu();
 
         // 1. Status (root level)
         this.propertiesMenuBuilder.addStatusSubmenu(menu, task);
         menu.addSeparator();
 
-        // 2. Properties Submenu
-        this.propertiesMenuBuilder.buildPropertiesSubmenu(menu, task, this.viewStartDate);
+        // 2. Properties Submenu (uses DisplayTask for correct implicit flags)
+        this.propertiesMenuBuilder.buildPropertiesSubmenu(menu, displayTask, this.viewStartDate);
         menu.addSeparator();
 
         // 3. Start Timer (submenu)

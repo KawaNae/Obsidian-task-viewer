@@ -198,6 +198,15 @@
     color: var(--tv-text-faint);
 }
 
+/* Task name suggest hint footer */
+.task-name-suggest__footer {
+    padding: 4px 8px;
+    font-size: 0.8em;
+    color: var(--text-faint);
+    border-top: 1px solid var(--background-modifier-border);
+    text-align: center;
+}
+
 /* Invalid state */
 .create-task-modal__input--invalid {
     border-color: var(--tv-text-danger) !important;

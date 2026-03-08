@@ -346,6 +346,26 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     this.plugin.settings.viewTemplateFolder = value.trim();
                     await this.plugin.saveSettings();
                 }));
+
+        // Pinned Lists
+        el.createEl('h3', { text: 'Pinned Lists', cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName('Tasks per page')
+            .setDesc('Number of task cards to show initially in each pinned list. Click "Show more" to load the next batch.')
+            .addText(text => {
+                text.inputEl.type = 'number';
+                text.inputEl.min = '1';
+                text
+                    .setPlaceholder('10')
+                    .setValue(this.plugin.settings.pinnedListPageSize.toString())
+                    .onChange(async (value) => {
+                        let n = parseInt(value);
+                        if (isNaN(n) || n < 1) n = 10;
+                        this.plugin.settings.pinnedListPageSize = n;
+                        await this.plugin.saveSettings();
+                    });
+            });
     }
 
 

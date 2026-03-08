@@ -3,8 +3,9 @@ import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import { Task, PinnedListDefinition } from '../../types';
+import { Task, DisplayTask, PinnedListDefinition } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
+import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import {
     getTaskDateRange,
@@ -61,8 +62,6 @@ export class CalendarView extends ItemView {
     private showSidebar = true;
     private pinnedListCollapsed: Record<string, boolean> = {};
     private pinnedLists: PinnedListDefinition[] = [];
-    private navigateWeekDebounceTimer: number | null = null;
-    private pendingWeekOffset: number = 0;
     private customName: string | undefined;
 
     constructor(leaf: WorkspaceLeaf, taskIndex: TaskIndex, plugin: TaskViewerPlugin) {
@@ -86,6 +85,8 @@ export class CalendarView extends ItemView {
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
         const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
         this.windowStart = DateUtils.getLocalDateString(weekStart);
+        this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
+        this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
     }
 
     getViewType(): string {
@@ -238,11 +239,6 @@ export class CalendarView extends ItemView {
         this.filterMenu.close();
         this.sidebarFilterMenu.close();
         this.sidebarManager.detach();
-        if (this.navigateWeekDebounceTimer !== null) {
-            window.clearTimeout(this.navigateWeekDebounceTimer);
-            this.navigateWeekDebounceTimer = null;
-            this.pendingWeekOffset = 0;
-        }
 
         this.dragHandler?.destroy();
         this.dragHandler = null;
@@ -289,21 +285,6 @@ export class CalendarView extends ItemView {
         const body = calendarHost.createDiv('calendar-grid__body');
         const referenceMonth = this.getReferenceMonth();
         const showWeekNumbers = this.shouldShowWeekNumbers();
-
-        body.addEventListener('wheel', (e: WheelEvent) => {
-            if (e.deltaY === 0) {
-                return;
-            }
-
-            const atTop = body.scrollTop <= 0;
-            const atBottom = body.scrollTop >= body.scrollHeight - body.clientHeight - 1;
-            const noScroll = body.scrollHeight <= body.clientHeight + 1;
-
-            if (noScroll || (e.deltaY < 0 && atTop) || (e.deltaY > 0 && atBottom)) {
-                e.preventDefault();
-                this.navigateWeekDebounced(e.deltaY > 0 ? 1 : -1);
-            }
-        }, { passive: false });
 
         let cursor = new Date(startDate);
         while (cursor <= endDate) {
@@ -369,7 +350,10 @@ export class CalendarView extends ItemView {
                 void this.app.workspace.requestSaveLayout();
                 void this.render();
             },
-            { vertical: true }
+            {
+                vertical: true,
+                onNavigateFast: (direction) => this.navigateMonth(direction),
+            }
         );
 
         toolbar.createDiv('view-toolbar__spacer');
@@ -507,6 +491,9 @@ export class CalendarView extends ItemView {
                 this.app.workspace.requestSaveLayout();
                 void this.render();
             },
+            onRename: () => {
+                this.app.workspace.requestSaveLayout();
+            },
         },
             (task) => this.filterMenu.isTaskVisible(task),
         );
@@ -590,12 +577,12 @@ export class CalendarView extends ItemView {
         }, { bindClick: false });
     }
 
-    private async renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: Task[]): Promise<void> {
+    private async renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: DisplayTask[]): Promise<void> {
         const startHour = this.plugin.settings.startHour;
         const entries = computeGridLayout(allTasks, {
             dates: weekDates,
             getDateRange: (task) => {
-                const range = getTaskDateRange(task, startHour);
+                const range = getTaskDateRange(task as DisplayTask, startHour);
                 if (!range.effectiveStart) return null;
                 return {
                     effectiveStart: range.effectiveStart,
@@ -629,27 +616,24 @@ export class CalendarView extends ItemView {
         }));
     }
 
-    private getVisibleTasksInRange(rangeStart: string, rangeEnd: string): Task[] {
-        const allTasks = this.taskIndex.getTasks();
-        return allTasks.filter((task) => {
-            if (!this.plugin.settings.calendarShowCompleted && this.isTaskCompleted(task)) {
+    private getVisibleTasksInRange(rangeStart: string, rangeEnd: string): DisplayTask[] {
+        const startHour = this.plugin.settings.startHour;
+        const allTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
+        return allTasks.filter((dt) => {
+            if (!this.plugin.settings.calendarShowCompleted && this.isTaskCompleted(dt)) {
                 return false;
             }
-            if (!this.filterMenu.isTaskVisible(task)) {
+            if (!this.filterMenu.isTaskVisible(dt)) {
                 return false;
             }
 
-            const { effectiveStart, effectiveEnd } = this.getTaskDateRange(task);
+            const { effectiveStart, effectiveEnd } = getTaskDateRange(dt, startHour);
             if (!effectiveStart) {
                 return false;
             }
             const taskEnd = effectiveEnd || effectiveStart;
             return effectiveStart <= rangeEnd && taskEnd >= rangeStart;
         });
-    }
-
-    private getTaskDateRange(task: Task): { effectiveStart: string | null; effectiveEnd: string | null } {
-        return getTaskDateRange(task, this.plugin.settings.startHour);
     }
 
     private async renderGridTask(
@@ -775,17 +759,13 @@ export class CalendarView extends ItemView {
         void this.render();
     }
 
-    private navigateWeekDebounced(offset: number): void {
-        this.pendingWeekOffset = offset;
-        if (this.navigateWeekDebounceTimer !== null) {
-            window.clearTimeout(this.navigateWeekDebounceTimer);
-        }
-        this.navigateWeekDebounceTimer = window.setTimeout(() => {
-            this.navigateWeekDebounceTimer = null;
-            const nextOffset = this.pendingWeekOffset;
-            this.pendingWeekOffset = 0;
-            requestAnimationFrame(() => this.navigateWeek(nextOffset));
-        }, 200);
+    private navigateMonth(offset: number): void {
+        const ref = this.getReferenceMonth();
+        const monthStart = new Date(ref.year, ref.month + offset, 1);
+        const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
+        this.windowStart = DateUtils.getLocalDateString(weekStart);
+        void this.app.workspace.requestSaveLayout();
+        void this.render();
     }
 
     private parseLocalDateString(value: string): Date | null {

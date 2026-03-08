@@ -736,6 +736,56 @@ task.parserId === 'at-notation'   →  InlineTaskWriter
 - `line: -1` means "no valid line number" only — **do not use it for type detection** (use `parserId`).
 - In `TimerRecorder`, `line: -1` specifically means "line number unknown → force content-based search".
 
+### Inline vs Frontmatter persistence rules
+
+#### Date field handling
+
+| Aspect | Inline (`at-notation`) | Frontmatter |
+|--------|----------------------|-------------|
+| Time-only values | ✅ Allowed (`@10:00`) | ❌ Prohibited (returns null → key deleted) |
+| startDateInherited | ✅ Used (daily note date inheritance) | ❌ Never set |
+| endDate same-day omission | ✅ Normal (`>14:00` = same day as start) | ❌ Always explicit date |
+| Update strategy | Full line re-format via `AtNotationParser.format()` | Surgical YAML key edit via `FrontmatterLineEditor` |
+| Empty field in Properties modal | Sparse update (field omitted → preserved) | Resolved value written (field filled from PropertyCalculator) |
+
+#### Inline notation format rules (`AtNotationParser.format()`)
+
+**startDateInherited**:
+- `true` + startTime → `@10:00` (date omitted)
+- `false` / unset → `@2026-03-07T10:00` (date explicit)
+- Drag/resize always sets startDate → clears inherited flag
+
+**endDate same-day omission**:
+- `endDate === startDate` + endTime → `>14:00` (date omitted)
+- `endDate !== startDate` → `>2026-03-08T02:00` (date explicit)
+- `endDate` undefined + endTime → `>14:00` (implicit same-day)
+- Round-trip safe: parser re-derives endDate=undefined → DisplayTaskConverter resolves it
+
+#### Frontmatter write rules
+
+**Time-only prohibition**: `formatFrontmatterDateTime()` returns `null` when only time is available.
+Prevents YAML sexagesimal misinterpretation and Obsidian frontmatter editor incompatibility.
+
+**fallbackDate pattern**: When endDate is undefined but endTime exists, startDate is used as fallback.
+In FrontmatterWriter, task is already updated via `Object.assign(task, updates)` so startDate is current.
+In TaskConverter (inline→frontmatter), task comes from parser with parsed startDate.
+
+#### Properties modal update behavior (`PropertiesMenuBuilder.buildTaskUpdatesFromResult()`)
+
+- **Frontmatter**: Empty fields filled with PropertyCalculator resolved values → all dates always explicit in YAML
+- **Inline**: Empty fields excluded from updates → preserves `startDateInherited` and time-only notation
+
+### startDateInherited lifecycle
+
+| Event | Result |
+|-------|--------|
+| Daily note parse (startTime present, startDate absent) | Set `true` |
+| Drag / resize | Cleared (startDate always set explicitly) |
+| Properties modal — inline, startDate left empty | Preserved (not in updates) |
+| Properties modal — inline, startDate filled in | Cleared |
+| Properties modal — frontmatter | N/A (never set for frontmatter) |
+| `TaskIndex.updateTask()` condition | `'startDate' in updates && updates.startDate !== undefined` |
+
 ---
 
 ## Terminology

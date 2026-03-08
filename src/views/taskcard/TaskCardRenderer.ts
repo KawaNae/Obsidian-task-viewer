@@ -1,9 +1,8 @@
 import { App, MarkdownRenderer, Component, setIcon } from 'obsidian';
-import { Task, TaskViewerSettings, isCompleteStatusChar } from '../../types';
+import { Task, DisplayTask, TaskViewerSettings, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
 import { getFileBaseName, hasTaskContent, isContentMatchingBaseName } from '../../utils/TaskContent';
-import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
 import { ChildItemBuilder } from './ChildItemBuilder';
 import { ChildSectionRenderer, ChildMenuCallback } from './ChildSectionRenderer';
 import { CheckboxWiring } from './CheckboxWiring';
@@ -37,7 +36,7 @@ export class TaskCardRenderer {
 
     async render(
         container: HTMLElement,
-        task: Task,
+        task: DisplayTask,
         component: Component,
         settings: TaskViewerSettings,
         options?: { topRight?: 'time' | 'deadline' | 'none'; compact?: boolean; forceExpand?: boolean }
@@ -77,7 +76,7 @@ export class TaskCardRenderer {
         }
 
         this.bindInternalLinks(contentContainer, task.file);
-        this.bindParentCheckbox(contentContainer, task.id, settings);
+        this.bindParentCheckbox(contentContainer, task.originalTaskId ?? task.id, settings);
     }
 
     private getChildCompletion(task: Task, settings: TaskViewerSettings): { completed: number; total: number } {
@@ -157,7 +156,7 @@ export class TaskCardRenderer {
         }
     }
 
-    private buildParentMarkdown(task: Task, settings: TaskViewerSettings): string {
+    private buildParentMarkdown(task: DisplayTask, settings: TaskViewerSettings): string {
         const statusChar = task.statusChar || ' ';
 
         let overdueIcon = '';
@@ -165,12 +164,11 @@ export class TaskCardRenderer {
             if (task.deadline && DateUtils.isPastDeadline(task.deadline, settings.startHour)) {
                 overdueIcon = '🚨 ';
             } else {
-                const effectiveEnd = task.endDate
-                    ? { endDate: task.endDate, endTime: task.endTime }
-                    : ImplicitCalendarDateResolver.resolveImplicitEnd(task, settings.startHour);
-                if (effectiveEnd) {
-                    const endTime = effectiveEnd.endTime?.includes('T') ? effectiveEnd.endTime.split('T')[1] : effectiveEnd.endTime;
-                    if (DateUtils.isPastDate(effectiveEnd.endDate, endTime, settings.startHour)) {
+                const endDate = task.effectiveEndDate ?? task.endDate;
+                const endTime = task.effectiveEndTime ?? task.endTime;
+                if (endDate) {
+                    const cleanEndTime = endTime?.includes('T') ? endTime.split('T')[1] : endTime;
+                    if (DateUtils.isPastDate(endDate, cleanEndTime, settings.startHour)) {
                         overdueIcon = '⚠️ ';
                     }
                 }

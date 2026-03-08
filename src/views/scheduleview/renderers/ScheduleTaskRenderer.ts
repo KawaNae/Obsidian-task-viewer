@@ -3,11 +3,11 @@ import type { TaskViewerSettings } from '../../../types';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
-import type { GridRow, TaskPlacement, TimedRenderableTask } from '../ScheduleTypes';
+import type { GridRow, TaskPlacement, TimedDisplayTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from '../utils/ScheduleGridCalculator';
 import type { ScheduleOverlapLayout } from '../utils/ScheduleOverlapLayout';
 import { toDisplayHeightPx, toDisplayTopPx } from '../../sharedLogic/TimelineCardPosition';
-import type { RenderableTask } from '../../sharedLogic/RenderableTaskUtils';
+import type { DisplayTask } from '../../../types';
 
 export interface ScheduleTaskRendererOptions {
     app: App;
@@ -68,7 +68,7 @@ export class ScheduleTaskRenderer {
         }
     }
 
-    placeTasksOnGrid(tasks: TimedRenderableTask[], rows: GridRow[]): TaskPlacement[] {
+    placeTasksOnGrid(tasks: TimedDisplayTask[], rows: GridRow[]): TaskPlacement[] {
         const clusters = this.overlapLayout.buildOverlapClusters(tasks);
         const placements: TaskPlacement[] = [];
 
@@ -99,7 +99,7 @@ export class ScheduleTaskRenderer {
         });
     }
 
-    async renderTaskCard(container: HTMLElement, task: RenderableTask, flowCard: boolean): Promise<void> {
+    async renderTaskCard(container: HTMLElement, task: DisplayTask, flowCard: boolean): Promise<void> {
         const wrapper = container.createDiv(flowCard ? 'schedule-tasks__card-wrap' : 'schedule-section__task-wrap');
         const card = wrapper.createDiv('task-card');
 

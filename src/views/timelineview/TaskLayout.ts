@@ -1,15 +1,15 @@
-import { Task } from '../../types';
+import { DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 
 export class TaskLayout {
-    static calculateTaskLayout(tasks: Task[], date: string, startHour: number): Map<string, { width: number, left: number, zIndex: number }> {
+    static calculateTaskLayout(tasks: DisplayTask[], date: string, startHour: number): Map<string, { width: number, left: number, zIndex: number }> {
         const layout = new Map<string, { width: number, left: number, zIndex: number }>();
         if (tasks.length === 0) return layout;
 
         const startHourMinutes = startHour * 60;
 
         // Helper to get adjusted minutes (minutes from visual start)
-        const getAdjustedMinutes = (task: Task, timeStr: string, isEnd: boolean) => {
+        const getAdjustedMinutes = (task: DisplayTask, timeStr: string, isEnd: boolean) => {
             let m: number;
 
             if (timeStr.includes('T')) {
@@ -32,10 +32,10 @@ export class TaskLayout {
 
         // 1. Prepare tasks with calculated start/end for sorting
         const preparedTasks = tasks.map(task => {
-            const start = getAdjustedMinutes(task, task.startTime!, false);
-            let end = task.endTime ? getAdjustedMinutes(task, task.endTime, true) : start + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
+            const start = getAdjustedMinutes(task, task.effectiveStartTime!, false);
+            let end = task.effectiveEndTime ? getAdjustedMinutes(task, task.effectiveEndTime, true) : start + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
             // Fix simple wrap for end time if needed
-            if (!task.endTime?.includes('T') && end < start) end += 24 * 60;
+            if (!task.effectiveEndTime?.includes('T') && end < start) end += 24 * 60;
 
             return { task, start, end };
         });

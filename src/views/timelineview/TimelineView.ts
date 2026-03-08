@@ -8,7 +8,7 @@ import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
 
 import { DateUtils } from '../../utils/DateUtils';
-import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
+import { toDisplayTask, toDisplayTasks } from '../../utils/DisplayTaskConverter';
 
 import TaskViewerPlugin from '../../main';
 
@@ -244,6 +244,7 @@ export class TimelineView extends ItemView {
         this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler, this.taskIndex);
         this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.menuHandler, this.taskIndex);
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
+        this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
 
         // Initialize DragHandler with selection callback, move callback, and view start date provider
         this.dragHandler = new DragHandler(this.container, this.taskIndex, this.plugin,
@@ -315,7 +316,8 @@ export class TimelineView extends ItemView {
                             const opts = isAllDay
                                 ? { topRight: 'none' as const, compact: true }
                                 : undefined;
-                            this.taskRenderer.render(card, task, this, this.plugin.settings, opts);
+                            const dt = toDisplayTask(task, this.plugin.settings.startHour);
+                            this.taskRenderer.render(card, dt, this, this.plugin.settings, opts);
                             return;
                         }
                     }
@@ -567,6 +569,9 @@ export class TimelineView extends ItemView {
                     this.app.workspace.requestSaveLayout();
                     this.render();
                 },
+                onRename: () => {
+                    this.app.workspace.requestSaveLayout();
+                },
             },
             this.toolbar?.getTaskFilter(),
         );
@@ -706,12 +711,8 @@ export class TimelineView extends ItemView {
 
     private getDatesToShow(): string[] {
         const dates = [];
-        const start = new Date(this.viewState.startDate);
-
         for (let i = 0; i < this.viewState.daysToShow; i++) {
-            const d = new Date(start);
-            d.setDate(start.getDate() + i);
-            dates.push(DateUtils.getLocalDateString(d));
+            dates.push(DateUtils.addDays(this.viewState.startDate, i));
         }
         return dates;
     }
@@ -738,24 +739,24 @@ export class TimelineView extends ItemView {
         const isVisible = this.toolbar.getTaskFilter();
 
         // Get all incomplete, visible tasks with dates (including E/ED types)
-        const tasks = this.taskIndex.getTasks().filter(t =>
+        const rawTasks = this.taskIndex.getTasks().filter(t =>
             isVisible(t) &&
             !isCompleteStatusChar(t.statusChar, this.plugin.settings.completeStatusChars) &&
             (t.startDate || t.endDate)
         );
 
+        const displayTasks = toDisplayTasks(rawTasks, startHour);
+
         // Find the oldest past date among incomplete tasks
         let oldestDate: string | null = null;
 
-        for (const task of tasks) {
-            const taskDate = task.startDate
-                || ImplicitCalendarDateResolver.resolveImplicitStart(task, startHour)?.startDate;
-            if (!taskDate) continue;
+        for (const dt of displayTasks) {
+            if (!dt.effectiveStartDate) continue;
 
             // Only consider tasks that are before today (visual date)
-            if (taskDate < visualToday) {
-                if (!oldestDate || taskDate < oldestDate) {
-                    oldestDate = taskDate;
+            if (dt.effectiveStartDate < visualToday) {
+                if (!oldestDate || dt.effectiveStartDate < oldestDate) {
+                    oldestDate = dt.effectiveStartDate;
                 }
             }
         }

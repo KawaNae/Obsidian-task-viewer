@@ -12,6 +12,7 @@ import { InlineToFrontmatterConversionService } from './InlineToFrontmatterConve
 import { AiIndexService } from '../aiindex/AiIndexService';
 import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
 import { DateUtils as CoreDateUtils } from '../../utils/DateUtils';
+import { toDisplayTask } from '../../utils/DisplayTaskConverter';
 
 export interface ValidationError {
     file: string;
@@ -67,7 +68,6 @@ export class TaskIndex {
     }
 
     async initialize(): Promise<void> {
-        // レイアウト準備完了後に初回スキャン
         this.app.workspace.onLayoutReady(async () => {
             await this.scanner.scanVault();
             this.scanner.setInitializing(false);
@@ -261,14 +261,6 @@ export class TaskIndex {
         return lines;
     }
 
-    getTasksForDate(date: string, startHour?: number): Task[] {
-        return this.store.getTasksForDate(date, startHour);
-    }
-
-    getTasksForVisualDay(visualDate: string, startHour: number): Task[] {
-        return this.store.getTasksForVisualDay(visualDate, startHour);
-    }
-
     getValidationErrors(): ValidationError[] {
         return this.validator.getValidationErrors();
     }
@@ -313,29 +305,36 @@ export class TaskIndex {
                 return;
             }
 
-            if (!originalTask.startDate || !originalTask.startTime) {
-                console.warn(`[TaskIndex] Original task ${originalId} has no start date/time`);
+            // Resolve effective dates to match splitDisplayTaskAtBoundary's logic
+            const dt = toDisplayTask(originalTask, this.settings.startHour);
+            if (!dt.effectiveStartDate) {
+                console.warn(`[TaskIndex] Original task ${originalId} has no effective start date`);
                 return;
             }
 
-            const originalVisualStartDate = CoreDateUtils.getVisualStartDate(
-                originalTask.startDate,
-                originalTask.startTime,
-                this.settings.startHour
-            );
+            const originalVisualStartDate = dt.effectiveStartTime
+                ? CoreDateUtils.getVisualStartDate(dt.effectiveStartDate, dt.effectiveStartTime, this.settings.startHour)
+                : dt.effectiveStartDate;
 
-            let originalVisualEndDate = originalTask.endDate;
-            if (originalTask.endDate && originalTask.endTime) {
-                const [endH, endM] = originalTask.endTime.split(':').map(Number);
-                if (endH < this.settings.startHour || (endH === this.settings.startHour && endM === 0)) {
-                    originalVisualEndDate = CoreDateUtils.addDays(originalTask.endDate, -1);
+            // Compute afterSegmentDate the same way splitDisplayTaskAtBoundary does
+            let afterSegmentDate = originalVisualStartDate;
+            if (dt.effectiveStartDate && dt.effectiveEndDate) {
+                let boundaryCalendarDate: string;
+                if (dt.effectiveStartDate === dt.effectiveEndDate) {
+                    boundaryCalendarDate = dt.effectiveStartDate;
+                } else {
+                    boundaryCalendarDate = CoreDateUtils.addDays(dt.effectiveStartDate, 1);
                 }
+                const boundaryTime = `${this.settings.startHour.toString().padStart(2, '0')}:00`;
+                afterSegmentDate = CoreDateUtils.getVisualStartDate(
+                    boundaryCalendarDate, boundaryTime, this.settings.startHour
+                );
             }
 
             let segment: 'before' | 'after' | null = null;
             if (segmentInfo.segmentDate === originalVisualStartDate) {
                 segment = 'before';
-            } else if (segmentInfo.segmentDate === originalVisualEndDate) {
+            } else if (segmentInfo.segmentDate === afterSegmentDate) {
                 segment = 'after';
             } else {
                 console.warn(`[TaskIndex] Unsupported split segment date: ${segmentInfo.segmentDate} for task ${originalId}`);
@@ -362,12 +361,14 @@ export class TaskIndex {
             }
 
             taskId = originalId;
-            // 元のupdates（statusChar等）を保持しつつ日付/時刻を追加
-            const dateTimeUpdates = {
-                startDate: originalTask.startDate, startTime: originalTask.startTime,
-                endDate: originalTask.endDate, endTime: originalTask.endTime
-            };
-            updates = { ...updates, ...dateTimeUpdates };
+            // date/time 更新がある場合のみ、元タスクの全 date/time フィールドをマージ
+            if (updates.startDate || updates.startTime || updates.endDate || updates.endTime) {
+                const dateTimeUpdates = {
+                    startDate: originalTask.startDate, startTime: originalTask.startTime,
+                    endDate: originalTask.endDate, endTime: originalTask.endTime
+                };
+                updates = { ...updates, ...dateTimeUpdates };
+            }
         }
 
         const task = this.store.getTask(taskId);
@@ -378,6 +379,13 @@ export class TaskIndex {
 
         this.syncDetector.markLocalEdit(task.file);
         Object.assign(task, updates);
+
+        // startDate が明示的に更新された → 継承フラグをクリア
+        // (undefined = Propertiesモーダル未変更 → フラグ維持)
+        if ('startDate' in updates && updates.startDate !== undefined) {
+            task.startDateInherited = false;
+        }
+
         // ドラッグ中のファイルはnotifyをスキップ（ドラッグ終了時にsetDraggingFile(null)で一括通知）
         if (this.draggingFilePath !== task.file) {
             this.store.notifyListeners(taskId, Object.keys(updates));

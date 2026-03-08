@@ -1,10 +1,13 @@
-import type { Task } from '../../../types';
+import type { DisplayTask } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
-import { ImplicitCalendarDateResolver } from '../../../utils/ImplicitCalendarDateResolver';
 import type { TaskIndex } from '../../../services/core/TaskIndex';
-import { shouldSplitTask, splitTaskAtBoundary, type RenderableTask } from '../../sharedLogic/RenderableTaskUtils';
+import {
+    toDisplayTask,
+    shouldSplitDisplayTask,
+    splitDisplayTaskAtBoundary,
+} from '../../../utils/DisplayTaskConverter';
 import type { FilterMenuComponent } from '../../customMenus/FilterMenuComponent';
-import type { CategorizedTasks, TimedRenderableTask } from '../ScheduleTypes';
+import type { CategorizedTasks, TimedDisplayTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from './ScheduleGridCalculator';
 
 export interface ScheduleTaskCategorizerOptions {
@@ -27,7 +30,7 @@ export class ScheduleTaskCategorizer {
         this.gridCalculator = options.gridCalculator;
     }
 
-    categorizeTasksBySection(tasks: RenderableTask[], dateStr: string): CategorizedTasks {
+    categorizeTasksBySection(tasks: DisplayTask[], dateStr: string): CategorizedTasks {
         const categorized: CategorizedTasks = {
             allDay: [],
             timed: [],
@@ -41,7 +44,7 @@ export class ScheduleTaskCategorizer {
             }
 
             if (this.isTimedTask(task)) {
-                const timedTask = this.toTimedRenderableTask(task);
+                const timedTask = this.toTimedDisplayTask(task);
                 if (timedTask) {
                     categorized.timed.push(timedTask);
                     continue;
@@ -83,67 +86,67 @@ export class ScheduleTaskCategorizer {
         return categorized;
     }
 
-    getTasksForDate(dateStr: string): RenderableTask[] {
-        const result: RenderableTask[] = [];
+    getTasksForDate(dateStr: string): DisplayTask[] {
+        const result: DisplayTask[] = [];
+        const startHour = this.getStartHour();
         const allTasks = this.taskIndex.getTasks();
         for (const task of allTasks) {
-            if (!this.filterMenu.isTaskVisible(task)) {
+            const dt = toDisplayTask(task, startHour);
+            if (!this.filterMenu.isTaskVisible(dt)) {
                 continue;
             }
-            result.push(...this.getRenderableTasksForDate(task, dateStr));
+            result.push(...this.getDisplayTasksForDate(dt, dateStr));
         }
         return result;
     }
 
-    private getRenderableTasksForDate(task: Task, dateStr: string): RenderableTask[] {
-        if (this.isTimedTask(task)) {
-            return this.getTimedTaskSegmentsForDate(task, dateStr);
+    private getDisplayTasksForDate(dt: DisplayTask, dateStr: string): DisplayTask[] {
+        if (this.isTimedTask(dt)) {
+            return this.getTimedTaskSegmentsForDate(dt, dateStr);
         }
 
-        if (this.isAllDayLikeTaskOnDate(task, dateStr)) {
-            return [this.toRenderableTask(task)];
+        if (this.isAllDayLikeTaskOnDate(dt, dateStr)) {
+            return [dt];
         }
 
-        if (this.isDeadlineOnlyTaskOnDate(task, dateStr)) {
-            return [this.toRenderableTask(task)];
+        if (this.isDeadlineOnlyTaskOnDate(dt, dateStr)) {
+            return [dt];
         }
 
         return [];
     }
 
-    private toTimedRenderableTask(task: RenderableTask): TimedRenderableTask | null {
-        const effective = this.resolveEffectiveStart(task);
-        if (!effective?.startTime) {
+    private toTimedDisplayTask(dt: DisplayTask): TimedDisplayTask | null {
+        if (!dt.effectiveStartTime) {
             return null;
         }
 
         const dayStart = this.gridCalculator.getDayStartMinute();
         const dayEnd = this.gridCalculator.getDayEndMinute();
-        const durationMinutes = this.calculateDurationMinutes(task);
-        const rawStart = this.gridCalculator.timeToVisualMinute(effective.startTime);
+        const durationMinutes = this.calculateDurationMinutes(dt);
+        const rawStart = this.gridCalculator.timeToVisualMinute(dt.effectiveStartTime);
         const rawEnd = rawStart + durationMinutes;
 
         const visualStartMinute = Math.max(dayStart, Math.min(dayEnd - 1, rawStart));
         const visualEndMinute = Math.max(visualStartMinute + 1, Math.min(dayEnd, rawEnd));
 
         return {
-            ...task,
+            ...dt,
             visualStartMinute,
             visualEndMinute,
         };
     }
 
-    private calculateDurationMinutes(task: RenderableTask): number {
-        const effective = this.resolveEffectiveStart(task);
-        if (!effective || !effective.startTime) {
+    private calculateDurationMinutes(dt: DisplayTask): number {
+        if (!dt.effectiveStartDate || !dt.effectiveStartTime) {
             return DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
         }
 
         const durationMs = DateUtils.getTaskDurationMs(
-            effective.startDate,
-            effective.startTime,
-            task.endDate,
-            task.endTime,
+            dt.effectiveStartDate,
+            dt.effectiveStartTime,
+            dt.effectiveEndDate,
+            dt.effectiveEndTime,
             this.getStartHour()
         );
 
@@ -154,95 +157,72 @@ export class ScheduleTaskCategorizer {
         return Math.max(1, Math.round(durationMs / (1000 * 60)));
     }
 
-    private getTimedTaskSegmentsForDate(task: Task, dateStr: string): RenderableTask[] {
-        const effective = this.resolveEffectiveStart(task);
-        if (!effective || !effective.startTime) {
+    private getTimedTaskSegmentsForDate(dt: DisplayTask, dateStr: string): DisplayTask[] {
+        if (!dt.effectiveStartTime) {
             return [];
         }
 
         const startHour = this.getStartHour();
-        const segments: RenderableTask[] = [];
+        const segments: DisplayTask[] = [];
 
-        // Build an effective task with resolved start for split/visual calculations
-        const effectiveTask = { ...task, startDate: effective.startDate, startTime: effective.startTime };
-
-        if (shouldSplitTask(effectiveTask, startHour)) {
-            const [before, after] = splitTaskAtBoundary(effectiveTask, startHour);
-            const beforeVisualDate = DateUtils.getVisualStartDate(before.startDate!, before.startTime!, startHour);
-            const afterVisualDate = DateUtils.getVisualStartDate(after.startDate!, after.startTime!, startHour);
+        if (shouldSplitDisplayTask(dt, startHour)) {
+            const [before, after] = splitDisplayTaskAtBoundary(dt, startHour);
+            const beforeVisualDate = DateUtils.getVisualStartDate(before.effectiveStartDate, before.effectiveStartTime!, startHour);
+            const afterVisualDate = DateUtils.getVisualStartDate(after.effectiveStartDate, after.effectiveStartTime!, startHour);
 
             if (beforeVisualDate === dateStr) {
-                segments.push(this.toRenderableTask(before));
+                segments.push(before);
             }
             if (afterVisualDate === dateStr) {
-                segments.push(this.toRenderableTask(after));
+                segments.push(after);
             }
             return segments;
         }
 
-        const visualDate = DateUtils.getVisualStartDate(effective.startDate, effective.startTime, startHour);
+        const visualDate = DateUtils.getVisualStartDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
         if (visualDate === dateStr) {
-            segments.push(this.toRenderableTask(task));
+            segments.push(dt);
         }
         return segments;
     }
 
-    private toRenderableTask(task: Task | RenderableTask): RenderableTask {
-        const renderable = task as RenderableTask;
-        return {
-            ...task,
-            id: task.id,
-            originalTaskId: renderable.originalTaskId ?? task.id,
-            isSplit: renderable.isSplit ?? false,
-            splitSegment: renderable.splitSegment,
-        };
-    }
-
-    /** Resolve effective start for E/ED types (derive from endDate). */
-    private resolveEffectiveStart(task: Task): { startDate: string; startTime?: string } | null {
-        if (task.startDate) return { startDate: task.startDate, startTime: task.startTime };
-        return ImplicitCalendarDateResolver.resolveImplicitStart(task, this.getStartHour());
-    }
-
-    private isTimedTask(task: Task): boolean {
-        const effective = this.resolveEffectiveStart(task);
-        if (!effective || !effective.startTime) {
+    private isTimedTask(dt: DisplayTask): boolean {
+        if (!dt.effectiveStartDate || !dt.effectiveStartTime) {
             return false;
         }
         return !DateUtils.isAllDayTask(
-            effective.startDate,
-            effective.startTime,
-            task.endDate,
-            task.endTime,
+            dt.effectiveStartDate,
+            dt.effectiveStartTime,
+            dt.effectiveEndDate,
+            dt.effectiveEndTime,
             this.getStartHour()
         );
     }
 
-    private isAllDayLikeTaskOnDate(task: Task, dateStr: string): boolean {
-        const effective = this.resolveEffectiveStart(task);
-        if (!effective) {
+    private isAllDayLikeTaskOnDate(dt: DisplayTask, dateStr: string): boolean {
+        if (!dt.effectiveStartDate) {
             return false;
         }
 
-        if (effective.startTime && this.isTimedTask(task)) {
+        if (dt.effectiveStartTime && this.isTimedTask(dt)) {
             return false;
         }
 
-        if (task.endDate && task.endDate >= effective.startDate) {
-            return dateStr >= effective.startDate && dateStr <= task.endDate;
+        if (dt.effectiveEndDate && dt.effectiveEndDate >= dt.effectiveStartDate) {
+            return dateStr >= dt.effectiveStartDate && dateStr <= dt.effectiveEndDate;
         }
 
-        return effective.startDate === dateStr;
+        return dt.effectiveStartDate === dateStr;
     }
 
-    private isDeadlineOnlyTaskOnDate(task: Task, dateStr: string): boolean {
-        if (!task.deadline) {
+    private isDeadlineOnlyTaskOnDate(dt: DisplayTask, dateStr: string): boolean {
+        if (!dt.deadline) {
             return false;
         }
-        if (task.startDate || task.endDate) {
+        if (dt.startDate || dt.endDate) {
             return false;
         }
-        const deadlineDate = task.deadline.split('T')[0];
+        const deadlineDate = dt.deadline.split('T')[0];
         return deadlineDate === dateStr;
     }
 }

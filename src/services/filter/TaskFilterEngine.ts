@@ -1,12 +1,18 @@
-import type { Task } from '../../types';
+import type { Task, DisplayTask } from '../../types';
 import type { FilterState, FilterConditionNode, FilterGroupNode, FilterNode, FilterContext } from './FilterTypes';
 import { DateResolver } from './DateResolver';
 import { DateUtils } from '../../utils/DateUtils';
-import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
 
 /**
  * Evaluates whether a task passes a recursive filter tree.
  * Groups can contain both conditions and sub-groups at any depth.
+ *
+ * Accepts both Task and DisplayTask:
+ * - DisplayTask: date filters use effective (resolved) values via effectiveStartDate/effectiveEndDate
+ * - Raw Task: date filters fall back to raw startDate/endDate (E/ED implicit dates not available)
+ *
+ * Callers passing DisplayTask: KanbanView, PinnedListRenderer
+ * Callers passing raw Task: FilterMenuComponent, ScheduleTaskCategorizer, GridRenderer
  */
 export class TaskFilterEngine {
     static evaluate(task: Task, filterState: FilterState, context?: FilterContext): boolean {
@@ -32,6 +38,7 @@ export class TaskFilterEngine {
     private static evalCondition(task: Task, condition: FilterConditionNode, context?: FilterContext): boolean {
         // Skip conditions with empty stringSet values (value not yet selected)
         if (condition.value.type === 'stringSet' && condition.value.values.length === 0) return true;
+        const dt = task as Partial<DisplayTask>;
         switch (condition.property) {
             case 'file':
                 return this.evalStringSet(task.file, condition);
@@ -42,9 +49,9 @@ export class TaskFilterEngine {
             case 'content':
                 return this.evalContent(task, condition);
             case 'startDate':
-                return this.evalDate(task.startDate, condition);
+                return this.evalDate(dt.effectiveStartDate ?? task.startDate, condition);
             case 'endDate':
-                return this.evalDate(task.endDate, condition);
+                return this.evalDate(dt.effectiveEndDate ?? task.endDate, condition);
             case 'deadline':
                 return this.evalDate(task.deadline, condition);
             case 'color':
@@ -106,9 +113,9 @@ export class TaskFilterEngine {
     }
 
     private static evalLength(task: Task, c: FilterConditionNode, startHour: number): boolean {
-        const implicit = ImplicitCalendarDateResolver.resolveImplicitStart(task, startHour);
-        const effectiveStartDate = task.startDate || implicit?.startDate;
-        const effectiveStartTime = task.startTime || implicit?.startTime;
+        const dt = task as Partial<DisplayTask>;
+        const effectiveStartDate = dt.effectiveStartDate ?? task.startDate;
+        const effectiveStartTime = dt.effectiveStartTime ?? task.startTime;
 
         const hasDuration = !!effectiveStartDate;
         if (c.operator === 'isSet') return hasDuration;
@@ -118,7 +125,10 @@ export class TaskFilterEngine {
         if (!effectiveStartDate) return false;
 
         const durationMs = DateUtils.getTaskDurationMs(
-            effectiveStartDate, effectiveStartTime, task.endDate, task.endTime, startHour,
+            effectiveStartDate, effectiveStartTime,
+            dt.effectiveEndDate ?? task.endDate,
+            dt.effectiveEndTime ?? task.endTime,
+            startHour,
         );
         if (!Number.isFinite(durationMs) || durationMs < 0) return false;
 

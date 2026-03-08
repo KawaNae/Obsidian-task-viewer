@@ -1,7 +1,7 @@
-import type { ClusteredTaskAssignment, TimedRenderableTask } from '../ScheduleTypes';
+import type { ClusteredTaskAssignment, TimedDisplayTask } from '../ScheduleTypes';
 
 export class ScheduleOverlapLayout {
-    buildOverlapClusters(tasks: TimedRenderableTask[]): TimedRenderableTask[][] {
+    buildOverlapClusters(tasks: TimedDisplayTask[]): TimedDisplayTask[][] {
         const sorted = tasks.slice().sort((a, b) => {
             if (a.visualStartMinute !== b.visualStartMinute) {
                 return a.visualStartMinute - b.visualStartMinute;
@@ -14,8 +14,8 @@ export class ScheduleOverlapLayout {
             return a.line - b.line;
         });
 
-        const clusters: TimedRenderableTask[][] = [];
-        let currentCluster: TimedRenderableTask[] = [];
+        const clusters: TimedDisplayTask[][] = [];
+        let currentCluster: TimedDisplayTask[] = [];
         let clusterMaxEnd = -1;
 
         for (const task of sorted) {
@@ -43,7 +43,7 @@ export class ScheduleOverlapLayout {
         return clusters;
     }
 
-    assignClusterColumns(cluster: TimedRenderableTask[]): ClusteredTaskAssignment[] {
+    assignClusterColumns(cluster: TimedDisplayTask[]): ClusteredTaskAssignment[] {
         const sorted = cluster.slice().sort((a, b) => {
             if (a.visualStartMinute !== b.visualStartMinute) {
                 return a.visualStartMinute - b.visualStartMinute;
@@ -57,7 +57,7 @@ export class ScheduleOverlapLayout {
         });
 
         const columnEndMinutes: number[] = [];
-        const assigned: Array<{ task: TimedRenderableTask; column: number }> = [];
+        const assigned: Array<{ task: TimedDisplayTask; column: number }> = [];
 
         for (const task of sorted) {
             let column = -1;

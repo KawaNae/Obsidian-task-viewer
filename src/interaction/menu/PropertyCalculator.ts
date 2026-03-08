@@ -1,6 +1,5 @@
-import { Task } from '../../types';
+import { DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
 
 export interface CalculatedProperty {
     date?: string;
@@ -11,14 +10,17 @@ export interface CalculatedProperty {
 }
 
 export interface PropertyCalculationContext {
-    task: Task;
+    task: DisplayTask;
     startHour: number;
     viewStartDate: string | null;
 }
 
 /**
  * タスクプロパティの暗黙的値を計算
- * 
+ *
+ * DisplayTask の effective フィールドと implicit フラグを直接使用。
+ * 呼び出し元（MenuHandler.showContextMenu）が toDisplayTask() で変換済み。
+ *
  * README Period Calculation Rulesに従う:
  * 1. SED, SE: actual time from start to end
  * 2. SD, S-All: start day's startHour to startHour+23:59
@@ -32,61 +34,25 @@ export class PropertyCalculator {
      */
     calculateStart(context: PropertyCalculationContext): CalculatedProperty {
         const { task, startHour, viewStartDate } = context;
-        const hasExplicitStart = task.explicitStartDate ?? false;
-        const hasStartTime = task.explicitStartTime ?? false;
 
         const startHourStr = startHour.toString().padStart(2, '0') + ':00';
         const implicitVisualStartDate = viewStartDate || DateUtils.getVisualDateOfNow(startHour);
 
-        if (hasExplicitStart) {
-            if (hasStartTime) {
-                // SED-Timed, SE-Timed, S-Timed: explicit start date and time
-                return {
-                    date: task.startDate,
-                    time: task.startTime,
-                    dateImplicit: false,
-                    timeImplicit: false
-                };
-            } else {
-                // SD, S-All, SE, SED (Long-term): explicit date, implicit time = startHour
-                return {
-                    date: task.startDate,
-                    time: startHourStr,
-                    dateImplicit: false,
-                    timeImplicit: true
-                };
-            }
-        } else {
-            // Auto-derived: startDate undefined
-            // E/ED types: derive from endDate via ImplicitCalendarDateResolver
-            const implicit = ImplicitCalendarDateResolver.resolveImplicitStart(task, startHour);
-            if (implicit) {
-                return {
-                    date: implicit.startDate,
-                    time: implicit.startTime || startHourStr,
-                    dateImplicit: true,
-                    timeImplicit: !implicit.startTime,
-                };
-            }
-
-            if (hasStartTime) {
-                // Time-only notation: startTime is explicit but date is inherited/implicit
-                return {
-                    date: task.startDate || implicitVisualStartDate,
-                    time: task.startTime,
-                    dateImplicit: true,
-                    timeImplicit: false
-                };
-            } else {
-                // D types: implicit date and implicit time
-                return {
-                    date: implicitVisualStartDate,
-                    time: startHourStr,
-                    dateImplicit: true,
-                    timeImplicit: true
-                };
-            }
+        // D type: effectiveStartDate is "" — use viewStartDate fallback
+        if (!task.effectiveStartDate) {
+            return {
+                date: implicitVisualStartDate,
+                time: startHourStr,
+                dateImplicit: true,
+                timeImplicit: true
+            };
         }
+        return {
+            date: task.effectiveStartDate,
+            time: task.effectiveStartTime || startHourStr,
+            dateImplicit: task.startDateImplicit,
+            timeImplicit: task.startTimeImplicit,
+        };
     }
 
     /**
@@ -94,61 +60,21 @@ export class PropertyCalculator {
      */
     calculateEnd(context: PropertyCalculationContext): CalculatedProperty {
         const { task, startHour, viewStartDate } = context;
-        const hasExplicitStart = task.explicitStartDate ?? false;
-        const hasExplicitEnd = task.explicitEndDate ?? false;
-        const hasEndTime = task.explicitEndTime ?? false;
 
         const endHourStr = this.calculateEndHourStr(startHour);
         const implicitVisualStartDate = viewStartDate || DateUtils.getVisualDateOfNow(startHour);
-        const implicit = !task.startDate ? ImplicitCalendarDateResolver.resolveImplicitStart(task, startHour) : null;
-        const effectiveVisualStartDate = task.startDate || implicit?.startDate || implicitVisualStartDate;
 
-        // Case 1: Explicit end date + time
-        if (hasExplicitEnd) {
-            if (hasEndTime) {
-                return {
-                    date: task.endDate,
-                    time: task.endTime,
-                    dateImplicit: false,
-                    timeImplicit: false
-                };
-            } else {
-                // SE, SED (Long-term): explicit date, implicit time
-                return {
-                    date: task.endDate,
-                    time: endHourStr,
-                    dateImplicit: false,
-                    timeImplicit: true
-                };
-            }
-        }
-
-        // Case 2: Has endTime but no endDate
-        if (hasEndTime) {
+        if (task.effectiveEndDate) {
             return {
-                date: effectiveVisualStartDate,
-                time: task.endTime,
-                dateImplicit: true,
-                timeImplicit: false
+                date: task.effectiveEndDate,
+                time: task.effectiveEndTime || endHourStr,
+                dateImplicit: task.endDateImplicit,
+                timeImplicit: task.endTimeImplicit,
             };
         }
-
-        // Case 3-4: Derive implicit end via resolveImplicitEnd (S-Timed, S-All, SD, D types)
-        const implicitEnd = ImplicitCalendarDateResolver.resolveImplicitEnd(
-            { startDate: effectiveVisualStartDate, startTime: task.startTime, endDate: undefined, endTime: undefined },
-            startHour
-        );
-        if (implicitEnd) {
-            return {
-                date: implicitEnd.endDate,
-                time: implicitEnd.endTime || endHourStr,
-                dateImplicit: true,
-                timeImplicit: true
-            };
-        }
-
-        // D type (no startDate): use effectiveVisualStartDate + 1day as fallback
-        const nextDay = DateUtils.addDays(effectiveVisualStartDate, 1);
+        // D type or no effective end: use viewStartDate + 1day fallback
+        const effectiveBase = task.effectiveStartDate || implicitVisualStartDate;
+        const nextDay = DateUtils.addDays(effectiveBase, 1);
         return {
             date: nextDay,
             time: endHourStr,
@@ -160,7 +86,7 @@ export class PropertyCalculator {
     /**
      * Deadline プロパティの計算
      */
-    calculateDeadline(task: Task): CalculatedProperty {
+    calculateDeadline(task: DisplayTask): CalculatedProperty {
         if (!task.deadline) {
             return { dateImplicit: false, timeImplicit: false, isUnset: true };
         }

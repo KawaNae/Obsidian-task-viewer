@@ -1,90 +1,25 @@
-import { Task } from '../../types';
-import { DateUtils } from '../../utils/DateUtils';
-import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
-
 /**
- * View-only task segment used by timeline/schedule rendering.
+ * @deprecated Use DisplayTask from '../../types' and functions from '../../utils/DisplayTaskConverter' instead.
+ * This file re-exports for backward compatibility during migration.
  */
-export interface RenderableTask extends Task {
-    id: string;
-    originalTaskId: string;
-    isSplit: boolean;
-    splitSegment?: 'head' | 'tail';
-    _isReadOnly?: boolean;
-}
+import type { Task, DisplayTask } from '../../types';
+import {
+    shouldSplitDisplayTask,
+    splitDisplayTaskAtBoundary,
+    toDisplayTask,
+} from '../../utils/DisplayTaskConverter';
 
-/**
- * Returns true when a task crosses the visual day boundary and should be split.
- */
+/** @deprecated Use DisplayTask from '../../types' instead. */
+export type RenderableTask = DisplayTask;
+
+/** @deprecated Use shouldSplitDisplayTask from DisplayTaskConverter instead. */
 export function shouldSplitTask(task: Task, startHour: number): boolean {
-    if (!task.startDate || !task.endDate || !task.startTime || !task.endTime) {
-        return false;
-    }
-
-    const visualStartDay = DateUtils.getVisualStartDate(task.startDate, task.startTime, startHour);
-
-    let visualEndDay = task.endDate;
-    const [endH, endM] = task.endTime.split(':').map(Number);
-    if (endH < startHour || (endH === startHour && endM === 0)) {
-        visualEndDay = DateUtils.addDays(task.endDate, -1);
-    }
-
-    if (visualStartDay !== visualEndDay) {
-        return true;
-    }
-
-    const startDateTime = new Date(`${task.startDate}T${task.startTime}`);
-    const endDateTime = new Date(`${task.endDate}T${task.endTime}`);
-    if (endDateTime < startDateTime) return false;
-
-    const durationHours = (endDateTime.getTime() - startDateTime.getTime()) / (1000 * 60 * 60);
-    if (durationHours >= 24) return false;
-
-    return false;
+    const dt = toDisplayTask(task, startHour);
+    return shouldSplitDisplayTask(dt, startHour);
 }
 
-/**
- * Splits a task into two renderable segments at the visual day boundary.
- */
-export function splitTaskAtBoundary(task: Task, startHour: number): [RenderableTask, RenderableTask] {
-    if (!task.startDate || !task.endDate || !task.startTime || !task.endTime) {
-        throw new Error('Task must have start and end date/time to split');
-    }
-
-    let boundaryCalendarDate: string;
-    const boundaryTime = `${startHour.toString().padStart(2, '0')}:00`;
-
-    if (task.startDate === task.endDate) {
-        boundaryCalendarDate = task.startDate;
-    } else {
-        const startDateObj = new Date(task.startDate);
-        const boundaryCalendarDateObj = new Date(startDateObj);
-        boundaryCalendarDateObj.setDate(boundaryCalendarDateObj.getDate() + 1);
-        boundaryCalendarDate = boundaryCalendarDateObj.toISOString().split('T')[0];
-    }
-
-    const beforeSegmentDate = DateUtils.getVisualStartDate(task.startDate, task.startTime, startHour);
-    const afterSegmentDate = DateUtils.getVisualStartDate(boundaryCalendarDate, boundaryTime, startHour);
-
-    const beforeSegment: RenderableTask = {
-        ...task,
-        id: TaskIdGenerator.makeSegmentId(task.id, beforeSegmentDate),
-        originalTaskId: task.id,
-        isSplit: true,
-        splitSegment: 'head',
-        endDate: boundaryCalendarDate,
-        endTime: boundaryTime,
-    };
-
-    const afterSegment: RenderableTask = {
-        ...task,
-        id: TaskIdGenerator.makeSegmentId(task.id, afterSegmentDate),
-        originalTaskId: task.id,
-        isSplit: true,
-        splitSegment: 'tail',
-        startDate: boundaryCalendarDate,
-        startTime: boundaryTime,
-    };
-
-    return [beforeSegment, afterSegment];
+/** @deprecated Use splitDisplayTaskAtBoundary from DisplayTaskConverter instead. */
+export function splitTaskAtBoundary(task: Task, startHour: number): [DisplayTask, DisplayTask] {
+    const dt = toDisplayTask(task, startHour);
+    return splitDisplayTaskAtBoundary(dt, startHour);
 }

@@ -24,15 +24,21 @@ export class DateUtils {
         return this.getLocalDateString(new Date());
     }
 
+    /** Parse 'YYYY-MM-DD' as local midnight (not UTC). */
+    private static parseLocalDate(dateStr: string): Date {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    }
+
     static getDiffDays(start: string, end: string): number {
-        const d1 = new Date(start);
-        const d2 = new Date(end);
+        const d1 = DateUtils.parseLocalDate(start);
+        const d2 = DateUtils.parseLocalDate(end);
         const diffTime = d2.getTime() - d1.getTime();
         return Math.round(diffTime / (1000 * 60 * 60 * 24));
     }
 
     static addDays(date: string, days: number): string {
-        const d = new Date(date);
+        const d = DateUtils.parseLocalDate(date);
         d.setDate(d.getDate() + days);
         return this.getLocalDateString(d);
     }
@@ -106,6 +112,18 @@ export class DateUtils {
         const h = Math.floor(m / 60);
         const min = m % 60;
         return `${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+    }
+
+    /**
+     * 日付+時刻を frontmatter/YAML 互換の文字列にフォーマット。
+     * - time-only 禁止（YAML sexagesimal / Obsidian 非互換）
+     * - endDate 未設定時は fallbackDate（通常 startDate）で same-day 推論
+     */
+    static formatDateTimeForStorage(date?: string, time?: string, fallbackDate?: string): string | null {
+        const effectiveDate = date || fallbackDate;
+        if (effectiveDate && time) return `${effectiveDate}T${time}`;
+        if (effectiveDate) return effectiveDate;
+        return null;
     }
 
     /**

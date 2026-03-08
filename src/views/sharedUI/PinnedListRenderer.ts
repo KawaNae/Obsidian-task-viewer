@@ -4,7 +4,7 @@
  */
 
 import { Component, Menu, setIcon } from 'obsidian';
-import type { Task, PinnedListDefinition } from '../../types';
+import type { Task, DisplayTask, PinnedListDefinition } from '../../types';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskFilterEngine } from '../../services/filter/TaskFilterEngine';
@@ -14,6 +14,7 @@ import { TaskSorter } from '../../services/sort/TaskSorter';
 import { hasSortRules } from '../../services/sort/SortTypes';
 import TaskViewerPlugin from '../../main';
 import { TaskStyling } from './TaskStyling';
+import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
 
 export interface PinnedListCallbacks {
     onCollapsedChange: (listId: string, collapsed: boolean) => void;
@@ -22,6 +23,7 @@ export interface PinnedListCallbacks {
     onDuplicate: (listDef: PinnedListDefinition) => void;
     onRemove: (listDef: PinnedListDefinition) => void;
     onToggleApplyViewFilter?: (listDef: PinnedListDefinition) => void;
+    onRename?: (listDef: PinnedListDefinition, newName: string) => void;
 }
 
 export class PinnedListRenderer {
@@ -29,6 +31,8 @@ export class PinnedListRenderer {
     private collapsedGroups = new Set<string>();
     // ID of list to start renaming immediately after render
     private pendingRenameId: string | null = null;
+    // Tracks how many tasks are currently visible per list (for "Show more")
+    private visibleCounts = new Map<string, number>();
 
     constructor(
         private taskRenderer: TaskCardRenderer,
@@ -52,17 +56,19 @@ export class PinnedListRenderer {
     ): void {
         container.empty();
         container.addClass('pinned-lists-container');
+        this.visibleCounts.clear();
         if (lists.length === 0) {
             container.createDiv('pinned-lists-container__empty')
                 .setText('No pinned lists.');
             return;
         }
 
-        const allTasks = this.taskIndex.getTasks();
-        const filterContext = { startHour: this.plugin.settings.startHour };
+        const startHour = this.plugin.settings.startHour;
+        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
+        const filterContext = { startHour };
 
         for (const listDef of lists) {
-            const tasks = allTasks.filter(task => {
+            const tasks = allDisplayTasks.filter(task => {
                 if (!TaskFilterEngine.evaluate(task, listDef.filterState, filterContext)) return false;
                 if (listDef.applyViewFilter && viewFilter && !viewFilter(task)) return false;
                 return true;
@@ -77,7 +83,7 @@ export class PinnedListRenderer {
     private renderList(
         container: HTMLElement,
         listDef: PinnedListDefinition,
-        tasks: Task[],
+        tasks: DisplayTask[],
         owner: Component,
         collapsedState: Record<string, boolean>,
         callbacks: PinnedListCallbacks,
@@ -125,13 +131,13 @@ export class PinnedListRenderer {
         setIcon(moreBtn, 'more-horizontal');
         moreBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.showMoreMenu(e as MouseEvent, listDef, nameEl, callbacks);
+            this.showMoreMenu(e as MouseEvent, listDef, moreBtn, callbacks);
         });
 
         // Task list body
         const body = listEl.createDiv('pinned-list__body');
         if (!isCollapsed) {
-            this.renderTaskCards(body, tasks, owner);
+            this.renderPagedTasks(body, tasks, listDef.id, owner);
         }
 
         // Collapse toggle
@@ -147,9 +153,10 @@ export class PinnedListRenderer {
                 this.collapsedGroups.delete(listDef.id);
                 listEl.removeClass('pinned-list--collapsed');
                 toggle.textContent = '▼';
-                // Lazy render on expand
+                // Lazy render on expand (reset to first page)
                 if (body.childElementCount === 0 && tasks.length > 0) {
-                    this.renderTaskCards(body, tasks, owner);
+                    this.visibleCounts.delete(listDef.id);
+                    this.renderPagedTasks(body, tasks, listDef.id, owner);
                 }
             }
 
@@ -161,7 +168,8 @@ export class PinnedListRenderer {
             this.pendingRenameId = null;
             // Defer enough for Obsidian's layout/focus to settle
             setTimeout(() => {
-                this.startRename(nameEl, listDef);
+                const currentNameEl = listEl.querySelector('.pinned-list__name') as HTMLElement | null;
+                if (currentNameEl) this.startRename(currentNameEl, listDef, callbacks);
             }, 50);
         }
     }
@@ -169,7 +177,7 @@ export class PinnedListRenderer {
     private showMoreMenu(
         e: MouseEvent,
         listDef: PinnedListDefinition,
-        nameEl: HTMLElement,
+        anchorEl: HTMLElement,
         callbacks: PinnedListCallbacks,
     ): void {
         const menu = new Menu();
@@ -177,7 +185,11 @@ export class PinnedListRenderer {
         menu.addItem(item => {
             item.setTitle('Rename')
                 .setIcon('pencil')
-                .onClick(() => this.startRename(nameEl, listDef));
+                .onClick(() => {
+                    const listEl = anchorEl.closest('.pinned-list');
+                    const nameEl = listEl?.querySelector('.pinned-list__name') as HTMLElement | null;
+                    if (nameEl) this.startRename(nameEl, listDef, callbacks);
+                });
         });
 
         menu.addItem(item => {
@@ -211,6 +223,7 @@ export class PinnedListRenderer {
     private startRename(
         nameEl: HTMLElement,
         listDef: PinnedListDefinition,
+        callbacks: PinnedListCallbacks,
     ): void {
         const input = document.createElement('input');
         input.type = 'text';
@@ -225,7 +238,7 @@ export class PinnedListRenderer {
             if (committed) return;
             committed = true;
             listDef.name = newName;
-            this.plugin.saveData(this.plugin.settings);
+            callbacks.onRename?.(listDef, newName);
             // Replace input with span (no full re-render needed)
             const span = document.createElement('span');
             span.className = 'pinned-list__name';
@@ -248,7 +261,48 @@ export class PinnedListRenderer {
         input.addEventListener('pointerdown', (e) => e.stopPropagation());
     }
 
-    private renderTaskCards(body: HTMLElement, tasks: Task[], owner: Component): void {
+    private renderPagedTasks(
+        body: HTMLElement,
+        allTasks: DisplayTask[],
+        listId: string,
+        owner: Component,
+    ): void {
+        const pageSize = this.plugin.settings.pinnedListPageSize;
+        const visibleCount = this.visibleCounts.get(listId) ?? pageSize;
+        const tasksToShow = allTasks.slice(0, visibleCount);
+
+        this.renderTaskCards(body, tasksToShow, owner);
+
+        if (visibleCount < allTasks.length) {
+            this.appendShowMoreButton(body, allTasks, visibleCount, listId, owner);
+        }
+    }
+
+    private appendShowMoreButton(
+        body: HTMLElement,
+        allTasks: DisplayTask[],
+        shownCount: number,
+        listId: string,
+        owner: Component,
+    ): void {
+        const pageSize = this.plugin.settings.pinnedListPageSize;
+        const remaining = allTasks.length - shownCount;
+        const btn = body.createDiv('pinned-list__show-more');
+        btn.setText(`Show more (${remaining})`);
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            btn.remove();
+            const newCount = Math.min(shownCount + pageSize, allTasks.length);
+            this.visibleCounts.set(listId, newCount);
+            const nextBatch = allTasks.slice(shownCount, newCount);
+            this.renderTaskCards(body, nextBatch, owner);
+            if (newCount < allTasks.length) {
+                this.appendShowMoreButton(body, allTasks, newCount, listId, owner);
+            }
+        });
+    }
+
+    private renderTaskCards(body: HTMLElement, tasks: DisplayTask[], owner: Component): void {
         const settings = this.plugin.settings;
         tasks.forEach(task => {
             const card = body.createDiv('task-card');

@@ -52,18 +52,10 @@ export interface Task {
     // True when startDate was inherited from the daily note filename.
     startDateInherited?: boolean;
 
-    // Explicitly written markers for UI styling.
-    explicitStartDate?: boolean;
-    explicitStartTime?: boolean;
-    explicitEndDate?: boolean;
-    explicitEndTime?: boolean;
-
     // Original parsed text and stable IDs.
     originalText: string;
     blockId?: string;
     timerTargetId?: string;
-
-    recurrence?: string;
 
     // Tags extracted from task content and/or frontmatter.
     tags: string[];
@@ -87,6 +79,29 @@ export interface Task {
     // File-level styling from frontmatter (resolved at scan time).
     color?: string;
     linestyle?: string;
+}
+
+/**
+ * 表示用タスク型。暗黙値解決 + split 情報を統合。
+ * Task（生データ）→ toDisplayTask() → DisplayTask の 2 層構造。
+ * 編集パスは raw フィールド (startDate 等) のみを参照する。
+ */
+export interface DisplayTask extends Task {
+    /** 暗黙値解決済みの effective フィールド */
+    effectiveStartDate: string;
+    effectiveStartTime?: string;
+    effectiveEndDate?: string;
+    effectiveEndTime?: string;
+    /** 各フィールドが暗黙値かどうか */
+    startDateImplicit: boolean;
+    startTimeImplicit: boolean;
+    endDateImplicit: boolean;
+    endTimeImplicit: boolean;
+    /** Split 情報（日跨ぎ分割） */
+    originalTaskId: string;
+    isSplit: boolean;
+    splitSegment?: 'head' | 'tail';
+    _isReadOnly?: boolean;
 }
 
 export interface FlowCommand {
@@ -257,6 +272,7 @@ export interface TaskViewerSettings {
     yearlyNoteFolder: string;
     intervalTemplateFolder: string;
     viewTemplateFolder: string;
+    pinnedListPageSize: number;
     defaultViewPositions: {
         timeline: DefaultLeafPosition;
         schedule: DefaultLeafPosition;
@@ -301,6 +317,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     yearlyNoteFolder: '',
     intervalTemplateFolder: '',
     viewTemplateFolder: '',
+    pinnedListPageSize: 10,
     defaultViewPositions: {
         timeline: 'tab',
         schedule: 'right',

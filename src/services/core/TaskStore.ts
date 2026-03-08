@@ -1,5 +1,4 @@
 import type { Task, TaskViewerSettings } from '../../types';
-import { DateUtils } from '../../utils/DateUtils';
 
 /**
  * タスクストア - タスクのインメモリ管理とアクセス
@@ -25,48 +24,6 @@ export class TaskStore {
      */
     getTask(taskId: string): Task | undefined {
         return this.tasks.get(taskId);
-    }
-
-    /**
-     * 指定日付のタスクを取得
-     */
-    getTasksForDate(date: string, startHour?: number): Task[] {
-        const today = startHour !== undefined ?
-            DateUtils.getVisualDateOfNow(startHour) :
-            DateUtils.getToday();
-        return this.getTasks().filter(t => {
-            // D-type tasks (Deadline only) は除外
-            if (!t.startDate && !t.startTime && t.deadline) {
-                return false;
-            }
-            const effectiveStart = t.startDate || today;
-            return effectiveStart === date;
-        });
-    }
-
-    /**
-     * ビジュアル日のタスクを取得（startHour基準）
-     */
-    getTasksForVisualDay(visualDate: string, startHour: number): Task[] {
-        // 1. 当日のタスク (startHour - 23:59)
-        const currentDayTasks = this.getTasksForDate(visualDate, startHour).filter(t => {
-            if (!t.startTime) return true;
-            const [h] = t.startTime.split(':').map(Number);
-            return h >= startHour;
-        });
-
-        // 2. 翌日のタスク (00:00 - startHour-1)
-        const nextDate = new Date(visualDate);
-        nextDate.setDate(nextDate.getDate() + 1);
-        const nextDateStr = nextDate.toISOString().split('T')[0];
-
-        const nextDayTasks = this.getTasksForDate(nextDateStr, startHour).filter(t => {
-            if (!t.startTime) return false;
-            const [h] = t.startTime.split(':').map(Number);
-            return h < startHour;
-        });
-
-        return [...currentDayTasks, ...nextDayTasks];
     }
 
     // ===== 内部操作 =====
