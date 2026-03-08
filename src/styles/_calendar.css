@@ -58,6 +58,7 @@
     grid-template-rows: var(--calendar-header-height);
     grid-auto-rows: minmax(var(--calendar-track-height), auto);
     min-height: 140px;
+    flex-shrink: 0;
     border-bottom: 1px solid var(--tv-border);
 }
 

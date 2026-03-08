@@ -62,8 +62,6 @@ export class CalendarView extends ItemView {
     private showSidebar = true;
     private pinnedListCollapsed: Record<string, boolean> = {};
     private pinnedLists: PinnedListDefinition[] = [];
-    private navigateWeekDebounceTimer: number | null = null;
-    private pendingWeekOffset: number = 0;
     private customName: string | undefined;
 
     constructor(leaf: WorkspaceLeaf, taskIndex: TaskIndex, plugin: TaskViewerPlugin) {
@@ -241,11 +239,6 @@ export class CalendarView extends ItemView {
         this.filterMenu.close();
         this.sidebarFilterMenu.close();
         this.sidebarManager.detach();
-        if (this.navigateWeekDebounceTimer !== null) {
-            window.clearTimeout(this.navigateWeekDebounceTimer);
-            this.navigateWeekDebounceTimer = null;
-            this.pendingWeekOffset = 0;
-        }
 
         this.dragHandler?.destroy();
         this.dragHandler = null;
@@ -292,21 +285,6 @@ export class CalendarView extends ItemView {
         const body = calendarHost.createDiv('calendar-grid__body');
         const referenceMonth = this.getReferenceMonth();
         const showWeekNumbers = this.shouldShowWeekNumbers();
-
-        body.addEventListener('wheel', (e: WheelEvent) => {
-            if (e.deltaY === 0) {
-                return;
-            }
-
-            const atTop = body.scrollTop <= 0;
-            const atBottom = body.scrollTop >= body.scrollHeight - body.clientHeight - 1;
-            const noScroll = body.scrollHeight <= body.clientHeight + 1;
-
-            if (noScroll || (e.deltaY < 0 && atTop) || (e.deltaY > 0 && atBottom)) {
-                e.preventDefault();
-                this.navigateWeekDebounced(e.deltaY > 0 ? 1 : -1);
-            }
-        }, { passive: false });
 
         let cursor = new Date(startDate);
         while (cursor <= endDate) {
@@ -773,19 +751,6 @@ export class CalendarView extends ItemView {
         this.windowStart = DateUtils.addDays(this.windowStart, offset * 7);
         void this.app.workspace.requestSaveLayout();
         void this.render();
-    }
-
-    private navigateWeekDebounced(offset: number): void {
-        this.pendingWeekOffset = offset;
-        if (this.navigateWeekDebounceTimer !== null) {
-            window.clearTimeout(this.navigateWeekDebounceTimer);
-        }
-        this.navigateWeekDebounceTimer = window.setTimeout(() => {
-            this.navigateWeekDebounceTimer = null;
-            const nextOffset = this.pendingWeekOffset;
-            this.pendingWeekOffset = 0;
-            requestAnimationFrame(() => this.navigateWeek(nextOffset));
-        }, 200);
     }
 
     private parseLocalDateString(value: string): Date | null {
