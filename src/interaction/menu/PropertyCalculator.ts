@@ -84,15 +84,15 @@ export class PropertyCalculator {
     }
 
     /**
-     * Deadline プロパティの計算
+     * Due プロパティの計算
      */
-    calculateDeadline(task: DisplayTask): CalculatedProperty {
-        if (!task.deadline) {
+    calculateDue(task: DisplayTask): CalculatedProperty {
+        if (!task.due) {
             return { dateImplicit: false, timeImplicit: false, isUnset: true };
         }
 
-        if (task.deadline.includes('T')) {
-            const [date, time] = task.deadline.split('T');
+        if (task.due.includes('T')) {
+            const [date, time] = task.due.split('T');
             return {
                 date,
                 time,
@@ -102,7 +102,7 @@ export class PropertyCalculator {
         }
 
         return {
-            date: task.deadline,
+            date: task.due,
             dateImplicit: false,
             timeImplicit: false
         };

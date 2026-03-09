@@ -1,6 +1,6 @@
 import type { GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 
-export interface DeadlineArrowOptions {
+export interface DueArrowOptions {
     /** Row offset applied to trackIndex (e.g. 2 for calendar date-header row) */
     gridRowOffset?: number;
     /** Column offset (e.g. 1 when week-number column is present) */
@@ -8,19 +8,19 @@ export interface DeadlineArrowOptions {
 }
 
 /**
- * Render a deadline arrow element into a grid container.
+ * Render a due arrow element into a grid container.
  */
-export function renderDeadlineArrow(
+export function renderDueArrow(
     container: HTMLElement,
     entry: GridTaskEntry,
-    options: DeadlineArrowOptions = {},
+    options: DueArrowOptions = {},
 ): void {
-    if (!entry.deadlineArrow) return;
+    if (!entry.dueArrow) return;
 
-    const { arrowStartCol, arrowEndCol, isClipped, deadlineStr } = entry.deadlineArrow;
-    const arrowEl = container.createDiv('deadline-arrow');
+    const { arrowStartCol, arrowEndCol, isClipped, dueStr } = entry.dueArrow;
+    const arrowEl = container.createDiv('due-arrow');
     arrowEl.dataset.taskId = entry.task.id;
-    arrowEl.setAttribute('aria-label', `Deadline: ${deadlineStr}`);
+    arrowEl.setAttribute('aria-label', `Due: ${dueStr}`);
 
     const gridRowOffset = options.gridRowOffset ?? 0;
     const gridColOffset = options.gridColOffset ?? 0;
@@ -29,6 +29,6 @@ export function renderDeadlineArrow(
     arrowEl.style.gridColumnEnd = (arrowEndCol + gridColOffset).toString();
 
     if (isClipped) {
-        arrowEl.addClass('deadline-arrow--clipped');
+        arrowEl.addClass('due-arrow--clipped');
     }
 }

@@ -41,8 +41,8 @@ export class FrontmatterWriter {
             fmUpdates[frontmatterKeys.end] = DateUtils.formatDateTimeForStorage(task.endDate, task.endTime, task.startDate);
         }
 
-        if ('deadline' in updates) {
-            fmUpdates[frontmatterKeys.deadline] = task.deadline || null;
+        if ('due' in updates) {
+            fmUpdates[frontmatterKeys.due] = task.due || null;
         }
 
         if ('content' in updates) {
@@ -62,7 +62,7 @@ export class FrontmatterWriter {
         await this.updateFrontmatterFields(task.file, {
             [frontmatterKeys.start]: null,
             [frontmatterKeys.end]: null,
-            [frontmatterKeys.deadline]: null,
+            [frontmatterKeys.due]: null,
             [frontmatterKeys.status]: null,
             [frontmatterKeys.content]: null,
         });

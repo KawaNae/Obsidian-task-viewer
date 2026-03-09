@@ -24,7 +24,7 @@ export class FrontmatterTaskBuilder {
         if (
             !(frontmatterKeys.start in frontmatter)
             && !(frontmatterKeys.end in frontmatter)
-            && !(frontmatterKeys.deadline in frontmatter)
+            && !(frontmatterKeys.due in frontmatter)
         ) {
             return null;
         }
@@ -35,10 +35,10 @@ export class FrontmatterTaskBuilder {
         const endNorm = this.normalizeYamlDate(frontmatter[frontmatterKeys.end]);
         const end = this.parseDateTimeField(endNorm);
 
-        const deadlineNorm = this.normalizeYamlDate(frontmatter[frontmatterKeys.deadline]);
-        const deadlineParsed = this.parseDateTimeField(deadlineNorm);
+        const dueNorm = this.normalizeYamlDate(frontmatter[frontmatterKeys.due]);
+        const dueParsed = this.parseDateTimeField(dueNorm);
 
-        if (!start.date && !start.time && !end.date && !end.time && !deadlineParsed.date) {
+        if (!start.date && !start.time && !end.date && !end.time && !dueParsed.date) {
             return null;
         }
 
@@ -57,11 +57,11 @@ export class FrontmatterTaskBuilder {
             ? undefined
             : String(rawTimerTargetId).trim();
 
-        let deadline: string | undefined;
-        if (deadlineParsed.date) {
-            deadline = deadlineParsed.time
-                ? `${deadlineParsed.date}T${deadlineParsed.time}`
-                : deadlineParsed.date;
+        let due: string | undefined;
+        if (dueParsed.date) {
+            due = dueParsed.time
+                ? `${dueParsed.date}T${dueParsed.time}`
+                : dueParsed.date;
         }
 
         const childLines: string[] = [];
@@ -114,7 +114,7 @@ export class FrontmatterTaskBuilder {
             startTime: start.time,
             endDate: end.date,
             endTime: end.time,
-            deadline,
+            due,
             tags: TagExtractor.merge(contentTags, fmTags),
             wikiLinkTargets,
             wikiLinkBodyLines,

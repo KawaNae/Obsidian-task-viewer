@@ -3,7 +3,7 @@ import type { SortState, SortRule, SortProperty } from './SortTypes';
 
 /**
  * Sorts tasks according to a user-defined SortState.
- * Falls back to default sort (deadline → startDate → content) when no rules are set.
+ * Falls back to default sort (due → startDate → content) when no rules are set.
  * Uses effective (resolved) values for startDate/endDate sort.
  */
 export class TaskSorter {
@@ -23,8 +23,8 @@ export class TaskSorter {
 
     static defaultSort(tasks: DisplayTask[]): void {
         tasks.sort((a, b) => {
-            const da = a.deadline || '';
-            const db = b.deadline || '';
+            const da = a.due || '';
+            const db = b.due || '';
             if (da !== db) return da.localeCompare(db);
             const sa = a.effectiveStartDate ?? a.startDate ?? '';
             const sb = b.effectiveStartDate ?? b.startDate ?? '';
@@ -43,7 +43,7 @@ export class TaskSorter {
     private static getValue(task: DisplayTask, property: SortProperty): string {
         switch (property) {
             case 'content': return task.content || '';
-            case 'deadline': return task.deadline || '';
+            case 'due': return task.due || '';
             case 'startDate': return task.effectiveStartDate ?? task.startDate ?? '';
             case 'endDate': return task.effectiveEndDate ?? task.endDate ?? '';
             case 'file': return task.file || '';

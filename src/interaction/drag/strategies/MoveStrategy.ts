@@ -591,23 +591,23 @@ export class MoveStrategy extends BaseDragStrategy {
         const updates: Partial<Task> = {};
         const hasExplicitStart = !!this.dragTask.startDate;
         const hasExplicitEnd = !!this.dragTask.endDate || !!this.dragTask.endTime;
-        const hasDeadline = !!this.dragTask.deadline;
+        const hasDue = !!this.dragTask.due;
 
         if (hasExplicitStart && hasExplicitEnd) {
             updates.startDate = newStart;
             updates.endDate = newEnd;
-        } else if (hasExplicitStart && !hasExplicitEnd && hasDeadline) {
+        } else if (hasExplicitStart && !hasExplicitEnd && hasDue) {
             updates.startDate = newStart;
             updates.endDate = newEnd;
-        } else if (!hasExplicitStart && hasExplicitEnd && hasDeadline) {
+        } else if (!hasExplicitStart && hasExplicitEnd && hasDue) {
             updates.startDate = newStart;
             updates.endDate = newEnd;
-        } else if (!hasExplicitStart && hasExplicitEnd && !hasDeadline) {
+        } else if (!hasExplicitStart && hasExplicitEnd && !hasDue) {
             updates.startDate = newStart;
             updates.endDate = newEnd;
-        } else if (!hasExplicitStart && !hasExplicitEnd && hasDeadline) {
+        } else if (!hasExplicitStart && !hasExplicitEnd && hasDue) {
             updates.startDate = newStart;
-        } else if (hasExplicitStart && !hasExplicitEnd && !hasDeadline) {
+        } else if (hasExplicitStart && !hasExplicitEnd && !hasDue) {
             updates.startDate = newStart;
         } else {
             updates.startDate = newStart;
@@ -625,7 +625,7 @@ export class MoveStrategy extends BaseDragStrategy {
         if (!this.dragEl?.dataset.id || !this.container) return;
 
         const taskId = this.dragEl.dataset.id;
-        const arrow = this.container.querySelector(`.deadline-arrow[data-task-id="${taskId}"]`) as HTMLElement;
+        const arrow = this.container.querySelector(`.due-arrow[data-task-id="${taskId}"]`) as HTMLElement;
         if (arrow) {
             arrow.style.gridColumnStart = taskEndGridLine.toString();
             const arrowEnd = parseInt(arrow.style.gridColumnEnd) || 0;

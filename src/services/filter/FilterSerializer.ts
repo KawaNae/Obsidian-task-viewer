@@ -135,9 +135,9 @@ function isValidConditionObj(c: unknown): c is Record<string, unknown> {
 
 function migrateConditionToNode(c: Record<string, unknown>): FilterConditionNode {
     let property = c.property as string;
-    // Migrate removed properties: hasStartDate → startDate, hasDeadline → deadline
+    // Migrate removed/renamed properties
     if (property === 'hasStartDate') property = 'startDate';
-    if (property === 'hasDeadline') property = 'deadline';
+    if (property === 'hasDeadline' || property === 'deadline') property = 'due';
 
     return {
         type: 'condition',

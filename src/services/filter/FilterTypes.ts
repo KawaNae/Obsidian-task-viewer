@@ -2,7 +2,7 @@
 
 export type FilterProperty =
     | 'file' | 'tag' | 'status' | 'content'
-    | 'startDate' | 'endDate' | 'deadline'
+    | 'startDate' | 'endDate' | 'due'
     | 'color' | 'linestyle'
     | 'length' | 'taskType';
 
@@ -147,7 +147,7 @@ export function deepCloneNode(node: FilterNode): FilterNode {
 // ── Constants ──
 
 /** Date properties that use date comparison operators */
-export const DATE_PROPERTIES: Set<FilterProperty> = new Set(['startDate', 'endDate', 'deadline']);
+export const DATE_PROPERTIES: Set<FilterProperty> = new Set(['startDate', 'endDate', 'due']);
 
 /** Number properties that use numeric comparison operators */
 export const NUMBER_PROPERTIES: Set<FilterProperty> = new Set(['length']);
@@ -160,7 +160,7 @@ export const PROPERTY_OPERATORS: Record<FilterProperty, FilterOperator[]> = {
     content: ['contains', 'notContains'],
     startDate: ['isSet', 'isNotSet', 'equals', 'before', 'after', 'onOrBefore', 'onOrAfter'],
     endDate: ['isSet', 'isNotSet', 'equals', 'before', 'after', 'onOrBefore', 'onOrAfter'],
-    deadline: ['isSet', 'isNotSet', 'equals', 'before', 'after', 'onOrBefore', 'onOrAfter'],
+    due: ['isSet', 'isNotSet', 'equals', 'before', 'after', 'onOrBefore', 'onOrAfter'],
     color: ['includes', 'excludes'],
     linestyle: ['includes', 'excludes'],
     length: ['lessThan', 'lessThanOrEqual', 'greaterThan', 'greaterThanOrEqual', 'equals', 'isSet', 'isNotSet'],
@@ -194,7 +194,7 @@ export const PROPERTY_LABELS: Record<FilterProperty, string> = {
     content: 'Content',
     startDate: 'Start date',
     endDate: 'End date',
-    deadline: 'Deadline',
+    due: 'Due',
     color: 'Color',
     linestyle: 'Line style',
     length: 'Length',
@@ -212,7 +212,7 @@ export const PROPERTY_ICONS: Record<FilterProperty, string> = {
     content: 'text',
     startDate: 'calendar',
     endDate: 'calendar-check',
-    deadline: 'alarm-clock',
+    due: 'alarm-clock',
     color: 'palette',
     linestyle: 'minus',
     length: 'timer',

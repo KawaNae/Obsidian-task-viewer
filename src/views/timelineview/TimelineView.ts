@@ -286,7 +286,7 @@ export class TimelineView extends ItemView {
 
             if (taskId && changes) {
                 // 日付/時刻の変更は完全レンダリングが必要（位置変更）
-                const layoutKeys = ['startDate', 'startTime', 'endDate', 'endTime', 'deadline'];
+                const layoutKeys = ['startDate', 'startTime', 'endDate', 'endTime', 'due'];
                 const hasLayoutChange = changes.some(k => layoutKeys.includes(k));
 
                 if (hasLayoutChange) {

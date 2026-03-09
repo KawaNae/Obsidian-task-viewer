@@ -36,7 +36,7 @@
 
 #### 基本構文
 
-基本構成として`@start>end>deadline`という構成をとります。
+基本構成として`@start>end>due`という構成をとります。
 
 ```markdown
 - [ ] @2001-11-11>2001-11-12>2001-11-13  <!-- 完全な記法(SED型) -->
@@ -84,7 +84,7 @@
 ---
 tv-start: 2026-02-05
 tv-end: 2026-02-07
-tv-deadline: 2026-02-10
+tv-due: 2026-02-10
 tv-status: ' '
 tv-content: プロジェクト名
 ---
@@ -100,7 +100,7 @@ tv-content: プロジェクト名
 |-----------|------|------|-----|
 | `tv-start` | ○* | 開始日時 | `2026-02-05` または `2026-02-05T14:00` |
 | `tv-end` | | 終了日時 | `2026-02-07` または `2026-02-07T18:00` |
-| `tv-deadline` | | 締切日時 | `2026-02-10` または `2026-02-10T23:59` |
+| `tv-due` | | 締切日時 | `2026-02-10` または `2026-02-10T23:59` |
 | `tv-status` | | タスクステータス（省略時は` `） | `x`, `-`, `!` など |
 | `tv-content` | | タスク名（省略時は空。表示時はファイル名がフォールバック） | `プロジェクト名` |
 | `tv-color` | | タスクカードの色 | `red`, `#ff0000` |
@@ -109,7 +109,7 @@ tv-content: プロジェクト名
 | `tv-ignore` | | `true` でスキャン対象から除外 | `true` |
 
 > [!NOTE]
-> `tv-start`, `tv-end`, `tv-deadline`のいずれか1つは必須です。
+> `tv-start`, `tv-end`, `tv-due`のいずれか1つは必須です。
 
 > [!WARNING]
 > 時刻のみを記述する場合は、YAMLのsexagesimal記法を回避するため`"14:00"`のようにクォートで囲んでください。
@@ -124,7 +124,7 @@ tv-content: プロジェクト名
 ---
 tv-start: 2026-02-01
 tv-end: 2026-02-15
-tv-deadline: 2026-02-20
+tv-due: 2026-02-20
 tv-content: ウェブサイトリニューアル
 ---
 
@@ -274,7 +274,7 @@ frontmatterタスクでは、子要素の表示範囲を次のように定義し
 | Long Press Threshold | 長押し判定時間（ms） | 400 |
 | Frontmatter Task Header | 子タスク挿入先の見出しテキスト | `Tasks` |
 | Frontmatter Task Header Level | 見出しレベル（2 = `##`） | 2 |
-| Frontmatter Task Keys | Frontmatterキー名（個別にカスタマイズ可） | `tv-start` / `tv-end` / `tv-deadline` / `tv-status` / `tv-content` / `tv-timer-target-id` / `tv-color` / `tv-linestyle` / `tv-ignore` |
+| Frontmatter Task Keys | Frontmatterキー名（個別にカスタマイズ可） | `tv-start` / `tv-end` / `tv-due` / `tv-status` / `tv-content` / `tv-timer-target-id` / `tv-color` / `tv-linestyle` / `tv-ignore` |
 | Default View Positions | ビューごとのデフォルト表示位置 | Timeline: tab, Schedule: right, Calendar: tab, Mini Calendar: left, Timer: right |
 | Pomodoro Work/Break Minutes | ポモドーロの作業/休憩時間 | 25 / 5 |
 | Countdown Minutes | カウントダウンのデフォルト時間 | 25 |
@@ -297,7 +297,7 @@ AI Indexの1行（NDJSON）は、次のフィールドを持ちます。
 | `content` | タスク本文（inline/frontmatter で空の場合はファイル basename を補完） |
 | `start` | 開始日時（ISO形式または`null`） |
 | `end` | 終了日時（ISO形式または`null`） |
-| `deadline` | 締切日時（ISO形式または`null`） |
+| `due` | 締切日時（ISO形式または`null`） |
 | `tags` | `content`から抽出したタグ配列 |
 | `raw` | 元記法文字列（設定で有効時のみ） |
 

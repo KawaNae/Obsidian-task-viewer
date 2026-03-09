@@ -10,7 +10,7 @@ import { HandleManager } from '../timelineview/HandleManager';
 import { Task, DisplayTask } from '../../types';
 import { CreateTaskModal, formatTaskLine } from '../../modals/CreateTaskModal';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
-import { renderDeadlineArrow } from './DeadlineArrowRenderer';
+import { renderDueArrow } from './DueArrowRenderer';
 
 export class AllDaySectionRenderer {
     constructor(
@@ -57,7 +57,7 @@ export class AllDaySectionRenderer {
                 const effectiveEnd = DateUtils.getVisualStartDate(rawEnd, dt.effectiveEndTime, startHour);
                 return { effectiveStart, effectiveEnd };
             },
-            computeDeadlines: true,
+            computeDueArrows: true,
         });
 
         // Grid offsets: col 1 = time axis, row 1 = padding
@@ -67,8 +67,8 @@ export class AllDaySectionRenderer {
         for (const entry of entries) {
             this.renderTaskCard(container, entry, owner, gridColOffset, gridRowOffset);
 
-            if (entry.deadlineArrow) {
-                renderDeadlineArrow(container, entry, {
+            if (entry.dueArrow) {
+                renderDueArrow(container, entry, {
                     gridRowOffset,
                     gridColOffset,
                 });

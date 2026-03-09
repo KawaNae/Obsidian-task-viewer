@@ -10,13 +10,13 @@ interface DateBlockResult {
     startTime?: string;
     endDate?: string;
     endTime?: string;
-    deadline?: string;
+    due?: string;
     validationWarning?: string;
 }
 
 /**
  * Task Viewer native notation parser.
- * Supports: @start>end>deadline format with time support.
+ * Supports: @start>end>due format with time support.
  */
 export class AtNotationParser implements ParserStrategy {
     readonly id = 'at-notation';
@@ -24,7 +24,7 @@ export class AtNotationParser implements ParserStrategy {
     // Regex to match basic task structure: - [x] ...
     private static readonly BASIC_TASK_REGEX = /^(\s*)-\s*\[(.)]\s*(.*)$/;
 
-    // Regex for locating the Date block: @start>end>deadline
+    // Regex for locating the Date block: @start>end>due
     // Each segment accepts: YYYY-MM-DD, YYYY-MM-DDTHH:mm, T?HH:mm, or empty
     // Rejects non-date @ patterns like @user, @notation
     private static readonly DATE_BLOCK_REGEX =
@@ -62,30 +62,30 @@ export class AtNotationParser implements ParserStrategy {
         // 2. Parse flow commands
         const commands = flowPart ? this.parseFlowCommands(flowPart) : [];
 
-        // 3. Parse date block (@start>end>deadline)
+        // 3. Parse date block (@start>end>due)
         let content = rawContent;
         let date = '';
         let startTime: string | undefined;
         let endDate: string | undefined;
         let endTime: string | undefined;
-        let deadline: string | undefined;
+        let due: string | undefined;
         let validationWarning: string | undefined;
 
         const dateBlock = this.parseDateBlock(rawContent);
         if (dateBlock) {
-            ({ date, startTime, endDate, endTime, deadline,
+            ({ date, startTime, endDate, endTime, due,
                validationWarning } = dateBlock.fields);
             content = dateBlock.content;
         }
 
         // A task must have at least one scheduling field or a flow command
-        const hasSchedulingData = !!(date || startTime || endDate || endTime || deadline);
+        const hasSchedulingData = !!(date || startTime || endDate || endTime || due);
         if (!hasSchedulingData && commands.length === 0) {
             return null;
         }
 
         // 4. Validate date/time constraints
-        const fieldWarning = this.validateDateBlock(date, startTime, endDate, endTime, deadline);
+        const fieldWarning = this.validateDateBlock(date, startTime, endDate, endTime, due);
         if (fieldWarning) {
             validationWarning = fieldWarning;
         }
@@ -111,7 +111,7 @@ export class AtNotationParser implements ParserStrategy {
             startTime,
             endDate,
             endTime,
-            deadline,
+            due,
             commands,
             tags: TagExtractor.fromContent(content.trim()),
             originalText: line,
@@ -125,7 +125,7 @@ export class AtNotationParser implements ParserStrategy {
     }
 
     /**
-     * Parse the @start>end>deadline date block into structured fields.
+     * Parse the @start>end>due date block into structured fields.
      * Returns null if no date block was found in the content.
      */
     private parseDateBlock(content: string): { fields: DateBlockResult; content: string } | null {
@@ -143,7 +143,7 @@ export class AtNotationParser implements ParserStrategy {
         let startTime: string | undefined;
         let endDate: string | undefined;
         let endTime: string | undefined;
-        let deadline: string | undefined;
+        let due: string | undefined;
         let validationWarning: string | undefined;
 
         // --- Start segment ---
@@ -160,12 +160,12 @@ export class AtNotationParser implements ParserStrategy {
 
         // --- End segment ---
         // endDate is only set when explicitly written (e.g. >2026-02-16T08:00).
-        // Time-only end (>08:00) or empty end (>>deadline) leave endDate undefined;
+        // Time-only end (>08:00) or empty end (>>due) leave endDate undefined;
         // DisplayTaskConverter resolves the implicit endDate at display time.
         if (parts.length > 1) {
             const rawEnd = parts[1];
             if (!rawEnd) {
-                // Empty end (@start>>deadline): endDate stays undefined
+                // Empty end (@start>>due): endDate stays undefined
             } else {
                 const parsed = this.parseDateTime(rawEnd);
                 if (parsed.date) {
@@ -177,23 +177,23 @@ export class AtNotationParser implements ParserStrategy {
             }
         }
 
-        // --- Deadline segment ---
+        // --- Due segment ---
         if (parts.length > 2 && parts[2]) {
             const parsed = this.parseDateTime(parts[2]);
-            deadline = parsed.date;
+            due = parsed.date;
             if (parsed.date && parsed.time) {
-                deadline += `T${parsed.time}`;
+                due += `T${parsed.time}`;
             }
         }
 
         // --- Excess separator check ---
         if (parts.length > 3) {
-            validationWarning = `Too many '>' separators in date block. Expected at most 2 (start>end>deadline), found ${parts.length - 1}.`;
+            validationWarning = `Too many '>' separators in date block. Expected at most 2 (start>end>due), found ${parts.length - 1}.`;
         }
 
         return {
             fields: {
-                date, startTime, endDate, endTime, deadline,
+                date, startTime, endDate, endTime, due,
                 validationWarning,
             },
             content: cleanedContent,
@@ -209,7 +209,7 @@ export class AtNotationParser implements ParserStrategy {
         startTime: string | undefined,
         endDate: string | undefined,
         endTime: string | undefined,
-        deadline: string | undefined,
+        due: string | undefined,
     ): string | undefined {
         // Same-day time range: end before start
         if (date && startTime && endTime && endDate && date === endDate) {
@@ -225,9 +225,9 @@ export class AtNotationParser implements ParserStrategy {
             return `End time specified without start time.`;
         }
 
-        // Deadline must include a date
-        if (deadline && !deadline.match(/\d{4}-\d{2}-\d{2}/)) {
-            return `Deadline must include a date (YYYY-MM-DD).`;
+        // Due must include a date
+        if (due && !due.match(/\d{4}-\d{2}-\d{2}/)) {
+            return `Due must include a date (YYYY-MM-DD).`;
         }
 
         return undefined;
@@ -306,7 +306,7 @@ export class AtNotationParser implements ParserStrategy {
             startStr = `@${task.startDate}`;
             if (task.startTime) startStr += `T${task.startTime}`;
             hasDateBlock = true;
-        } else if (task.startTime || task.endDate || task.endTime || task.deadline) {
+        } else if (task.startTime || task.endDate || task.endTime || task.due) {
             // Implicit Start with content to format (D type, S-Timed with implicit date, etc.)
             startStr = '@';
             if (task.startTime) startStr += `T${task.startTime}`;
@@ -338,7 +338,7 @@ export class AtNotationParser implements ParserStrategy {
                     }
                 } else {
                     // End=Start.
-                    if (task.deadline) metaStr += '>';
+                    if (task.due) metaStr += '>';
                 }
             } else if (task.endTime) {
                 // endTime is set but endDate is not (same day case)
@@ -346,12 +346,12 @@ export class AtNotationParser implements ParserStrategy {
                 metaStr += `>${task.endTime}`;
             } else {
                 // No end date or time
-                if (task.deadline) metaStr += '>';
+                if (task.due) metaStr += '>';
             }
 
-            // Deadline Part
-            if (task.deadline) {
-                metaStr += `>${task.deadline}`;
+            // Due Part
+            if (task.due) {
+                metaStr += `>${task.due}`;
             }
         }
 

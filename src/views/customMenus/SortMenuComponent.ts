@@ -208,7 +208,7 @@ export class SortMenuComponent {
 
     private showPropertyMenu(anchorEl: HTMLElement, rule: SortRule): void {
         const properties: SortProperty[] = [
-            'content', 'deadline', 'startDate', 'endDate', 'file', 'status', 'tag',
+            'content', 'due', 'startDate', 'endDate', 'file', 'status', 'tag',
         ];
         const items: SelectItem[] = properties.map(p => ({
             label: SORT_PROPERTY_LABELS[p],

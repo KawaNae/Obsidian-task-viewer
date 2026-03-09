@@ -52,8 +52,8 @@ export class TaskFilterEngine {
                 return this.evalDate(dt.effectiveStartDate ?? task.startDate, condition, context?.startHour ?? 0);
             case 'endDate':
                 return this.evalDate(dt.effectiveEndDate ?? task.endDate, condition, context?.startHour ?? 0);
-            case 'deadline':
-                return this.evalDate(task.deadline?.split('T')[0], condition, context?.startHour ?? 0);
+            case 'due':
+                return this.evalDate(task.due?.split('T')[0], condition, context?.startHour ?? 0);
             case 'color':
                 return this.evalStringSet(task.color ?? '', condition);
             case 'linestyle':

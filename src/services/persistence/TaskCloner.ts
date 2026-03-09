@@ -37,7 +37,7 @@ export class TaskCloner {
 
     /**
      * インラインタスクを翌日分として複製する。
-     * 親行の @start/@end 日付を +1 日シフトする（deadline は保持、子行はそのまま）。
+     * 親行の @start/@end 日付を +1 日シフトする（due は保持、子行はそのまま）。
      */
     async duplicateTaskForTomorrow(task: Task): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
@@ -58,7 +58,7 @@ export class TaskCloner {
 
     /**
      * インラインタスクを1週間分（7日間）複製する。
-     * 各コピーの親行 @start/@end 日付を1日ずつシフトする（deadline は保持、子行はそのまま）。
+     * 各コピーの親行 @start/@end 日付を1日ずつシフトする（due は保持、子行はそのまま）。
      */
     async duplicateTaskForWeek(task: Task): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
@@ -203,7 +203,7 @@ export class TaskCloner {
 
     /**
      * @notation ブロック内の start/end 日付を dayOffset 日シフトする。
-     * deadline（3番目のセグメント）はシフトしない。
+     * due（3番目のセグメント）はシフトしない。
      */
     private shiftInlineDates(line: string, dayOffset: number): string {
         return line.replace(
@@ -254,7 +254,7 @@ export class TaskCloner {
         return `${prefix}${name} ${newDate}.md`;
     }
 
-    /** frontmatter の日付キー (start/end/deadline) の日付部分を N日シフトする。 */
+    /** frontmatter の日付キー (start/end/due) の日付部分を N日シフトする。 */
     private shiftFrontmatterDates(content: string, dayOffset: number, frontmatterKeys: FrontmatterTaskKeys): string {
         const lines = content.split('\n');
         const fmEnd = FrontmatterLineEditor.findEnd(lines);
@@ -263,7 +263,7 @@ export class TaskCloner {
         const dateKeys = new Set([
             frontmatterKeys.start,
             frontmatterKeys.end,
-            frontmatterKeys.deadline,
+            frontmatterKeys.due,
         ]);
         const dateRegex = /(\d{4}-\d{2}-\d{2})/;
 

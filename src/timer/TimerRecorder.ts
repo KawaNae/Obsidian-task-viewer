@@ -240,7 +240,7 @@ export class TimerRecorder {
             startTime,
             endDate,
             endTime,
-            deadline: undefined,
+            due: undefined,
             commands: [],
             originalText: '',
             childLines: [],

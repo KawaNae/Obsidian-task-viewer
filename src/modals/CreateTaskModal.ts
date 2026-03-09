@@ -11,7 +11,7 @@ export interface CreateTaskResult {
     startTime?: string;   // HH:mm
     endDate?: string;     // YYYY-MM-DD
     endTime?: string;     // HH:mm
-    deadline?: string;    // YYYY-MM-DD or YYYY-MM-DDThh:mm
+    due?: string;    // YYYY-MM-DD or YYYY-MM-DDThh:mm
 }
 
 /**
@@ -32,7 +32,7 @@ export function formatTaskLine(result: CreateTaskResult): string {
         startTime: result.startTime,
         endDate: result.endDate,
         endTime: result.endTime,
-        deadline: result.deadline,
+        due: result.due,
         commands: [],
         originalText: '',
         childLineBodyOffsets: [],
@@ -50,7 +50,7 @@ export interface CreateTaskModalOptions {
     /** Submit button label */
     submitLabel?: string;
     /** Initial focus field */
-    focusField?: 'name' | 'start' | 'end' | 'deadline';
+    focusField?: 'name' | 'start' | 'end' | 'due';
     /** Daily note date (YYYY-MM-DD). Shown as Start Date placeholder when startDate is omitted (inherited from filename). */
     dailyNoteDate?: string;
     /** Start hour for implicit value resolution via toDisplayTask(). */
@@ -66,8 +66,8 @@ export class CreateTaskModal extends Modal {
     private startTimeInput: HTMLInputElement;
     private endDateInput: HTMLInputElement;
     private endTimeInput: HTMLInputElement;
-    private deadlineDateInput: HTMLInputElement;
-    private deadlineTimeInput: HTMLInputElement;
+    private dueDateInput: HTMLInputElement;
+    private dueTimeInput: HTMLInputElement;
     private nameInput: HTMLInputElement;
     private errorEl: HTMLElement;
     private warningEl: HTMLElement;
@@ -117,13 +117,13 @@ export class CreateTaskModal extends Modal {
             'end'
         );
 
-        // --- Deadline ---
-        // Deadline is stored as a single string (YYYY-MM-DD or YYYY-MM-DDThh:mm); split for inputs
-        const dlParts = this.splitDeadline(this.result.deadline);
+        // --- Due ---
+        // Due is stored as a single string (YYYY-MM-DD or YYYY-MM-DDThh:mm); split for inputs
+        const dlParts = this.splitDue(this.result.due);
         this.renderDateTimeSection(
-            contentEl, 'Deadline',
+            contentEl, 'Due',
             dlParts.date, dlParts.time,
-            'deadline'
+            'due'
         );
 
         // Set initial placeholders based on initialValues
@@ -150,7 +150,7 @@ export class CreateTaskModal extends Modal {
         label: string,
         initialDate: string | undefined,
         initialTime: string | undefined,
-        section: 'start' | 'end' | 'deadline'
+        section: 'start' | 'end' | 'due'
     ) {
         container.createEl('h4', { text: label, cls: 'create-task-modal__section-label' });
 
@@ -179,7 +179,7 @@ export class CreateTaskModal extends Modal {
         // Store refs
         if (section === 'start') { this.startDateInput = dateInput; this.startTimeInput = timeInput; }
         else if (section === 'end') { this.endDateInput = dateInput; this.endTimeInput = timeInput; }
-        else { this.deadlineDateInput = dateInput; this.deadlineTimeInput = timeInput; }
+        else { this.dueDateInput = dateInput; this.dueTimeInput = timeInput; }
 
         // Event listeners: update result and validate
         const update = () => {
@@ -193,7 +193,7 @@ export class CreateTaskModal extends Modal {
                 this.result.endDate = d;
                 this.result.endTime = t;
             } else {
-                this.result.deadline = d ? (t ? `${d}T${t}` : d) : undefined;
+                this.result.due = d ? (t ? `${d}T${t}` : d) : undefined;
             }
 
             this.updatePlaceholders();
@@ -278,7 +278,7 @@ export class CreateTaskModal extends Modal {
         const inputs = [
             this.startDateInput, this.startTimeInput,
             this.endDateInput, this.endTimeInput,
-            this.deadlineDateInput, this.deadlineTimeInput
+            this.dueDateInput, this.dueTimeInput
         ];
         inputs.forEach(el => el?.classList.remove('create-task-modal__input--invalid'));
         this.errorEl.style.display = 'none';
@@ -287,8 +287,8 @@ export class CreateTaskModal extends Modal {
         const st = this.startTimeInput?.value.trim() || '';
         const ed = this.endDateInput?.value.trim() || '';
         const et = this.endTimeInput?.value.trim() || '';
-        const dd = this.deadlineDateInput?.value.trim() || '';
-        const dt = this.deadlineTimeInput?.value.trim() || '';
+        const dd = this.dueDateInput?.value.trim() || '';
+        const dt = this.dueTimeInput?.value.trim() || '';
 
         // Format checks
         const fields: Array<{ value: string; input: HTMLInputElement; label: string; type: 'date' | 'time' }> = [
@@ -296,8 +296,8 @@ export class CreateTaskModal extends Modal {
             { value: st, input: this.startTimeInput, label: 'Start', type: 'time' },
             { value: ed, input: this.endDateInput, label: 'End', type: 'date' },
             { value: et, input: this.endTimeInput, label: 'End', type: 'time' },
-            { value: dd, input: this.deadlineDateInput, label: 'Deadline', type: 'date' },
-            { value: dt, input: this.deadlineTimeInput, label: 'Deadline', type: 'time' },
+            { value: dd, input: this.dueDateInput, label: 'Due', type: 'date' },
+            { value: dt, input: this.dueTimeInput, label: 'Due', type: 'time' },
         ];
         for (const f of fields) {
             if (!f.value) continue;
@@ -313,7 +313,7 @@ export class CreateTaskModal extends Modal {
         const hasImplicitStartDate = !!this.options.dailyNoteDate;
         if (!sd && st && !hasImplicitStartDate) { this.startTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('Start: date is required when time is specified.'); return false; }
         if (!ed && et && !sd && !hasImplicitStartDate) { this.endTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('End: date is required when there is no start date.'); return false; }
-        if (!dd && dt) { this.deadlineTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('Deadline: date is required when time is specified.'); return false; }
+        if (!dd && dt) { this.dueTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('Due: date is required when time is specified.'); return false; }
 
         // Warning: empty task won't appear in viewer
         if (this.options.warnOnEmptyTask && !this.result.content.trim() && !sd && !st && !ed && !et && !dd && !dt) {
@@ -390,14 +390,14 @@ export class CreateTaskModal extends Modal {
         }
     }
 
-    /** Split a deadline string ("YYYY-MM-DD" or "YYYY-MM-DDThh:mm") into date and time parts */
-    private splitDeadline(deadline: string | undefined): { date: string | undefined; time: string | undefined } {
-        if (!deadline) return { date: undefined, time: undefined };
-        if (deadline.includes('T')) {
-            const [date, time] = deadline.split('T');
+    /** Split a due string ("YYYY-MM-DD" or "YYYY-MM-DDThh:mm") into date and time parts */
+    private splitDue(due: string | undefined): { date: string | undefined; time: string | undefined } {
+        if (!due) return { date: undefined, time: undefined };
+        if (due.includes('T')) {
+            const [date, time] = due.split('T');
             return { date, time };
         }
-        return { date: deadline, time: undefined };
+        return { date: due, time: undefined };
     }
 
     private static readonly BRACKET_PAIRS: Record<string, string> = { '[': ']', '(': ')' };

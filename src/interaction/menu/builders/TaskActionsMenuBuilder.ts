@@ -208,7 +208,7 @@ export class TaskActionsMenuBuilder {
                                     startTime: undefined,
                                     endDate: undefined,
                                     endTime: undefined,
-                                    deadline: undefined,
+                                    due: undefined,
                                 });
                             },
                             { confirmLabel: 'Convert' }

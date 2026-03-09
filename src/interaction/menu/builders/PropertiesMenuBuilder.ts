@@ -10,7 +10,7 @@ import { getTaskDisplayName } from '../../../utils/TaskContent';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
 import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
 
-type ChangePropertiesFocusField = 'name' | 'start' | 'end' | 'deadline';
+type ChangePropertiesFocusField = 'name' | 'start' | 'end' | 'due';
 
 /**
  * Properties sub menu builder.
@@ -42,7 +42,7 @@ export class PropertiesMenuBuilder {
             };
 
             // Requested order:
-            // file / --- / name / start / end / deadline / --- / length
+            // file / --- / name / start / end / due / --- / length
             // (Status is now added at root level by the caller)
             this.addFileItem(subMenu, task);
             subMenu.addSeparator();
@@ -111,7 +111,7 @@ export class PropertiesMenuBuilder {
     }
 
     /**
-     * Add Start, End, Deadline, Length items.
+     * Add Start, End, Due, Length items.
      */
     private addPropertyItems(menu: Menu, task: DisplayTask, viewStartDate: string | null, openModal: (focusField: ChangePropertiesFocusField) => void): void {
         const context: PropertyCalculationContext = {
@@ -122,11 +122,11 @@ export class PropertiesMenuBuilder {
 
         const startParts = this.propertyCalculator.calculateStart(context);
         const endParts = this.propertyCalculator.calculateEnd(context);
-        const deadlineParts = this.propertyCalculator.calculateDeadline(task);
+        const dueParts = this.propertyCalculator.calculateDue(task);
 
         this.addStartItem(menu, task, startParts, openModal);
         this.addEndItem(menu, task, endParts, openModal);
-        this.addDeadlineItem(menu, task, deadlineParts, openModal);
+        this.addDueItem(menu, task, dueParts, openModal);
         menu.addSeparator();
         this.addLengthItem(menu, startParts, endParts, context.startHour);
     }
@@ -158,14 +158,14 @@ export class PropertiesMenuBuilder {
     }
 
     /**
-     * Add Deadline item.
+     * Add Due item.
      */
-    private addDeadlineItem(menu: Menu, task: Task, parts: CalculatedProperty, openModal: (focusField: ChangePropertiesFocusField) => void): void {
+    private addDueItem(menu: Menu, task: Task, parts: CalculatedProperty, openModal: (focusField: ChangePropertiesFocusField) => void): void {
         menu.addItem((item) => {
-            item.setTitle(this.propertyFormatter.createPropertyTitle('Deadline: ', parts))
+            item.setTitle(this.propertyFormatter.createPropertyTitle('Due: ', parts))
                 .setIcon('alert-circle')
                 .onClick(() => {
-                    openModal('deadline');
+                    openModal('due');
                 });
         });
     }
@@ -187,7 +187,7 @@ export class PropertiesMenuBuilder {
             startTime: startCalc.timeImplicit ? undefined : task.startTime,
             endDate: endCalc.dateImplicit ? undefined : task.endDate,
             endTime: endCalc.timeImplicit ? undefined : task.endTime,
-            deadline: task.deadline,
+            due: task.due,
         };
 
         new CreateTaskModal(
@@ -218,7 +218,7 @@ export class PropertiesMenuBuilder {
         const startTime = result.startTime?.trim() || undefined;
         const endDate = result.endDate?.trim() || undefined;
         const endTime = result.endTime?.trim() || undefined;
-        const deadline = result.deadline?.trim() || undefined;
+        const due = result.due?.trim() || undefined;
 
         const updates: Partial<Task> = { content: result.content ?? '' };
 
@@ -228,14 +228,14 @@ export class PropertiesMenuBuilder {
             updates.startTime = startTime ?? startCalc.time;
             updates.endDate = endDate ?? endCalc.date;
             updates.endTime = endTime ?? endCalc.time;
-            if (deadline !== undefined) updates.deadline = deadline;
+            if (due !== undefined) updates.due = due;
         } else {
             // inline: 空欄は省略維持（startDateInherited 保護）
             if (startDate !== undefined) updates.startDate = startDate;
             if (startTime !== undefined) updates.startTime = startTime;
             if (endDate !== undefined) updates.endDate = endDate;
             if (endTime !== undefined) updates.endTime = endTime;
-            if (deadline !== undefined) updates.deadline = deadline;
+            if (due !== undefined) updates.due = due;
         }
 
         return updates;

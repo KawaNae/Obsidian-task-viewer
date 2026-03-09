@@ -1,7 +1,7 @@
 import { App, Modal, Setting } from 'obsidian';
 import { DateUtils } from '../utils/DateUtils';
 
-export type DateTimeType = 'start' | 'end' | 'deadline';
+export type DateTimeType = 'start' | 'end' | 'due';
 
 export interface DateTimeValue {
     date: string | null;     // YYYY-MM-DD or null
@@ -144,11 +144,11 @@ export class DateTimeInputModal extends Modal {
                 }
                 break;
 
-            case 'deadline':
+            case 'due':
                 if (!dateValue && timeValue) {
                     this.timeInput.addClass('datetime-input-modal__input--invalid');
-                    this.showError('Deadline requires a date if time is specified.');
-                    return { valid: false, errorMessage: 'Deadline requires date' };
+                    this.showError('Due requires a date if time is specified.');
+                    return { valid: false, errorMessage: 'Due requires date' };
                 }
                 break;
         }

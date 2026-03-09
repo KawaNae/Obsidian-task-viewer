@@ -244,16 +244,16 @@ export class DateUtils {
     }
 
     /**
-     * Check if a deadline is in the past considering startHour.
-     * 
-     * @param deadline YYYY-MM-DD or YYYY-MM-DDTHH:mm format
+     * Check if a due date is in the past considering startHour.
+     *
+     * @param due YYYY-MM-DD or YYYY-MM-DDTHH:mm format
      * @param startHour The configured start hour for visual day boundary
-     * @returns true if the deadline is in the past
+     * @returns true if the due date is in the past
      */
-    static isPastDeadline(deadline: string, startHour: number): boolean {
-        const hasTime = deadline.includes('T');
-        const datePart = deadline.split('T')[0];
-        const timePart = hasTime ? deadline.split('T')[1] : undefined;
+    static isPastDue(due: string, startHour: number): boolean {
+        const hasTime = due.includes('T');
+        const datePart = due.split('T')[0];
+        const timePart = hasTime ? due.split('T')[1] : undefined;
 
         return this.isPastDate(datePart, timePart, startHour);
     }

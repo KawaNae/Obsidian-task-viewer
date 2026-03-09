@@ -616,7 +616,7 @@ export class FilterMenuComponent {
     private showPropertyMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
         const properties: FilterProperty[] = [
             'file', 'tag', 'status', 'content',
-            'startDate', 'endDate', 'deadline',
+            'startDate', 'endDate', 'due',
             'length', 'color', 'linestyle', 'taskType',
         ];
         const items: SelectItem[] = properties.map(p => ({

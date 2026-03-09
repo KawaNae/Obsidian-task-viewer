@@ -10,7 +10,7 @@ export interface NormalizedTask {
     content: string;
     start: string | null;
     end: string | null;
-    deadline: string | null;
+    due: string | null;
     tags: string[];
     raw?: string;
 }

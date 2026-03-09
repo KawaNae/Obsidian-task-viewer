@@ -168,7 +168,7 @@ Quick reference for locating the right layer when implementing a feature.
 
 The plugin recognizes eight task types internally.
 
-| Type | Syntax example | start | end | deadline |
+| Type | Syntax example | start | end | due |
 |------|---------------|-------|-----|----------|
 | **SED** | `@2001-11-11>2001-11-12>2001-11-13` | ✓ | ✓ | ✓ |
 | **SE** | `@2001-11-11>2001-11-12` | ✓ | ✓ | — |
@@ -192,7 +192,7 @@ At least one side has an explicit time, and only one side (start or end) is spec
 
 - **Display**: Timeline lane, 1 h fixed duration
 - **Inference**: reverse time on the missing side (startTime + 1 h → endTime, or endTime − 1 h → startTime)
-- Examples: `@2026-03-09T10:00`, `@>2026-03-09T11:00`, `@2026-03-09T10:00>>deadline`
+- Examples: `@2026-03-09T10:00`, `@>2026-03-09T11:00`, `@2026-03-09T10:00>>due`
 
 #### 2. All-day tasks (S-All / E-All / SD-All / ED-All)
 
@@ -200,7 +200,7 @@ Only one side specified, no time on that side.
 
 - **Display**: Calendar (all-day) lane, 1 visual-day duration
 - **Inference**: implicit time = startHour:00 / (startHour−1):59; reverse date = same day
-- Examples: `@2026-03-09`, `@>2026-03-09`, `@2026-03-09>>deadline`
+- Examples: `@2026-03-09`, `@>2026-03-09`, `@2026-03-09>>due`
 
 #### 3. SE / SED All-day (no time on either side)
 
@@ -208,7 +208,7 @@ Both start and end are specified, neither has a time.
 
 - **Display**: Calendar (all-day) lane, spanning the specified days
 - **Inference**: implicit times = startHour:00 / (startHour−1):59
-- Examples: `@2026-03-09>2026-03-11`, `@2026-03-09>2026-03-11>deadline`
+- Examples: `@2026-03-09>2026-03-11`, `@2026-03-09>2026-03-11>due`
 
 #### 4. SE / SED Timed (at least one side has time)
 
@@ -219,11 +219,11 @@ Both start and end are specified, at least one has an explicit time.
 - Daily-note special case: startDate can be omitted (inherited from filename)
 - Examples: `@2026-03-09T10:00>12:00`, `@2026-03-09T10:00>2026-03-10T18:00`
 
-#### 5. D (deadline only)
+#### 5. D (due only)
 
-Only a deadline is specified, no start or end.
+Only a due is specified, no start or end.
 
-- **Display**: Calendar (all-day) lane on the deadline date (display only)
+- **Display**: Calendar (all-day) lane on the due date (display only)
 - **Inference**: none — D does not affect display position or duration inference
 - Example: `@>>2026-03-13`
 
@@ -260,8 +260,8 @@ Drag/resize operations may change a task's type.
 
 **SED (≥ 24 h)**
 - Move handle: update start/end dates (preserve duration)
-- Right resize: update end date (deadline unchanged)
-- Left resize: update start date (deadline unchanged)
+- Right resize: update end date (due unchanged)
+- Left resize: update start date (due unchanged)
 
 **SE (≥ 24 h)**
 - Move handle: update start/end dates (preserve duration)
@@ -303,7 +303,7 @@ Drag/resize operations may change a task's type.
 - Move handle: update start/end time and date (preserve duration)
 
 **SED (< 24 h)**
-- Move to All Day: convert to D-type (drop start/end, keep deadline only)
+- Move to All Day: convert to D-type (drop start/end, keep due only)
 
 **SE (< 24 h)**
 - Move to Future: convert to F-type (start → `future`, drop end)
@@ -795,7 +795,7 @@ In TaskConverter (inline→frontmatter), task comes from parser with parsed star
 
 | Term | Meaning | Determined by |
 |------|---------|---------------|
-| **calendarDate** | The date as defined by midnight (00:00). `task.startDate`, `task.endDate`, `task.deadline` are all calendar dates. | Fixed (midnight) |
+| **calendarDate** | The date as defined by midnight (00:00). `task.startDate`, `task.endDate`, `task.due` are all calendar dates. | Fixed (midnight) |
 | **visualDate** | The date as perceived by the user, shifted by `startHour`. A task at 03:00 with `startHour=5` belongs to the previous visual day. | `startHour` setting |
 
 - `getVisualDateOfNow()`, `getVisualStartDate()` return **visualDate**
@@ -841,7 +841,7 @@ Defined in `src/types.ts` as `TaskViewerSettings`. Defaults are in `DEFAULT_SETT
 
 **`defaultViewPositions` defaults**: `{ timeline: 'tab', schedule: 'right', calendar: 'tab', miniCalendar: 'left', timer: 'right' }`
 
-All `FrontmatterTaskKeys` fields (`start`, `end`, `deadline`, `status`, `content`, `timerTargetId`, `color`, `linestyle`, `ignore`) are independently customisable. Duplicate key values are not allowed.
+All `FrontmatterTaskKeys` fields (`start`, `end`, `due`, `status`, `content`, `timerTargetId`, `color`, `linestyle`, `ignore`) are independently customisable. Duplicate key values are not allowed.
 
 ---
 

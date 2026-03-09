@@ -57,7 +57,7 @@ export class ScheduleView extends ItemView {
     private customName: string | undefined;
     private collapsedSections: Record<CollapsibleSectionKey, boolean> = {
         allDay: false,
-        deadlines: false,
+        dueOnly: false,
     };
 
     constructor(leaf: WorkspaceLeaf, taskIndex: TaskIndex, plugin: TaskViewerPlugin) {
@@ -347,13 +347,13 @@ export class ScheduleView extends ItemView {
 
         await this.renderTimelineMain(bodyContainer, categorized.timed);
 
-        if (categorized.deadlines.length > 0) {
+        if (categorized.dueOnly.length > 0) {
             await this.sectionRenderer.renderCollapsibleTaskSection(
                 bodyContainer,
-                'schedule-deadline-section',
-                'Deadlines',
-                categorized.deadlines,
-                'deadlines'
+                'schedule-due-section',
+                'Due',
+                categorized.dueOnly,
+                'dueOnly'
             );
         }
     }
