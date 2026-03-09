@@ -183,7 +183,8 @@ The plugin recognizes eight task types internally.
 
 Tasks are classified by **display behavior** — where they appear and what values are inferred.
 All times are relative to the configured `startHour` (default 5 → visual day 05:00–04:59).
-Implicit value resolution is centralised in `ImplicitCalendarDateResolver`.
+Display-layer implicit value resolution is centralised in `DisplayTaskConverter.toDisplayTask()`.
+Storage-layer daily-note date inheritance is in `ImplicitCalendarDateResolver.resolveDailyNoteDates()`.
 
 #### 1. Timed tasks (S-Timed / E-Timed / SD-Timed / ED-Timed)
 

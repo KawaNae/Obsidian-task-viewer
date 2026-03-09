@@ -49,7 +49,7 @@ export class PropertyCalculator {
         }
         return {
             date: task.effectiveStartDate,
-            time: task.effectiveStartTime || startHourStr,
+            time: task.effectiveStartTime,
             dateImplicit: task.startDateImplicit,
             timeImplicit: task.startTimeImplicit,
         };
@@ -67,7 +67,7 @@ export class PropertyCalculator {
         if (task.effectiveEndDate) {
             return {
                 date: task.effectiveEndDate,
-                time: task.effectiveEndTime || endHourStr,
+                time: task.effectiveEndTime,
                 dateImplicit: task.endDateImplicit,
                 timeImplicit: task.endTimeImplicit,
             };

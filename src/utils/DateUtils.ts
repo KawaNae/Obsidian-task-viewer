@@ -204,8 +204,8 @@ export class DateUtils {
         if (!startTime) return true;
 
         const durationMs = this.getTaskDurationMs(startDate, startTime, endDate, endTime, startHour);
-        const hours24 = 24 * 60 * 60 * 1000;
-        return durationMs >= hours24;
+        const threshold = 23.5 * 60 * 60 * 1000; // 23h30m
+        return durationMs >= threshold;
     }
 
     /**

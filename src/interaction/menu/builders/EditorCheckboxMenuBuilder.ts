@@ -118,7 +118,7 @@ export class EditorCheckboxMenuBuilder {
                                 editor.setLine(line, newLine);
                             },
                             { content, startDate: today },
-                            { title: 'Convert to Inline Task', submitLabel: 'Convert', focusField: 'start' }
+                            { title: 'Convert to Inline Task', submitLabel: 'Convert', focusField: 'start', startHour: this.getStartHour() }
                         ).open();
                     });
             });
@@ -141,7 +141,7 @@ export class EditorCheckboxMenuBuilder {
                                     editor.setLine(line, `${indent}- [[${linkTarget}|${fileName}]]`);
                                 },
                                 { content, startDate: today },
-                                { title: 'Convert to Frontmatter Task', submitLabel: 'Convert', focusField: 'start' }
+                                { title: 'Convert to Frontmatter Task', submitLabel: 'Convert', focusField: 'start', startHour: this.getStartHour() }
                             ).open();
                         });
                 });

@@ -2,7 +2,7 @@ import { App, Modal, Setting, setIcon } from 'obsidian';
 import { Task } from '../types';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { DateUtils } from '../utils/DateUtils';
-import { ImplicitCalendarDateResolver } from '../utils/ImplicitCalendarDateResolver';
+import { toDisplayTask } from '../utils/DisplayTaskConverter';
 import { TaskNameSuggest } from '../suggest/TaskNameSuggest';
 
 export interface CreateTaskResult {
@@ -53,13 +53,8 @@ export interface CreateTaskModalOptions {
     focusField?: 'name' | 'start' | 'end' | 'deadline';
     /** Daily note date (YYYY-MM-DD). Shown as Start Date placeholder when startDate is omitted (inherited from filename). */
     dailyNoteDate?: string;
-    /** Pre-calculated implicit placeholders from PropertyCalculator. Takes priority over dynamic calculation. */
-    implicitPlaceholders?: {
-        startDate?: string;
-        startTime?: string;
-        endDate?: string;
-        endTime?: string;
-    };
+    /** Start hour for implicit value resolution via toDisplayTask(). */
+    startHour?: number;
 }
 
 export class CreateTaskModal extends Modal {
@@ -338,61 +333,60 @@ export class CreateTaskModal extends Modal {
 
     /**
      * Recalculate all implicit placeholders based on current result values.
-     * Priority: implicitPlaceholders (from PropertyCalculator) > dynamic calculation > defaults.
-     * Dynamic calculation uses ImplicitCalendarDateResolver rules:
-     * - End Date: inherits from Start Date (same-day inference)
-     * - Start Date: inherits from End Date for E/ED types, or dailyNoteDate
-     * - End Time: startTime + 1h (S-Timed default duration)
-     * - Start Time: endTime - 1h (E-Timed reverse)
+     * Builds a partial Task from the form state and runs it through toDisplayTask()
+     * to get the same implicit resolution used everywhere else.
      */
     private updatePlaceholders(): void {
-        const sd = this.result.startDate;
-        const st = this.result.startTime;
-        const ed = this.result.endDate;
-        const et = this.result.endTime;
-        const ip = this.options.implicitPlaceholders;
+        const startHour = this.options.startHour ?? 0;
+
+        // Build a partial Task from current form values
+        const formTask: Task = {
+            id: 'placeholder-temp',
+            file: '',
+            line: 0,
+            indent: 0,
+            content: '',
+            statusChar: ' ',
+            childIds: [],
+            childLines: [],
+            startDate: this.result.startDate,
+            startTime: this.result.startTime,
+            endDate: this.result.endDate,
+            endTime: this.result.endTime,
+            commands: [],
+            originalText: '',
+            childLineBodyOffsets: [],
+            tags: [],
+            parserId: 'at-notation',
+        };
+
+        const dt = toDisplayTask(formTask, startHour);
 
         // --- Start Date placeholder ---
         if (this.startDateInput) {
-            if (!sd && ed) {
-                const implicit = ImplicitCalendarDateResolver.resolveImplicitStart(
-                    { endDate: ed, endTime: et }, 0
-                );
-                this.startDateInput.placeholder = implicit?.startDate || ip?.startDate || this.options.dailyNoteDate || 'YYYY-MM-DD';
-            } else {
-                this.startDateInput.placeholder = ip?.startDate || this.options.dailyNoteDate || 'YYYY-MM-DD';
-            }
-        }
-
-        // --- End Date placeholder ---
-        if (this.endDateInput) {
-            this.endDateInput.placeholder = ip?.endDate || sd || this.options.dailyNoteDate || 'YYYY-MM-DD';
+            this.startDateInput.placeholder =
+                (dt.startDateImplicit && dt.effectiveStartDate) || this.options.dailyNoteDate || 'YYYY-MM-DD';
         }
 
         // --- Start Time placeholder ---
         if (this.startTimeInput) {
-            if (!st && et) {
-                const endMinutes = DateUtils.timeToMinutes(et);
-                const startMinutes = endMinutes - DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
-                this.startTimeInput.placeholder = DateUtils.minutesToTime(
-                    startMinutes >= 0 ? startMinutes : startMinutes + 24 * 60
-                );
-            } else {
-                this.startTimeInput.placeholder = ip?.startTime || 'HH:mm';
-            }
+            // Only show time placeholder when the user has a date context (explicit or implicit)
+            // For all-day tasks (no startTime), the implicit startTime is startHour which is not useful as placeholder
+            this.startTimeInput.placeholder =
+                (dt.startTimeImplicit && this.result.endTime && dt.effectiveStartTime) || 'HH:mm';
+        }
+
+        // --- End Date placeholder ---
+        if (this.endDateInput) {
+            this.endDateInput.placeholder =
+                (dt.endDateImplicit && dt.effectiveEndDate) || this.options.dailyNoteDate || 'YYYY-MM-DD';
         }
 
         // --- End Time placeholder ---
         if (this.endTimeInput) {
-            if (!et && st) {
-                const startMinutes = DateUtils.timeToMinutes(st);
-                const endMinutes = startMinutes + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
-                this.endTimeInput.placeholder = DateUtils.minutesToTime(
-                    endMinutes < 24 * 60 ? endMinutes : endMinutes - 24 * 60
-                );
-            } else {
-                this.endTimeInput.placeholder = ip?.endTime || 'HH:mm';
-            }
+            // Only show time placeholder for timed tasks (startTime or endTime is set)
+            this.endTimeInput.placeholder =
+                (dt.endTimeImplicit && this.result.startTime && dt.effectiveEndTime) || 'HH:mm';
         }
     }
 

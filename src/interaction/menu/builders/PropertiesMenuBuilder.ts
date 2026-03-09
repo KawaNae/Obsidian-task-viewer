@@ -190,13 +190,6 @@ export class PropertiesMenuBuilder {
             deadline: task.deadline,
         };
 
-        // implicitPlaceholders: implicit values only
-        const implicitPlaceholders: { startDate?: string; startTime?: string; endDate?: string; endTime?: string } = {};
-        if (startCalc.dateImplicit && startCalc.date) implicitPlaceholders.startDate = startCalc.date;
-        if (startCalc.timeImplicit && startCalc.time) implicitPlaceholders.startTime = startCalc.time;
-        if (endCalc.dateImplicit && endCalc.date) implicitPlaceholders.endDate = endCalc.date;
-        if (endCalc.timeImplicit && endCalc.time) implicitPlaceholders.endTime = endCalc.time;
-
         new CreateTaskModal(
             this.app,
             async (result) => {
@@ -210,7 +203,7 @@ export class PropertiesMenuBuilder {
                 title: 'Change Properties',
                 submitLabel: 'Save',
                 focusField,
-                implicitPlaceholders,
+                startHour: this.plugin.settings.startHour,
             }
         ).open();
     }
