@@ -75,7 +75,7 @@ export class TaskNormalizer {
 
         const start = this.composeDateTime(task.startDate, task.startTime);
         const end = this.composeDateTime(task.endDate, task.endTime);
-        const deadline = this.normalizeDeadline(task.deadline);
+        const due = this.normalizeDue(task.due);
 
         const status = this.resolveStatus(task.statusChar, options.completeStatusChars);
         if (!options.includeDone && status !== 'todo' && status !== 'unknown') {
@@ -101,7 +101,7 @@ export class TaskNormalizer {
             effectiveContent,
             start ?? '',
             end ?? '',
-            deadline ?? '',
+            due ?? '',
             tags.slice().sort().join(','),
             '',
             raw,
@@ -117,7 +117,7 @@ export class TaskNormalizer {
             content: effectiveContent,
             start,
             end,
-            deadline,
+            due,
             tags,
         };
         if (options.includeRaw) {
@@ -179,11 +179,11 @@ export class TaskNormalizer {
         return null;
     }
 
-    private normalizeDeadline(deadline?: string): string | null {
-        if (!deadline) {
+    private normalizeDue(due?: string): string | null {
+        if (!due) {
             return null;
         }
-        return deadline.trim() || null;
+        return due.trim() || null;
     }
 
     private resolveEffectiveContent(content: string, parser: string, sourcePath: string): string {
@@ -205,12 +205,12 @@ export class TaskNormalizer {
             `startTime=${task.startTime ?? ''}`,
             `endDate=${task.endDate ?? ''}`,
             `endTime=${task.endTime ?? ''}`,
-            `deadline=${task.deadline ?? ''}`,
+            `due=${task.due ?? ''}`,
         ].join(';');
     }
 
     private isWithinRetention(task: Task, keepDays: number, snapshotAt: string): boolean {
-        const proxyDate = task.endDate ?? task.startDate ?? task.deadline;
+        const proxyDate = task.endDate ?? task.startDate ?? task.due;
         if (!proxyDate) {
             return true;
         }

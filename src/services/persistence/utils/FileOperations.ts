@@ -84,7 +84,7 @@ export class FileOperations {
         // Build a pattern: contains task content AND @ date notation
         const content = task.content || '';
         const escapedContent = content.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const datePattern = task.startDate ? `@${task.startDate}` : (task.deadline ? `@` : null);
+        const datePattern = task.startDate ? `@${task.startDate}` : (task.due ? `@` : null);
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];

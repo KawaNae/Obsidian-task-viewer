@@ -1,6 +1,5 @@
 import type { Task, DisplayTask } from '../types';
 import { DateUtils } from './DateUtils';
-import { ImplicitCalendarDateResolver } from './ImplicitCalendarDateResolver';
 import { TaskIdGenerator } from './TaskIdGenerator';
 
 /**
@@ -23,12 +22,31 @@ export function toDisplayTask(task: Task, startHour: number): DisplayTask {
 
     // Resolve implicit start for E/ED types (have endDate, no startDate at all)
     if (!task.startDate && task.endDate) {
-        const implicitStart = ImplicitCalendarDateResolver.resolveImplicitStart(task, startHour);
-        if (implicitStart) {
-            effectiveStartDate = implicitStart.startDate;
-            effectiveStartTime = implicitStart.startTime;
-            // startDateImplicit / startTimeImplicit remain true
+        if (task.endTime) {
+            // E-Timed: 1 hour before endTime
+            const endMinutes = DateUtils.timeToMinutes(task.endTime);
+            const startMinutes = endMinutes - DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
+            if (startMinutes >= 0) {
+                effectiveStartDate = task.endDate;
+                effectiveStartTime = DateUtils.minutesToTime(startMinutes);
+            } else {
+                effectiveStartDate = DateUtils.addDays(task.endDate, -1);
+                effectiveStartTime = DateUtils.minutesToTime(startMinutes + 24 * 60);
+            }
+        } else {
+            // E-AllDay: resolve endTime first, then find visual day start
+            const endHour = startHour === 0 ? 23 : startHour - 1;
+            const implicitEndTime = `${endHour.toString().padStart(2, '0')}:59`;
+            effectiveEndTime = implicitEndTime;
+            effectiveStartDate = DateUtils.getVisualStartDate(task.endDate, implicitEndTime, startHour);
+            effectiveStartTime = startHour.toString().padStart(2, '0') + ':00';
         }
+        // startDateImplicit / startTimeImplicit remain true
+    }
+
+    // Resolve implicit start time for all-day tasks (date only, no time)
+    if (effectiveStartDate && !effectiveStartTime) {
+        effectiveStartTime = startHour.toString().padStart(2, '0') + ':00';
     }
 
     // Resolve implicit end for S/SD types (have startDate, no endDate)
@@ -37,18 +55,45 @@ export function toDisplayTask(task: Task, startHour: number): DisplayTask {
             // endTime is explicit, only endDate needs resolution (same-day inheritance)
             effectiveEndDate = effectiveStartDate;
             // effectiveEndTime already set from task.endTime (line 14)
-        } else {
-            // Both endDate and endTime are implicit → full implicit resolution
-            const implicitEnd = ImplicitCalendarDateResolver.resolveImplicitEnd(
-                { startDate: effectiveStartDate, startTime: effectiveStartTime, endDate: undefined, endTime: undefined },
-                startHour,
-            );
-            if (implicitEnd) {
-                effectiveEndDate = implicitEnd.endDate;
-                effectiveEndTime = implicitEnd.endTime;
+        } else if (task.startTime) {
+            // S-Timed: startTime + DEFAULT_TIMED_DURATION_MINUTES
+            const startMinutes = DateUtils.timeToMinutes(effectiveStartTime!);
+            const endMinutes = startMinutes + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
+            if (endMinutes < 24 * 60) {
+                effectiveEndDate = effectiveStartDate;
+                effectiveEndTime = DateUtils.minutesToTime(endMinutes);
+            } else {
+                effectiveEndDate = DateUtils.addDays(effectiveStartDate, 1);
+                effectiveEndTime = DateUtils.minutesToTime(endMinutes - 24 * 60);
             }
+        } else {
+            // S-AllDay: startTime (resolved above) + 23h59m
+            const startMinutes = DateUtils.timeToMinutes(effectiveStartTime!);
+            const endMinutes = startMinutes + 23 * 60 + 59;
+            effectiveEndDate = DateUtils.addDays(effectiveStartDate, Math.floor(endMinutes / (24 * 60)));
+            effectiveEndTime = DateUtils.minutesToTime(endMinutes % (24 * 60));
         }
         // endDateImplicit remains true (endDate was not explicit)
+    }
+
+    // Resolve implicit end time for SE/SED types (have endDate, no endTime)
+    if (effectiveEndDate && !effectiveEndTime) {
+        const endHour = startHour === 0 ? 23 : startHour - 1;
+        effectiveEndTime = `${endHour.toString().padStart(2, '0')}:59`;
+    }
+
+    // Fallback: if same calendarDate and implicit end < implicit start, use 00:00/23:59
+    if (effectiveStartDate && effectiveEndDate
+        && effectiveStartDate === effectiveEndDate
+        && effectiveStartTime && effectiveEndTime
+        && startTimeImplicit !== endTimeImplicit
+        && effectiveEndTime < effectiveStartTime) {
+        if (startTimeImplicit) {
+            effectiveStartTime = '00:00';
+        }
+        if (endTimeImplicit) {
+            effectiveEndTime = '23:59';
+        }
     }
 
     // For explicit fields, mark as non-implicit
@@ -164,12 +209,14 @@ export function isDisplayTaskOnVisualDate(
     dt: DisplayTask, visualDate: string, startHour: number
 ): boolean {
     if (!dt.effectiveStartDate) return false;
-    if (dt.effectiveStartTime) {
+    // True all-day: no explicit start or end time in original task
+    const isAllDay = !dt.startTime && !dt.endTime;
+    if (!isAllDay && dt.effectiveStartTime) {
         return DateUtils.getVisualStartDate(
             dt.effectiveStartDate, dt.effectiveStartTime, startHour
         ) === visualDate;
     }
-    // AllDay: effectiveStartDate ≤ visualDate ≤ effectiveEndDate
+    // AllDay: date range check
     const end = dt.effectiveEndDate || dt.effectiveStartDate;
     return dt.effectiveStartDate <= visualDate && visualDate <= end;
 }

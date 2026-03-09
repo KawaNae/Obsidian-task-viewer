@@ -36,7 +36,7 @@ import { SidebarManager } from '../sidebar/SidebarManager';
 import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
-import { renderDeadlineArrow } from '../sharedUI/DeadlineArrowRenderer';
+import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
@@ -486,6 +486,22 @@ export class CalendarView extends ItemView {
                 this.app.workspace.requestSaveLayout();
                 void this.render();
             },
+            onMoveUp: (listDef) => {
+                const idx = this.pinnedLists.indexOf(listDef);
+                if (idx > 0) {
+                    [this.pinnedLists[idx - 1], this.pinnedLists[idx]] = [this.pinnedLists[idx], this.pinnedLists[idx - 1]];
+                    this.app.workspace.requestSaveLayout();
+                    void this.render();
+                }
+            },
+            onMoveDown: (listDef) => {
+                const idx = this.pinnedLists.indexOf(listDef);
+                if (idx >= 0 && idx < this.pinnedLists.length - 1) {
+                    [this.pinnedLists[idx], this.pinnedLists[idx + 1]] = [this.pinnedLists[idx + 1], this.pinnedLists[idx]];
+                    this.app.workspace.requestSaveLayout();
+                    void this.render();
+                }
+            },
             onToggleApplyViewFilter: (listDef) => {
                 listDef.applyViewFilter = !listDef.applyViewFilter;
                 this.app.workspace.requestSaveLayout();
@@ -589,7 +605,7 @@ export class CalendarView extends ItemView {
                     effectiveEnd: range.effectiveEnd || range.effectiveStart,
                 };
             },
-            computeDeadlines: true,
+            computeDueArrows: true,
         });
 
         // Set grid-template-rows based on track count
@@ -607,8 +623,8 @@ export class CalendarView extends ItemView {
         await Promise.all(entries.map(async (entry) => {
             await this.renderGridTask(weekRow, entry, colOffset);
 
-            if (entry.deadlineArrow) {
-                renderDeadlineArrow(weekRow, entry, {
+            if (entry.dueArrow) {
+                renderDueArrow(weekRow, entry, {
                     gridRowOffset: 2,
                     gridColOffset: colOffset,
                 });

@@ -91,7 +91,6 @@ export class MenuHandler {
 
         // 1. Status (root level)
         this.propertiesMenuBuilder.addStatusSubmenu(menu, task);
-        menu.addSeparator();
 
         // 2. Properties Submenu (uses DisplayTask for correct implicit flags)
         this.propertiesMenuBuilder.buildPropertiesSubmenu(menu, displayTask, this.viewStartDate);

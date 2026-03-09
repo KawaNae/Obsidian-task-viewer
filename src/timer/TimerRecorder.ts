@@ -12,15 +12,19 @@ import { TaskParser } from '../services/parsing/TaskParser';
 import { Task } from '../types';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
+import { TimerStorageUtils } from './TimerStorageUtils';
 
 export class TimerRecorder {
     private resolver: TimerTaskResolver;
+    private storageUtils: TimerStorageUtils;
 
     constructor(
         private app: App,
-        private plugin: TaskViewerPlugin
+        private plugin: TaskViewerPlugin,
+        storageUtils: TimerStorageUtils
     ) {
         this.resolver = new TimerTaskResolver(plugin);
+        this.storageUtils = storageUtils;
     }
 
     /**
@@ -95,8 +99,13 @@ export class TimerRecorder {
 
     /**
      * Record for stopwatch-style modes; idle is intentionally ignored.
+     * If a child task was created at start (recordedChildTaskId), update it instead.
      */
     async addSessionRecord(timer: TimerInstance): Promise<void> {
+        if (timer.recordedChildTaskId) {
+            await this.updateChildAtEnd(timer);
+            return;
+        }
         switch (timer.timerType) {
             case 'countup':
                 await this.addCountupRecord(timer);
@@ -113,6 +122,125 @@ export class TimerRecorder {
             default:
                 break;
         }
+    }
+
+    /**
+     * Write startDate/startTime to the task at timer start (for 'self' recordMode).
+     * This moves the task to the current time on the Timeline immediately.
+     */
+    async updateTaskStartTime(timer: TimerInstance): Promise<void> {
+        const now = new Date();
+        const taskIndex = this.plugin.getTaskIndex();
+        const task = timer.parserId === 'frontmatter'
+            ? this.resolver.resolveFrontmatterTask(timer)
+            : this.resolver.resolveInlineTask(timer);
+
+        if (!task) return;
+
+        await taskIndex.updateTask(task.id, {
+            startDate: this.formatDate(now),
+            startTime: this.formatTime(now),
+        });
+    }
+
+    /**
+     * Create a child task at timer start (for 'child' recordMode).
+     * Inserts a placeholder child with startDate/startTime and a blockId for tracking.
+     * Returns the child task ID, or undefined if insertion failed.
+     */
+    async createChildAtStart(timer: TimerInstance): Promise<string | undefined> {
+        if (timer.taskId.startsWith('daily-')) return undefined;
+
+        const now = new Date();
+        const blockId = this.storageUtils.generateTimerTargetId();
+        const label = timer.customLabel.trim();
+
+        const taskObj = this.createTaskObject(
+            label,
+            this.formatDate(now),
+            this.formatTime(now),
+            '', ''
+        );
+        taskObj.statusChar = ' ';
+        taskObj.blockId = blockId;
+
+        const formattedLine = TaskParser.format(taskObj);
+        await this.insertChildRecord(timer, formattedLine);
+
+        // Wait for scan to pick up the new child, then find it by blockId
+        const parentTask = timer.parserId === 'frontmatter'
+            ? this.resolver.resolveFrontmatterTask(timer)
+            : this.resolver.resolveInlineTask(timer);
+        if (!parentTask) return undefined;
+
+        const taskIndex = this.plugin.getTaskIndex();
+        await taskIndex.waitForScan(parentTask.file);
+
+        const child = taskIndex.getTasks().find(t =>
+            t.file === parentTask.file && t.blockId === blockId
+        );
+        return child?.id;
+    }
+
+    /**
+     * Update the child task created at timer start with end time and completion.
+     */
+    private async updateChildAtEnd(timer: TimerInstance): Promise<void> {
+        const taskIndex = this.plugin.getTaskIndex();
+        const child = taskIndex.getTask(timer.recordedChildTaskId!);
+
+        if (!child) {
+            // Fallback: child was deleted, create a new record
+            new Notice('Child task not found, creating new record.');
+            timer.recordedChildTaskId = undefined;
+            switch (timer.timerType) {
+                case 'countup': await this.addCountupRecord(timer); break;
+                case 'countdown': await this.addCountdownRecord(timer); break;
+                case 'interval': await this.addIntervalRecord(timer); break;
+                default: break;
+            }
+            return;
+        }
+
+        const elapsedSeconds = getTimerElapsedSeconds(timer);
+        const endTime = new Date();
+
+        const icon = this.getTimerIcon(timer);
+        const existingContent = child.content.trim();
+        const content = existingContent ? `${icon} ${existingContent}` : icon;
+
+        await taskIndex.updateTask(child.id, {
+            content,
+            endDate: this.formatDate(endTime),
+            endTime: this.formatTime(endTime),
+            statusChar: 'x',
+            blockId: undefined,
+        });
+
+        const kind = this.getTimerKind(timer);
+        new Notice(`${icon} ${kind} recorded! (${TimeFormatter.formatSeconds(elapsedSeconds)})`);
+    }
+
+    /**
+     * Get the emoji icon for a timer type.
+     */
+    private getTimerIcon(timer: TimerInstance): string {
+        if (timer.timerType === 'interval') {
+            return timer.intervalSource === 'pomodoro' ? '🍅' : '🔁';
+        }
+        if (timer.timerType === 'countdown') return '⏲️';
+        return '⏱️';
+    }
+
+    /**
+     * Get the display kind name for a timer type.
+     */
+    private getTimerKind(timer: TimerInstance): string {
+        if (timer.timerType === 'interval') {
+            return timer.intervalSource === 'pomodoro' ? 'Pomodoro' : 'Interval';
+        }
+        if (timer.timerType === 'countdown') return 'Countdown';
+        return 'Timer';
     }
 
     /**
@@ -238,9 +366,9 @@ export class TimerRecorder {
             childIds: [],
             startDate,
             startTime,
-            endDate,
-            endTime,
-            deadline: undefined,
+            endDate: endDate || undefined,
+            endTime: endTime || undefined,
+            due: undefined,
             commands: [],
             originalText: '',
             childLines: [],

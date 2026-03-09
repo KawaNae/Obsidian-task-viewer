@@ -120,7 +120,7 @@ export class TaskScanner {
                 let task = TaskParser.parse(line, file.path, actualLineNumber);
 
                 // 非デイリーノートで時刻のみ（日付なし）のタスクはプレーンチェックボックスとして扱う
-                if (task && !parentStartDate && !task.startDate && !task.endDate && !task.deadline
+                if (task && !parentStartDate && !task.startDate && !task.endDate && !task.due
                     && (!task.commands || task.commands.length === 0)) {
                     task = null;
                 }

@@ -204,8 +204,8 @@ export class DateUtils {
         if (!startTime) return true;
 
         const durationMs = this.getTaskDurationMs(startDate, startTime, endDate, endTime, startHour);
-        const hours24 = 24 * 60 * 60 * 1000;
-        return durationMs >= hours24;
+        const threshold = 23.5 * 60 * 60 * 1000; // 23h30m
+        return durationMs >= threshold;
     }
 
     /**
@@ -220,23 +220,19 @@ export class DateUtils {
     static isPastDate(dateStr: string, timeStr: string | undefined, startHour: number): boolean {
         const now = new Date();
         const visualToday = this.getVisualDateOfNow(startHour);
+        const taskVisualDate = this.getVisualStartDate(dateStr, timeStr, startHour);
 
-        // Compare the date part first
-        if (dateStr < visualToday) {
-            return true;
-        }
+        if (taskVisualDate < visualToday) return true;
+        if (taskVisualDate > visualToday) return false;
 
-        if (dateStr > visualToday) {
-            return false;
-        }
-
-        // Same visual date - check time if provided
+        // Same visual date - compare in visual-day-relative minutes
         if (timeStr) {
-            const currentHour = now.getHours();
-            const currentMinute = now.getMinutes();
-            const currentMinutes = currentHour * 60 + currentMinute;
+            const startMinutes = startHour * 60;
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
             const taskMinutes = this.timeToMinutes(timeStr);
-            return taskMinutes < currentMinutes;
+            const currentVisual = (currentMinutes - startMinutes + 1440) % 1440;
+            const taskVisual = (taskMinutes - startMinutes + 1440) % 1440;
+            return taskVisual < currentVisual;
         }
 
         // Same date, no time specified - not past yet (it's "today")
@@ -244,16 +240,16 @@ export class DateUtils {
     }
 
     /**
-     * Check if a deadline is in the past considering startHour.
-     * 
-     * @param deadline YYYY-MM-DD or YYYY-MM-DDTHH:mm format
+     * Check if a due date is in the past considering startHour.
+     *
+     * @param due YYYY-MM-DD or YYYY-MM-DDTHH:mm format
      * @param startHour The configured start hour for visual day boundary
-     * @returns true if the deadline is in the past
+     * @returns true if the due date is in the past
      */
-    static isPastDeadline(deadline: string, startHour: number): boolean {
-        const hasTime = deadline.includes('T');
-        const datePart = deadline.split('T')[0];
-        const timePart = hasTime ? deadline.split('T')[1] : undefined;
+    static isPastDue(due: string, startHour: number): boolean {
+        const hasTime = due.includes('T');
+        const datePart = due.split('T')[0];
+        const timePart = hasTime ? due.split('T')[1] : undefined;
 
         return this.isPastDate(datePart, timePart, startHour);
     }

@@ -46,7 +46,7 @@ export abstract class GenerationCommand implements CommandStrategy {
         }
 
 
-        // 基準日の決宁E startDate > endDate > deadline の優先頁E
+        // 基準日の決宁E startDate > endDate > due の優先頁E
         let baseDateObj: Date;
 
         if (isWhenDone) {
@@ -56,8 +56,8 @@ export abstract class GenerationCommand implements CommandStrategy {
             baseDateObj = this.parseDate(task.startDate);
         } else if (task.endDate) {
             baseDateObj = this.parseDate(task.endDate);
-        } else if (task.deadline) {
-            baseDateObj = this.parseDate(task.deadline);
+        } else if (task.due) {
+            baseDateObj = this.parseDate(task.due);
         } else {
             // Fallback: 今日を基溁E
             baseDateObj = new Date();
@@ -78,7 +78,7 @@ export abstract class GenerationCommand implements CommandStrategy {
             startDate: task.startDate ? this.shiftDate(task.startDate, shiftDays) : undefined,
             startDateInherited: false, // Generated task has explicit dates
             endDate: task.endDate ? this.shiftDate(task.endDate, shiftDays) : undefined,
-            deadline: task.deadline ? this.shiftDate(task.deadline, shiftDays) : undefined,
+            due: task.due ? this.shiftDate(task.due, shiftDays) : undefined,
             originalText: '',
             childLines: [] // Children are re-collected from file by insertRecurrenceForTask
         };

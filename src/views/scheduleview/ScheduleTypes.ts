@@ -1,6 +1,6 @@
 import type { DisplayTask } from '../../types';
 
-export type CollapsibleSectionKey = 'allDay' | 'deadlines';
+export type CollapsibleSectionKey = 'allDay' | 'dueOnly';
 
 export interface TimedDisplayTask extends DisplayTask {
     visualStartMinute: number;
@@ -10,7 +10,7 @@ export interface TimedDisplayTask extends DisplayTask {
 export interface CategorizedTasks {
     allDay: DisplayTask[];
     timed: TimedDisplayTask[];
-    deadlines: DisplayTask[];
+    dueOnly: DisplayTask[];
 }
 
 export interface GridRow {

@@ -24,6 +24,8 @@ export interface PinnedListCallbacks {
     onRemove: (listDef: PinnedListDefinition) => void;
     onToggleApplyViewFilter?: (listDef: PinnedListDefinition) => void;
     onRename?: (listDef: PinnedListDefinition, newName: string) => void;
+    onMoveUp?: (listDef: PinnedListDefinition) => void;
+    onMoveDown?: (listDef: PinnedListDefinition) => void;
 }
 
 export class PinnedListRenderer {
@@ -53,6 +55,7 @@ export class PinnedListRenderer {
         collapsedState: Record<string, boolean>,
         callbacks: PinnedListCallbacks,
         viewFilter?: (task: Task) => boolean,
+        precomputedDisplayTasks?: DisplayTask[],
     ): void {
         container.empty();
         container.addClass('pinned-lists-container');
@@ -64,10 +67,11 @@ export class PinnedListRenderer {
         }
 
         const startHour = this.plugin.settings.startHour;
-        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
+        const allDisplayTasks = precomputedDisplayTasks ?? toDisplayTasks(this.taskIndex.getTasks(), startHour);
         const filterContext = { startHour };
 
-        for (const listDef of lists) {
+        for (let i = 0; i < lists.length; i++) {
+            const listDef = lists[i];
             const tasks = allDisplayTasks.filter(task => {
                 if (!TaskFilterEngine.evaluate(task, listDef.filterState, filterContext)) return false;
                 if (listDef.applyViewFilter && viewFilter && !viewFilter(task)) return false;
@@ -76,7 +80,7 @@ export class PinnedListRenderer {
 
             TaskSorter.sort(tasks, listDef.sortState);
 
-            this.renderList(container, listDef, tasks, owner, collapsedState, callbacks);
+            this.renderList(container, listDef, tasks, owner, collapsedState, callbacks, i, lists.length);
         }
     }
 
@@ -87,6 +91,8 @@ export class PinnedListRenderer {
         owner: Component,
         collapsedState: Record<string, boolean>,
         callbacks: PinnedListCallbacks,
+        index: number,
+        totalCount: number,
     ): void {
         // Determine collapsed state: ViewState > instance memory > default expanded
         const isCollapsed = collapsedState[listDef.id] ?? this.collapsedGroups.has(listDef.id);
@@ -131,7 +137,7 @@ export class PinnedListRenderer {
         setIcon(moreBtn, 'more-horizontal');
         moreBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.showMoreMenu(e as MouseEvent, listDef, moreBtn, callbacks);
+            this.showMoreMenu(e as MouseEvent, listDef, moreBtn, callbacks, index, totalCount);
         });
 
         // Task list body
@@ -179,6 +185,8 @@ export class PinnedListRenderer {
         listDef: PinnedListDefinition,
         anchorEl: HTMLElement,
         callbacks: PinnedListCallbacks,
+        index: number,
+        totalCount: number,
     ): void {
         const menu = new Menu();
 
@@ -191,6 +199,22 @@ export class PinnedListRenderer {
                     if (nameEl) this.startRename(nameEl, listDef, callbacks);
                 });
         });
+
+        if (callbacks.onMoveUp && index > 0) {
+            menu.addItem(item => {
+                item.setTitle('Move up')
+                    .setIcon('arrow-up')
+                    .onClick(() => callbacks.onMoveUp!(listDef));
+            });
+        }
+
+        if (callbacks.onMoveDown && index < totalCount - 1) {
+            menu.addItem(item => {
+                item.setTitle('Move down')
+                    .setIcon('arrow-down')
+                    .onClick(() => callbacks.onMoveDown!(listDef));
+            });
+        }
 
         menu.addItem(item => {
             item.setTitle('Duplicate')

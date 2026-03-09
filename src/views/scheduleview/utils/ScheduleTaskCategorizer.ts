@@ -34,12 +34,12 @@ export class ScheduleTaskCategorizer {
         const categorized: CategorizedTasks = {
             allDay: [],
             timed: [],
-            deadlines: [],
+            dueOnly: [],
         };
 
         for (const task of tasks) {
-            if (this.isDeadlineOnlyTaskOnDate(task, dateStr)) {
-                categorized.deadlines.push(task);
+            if (this.isDueOnlyTaskOnDate(task, dateStr)) {
+                categorized.dueOnly.push(task);
                 continue;
             }
 
@@ -72,11 +72,11 @@ export class ScheduleTaskCategorizer {
             return a.line - b.line;
         });
 
-        categorized.deadlines.sort((a, b) => {
-            const aDeadline = a.deadline || '';
-            const bDeadline = b.deadline || '';
-            if (aDeadline !== bDeadline) {
-                return aDeadline.localeCompare(bDeadline);
+        categorized.dueOnly.sort((a, b) => {
+            const aDue = a.due || '';
+            const bDue = b.due || '';
+            if (aDue !== bDue) {
+                return aDue.localeCompare(bDue);
             }
             const fileDiff = a.file.localeCompare(b.file);
             if (fileDiff !== 0) return fileDiff;
@@ -109,7 +109,7 @@ export class ScheduleTaskCategorizer {
             return [dt];
         }
 
-        if (this.isDeadlineOnlyTaskOnDate(dt, dateStr)) {
+        if (this.isDueOnlyTaskOnDate(dt, dateStr)) {
             return [dt];
         }
 
@@ -215,14 +215,14 @@ export class ScheduleTaskCategorizer {
         return dt.effectiveStartDate === dateStr;
     }
 
-    private isDeadlineOnlyTaskOnDate(dt: DisplayTask, dateStr: string): boolean {
-        if (!dt.deadline) {
+    private isDueOnlyTaskOnDate(dt: DisplayTask, dateStr: string): boolean {
+        if (!dt.due) {
             return false;
         }
         if (dt.startDate || dt.endDate) {
             return false;
         }
-        const deadlineDate = dt.deadline.split('T')[0];
-        return deadlineDate === dateStr;
+        const dueDate = dt.due.split('T')[0];
+        return dueDate === dateStr;
     }
 }

@@ -107,7 +107,7 @@ export class TaskActionsMenuBuilder {
                         const childIndent = parentIndent.includes('\t') ? parentIndent + '\t' : parentIndent + '    ';
                         const childLine = childIndent + taskLine;
                         await repository.insertLineAsFirstChild(task, childLine);
-                    }).open();
+                    }, {}, { startHour: this.plugin.settings.startHour }).open();
                 });
         });
     }
@@ -208,7 +208,7 @@ export class TaskActionsMenuBuilder {
                                     startTime: undefined,
                                     endDate: undefined,
                                     endTime: undefined,
-                                    deadline: undefined,
+                                    due: undefined,
                                 });
                             },
                             { confirmLabel: 'Convert' }

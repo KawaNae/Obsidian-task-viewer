@@ -829,10 +829,10 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,
-            'Deadline Key',
-            'Frontmatter key for task deadline.',
-            'tv-deadline',
-            'deadline'
+            'Due Key',
+            'Frontmatter key for task due date.',
+            'tv-due',
+            'due'
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,

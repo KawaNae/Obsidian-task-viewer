@@ -91,7 +91,7 @@
 }
 
 .allday-section.collapsed .task-card,
-.allday-section.collapsed .deadline-arrow {
+.allday-section.collapsed .due-arrow {
     display: none !important;
 }
 

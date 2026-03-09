@@ -92,9 +92,9 @@ export class TaskConverter {
             lines.push(`${frontmatterKeys.end}: ${endValue}`);
         }
 
-        // deadline
-        if (task.deadline) {
-            lines.push(`${frontmatterKeys.deadline}: ${task.deadline}`);
+        // due
+        if (task.due) {
+            lines.push(`${frontmatterKeys.due}: ${task.due}`);
         }
 
         // content

@@ -1,7 +1,7 @@
 // ── Sort property & direction enums ──
 
 export type SortProperty =
-    | 'content' | 'deadline' | 'startDate' | 'endDate'
+    | 'content' | 'due' | 'startDate' | 'endDate'
     | 'file' | 'status' | 'tag';
 
 export type SortDirection = 'asc' | 'desc';
@@ -25,7 +25,7 @@ function generateId(): string {
 }
 
 export function createDefaultSortRule(): SortRule {
-    return { id: generateId(), property: 'deadline', direction: 'asc' };
+    return { id: generateId(), property: 'due', direction: 'asc' };
 }
 
 export function createEmptySortState(): SortState {
@@ -42,9 +42,9 @@ export function hasSortRules(state: SortState): boolean {
 
 export const SORT_PROPERTY_LABELS: Record<SortProperty, string> = {
     content: 'Content',
-    deadline: 'Deadline',
-    startDate: 'Start date',
-    endDate: 'End date',
+    due: 'Due',
+    startDate: 'Start',
+    endDate: 'End',
     file: 'File',
     status: 'Status',
     tag: 'Tag',
@@ -52,7 +52,7 @@ export const SORT_PROPERTY_LABELS: Record<SortProperty, string> = {
 
 export const SORT_PROPERTY_ICONS: Record<SortProperty, string> = {
     content: 'text',
-    deadline: 'alarm-clock',
+    due: 'alarm-clock',
     startDate: 'calendar',
     endDate: 'calendar-check',
     file: 'file',

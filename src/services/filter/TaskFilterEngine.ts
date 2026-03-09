@@ -49,11 +49,11 @@ export class TaskFilterEngine {
             case 'content':
                 return this.evalContent(task, condition);
             case 'startDate':
-                return this.evalDate(dt.effectiveStartDate ?? task.startDate, condition);
+                return this.evalDate(dt.effectiveStartDate ?? task.startDate, condition, context?.startHour ?? 0);
             case 'endDate':
-                return this.evalDate(dt.effectiveEndDate ?? task.endDate, condition);
-            case 'deadline':
-                return this.evalDate(task.deadline, condition);
+                return this.evalDate(dt.effectiveEndDate ?? task.endDate, condition, context?.startHour ?? 0);
+            case 'due':
+                return this.evalDate(task.due?.split('T')[0], condition, context?.startHour ?? 0);
             case 'color':
                 return this.evalStringSet(task.color ?? '', condition);
             case 'linestyle':
@@ -94,14 +94,14 @@ export class TaskFilterEngine {
         return true;
     }
 
-    private static evalDate(taskDate: string | undefined, c: FilterConditionNode): boolean {
+    private static evalDate(taskDate: string | undefined, c: FilterConditionNode, startHour: number = 0): boolean {
         // isSet / isNotSet — existence check, no date value needed
         if (c.operator === 'isSet') return !!taskDate;
         if (c.operator === 'isNotSet') return !taskDate;
 
         if (c.value.type !== 'date') return true;
         if (!taskDate) return false;
-        const { start, end } = DateResolver.resolve(c.value.value);
+        const { start, end } = DateResolver.resolve(c.value.value, 1, startHour);
         switch (c.operator) {
             case 'equals':     return taskDate >= start && taskDate <= end;
             case 'before':     return taskDate < start;

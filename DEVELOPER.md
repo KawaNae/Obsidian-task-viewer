@@ -168,7 +168,7 @@ Quick reference for locating the right layer when implementing a feature.
 
 The plugin recognizes eight task types internally.
 
-| Type | Syntax example | start | end | deadline |
+| Type | Syntax example | start | end | due |
 |------|---------------|-------|-----|----------|
 | **SED** | `@2001-11-11>2001-11-12>2001-11-13` | ✓ | ✓ | ✓ |
 | **SE** | `@2001-11-11>2001-11-12` | ✓ | ✓ | — |
@@ -183,7 +183,8 @@ The plugin recognizes eight task types internally.
 
 Tasks are classified by **display behavior** — where they appear and what values are inferred.
 All times are relative to the configured `startHour` (default 5 → visual day 05:00–04:59).
-Implicit value resolution is centralised in `ImplicitCalendarDateResolver`.
+Display-layer implicit value resolution is centralised in `DisplayTaskConverter.toDisplayTask()`.
+Storage-layer daily-note date inheritance is in `ImplicitCalendarDateResolver.resolveDailyNoteDates()`.
 
 #### 1. Timed tasks (S-Timed / E-Timed / SD-Timed / ED-Timed)
 
@@ -191,7 +192,7 @@ At least one side has an explicit time, and only one side (start or end) is spec
 
 - **Display**: Timeline lane, 1 h fixed duration
 - **Inference**: reverse time on the missing side (startTime + 1 h → endTime, or endTime − 1 h → startTime)
-- Examples: `@2026-03-09T10:00`, `@>2026-03-09T11:00`, `@2026-03-09T10:00>>deadline`
+- Examples: `@2026-03-09T10:00`, `@>2026-03-09T11:00`, `@2026-03-09T10:00>>due`
 
 #### 2. All-day tasks (S-All / E-All / SD-All / ED-All)
 
@@ -199,7 +200,7 @@ Only one side specified, no time on that side.
 
 - **Display**: Calendar (all-day) lane, 1 visual-day duration
 - **Inference**: implicit time = startHour:00 / (startHour−1):59; reverse date = same day
-- Examples: `@2026-03-09`, `@>2026-03-09`, `@2026-03-09>>deadline`
+- Examples: `@2026-03-09`, `@>2026-03-09`, `@2026-03-09>>due`
 
 #### 3. SE / SED All-day (no time on either side)
 
@@ -207,7 +208,7 @@ Both start and end are specified, neither has a time.
 
 - **Display**: Calendar (all-day) lane, spanning the specified days
 - **Inference**: implicit times = startHour:00 / (startHour−1):59
-- Examples: `@2026-03-09>2026-03-11`, `@2026-03-09>2026-03-11>deadline`
+- Examples: `@2026-03-09>2026-03-11`, `@2026-03-09>2026-03-11>due`
 
 #### 4. SE / SED Timed (at least one side has time)
 
@@ -218,13 +219,62 @@ Both start and end are specified, at least one has an explicit time.
 - Daily-note special case: startDate can be omitted (inherited from filename)
 - Examples: `@2026-03-09T10:00>12:00`, `@2026-03-09T10:00>2026-03-10T18:00`
 
-#### 5. D (deadline only)
+#### 5. D (due only)
 
-Only a deadline is specified, no start or end.
+Only a due is specified, no start or end.
 
-- **Display**: Calendar (all-day) lane on the deadline date (display only)
+- **Display**: Calendar (all-day) lane on the due date (display only)
 - **Inference**: none — D does not affect display position or duration inference
 - Example: `@>>2026-03-13`
+
+### Implicit value resolution rules (`toDisplayTask()`)
+
+All display-layer implicit resolution is centralised in `DisplayTaskConverter.toDisplayTask()`.
+Written dates are **calendarDates**. Complement uses `startHour` where possible,
+falling back to `00:00`/`23:59` when same-day end < start occurs.
+
+#### Stage 1: E-type start resolution (no startDate, has endDate)
+
+| Subtype | Condition | Rule |
+|---|---|---|
+| E-Timed | endTime present | start = endTime − 1h (may cross to previous calendarDate) |
+| E-AllDay | no endTime | endTime = `(startHour−1):59`, startDate = `getVisualStartDate(endDate, endTime, startHour)`, startTime = `startHour:00` |
+
+#### Stage 2: All-day startTime complement
+
+| Condition | Rule |
+|---|---|
+| startDate present, no startTime | startTime = `startHour:00` |
+
+#### Stage 3: S-type end resolution (has startDate, no endDate)
+
+| Subtype | Condition | Rule |
+|---|---|---|
+| S + explicit endTime | endTime present, no endDate | endDate = startDate (same-day inheritance) |
+| S-Timed | startTime present, no endTime | end = startTime + 1h (may cross to next calendarDate) |
+| S-AllDay | no startTime, no endTime | end = startTime + 23h59m |
+
+#### Stage 4: SE/SED endTime complement
+
+| Condition | Rule |
+|---|---|
+| endDate present, no endTime | endTime = `(startHour−1):59` |
+
+#### Stage 5: Same-day fallback
+
+| Condition | Rule |
+|---|---|
+| same calendarDate, one side implicit, end < start | implicit startTime → `00:00`, implicit endTime → `23:59` |
+
+#### D-Only
+
+D-Only tasks (`@>>due`) have no start or end — `toDisplayTask()` produces
+`effectiveStartDate = ''` and `effectiveEndDate = undefined`. No resolution is applied.
+
+#### Due complement (conceptual)
+
+Due represents a deadline date (calendarDate). If time complement is needed,
+`23:59` is used (end of calendar day, startHour-independent).
 
 ### 24-hour boundary
 
@@ -259,8 +309,8 @@ Drag/resize operations may change a task's type.
 
 **SED (≥ 24 h)**
 - Move handle: update start/end dates (preserve duration)
-- Right resize: update end date (deadline unchanged)
-- Left resize: update start date (deadline unchanged)
+- Right resize: update end date (due unchanged)
+- Left resize: update start date (due unchanged)
 
 **SE (≥ 24 h)**
 - Move handle: update start/end dates (preserve duration)
@@ -302,7 +352,7 @@ Drag/resize operations may change a task's type.
 - Move handle: update start/end time and date (preserve duration)
 
 **SED (< 24 h)**
-- Move to All Day: convert to D-type (drop start/end, keep deadline only)
+- Move to All Day: convert to D-type (drop start/end, keep due only)
 
 **SE (< 24 h)**
 - Move to Future: convert to F-type (start → `future`, drop end)
@@ -794,7 +844,7 @@ In TaskConverter (inline→frontmatter), task comes from parser with parsed star
 
 | Term | Meaning | Determined by |
 |------|---------|---------------|
-| **calendarDate** | The date as defined by midnight (00:00). `task.startDate`, `task.endDate`, `task.deadline` are all calendar dates. | Fixed (midnight) |
+| **calendarDate** | The date as defined by midnight (00:00). `task.startDate`, `task.endDate`, `task.due` are all calendar dates. | Fixed (midnight) |
 | **visualDate** | The date as perceived by the user, shifted by `startHour`. A task at 03:00 with `startHour=5` belongs to the previous visual day. | `startHour` setting |
 
 - `getVisualDateOfNow()`, `getVisualStartDate()` return **visualDate**
@@ -840,7 +890,7 @@ Defined in `src/types.ts` as `TaskViewerSettings`. Defaults are in `DEFAULT_SETT
 
 **`defaultViewPositions` defaults**: `{ timeline: 'tab', schedule: 'right', calendar: 'tab', miniCalendar: 'left', timer: 'right' }`
 
-All `FrontmatterTaskKeys` fields (`start`, `end`, `deadline`, `status`, `content`, `timerTargetId`, `color`, `linestyle`, `ignore`) are independently customisable. Duplicate key values are not allowed.
+All `FrontmatterTaskKeys` fields (`start`, `end`, `due`, `status`, `content`, `timerTargetId`, `color`, `linestyle`, `ignore`) are independently customisable. Duplicate key values are not allowed.
 
 ---
 

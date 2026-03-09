@@ -288,7 +288,7 @@ export class TimelineSectionRenderer {
                 this.plugin.settings.dailyNoteHeader,
                 this.plugin.settings.dailyNoteHeaderLevel
             );
-        }, { startDate: taskDate, startTime: timeString }, { warnOnEmptyTask: true, dailyNoteDate: date }).open();
+        }, { startDate: taskDate, startTime: timeString }, { warnOnEmptyTask: true, dailyNoteDate: date, startHour: this.plugin.settings.startHour }).open();
     }
 
     /** Show context menu for empty space click */

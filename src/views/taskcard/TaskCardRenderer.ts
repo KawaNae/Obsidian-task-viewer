@@ -39,7 +39,7 @@ export class TaskCardRenderer {
         task: DisplayTask,
         component: Component,
         settings: TaskViewerSettings,
-        options?: { topRight?: 'time' | 'deadline' | 'none'; compact?: boolean; forceExpand?: boolean }
+        options?: { topRight?: 'time' | 'due' | 'none'; compact?: boolean; forceExpand?: boolean }
     ): Promise<void> {
         const topRight = options?.topRight ?? 'time';
         const compact = options?.compact ?? false;
@@ -106,7 +106,7 @@ export class TaskCardRenderer {
         container: HTMLElement,
         task: Task,
         settings: TaskViewerSettings,
-        topRight: 'time' | 'deadline' | 'none'
+        topRight: 'time' | 'due' | 'none'
     ): void {
         if (topRight === 'time' && task.startTime) {
             const timeDisplay = container.createDiv('task-card__time');
@@ -149,9 +149,9 @@ export class TaskCardRenderer {
             return;
         }
 
-        if (topRight === 'deadline' && task.deadline) {
+        if (topRight === 'due' && task.due) {
             const timeDisplay = container.createDiv('task-card__time');
-            const parts = task.deadline.split('T');
+            const parts = task.due.split('T');
             timeDisplay.innerText = parts[1] ? `${parts[0]} ${parts[1]}` : parts[0];
         }
     }
@@ -161,7 +161,7 @@ export class TaskCardRenderer {
 
         let overdueIcon = '';
         if (!isCompleteStatusChar(task.statusChar, settings.completeStatusChars)) {
-            if (task.deadline && DateUtils.isPastDeadline(task.deadline, settings.startHour)) {
+            if (task.due && DateUtils.isPastDue(task.due, settings.startHour)) {
                 overdueIcon = '🚨 ';
             } else {
                 const endDate = task.effectiveEndDate ?? task.endDate;

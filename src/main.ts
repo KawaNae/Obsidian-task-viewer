@@ -263,7 +263,7 @@ export default class TaskViewerPlugin extends Plugin {
                     // endDate が省略されていて endTime がある場合、startDate から同日推論
                     endDate: result.endDate || (result.endTime && result.startDate ? result.startDate : undefined),
                     endTime: result.endTime,
-                    deadline: result.deadline,
+                    due: result.due,
                     commands: [],
                     originalText: '',
                     childLineBodyOffsets: [],

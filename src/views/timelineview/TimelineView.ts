@@ -286,7 +286,7 @@ export class TimelineView extends ItemView {
 
             if (taskId && changes) {
                 // 日付/時刻の変更は完全レンダリングが必要（位置変更）
-                const layoutKeys = ['startDate', 'startTime', 'endDate', 'endTime', 'deadline'];
+                const layoutKeys = ['startDate', 'startTime', 'endDate', 'endTime', 'due'];
                 const hasLayoutChange = changes.some(k => layoutKeys.includes(k));
 
                 if (hasLayoutChange) {
@@ -435,6 +435,8 @@ export class TimelineView extends ItemView {
 
     async onClose() {
         this.toolbar.closeFilterPopover();
+        this.sidebarFilterMenu.close();
+        this.sidebarSortMenu.close();
         this.dragHandler.destroy();
         if (this.unsubscribe) {
             this.unsubscribe();
@@ -529,6 +531,10 @@ export class TimelineView extends ItemView {
             this.render();
         });
 
+        // Convert all tasks to DisplayTask once for the entire render pass
+        const startHour = this.plugin.settings.startHour;
+        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
+
         // Render pinned lists into sidebar body
         this.pinnedListRenderer.render(
             sidebarBody,
@@ -564,6 +570,24 @@ export class TimelineView extends ItemView {
                     this.app.workspace.requestSaveLayout();
                     this.render();
                 },
+                onMoveUp: (listDef) => {
+                    const lists = this.viewState.pinnedLists!;
+                    const idx = lists.indexOf(listDef);
+                    if (idx > 0) {
+                        [lists[idx - 1], lists[idx]] = [lists[idx], lists[idx - 1]];
+                        this.app.workspace.requestSaveLayout();
+                        this.render();
+                    }
+                },
+                onMoveDown: (listDef) => {
+                    const lists = this.viewState.pinnedLists!;
+                    const idx = lists.indexOf(listDef);
+                    if (idx >= 0 && idx < lists.length - 1) {
+                        [lists[idx], lists[idx + 1]] = [lists[idx + 1], lists[idx]];
+                        this.app.workspace.requestSaveLayout();
+                        this.render();
+                    }
+                },
                 onToggleApplyViewFilter: (listDef) => {
                     listDef.applyViewFilter = !listDef.applyViewFilter;
                     this.app.workspace.requestSaveLayout();
@@ -574,6 +598,7 @@ export class TimelineView extends ItemView {
                 },
             },
             this.toolbar?.getTaskFilter(),
+            allDisplayTasks,
         );
 
         // Render Toolbar (above both columns)
@@ -624,7 +649,8 @@ export class TimelineView extends ItemView {
             this.handleManager,
             () => this.getDatesToShow(),
             this,
-            this.toolbar.getTaskFilter()
+            this.toolbar.getTaskFilter(),
+            allDisplayTasks
         );
 
         this.handleManager.createOverlay();

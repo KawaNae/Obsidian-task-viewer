@@ -134,15 +134,10 @@ function isValidConditionObj(c: unknown): c is Record<string, unknown> {
 }
 
 function migrateConditionToNode(c: Record<string, unknown>): FilterConditionNode {
-    let property = c.property as string;
-    // Migrate removed properties: hasStartDate → startDate, hasDeadline → deadline
-    if (property === 'hasStartDate') property = 'startDate';
-    if (property === 'hasDeadline') property = 'deadline';
-
     return {
         type: 'condition',
         id: typeof c.id === 'string' ? c.id : 'f-unknown',
-        property: property as FilterConditionNode['property'],
+        property: c.property as FilterConditionNode['property'],
         operator: c.operator as FilterConditionNode['operator'],
         value: c.value as FilterConditionNode['value'],
     };

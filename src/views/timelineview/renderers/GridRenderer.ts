@@ -12,7 +12,7 @@ import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../../constants/hover';
 import { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './TimelineSectionRenderer';
 import { TaskIndex } from '../../../services/core/TaskIndex';
-import { toDisplayTasks, isDisplayTaskOnVisualDate } from '../../../utils/DisplayTaskConverter';
+import { isDisplayTaskOnVisualDate } from '../../../utils/DisplayTaskConverter';
 import type { DisplayTask } from '../../../types';
 import { HabitTrackerRenderer } from '../../sharedUI/HabitTrackerRenderer';
 
@@ -27,6 +27,7 @@ type DateHeaderDisplayEntry = {
 export class GridRenderer {
     private isAllDayCollapsed: boolean = false;
     private headerResizeObserver: ResizeObserver | null = null;
+    private dateLinkInteractionManager: TaskLinkInteractionManager;
 
     constructor(
         private container: HTMLElement,
@@ -34,7 +35,11 @@ export class GridRenderer {
         private plugin: TaskViewerPlugin,
         private menuHandler: MenuHandler,
         private taskIndex: TaskIndex
-    ) { }
+    ) {
+        this.dateLinkInteractionManager = new TaskLinkInteractionManager(
+            this.plugin.app, () => this.plugin.settings
+        );
+    }
 
     public render(
         parentContainer: HTMLElement,
@@ -44,7 +49,8 @@ export class GridRenderer {
         handleManager: HandleManager,
         getDatesToShow: () => string[],
         owner: Component,
-        isTaskVisible: (task: import('../../../types').Task) => boolean
+        isTaskVisible: (task: import('../../../types').Task) => boolean,
+        allDisplayTasks: DisplayTask[]
     ) {
         // Use parentContainer for rendering the grid
         const grid = parentContainer.createDiv('timeline-grid');
@@ -55,9 +61,7 @@ export class GridRenderer {
         // Set view start date for MenuHandler (for E, ED, D type implicit start display)
         this.menuHandler.setViewStartDate(dates[0]);
 
-        // Convert all tasks to DisplayTask once for the entire render pass
         const startHour = this.plugin.settings.startHour;
-        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
 
         // 1. Date Header Row
         const headerRow = grid.createDiv('timeline-row date-header');
@@ -68,9 +72,22 @@ export class GridRenderer {
         // Get today's visual date for highlighting
         const todayVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
 
+        // Pre-compute overdue dates set
+        const completeChars = this.plugin.settings.completeStatusChars;
+        const overdueDates = new Set<string>();
+        for (const dt of allDisplayTasks) {
+            if (isCompleteStatusChar(dt.statusChar, completeChars)) continue;
+            if (!isTaskVisible(dt)) continue;
+            for (const date of dates) {
+                if (date >= todayVisualDate) continue;
+                if (isDisplayTaskOnVisualDate(dt, date, startHour)) {
+                    overdueDates.add(date);
+                }
+            }
+        }
+
         // Day Headers
         const headerCells: DateHeaderDisplayEntry[] = [];
-        const dateLinkInteractionManager = new TaskLinkInteractionManager(this.plugin.app, () => this.plugin.settings);
         dates.forEach(date => {
             const cell = headerRow.createDiv('date-header__cell');
             const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
@@ -90,7 +107,7 @@ export class GridRenderer {
                 event.preventDefault();
             });
 
-            dateLinkInteractionManager.bind(cell, {
+            this.dateLinkInteractionManager.bind(cell, {
                 sourcePath: '',
                 hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
                 hoverParent: owner as unknown as HoverParent,
@@ -109,16 +126,9 @@ export class GridRenderer {
                 cell.addClass('is-today');
             }
 
-            // Check if this date has incomplete overdue tasks (respecting toolbar filter)
-            if (date < todayVisualDate) {
-                const hasOverdueTasks = allDisplayTasks.some(dt =>
-                    isDisplayTaskOnVisualDate(dt, date, startHour) &&
-                    isTaskVisible(dt) &&
-                    !isCompleteStatusChar(dt.statusChar, this.plugin.settings.completeStatusChars)
-                );
-                if (hasOverdueTasks) {
-                    cell.addClass('has-overdue');
-                }
+            // Mark overdue dates
+            if (overdueDates.has(date)) {
+                cell.addClass('has-overdue');
             }
 
             cell.dataset.date = date;

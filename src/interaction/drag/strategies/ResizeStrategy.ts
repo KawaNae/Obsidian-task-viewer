@@ -492,7 +492,7 @@ export class ResizeStrategy extends BaseDragStrategy {
         if (!this.dragEl?.dataset.id || !this.container) return;
 
         const taskId = this.dragEl.dataset.id;
-        const arrow = this.container.querySelector(`.deadline-arrow[data-task-id="${taskId}"]`) as HTMLElement;
+        const arrow = this.container.querySelector(`.due-arrow[data-task-id="${taskId}"]`) as HTMLElement;
         if (arrow) {
             arrow.style.gridColumnStart = taskEndGridLine.toString();
             const arrowEnd = parseInt(arrow.style.gridColumnEnd) || 0;

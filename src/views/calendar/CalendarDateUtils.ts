@@ -31,7 +31,13 @@ export function getTaskDateRange(
         );
 
         if (isAllDay && task.effectiveEndDate && task.effectiveEndDate >= task.effectiveStartDate) {
-            return { effectiveStart: task.effectiveStartDate, effectiveEnd: task.effectiveEndDate };
+            const visualEnd = DateUtils.getVisualStartDate(
+                task.effectiveEndDate, task.effectiveEndTime, startHour
+            );
+            return {
+                effectiveStart: task.effectiveStartDate,
+                effectiveEnd: visualEnd >= task.effectiveStartDate ? visualEnd : task.effectiveStartDate,
+            };
         }
         return { effectiveStart: visualDate, effectiveEnd: visualDate };
     }

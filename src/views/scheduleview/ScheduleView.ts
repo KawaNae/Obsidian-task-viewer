@@ -57,7 +57,7 @@ export class ScheduleView extends ItemView {
     private customName: string | undefined;
     private collapsedSections: Record<CollapsibleSectionKey, boolean> = {
         allDay: false,
-        deadlines: false,
+        dueOnly: false,
     };
 
     constructor(leaf: WorkspaceLeaf, taskIndex: TaskIndex, plugin: TaskViewerPlugin) {
@@ -240,13 +240,16 @@ export class ScheduleView extends ItemView {
         const tasks = this.taskCategorizer.getTasksForDate(this.currentVisualDate);
         this.menuHandler.setViewStartDate(this.currentVisualDate);
 
+        const startHour = this.plugin.settings.startHour;
+        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
+
         const fixedHost = this.container.createDiv('schedule-view__fixed-host');
         const fixedContainer = fixedHost.createDiv('schedule-view__container schedule-view__fixed-rows');
 
         const bodyScroll = this.container.createDiv('schedule-view__body-scroll schedule-body-scroll');
         const bodyContainer = bodyScroll.createDiv('schedule-view__container schedule-view__scroll-content');
 
-        await this.renderDayTimeline(fixedContainer, bodyContainer, this.currentVisualDate, tasks);
+        await this.renderDayTimeline(fixedContainer, bodyContainer, this.currentVisualDate, tasks, allDisplayTasks);
 
         if (this.scrollToNowOnNextRender) {
             this.scrollToNowOnNextRender = false;
@@ -333,23 +336,24 @@ export class ScheduleView extends ItemView {
         fixedContainer: HTMLElement,
         bodyContainer: HTMLElement,
         date: string,
-        tasks: DisplayTask[]
+        tasks: DisplayTask[],
+        allDisplayTasks: DisplayTask[]
     ): Promise<void> {
         const categorized = this.taskCategorizer.categorizeTasksBySection(tasks, date);
 
-        this.renderDateHeader(fixedContainer, date);
+        this.renderDateHeader(fixedContainer, date, allDisplayTasks);
         this.renderHabitsSection(fixedContainer, date);
         await this.sectionRenderer.renderAllDaySection(fixedContainer, categorized.allDay);
 
         await this.renderTimelineMain(bodyContainer, categorized.timed);
 
-        if (categorized.deadlines.length > 0) {
+        if (categorized.dueOnly.length > 0) {
             await this.sectionRenderer.renderCollapsibleTaskSection(
                 bodyContainer,
-                'schedule-deadline-section',
-                'Deadlines',
-                categorized.deadlines,
-                'deadlines'
+                'schedule-due-section',
+                'Due',
+                categorized.dueOnly,
+                'dueOnly'
             );
         }
     }
@@ -369,7 +373,7 @@ export class ScheduleView extends ItemView {
         }
     }
 
-    private renderDateHeader(container: HTMLElement, date: string): void {
+    private renderDateHeader(container: HTMLElement, date: string, allDisplayTasks: DisplayTask[]): void {
         const row = container.createDiv('timeline-row date-header');
         row.style.gridTemplateColumns = this.getScheduleRowColumns();
         row.createDiv('date-header__cell').setText(' ');
@@ -396,7 +400,6 @@ export class ScheduleView extends ItemView {
         }
         if (date < todayVisualDate) {
             const startHour = this.plugin.settings.startHour;
-            const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
             const hasOverdueTasks = allDisplayTasks.some(dt =>
                 isDisplayTaskOnVisualDate(dt, date, startHour) &&
                 this.filterMenu.isTaskVisible(dt) &&

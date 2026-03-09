@@ -47,7 +47,7 @@ export interface Task {
     startTime?: string;
     endDate?: string;
     endTime?: string;
-    deadline?: string;
+    due?: string;
 
     // True when startDate was inherited from the daily note filename.
     startDateInherited?: boolean;
@@ -153,7 +153,7 @@ export interface ViewTemplate extends ViewTemplateSummary {
 export interface FrontmatterTaskKeys {
     start: string;
     end: string;
-    deadline: string;
+    due: string;
     status: string;
     content: string;
     timerTargetId: string;
@@ -165,7 +165,7 @@ export interface FrontmatterTaskKeys {
 export const DEFAULT_FRONTMATTER_TASK_KEYS: FrontmatterTaskKeys = {
     start: 'tv-start',
     end: 'tv-end',
-    deadline: 'tv-deadline',
+    due: 'tv-due',
     status: 'tv-status',
     content: 'tv-content',
     timerTargetId: 'tv-timer-target-id',
@@ -192,7 +192,7 @@ export function normalizeFrontmatterTaskKeys(value: unknown): FrontmatterTaskKey
     return {
         start: normalize('start'),
         end: normalize('end'),
-        deadline: normalize('deadline'),
+        due: normalize('due'),
         status: normalize('status'),
         content: normalize('content'),
         timerTargetId: normalize('timerTargetId'),
@@ -206,7 +206,7 @@ export function validateFrontmatterTaskKeys(keys: FrontmatterTaskKeys): string |
     const names: Array<keyof FrontmatterTaskKeys> = [
         'start',
         'end',
-        'deadline',
+        'due',
         'status',
         'content',
         'timerTargetId',

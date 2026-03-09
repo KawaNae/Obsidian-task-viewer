@@ -29,23 +29,23 @@ export interface GridTaskEntry {
     continuesAfter: boolean;
     /** Whether this task spans more than one column */
     isMultiDay: boolean;
-    /** Deadline arrow metadata, null if no arrow */
-    deadlineArrow: DeadlineArrowInfo | null;
+    /** Due arrow metadata, null if no arrow */
+    dueArrow: DueArrowInfo | null;
 }
 
 /**
- * Metadata for rendering a deadline arrow.
+ * Metadata for rendering a due arrow.
  * Column values are 1-based relative to the dates array.
  */
-export interface DeadlineArrowInfo {
+export interface DueArrowInfo {
     /** Column where the arrow starts (task end + 1) */
     arrowStartCol: number;
-    /** Column where the arrow ends (deadline position) */
+    /** Column where the arrow ends (due position) */
     arrowEndCol: number;
-    /** Whether the deadline extends beyond the visible range */
+    /** Whether the due extends beyond the visible range */
     isClipped: boolean;
-    /** Raw deadline string for tooltip */
-    deadlineStr: string;
+    /** Raw due string for tooltip */
+    dueStr: string;
 }
 
 /**
@@ -56,8 +56,8 @@ export interface GridLayoutConfig {
     dates: string[];
     /** Returns the effective date range for a task, or null to skip */
     getDateRange: (task: DisplayTask) => TaskDateRange | null;
-    /** Whether to compute deadline arrows (default: true) */
-    computeDeadlines?: boolean;
+    /** Whether to compute due arrows (default: true) */
+    computeDueArrows?: boolean;
 }
 
 interface RawEntry {
@@ -68,7 +68,7 @@ interface RawEntry {
     continuesBefore: boolean;
     continuesAfter: boolean;
     isMultiDay: boolean;
-    deadlineArrow: DeadlineArrowInfo | null;
+    dueArrow: DueArrowInfo | null;
 }
 
 /**
@@ -84,7 +84,11 @@ export function computeGridLayout(
 
     const rangeStart = dates[0];
     const rangeEnd = dates[dates.length - 1];
-    const computeDeadlines = config.computeDeadlines !== false;
+    const computeDueArrows = config.computeDueArrows !== false;
+
+    // Pre-build date→index map for O(1) lookup
+    const dateIndex = new Map<string, number>();
+    dates.forEach((d, i) => dateIndex.set(d, i));
 
     // 1. Build raw entries
     const rawEntries: RawEntry[] = [];
@@ -100,9 +104,9 @@ export function computeGridLayout(
         const clippedStart = effectiveStart < rangeStart ? rangeStart : effectiveStart;
         const clippedEnd = effectiveEnd > rangeEnd ? rangeEnd : effectiveEnd;
 
-        const startIdx = dates.indexOf(clippedStart);
-        const endIdx = dates.indexOf(clippedEnd);
-        if (startIdx < 0 || endIdx < 0) continue;
+        const startIdx = dateIndex.get(clippedStart);
+        const endIdx = dateIndex.get(clippedEnd);
+        if (startIdx == null || endIdx == null) continue;
 
         const colStart = startIdx + 1; // 1-based
         const span = endIdx - startIdx + 1;
@@ -117,13 +121,13 @@ export function computeGridLayout(
             ? TaskIdGenerator.makeSegmentId(task.id, clippedStart)
             : task.id;
 
-        // 2. Compute deadline arrow
-        let deadlineArrow: DeadlineArrowInfo | null = null;
-        if (computeDeadlines && task.deadline && /^\d{4}-\d{2}-\d{2}/.test(task.deadline)) {
-            const deadlineDateStr = task.deadline.split('T')[0];
-            const deadlineDiff = DateUtils.getDiffDays(rangeStart, deadlineDateStr);
+        // 2. Compute due arrow
+        let dueArrow: DueArrowInfo | null = null;
+        if (computeDueArrows && task.due && /^\d{4}-\d{2}-\d{2}/.test(task.due)) {
+            const dueDateStr = task.due.split('T')[0];
+            const dueDiff = DateUtils.getDiffDays(rangeStart, dueDateStr);
             const maxCol = dates.length;
-            let dlCol = deadlineDiff + 1; // 1-based
+            let dlCol = dueDiff + 1; // 1-based
             let isClipped = false;
 
             if (dlCol > maxCol) {
@@ -133,11 +137,11 @@ export function computeGridLayout(
 
             const taskEndCol = colStart + span; // one past the task end
             if (dlCol > taskEndCol) {
-                deadlineArrow = {
+                dueArrow = {
                     arrowStartCol: taskEndCol,
                     arrowEndCol: dlCol,
                     isClipped,
-                    deadlineStr: task.deadline,
+                    dueStr: task.due,
                 };
             }
         }
@@ -145,7 +149,7 @@ export function computeGridLayout(
         rawEntries.push({
             task, colStart, span, segmentId,
             continuesBefore, continuesAfter, isMultiDay,
-            deadlineArrow,
+            dueArrow,
         });
     }
 
@@ -160,13 +164,13 @@ export function computeGridLayout(
     });
 
     // 4. Assign tracks (greedy first-fit)
-    // Each track stores the rightmost occupied column (including deadline arrow footprint)
+    // Each track stores the rightmost occupied column (including due arrow footprint)
     const tracks: number[] = [];
     const result: GridTaskEntry[] = [];
 
     for (const entry of rawEntries) {
-        const footprintEnd = entry.deadlineArrow
-            ? entry.deadlineArrow.arrowEndCol - 1
+        const footprintEnd = entry.dueArrow
+            ? entry.dueArrow.arrowEndCol - 1
             : entry.colStart + entry.span - 1;
 
         let trackIndex = -1;

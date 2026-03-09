@@ -523,10 +523,10 @@
 }
 
 /* ==========================================================================
-   9. DEADLINE VISUALIZATION
+   9. DUE VISUALIZATION
    ========================================================================== */
 
-.deadline-arrow {
+.due-arrow {
     position: relative;
     pointer-events: none;
     height: 100%;
@@ -534,7 +534,7 @@
     margin-right: 6px;
 }
 
-.deadline-arrow::after {
+.due-arrow::after {
     content: '';
     position: absolute;
     top: 50%;
@@ -545,7 +545,7 @@
     transform: translateY(-50%);
 }
 
-.deadline-arrow::before {
+.due-arrow::before {
     content: '';
     position: absolute;
     top: 50%;
@@ -558,6 +558,6 @@
     transform: translateY(-50%);
 }
 
-.deadline-arrow--clipped::before {
+.due-arrow--clipped::before {
     display: none;
 }

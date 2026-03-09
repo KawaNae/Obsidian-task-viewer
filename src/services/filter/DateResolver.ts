@@ -6,13 +6,18 @@ import type { DateFilterValue } from './FilterTypes';
  * Point presets (today) and absolute dates return start === end.
  */
 export class DateResolver {
-    static resolve(value: DateFilterValue, weekStartDay: 0 | 1 = 1): { start: string; end: string } {
+    static resolve(value: DateFilterValue, weekStartDay: 0 | 1 = 1, startHour: number = 0): { start: string; end: string } {
         if (value.mode === 'absolute') {
             return { start: value.date, end: value.date };
         }
 
-        const today = new Date();
+        const now = new Date();
+        const today = new Date(now);
         today.setHours(0, 0, 0, 0);
+        // Shift to visual "today" when before startHour boundary
+        if (now.getHours() < startHour) {
+            today.setDate(today.getDate() - 1);
+        }
 
         switch (value.preset) {
             case 'today':
