@@ -41,8 +41,8 @@ export class TimerWidget implements TimerContext {
     constructor(app: App, plugin: TaskViewerPlugin) {
         this.app = app;
         this.plugin = plugin;
-        this.recorder = new TimerRecorder(app, plugin);
         this.storageUtils = new TimerStorageUtils(app);
+        this.recorder = new TimerRecorder(app, plugin, this.storageUtils);
         this.creator = new TimerCreator(this, this.storageUtils);
         this.lifecycle = new TimerLifecycle(this, this.creator);
         this.renderer = new TimerRenderer(this, this.lifecycle, this.creator);
@@ -141,10 +141,29 @@ export class TimerWidget implements TimerContext {
             }
         }
 
+        // Write start time immediately so the task moves on Timeline
+        if (config.timerType !== 'idle' && !config.taskId.startsWith('daily-')) {
+            if (config.recordMode === 'self') {
+                void this.recorder.updateTaskStartTime(timer);
+            } else {
+                void this.createChildAndTrack(timer);
+            }
+        }
+
         this.render();
         this.persistTimersToStorage();
-        if (!this.lifecycle.isIdleTimer(timer.id) && !timer.taskId.startsWith('daily-')) {
+        if (!this.lifecycle.isIdleTimer(timer.id)
+            && !timer.taskId.startsWith('daily-')
+            && config.recordMode !== 'child') {
             void this.targetManager.ensureTimerTargetId(timer.id);
+        }
+    }
+
+    private async createChildAndTrack(timer: TimerInstance): Promise<void> {
+        const childTaskId = await this.recorder.createChildAtStart(timer);
+        if (childTaskId) {
+            timer.recordedChildTaskId = childTaskId;
+            this.persistTimersToStorage();
         }
     }
 
