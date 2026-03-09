@@ -568,6 +568,24 @@ export class TimelineView extends ItemView {
                     this.app.workspace.requestSaveLayout();
                     this.render();
                 },
+                onMoveUp: (listDef) => {
+                    const lists = this.viewState.pinnedLists!;
+                    const idx = lists.indexOf(listDef);
+                    if (idx > 0) {
+                        [lists[idx - 1], lists[idx]] = [lists[idx], lists[idx - 1]];
+                        this.app.workspace.requestSaveLayout();
+                        this.render();
+                    }
+                },
+                onMoveDown: (listDef) => {
+                    const lists = this.viewState.pinnedLists!;
+                    const idx = lists.indexOf(listDef);
+                    if (idx >= 0 && idx < lists.length - 1) {
+                        [lists[idx], lists[idx + 1]] = [lists[idx + 1], lists[idx]];
+                        this.app.workspace.requestSaveLayout();
+                        this.render();
+                    }
+                },
                 onToggleApplyViewFilter: (listDef) => {
                     listDef.applyViewFilter = !listDef.applyViewFilter;
                     this.app.workspace.requestSaveLayout();
