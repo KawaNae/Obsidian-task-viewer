@@ -450,7 +450,7 @@ export class FilterMenuComponent {
     }
 
     private showRelativeDateMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
-        const presets: RelativeDatePreset[] = ['today', 'thisWeek', 'nextWeek', 'pastWeek', 'nextNDays'];
+        const presets = Object.keys(RELATIVE_DATE_LABELS) as RelativeDatePreset[];
         const currentPreset = condition.value.type === 'date' && condition.value.value.mode === 'relative'
             ? condition.value.value.preset : 'today';
 

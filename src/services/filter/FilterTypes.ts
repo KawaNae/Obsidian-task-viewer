@@ -22,7 +22,7 @@ export type FilterValue =
     | { type: 'date'; value: DateFilterValue }
     | { type: 'number'; value: number; unit?: 'hours' | 'minutes' };
 
-export type RelativeDatePreset = 'today' | 'thisWeek' | 'nextWeek' | 'pastWeek' | 'nextNDays';
+export type RelativeDatePreset = 'today' | 'thisWeek' | 'nextWeek' | 'pastWeek' | 'nextNDays' | 'thisMonth' | 'thisYear';
 
 export type DateFilterValue =
     | { mode: 'absolute'; date: string }
@@ -226,4 +226,6 @@ export const RELATIVE_DATE_LABELS: Record<RelativeDatePreset, string> = {
     nextWeek: 'Next week',
     pastWeek: 'Past week',
     nextNDays: 'Next N days',
+    thisMonth: 'This month',
+    thisYear: 'This year',
 };
