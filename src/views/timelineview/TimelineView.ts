@@ -435,6 +435,8 @@ export class TimelineView extends ItemView {
 
     async onClose() {
         this.toolbar.closeFilterPopover();
+        this.sidebarFilterMenu.close();
+        this.sidebarSortMenu.close();
         this.dragHandler.destroy();
         if (this.unsubscribe) {
             this.unsubscribe();

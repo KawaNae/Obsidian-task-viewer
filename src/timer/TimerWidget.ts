@@ -142,7 +142,7 @@ export class TimerWidget implements TimerContext {
         }
 
         // Write start time immediately so the task moves on Timeline
-        if (config.timerType !== 'idle' && !config.taskId.startsWith('daily-')) {
+        if (config.timerType !== 'idle' && config.timerType !== 'countdown' && !config.taskId.startsWith('daily-')) {
             if (config.recordMode === 'self') {
                 void this.recorder.updateTaskStartTime(timer);
             } else {

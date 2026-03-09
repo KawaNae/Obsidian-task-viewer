@@ -209,12 +209,14 @@ export function isDisplayTaskOnVisualDate(
     dt: DisplayTask, visualDate: string, startHour: number
 ): boolean {
     if (!dt.effectiveStartDate) return false;
-    if (dt.effectiveStartTime) {
+    // True all-day: no explicit start or end time in original task
+    const isAllDay = !dt.startTime && !dt.endTime;
+    if (!isAllDay && dt.effectiveStartTime) {
         return DateUtils.getVisualStartDate(
             dt.effectiveStartDate, dt.effectiveStartTime, startHour
         ) === visualDate;
     }
-    // AllDay: effectiveStartDate ≤ visualDate ≤ effectiveEndDate
+    // AllDay: date range check
     const end = dt.effectiveEndDate || dt.effectiveStartDate;
     return dt.effectiveStartDate <= visualDate && visualDate <= end;
 }

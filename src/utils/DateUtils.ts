@@ -220,23 +220,19 @@ export class DateUtils {
     static isPastDate(dateStr: string, timeStr: string | undefined, startHour: number): boolean {
         const now = new Date();
         const visualToday = this.getVisualDateOfNow(startHour);
+        const taskVisualDate = this.getVisualStartDate(dateStr, timeStr, startHour);
 
-        // Compare the date part first
-        if (dateStr < visualToday) {
-            return true;
-        }
+        if (taskVisualDate < visualToday) return true;
+        if (taskVisualDate > visualToday) return false;
 
-        if (dateStr > visualToday) {
-            return false;
-        }
-
-        // Same visual date - check time if provided
+        // Same visual date - compare in visual-day-relative minutes
         if (timeStr) {
-            const currentHour = now.getHours();
-            const currentMinute = now.getMinutes();
-            const currentMinutes = currentHour * 60 + currentMinute;
+            const startMinutes = startHour * 60;
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
             const taskMinutes = this.timeToMinutes(timeStr);
-            return taskMinutes < currentMinutes;
+            const currentVisual = (currentMinutes - startMinutes + 1440) % 1440;
+            const taskVisual = (taskMinutes - startMinutes + 1440) % 1440;
+            return taskVisual < currentVisual;
         }
 
         // Same date, no time specified - not past yet (it's "today")
