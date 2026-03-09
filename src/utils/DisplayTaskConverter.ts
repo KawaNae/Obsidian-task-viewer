@@ -34,8 +34,12 @@ export function toDisplayTask(task: Task, startHour: number): DisplayTask {
                 effectiveStartTime = DateUtils.minutesToTime(startMinutes + 24 * 60);
             }
         } else {
-            // E-AllDay: same day
-            effectiveStartDate = task.endDate;
+            // E-AllDay: resolve endTime first, then find visual day start
+            const endHour = startHour === 0 ? 23 : startHour - 1;
+            const implicitEndTime = `${endHour.toString().padStart(2, '0')}:59`;
+            effectiveEndTime = implicitEndTime;
+            effectiveStartDate = DateUtils.getVisualStartDate(task.endDate, implicitEndTime, startHour);
+            effectiveStartTime = startHour.toString().padStart(2, '0') + ':00';
         }
         // startDateImplicit / startTimeImplicit remain true
     }

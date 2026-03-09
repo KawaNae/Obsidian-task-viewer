@@ -1,5 +1,4 @@
 import { DisplayTask } from '../../types';
-import { DateUtils } from '../../utils/DateUtils';
 
 export interface CalculatedProperty {
     date?: string;
@@ -26,26 +25,18 @@ export interface PropertyCalculationContext {
  * 2. SD, S-All: start day's startHour to startHour+23:59
  * 3. S-Timed: start time to +1 hour
  * 4. E, ED: implicit start derived from endDate (reverse of S/SD default duration)
- * 5. D: view's left edge date's startHour as start, start+23:59 as end
+ * 5. D: no start/end — marked as unset
  */
 export class PropertyCalculator {
     /**
      * Start プロパティの計算
      */
     calculateStart(context: PropertyCalculationContext): CalculatedProperty {
-        const { task, startHour, viewStartDate } = context;
+        const { task } = context;
 
-        const startHourStr = startHour.toString().padStart(2, '0') + ':00';
-        const implicitVisualStartDate = viewStartDate || DateUtils.getVisualDateOfNow(startHour);
-
-        // D type: effectiveStartDate is "" — use viewStartDate fallback
+        // D type: effectiveStartDate is "" — no start, mark as unset
         if (!task.effectiveStartDate) {
-            return {
-                date: implicitVisualStartDate,
-                time: startHourStr,
-                dateImplicit: true,
-                timeImplicit: true
-            };
+            return { dateImplicit: false, timeImplicit: false, isUnset: true };
         }
         return {
             date: task.effectiveStartDate,
@@ -59,10 +50,7 @@ export class PropertyCalculator {
      * End プロパティの計算
      */
     calculateEnd(context: PropertyCalculationContext): CalculatedProperty {
-        const { task, startHour, viewStartDate } = context;
-
-        const endHourStr = this.calculateEndHourStr(startHour);
-        const implicitVisualStartDate = viewStartDate || DateUtils.getVisualDateOfNow(startHour);
+        const { task } = context;
 
         if (task.effectiveEndDate) {
             return {
@@ -72,15 +60,8 @@ export class PropertyCalculator {
                 timeImplicit: task.endTimeImplicit,
             };
         }
-        // D type or no effective end: use viewStartDate + 1day fallback
-        const effectiveBase = task.effectiveStartDate || implicitVisualStartDate;
-        const nextDay = DateUtils.addDays(effectiveBase, 1);
-        return {
-            date: nextDay,
-            time: endHourStr,
-            dateImplicit: true,
-            timeImplicit: true
-        };
+        // D type or no effective end: mark as unset
+        return { dateImplicit: false, timeImplicit: false, isUnset: true };
     }
 
     /**
@@ -106,14 +87,5 @@ export class PropertyCalculator {
             dateImplicit: false,
             timeImplicit: false
         };
-    }
-
-    /**
-     * エンド時刻を計算 (startHour + 23:59)
-     */
-    private calculateEndHourStr(startHour: number): string {
-        let endHour = startHour - 1;
-        if (endHour < 0) endHour = 23;
-        return endHour.toString().padStart(2, '0') + ':59';
     }
 }

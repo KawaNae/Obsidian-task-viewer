@@ -227,6 +227,55 @@ Only a due is specified, no start or end.
 - **Inference**: none — D does not affect display position or duration inference
 - Example: `@>>2026-03-13`
 
+### Implicit value resolution rules (`toDisplayTask()`)
+
+All display-layer implicit resolution is centralised in `DisplayTaskConverter.toDisplayTask()`.
+Written dates are **calendarDates**. Complement uses `startHour` where possible,
+falling back to `00:00`/`23:59` when same-day end < start occurs.
+
+#### Stage 1: E-type start resolution (no startDate, has endDate)
+
+| Subtype | Condition | Rule |
+|---|---|---|
+| E-Timed | endTime present | start = endTime − 1h (may cross to previous calendarDate) |
+| E-AllDay | no endTime | endTime = `(startHour−1):59`, startDate = `getVisualStartDate(endDate, endTime, startHour)`, startTime = `startHour:00` |
+
+#### Stage 2: All-day startTime complement
+
+| Condition | Rule |
+|---|---|
+| startDate present, no startTime | startTime = `startHour:00` |
+
+#### Stage 3: S-type end resolution (has startDate, no endDate)
+
+| Subtype | Condition | Rule |
+|---|---|---|
+| S + explicit endTime | endTime present, no endDate | endDate = startDate (same-day inheritance) |
+| S-Timed | startTime present, no endTime | end = startTime + 1h (may cross to next calendarDate) |
+| S-AllDay | no startTime, no endTime | end = startTime + 23h59m |
+
+#### Stage 4: SE/SED endTime complement
+
+| Condition | Rule |
+|---|---|
+| endDate present, no endTime | endTime = `(startHour−1):59` |
+
+#### Stage 5: Same-day fallback
+
+| Condition | Rule |
+|---|---|
+| same calendarDate, one side implicit, end < start | implicit startTime → `00:00`, implicit endTime → `23:59` |
+
+#### D-Only
+
+D-Only tasks (`@>>due`) have no start or end — `toDisplayTask()` produces
+`effectiveStartDate = ''` and `effectiveEndDate = undefined`. No resolution is applied.
+
+#### Due complement (conceptual)
+
+Due represents a deadline date (calendarDate). If time complement is needed,
+`23:59` is used (end of calendar day, startHour-independent).
+
 ### 24-hour boundary
 
 - Duration ≥ 24 h → All-day lane

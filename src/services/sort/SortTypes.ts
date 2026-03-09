@@ -43,8 +43,8 @@ export function hasSortRules(state: SortState): boolean {
 export const SORT_PROPERTY_LABELS: Record<SortProperty, string> = {
     content: 'Content',
     due: 'Due',
-    startDate: 'Start date',
-    endDate: 'End date',
+    startDate: 'Start',
+    endDate: 'End',
     file: 'File',
     status: 'Status',
     tag: 'Tag',
