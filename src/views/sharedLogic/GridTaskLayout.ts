@@ -86,6 +86,10 @@ export function computeGridLayout(
     const rangeEnd = dates[dates.length - 1];
     const computeDeadlines = config.computeDeadlines !== false;
 
+    // Pre-build date→index map for O(1) lookup
+    const dateIndex = new Map<string, number>();
+    dates.forEach((d, i) => dateIndex.set(d, i));
+
     // 1. Build raw entries
     const rawEntries: RawEntry[] = [];
 
@@ -100,9 +104,9 @@ export function computeGridLayout(
         const clippedStart = effectiveStart < rangeStart ? rangeStart : effectiveStart;
         const clippedEnd = effectiveEnd > rangeEnd ? rangeEnd : effectiveEnd;
 
-        const startIdx = dates.indexOf(clippedStart);
-        const endIdx = dates.indexOf(clippedEnd);
-        if (startIdx < 0 || endIdx < 0) continue;
+        const startIdx = dateIndex.get(clippedStart);
+        const endIdx = dateIndex.get(clippedEnd);
+        if (startIdx == null || endIdx == null) continue;
 
         const colStart = startIdx + 1; // 1-based
         const span = endIdx - startIdx + 1;

@@ -53,6 +53,7 @@ export class PinnedListRenderer {
         collapsedState: Record<string, boolean>,
         callbacks: PinnedListCallbacks,
         viewFilter?: (task: Task) => boolean,
+        precomputedDisplayTasks?: DisplayTask[],
     ): void {
         container.empty();
         container.addClass('pinned-lists-container');
@@ -64,7 +65,7 @@ export class PinnedListRenderer {
         }
 
         const startHour = this.plugin.settings.startHour;
-        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
+        const allDisplayTasks = precomputedDisplayTasks ?? toDisplayTasks(this.taskIndex.getTasks(), startHour);
         const filterContext = { startHour };
 
         for (const listDef of lists) {

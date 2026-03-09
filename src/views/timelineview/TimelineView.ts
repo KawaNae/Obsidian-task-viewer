@@ -529,6 +529,10 @@ export class TimelineView extends ItemView {
             this.render();
         });
 
+        // Convert all tasks to DisplayTask once for the entire render pass
+        const startHour = this.plugin.settings.startHour;
+        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
+
         // Render pinned lists into sidebar body
         this.pinnedListRenderer.render(
             sidebarBody,
@@ -574,6 +578,7 @@ export class TimelineView extends ItemView {
                 },
             },
             this.toolbar?.getTaskFilter(),
+            allDisplayTasks,
         );
 
         // Render Toolbar (above both columns)
@@ -624,7 +629,8 @@ export class TimelineView extends ItemView {
             this.handleManager,
             () => this.getDatesToShow(),
             this,
-            this.toolbar.getTaskFilter()
+            this.toolbar.getTaskFilter(),
+            allDisplayTasks
         );
 
         this.handleManager.createOverlay();
