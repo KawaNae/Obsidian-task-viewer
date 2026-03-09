@@ -72,6 +72,26 @@ export function toDisplayTask(task: Task, startHour: number): DisplayTask {
         // endDateImplicit remains true (endDate was not explicit)
     }
 
+    // Resolve implicit end time for SE/SED types (have endDate, no endTime)
+    if (effectiveEndDate && !effectiveEndTime) {
+        const endHour = startHour === 0 ? 23 : startHour - 1;
+        effectiveEndTime = `${endHour.toString().padStart(2, '0')}:59`;
+    }
+
+    // Fallback: if same calendarDate and implicit end < implicit start, use 00:00/23:59
+    if (effectiveStartDate && effectiveEndDate
+        && effectiveStartDate === effectiveEndDate
+        && effectiveStartTime && effectiveEndTime
+        && startTimeImplicit !== endTimeImplicit
+        && effectiveEndTime < effectiveStartTime) {
+        if (startTimeImplicit) {
+            effectiveStartTime = '00:00';
+        }
+        if (endTimeImplicit) {
+            effectiveEndTime = '23:59';
+        }
+    }
+
     // For explicit fields, mark as non-implicit
     if (startDateExplicit) startDateImplicit = false;
     if (task.startTime) startTimeImplicit = false;
