@@ -10,6 +10,7 @@ import { TimerInstance, getTimerElapsedSeconds } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { Task } from '../types';
+import { FileOperations } from '../services/persistence/utils/FileOperations';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
 import { TimerStorageUtils } from './TimerStorageUtils';
@@ -334,7 +335,7 @@ export class TimerRecorder {
             return;
         }
 
-        const childIndent = this.getChildIndent(inlineTask.originalText);
+        const childIndent = FileOperations.getChildIndent(inlineTask.originalText);
         const childLine = childIndent + formattedLine;
         const taskRepository = this.plugin.getTaskRepository();
         await taskRepository.insertLineAsFirstChild(inlineTask, childLine);
@@ -402,27 +403,4 @@ export class TimerRecorder {
         return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
     }
 
-    /**
-     * Get proper child indentation based on parent's actual indentation style.
-     * Detects whether tabs or spaces are used and adds one level.
-     */
-    private getChildIndent(originalText: string): string {
-        const match = originalText.match(/^(\s*)/);
-        const parentIndent = match ? match[1] : '';
-
-        if (parentIndent.includes('\t')) {
-            return parentIndent + '\t';
-        }
-
-        const listMatch = originalText.match(/^(\s*)-/);
-        if (listMatch) {
-            const existingIndent = listMatch[1];
-            if (existingIndent.length === 0) {
-                return '    ';
-            }
-            return parentIndent + (existingIndent.substring(0, Math.max(2, existingIndent.length)) || '    ');
-        }
-
-        return parentIndent + '    ';
-    }
 }

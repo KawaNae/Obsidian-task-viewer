@@ -49,7 +49,7 @@ export class TaskScanner {
         for (const file of files) {
             await this.queueScan(file);
         }
-        WikiLinkResolver.resolve(this.store.getTasksMap(), this.app);
+        WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
         this.store.notifyListenersStaggered();
         this.isInitializing = false;
     }
@@ -228,7 +228,7 @@ export class TaskScanner {
         }
 
         const bodyLines = lines.slice(bodyStartIndex);
-        const fmTask = FrontmatterTaskBuilder.parse(
+        const fmResult = FrontmatterTaskBuilder.parse(
             file.path,
             frontmatterObj,
             bodyLines,
@@ -242,7 +242,12 @@ export class TaskScanner {
         const dailyNoteDate = DailyNoteUtils.parseDateFromFilePath(this.app, file.path);
         const allExtractedTasks = extractTasksFromLines(bodyLines, bodyStartIndex, dailyNoteDate ?? undefined);
 
-        if (fmTask) {
+        if (fmResult) {
+            const fmTask = fmResult.task;
+
+            // Store wikilink refs separately
+            this.store.setWikilinkRefs(fmTask.id, fmResult.wikilinkRefs);
+
             // MetadataCacheからファイル全体のタグを取得してマージ（frontmatterタスクのみ）
             const cacheTags = this.app.metadataCache.getFileCache(file)?.tags;
             if (cacheTags && cacheTags.length > 0) {

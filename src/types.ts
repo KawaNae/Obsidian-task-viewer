@@ -66,10 +66,6 @@ export interface Task {
     // Parse-time warning shown to users.
     validationWarning?: string;
 
-    // Frontmatter-task wikilink metadata (used by WikiLinkResolver).
-    wikiLinkTargets?: string[];
-    wikiLinkBodyLines?: number[];
-
     /**
      * Parser identifier that produced this task (e.g. at-notation/frontmatter).
      * Used for parser-specific writeback behavior.
@@ -79,6 +75,15 @@ export interface Task {
     // File-level styling from frontmatter (resolved at scan time).
     color?: string;
     linestyle?: string;
+}
+
+/**
+ * Wikilink reference extracted from frontmatter task body.
+ * Stored separately from Task and consumed by WikiLinkResolver.
+ */
+export interface WikilinkRef {
+    target: string;
+    bodyLine: number;
 }
 
 /**

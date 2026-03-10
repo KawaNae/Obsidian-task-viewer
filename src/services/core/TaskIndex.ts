@@ -90,7 +90,7 @@ export class TaskIndex {
                 }
 
                 await this.scanner.queueScan(file, isLocal);
-                WikiLinkResolver.resolve(this.store.getTasksMap(), this.app);
+                WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
                 this.debouncedNotify();
                 this.aiIndexService.schedulePath(file.path);
             }
@@ -107,7 +107,7 @@ export class TaskIndex {
         this.app.vault.on('create', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 this.scanner.queueScan(file).then(() => {
-                    WikiLinkResolver.resolve(this.store.getTasksMap(), this.app);
+                    WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
                     this.debouncedNotify();
                     this.aiIndexService.schedulePath(file.path);
                 });
@@ -121,7 +121,7 @@ export class TaskIndex {
                     return;
                 }
                 this.scanner.queueScan(file).then(() => {
-                    WikiLinkResolver.resolve(this.store.getTasksMap(), this.app);
+                    WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
                     this.debouncedNotify();
                     this.aiIndexService.schedulePath(file.path);
                 });
@@ -141,7 +141,7 @@ export class TaskIndex {
             // 非md → md: create 扱い
             if (!oldPath.endsWith('.md')) {
                 await this.scanner.queueScan(file);
-                WikiLinkResolver.resolve(this.store.getTasksMap(), this.app);
+                WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
                 this.debouncedNotify();
                 this.aiIndexService.schedulePath(file.path);
                 return;
@@ -157,7 +157,7 @@ export class TaskIndex {
             this.scanner.handleFileRenamed(oldPath);
 
             await this.scanner.queueScan(file);
-            WikiLinkResolver.resolve(this.store.getTasksMap(), this.app);
+            WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
             this.debouncedNotify();
 
             this.aiIndexService.scheduleDeletePath(oldPath);

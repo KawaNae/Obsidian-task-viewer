@@ -6,6 +6,7 @@ import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal
 import { ConfirmModal } from '../../../modals/ConfirmModal';
 import { getTaskDisplayName } from '../../../utils/TaskContent';
 import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
+import { FileOperations } from '../../../services/persistence/utils/FileOperations';
 
 /**
  * Task操作メニューの構築
@@ -102,9 +103,7 @@ export class TaskActionsMenuBuilder {
                             return;
                         }
 
-                        const match = task.originalText.match(/^(\s*)/);
-                        const parentIndent = match ? match[1] : '';
-                        const childIndent = parentIndent.includes('\t') ? parentIndent + '\t' : parentIndent + '    ';
+                        const childIndent = FileOperations.getChildIndent(task.originalText);
                         const childLine = childIndent + taskLine;
                         await repository.insertLineAsFirstChild(task, childLine);
                     }, {}, { startHour: this.plugin.settings.startHour }).open();

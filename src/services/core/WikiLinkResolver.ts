@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import { Task } from '../../types';
+import { Task, WikilinkRef } from '../../types';
 import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
 
 /**
@@ -14,24 +14,24 @@ export class WikiLinkResolver {
     /**
      * タスクMap全体をスキャンし、wikilink子タスクの親子関係を解決する。
      * @param tasks タスクインデックス (id → Task)
+     * @param wikilinkRefsMap タスクIDごとの WikilinkRef 配列
      * @param app Obsidian App インスタンス
      */
-    static resolve(tasks: Map<string, Task>, app: App): void {
+    static resolve(tasks: Map<string, Task>, wikilinkRefsMap: Map<string, WikilinkRef[]>, app: App): void {
         // wikilink 子の body 行位置を追跡（ソート用）
         const wikiChildLineMap = new Map<string, Map<string, number>>();
 
         for (const [parentId, parentTask] of tasks) {
-            // frontmatter タスク: wikiLinkTargets を使用（childLines は空）
-            if (parentTask.wikiLinkTargets && parentTask.wikiLinkTargets.length > 0) {
+            // frontmatter タスク: wikilinkRefs を使用（childLines は空）
+            const refs = wikilinkRefsMap.get(parentId);
+            if (refs && refs.length > 0) {
                 const childLineMap = new Map<string, number>();
-                for (let i = 0; i < parentTask.wikiLinkTargets.length; i++) {
-                    const linkName = parentTask.wikiLinkTargets[i];
-                    const bodyLine = parentTask.wikiLinkBodyLines?.[i];
-                    const resolvedPath = this.resolveWikiLink(linkName, app);
+                for (const ref of refs) {
+                    const resolvedPath = this.resolveWikiLink(ref.target, app);
                     if (!resolvedPath) continue;
                     const childTaskId = this.wireChild(parentTask, parentId, tasks, resolvedPath);
-                    if (bodyLine !== undefined && childTaskId) {
-                        childLineMap.set(childTaskId, bodyLine);
+                    if (childTaskId) {
+                        childLineMap.set(childTaskId, ref.bodyLine);
                     }
                 }
                 if (childLineMap.size > 0) {

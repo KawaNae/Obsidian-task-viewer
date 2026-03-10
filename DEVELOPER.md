@@ -133,7 +133,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskIndex** | `services/core/TaskIndex.ts` | Central orchestrator for scanning, indexing, and event management; branches on `parserId` |
 | **TaskStore** | `services/core/TaskStore.ts` | In-memory task cache; notifies UI via `onChange` listeners |
 | **TaskScanner** | `services/core/TaskScanner.ts` | File scanning → ParserChain invocation |
-| **WikiLinkResolver** | `services/core/WikiLinkResolver.ts` | Resolves frontmatter wikilink parent–child relationships (`wikiLinkTargets` / `childLines`) |
+| **WikiLinkResolver** | `services/core/WikiLinkResolver.ts` | Resolves frontmatter wikilink parent–child relationships (via `WikilinkRef` in TaskStore / `childLines`) |
 | **SyncDetector / EditorObserver** | `services/core/SyncDetector.ts` et al. | Distinguishes local edits from remote sync changes |
 | **ParserChain** | `services/parsing/strategies/ParserChain.ts` | Tries multiple parsers in order (Strategy chain) |
 | **AtNotationParser** | `services/parsing/inline/AtNotationParser.ts` | Parses `@date` inline notation (line-level) |
@@ -294,7 +294,7 @@ The heading configured in settings (`frontmatterTaskHeader` / `frontmatterTaskHe
 6. `ChildItemBuilder` prioritises absolute line numbers and skips already-expanded descendants to prevent duplicate rendering.
 
 Notes:
-- `wikiLinkTargets` is collected only from the same contiguous list block.
+- `WikilinkRef` entries are collected only from the same contiguous list block and stored in `TaskStore`.
 - When the configured heading is absent, child elements are treated as empty.
 
 ---

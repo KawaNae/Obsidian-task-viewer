@@ -200,14 +200,7 @@ export class InlineTaskWriter {
         const cleanedChildren = this.fileOps.stripBlockIds(childrenLines);
 
         // 3. Adjust children indentation relative to parent
-        // Remove parent's indentation amount, keep only relative indent
-        const adjustedChildren = cleanedChildren.map(line => {
-            if (line.trim() === '') return line; // Keep empty lines as-is
-            const currentIndent = line.search(/\S|$/);
-            const relativeIndent = Math.max(0, currentIndent - parentIndent);
-            // Use tabs for the relative indentation
-            return '\t'.repeat(relativeIndent / (line.includes('\t') ? 1 : 4)) + line.trimStart();
-        });
+        const adjustedChildren = FileOperations.adjustChildIndentation(cleanedChildren, parentIndent);
 
         // 4. Build full content to append
         const fullContent = [content, ...adjustedChildren].join('\n');
