@@ -266,7 +266,7 @@ export class TaskScanner {
         const fileColor = TaskStyleResolver.getFileColor(this.app, file.path, this.settings.frontmatterTaskKeys.color);
         const fileLinestyle = TaskStyleResolver.getFileLinestyle(this.app, file.path, this.settings.frontmatterTaskKeys.linestyle);
         const fileTags = TagExtractor.fromFrontmatter(
-            this.app.metadataCache.getFileCache(file)?.frontmatter?.[this.settings.frontmatterTaskKeys.tags]
+            this.app.metadataCache.getFileCache(file)?.frontmatter?.['tags']
         );
         for (const task of newTasks) {
             if (fileColor) task.color = fileColor;

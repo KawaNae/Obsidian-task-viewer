@@ -871,13 +871,6 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,
-            'Tags Key',
-            'Frontmatter key for file-level tags. Tags are merged into all tasks in the file.',
-            'tv-tags',
-            'tags'
-        );
-        this.addFrontmatterTaskKeySetting(
-            containerEl,
             'Ignore Key',
             'Frontmatter key for file-level ignore. When truthy, this file is fully skipped from scanning and AI index.',
             'tv-ignore',

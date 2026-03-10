@@ -129,6 +129,9 @@ export class PropertiesMenuBuilder {
         this.addDueItem(menu, task, dueParts, openModal);
         menu.addSeparator();
         this.addLengthItem(menu, startParts, endParts, context.startHour);
+        this.addTagsItem(menu, task);
+        this.addColorItem(menu, task);
+        this.addLinestyleItem(menu, task);
     }
 
     /**
@@ -241,9 +244,31 @@ export class PropertiesMenuBuilder {
         return updates;
     }
 
-    /**
-     * Add Length (Duration) item.
-     */
+    private addTagsItem(menu: Menu, task: Task): void {
+        const tagsText = task.tags.length > 0 ? task.tags.join(', ') : '-';
+        menu.addItem((item) => {
+            item.setTitle(`Tags: ${tagsText}`)
+                .setIcon('tag')
+                .setDisabled(true);
+        });
+    }
+
+    private addColorItem(menu: Menu, task: Task): void {
+        menu.addItem((item) => {
+            item.setTitle(`Color: ${task.color || '-'}`)
+                .setIcon('palette')
+                .setDisabled(true);
+        });
+    }
+
+    private addLinestyleItem(menu: Menu, task: Task): void {
+        menu.addItem((item) => {
+            item.setTitle(`Linestyle: ${task.linestyle || '-'}`)
+                .setIcon('minus')
+                .setDisabled(true);
+        });
+    }
+
     private addLengthItem(menu: Menu, startParts: CalculatedProperty, endParts: CalculatedProperty, startHour: number): void {
         let lengthText = '-';
 
