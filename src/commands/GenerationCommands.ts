@@ -15,8 +15,8 @@ export abstract class GenerationCommand implements CommandStrategy {
 
         // Handle Modifiers (e.g., .as())
         for (const mod of cmd.modifiers) {
-            if (mod.name === 'as' && mod.args[0]) {
-                nextTask.content = mod.args[0];
+            if (mod.name === 'as') {
+                nextTask.content = mod.args[0] ?? '';
             }
         }
 
@@ -27,8 +27,10 @@ export abstract class GenerationCommand implements CommandStrategy {
         // Command Persistence Logic
         this.persistCommands(nextTask, cmd, otherCommands, ctx);
 
+        const copyChildren = !cmd.modifiers.some(m => m.name === 'nochildren');
+
         const nextContent = TaskParser.format(nextTask);
-        await ctx.repository.insertRecurrenceForTask(ctx.task, nextContent.trim(), nextTask);
+        await ctx.repository.insertRecurrenceForTask(ctx.task, nextContent.trim(), nextTask, copyChildren);
 
         // Generation commands do NOT delete the original task by themselves
         return { shouldDeleteOriginal: false };

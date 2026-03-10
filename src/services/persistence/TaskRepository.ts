@@ -102,8 +102,8 @@ export class TaskRepository {
         return this.cloner.duplicateFrontmatterTaskForWeek(task, frontmatterKeys);
     }
 
-    async insertRecurrenceForTask(task: Task, content: string, newTask?: Task): Promise<void> {
-        return this.cloner.insertRecurrenceForTask(task, content, newTask);
+    async insertRecurrenceForTask(task: Task, content: string, newTask?: Task, copyChildren = true): Promise<void> {
+        return this.cloner.insertRecurrenceForTask(task, content, newTask, copyChildren);
     }
 
     // --- Task Conversion Operations ---
