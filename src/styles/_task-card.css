@@ -127,8 +127,8 @@
 .task-card__content ul,
 .task-card__content ol,
 .task-card__content li {
-    margin-block-start: 7px;
-    margin-block-end: 7px;
+    margin-block-start: 5px;
+    margin-block-end: 5px;
 }
 
 .task-card__content .task-list-item {

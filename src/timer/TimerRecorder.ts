@@ -126,7 +126,8 @@ export class TimerRecorder {
 
     /**
      * Write startDate/startTime to the task at timer start (for 'self' recordMode).
-     * This moves the task to the current time on the Timeline immediately.
+     * If the task has both start and end times (SE-Timed), shift end by the same
+     * amount to preserve the duration (parallel translation).
      */
     async updateTaskStartTime(timer: TimerInstance): Promise<void> {
         const now = new Date();
@@ -137,10 +138,22 @@ export class TimerRecorder {
 
         if (!task) return;
 
-        await taskIndex.updateTask(task.id, {
+        const updates: Record<string, string | undefined> = {
             startDate: this.formatDate(now),
             startTime: this.formatTime(now),
-        });
+        };
+
+        // Parallel translation: preserve duration for SE-Timed tasks
+        if (task.startDate && task.startTime && task.endDate && task.endTime) {
+            const oldStart = new Date(`${task.startDate}T${task.startTime}`);
+            const oldEnd = new Date(`${task.endDate}T${task.endTime}`);
+            const durationMs = oldEnd.getTime() - oldStart.getTime();
+            const newEnd = new Date(now.getTime() + durationMs);
+            updates.endDate = this.formatDate(newEnd);
+            updates.endTime = this.formatTime(newEnd);
+        }
+
+        await taskIndex.updateTask(task.id, updates);
     }
 
     /**

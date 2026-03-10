@@ -262,12 +262,16 @@ export class TaskScanner {
         }
         newTasks.push(...allExtractedTasks);
 
-        // Resolve file-level color/linestyle from frontmatter
+        // Resolve file-level color/linestyle/tags from frontmatter
         const fileColor = TaskStyleResolver.getFileColor(this.app, file.path, this.settings.frontmatterTaskKeys.color);
         const fileLinestyle = TaskStyleResolver.getFileLinestyle(this.app, file.path, this.settings.frontmatterTaskKeys.linestyle);
+        const fileTags = TagExtractor.fromFrontmatter(
+            this.app.metadataCache.getFileCache(file)?.frontmatter?.[this.settings.frontmatterTaskKeys.tags]
+        );
         for (const task of newTasks) {
             if (fileColor) task.color = fileColor;
             if (fileLinestyle) task.linestyle = fileLinestyle;
+            if (fileTags.length > 0) task.tags = TagExtractor.merge(task.tags, fileTags);
         }
 
         // 2. 現在の完了カウント

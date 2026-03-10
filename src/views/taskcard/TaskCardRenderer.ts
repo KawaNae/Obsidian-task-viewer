@@ -104,45 +104,16 @@ export class TaskCardRenderer {
 
     private renderTopRightMeta(
         container: HTMLElement,
-        task: Task,
+        task: DisplayTask,
         settings: TaskViewerSettings,
         topRight: 'time' | 'due' | 'none'
     ): void {
-        if (topRight === 'time' && task.startTime) {
+        if (topRight === 'time' && task.effectiveStartTime) {
             const timeDisplay = container.createDiv('task-card__time');
-            let timeText = task.startTime;
+            let timeText = task.effectiveStartTime;
 
-            if (task.endTime) {
-                const startDate = new Date(`${task.startDate}T${task.startTime}`);
-                let endDate: Date;
-
-                if (task.endTime.includes('T')) {
-                    endDate = new Date(task.endTime);
-                } else {
-                    endDate = new Date(`${task.startDate}T${task.endTime}`);
-                    if (endDate < startDate) {
-                        endDate.setDate(endDate.getDate() + 1);
-                    }
-                }
-
-                const limitDate = new Date(`${task.startDate}T${settings.startHour.toString().padStart(2, '0')}:00`);
-                limitDate.setDate(limitDate.getDate() + 1);
-
-                if (endDate > limitDate) {
-                    const startStr = `${task.startDate}T${task.startTime}`;
-                    const endY = endDate.getFullYear();
-                    const endM = (endDate.getMonth() + 1).toString().padStart(2, '0');
-                    const endD = endDate.getDate().toString().padStart(2, '0');
-                    const endH = endDate.getHours().toString().padStart(2, '0');
-                    const endMin = endDate.getMinutes().toString().padStart(2, '0');
-                    const endStr = `${endY}-${endM}-${endD}T${endH}:${endMin}`;
-                    timeText = `${startStr}>${endStr}`;
-                } else {
-                    const endH = endDate.getHours().toString().padStart(2, '0');
-                    const endMin = endDate.getMinutes().toString().padStart(2, '0');
-                    const endStr = `${endH}:${endMin}`;
-                    timeText = `${task.startTime}>${endStr}`;
-                }
+            if (task.effectiveEndTime) {
+                timeText = `${task.effectiveStartTime}>${task.effectiveEndTime}`;
             }
 
             timeDisplay.innerText = timeText;
