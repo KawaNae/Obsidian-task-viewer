@@ -45,21 +45,18 @@ export class WikiLinkResolver {
 
             // childLines の最小リストインデントを求める（直接子のレベル）
             let minChildIndent = Infinity;
-            for (const line of parentTask.childLines) {
-                const m = line.match(/^(\s*)-\s/);
+            for (const cl of parentTask.childLines) {
+                const m = cl.text.match(/^(\s*)-\s/);
                 if (m) minChildIndent = Math.min(minChildIndent, m[1].length);
             }
 
-            for (const line of parentTask.childLines) {
-                const match = line.match(this.WIKI_LINK_CHILD_REGEX);
-                if (!match) continue;
+            for (const cl of parentTask.childLines) {
+                if (cl.wikilinkTarget === null) continue;
 
                 // 直接子のインデントレベルのみ処理（孫以降はスキップ）
-                const lineIndent = (line.match(/^(\s*)/)?.[1] ?? '').length;
-                if (lineIndent !== minChildIndent) continue;
+                if (cl.indent.length !== minChildIndent) continue;
 
-                const linkName = match[1].trim();
-                const resolvedPath = this.resolveWikiLink(linkName, app);
+                const resolvedPath = this.resolveWikiLink(cl.wikilinkTarget, app);
                 if (!resolvedPath) continue;
                 this.wireChild(parentTask, parentId, tasks, resolvedPath);
             }

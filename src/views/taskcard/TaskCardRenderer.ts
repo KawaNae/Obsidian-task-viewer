@@ -92,11 +92,10 @@ export class TaskCardRenderer {
             }
         }
 
-        for (const line of task.childLines) {
-            const match = line.match(/\[(.)\]/);
-            if (!match) continue;
+        for (const cl of task.childLines) {
+            if (cl.checkboxChar === null) continue;
             total++;
-            if (isCompleteStatusChar(match[1], settings.completeStatusChars)) completed++;
+            if (isCompleteStatusChar(cl.checkboxChar, settings.completeStatusChars)) completed++;
         }
 
         return { completed, total };

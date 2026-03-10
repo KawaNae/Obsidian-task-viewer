@@ -34,10 +34,9 @@ export class ChildItemBuilder {
 
         const wikiTaskByIdx = new Map<number, Task>();
         for (let i = 0; i < task.childLines.length; i++) {
-            const wikiMatch = task.childLines[i].match(/^(\s*)-\s+\[\[([^\]]+)\]\]\s*$/);
-            if (!wikiMatch) continue;
-            const linkName = wikiMatch[2].trim();
-            const wikiTask = this.resolver.findWikiLinkChild(task, childIdByLine, linkName);
+            const cl = task.childLines[i];
+            if (cl.wikilinkTarget === null) continue;
+            const wikiTask = this.resolver.findWikiLinkChild(task, childIdByLine, cl.wikilinkTarget);
             if (wikiTask) wikiTaskByIdx.set(i, wikiTask);
         }
 
@@ -45,22 +44,21 @@ export class ChildItemBuilder {
         const visitedIds = new Set<string>();
 
         for (let idx = 0; idx < task.childLines.length; idx++) {
-            const childLine = task.childLines[idx];
+            const cl = task.childLines[idx];
             const wikiTask = wikiTaskByIdx.get(idx);
 
             if (wikiTask) {
-                const lineIndent = childLine.match(/^(\s*)/)?.[1] ?? '';
-                items.push(this.mapper.createWikiLinkItem(wikiTask, indent + lineIndent));
+                items.push(this.mapper.createWikiLinkItem(wikiTask, indent + cl.indent));
                 this.appendDescendants(
                     wikiTask,
-                    indent + lineIndent + '    ',
+                    indent + cl.indent + '    ',
                     task.id,
                     items,
                     visitedIds,
                     0
                 );
             } else {
-                items.push(this.mapper.processChildLine(childLine, idx, task, indent));
+                items.push(this.mapper.processChildLine(cl, idx, task, indent));
             }
         }
 
@@ -119,11 +117,11 @@ export class ChildItemBuilder {
         consumedLineKeys: Set<string>
     ): void {
         for (let i = 0; i < task.childLines.length; i++) {
+            const cl = task.childLines[i];
             const absLine = this.resolver.resolveChildAbsoluteLine(task, i);
             const lineKey = this.resolver.toLineKey(task.file, absLine);
             if (consumedLineKeys.has(lineKey)) continue;
-            const lineIndent = task.childLines[i].match(/^(\s*)/)?.[1] ?? '';
-            const effectiveIndent = indent + lineIndent;
+            const effectiveIndent = indent + cl.indent;
 
             const childIdTask = childIdByLine.get(absLine);
             if (childIdTask) {
@@ -158,9 +156,8 @@ export class ChildItemBuilder {
                 continue;
             }
 
-            const wikiMatch = task.childLines[i].match(/^\s*-\s+\[\[([^\]]+)\]\]\s*$/);
-            const wikiChildTask = wikiMatch
-                ? this.resolver.findWikiLinkChild(task, childIdByLine, wikiMatch[1].trim())
+            const wikiChildTask = cl.wikilinkTarget !== null
+                ? this.resolver.findWikiLinkChild(task, childIdByLine, cl.wikilinkTarget)
                 : null;
 
             if (wikiChildTask && !visitedIds.has(wikiChildTask.id) && wikiChildTask.id !== rootId) {
@@ -170,14 +167,14 @@ export class ChildItemBuilder {
                 items.push(this.mapper.createWikiLinkItem(wikiChildTask, effectiveIndent));
 
                 this.appendDescendants(
-                    wikiChildTask, indent + lineIndent + '    ', rootId, items, visitedIds, depth + 1
+                    wikiChildTask, indent + cl.indent + '    ', rootId, items, visitedIds, depth + 1
                 );
                 this.resolver.markTaskSubtreeLines(wikiChildTask, consumedLineKeys);
                 continue;
             }
 
             if (!wikiChildTask) {
-                items.push(this.mapper.processChildLine(task.childLines[i], i, task, indent));
+                items.push(this.mapper.processChildLine(cl, i, task, indent));
             }
         }
     }

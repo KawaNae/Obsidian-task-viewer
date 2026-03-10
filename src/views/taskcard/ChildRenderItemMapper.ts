@@ -1,4 +1,4 @@
-import { Task } from '../../types';
+import { Task, ChildLine } from '../../types';
 import { NotationUtils } from './NotationUtils';
 import { ChildRenderItem } from './types';
 import { getFileBaseName } from '../../utils/TaskContent';
@@ -49,11 +49,11 @@ export class ChildRenderItemMapper {
      * This path is only reached for lines NOT recognized as tasks by the parser,
      * so no @notation extraction or removal is performed — the line is rendered as-is.
      */
-    processChildLine(line: string, idx: number, task: Task, indent: string): ChildRenderItem {
-        const isCb = /^\s*-\s*\[.\]/.test(line);
+    processChildLine(cl: ChildLine, idx: number, task: Task, indent: string): ChildRenderItem {
+        const isCb = cl.checkboxChar !== null;
 
-        let cleaned = line.trimEnd();
-        if (/^\s*-\s*\[.\]$/.test(cleaned)) {
+        let cleaned = cl.text.trimEnd();
+        if (isCb && /^\s*-\s*\[.\]$/.test(cleaned)) {
             cleaned += ' \u200B';
         }
 

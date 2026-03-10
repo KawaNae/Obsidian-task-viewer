@@ -20,6 +20,13 @@ export interface HabitDefinition {
     unit?: string;
 }
 
+export interface ChildLine {
+    text: string;
+    indent: string;
+    checkboxChar: string | null;
+    wikilinkTarget: string | null;
+}
+
 export interface Task {
     // Identity and source location.
     id: string;
@@ -34,7 +41,7 @@ export interface Task {
     parentId?: string;
     indent: number;
     childIds: string[];
-    childLines: string[];
+    childLines: ChildLine[];
     /**
      * Line map for childLines.
      * - frontmatter tasks: absolute file line numbers

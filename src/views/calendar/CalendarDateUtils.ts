@@ -57,9 +57,8 @@ export function isTaskCompleted(
         return completed;
     }
 
-    for (const childLine of task.childLines) {
-        const match = childLine.match(/^\s*-\s*\[(.)\]/);
-        if (match && !isCompleteStatusChar(match[1], completeStatusChars)) {
+    for (const cl of task.childLines) {
+        if (cl.checkboxChar !== null && !isCompleteStatusChar(cl.checkboxChar, completeStatusChars)) {
             completed = false;
             break;
         }

@@ -125,7 +125,7 @@ export class TaskConverter {
 
         const headerPrefix = '#'.repeat(headerLevel) + ' ';
         const lines = ['', headerPrefix + header]; // 空行 + 見出し
-        lines.push(...task.childLines);
+        lines.push(...task.childLines.map(cl => cl.text));
 
         return lines.join('\n');
     }

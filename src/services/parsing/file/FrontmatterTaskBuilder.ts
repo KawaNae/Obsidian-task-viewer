@@ -1,6 +1,7 @@
-import { FrontmatterTaskKeys, Task, WikilinkRef } from '../../../types';
+import { FrontmatterTaskKeys, Task, WikilinkRef, ChildLine } from '../../../types';
 import { TaskIdGenerator } from '../../../utils/TaskIdGenerator';
 import { TagExtractor } from '../../../utils/TagExtractor';
+import { ChildLineClassifier } from '../../../utils/ChildLineClassifier';
 
 export interface FrontmatterParseResult {
     task: Task;
@@ -69,7 +70,7 @@ export class FrontmatterTaskBuilder {
                 : dueParsed.date;
         }
 
-        const childLines: string[] = [];
+        const childLines: ChildLine[] = [];
         const childBodyIndices: number[] = [];
 
         const wikilinkRefs: WikilinkRef[] = [];
@@ -90,7 +91,7 @@ export class FrontmatterTaskBuilder {
             for (const relIndex of block.lineIndices) {
                 const line = bodyLines[relIndex];
                 const absoluteLine = bodyStartIndex + relIndex;
-                childLines.push(line);
+                childLines.push(ChildLineClassifier.classify(line));
                 childBodyIndices.push(absoluteLine);
 
                 const wikiMatch = line.match(wikiRegex);

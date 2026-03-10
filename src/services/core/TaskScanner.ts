@@ -1,5 +1,6 @@
 import { App, TFile } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
+import { ChildLineClassifier } from '../../utils/ChildLineClassifier';
 import { TaskParser } from '../parsing/TaskParser';
 import { FrontmatterTaskBuilder } from '../parsing/file/FrontmatterTaskBuilder';
 import { WikiLinkResolver } from './WikiLinkResolver';
@@ -173,12 +174,13 @@ export class TaskScanner {
                     const nonEmptyChildren = children.filter(c => c.trim() !== '');
                     if (nonEmptyChildren.length > 0) {
                         const minIndent = Math.min(...nonEmptyChildren.map(c => c.search(/\S|$/)));
-                        task.childLines = children.map(c => {
+                        const normalized = children.map(c => {
                             if (c.trim() === '') return c;
                             return c.substring(minIndent);
                         });
+                        task.childLines = ChildLineClassifier.classifyLines(normalized);
                     } else {
-                        task.childLines = children;
+                        task.childLines = ChildLineClassifier.classifyLines(children);
                     }
 
                     extractedTasks.push(task);

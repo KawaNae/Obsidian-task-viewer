@@ -194,9 +194,9 @@ export class IntervalParser {
     private static collectChildLines(task: Task, taskIndex: TaskIndex): string[] {
         const lines: string[] = [];
 
-        for (const line of task.childLines || []) {
-            if (line.trim().length > 0) {
-                lines.push(line);
+        for (const cl of task.childLines || []) {
+            if (cl.text.trim().length > 0) {
+                lines.push(cl.text);
             }
         }
 
