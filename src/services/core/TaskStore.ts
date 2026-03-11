@@ -1,4 +1,4 @@
-import type { Task, TaskViewerSettings } from '../../types';
+import type { Task, TaskViewerSettings, WikilinkRef } from '../../types';
 
 /**
  * タスクストア - タスクのインメモリ管理とアクセス
@@ -6,6 +6,7 @@ import type { Task, TaskViewerSettings } from '../../types';
  */
 export class TaskStore {
     private tasks: Map<string, Task> = new Map();
+    private wikilinkRefs: Map<string, WikilinkRef[]> = new Map(); // taskId → refs
     private listeners: ((taskId?: string, changes?: string[]) => void)[] = [];
 
     constructor(private settings: TaskViewerSettings) { }
@@ -47,6 +48,7 @@ export class TaskStore {
      */
     clear(): void {
         this.tasks.clear();
+        this.wikilinkRefs.clear();
     }
 
     /**
@@ -61,6 +63,7 @@ export class TaskStore {
         }
         for (const id of toRemove) {
             this.tasks.delete(id);
+            this.wikilinkRefs.delete(id);
         }
     }
 
@@ -104,6 +107,20 @@ export class TaskStore {
      */
     updateSettings(settings: TaskViewerSettings): void {
         this.settings = settings;
+    }
+
+    // ===== Wikilink Refs =====
+
+    setWikilinkRefs(taskId: string, refs: WikilinkRef[]): void {
+        if (refs.length > 0) {
+            this.wikilinkRefs.set(taskId, refs);
+        } else {
+            this.wikilinkRefs.delete(taskId);
+        }
+    }
+
+    getWikilinkRefsMap(): Map<string, WikilinkRef[]> {
+        return this.wikilinkRefs;
     }
 
     /**

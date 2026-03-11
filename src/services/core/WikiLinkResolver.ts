@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import { Task } from '../../types';
+import { Task, WikilinkRef } from '../../types';
 import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
 
 /**
@@ -8,30 +8,27 @@ import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
  * 新規タスクは作成しない — 既存のタスクMap上で関係だけを更新する。
  */
 export class WikiLinkResolver {
-    // `- [[name]]` を検出する正規表現（チェックボックス無し）
-    private static readonly WIKI_LINK_CHILD_REGEX = /^\s*-\s+\[\[([^\]]+)\]\]\s*$/;
-
     /**
      * タスクMap全体をスキャンし、wikilink子タスクの親子関係を解決する。
      * @param tasks タスクインデックス (id → Task)
+     * @param wikilinkRefsMap タスクIDごとの WikilinkRef 配列
      * @param app Obsidian App インスタンス
      */
-    static resolve(tasks: Map<string, Task>, app: App): void {
+    static resolve(tasks: Map<string, Task>, wikilinkRefsMap: Map<string, WikilinkRef[]>, app: App): void {
         // wikilink 子の body 行位置を追跡（ソート用）
         const wikiChildLineMap = new Map<string, Map<string, number>>();
 
         for (const [parentId, parentTask] of tasks) {
-            // frontmatter タスク: wikiLinkTargets を使用（childLines は空）
-            if (parentTask.wikiLinkTargets && parentTask.wikiLinkTargets.length > 0) {
+            // frontmatter タスク: wikilinkRefs を使用（childLines は空）
+            const refs = wikilinkRefsMap.get(parentId);
+            if (refs && refs.length > 0) {
                 const childLineMap = new Map<string, number>();
-                for (let i = 0; i < parentTask.wikiLinkTargets.length; i++) {
-                    const linkName = parentTask.wikiLinkTargets[i];
-                    const bodyLine = parentTask.wikiLinkBodyLines?.[i];
-                    const resolvedPath = this.resolveWikiLink(linkName, app);
+                for (const ref of refs) {
+                    const resolvedPath = this.resolveWikiLink(ref.target, app);
                     if (!resolvedPath) continue;
                     const childTaskId = this.wireChild(parentTask, parentId, tasks, resolvedPath);
-                    if (bodyLine !== undefined && childTaskId) {
-                        childLineMap.set(childTaskId, bodyLine);
+                    if (childTaskId) {
+                        childLineMap.set(childTaskId, ref.bodyLine);
                     }
                 }
                 if (childLineMap.size > 0) {
@@ -45,21 +42,17 @@ export class WikiLinkResolver {
 
             // childLines の最小リストインデントを求める（直接子のレベル）
             let minChildIndent = Infinity;
-            for (const line of parentTask.childLines) {
-                const m = line.match(/^(\s*)-\s/);
-                if (m) minChildIndent = Math.min(minChildIndent, m[1].length);
+            for (const cl of parentTask.childLines) {
+                minChildIndent = Math.min(minChildIndent, cl.indent.length);
             }
 
-            for (const line of parentTask.childLines) {
-                const match = line.match(this.WIKI_LINK_CHILD_REGEX);
-                if (!match) continue;
+            for (const cl of parentTask.childLines) {
+                if (cl.wikilinkTarget === null) continue;
 
                 // 直接子のインデントレベルのみ処理（孫以降はスキップ）
-                const lineIndent = (line.match(/^(\s*)/)?.[1] ?? '').length;
-                if (lineIndent !== minChildIndent) continue;
+                if (cl.indent.length !== minChildIndent) continue;
 
-                const linkName = match[1].trim();
-                const resolvedPath = this.resolveWikiLink(linkName, app);
+                const resolvedPath = this.resolveWikiLink(cl.wikilinkTarget, app);
                 if (!resolvedPath) continue;
                 this.wireChild(parentTask, parentId, tasks, resolvedPath);
             }

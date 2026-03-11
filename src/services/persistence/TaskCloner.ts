@@ -143,7 +143,7 @@ export class TaskCloner {
      * タスクの再発処理：元タスク+子行の直後に新しいタスク（+子行コピー）を挿入する。
      * 既存タスクがある場合はその直後に、なければ新しいタスクとして追加する。
      */
-    async insertRecurrenceForTask(task: Task, content: string, newTask?: Task): Promise<void> {
+    async insertRecurrenceForTask(task: Task, content: string, newTask?: Task, copyChildren = true): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;
 
@@ -163,13 +163,25 @@ export class TaskCloner {
             const newContent = TaskParser.format(newTask || task);
             const newParentLine = originalIndent + newContent.trim();
 
-            // Insert before original task (new task on top, completed task below)
-            const result = this.duplicateInlineTaskLines(lines, task, newParentLine, 'before');
-            return result ? result.join('\n') : fileContent;
+            if (copyChildren) {
+                // Collect children, strip block IDs, and reset checkboxes
+                const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
+                const cleaned = this.fileOps.stripBlockIds(childrenLines);
+                const reset = this.resetChildCheckboxes(cleaned);
+                lines.splice(currentLine, 0, newParentLine, ...reset);
+            } else {
+                lines.splice(currentLine, 0, newParentLine);
+            }
+
+            return lines.join('\n');
         });
     }
 
     // --- Private helpers ---
+
+    private resetChildCheckboxes(lines: string[]): string[] {
+        return lines.map(line => line.replace(/^(\s*(?:[-*+]|\d+[.)]) *\[)[^\]]/, '$1 '));
+    }
 
     /**
      * Inline task duplication core: collect parent+children, replace parent line,

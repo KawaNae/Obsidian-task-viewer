@@ -49,6 +49,18 @@ export class DateResolver {
                 return { start: toISO(today), end: toISO(end) };
             }
 
+            case 'thisMonth': {
+                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                return { start: toISO(monthStart), end: toISO(monthEnd) };
+            }
+
+            case 'thisYear': {
+                const yearStart = new Date(today.getFullYear(), 0, 1);
+                const yearEnd = new Date(today.getFullYear(), 11, 31);
+                return { start: toISO(yearStart), end: toISO(yearEnd) };
+            }
+
             default:
                 return { start: toISO(today), end: toISO(today) };
         }

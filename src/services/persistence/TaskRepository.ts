@@ -6,6 +6,7 @@ import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner } from './TaskCloner';
 import { TaskConverter } from './TaskConverter';
 import { getFileBaseName } from '../../utils/TaskContent';
+import { TaskLineClassifier } from '../../utils/TaskLineClassifier';
 
 /**
  * TaskRepository - タスクのファイル操作を統括するファサードクラス
@@ -102,8 +103,8 @@ export class TaskRepository {
         return this.cloner.duplicateFrontmatterTaskForWeek(task, frontmatterKeys);
     }
 
-    async insertRecurrenceForTask(task: Task, content: string, newTask?: Task): Promise<void> {
-        return this.cloner.insertRecurrenceForTask(task, content, newTask);
+    async insertRecurrenceForTask(task: Task, content: string, newTask?: Task, copyChildren = true): Promise<void> {
+        return this.cloner.insertRecurrenceForTask(task, content, newTask, copyChildren);
     }
 
     // --- Task Conversion Operations ---
@@ -113,6 +114,7 @@ export class TaskRepository {
         headerName: string,
         headerLevel: number,
         sourceFileColor?: string,
+        sourceSharedTags?: string[],
         frontmatterKeys?: FrontmatterTaskKeys
     ): Promise<string> {
         return this.converter.convertToFrontmatterTask(
@@ -120,6 +122,7 @@ export class TaskRepository {
             headerName,
             headerLevel,
             sourceFileColor,
+            sourceSharedTags,
             frontmatterKeys
         );
     }
@@ -130,7 +133,8 @@ export class TaskRepository {
     async replaceInlineTaskWithWikilink(task: Task, targetPath: string): Promise<void> {
         const linkTarget = targetPath.replace(/\.md$/, '');
         const fileName = getFileBaseName(targetPath) || 'task';
-        const wikilinkLine = `- [[${linkTarget}|${fileName}]]`;
+        const marker = TaskLineClassifier.extractMarker(task.originalText);
+        const wikilinkLine = `${marker} [[${linkTarget}|${fileName}]]`;
 
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;

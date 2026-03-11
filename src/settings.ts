@@ -529,6 +529,41 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
         this.addFrontmatterTaskKeySettings(el);
 
+        el.createEl('h3', { text: 'Suggest', cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setDesc('Changes may require reloading Obsidian to take effect.')
+            .setClass('setting-item--desc-only');
+
+        new Setting(el)
+            .setName('Color suggest')
+            .setDesc('Enable custom color suggestions for the color property.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.suggestColor)
+                .onChange(async (value) => {
+                    this.plugin.settings.suggestColor = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Line style suggest')
+            .setDesc('Enable custom line style suggestions for the linestyle property.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.suggestLinestyle)
+                .onChange(async (value) => {
+                    this.plugin.settings.suggestLinestyle = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Shared tags suggest')
+            .setDesc('Enable custom tag suggestions for the shared tags property.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.suggestSharedtags)
+                .onChange(async (value) => {
+                    this.plugin.settings.suggestSharedtags = value;
+                    await this.plugin.saveSettings();
+                }));
     }
 
     // ─── AI Index Tab ────────────────────────────────────────
@@ -868,6 +903,13 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             'Frontmatter key for task border line style (solid/dashed/dotted/double/dashdotted).',
             'tv-linestyle',
             'linestyle'
+        );
+        this.addFrontmatterTaskKeySetting(
+            containerEl,
+            'Shared Tags Key',
+            'Frontmatter key for file-level shared tags inherited by all tasks in the file.',
+            'tv-sharedtags',
+            'sharedtags'
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,

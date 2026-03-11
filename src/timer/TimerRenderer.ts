@@ -6,7 +6,6 @@ import { setIcon } from 'obsidian';
 import {
     CountdownTimer,
     CountupTimer,
-    IdleTimer,
     IntervalTimer,
     TimerInstance,
 } from './TimerInstance';
@@ -179,8 +178,16 @@ export class TimerRenderer {
             const closeBtn = header.createEl('button', { cls: 'timer-widget__close-btn' });
             setIcon(closeBtn, 'x');
             closeBtn.onclick = () => {
-                // Skip confirmation for non-running or idle timers
-                if (!timer.isRunning || timer.phase === 'idle') {
+                // Skip confirmation for non-running timers
+                if (!timer.isRunning) {
+                    this.clearCloseConfirmTimer(taskId);
+                    this.lifecycle.closeTimer(taskId);
+                    return;
+                }
+                // Idle timers close without confirmation, but ignore accidental clicks
+                // right after the idle timer spawns (e.g. double-clicking a previous close)
+                if (timer.phase === 'idle') {
+                    if (Date.now() - timer.startTimeMs < 500) return;
                     this.clearCloseConfirmTimer(taskId);
                     this.lifecycle.closeTimer(taskId);
                     return;
@@ -285,7 +292,6 @@ export class TimerRenderer {
                 this.renderIntervalControls(container, timer);
                 return;
             case 'idle':
-                this.renderIdleControls(container, timer);
                 return;
             default:
                 return;
@@ -484,16 +490,6 @@ export class TimerRenderer {
         };
     }
 
-    private renderIdleControls(container: HTMLElement, timer: IdleTimer): void {
-        const dismissBtn = container.createEl('button', {
-            cls: 'timer-widget__btn timer-widget__btn--secondary'
-        });
-        setIcon(dismissBtn, 'x');
-        dismissBtn.createSpan({ text: ' Dismiss' });
-        dismissBtn.onclick = () => {
-            this.lifecycle.closeTimer(timer.id);
-        };
-    }
 
     private formatSignedTime(seconds: number): string {
         return TimeFormatter.formatSignedSeconds(seconds);

@@ -23,9 +23,8 @@ function countChildCompletion(
                 completed++;
             }
         } else {
-            const line = item.handler.parentTask.childLines[item.handler.childLineIndex];
-            const match = line?.match(/\[(.)\]/);
-            if (match && isCompleteStatusChar(match[1], settings.completeStatusChars)) {
+            const cl = item.handler.parentTask.childLines[item.handler.childLineIndex];
+            if (cl?.checkboxChar !== null && cl?.checkboxChar !== undefined && isCompleteStatusChar(cl.checkboxChar, settings.completeStatusChars)) {
                 completed++;
             }
         }

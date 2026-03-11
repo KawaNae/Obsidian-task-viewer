@@ -145,6 +145,9 @@ export class TaskCommandExecutor {
 
         if (shouldDeleteOriginal) {
             await this.repository.deleteTaskFromFile(task);
+        } else if (task.commands && task.commands.length > 0) {
+            const cleanedTask = { ...task, commands: [] };
+            await this.repository.updateTaskInFile(task, cleanedTask);
         }
     }
 }

@@ -1,5 +1,6 @@
 import { App, TFile } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
+import { ChildLineClassifier } from '../../utils/ChildLineClassifier';
 import { TaskParser } from '../parsing/TaskParser';
 import { FrontmatterTaskBuilder } from '../parsing/file/FrontmatterTaskBuilder';
 import { WikiLinkResolver } from './WikiLinkResolver';
@@ -49,7 +50,7 @@ export class TaskScanner {
         for (const file of files) {
             await this.queueScan(file);
         }
-        WikiLinkResolver.resolve(this.store.getTasksMap(), this.app);
+        WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
         this.store.notifyListenersStaggered();
         this.isInitializing = false;
     }
@@ -173,12 +174,13 @@ export class TaskScanner {
                     const nonEmptyChildren = children.filter(c => c.trim() !== '');
                     if (nonEmptyChildren.length > 0) {
                         const minIndent = Math.min(...nonEmptyChildren.map(c => c.search(/\S|$/)));
-                        task.childLines = children.map(c => {
+                        const normalized = children.map(c => {
                             if (c.trim() === '') return c;
                             return c.substring(minIndent);
                         });
+                        task.childLines = ChildLineClassifier.classifyLines(normalized);
                     } else {
-                        task.childLines = children;
+                        task.childLines = ChildLineClassifier.classifyLines(children);
                     }
 
                     extractedTasks.push(task);
@@ -228,7 +230,7 @@ export class TaskScanner {
         }
 
         const bodyLines = lines.slice(bodyStartIndex);
-        const fmTask = FrontmatterTaskBuilder.parse(
+        const fmResult = FrontmatterTaskBuilder.parse(
             file.path,
             frontmatterObj,
             bodyLines,
@@ -242,7 +244,12 @@ export class TaskScanner {
         const dailyNoteDate = DailyNoteUtils.parseDateFromFilePath(this.app, file.path);
         const allExtractedTasks = extractTasksFromLines(bodyLines, bodyStartIndex, dailyNoteDate ?? undefined);
 
-        if (fmTask) {
+        if (fmResult) {
+            const fmTask = fmResult.task;
+
+            // Store wikilink refs separately
+            this.store.setWikilinkRefs(fmTask.id, fmResult.wikilinkRefs);
+
             // MetadataCacheからファイル全体のタグを取得してマージ（frontmatterタスクのみ）
             const cacheTags = this.app.metadataCache.getFileCache(file)?.tags;
             if (cacheTags && cacheTags.length > 0) {
@@ -262,12 +269,17 @@ export class TaskScanner {
         }
         newTasks.push(...allExtractedTasks);
 
-        // Resolve file-level color/linestyle from frontmatter
+        // Resolve file-level color/linestyle/tags from frontmatter
         const fileColor = TaskStyleResolver.getFileColor(this.app, file.path, this.settings.frontmatterTaskKeys.color);
         const fileLinestyle = TaskStyleResolver.getFileLinestyle(this.app, file.path, this.settings.frontmatterTaskKeys.linestyle);
+        const sharedtagsKey = this.settings.frontmatterTaskKeys.sharedtags;
+        const fileTags = TagExtractor.fromFrontmatter(
+            this.app.metadataCache.getFileCache(file)?.frontmatter?.[sharedtagsKey]
+        );
         for (const task of newTasks) {
             if (fileColor) task.color = fileColor;
             if (fileLinestyle) task.linestyle = fileLinestyle;
+            if (fileTags.length > 0) task.tags = TagExtractor.merge(task.tags, fileTags);
         }
 
         // 2. 現在の完了カウント

@@ -214,6 +214,36 @@ export class CreateTaskModal extends Modal {
     ): HTMLInputElement {
         const wrapper = container.createDiv({ cls: 'create-task-modal__input-with-picker' });
 
+        // Visual icon button (left side, non-interactive — sits behind the native input overlay)
+        const pickerButton = wrapper.createDiv({
+            cls: 'create-task-modal__picker-button'
+        });
+        pickerButton.setAttribute('aria-label',
+            pickerType === 'date' ? 'Open date picker' : 'Open time picker');
+        setIcon(pickerButton, pickerType === 'date' ? 'calendar' : 'clock');
+
+        // Hidden native picker input — opened programmatically via showPicker().
+        // pointer-events: none (CSS) prevents native browser tooltip on hover.
+        const nativePickerInput = wrapper.createEl('input', {
+            cls: 'create-task-modal__native-picker-input'
+        });
+        nativePickerInput.type = pickerType;
+        nativePickerInput.setAttribute('aria-hidden', 'true');
+        if (pickerType === 'time') {
+            nativePickerInput.step = '60';
+        }
+
+        // Open native picker on icon button click
+        pickerButton.addEventListener('click', () => {
+            try {
+                nativePickerInput.showPicker();
+            } catch {
+                // iOS Safari fallback (WebKit Bug #261703)
+                nativePickerInput.focus();
+                nativePickerInput.click();
+            }
+        });
+
         const textInput = wrapper.createEl('input', {
             type: 'text',
             placeholder,
@@ -221,30 +251,18 @@ export class CreateTaskModal extends Modal {
         });
         textInput.value = initialValue;
 
-        // Visual icon button (non-interactive, sits behind the native input overlay)
-        const pickerButton = wrapper.createDiv({
-            cls: 'create-task-modal__picker-button'
+        // Clear button (right side, visible only when value exists)
+        const clearButton = wrapper.createDiv({
+            cls: 'create-task-modal__clear-button'
         });
-        pickerButton.setAttribute(
-            'aria-hidden',
-            'true'
-        );
-        setIcon(pickerButton, pickerType === 'date' ? 'calendar' : 'clock');
-
-        // Native picker input: overlays the icon button area, transparent but tappable.
-        // On iOS Safari, showPicker() doesn't work for date/time inputs (WebKit Bug #261703).
-        // Instead, the native input directly receives taps and opens the platform picker.
-        const nativePickerInput = wrapper.createEl('input', {
-            cls: 'create-task-modal__native-picker-input'
+        clearButton.setAttribute('aria-label', 'Clear');
+        setIcon(clearButton, 'x');
+        clearButton.style.display = initialValue ? '' : 'none';
+        clearButton.addEventListener('click', () => {
+            textInput.value = '';
+            textInput.dispatchEvent(new Event('input', { bubbles: true }));
+            clearButton.style.display = 'none';
         });
-        nativePickerInput.type = pickerType;
-        if (pickerType === 'time') {
-            nativePickerInput.step = '60';
-        }
-        nativePickerInput.setAttribute(
-            'aria-label',
-            pickerType === 'date' ? 'Open date picker' : 'Open time picker'
-        );
 
         // Sync text input value → native input before picker opens
         const syncNativeValueFromText = () => {
@@ -256,8 +274,11 @@ export class CreateTaskModal extends Modal {
             nativePickerInput.value = /^\d{2}:\d{2}$/.test(value) ? value : '';
         };
 
-        // Keep native input in sync when text changes
-        textInput.addEventListener('input', syncNativeValueFromText);
+        // Keep native input in sync when text changes; toggle clear button visibility
+        textInput.addEventListener('input', () => {
+            syncNativeValueFromText();
+            clearButton.style.display = textInput.value.trim() ? '' : 'none';
+        });
 
         // Sync before the picker opens (focus = about to show picker on some platforms)
         nativePickerInput.addEventListener('focus', syncNativeValueFromText);

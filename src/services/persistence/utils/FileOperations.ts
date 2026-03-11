@@ -52,6 +52,34 @@ export class FileOperations {
     }
 
     /**
+     * Compute the indent string for a direct child of the given parent line.
+     * Detects tabs vs spaces from the parent and adds one level.
+     */
+    static getChildIndent(parentLine: string): string {
+        const match = parentLine.match(/^(\s*)/);
+        const parentIndent = match ? match[1] : '';
+
+        if (parentIndent.includes('\t')) {
+            return parentIndent + '\t';
+        }
+
+        return parentIndent + '    ';
+    }
+
+    /**
+     * Re-indent child lines relative to a new context.
+     * Strips the old parent's indentation width and converts to tab-based relative indent.
+     */
+    static adjustChildIndentation(childLines: string[], oldParentIndent: number): string[] {
+        return childLines.map(line => {
+            if (line.trim() === '') return line;
+            const currentIndent = line.search(/\S|$/);
+            const relativeIndent = Math.max(0, currentIndent - oldParentIndent);
+            return '\t'.repeat(relativeIndent / (line.includes('\t') ? 1 : 4)) + line.trimStart();
+        });
+    }
+
+    /**
      * Find the current line number of a task in the file.
      * Uses multiple strategies: exact match, content + date match, fallback to stored line.
      */

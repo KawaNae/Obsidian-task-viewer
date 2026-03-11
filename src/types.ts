@@ -20,6 +20,13 @@ export interface HabitDefinition {
     unit?: string;
 }
 
+export interface ChildLine {
+    text: string;
+    indent: string;
+    checkboxChar: string | null;
+    wikilinkTarget: string | null;
+}
+
 export interface Task {
     // Identity and source location.
     id: string;
@@ -34,7 +41,7 @@ export interface Task {
     parentId?: string;
     indent: number;
     childIds: string[];
-    childLines: string[];
+    childLines: ChildLine[];
     /**
      * Line map for childLines.
      * - frontmatter tasks: absolute file line numbers
@@ -66,10 +73,6 @@ export interface Task {
     // Parse-time warning shown to users.
     validationWarning?: string;
 
-    // Frontmatter-task wikilink metadata (used by WikiLinkResolver).
-    wikiLinkTargets?: string[];
-    wikiLinkBodyLines?: number[];
-
     /**
      * Parser identifier that produced this task (e.g. at-notation/frontmatter).
      * Used for parser-specific writeback behavior.
@@ -79,6 +82,15 @@ export interface Task {
     // File-level styling from frontmatter (resolved at scan time).
     color?: string;
     linestyle?: string;
+}
+
+/**
+ * Wikilink reference extracted from frontmatter task body.
+ * Stored separately from Task and consumed by WikiLinkResolver.
+ */
+export interface WikilinkRef {
+    target: string;
+    bodyLine: number;
 }
 
 /**
@@ -159,6 +171,7 @@ export interface FrontmatterTaskKeys {
     timerTargetId: string;
     color: string;
     linestyle: string;
+    sharedtags: string;
     ignore: string;
 }
 
@@ -171,6 +184,7 @@ export const DEFAULT_FRONTMATTER_TASK_KEYS: FrontmatterTaskKeys = {
     timerTargetId: 'tv-timer-target-id',
     color: 'tv-color',
     linestyle: 'tv-linestyle',
+    sharedtags: 'tv-sharedtags',
     ignore: 'tv-ignore',
 };
 
@@ -198,6 +212,7 @@ export function normalizeFrontmatterTaskKeys(value: unknown): FrontmatterTaskKey
         timerTargetId: normalize('timerTargetId'),
         color: normalize('color'),
         linestyle: normalize('linestyle'),
+        sharedtags: normalize('sharedtags'),
         ignore: normalize('ignore'),
     };
 }
@@ -281,6 +296,9 @@ export interface TaskViewerSettings {
         timer: DefaultLeafPosition;
         kanban: DefaultLeafPosition;
     };
+    suggestColor: boolean;
+    suggestLinestyle: boolean;
+    suggestSharedtags: boolean;
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -326,4 +344,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
         timer: 'right',
         kanban: 'tab',
     },
+    suggestColor: true,
+    suggestLinestyle: true,
+    suggestSharedtags: true,
 };

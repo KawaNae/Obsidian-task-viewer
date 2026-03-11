@@ -133,7 +133,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskIndex** | `services/core/TaskIndex.ts` | Central orchestrator for scanning, indexing, and event management; branches on `parserId` |
 | **TaskStore** | `services/core/TaskStore.ts` | In-memory task cache; notifies UI via `onChange` listeners |
 | **TaskScanner** | `services/core/TaskScanner.ts` | File scanning → ParserChain invocation |
-| **WikiLinkResolver** | `services/core/WikiLinkResolver.ts` | Resolves frontmatter wikilink parent–child relationships (`wikiLinkTargets` / `childLines`) |
+| **WikiLinkResolver** | `services/core/WikiLinkResolver.ts` | Resolves frontmatter wikilink parent–child relationships (via `WikilinkRef` in TaskStore / `childLines`) |
 | **SyncDetector / EditorObserver** | `services/core/SyncDetector.ts` et al. | Distinguishes local edits from remote sync changes |
 | **ParserChain** | `services/parsing/strategies/ParserChain.ts` | Tries multiple parsers in order (Strategy chain) |
 | **AtNotationParser** | `services/parsing/inline/AtNotationParser.ts` | Parses `@date` inline notation (line-level) |
@@ -294,7 +294,7 @@ The heading configured in settings (`frontmatterTaskHeader` / `frontmatterTaskHe
 6. `ChildItemBuilder` prioritises absolute line numbers and skips already-expanded descendants to prevent duplicate rendering.
 
 Notes:
-- `wikiLinkTargets` is collected only from the same contiguous list block.
+- `WikilinkRef` entries are collected only from the same contiguous list block and stored in `TaskStore`.
 - When the configured heading is absent, child elements are treated as empty.
 
 ---
@@ -485,6 +485,29 @@ btn.setAttribute('aria-label', 'Filter');
 // Bad — causes double tooltip
 btn.setAttribute('aria-label', 'Filter');
 btn.setAttribute('title', 'Filter');
+```
+
+**Native `<input type="date/time">` の注意**: Electron/Chromium はこれらの入力要素にビルトインのブラウザツールチップを表示する。`title=""` では抑制できない。対処法:
+
+1. CSS で `pointer-events: none` を設定してホバーが native input に到達しないようにする
+2. 表示用の要素（アイコンボタン等）に `aria-label` を設定して Obsidian 標準ツールチップを表示
+3. アイコンボタンの `click` イベントで `showPicker()` を呼んでピッカーを開く
+4. iOS Safari では `showPicker()` が動かない (WebKit Bug #261703) ため `focus()` + `click()` でフォールバック
+
+```ts
+// Native input: pointer-events: none (CSS), aria-hidden
+nativeInput.setAttribute('aria-hidden', 'true');
+
+// Icon button: aria-label for Obsidian tooltip, click to open picker
+pickerButton.setAttribute('aria-label', 'Open date picker');
+pickerButton.addEventListener('click', () => {
+    try {
+        nativeInput.showPicker();
+    } catch {
+        nativeInput.focus();
+        nativeInput.click();
+    }
+});
 ```
 
 ### Wording: "Remove" vs "Delete"

@@ -3,7 +3,6 @@
  */
 
 export { TimerWidget } from './TimerWidget';
-export { IntervalParser } from './IntervalParser';
 export { TimerProgressUI } from './TimerProgressUI';
 export type {
     TimerInstance,

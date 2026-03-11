@@ -9,10 +9,10 @@ import type { PropertiesMenuBuilder } from '../interaction/menu/builders/Propert
 import type { TimerMenuBuilder } from '../interaction/menu/builders/TimerMenuBuilder';
 import type { TaskActionsMenuBuilder } from '../interaction/menu/builders/TaskActionsMenuBuilder';
 import type { EditorCheckboxMenuBuilder } from '../interaction/menu/builders/EditorCheckboxMenuBuilder';
+import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 
 const taskIndexChanged = StateEffect.define<void>();
 const settingsChanged = StateEffect.define<void>();
-const CHECKBOX_LINE_REGEX = /^\s*-\s*\[.\]/;
 
 class TaskMenuWidget extends WidgetType {
     constructor(
@@ -82,7 +82,6 @@ export function createTaskMenuExtension(
             // Recognized task: full menu
             const dt = toDisplayTask(task, getSettings().startHour);
             propertiesBuilder.addStatusSubmenu(menu, task);
-            menu.addSeparator();
             propertiesBuilder.buildPropertiesSubmenu(menu, dt, null);
             menu.addSeparator();
             timerBuilder.addTimerSubmenu(menu, task);
@@ -126,7 +125,7 @@ export function createTaskMenuExtension(
                 const lineNumber = line.number - 1; // CM6 is 1-based, Task.line is 0-based
                 const lineText = view.state.doc.sliceString(line.from, line.to);
 
-                if (CHECKBOX_LINE_REGEX.test(lineText) && !seen.has(line.number)) {
+                if (TaskLineClassifier.isTaskLine(lineText) && !seen.has(line.number)) {
                     seen.add(line.number);
                     let show = true;
                     if (needsFilter && filePath) {

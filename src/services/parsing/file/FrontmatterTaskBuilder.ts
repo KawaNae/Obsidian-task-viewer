@@ -1,6 +1,12 @@
-import { FrontmatterTaskKeys, Task } from '../../../types';
+import { FrontmatterTaskKeys, Task, WikilinkRef, ChildLine } from '../../../types';
 import { TaskIdGenerator } from '../../../utils/TaskIdGenerator';
 import { TagExtractor } from '../../../utils/TagExtractor';
+import { ChildLineClassifier } from '../../../utils/ChildLineClassifier';
+
+export interface FrontmatterParseResult {
+    task: Task;
+    wikilinkRefs: WikilinkRef[];
+}
 
 /**
  * Builds a frontmatter-backed Task from metadata cache data.
@@ -18,7 +24,7 @@ export class FrontmatterTaskBuilder {
         frontmatterKeys: FrontmatterTaskKeys,
         frontmatterTaskHeader: string,
         frontmatterTaskHeaderLevel: number
-    ): Task | null {
+    ): FrontmatterParseResult | null {
         if (!frontmatter) return null;
 
         if (
@@ -64,11 +70,10 @@ export class FrontmatterTaskBuilder {
                 : dueParsed.date;
         }
 
-        const childLines: string[] = [];
+        const childLines: ChildLine[] = [];
         const childBodyIndices: number[] = [];
 
-        const wikiLinkTargets: string[] = [];
-        const wikiLinkBodyLines: number[] = [];
+        const wikilinkRefs: WikilinkRef[] = [];
 
         const section = this.findHeaderSection(
             bodyLines,
@@ -86,42 +91,43 @@ export class FrontmatterTaskBuilder {
             for (const relIndex of block.lineIndices) {
                 const line = bodyLines[relIndex];
                 const absoluteLine = bodyStartIndex + relIndex;
-                childLines.push(line);
+                childLines.push(ChildLineClassifier.classify(line));
                 childBodyIndices.push(absoluteLine);
 
                 const wikiMatch = line.match(wikiRegex);
                 if (wikiMatch) {
-                    wikiLinkTargets.push(wikiMatch[1].trim());
-                    wikiLinkBodyLines.push(absoluteLine);
+                    wikilinkRefs.push({ target: wikiMatch[1].trim(), bodyLine: absoluteLine });
                 }
             }
         }
 
         const contentTags = TagExtractor.fromContent(content);
-        const fmTags = TagExtractor.fromFrontmatter(frontmatter['tags']);
+        const taskTags = TagExtractor.fromFrontmatter(frontmatter['tags']);
+        const sharedTags = TagExtractor.fromFrontmatter(frontmatter[frontmatterKeys.sharedtags]);
 
         return {
-            id: TaskIdGenerator.generate('frontmatter', filePath, 'fm-root'),
-            file: filePath,
-            line: -1,
-            content,
-            statusChar,
-            indent: 0,
-            childIds: [],
-            childLines,
-            childLineBodyOffsets: childBodyIndices,
-            startDate: start.date,
-            startTime: start.time,
-            endDate: end.date,
-            endTime: end.time,
-            due,
-            tags: TagExtractor.merge(contentTags, fmTags),
-            wikiLinkTargets,
-            wikiLinkBodyLines,
-            originalText: '',
-            commands: [],
-            timerTargetId,
-            parserId: 'frontmatter'
+            task: {
+                id: TaskIdGenerator.generate('frontmatter', filePath, 'fm-root'),
+                file: filePath,
+                line: -1,
+                content,
+                statusChar,
+                indent: 0,
+                childIds: [],
+                childLines,
+                childLineBodyOffsets: childBodyIndices,
+                startDate: start.date,
+                startTime: start.time,
+                endDate: end.date,
+                endTime: end.time,
+                due,
+                tags: TagExtractor.merge(contentTags, taskTags, sharedTags),
+                originalText: '',
+                commands: [],
+                timerTargetId,
+                parserId: 'frontmatter'
+            },
+            wikilinkRefs
         };
     }
 

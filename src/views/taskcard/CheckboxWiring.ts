@@ -110,13 +110,11 @@ export class CheckboxWiring {
         checkbox.addEventListener('click', async () => {
             if (childLineIndex >= task.childLines.length) return;
 
-            let childLine = task.childLines[childLineIndex];
-            const match = childLine.match(/\[(.)\]/);
-            if (!match) return;
+            const cl = task.childLines[childLineIndex];
+            if (cl.checkboxChar === null) return;
 
-            const currentChar = match[1];
-            const newChar = currentChar === ' ' ? 'x' : ' ';
-            childLine = childLine.replace(`[${currentChar}]`, `[${newChar}]`);
+            const newChar = cl.checkboxChar === ' ' ? 'x' : ' ';
+            const newText = cl.text.replace(`[${cl.checkboxChar}]`, `[${newChar}]`);
             this.updateCheckboxDataTask(checkbox as HTMLElement, newChar);
 
             const absoluteLineNumber = this.resolveChildLineNumber(task, childLineIndex);
@@ -126,7 +124,7 @@ export class CheckboxWiring {
                 return;
             }
 
-            await this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
+            await this.taskIndex.updateLine(task.file, absoluteLineNumber, newText);
         });
         checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
 
@@ -139,8 +137,8 @@ export class CheckboxWiring {
             this.showStatusMenu(e as MouseEvent, settings, async (statusChar) => {
                 if (childLineIndex >= task.childLines.length) return;
 
-                let childLine = task.childLines[childLineIndex];
-                childLine = childLine.replace(/\[(.)\]/, `[${statusChar}]`);
+                const cl = task.childLines[childLineIndex];
+                const newText = cl.text.replace(`[${cl.checkboxChar}]`, `[${statusChar}]`);
                 if (targetEl) {
                     this.updateCheckboxDataTask(targetEl, statusChar);
                 }
@@ -152,7 +150,7 @@ export class CheckboxWiring {
                     return;
                 }
 
-                await this.taskIndex.updateLine(task.file, absoluteLineNumber, childLine);
+                await this.taskIndex.updateLine(task.file, absoluteLineNumber, newText);
             });
         });
         checkbox.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });

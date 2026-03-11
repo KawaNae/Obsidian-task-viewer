@@ -4,6 +4,7 @@ import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
 import { TaskIdGenerator } from '../../../utils/TaskIdGenerator';
 import { TagExtractor } from '../../../utils/TagExtractor';
 import { DateUtils } from '../../../utils/DateUtils';
+import { TaskLineClassifier } from '../../../utils/TaskLineClassifier';
 
 interface DateBlockResult {
     date: string;
@@ -20,9 +21,6 @@ interface DateBlockResult {
  */
 export class AtNotationParser implements ParserStrategy {
     readonly id = 'at-notation';
-
-    // Regex to match basic task structure: - [x] ...
-    private static readonly BASIC_TASK_REGEX = /^(\s*)-\s*\[(.)]\s*(.*)$/;
 
     // Regex for locating the Date block: @start>end>due
     // Each segment accepts: YYYY-MM-DD, YYYY-MM-DDTHH:mm, T?HH:mm, or empty
@@ -52,12 +50,12 @@ export class AtNotationParser implements ParserStrategy {
         const taskPart = flowSplit[0];
         const flowPart = flowSplit[1] || '';
 
-        const match = taskPart.match(AtNotationParser.BASIC_TASK_REGEX);
-        if (!match) {
+        const classified = TaskLineClassifier.classify(taskPart);
+        if (!classified) {
             return null;
         }
 
-        const [, , statusChar, rawContent] = match;
+        const { statusChar, rawContent } = classified;
 
         // 2. Parse flow commands
         const commands = flowPart ? this.parseFlowCommands(flowPart) : [];
@@ -368,7 +366,8 @@ export class AtNotationParser implements ParserStrategy {
         }
 
         const blockIdStr = task.blockId ? ` ^${task.blockId}` : '';
-        return `- [${statusChar}] ${task.content}${metaStr}${flowStr}${blockIdStr}`;
+        const marker = TaskLineClassifier.extractMarker(task.originalText);
+        return `${marker} [${statusChar}] ${task.content}${metaStr}${flowStr}${blockIdStr}`;
     }
 
     isTriggerableStatus(task: Task): boolean {

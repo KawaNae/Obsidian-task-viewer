@@ -10,6 +10,7 @@ import { TimerInstance, getTimerElapsedSeconds } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { Task } from '../types';
+import { FileOperations } from '../services/persistence/utils/FileOperations';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
 import { TimerStorageUtils } from './TimerStorageUtils';
@@ -126,7 +127,8 @@ export class TimerRecorder {
 
     /**
      * Write startDate/startTime to the task at timer start (for 'self' recordMode).
-     * This moves the task to the current time on the Timeline immediately.
+     * If the task has both start and end times (SE-Timed), shift end by the same
+     * amount to preserve the duration (parallel translation).
      */
     async updateTaskStartTime(timer: TimerInstance): Promise<void> {
         const now = new Date();
@@ -137,10 +139,22 @@ export class TimerRecorder {
 
         if (!task) return;
 
-        await taskIndex.updateTask(task.id, {
+        const updates: Record<string, string | undefined> = {
             startDate: this.formatDate(now),
             startTime: this.formatTime(now),
-        });
+        };
+
+        // Parallel translation: preserve duration for SE-Timed tasks
+        if (task.startDate && task.startTime && task.endDate && task.endTime) {
+            const oldStart = new Date(`${task.startDate}T${task.startTime}`);
+            const oldEnd = new Date(`${task.endDate}T${task.endTime}`);
+            const durationMs = oldEnd.getTime() - oldStart.getTime();
+            const newEnd = new Date(now.getTime() + durationMs);
+            updates.endDate = this.formatDate(newEnd);
+            updates.endTime = this.formatTime(newEnd);
+        }
+
+        await taskIndex.updateTask(task.id, updates);
     }
 
     /**
@@ -321,7 +335,7 @@ export class TimerRecorder {
             return;
         }
 
-        const childIndent = this.getChildIndent(inlineTask.originalText);
+        const childIndent = FileOperations.getChildIndent(inlineTask.originalText);
         const childLine = childIndent + formattedLine;
         const taskRepository = this.plugin.getTaskRepository();
         await taskRepository.insertLineAsFirstChild(inlineTask, childLine);
@@ -389,27 +403,4 @@ export class TimerRecorder {
         return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
     }
 
-    /**
-     * Get proper child indentation based on parent's actual indentation style.
-     * Detects whether tabs or spaces are used and adds one level.
-     */
-    private getChildIndent(originalText: string): string {
-        const match = originalText.match(/^(\s*)/);
-        const parentIndent = match ? match[1] : '';
-
-        if (parentIndent.includes('\t')) {
-            return parentIndent + '\t';
-        }
-
-        const listMatch = originalText.match(/^(\s*)-/);
-        if (listMatch) {
-            const existingIndent = listMatch[1];
-            if (existingIndent.length === 0) {
-                return '    ';
-            }
-            return parentIndent + (existingIndent.substring(0, Math.max(2, existingIndent.length)) || '    ');
-        }
-
-        return parentIndent + '    ';
-    }
 }
