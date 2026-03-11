@@ -3,14 +3,9 @@ import type { TaskViewerSettings } from '../../../types';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
 import { CreateTaskModal, CreateTaskResult, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { DateUtils } from '../../../utils/DateUtils';
+import { TaskLineClassifier, type TaskLineMatch } from '../../../utils/TaskLineClassifier';
 
 export type CreateFrontmatterTaskCallback = (result: CreateTaskResult, statusChar: string) => Promise<string>;
-
-/** Regex to detect checkbox lines: `- [ ]`, `- [x]`, `- [!]`, etc. */
-const CHECKBOX_LINE_REGEX = /^(\s*-\s*\[)(.)(\].*)$/;
-
-/** Regex to extract content text after checkbox marker: `- [x] content here` */
-const CHECKBOX_CONTENT_REGEX = /^\s*-\s*\[.\]\s*(.*?)\s*$/;
 
 /**
  * Menu builder for plain checkbox lines (not recognized as @notation tasks).
@@ -27,12 +22,12 @@ export class EditorCheckboxMenuBuilder {
      */
     addFullMenu(menu: Menu, editor: Editor, line: number, settings: TaskViewerSettings): boolean {
         const lineText = editor.getLine(line);
-        const match = lineText.match(CHECKBOX_LINE_REGEX);
-        if (!match) return false;
+        const classified = TaskLineClassifier.classify(lineText);
+        if (!classified) return false;
 
         // Status submenu
         if (settings.enableStatusMenu) {
-            this.addStatusSubmenu(menu, editor, line, match, settings.statusMenuChars);
+            this.addStatusSubmenu(menu, editor, line, classified, settings.statusMenuChars);
             menu.addSeparator();
         }
 
@@ -40,7 +35,7 @@ export class EditorCheckboxMenuBuilder {
         this.addDuplicateItem(menu, editor, line);
 
         // Convert to > Inline Task / Frontmatter Task
-        this.addConvertSubmenu(menu, editor, line, lineText);
+        this.addConvertSubmenu(menu, editor, line, classified);
 
         // Delete
         this.addDeleteItem(menu, editor, line);
@@ -48,8 +43,8 @@ export class EditorCheckboxMenuBuilder {
         return true;
     }
 
-    private addStatusSubmenu(menu: Menu, editor: Editor, line: number, match: RegExpMatchArray, statusMenuChars: string[]): void {
-        const currentChar = match[2];
+    private addStatusSubmenu(menu: Menu, editor: Editor, line: number, classified: TaskLineMatch, statusMenuChars: string[]): void {
+        const currentChar = classified.statusChar;
         const options = buildStatusOptions(statusMenuChars);
 
         menu.addItem((item) => {
@@ -65,7 +60,7 @@ export class EditorCheckboxMenuBuilder {
                     sub.setTitle(createStatusTitle(s))
                         .setChecked(currentChar === s.char)
                         .onClick(() => {
-                            const newLine = match[1] + s.char + match[3];
+                            const newLine = classified.prefix + s.char + classified.suffix;
                             editor.setLine(line, newLine);
                         });
                 });
@@ -90,11 +85,9 @@ export class EditorCheckboxMenuBuilder {
         });
     }
 
-    private addConvertSubmenu(menu: Menu, editor: Editor, line: number, lineText: string): void {
-        const contentMatch = lineText.match(CHECKBOX_CONTENT_REGEX);
-        const content = contentMatch ? contentMatch[1] : '';
-        const match = lineText.match(CHECKBOX_LINE_REGEX);
-        const statusChar = match ? match[2] : ' ';
+    private addConvertSubmenu(menu: Menu, editor: Editor, line: number, classified: TaskLineMatch): void {
+        const { rawContent, statusChar, indent } = classified;
+        const content = rawContent.trim();
 
         menu.addItem((item) => {
             const subMenu = (item as any)
@@ -112,7 +105,6 @@ export class EditorCheckboxMenuBuilder {
                         new CreateTaskModal(
                             this.app,
                             (result) => {
-                                const indent = match ? match[1].match(/^(\s*)/)?.[1] ?? '' : '';
                                 const formatted = formatTaskLine(result);
                                 const newLine = indent + formatted.replace(/^- \[ \]/, `- [${statusChar}]`);
                                 editor.setLine(line, newLine);
@@ -135,7 +127,6 @@ export class EditorCheckboxMenuBuilder {
                                 this.app,
                                 async (result) => {
                                     const newPath = await this.onCreateFrontmatterTask!(result, statusChar);
-                                    const indent = match ? match[1].match(/^(\s*)/)?.[1] ?? '' : '';
                                     const linkTarget = newPath.replace(/\.md$/, '');
                                     const fileName = linkTarget.split('/').pop() || 'task';
                                     editor.setLine(line, `${indent}- [[${linkTarget}|${fileName}]]`);

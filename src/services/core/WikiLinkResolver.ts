@@ -8,9 +8,6 @@ import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
  * 新規タスクは作成しない — 既存のタスクMap上で関係だけを更新する。
  */
 export class WikiLinkResolver {
-    // `- [[name]]` を検出する正規表現（チェックボックス無し）
-    private static readonly WIKI_LINK_CHILD_REGEX = /^\s*-\s+\[\[([^\]]+)\]\]\s*$/;
-
     /**
      * タスクMap全体をスキャンし、wikilink子タスクの親子関係を解決する。
      * @param tasks タスクインデックス (id → Task)
