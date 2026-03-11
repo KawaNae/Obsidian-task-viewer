@@ -180,7 +180,7 @@ export class TaskCloner {
     // --- Private helpers ---
 
     private resetChildCheckboxes(lines: string[]): string[] {
-        return lines.map(line => line.replace(/^(\s*- \[)[^\]]/, '$1 '));
+        return lines.map(line => line.replace(/^(\s*(?:[-*+]|\d+[.)]) *\[)[^\]]/, '$1 '));
     }
 
     /**

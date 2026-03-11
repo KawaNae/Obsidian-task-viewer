@@ -102,7 +102,7 @@ export class FrontmatterTaskBuilder {
         }
 
         const contentTags = TagExtractor.fromContent(content);
-        const taskTags = TagExtractor.fromFrontmatter(frontmatter[frontmatterKeys.tags]);
+        const taskTags = TagExtractor.fromFrontmatter(frontmatter['tags']);
         const sharedTags = TagExtractor.fromFrontmatter(frontmatter[frontmatterKeys.sharedtags]);
 
         return {

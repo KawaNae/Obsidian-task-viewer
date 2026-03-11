@@ -117,9 +117,12 @@ export class TaskConverter {
             lines.push(`${frontmatterKeys.color}: "${this.escapeForDoubleQuotedYaml(color)}"`);
         }
 
-        // tags (タスク専用 — inline content から抽出されたタグ)
-        if (task.tags.length > 0) {
-            lines.push(`${frontmatterKeys.tags}: [${task.tags.join(', ')}]`);
+        // tags (Obsidian 標準キー — タスク自身のタグのみ、sharedTags を除外)
+        const ownTags = sharedTags && sharedTags.length > 0
+            ? task.tags.filter(t => !sharedTags.includes(t))
+            : task.tags;
+        if (ownTags.length > 0) {
+            lines.push(`tags: [${ownTags.join(', ')}]`);
         }
 
         // sharedtags (ソースファイルから継承)

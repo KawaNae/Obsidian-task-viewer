@@ -871,13 +871,6 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,
-            'Tags Key',
-            'Frontmatter key for task-specific tags.',
-            'tv-tags',
-            'tags'
-        );
-        this.addFrontmatterTaskKeySetting(
-            containerEl,
             'Shared Tags Key',
             'Frontmatter key for file-level shared tags inherited by all tasks in the file.',
             'tv-sharedtags',

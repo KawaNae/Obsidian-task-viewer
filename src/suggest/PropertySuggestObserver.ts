@@ -2,6 +2,7 @@ import { App, setIcon } from 'obsidian';
 import type { TaskViewerSettings } from '../types';
 import { PropertyColorSuggest } from './color/PropertyColorSuggest';
 import { PropertyLineStyleSuggest } from './line/PropertyLineStyleSuggest';
+import { PropertyTagSuggest } from './tags/PropertyTagSuggest';
 
 /**
  * Observes the Properties View in the editor and attaches
@@ -42,6 +43,7 @@ export class PropertySuggestObserver {
         const settings = this.getSettings();
         const colorKey = settings.frontmatterTaskKeys.color;
         const linestyleKey = settings.frontmatterTaskKeys.linestyle;
+        const sharedtagsKey = settings.frontmatterTaskKeys.sharedtags;
 
         const keyInputs = document.querySelectorAll('.metadata-property-key-input');
 
@@ -49,12 +51,18 @@ export class PropertySuggestObserver {
             const input = keyInput as HTMLInputElement;
             const isColorKey = input.value === colorKey;
             const isLineStyleKey = input.value === linestyleKey;
-            if (!isColorKey && !isLineStyleKey) {
+            const isSharedTagsKey = input.value === sharedtagsKey;
+            if (!isColorKey && !isLineStyleKey && !isSharedTagsKey) {
                 return;
             }
 
             const propertyContainer = input.closest('.metadata-property');
             if (!propertyContainer) {
+                return;
+            }
+
+            if (isSharedTagsKey) {
+                this.attachTagSuggests(propertyContainer as HTMLElement, sharedtagsKey);
                 return;
             }
 
@@ -71,6 +79,24 @@ export class PropertySuggestObserver {
             }
 
             this.attachedInputs.add(valueDiv);
+        });
+    }
+
+    /**
+     * リスト型プロパティの各入力欄にタグサジェストをアタッチ。
+     * MutationObserver により新規追加された項目にも対応。
+     */
+    private attachTagSuggests(container: HTMLElement, frontmatterKey: string): void {
+        // リスト型: 各項目の入力欄を探す（contenteditable div or input）
+        const inputs = container.querySelectorAll(
+            '.metadata-input-longtext[contenteditable="true"], .multi-select-input'
+        );
+
+        inputs.forEach((el) => {
+            const inputEl = el as HTMLDivElement;
+            if (this.attachedInputs.has(inputEl)) return;
+            new PropertyTagSuggest(this.app, inputEl, this.suggestHost, frontmatterKey);
+            this.attachedInputs.add(inputEl);
         });
     }
 

@@ -366,7 +366,8 @@ export class AtNotationParser implements ParserStrategy {
         }
 
         const blockIdStr = task.blockId ? ` ^${task.blockId}` : '';
-        return `- [${statusChar}] ${task.content}${metaStr}${flowStr}${blockIdStr}`;
+        const marker = TaskLineClassifier.extractMarker(task.originalText);
+        return `${marker} [${statusChar}] ${task.content}${metaStr}${flowStr}${blockIdStr}`;
     }
 
     isTriggerableStatus(task: Task): boolean {
