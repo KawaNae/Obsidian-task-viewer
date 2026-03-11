@@ -296,6 +296,9 @@ export interface TaskViewerSettings {
         timer: DefaultLeafPosition;
         kanban: DefaultLeafPosition;
     };
+    suggestColor: boolean;
+    suggestLinestyle: boolean;
+    suggestSharedtags: boolean;
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -341,4 +344,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
         timer: 'right',
         kanban: 'tab',
     },
+    suggestColor: true,
+    suggestLinestyle: true,
+    suggestSharedtags: true,
 };

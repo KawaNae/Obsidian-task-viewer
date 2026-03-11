@@ -487,6 +487,29 @@ btn.setAttribute('aria-label', 'Filter');
 btn.setAttribute('title', 'Filter');
 ```
 
+**Native `<input type="date/time">` の注意**: Electron/Chromium はこれらの入力要素にビルトインのブラウザツールチップを表示する。`title=""` では抑制できない。対処法:
+
+1. CSS で `pointer-events: none` を設定してホバーが native input に到達しないようにする
+2. 表示用の要素（アイコンボタン等）に `aria-label` を設定して Obsidian 標準ツールチップを表示
+3. アイコンボタンの `click` イベントで `showPicker()` を呼んでピッカーを開く
+4. iOS Safari では `showPicker()` が動かない (WebKit Bug #261703) ため `focus()` + `click()` でフォールバック
+
+```ts
+// Native input: pointer-events: none (CSS), aria-hidden
+nativeInput.setAttribute('aria-hidden', 'true');
+
+// Icon button: aria-label for Obsidian tooltip, click to open picker
+pickerButton.setAttribute('aria-label', 'Open date picker');
+pickerButton.addEventListener('click', () => {
+    try {
+        nativeInput.showPicker();
+    } catch {
+        nativeInput.focus();
+        nativeInput.click();
+    }
+});
+```
+
 ### Wording: "Remove" vs "Delete"
 
 - **Remove** — internal data operations (removing a filter condition, removing an item from a list, removing a DOM element)

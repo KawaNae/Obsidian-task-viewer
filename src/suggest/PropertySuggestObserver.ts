@@ -11,7 +11,7 @@ import { PropertyTagSuggest } from './tags/PropertyTagSuggest';
 export class PropertySuggestObserver {
     private propertiesObserver: MutationObserver | null = null;
     private attachedInputs: WeakSet<HTMLElement> = new WeakSet();
-    private nativeSuggestStyle: HTMLStyleElement | null = null;
+    private nativeSuggestStyles: Map<string, HTMLStyleElement> = new Map();
 
     constructor(
         private app: App,
@@ -38,8 +38,10 @@ export class PropertySuggestObserver {
             this.propertiesObserver.disconnect();
             this.propertiesObserver = null;
         }
-        this.nativeSuggestStyle?.remove();
-        this.nativeSuggestStyle = null;
+        for (const style of this.nativeSuggestStyles.values()) {
+            style.remove();
+        }
+        this.nativeSuggestStyles.clear();
     }
 
     private attachPropertySuggests(): void {
@@ -47,6 +49,11 @@ export class PropertySuggestObserver {
         const colorKey = settings.frontmatterTaskKeys.color;
         const linestyleKey = settings.frontmatterTaskKeys.linestyle;
         const sharedtagsKey = settings.frontmatterTaskKeys.sharedtags;
+
+        // ネイティブサジェスト抑制の同期（独自 OFF → 抑制解除）
+        if (!settings.suggestColor) this.restoreNativePropertySuggest(colorKey);
+        if (!settings.suggestLinestyle) this.restoreNativePropertySuggest(linestyleKey);
+        if (!settings.suggestSharedtags) this.restoreNativePropertySuggest(sharedtagsKey);
 
         const keyInputs = document.querySelectorAll('.metadata-property-key-input');
 
@@ -65,7 +72,9 @@ export class PropertySuggestObserver {
             }
 
             if (isSharedTagsKey) {
-                this.attachTagSuggests(propertyContainer as HTMLElement, sharedtagsKey);
+                if (settings.suggestSharedtags) {
+                    this.attachTagSuggests(propertyContainer as HTMLElement, sharedtagsKey);
+                }
                 return;
             }
 
@@ -74,14 +83,16 @@ export class PropertySuggestObserver {
                 return;
             }
 
-            if (isColorKey) {
+            if (isColorKey && settings.suggestColor) {
                 new PropertyColorSuggest(this.app, valueDiv, this.suggestHost);
                 this.addColorPickerIcon(propertyContainer as HTMLElement, valueDiv);
-            } else {
+                this.suppressNativePropertySuggest(colorKey);
+                this.attachedInputs.add(valueDiv);
+            } else if (isLineStyleKey && settings.suggestLinestyle) {
                 new PropertyLineStyleSuggest(this.app, valueDiv, this.suggestHost);
+                this.suppressNativePropertySuggest(linestyleKey);
+                this.attachedInputs.add(valueDiv);
             }
-
-            this.attachedInputs.add(valueDiv);
         });
     }
 
@@ -109,11 +120,22 @@ export class PropertySuggestObserver {
      * Obsidian ネイティブのプロパティ値サジェストを CSS で非表示にする。
      */
     private suppressNativePropertySuggest(propertyKey: string): void {
-        if (this.nativeSuggestStyle) return;
-        this.nativeSuggestStyle = document.createElement('style');
-        this.nativeSuggestStyle.textContent =
+        if (this.nativeSuggestStyles.has(propertyKey)) return;
+        const style = document.createElement('style');
+        style.textContent =
             `div.suggestion-container.mod-property-value[data-property-key="${propertyKey}"] { display: none !important; }`;
-        document.head.appendChild(this.nativeSuggestStyle);
+        document.head.appendChild(style);
+        this.nativeSuggestStyles.set(propertyKey, style);
+    }
+
+    /**
+     * ネイティブサジェスト抑制を解除する。
+     */
+    private restoreNativePropertySuggest(propertyKey: string): void {
+        const style = this.nativeSuggestStyles.get(propertyKey);
+        if (!style) return;
+        style.remove();
+        this.nativeSuggestStyles.delete(propertyKey);
     }
 
     private addColorPickerIcon(container: HTMLElement, valueDiv: HTMLDivElement): void {

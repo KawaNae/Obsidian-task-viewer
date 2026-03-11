@@ -82,7 +82,6 @@ export function createTaskMenuExtension(
             // Recognized task: full menu
             const dt = toDisplayTask(task, getSettings().startHour);
             propertiesBuilder.addStatusSubmenu(menu, task);
-            menu.addSeparator();
             propertiesBuilder.buildPropertiesSubmenu(menu, dt, null);
             menu.addSeparator();
             timerBuilder.addTimerSubmenu(menu, task);
