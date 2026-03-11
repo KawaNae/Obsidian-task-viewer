@@ -1,10 +1,11 @@
 import { App, TFile } from 'obsidian';
 import type { FrontmatterTaskKeys, Task } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
+import { TagExtractor } from '../../utils/TagExtractor';
 
 /**
  * inline タスクを frontmatter タスクファイルへ変換する業務フローを担当。
- * - ソースファイルの color 読み取り
+ * - ソースファイルの color / sharedtags 読み取り
  * - 変換先ファイル作成
  * - 元タスクを wikilink へ置換
  */
@@ -21,12 +22,14 @@ export class InlineToFrontmatterConversionService {
         frontmatterKeys: FrontmatterTaskKeys,
     ): Promise<string> {
         const sourceColor = this.getSourceFileColor(task.file, frontmatterKeys.color);
+        const sourceSharedTags = this.getSourceFileSharedTags(task.file, frontmatterKeys.sharedtags);
 
         const newPath = await this.repository.createFrontmatterTaskFile(
             task,
             headerName,
             headerLevel,
             sourceColor,
+            sourceSharedTags,
             frontmatterKeys,
         );
 
@@ -46,5 +49,15 @@ export class InlineToFrontmatterConversionService {
 
         const normalized = String(value).trim();
         return normalized.length > 0 ? normalized : undefined;
+    }
+
+    private getSourceFileSharedTags(filePath: string, sharedtagsKey: string): string[] {
+        if (!sharedtagsKey.trim()) return [];
+
+        const sourceFile = this.app.vault.getAbstractFileByPath(filePath);
+        if (!(sourceFile instanceof TFile)) return [];
+
+        const cache = this.app.metadataCache.getFileCache(sourceFile);
+        return TagExtractor.fromFrontmatter(cache?.frontmatter?.[sharedtagsKey]);
     }
 }

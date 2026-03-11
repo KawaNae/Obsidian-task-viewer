@@ -23,7 +23,7 @@ export class MoveCommand implements CommandStrategy {
             // Replace Windows invalid characters: < > : " / \ | ? *
             // Note: / and \ are already handled as separators.
             // valid: < > : " | ? * 
-            return segment.replace(/[<>:"|?*]/g, '_');
+            return segment.replace(/[<>:"|?*#]/g, '_');
         });
 
         dest = safeSegments.join('/');

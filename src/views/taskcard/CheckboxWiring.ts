@@ -138,7 +138,7 @@ export class CheckboxWiring {
                 if (childLineIndex >= task.childLines.length) return;
 
                 const cl = task.childLines[childLineIndex];
-                const newText = cl.text.replace(/\[(.)\]/, `[${statusChar}]`);
+                const newText = cl.text.replace(`[${cl.checkboxChar}]`, `[${statusChar}]`);
                 if (targetEl) {
                     this.updateCheckboxDataTask(targetEl, statusChar);
                 }

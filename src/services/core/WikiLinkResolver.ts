@@ -46,8 +46,7 @@ export class WikiLinkResolver {
             // childLines の最小リストインデントを求める（直接子のレベル）
             let minChildIndent = Infinity;
             for (const cl of parentTask.childLines) {
-                const m = cl.text.match(/^(\s*)-\s/);
-                if (m) minChildIndent = Math.min(minChildIndent, m[1].length);
+                minChildIndent = Math.min(minChildIndent, cl.indent.length);
             }
 
             for (const cl of parentTask.childLines) {

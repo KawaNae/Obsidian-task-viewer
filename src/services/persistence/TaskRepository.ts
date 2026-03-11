@@ -113,6 +113,7 @@ export class TaskRepository {
         headerName: string,
         headerLevel: number,
         sourceFileColor?: string,
+        sourceSharedTags?: string[],
         frontmatterKeys?: FrontmatterTaskKeys
     ): Promise<string> {
         return this.converter.convertToFrontmatterTask(
@@ -120,6 +121,7 @@ export class TaskRepository {
             headerName,
             headerLevel,
             sourceFileColor,
+            sourceSharedTags,
             frontmatterKeys
         );
     }

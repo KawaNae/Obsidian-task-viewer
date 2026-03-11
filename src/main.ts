@@ -275,6 +275,7 @@ export default class TaskViewerPlugin extends Plugin {
                     this.settings.frontmatterTaskHeader,
                     this.settings.frontmatterTaskHeaderLevel,
                     undefined,
+                    undefined,
                     this.settings.frontmatterTaskKeys
                 );
             }

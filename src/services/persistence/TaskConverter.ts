@@ -21,10 +21,11 @@ export class TaskConverter {
         headerName: string,
         headerLevel: number,
         sourceFileColor?: string,
+        sourceSharedTags?: string[],
         frontmatterKeys: FrontmatterTaskKeys = DEFAULT_FRONTMATTER_TASK_KEYS
     ): Promise<string> {
         const filePath = this.generateFilePath(task);
-        const frontmatter = this.buildFrontmatterContent(task, sourceFileColor, frontmatterKeys);
+        const frontmatter = this.buildFrontmatterContent(task, sourceFileColor, sourceSharedTags, frontmatterKeys);
         const body = this.buildBodyContent(task, headerName, headerLevel);
         const content = frontmatter + body;
 
@@ -36,10 +37,10 @@ export class TaskConverter {
 
     /**
      * タスクの content からファイルパスを生成。
-     * 衝突時は " 2", " 3" と自動採番。
+     * #tag を除去してからサニタイズ。衝突時は " 2", " 3" と自動採番。
      */
     private generateFilePath(task: Task): string {
-        let baseName = task.content.trim() || 'Untitled Task';
+        let baseName = task.content.replace(/\B#[^\s#]+/g, '').trim() || 'Untitled Task';
         baseName = this.sanitizeFilename(baseName);
 
         // 100文字で切り詰め
@@ -71,13 +72,18 @@ export class TaskConverter {
      * ファイル名に使用できない文字を _ に置換。
      */
     private sanitizeFilename(name: string): string {
-        return name.replace(/[<>:"|?*]/g, '_');
+        return name.replace(/[<>:"/\\|?*#]/g, '_');
     }
 
     /**
      * Frontmatter YAML を構築。
      */
-    private buildFrontmatterContent(task: Task, color?: string, frontmatterKeys: FrontmatterTaskKeys = DEFAULT_FRONTMATTER_TASK_KEYS): string {
+    private buildFrontmatterContent(
+        task: Task,
+        color?: string,
+        sharedTags?: string[],
+        frontmatterKeys: FrontmatterTaskKeys = DEFAULT_FRONTMATTER_TASK_KEYS
+    ): string {
         const lines = ['---'];
 
         // start
@@ -97,8 +103,9 @@ export class TaskConverter {
             lines.push(`${frontmatterKeys.due}: ${task.due}`);
         }
 
-        // content
-        lines.push(`${frontmatterKeys.content}: ${task.content}`);
+        // content (#tag を除去して tv-content に書く)
+        const cleanContent = task.content.replace(/\B#[^\s#]+/g, '').trim();
+        lines.push(`${frontmatterKeys.content}: ${cleanContent}`);
 
         // status (デフォルトの ' ' は省略)
         if (task.statusChar && task.statusChar !== ' ') {
@@ -108,6 +115,16 @@ export class TaskConverter {
         // color (ソースファイルから継承、存在する場合のみ)
         if (color) {
             lines.push(`${frontmatterKeys.color}: "${this.escapeForDoubleQuotedYaml(color)}"`);
+        }
+
+        // tags (タスク専用 — inline content から抽出されたタグ)
+        if (task.tags.length > 0) {
+            lines.push(`${frontmatterKeys.tags}: [${task.tags.join(', ')}]`);
+        }
+
+        // sharedtags (ソースファイルから継承)
+        if (sharedTags && sharedTags.length > 0) {
+            lines.push(`${frontmatterKeys.sharedtags}: [${sharedTags.join(', ')}]`);
         }
 
         lines.push('---');

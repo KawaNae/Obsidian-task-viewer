@@ -102,7 +102,8 @@ export class FrontmatterTaskBuilder {
         }
 
         const contentTags = TagExtractor.fromContent(content);
-        const fmTags = TagExtractor.fromFrontmatter(frontmatter['tags']);
+        const taskTags = TagExtractor.fromFrontmatter(frontmatter[frontmatterKeys.tags]);
+        const sharedTags = TagExtractor.fromFrontmatter(frontmatter[frontmatterKeys.sharedtags]);
 
         return {
             task: {
@@ -120,7 +121,7 @@ export class FrontmatterTaskBuilder {
                 endDate: end.date,
                 endTime: end.time,
                 due,
-                tags: TagExtractor.merge(contentTags, fmTags),
+                tags: TagExtractor.merge(contentTags, taskTags, sharedTags),
                 originalText: '',
                 commands: [],
                 timerTargetId,

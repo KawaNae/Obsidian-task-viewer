@@ -6,7 +6,7 @@ import type { ChildLine } from '../types';
  */
 export class ChildLineClassifier {
     static readonly WIKILINK_CHILD = /^\s*-\s+\[\[([^\]]+)\]\]\s*$/;
-    static readonly CHECKBOX_CHAR = /\[(.)\]/;
+    static readonly CHECKBOX_CHAR = /^\s*(?:[-*+]|\d+[.)])\s*\[(.)\]/;
 
     /** 生テキスト → ChildLine に変換 */
     static classify(text: string): ChildLine {
