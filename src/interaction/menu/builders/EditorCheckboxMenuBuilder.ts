@@ -35,7 +35,7 @@ export class EditorCheckboxMenuBuilder {
         this.addDuplicateItem(menu, editor, line);
 
         // Convert to > Inline Task / Frontmatter Task
-        this.addConvertSubmenu(menu, editor, line, classified);
+        this.addConvertSubmenu(menu, editor, line, classified, lineText);
 
         // Delete
         this.addDeleteItem(menu, editor, line);
@@ -85,8 +85,9 @@ export class EditorCheckboxMenuBuilder {
         });
     }
 
-    private addConvertSubmenu(menu: Menu, editor: Editor, line: number, classified: TaskLineMatch): void {
+    private addConvertSubmenu(menu: Menu, editor: Editor, line: number, classified: TaskLineMatch, lineText: string): void {
         const { rawContent, statusChar, indent } = classified;
+        const marker = TaskLineClassifier.extractMarker(lineText);
         const content = rawContent.trim();
 
         menu.addItem((item) => {
@@ -106,7 +107,7 @@ export class EditorCheckboxMenuBuilder {
                             this.app,
                             (result) => {
                                 const formatted = formatTaskLine(result);
-                                const newLine = indent + formatted.replace(/^- \[ \]/, `- [${statusChar}]`);
+                                const newLine = indent + formatted.replace(/^- \[ \]/, `${marker} [${statusChar}]`);
                                 editor.setLine(line, newLine);
                             },
                             { content, startDate: today },
@@ -129,7 +130,7 @@ export class EditorCheckboxMenuBuilder {
                                     const newPath = await this.onCreateFrontmatterTask!(result, statusChar);
                                     const linkTarget = newPath.replace(/\.md$/, '');
                                     const fileName = linkTarget.split('/').pop() || 'task';
-                                    editor.setLine(line, `${indent}- [[${linkTarget}|${fileName}]]`);
+                                    editor.setLine(line, `${indent}${marker} [[${linkTarget}|${fileName}]]`);
                                 },
                                 { content, startDate: today },
                                 { title: 'Convert to Frontmatter Task', submitLabel: 'Convert', focusField: 'start', startHour: this.getStartHour() }

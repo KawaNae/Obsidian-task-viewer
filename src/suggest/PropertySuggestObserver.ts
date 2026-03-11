@@ -11,6 +11,7 @@ import { PropertyTagSuggest } from './tags/PropertyTagSuggest';
 export class PropertySuggestObserver {
     private propertiesObserver: MutationObserver | null = null;
     private attachedInputs: WeakSet<HTMLElement> = new WeakSet();
+    private nativeSuggestStyle: HTMLStyleElement | null = null;
 
     constructor(
         private app: App,
@@ -37,6 +38,8 @@ export class PropertySuggestObserver {
             this.propertiesObserver.disconnect();
             this.propertiesObserver = null;
         }
+        this.nativeSuggestStyle?.remove();
+        this.nativeSuggestStyle = null;
     }
 
     private attachPropertySuggests(): void {
@@ -87,6 +90,8 @@ export class PropertySuggestObserver {
      * MutationObserver により新規追加された項目にも対応。
      */
     private attachTagSuggests(container: HTMLElement, frontmatterKey: string): void {
+        this.suppressNativePropertySuggest(frontmatterKey);
+
         // リスト型: 各項目の入力欄を探す（contenteditable div or input）
         const inputs = container.querySelectorAll(
             '.metadata-input-longtext[contenteditable="true"], .multi-select-input'
@@ -98,6 +103,17 @@ export class PropertySuggestObserver {
             new PropertyTagSuggest(this.app, inputEl, this.suggestHost, frontmatterKey);
             this.attachedInputs.add(inputEl);
         });
+    }
+
+    /**
+     * Obsidian ネイティブのプロパティ値サジェストを CSS で非表示にする。
+     */
+    private suppressNativePropertySuggest(propertyKey: string): void {
+        if (this.nativeSuggestStyle) return;
+        this.nativeSuggestStyle = document.createElement('style');
+        this.nativeSuggestStyle.textContent =
+            `div.suggestion-container.mod-property-value[data-property-key="${propertyKey}"] { display: none !important; }`;
+        document.head.appendChild(this.nativeSuggestStyle);
     }
 
     private addColorPickerIcon(container: HTMLElement, valueDiv: HTMLDivElement): void {

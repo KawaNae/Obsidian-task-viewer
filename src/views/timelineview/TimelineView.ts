@@ -68,8 +68,10 @@ export class TimelineView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private currentTimeInterval: number | null = null;
     private lastScrollTop: number = 0;
+    private hasValidScrollPosition = false;
     private scrollToNowOnNextRender = false;
     private hasInitializedStartDate: boolean = false;
+    private lastPartialUpdateTime = 0;
     // ==================== Pinch zoom state ====================
     private pinchInitialDistance: number = 0;
     private pinchInitialZoom: number = 1;
@@ -318,12 +320,17 @@ export class TimelineView extends ItemView {
                                 : undefined;
                             const dt = toDisplayTask(task, this.plugin.settings.startHour);
                             this.taskRenderer.render(card, dt, this, this.plugin.settings, opts);
+                            this.lastPartialUpdateTime = Date.now();
                             return;
                         }
                     }
                 }
             }
 
+            // Skip redundant full render from re-scan after local partial update
+            if (!taskId && !changes && Date.now() - this.lastPartialUpdateTime < 200) {
+                return;
+            }
             this.render();
         });
 
@@ -494,6 +501,7 @@ export class TimelineView extends ItemView {
         const scrollArea = this.container.querySelector('.timeline-scroll-area');
         if (scrollArea) {
             this.lastScrollTop = scrollArea.scrollTop;
+            this.hasValidScrollPosition = true;
         }
 
         this.container.empty();
@@ -662,7 +670,7 @@ export class TimelineView extends ItemView {
             if (this.scrollToNowOnNextRender) {
                 this.scrollToNowOnNextRender = false;
                 requestAnimationFrame(() => this.scrollToCurrentTime());
-            } else if (this.lastScrollTop > 0) {
+            } else if (this.hasValidScrollPosition) {
                 newScrollArea.scrollTop = this.lastScrollTop;
             }
         }
