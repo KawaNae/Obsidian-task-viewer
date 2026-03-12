@@ -134,13 +134,17 @@ function isValidConditionObj(c: unknown): c is Record<string, unknown> {
 }
 
 function migrateConditionToNode(c: Record<string, unknown>): FilterConditionNode {
-    return {
+    const node: FilterConditionNode = {
         type: 'condition',
         id: typeof c.id === 'string' ? c.id : 'f-unknown',
         property: c.property as FilterConditionNode['property'],
         operator: c.operator as FilterConditionNode['operator'],
         value: c.value as FilterConditionNode['value'],
     };
+    if (c.target === 'parent') {
+        node.target = 'parent';
+    }
+    return node;
 }
 
 // ── Helpers ──

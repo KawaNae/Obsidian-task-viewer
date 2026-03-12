@@ -1,10 +1,13 @@
+import type { Task } from '../../types';
+
 // ── Property & Operator enums ──
 
 export type FilterProperty =
     | 'file' | 'tag' | 'status' | 'content'
     | 'startDate' | 'endDate' | 'due'
     | 'color' | 'linestyle'
-    | 'length' | 'taskType';
+    | 'length' | 'taskType'
+    | 'parent' | 'children';
 
 export type FilterOperator =
     | 'includes' | 'excludes'
@@ -34,12 +37,15 @@ export const MAX_FILTER_DEPTH = 3;
 
 export type FilterNode = FilterConditionNode | FilterGroupNode;
 
+export type FilterTarget = 'self' | 'parent';
+
 export interface FilterConditionNode {
     type: 'condition';
     id: string;
     property: FilterProperty;
     operator: FilterOperator;
     value: FilterValue;
+    target?: FilterTarget;
 }
 
 export interface FilterGroupNode {
@@ -56,6 +62,7 @@ export interface FilterState {
 /** Optional context for filter evaluation (e.g., view-level settings). */
 export interface FilterContext {
     startHour?: number;
+    taskLookup?: (id: string) => Task | undefined;
 }
 
 /** @deprecated Use FilterConditionNode */
@@ -165,6 +172,8 @@ export const PROPERTY_OPERATORS: Record<FilterProperty, FilterOperator[]> = {
     linestyle: ['includes', 'excludes'],
     length: ['lessThan', 'lessThanOrEqual', 'greaterThan', 'greaterThanOrEqual', 'equals', 'isSet', 'isNotSet'],
     taskType: ['includes', 'excludes'],
+    parent: ['isSet', 'isNotSet'],
+    children: ['isSet', 'isNotSet'],
 };
 
 /** Display labels for operators */
@@ -199,6 +208,8 @@ export const PROPERTY_LABELS: Record<FilterProperty, string> = {
     linestyle: 'Line style',
     length: 'Length',
     taskType: 'Task type',
+    parent: 'Parent',
+    children: 'Children',
 };
 
 /** Operators that require no value input */
@@ -217,6 +228,8 @@ export const PROPERTY_ICONS: Record<FilterProperty, string> = {
     linestyle: 'minus',
     length: 'timer',
     taskType: 'file-type',
+    parent: 'arrow-up',
+    children: 'arrow-down',
 };
 
 /** Display labels for relative date presets */

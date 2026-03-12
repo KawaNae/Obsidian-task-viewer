@@ -124,9 +124,8 @@ describe('TaskConverter', () => {
 
             const content = vault.files.get(path)!;
             expect(content).toContain('tv-color: "#ff0000"');
-            expect(content).toContain('tv-sharedtags: [shared-tag]');
-            // ownTags should exclude shared-tag
-            expect(content).toContain('tags: [project, own-tag]');
+            // sharedtags key === 'tags' → all tags merged into single tags: line
+            expect(content).toContain('tags: [own-tag, project, shared-tag]');
         });
     });
 

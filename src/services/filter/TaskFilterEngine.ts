@@ -38,6 +38,22 @@ export class TaskFilterEngine {
     private static evalCondition(task: Task, condition: FilterConditionNode, context?: FilterContext): boolean {
         // Skip conditions with empty stringSet values (value not yet selected)
         if (condition.value.type === 'stringSet' && condition.value.values.length === 0) return true;
+
+        // Target resolution: evaluate condition against any ancestor
+        if (condition.target === 'parent') {
+            const selfCondition = { ...condition, target: undefined } as FilterConditionNode;
+            const seen = new Set<string>();
+            let current: Task | undefined = task;
+            while (current?.parentId && !seen.has(current.parentId)) {
+                seen.add(current.parentId);
+                const ancestor: Task | undefined = context?.taskLookup?.(current.parentId);
+                if (!ancestor) break;
+                if (this.evalCondition(ancestor, selfCondition, context)) return true;
+                current = ancestor;
+            }
+            return false;
+        }
+
         const dt = task as Partial<DisplayTask>;
         switch (condition.property) {
             case 'file':
@@ -62,6 +78,14 @@ export class TaskFilterEngine {
                 return this.evalLength(task, condition, context?.startHour ?? 0);
             case 'taskType':
                 return this.evalStringSet(task.parserId, condition);
+            case 'parent':
+                if (condition.operator === 'isSet') return !!task.parentId;
+                if (condition.operator === 'isNotSet') return !task.parentId;
+                return true;
+            case 'children':
+                if (condition.operator === 'isSet') return task.childIds.length > 0;
+                if (condition.operator === 'isNotSet') return task.childIds.length === 0;
+                return true;
             default:
                 return true;
         }

@@ -92,7 +92,9 @@ export class CalendarView extends ItemView {
         const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
         this.windowStart = DateUtils.getLocalDateString(weekStart);
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
+        this.filterMenu.setTaskLookupProvider((id) => this.taskIndex.getTask(id));
         this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
+        this.sidebarFilterMenu.setTaskLookupProvider((id) => this.taskIndex.getTask(id));
     }
 
     getViewType(): string {

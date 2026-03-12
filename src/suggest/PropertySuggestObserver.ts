@@ -72,7 +72,8 @@ export class PropertySuggestObserver {
             }
 
             if (isSharedTagsKey) {
-                if (settings.suggestSharedtags) {
+                // tags キーは Obsidian ネイティブサジェストに任せる
+                if (sharedtagsKey !== 'tags' && settings.suggestSharedtags) {
                     this.attachTagSuggests(propertyContainer as HTMLElement, sharedtagsKey);
                 }
                 return;

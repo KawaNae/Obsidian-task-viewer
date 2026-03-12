@@ -89,6 +89,20 @@
     height: 14px;
 }
 
+/* Target selector: compact "self" state (icon only, muted) */
+.filter-popover__dropdown--target-self {
+    padding: 4px !important;
+    opacity: 0.4;
+}
+.filter-popover__dropdown--target-self:hover {
+    opacity: 1;
+}
+
+/* Target selector: active "parent" state */
+.filter-popover__dropdown--target {
+    color: var(--interactive-accent);
+}
+
 /* Text input for content filter */
 .filter-popover .filter-popover__text-input {
     font-size: var(--font-ui-small);

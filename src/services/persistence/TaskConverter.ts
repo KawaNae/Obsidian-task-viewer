@@ -2,6 +2,7 @@ import { App, TFile } from 'obsidian';
 import { DEFAULT_FRONTMATTER_TASK_KEYS, FrontmatterTaskKeys, Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { DateUtils } from '../../utils/DateUtils';
+import { TagExtractor } from '../../utils/TagExtractor';
 
 /**
  * Inline タスクを Frontmatter タスクファイルに変換する。
@@ -117,17 +118,26 @@ export class TaskConverter {
             lines.push(`${frontmatterKeys.color}: "${this.escapeForDoubleQuotedYaml(color)}"`);
         }
 
-        // tags (Obsidian 標準キー — タスク自身のタグのみ、sharedTags を除外)
-        const ownTags = sharedTags && sharedTags.length > 0
-            ? task.tags.filter(t => !sharedTags.includes(t))
-            : task.tags;
-        if (ownTags.length > 0) {
-            lines.push(`tags: [${ownTags.join(', ')}]`);
-        }
-
-        // sharedtags (ソースファイルから継承)
-        if (sharedTags && sharedTags.length > 0) {
-            lines.push(`${frontmatterKeys.sharedtags}: [${sharedTags.join(', ')}]`);
+        // tags
+        if (frontmatterKeys.sharedtags === 'tags') {
+            // sharedtags キーが tags と同一 → 全タグを tags: に統合
+            const allTags = sharedTags && sharedTags.length > 0
+                ? TagExtractor.merge(task.tags, sharedTags)
+                : task.tags;
+            if (allTags.length > 0) {
+                lines.push(`tags: [${allTags.join(', ')}]`);
+            }
+        } else {
+            // カスタムキー → タスク固有タグと shared タグを分離
+            const ownTags = sharedTags && sharedTags.length > 0
+                ? task.tags.filter(t => !sharedTags.includes(t))
+                : task.tags;
+            if (ownTags.length > 0) {
+                lines.push(`tags: [${ownTags.join(', ')}]`);
+            }
+            if (sharedTags && sharedTags.length > 0) {
+                lines.push(`${frontmatterKeys.sharedtags}: [${sharedTags.join(', ')}]`);
+            }
         }
 
         lines.push('---');

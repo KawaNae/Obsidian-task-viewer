@@ -184,7 +184,7 @@ export const DEFAULT_FRONTMATTER_TASK_KEYS: FrontmatterTaskKeys = {
     timerTargetId: 'tv-timer-target-id',
     color: 'tv-color',
     linestyle: 'tv-linestyle',
-    sharedtags: 'tv-sharedtags',
+    sharedtags: 'tags',
     ignore: 'tv-ignore',
 };
 

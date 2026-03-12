@@ -59,7 +59,9 @@ export class KanbanView extends ItemView {
             new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.taskIndex).open();
         });
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
+        this.filterMenu.setTaskLookupProvider((id) => this.taskIndex.getTask(id));
         this.viewFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
+        this.viewFilterMenu.setTaskLookupProvider((id) => this.taskIndex.getTask(id));
     }
 
     getViewType(): string {
@@ -168,7 +170,7 @@ export class KanbanView extends ItemView {
 
         const startHour = this.plugin.settings.startHour;
         const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
-        const filterContext = { startHour };
+        const filterContext = { startHour, taskLookup: (id: string) => this.taskIndex.getTask(id) };
 
         // Pre-apply view-level filter once (instead of per-cell)
         const hasViewFilter = !!this.viewFilterState && hasConditions(this.viewFilterState);
@@ -264,7 +266,7 @@ export class KanbanView extends ItemView {
         // ─── Header ─────────────────────────
         const header = cell.createDiv('kanban-view__cell-header');
 
-        const filterContext = { startHour };
+        const filterContext = { startHour, taskLookup: (id: string) => this.taskIndex.getTask(id) };
         const tasks = allDisplayTasks.filter(t =>
             TaskFilterEngine.evaluate(t, listDef.filterState, filterContext)
         );
