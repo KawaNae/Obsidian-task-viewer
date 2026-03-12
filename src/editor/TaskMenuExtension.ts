@@ -8,7 +8,7 @@ import { toDisplayTask } from '../utils/DisplayTaskConverter';
 import type { PropertiesMenuBuilder } from '../interaction/menu/builders/PropertiesMenuBuilder';
 import type { TimerMenuBuilder } from '../interaction/menu/builders/TimerMenuBuilder';
 import type { TaskActionsMenuBuilder } from '../interaction/menu/builders/TaskActionsMenuBuilder';
-import type { EditorCheckboxMenuBuilder } from '../interaction/menu/builders/EditorCheckboxMenuBuilder';
+import type { CheckboxMenuBuilder, CheckboxLineOps } from '../interaction/menu/builders/CheckboxMenuBuilder';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 
 const taskIndexChanged = StateEffect.define<void>();
@@ -66,7 +66,7 @@ export function createTaskMenuExtension(
     propertiesBuilder: PropertiesMenuBuilder,
     timerBuilder: TimerMenuBuilder,
     actionsBuilder: TaskActionsMenuBuilder,
-    checkboxBuilder: EditorCheckboxMenuBuilder,
+    checkboxBuilder: CheckboxMenuBuilder,
     getSettings: () => TaskViewerSettings
 ): TaskMenuExtensionResult {
 
@@ -89,13 +89,15 @@ export function createTaskMenuExtension(
             actionsBuilder.addTaskActions(menu, task);
         } else {
             // Plain checkbox: status + basic actions
-            const editorInfo = info as any;
-            if (editorInfo?.editor) {
-                checkboxBuilder.addFullMenu(
-                    menu, editorInfo.editor, lineNumber,
-                    getSettings()
-                );
-            }
+            const lineText = view.state.doc.line(lineNumber + 1).text; // CM6 lines are 1-based
+
+            const ops: CheckboxLineOps = {
+                updateLine: (content) => taskIndex.updateLine(filePath, lineNumber, content),
+                insertLineAfter: (content) => taskIndex.insertLineAfterLine(filePath, lineNumber, content),
+                deleteLine: () => taskIndex.deleteLine(filePath, lineNumber),
+            };
+
+            checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops);
         }
 
         const rect = btnEl.getBoundingClientRect();

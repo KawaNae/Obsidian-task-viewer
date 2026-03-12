@@ -299,6 +299,8 @@ export interface TaskViewerSettings {
     suggestColor: boolean;
     suggestLinestyle: boolean;
     suggestSharedtags: boolean;
+    hideViewHeader: boolean;
+    mobileTopOffset: number;
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -347,4 +349,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     suggestColor: true,
     suggestLinestyle: true,
     suggestSharedtags: true,
+    hideViewHeader: true,
+    mobileTopOffset: 32,
 };

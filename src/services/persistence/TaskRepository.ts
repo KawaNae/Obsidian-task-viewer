@@ -39,6 +39,14 @@ export class TaskRepository {
         return this.inlineWriter.updateLine(filePath, lineNumber, newContent);
     }
 
+    async insertLineAfterLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
+        return this.inlineWriter.insertLineAfterLine(filePath, lineNumber, newContent);
+    }
+
+    async deleteLine(filePath: string, lineNumber: number): Promise<void> {
+        return this.inlineWriter.deleteLine(filePath, lineNumber);
+    }
+
     async deleteTaskFromFile(task: Task): Promise<void> {
         return this.inlineWriter.deleteTaskFromFile(task);
     }

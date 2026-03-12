@@ -45,21 +45,37 @@ export class ChildItemBuilder {
 
         for (let idx = 0; idx < task.childLines.length; idx++) {
             const cl = task.childLines[idx];
-            const wikiTask = wikiTaskByIdx.get(idx);
+            const effectiveIndent = indent + cl.indent;
 
-            if (wikiTask) {
-                items.push(this.mapper.createWikiLinkItem(wikiTask, indent + cl.indent));
-                this.appendDescendants(
-                    wikiTask,
-                    indent + cl.indent + '    ',
-                    task.id,
-                    items,
-                    visitedIds,
-                    0
-                );
-            } else {
-                items.push(this.mapper.processChildLine(cl, idx, task, indent));
+            // 1. childIdByLine でタスク解決（@notation 子タスク）
+            const absLine = this.resolver.resolveChildAbsoluteLine(task, idx);
+            const childIdTask = childIdByLine.get(absLine);
+            if (childIdTask && !visitedIds.has(childIdTask.id)) {
+                visitedIds.add(childIdTask.id);
+                items.push(this.mapper.createTaskItem(childIdTask, effectiveIndent, task.file));
+                this.appendDescendants(childIdTask, effectiveIndent + '    ', task.id, items, visitedIds, 0);
+                continue;
             }
+
+            // 2. orphan タスク検索（childIds に未登録だが行番号でマッチするタスク）
+            const orphanTask = this.resolver.findOrphanTask(task.file, absLine);
+            if (orphanTask && !visitedIds.has(orphanTask.id)) {
+                visitedIds.add(orphanTask.id);
+                items.push(this.mapper.createTaskItem(orphanTask, effectiveIndent, task.file));
+                this.appendDescendants(orphanTask, effectiveIndent + '    ', task.id, items, visitedIds, 0);
+                continue;
+            }
+
+            // 3. wikilink 解決
+            const wikiTask = wikiTaskByIdx.get(idx);
+            if (wikiTask) {
+                items.push(this.mapper.createWikiLinkItem(wikiTask, effectiveIndent));
+                this.appendDescendants(wikiTask, effectiveIndent + '    ', task.id, items, visitedIds, 0);
+                continue;
+            }
+
+            // 4. plainCheckbox / 通常行
+            items.push(this.mapper.processChildLine(cl, idx, task, indent));
         }
 
         return items;

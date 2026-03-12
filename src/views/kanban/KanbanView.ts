@@ -16,6 +16,7 @@ import { TaskSorter } from '../../services/sort/TaskSorter';
 import { TaskStyling } from '../sharedUI/TaskStyling';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
+import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
 import type { PinnedListDefinition, DisplayTask } from '../../types';
 import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
@@ -50,6 +51,10 @@ export class KanbanView extends ItemView {
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
+        const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.taskIndex, this.plugin);
+        this.taskRenderer.setChildLineEditCallback((parentTask, childLineIndex, x, y) => {
+            childLineMenuBuilder.showMenu(parentTask, childLineIndex, x, y);
+        });
         this.taskRenderer.setDetailCallback((task) => {
             new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.taskIndex).open();
         });

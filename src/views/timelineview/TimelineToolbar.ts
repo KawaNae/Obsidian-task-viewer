@@ -19,7 +19,7 @@ export interface ToolbarCallbacks {
     onScrollToNow: () => void;
     onStateChange: () => void;
     getDatesToShow: () => string[];
-    onRequestSidebarToggle: (nextOpen: boolean, source: 'toolbar' | 'backdrop' | 'escape') => void;
+    onRequestSidebarToggle: (nextOpen: boolean) => void;
     getLeafPosition: () => LeafPosition;
     getCustomName: () => string | undefined;
     onRename: (newName: string | undefined) => void;
@@ -289,7 +289,7 @@ export class TimelineToolbar {
 
         toggleBtn.onclick = () => {
             const nextOpen = !this.viewState.showSidebar;
-            this.callbacks.onRequestSidebarToggle(nextOpen, 'toolbar');
+            this.callbacks.onRequestSidebarToggle(nextOpen);
         };
     }
 

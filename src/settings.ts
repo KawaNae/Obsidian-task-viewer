@@ -347,6 +347,36 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
+        // Display
+        el.createEl('h3', { text: 'Display', cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName('Hide view header')
+            .setDesc('Hide the view header (navigation bar) in task viewer panels.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.hideViewHeader)
+                .onChange(async (value) => {
+                    this.plugin.settings.hideViewHeader = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName('Mobile top offset (px)')
+            .setDesc('Top offset for mobile views when the header is hidden. Prevents overlap with the OS status bar.')
+            .addText(text => {
+                text.inputEl.type = 'number';
+                text.inputEl.min = '0';
+                text
+                    .setPlaceholder('32')
+                    .setValue(this.plugin.settings.mobileTopOffset.toString())
+                    .onChange(async (value) => {
+                        let offset = parseInt(value);
+                        if (isNaN(offset) || offset < 0) offset = 32;
+                        this.plugin.settings.mobileTopOffset = offset;
+                        await this.plugin.saveSettings();
+                    });
+            });
+
         // Pinned Lists
         el.createEl('h3', { text: 'Pinned Lists', cls: 'setting-section-header' });
 

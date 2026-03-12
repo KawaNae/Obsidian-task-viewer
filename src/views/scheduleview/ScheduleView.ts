@@ -8,6 +8,7 @@ import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
 import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import TaskViewerPlugin from '../../main';
 
 import { DateNavigator, ViewSettingsMenu } from '../sharedUI/ViewToolbar';
@@ -72,6 +73,10 @@ export class ScheduleView extends ItemView {
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
+        const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.taskIndex, this.plugin);
+        this.taskRenderer.setChildLineEditCallback((parentTask, childLineIndex, x, y) => {
+            childLineMenuBuilder.showMenu(parentTask, childLineIndex, x, y);
+        });
         this.taskRenderer.setDetailCallback((task) => {
             new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.taskIndex).open();
         });

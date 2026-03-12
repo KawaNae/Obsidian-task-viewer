@@ -62,6 +62,30 @@ export class InlineTaskWriter {
         });
     }
 
+    async insertLineAfterLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(filePath);
+        if (!(file instanceof TFile)) return;
+
+        await this.app.vault.process(file, (content) => {
+            const lines = content.split('\n');
+            if (lineNumber < 0 || lineNumber >= lines.length) return content;
+            lines.splice(lineNumber + 1, 0, newContent);
+            return lines.join('\n');
+        });
+    }
+
+    async deleteLine(filePath: string, lineNumber: number): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(filePath);
+        if (!(file instanceof TFile)) return;
+
+        await this.app.vault.process(file, (content) => {
+            const lines = content.split('\n');
+            if (lineNumber < 0 || lineNumber >= lines.length) return content;
+            lines.splice(lineNumber, 1);
+            return lines.join('\n');
+        });
+    }
+
     async deleteTaskFromFile(task: Task): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;

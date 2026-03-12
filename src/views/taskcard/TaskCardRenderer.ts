@@ -4,7 +4,7 @@ import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
 import { getFileBaseName, hasTaskContent, isContentMatchingBaseName } from '../../utils/TaskContent';
 import { ChildItemBuilder } from './ChildItemBuilder';
-import { ChildSectionRenderer, ChildMenuCallback } from './ChildSectionRenderer';
+import { ChildSectionRenderer, ChildMenuCallback, ChildLineEditCallback } from './ChildSectionRenderer';
 import { CheckboxWiring } from './CheckboxWiring';
 import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
 import type { TaskCardLinkRuntime } from './types';
@@ -28,6 +28,10 @@ export class TaskCardRenderer {
 
     setChildMenuCallback(cb: ChildMenuCallback): void {
         this.childSectionRenderer.setChildMenuCallback(cb);
+    }
+
+    setChildLineEditCallback(cb: ChildLineEditCallback): void {
+        this.childSectionRenderer.setChildLineEditCallback(cb);
     }
 
     setDetailCallback(cb: (task: Task) => void): void {
