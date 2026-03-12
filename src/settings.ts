@@ -937,8 +937,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         this.addFrontmatterTaskKeySetting(
             containerEl,
             'Shared Tags Key',
-            'Frontmatter key for file-level shared tags inherited by all tasks in the file.',
-            'tv-sharedtags',
+            'Frontmatter key for file-level shared tags inherited by all tasks in the file. Use "tags" for Obsidian compatibility.',
+            'tags',
             'sharedtags'
         );
         this.addFrontmatterTaskKeySetting(

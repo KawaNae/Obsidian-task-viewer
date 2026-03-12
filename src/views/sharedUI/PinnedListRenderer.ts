@@ -68,7 +68,7 @@ export class PinnedListRenderer {
 
         const startHour = this.plugin.settings.startHour;
         const allDisplayTasks = precomputedDisplayTasks ?? toDisplayTasks(this.taskIndex.getTasks(), startHour);
-        const filterContext = { startHour };
+        const filterContext = { startHour, taskLookup: (id: string) => this.taskIndex.getTask(id) };
 
         for (let i = 0; i < lists.length; i++) {
             const listDef = lists[i];

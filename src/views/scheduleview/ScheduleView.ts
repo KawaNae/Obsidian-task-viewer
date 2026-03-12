@@ -110,6 +110,7 @@ export class ScheduleView extends ItemView {
             currentVisualDateProvider: () => this.currentVisualDate,
         });
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
+        this.filterMenu.setTaskLookupProvider((id) => this.taskIndex.getTask(id));
     }
 
     getViewType(): string {

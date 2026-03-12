@@ -43,6 +43,7 @@ export class TimelineToolbar {
         private callbacks: ToolbarCallbacks
     ) {
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
+        this.filterMenu.setTaskLookupProvider((id) => this.taskIndex.getTask(id));
     }
 
     /**

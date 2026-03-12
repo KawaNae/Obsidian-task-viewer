@@ -3,7 +3,7 @@ import type { Task } from '../../types';
 import type {
     FilterState, FilterConditionNode, FilterGroupNode, FilterNode,
     FilterProperty, FilterOperator, DateFilterValue, RelativeDatePreset,
-    FilterContext,
+    FilterContext, FilterTarget,
 } from '../../services/filter/FilterTypes';
 import {
     MAX_FILTER_DEPTH,
@@ -51,6 +51,7 @@ export class FilterMenuComponent {
     private lastTasks: Task[] = [];
     private lastCallbacks: FilterMenuCallbacks | null = null;
     private startHourProvider: (() => number) | null = null;
+    private taskLookupProvider: ((id: string) => Task | undefined) | null = null;
 
     getFilterState(): FilterState {
         return this.state;
@@ -64,11 +65,15 @@ export class FilterMenuComponent {
         this.startHourProvider = provider;
     }
 
+    setTaskLookupProvider(provider: (id: string) => Task | undefined): void {
+        this.taskLookupProvider = provider;
+    }
+
     isTaskVisible(task: Task): boolean {
-        const context: FilterContext | undefined = this.startHourProvider
-            ? { startHour: this.startHourProvider() }
-            : undefined;
-        return TaskFilterEngine.evaluate(task, this.state, context);
+        const context: FilterContext = {};
+        if (this.startHourProvider) context.startHour = this.startHourProvider();
+        if (this.taskLookupProvider) context.taskLookup = this.taskLookupProvider;
+        return TaskFilterEngine.evaluate(task, this.state, Object.keys(context).length > 0 ? context : undefined);
     }
 
     hasActiveFilters(): boolean {
@@ -273,8 +278,33 @@ export class FilterMenuComponent {
     ): void {
         const row = parent.createDiv('filter-popover__row');
 
-        // ── Upper row: [Property] [Operator] [...] ──
+        // ── Upper row: [Target?] [Property] [Operator] [...] ──
         const headerLine = row.createDiv('filter-popover__row-header');
+
+        // Target dropdown (only shown when not 'self')
+        if (condition.target && condition.target !== 'self') {
+            const targetBtn = headerLine.createEl('button', {
+                cls: 'filter-popover__dropdown filter-popover__dropdown--target',
+            });
+            const targetIcon = targetBtn.createSpan('filter-popover__dropdown-icon');
+            setIcon(targetIcon, 'arrow-up');
+            targetBtn.createSpan().setText('Parent');
+            targetBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showTargetMenu(targetBtn, condition);
+            });
+        } else {
+            // Subtle "self" indicator that can be clicked to switch
+            const targetBtn = headerLine.createEl('button', {
+                cls: 'filter-popover__dropdown filter-popover__dropdown--target-self',
+            });
+            const targetIcon = targetBtn.createSpan('filter-popover__dropdown-icon');
+            setIcon(targetIcon, 'user');
+            targetBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showTargetMenu(targetBtn, condition);
+            });
+        }
 
         // Property dropdown (with icon)
         const propBtn = headerLine.createEl('button', { cls: 'filter-popover__dropdown' });
@@ -618,6 +648,7 @@ export class FilterMenuComponent {
             'file', 'tag', 'status', 'content',
             'startDate', 'endDate', 'due',
             'length', 'color', 'linestyle', 'taskType',
+            'parent', 'children',
         ];
         const items: SelectItem[] = properties.map(p => ({
             label: PROPERTY_LABELS[p],
@@ -658,6 +689,25 @@ export class FilterMenuComponent {
             if (NO_VALUE_OPERATORS.has(condition.operator)) {
                 condition.value = { type: 'boolean', value: true };
             }
+            this.refreshPopover();
+        });
+    }
+
+    private showTargetMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
+        const targets: { label: string; value: FilterTarget; icon: string }[] = [
+            { label: 'Self', value: 'self', icon: 'user' },
+            { label: 'Parent', value: 'parent', icon: 'arrow-up' },
+        ];
+        const items: SelectItem[] = targets.map(t => ({
+            label: t.label,
+            value: t.value,
+            checked: (condition.target ?? 'self') === t.value,
+            icon: t.icon,
+        }));
+
+        this.showSelectPopover(anchorEl, items, (val) => {
+            const target = val as FilterTarget;
+            condition.target = target === 'self' ? undefined : target;
             this.refreshPopover();
         });
     }

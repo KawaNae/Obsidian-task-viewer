@@ -340,18 +340,18 @@ describe('TaskScanner', () => {
     // ── Shared tags from frontmatter ──
 
     describe('shared tags', () => {
-        it('merges tv-sharedtags into task tags', async () => {
+        it('merges shared tags into task tags', async () => {
             const vault = createInMemoryVault({
                 'note.md': [
                     '---',
-                    'tv-sharedtags: [project, important]',
+                    'tags: [project, important]',
                     '---',
                     '- [ ] Task #local @2026-03-11',
                 ].join('\n'),
             });
             const cache = createFakeMetadataCache({
                 'note.md': {
-                    frontmatter: { 'tv-sharedtags': ['project', 'important'] },
+                    frontmatter: { 'tags': ['project', 'important'] },
                 },
             });
             const app = createFakeApp(vault, cache);
