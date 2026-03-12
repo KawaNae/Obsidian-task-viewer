@@ -1,50 +1,64 @@
-import { App, Editor, Menu } from 'obsidian';
+import { App, Menu } from 'obsidian';
 import type { TaskViewerSettings } from '../../../types';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
-import { CreateTaskModal, CreateTaskResult, formatTaskLine } from '../../../modals/CreateTaskModal';
+import { CreateTaskModal, type CreateTaskResult, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { DateUtils } from '../../../utils/DateUtils';
-import { TaskLineClassifier, type TaskLineMatch } from '../../../utils/TaskLineClassifier';
+import { TaskLineClassifier } from '../../../utils/TaskLineClassifier';
 
 export type CreateFrontmatterTaskCallback = (result: CreateTaskResult, statusChar: string) => Promise<string>;
 
+export interface CheckboxLineOps {
+    updateLine(newContent: string): void | Promise<void>;
+    insertLineAfter(content: string): void | Promise<void>;
+    deleteLine(): void | Promise<void>;
+}
+
 /**
  * Menu builder for plain checkbox lines (not recognized as @notation tasks).
+ * Agnostic to the mutation backend — callers provide CheckboxLineOps
+ * for Editor-based or TaskIndex-based line operations.
  */
-export class EditorCheckboxMenuBuilder {
+export class CheckboxMenuBuilder {
     constructor(
         private app: App,
         private getStartHour: () => number,
         private onCreateFrontmatterTask?: CreateFrontmatterTaskCallback
     ) {}
+
     /**
      * Build the full menu for a plain checkbox line:
      * Status + Duplicate + Convert to Inline Task + Delete
      */
-    addFullMenu(menu: Menu, editor: Editor, line: number, settings: TaskViewerSettings): boolean {
-        const lineText = editor.getLine(line);
+    addFullMenu(menu: Menu, lineText: string, settings: TaskViewerSettings, ops: CheckboxLineOps): boolean {
         const classified = TaskLineClassifier.classify(lineText);
         if (!classified) return false;
 
         // Status submenu
         if (settings.enableStatusMenu) {
-            this.addStatusSubmenu(menu, editor, line, classified, settings.statusMenuChars);
+            this.addStatusSubmenu(menu, classified.prefix, classified.suffix, classified.statusChar, settings.statusMenuChars, ops);
             menu.addSeparator();
         }
 
         // Duplicate
-        this.addDuplicateItem(menu, editor, line);
+        this.addDuplicateItem(menu, lineText, ops);
 
         // Convert to > Inline Task / Frontmatter Task
-        this.addConvertSubmenu(menu, editor, line, classified, lineText);
+        this.addConvertSubmenu(menu, classified, lineText, ops);
 
         // Delete
-        this.addDeleteItem(menu, editor, line);
+        this.addDeleteItem(menu, ops);
 
         return true;
     }
 
-    private addStatusSubmenu(menu: Menu, editor: Editor, line: number, classified: TaskLineMatch, statusMenuChars: string[]): void {
-        const currentChar = classified.statusChar;
+    private addStatusSubmenu(
+        menu: Menu,
+        prefix: string,
+        suffix: string,
+        currentChar: string,
+        statusMenuChars: string[],
+        ops: CheckboxLineOps
+    ): void {
         const options = buildStatusOptions(statusMenuChars);
 
         menu.addItem((item) => {
@@ -59,33 +73,31 @@ export class EditorCheckboxMenuBuilder {
                 statusMenu.addItem(sub => {
                     sub.setTitle(createStatusTitle(s))
                         .setChecked(currentChar === s.char)
-                        .onClick(() => {
-                            const newLine = classified.prefix + s.char + classified.suffix;
-                            editor.setLine(line, newLine);
+                        .onClick(async () => {
+                            const newLine = prefix + s.char + suffix;
+                            await ops.updateLine(newLine);
                         });
                 });
             });
         });
     }
 
-    private addDuplicateItem(menu: Menu, editor: Editor, line: number): void {
+    private addDuplicateItem(menu: Menu, lineText: string, ops: CheckboxLineOps): void {
         menu.addItem((item) => {
             item.setTitle('Duplicate')
                 .setIcon('copy')
-                .onClick(() => {
-                    const lineText = editor.getLine(line);
-                    const lineCount = editor.lineCount();
-                    const isLastLine = line === lineCount - 1;
-                    const insertText = isLastLine ? '\n' + lineText : lineText + '\n';
-                    const insertPos = isLastLine
-                        ? { line, ch: editor.getLine(line).length }
-                        : { line: line + 1, ch: 0 };
-                    editor.replaceRange(insertText, insertPos);
+                .onClick(async () => {
+                    await ops.insertLineAfter(lineText);
                 });
         });
     }
 
-    private addConvertSubmenu(menu: Menu, editor: Editor, line: number, classified: TaskLineMatch, lineText: string): void {
+    private addConvertSubmenu(
+        menu: Menu,
+        classified: NonNullable<ReturnType<typeof TaskLineClassifier.classify>>,
+        lineText: string,
+        ops: CheckboxLineOps
+    ): void {
         const { rawContent, statusChar, indent } = classified;
         const marker = TaskLineClassifier.extractMarker(lineText);
         const content = rawContent.trim();
@@ -105,10 +117,10 @@ export class EditorCheckboxMenuBuilder {
                         const today = DateUtils.getVisualDateOfNow(this.getStartHour());
                         new CreateTaskModal(
                             this.app,
-                            (result) => {
+                            async (result) => {
                                 const formatted = formatTaskLine(result);
                                 const newLine = indent + formatted.replace(/^- \[ \]/, `${marker} [${statusChar}]`);
-                                editor.setLine(line, newLine);
+                                await ops.updateLine(newLine);
                             },
                             { content, startDate: today },
                             { title: 'Convert to Inline Task', submitLabel: 'Convert', focusField: 'start', startHour: this.getStartHour() }
@@ -130,7 +142,7 @@ export class EditorCheckboxMenuBuilder {
                                     const newPath = await this.onCreateFrontmatterTask!(result, statusChar);
                                     const linkTarget = newPath.replace(/\.md$/, '');
                                     const fileName = linkTarget.split('/').pop() || 'task';
-                                    editor.setLine(line, `${indent}${marker} [[${linkTarget}|${fileName}]]`);
+                                    await ops.updateLine(`${indent}${marker} [[${linkTarget}|${fileName}]]`);
                                 },
                                 { content, startDate: today },
                                 { title: 'Convert to Frontmatter Task', submitLabel: 'Convert', focusField: 'start', startHour: this.getStartHour() }
@@ -141,26 +153,14 @@ export class EditorCheckboxMenuBuilder {
         });
     }
 
-    private addDeleteItem(menu: Menu, editor: Editor, line: number): void {
+    private addDeleteItem(menu: Menu, ops: CheckboxLineOps): void {
         menu.addItem((item) => {
             item.setTitle('Delete')
                 .setIcon('trash')
                 .setWarning(true)
-                .onClick(() => {
-                    this.deleteLine(editor, line);
+                .onClick(async () => {
+                    await ops.deleteLine();
                 });
         });
-    }
-
-    private deleteLine(editor: Editor, line: number): void {
-        const lineCount = editor.lineCount();
-        if (lineCount === 1) {
-            editor.setLine(line, '');
-        } else if (line === lineCount - 1) {
-            const prevLineEnd = editor.getLine(line - 1).length;
-            editor.replaceRange('', { line: line - 1, ch: prevLineEnd }, { line, ch: editor.getLine(line).length });
-        } else {
-            editor.replaceRange('', { line, ch: 0 }, { line: line + 1, ch: 0 });
-        }
     }
 }

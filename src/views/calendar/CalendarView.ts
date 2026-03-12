@@ -6,6 +6,7 @@ import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { Task, DisplayTask, PinnedListDefinition } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
+import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import {
     getTaskDateRange,
@@ -76,10 +77,15 @@ export class CalendarView extends ItemView {
             new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.taskIndex).open();
         });
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
-        this.sidebarManager = new SidebarManager(true, {
+        this.sidebarManager = new SidebarManager({
             mobileBreakpointPx: 768,
             onPersist: () => this.app.workspace.requestSaveLayout(),
             onSyncToggleButton: () => this.syncSidebarToggleBtn?.(),
+            onRequestClose: () => {
+                this.showSidebar = false;
+                this.sidebarManager.applyOpen(false, { animate: true, persist: true });
+            },
+            getIsOpen: () => this.showSidebar,
         });
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -150,9 +156,7 @@ export class CalendarView extends ItemView {
 
         if (typeof state?.showSidebar === 'boolean') {
             this.showSidebar = state.showSidebar;
-            this.sidebarManager.setOpen(state.showSidebar, 'setState', {
-                persist: false, animate: false,
-            });
+            this.sidebarManager.applyOpen(state.showSidebar, { animate: false });
         }
         if (state?.pinnedListCollapsed) {
             this.pinnedListCollapsed = state.pinnedListCollapsed;
@@ -177,7 +181,7 @@ export class CalendarView extends ItemView {
         if (hasConditions(filterState)) {
             result.filterState = FilterSerializer.toJSON(filterState);
         }
-        result.showSidebar = this.sidebarManager.isOpen;
+        result.showSidebar = this.showSidebar;
         if (Object.keys(this.pinnedListCollapsed).length > 0) {
             result.pinnedListCollapsed = this.pinnedListCollapsed;
         }
@@ -200,6 +204,10 @@ export class CalendarView extends ItemView {
 
         this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
+        const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.taskIndex, this.plugin);
+        this.taskRenderer.setChildLineEditCallback((parentTask, childLineIndex, x, y) => {
+            childLineMenuBuilder.showMenu(parentTask, childLineIndex, x, y);
+        });
         this.pinnedListRenderer = new PinnedListRenderer(
             this.taskRenderer, this.plugin, this.menuHandler, this.taskIndex,
         );
@@ -264,7 +272,7 @@ export class CalendarView extends ItemView {
             this.windowStart = normalizedWindowStart;
         }
 
-        this.sidebarManager.syncPresentation({ animate: false });
+        this.sidebarManager.syncPresentation(this.showSidebar, { animate: false });
         this.container.empty();
 
         const toolbar = this.renderToolbar();
@@ -388,7 +396,7 @@ export class CalendarView extends ItemView {
             buildUri: () => ({
                 filterState: this.filterMenu.getFilterState(),
                 pinnedLists: this.pinnedLists,
-                showSidebar: this.sidebarManager.isOpen,
+                showSidebar: this.showSidebar,
             }),
             viewType: VIEW_META_CALENDAR.type,
             getViewTemplateFolder: () => this.plugin.settings.viewTemplateFolder,
@@ -396,7 +404,7 @@ export class CalendarView extends ItemView {
                 filePath: '',
                 name: this.customName || VIEW_META_CALENDAR.displayText,
                 viewType: 'calendar',
-                showSidebar: this.sidebarManager.isOpen,
+                showSidebar: this.showSidebar,
                 filterState: this.filterMenu.getFilterState(),
                 pinnedLists: this.pinnedLists,
             }),
@@ -407,7 +415,7 @@ export class CalendarView extends ItemView {
                 if (template.pinnedLists) this.pinnedLists = template.pinnedLists;
                 if (template.showSidebar != null) {
                     this.showSidebar = template.showSidebar;
-                    this.sidebarManager.setOpen(template.showSidebar, 'toolbar', { persist: true });
+                    this.sidebarManager.applyOpen(template.showSidebar, { persist: true });
                 }
                 if (template.name) {
                     this.customName = template.name;
@@ -420,7 +428,7 @@ export class CalendarView extends ItemView {
                 this.filterMenu.setFilterState(createEmptyFilterState());
                 this.pinnedLists = [];
                 this.showSidebar = true;
-                this.sidebarManager.setOpen(true, 'toolbar', { persist: true });
+                this.sidebarManager.applyOpen(true, { persist: true });
                 this.customName = undefined;
                 (this.leaf as any).updateHeader();
                 this.app.workspace.requestSaveLayout();
@@ -432,11 +440,11 @@ export class CalendarView extends ItemView {
             cls: 'view-toolbar__btn--icon sidebar-toggle-button-icon',
         });
         updateSidebarToggleButton(toggleBtn, this.showSidebar);
-        this.syncSidebarToggleBtn = () => updateSidebarToggleButton(toggleBtn, this.sidebarManager.isOpen);
+        this.syncSidebarToggleBtn = () => updateSidebarToggleButton(toggleBtn, this.showSidebar);
         toggleBtn.onclick = () => {
-            const nextOpen = !this.sidebarManager.isOpen;
-            this.sidebarManager.setOpen(nextOpen, 'toolbar', { persist: true });
+            const nextOpen = !this.showSidebar;
             this.showSidebar = nextOpen;
+            this.sidebarManager.applyOpen(nextOpen, { animate: true, persist: true });
         };
 
         return toolbar;

@@ -171,8 +171,9 @@
     outline-offset: 1px;
 }
 
-/* Native picker input: hidden, opened programmatically via showPicker().
-   pointer-events: none prevents native browser tooltip on hover. */
+/* Native picker input: transparent overlay on the picker-button area.
+   pointer-events: auto so iPad users can directly tap to open the native picker
+   (iOS Safari rejects programmatic showPicker — WebKit Bug #261703). */
 .create-task-modal__input-with-picker > input.create-task-modal__native-picker-input[type='date'],
 .create-task-modal__input-with-picker > input.create-task-modal__native-picker-input[type='time'] {
     position: absolute !important;
@@ -184,7 +185,8 @@
     margin: 0 !important;
     padding: 0 !important;
     border: 0 !important;
-    pointer-events: none !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
     -webkit-appearance: none !important;
     appearance: none !important;
 }

@@ -33,7 +33,7 @@ import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
 import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
 import { TimerMenuBuilder } from './interaction/menu/builders/TimerMenuBuilder';
 import { TaskActionsMenuBuilder } from './interaction/menu/builders/TaskActionsMenuBuilder';
-import { EditorCheckboxMenuBuilder } from './interaction/menu/builders/EditorCheckboxMenuBuilder';
+import { CheckboxMenuBuilder } from './interaction/menu/builders/CheckboxMenuBuilder';
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 
 export default class TaskViewerPlugin extends Plugin {
@@ -244,7 +244,7 @@ export default class TaskViewerPlugin extends Plugin {
         );
         const editorTimerBuilder = new TimerMenuBuilder(this);
         const editorActionsBuilder = new TaskActionsMenuBuilder(this.app, this.taskIndex, this);
-        const editorCheckboxBuilder = new EditorCheckboxMenuBuilder(
+        const editorCheckboxBuilder = new CheckboxMenuBuilder(
             this.app,
             () => this.settings.startHour,
             async (result, statusChar) => {
@@ -297,6 +297,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Apply global styles if enabled
         this.updateGlobalStyles();
+        this.updateViewHeaderStyles();
 
         // Start day boundary check (every 5 minutes)
         this.startDateBoundaryCheck();
@@ -439,6 +440,7 @@ export default class TaskViewerPlugin extends Plugin {
     async saveSettings() {
         await this.saveData(this.settings);
         this.taskIndex.updateSettings(this.settings);
+        this.updateViewHeaderStyles();
 
         this.refreshAllViews();
     }
@@ -449,6 +451,17 @@ export default class TaskViewerPlugin extends Plugin {
         } else {
             document.body.classList.remove('task-viewer-global-styles');
         }
+    }
+
+    updateViewHeaderStyles() {
+        if (this.settings.hideViewHeader) {
+            document.body.classList.add('task-viewer-hide-view-header');
+        } else {
+            document.body.classList.remove('task-viewer-hide-view-header');
+        }
+        document.documentElement.style.setProperty(
+            '--tv-mobile-top-offset', `${this.settings.mobileTopOffset}px`
+        );
     }
 
     notifyEditorMenuSettingsChanged() {

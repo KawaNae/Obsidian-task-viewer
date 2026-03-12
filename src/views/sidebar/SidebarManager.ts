@@ -1,28 +1,25 @@
 /**
- * Manages a right-side sidebar panel: DOM creation, open/close state,
- * CSS class toggling, animation, responsive layout, and keyboard handling.
+ * Stateless DOM helper for a right-side sidebar panel.
+ *
+ * Does NOT own open/close state — the view's own state (e.g. viewState.showSidebar)
+ * is the single source of truth. SidebarManager only applies CSS classes and
+ * delegates user-initiated close requests back to the view via `onRequestClose`.
  *
  * Designed for composition — each view instantiates its own SidebarManager
- * and delegates layout/state concerns to it.
+ * and delegates layout/DOM concerns to it.
  */
-
-export type SidebarToggleSource =
-    | 'toolbar'
-    | 'backdrop'
-    | 'escape'
-    | 'render'
-    | 'setState'
-    | 'resize'
-    | 'layout-restore';
 
 export interface SidebarManagerConfig {
     mobileBreakpointPx: number;
     onPersist: () => void;
     onSyncToggleButton?: () => void;
+    /** Called when the user closes the sidebar via backdrop click or Escape key. */
+    onRequestClose: () => void;
+    /** Returns the current open/close state from the view's state. */
+    getIsOpen: () => boolean;
 }
 
 export class SidebarManager {
-    private _isOpen: boolean;
     private containerEl: HTMLElement | null = null;
     private layoutEl: HTMLElement | null = null;
     private mainEl: HTMLElement | null = null;
@@ -30,13 +27,7 @@ export class SidebarManager {
     private backdropEl: HTMLElement | null = null;
     private resizeObserver: ResizeObserver | null = null;
 
-    constructor(initialOpen: boolean, private config: SidebarManagerConfig) {
-        this._isOpen = initialOpen;
-    }
-
-    get isOpen(): boolean {
-        return this._isOpen;
-    }
+    constructor(private config: SidebarManagerConfig) {}
 
     // ----- Lifecycle -----
 
@@ -52,18 +43,15 @@ export class SidebarManager {
         this.containerEl = container;
 
         this.resizeObserver = new ResizeObserver(() => {
-            this.setOpen(this._isOpen, 'resize', {
-                persist: false,
-                animate: false,
-            });
+            this.applyOpen(this.config.getIsOpen(), { animate: false });
         });
         this.resizeObserver.observe(container);
 
         const win = container.win ?? window;
         registerDomEvent(win, 'keydown', (event: KeyboardEvent) => {
-            if (event.key === 'Escape' && this._isOpen) {
+            if (event.key === 'Escape' && this.config.getIsOpen()) {
                 event.preventDefault();
-                this.setOpen(false, 'escape', { persist: true });
+                this.config.onRequestClose();
             }
         });
     }
@@ -98,8 +86,8 @@ export class SidebarManager {
 
         const backdrop = layout.createDiv('view-sidebar-backdrop');
         backdrop.addEventListener('click', () => {
-            if (this._isOpen) {
-                this.setOpen(false, 'backdrop', { persist: true });
+            if (this.config.getIsOpen()) {
+                this.config.onRequestClose();
             }
         });
         this.backdropEl = backdrop;
@@ -111,60 +99,50 @@ export class SidebarManager {
         const sidebarBody = sidebar.createDiv('view-sidebar__body');
 
         // Apply current open/closed state to freshly created elements
-        this.syncPresentation({ animate: false });
+        this.syncPresentation(this.config.getIsOpen(), { animate: false });
 
         return { main, sidebarHeader, sidebarBody };
     }
 
-    // ----- State Control -----
+    // ----- DOM Application -----
 
     /**
-     * Open or close the sidebar.
-     * Mirrors the original TimelineView.setSidebarOpen() logic.
+     * Apply the given open/close state to the DOM.
+     * Call after changing the view's sidebar state to update CSS classes.
      */
-    setOpen(
-        nextOpen: boolean,
-        source: SidebarToggleSource,
-        options: Partial<{ persist: boolean; animate: boolean }> = {},
+    applyOpen(
+        isOpen: boolean,
+        options?: { animate?: boolean; persist?: boolean },
     ): void {
-        const persist = options.persist ?? false;
-        const animate = options.animate ?? this.shouldAnimate(source);
-        const hasChanged = this._isOpen !== nextOpen;
-        this._isOpen = nextOpen;
-        this.syncPresentation({ animate });
-        if (persist && hasChanged) {
+        const animate = options?.animate ?? false;
+        this.syncPresentation(isOpen, { animate });
+        if (options?.persist) {
             this.config.onPersist();
         }
     }
 
     /**
-     * Synchronize CSS classes to match current state.
-     * Call at the top of render() (before buildLayout) to handle the case
-     * where container already has stale classes from a previous render.
+     * Synchronize CSS classes for the given open/close state.
      */
-    syncPresentation(options: { animate: boolean }): void {
+    syncPresentation(isOpen: boolean, options: { animate: boolean }): void {
         this.applyResponsiveLayout();
 
         if (this.layoutEl) {
             this.layoutEl.classList.toggle('view-sidebar-layout--animate', options.animate);
         }
         if (this.sidebarEl) {
-            this.sidebarEl.classList.toggle('view-sidebar-panel--hidden', !this._isOpen);
+            this.sidebarEl.classList.toggle('view-sidebar-panel--hidden', !isOpen);
         }
         if (this.mainEl) {
-            this.mainEl.classList.toggle('view-sidebar-main--open', this._isOpen);
+            this.mainEl.classList.toggle('view-sidebar-main--open', isOpen);
         }
         if (this.backdropEl) {
-            this.backdropEl.classList.toggle('view-sidebar-backdrop--visible', this._isOpen);
+            this.backdropEl.classList.toggle('view-sidebar-backdrop--visible', isOpen);
         }
         this.config.onSyncToggleButton?.();
     }
 
     // ----- Private Helpers -----
-
-    private shouldAnimate(source: SidebarToggleSource): boolean {
-        return source === 'toolbar' || source === 'backdrop' || source === 'escape';
-    }
 
     private applyResponsiveLayout(): void {
         if (!this.containerEl) return;

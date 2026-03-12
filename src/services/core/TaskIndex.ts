@@ -503,6 +503,26 @@ export class TaskIndex {
         }
     }
 
+    async insertLineAfterLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
+        this.syncDetector.markLocalEdit(filePath);
+        await this.repository.insertLineAfterLine(filePath, lineNumber, newContent);
+
+        const file = this.app.vault.getAbstractFileByPath(filePath);
+        if (file instanceof TFile) {
+            await this.scanner.waitForScan(filePath);
+        }
+    }
+
+    async deleteLine(filePath: string, lineNumber: number): Promise<void> {
+        this.syncDetector.markLocalEdit(filePath);
+        await this.repository.deleteLine(filePath, lineNumber);
+
+        const file = this.app.vault.getAbstractFileByPath(filePath);
+        if (file instanceof TFile) {
+            await this.scanner.waitForScan(filePath);
+        }
+    }
+
     // ===== ヘルパー =====
 
     resolveTask(originalTask: Task): Task | undefined {

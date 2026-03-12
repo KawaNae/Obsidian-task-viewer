@@ -214,7 +214,7 @@ export class CreateTaskModal extends Modal {
     ): HTMLInputElement {
         const wrapper = container.createDiv({ cls: 'create-task-modal__input-with-picker' });
 
-        // Visual icon button (left side, non-interactive — sits behind the native input overlay)
+        // Visual icon button (left side)
         const pickerButton = wrapper.createDiv({
             cls: 'create-task-modal__picker-button'
         });
@@ -222,8 +222,8 @@ export class CreateTaskModal extends Modal {
             pickerType === 'date' ? 'Open date picker' : 'Open time picker');
         setIcon(pickerButton, pickerType === 'date' ? 'calendar' : 'clock');
 
-        // Hidden native picker input — opened programmatically via showPicker().
-        // pointer-events: none (CSS) prevents native browser tooltip on hover.
+        // Hidden native picker input — pointer-events: auto (CSS) so iPad users
+        // can directly tap to open the native picker (WebKit Bug #261703).
         const nativePickerInput = wrapper.createEl('input', {
             cls: 'create-task-modal__native-picker-input'
         });
@@ -233,12 +233,21 @@ export class CreateTaskModal extends Modal {
             nativePickerInput.step = '60';
         }
 
-        // Open native picker on icon button click
+        // On click, try showPicker() for desktop browsers that need it.
+        // On iPad, the direct tap on the native input already opens the picker.
+        nativePickerInput.addEventListener('click', () => {
+            try {
+                nativePickerInput.showPicker();
+            } catch {
+                // iOS Safari: direct tap already opens native picker
+            }
+        });
+
+        // Fallback: clicking the visual icon area behind the native input
         pickerButton.addEventListener('click', () => {
             try {
                 nativePickerInput.showPicker();
             } catch {
-                // iOS Safari fallback (WebKit Bug #261703)
                 nativePickerInput.focus();
                 nativePickerInput.click();
             }

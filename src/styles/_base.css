@@ -3,10 +3,18 @@
     box-sizing: border-box;
 }
 
-/* Timeline view header visibility follows Obsidian mobile UI mode */
-body:not(.is-phone) .workspace-leaf-content[data-type="timeline-view"] .view-header,
-body:not(.is-phone) .workspace-leaf-content[data-type="schedule-view"] .view-header,
-body:not(.is-phone) .workspace-leaf-content[data-type="calendar-view"] .view-header,
-body:not(.is-phone) .workspace-leaf-content[data-type="kanban-view"] .view-header {
+/* View header visibility (toggled via settings → body class) */
+body.task-viewer-hide-view-header .workspace-leaf-content[data-type="timeline-view"] .view-header,
+body.task-viewer-hide-view-header .workspace-leaf-content[data-type="schedule-view"] .view-header,
+body.task-viewer-hide-view-header .workspace-leaf-content[data-type="calendar-view"] .view-header,
+body.task-viewer-hide-view-header .workspace-leaf-content[data-type="kanban-view"] .view-header {
     display: none !important;
+}
+
+/* Mobile: top offset when header is hidden (prevents OS status bar overlap) */
+body.is-phone.task-viewer-hide-view-header .workspace-leaf-content[data-type="timeline-view"] > .view-content,
+body.is-phone.task-viewer-hide-view-header .workspace-leaf-content[data-type="schedule-view"] > .view-content,
+body.is-phone.task-viewer-hide-view-header .workspace-leaf-content[data-type="calendar-view"] > .view-content,
+body.is-phone.task-viewer-hide-view-header .workspace-leaf-content[data-type="kanban-view"] > .view-content {
+    margin-top: var(--tv-mobile-top-offset, 32px) !important;
 }

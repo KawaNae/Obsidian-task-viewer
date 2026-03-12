@@ -1,8 +1,9 @@
-import { App, Menu, Notice, TFile } from 'obsidian';
+import { App, Menu, Notice } from 'obsidian';
 import { Task, TaskViewerSettings } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { ChildRenderItem } from './types';
 import { buildStatusOptions, createStatusTitle } from '../../constants/statusOptions';
+import { resolveChildLineNumber } from './ChildLineUtils';
 
 /**
  * Wires checkbox interactions for parent and child items.
@@ -198,25 +199,6 @@ export class CheckboxWiring {
     }
 
     private resolveChildLineNumber(task: Task, childLineIndex: number): number {
-        if (task.parserId === 'frontmatter') {
-            const bodyOffset = task.childLineBodyOffsets[childLineIndex];
-            if (bodyOffset === undefined) return -1;
-
-            const fmEndLine = this.getFrontmatterEndLine(task.file);
-            // New frontmatter parser stores absolute lines. Keep legacy fallback for old offsets.
-            if (fmEndLine !== -1 && bodyOffset <= fmEndLine) {
-                return fmEndLine + 1 + bodyOffset;
-            }
-            return bodyOffset;
-        }
-
-        return task.line + 1 + childLineIndex;
-    }
-
-    private getFrontmatterEndLine(filePath: string): number {
-        const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (!(file instanceof TFile)) return -1;
-        const cache = this.app.metadataCache.getFileCache(file);
-        return cache?.frontmatterPosition?.end?.line ?? -1;
+        return resolveChildLineNumber(this.app, task, childLineIndex);
     }
 }
