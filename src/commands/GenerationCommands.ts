@@ -82,7 +82,9 @@ export abstract class GenerationCommand implements CommandStrategy {
             endDate: task.endDate ? this.shiftDate(task.endDate, shiftDays) : undefined,
             due: task.due ? this.shiftDate(task.due, shiftDays) : undefined,
             originalText: '',
-            childLines: [] // Children are re-collected from file by insertRecurrenceForTask
+            childLines: [], // Children are re-collected from file by insertRecurrenceForTask
+            blockId: undefined, // タイマーターゲットID等を引き継がない
+            timerTargetId: undefined,
         };
     }
 

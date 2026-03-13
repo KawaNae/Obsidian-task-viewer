@@ -8,11 +8,15 @@
 src/views/taskcard/
   TaskCardRenderer.ts              # Orchestrator for one task card
   ChildItemBuilder.ts              # Task/childLines -> ChildRenderItem[]
+  ChildLineResolver.ts             # Child line resolution from file content
+  ChildLineUtils.ts                # Child line utility helpers
+  ChildRenderItemMapper.ts         # Maps child data to ChildRenderItem[]
   ChildSectionRenderer.ts          # Child markdown/toggle rendering
   CheckboxWiring.ts                # Parent/child checkbox interaction and status menu
   NotationUtils.ts                 # @notation label formatting helpers
   TaskLinkInteractionManager.ts    # Internal link click/hover handling
   types.ts                         # ChildRenderItem / CheckboxHandler (taskcard-local types)
+  index.ts                         # Barrel exports
 ```
 
 ### Responsibility boundaries
@@ -34,8 +38,8 @@ src/views/taskcard/
 ### Shared type policy
 
 1. `src/types.ts` is reserved for cross-layer models/settings only.
-2. View-only split helpers moved to `src/views/sharedLogic/RenderableTaskUtils.ts`.
-3. `RenderableTask`, `shouldSplitTask`, and `splitTaskAtBoundary` must be imported from `src/views/sharedLogic/RenderableTaskUtils.ts`.
+2. View-only split helpers moved to `src/views/sharedLogic/RenderableTaskUtils.ts` (@deprecated — new code should import from `src/utils/DisplayTaskConverter.ts` directly).
+3. `RenderableTask`, `shouldSplitTask`, and `splitTaskAtBoundary` are re-exported from `src/views/sharedLogic/RenderableTaskUtils.ts` for backward compatibility, but are @deprecated. New code should use `DisplayTask`, `shouldSplitDisplayTask`, and `splitDisplayTaskAtBoundary` from `DisplayTaskConverter`.
 4. Task-card-local render helper types are defined in `src/views/taskcard/types.ts`.
 
 ### Task content invariant
@@ -101,10 +105,12 @@ src/
 │   ├── styling/               # Task style resolution (TaskStyleResolver)
 │   ├── template/              # View template load/save (ViewTemplateLoader/Writer)
 │   └── aiindex/               # AI Index generation service
+├── editor/                    # Editor extensions (TaskMenuExtension)
 ├── views/
 │   ├── timelineview/          # Timeline view (including renderers/)
 │   ├── scheduleview/          # Schedule view (including renderers/, utils/)
 │   ├── calendar/              # CalendarView, MiniCalendarView
+│   ├── kanban/                # Kanban view
 │   ├── taskcard/              # Task card rendering (see section above)
 │   ├── sharedUI/              # Shared UI components (ViewToolbar, PinnedListRenderer, etc.)
 │   ├── sharedLogic/           # Shared logic (RenderableTaskUtils, GridTaskLayout, etc.)
@@ -117,7 +123,7 @@ src/
 │   └── menu/                  # Context menus (MenuHandler, builders/)
 ├── commands/                  # Flow command execution (next / repeat / move)
 ├── modals/                    # Modal UI (CreateTaskModal, ConfirmModal, etc.)
-├── suggest/                   # Obsidian property panel autocomplete (color/, line/)
+├── suggest/                   # Obsidian property panel autocomplete (color/, line/, tags/)
 ├── utils/                     # General utilities (AudioUtils, DateUtils, ViewUriBuilder, etc.)
 └── styles/                    # CSS (BEM naming, --tv-* tokens)
 ```
@@ -153,6 +159,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **MenuHandler** | `interaction/menu/MenuHandler.ts` | Context menu facade coordinating multiple Builder classes |
 | **TimerWidget** | `timer/TimerWidget.ts` | Floating timer UI; manages and persists all timer instances |
 | **IntervalTemplateLoader/Writer** | `timer/IntervalTemplateLoader.ts` et al. | Interval template read/write |
+| **KanbanView** | `views/kanban/KanbanView.ts` | Kanban board view |
 | **TimerView** | `views/TimerView.ts` | Standalone timer view (Pomodoro / Countdown / Countup / Interval) |
 | **TaskCardRenderer** | `views/taskcard/TaskCardRenderer.ts` | Task card rendering orchestrator (see section above) |
 | **TaskLinkInteractionManager** | `views/taskcard/TaskLinkInteractionManager.ts` | Internal link click/hover handling within task cards |
@@ -316,7 +323,6 @@ Drag/resize operations may change a task's type.
 - Move handle: update start/end dates (preserve duration)
 - Right resize: update end date
 - Left resize: update start date
-- Move to Future: convert to F-type (start → `future`, drop end)
 
 **SD**
 - Move handle: update start date, add end to convert to SED (preserve width)
@@ -355,11 +361,9 @@ Drag/resize operations may change a task's type.
 - Move to All Day: convert to D-type (drop start/end, keep due only)
 
 **SE (< 24 h)**
-- Move to Future: convert to F-type (start → `future`, drop end)
 - Move to All Day: convert to S-All (drop start time and entire end)
 
 **S-Timed**
-- Move to Future: convert to F-type (start → `future`)
 - Move to All Day: convert to S-All (drop start time)
 
 ### Auto-scroll
@@ -403,6 +407,7 @@ src/styles/
 ├── _base.css                 # Global styles
 ├── _task-card.css            # Task card component
 ├── _checkboxes.css           # Checkbox icons
+├── _editor-task-menu.css     # Editor task menu
 ├── _timeline-grid.css        # Timeline grid
 ├── _timeline-date-header.css # Date header
 ├── _timeline-allday.css      # All-day lane
@@ -421,6 +426,7 @@ src/styles/
 ├── _settings.css             # Settings tab
 ├── _modal.css                # Modal dialogs
 ├── _habits.css               # Habit tracker
+├── _kanban.css               # Kanban view
 └── _template-creator.css     # Template creator UI
 ```
 
@@ -776,7 +782,8 @@ State-transition-based sound mapping. All sounds use Web Audio API scheduling (n
 | `PropertiesMenuBuilder` | Date/time property editing |
 | `TimerMenuBuilder` | Timer launch shortcuts |
 | `TaskActionsMenuBuilder` | Complete, delete, convert, and move/clone actions |
-| `EditorCheckboxMenuBuilder` | Editor-level checkbox status menu |
+| `CheckboxMenuBuilder` | Checkbox status menu |
+| `ChildLineMenuBuilder` | Child line context menu |
 
 Touch support: `TouchEventHandler` detects long-press (configurable via `longPressThreshold`, default 400 ms) to open the menu.
 
@@ -907,13 +914,25 @@ Defined in `src/types.ts` as `TaskViewerSettings`. Defaults are in `DEFAULT_SETT
 | `weeklyNoteFormat` | string | `'gggg-[W]ww'` | Weekly note filename format |
 | `monthlyNoteFormat` | string | `'YYYY-MM'` | Monthly note filename format |
 | `yearlyNoteFormat` | string | `'YYYY'` | Yearly note filename format |
+| `weeklyNoteFolder` | string | `''` | Folder for weekly notes |
+| `monthlyNoteFolder` | string | `''` | Folder for monthly notes |
+| `yearlyNoteFolder` | string | `''` | Folder for yearly notes |
 | `intervalTemplateFolder` | string | `''` | Folder for interval timer templates |
 | `viewTemplateFolder` | string | `''` | Folder for view templates |
+| `pinnedListPageSize` | number | 10 | Pinned list page size |
 | `defaultViewPositions` | object | *(see below)* | Per-view default leaf position |
+| `reuseExistingTab` | boolean | `true` | Reuse existing tab of same view type |
+| `editorMenuForTasks` | boolean | `true` | Show task operations in editor context menu |
+| `editorMenuForCheckboxes` | boolean | `true` | Show checkbox operations in editor context menu |
+| `suggestColor` | boolean | `true` | Show color suggestions in property panel |
+| `suggestLinestyle` | boolean | `true` | Show linestyle suggestions in property panel |
+| `suggestSharedtags` | boolean | `true` | Show tag suggestions in property panel |
+| `hideViewHeader` | boolean | `true` | Hide view header |
+| `mobileTopOffset` | number | 32 | Top offset for mobile (px) |
 
-**`defaultViewPositions` defaults**: `{ timeline: 'tab', schedule: 'right', calendar: 'tab', miniCalendar: 'left', timer: 'right' }`
+**`defaultViewPositions` defaults**: `{ timeline: 'tab', schedule: 'right', calendar: 'tab', miniCalendar: 'left', timer: 'right', kanban: 'tab' }`
 
-All `FrontmatterTaskKeys` fields (`start`, `end`, `due`, `status`, `content`, `timerTargetId`, `color`, `linestyle`, `ignore`) are independently customisable. Duplicate key values are not allowed.
+All `FrontmatterTaskKeys` fields (`start`, `end`, `due`, `status`, `content`, `timerTargetId`, `color`, `linestyle`, `sharedtags`, `ignore`) are independently customisable. Duplicate key values are not allowed.
 
 ---
 

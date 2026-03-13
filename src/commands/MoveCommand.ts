@@ -34,7 +34,7 @@ export class MoveCommand implements CommandStrategy {
         }
 
         // When moving, we typically strip ALL flow commands to keep the archive clean
-        const archivedTask = { ...ctx.task, commands: [], startDateInherited: false };
+        const archivedTask = { ...ctx.task, commands: [], startDateInherited: false, blockId: undefined, timerTargetId: undefined };
         const content = TaskParser.format(archivedTask);
 
         // Move task with children
