@@ -104,7 +104,8 @@ tv-content: プロジェクト名
 | `tv-status` | | タスクステータス（省略時は` `） | `x`, `-`, `!` など |
 | `tv-content` | | タスク名（省略時は空。表示時はファイル名がフォールバック） | `プロジェクト名` |
 | `tv-color` | | タスクカードの色 | `red`, `#ff0000` |
-| `tv-linestyle` | | タスクカードの線スタイル | |
+| `tv-linestyle` | | タスクカードの線スタイル | `solid`, `dashed`, `dotted`, `double`, `dashdotted` |
+| `tags` | | タグ（Obsidian標準の`tags`キーと共有、キー名はカスタマイズ可） | `#meeting`, `#work` |
 | `tv-timer-target-id` | | タイマー連携用ID（自動設定） | |
 | `tv-ignore` | | `true` でスキャン対象から除外 | `true` |
 
@@ -247,7 +248,7 @@ frontmatterタスクでは、子要素の表示範囲を次のように定義し
 
 ## ビュー
 
-本プラグインは5つのビューを提供します。いずれもコマンドパレットから開けます。
+本プラグインは6つのビューを提供します。いずれもコマンドパレットから開けます。
 
 | ビュー | コマンド | 説明 |
 |--------|---------|------|
@@ -256,6 +257,7 @@ frontmatterタスクでは、子要素の表示範囲を次のように定義し
 | Calendar View | `Task Viewer: Open Calendar View` | 月間カレンダー表示 |
 | Mini Calendar | `Task Viewer: Open Mini Calendar View` | コンパクトなカレンダー（サイドバー向け） |
 | Timer View | `Task Viewer: Open Timer View` | ポモドーロ / カウントダウン / カウントアップ / インターバルタイマー |
+| Kanban View | `Task Viewer: Open Kanban View` | カンバンボード表示 |
 
 ---
 
@@ -274,11 +276,21 @@ frontmatterタスクでは、子要素の表示範囲を次のように定義し
 | Long Press Threshold | 長押し判定時間（ms） | 400 |
 | Frontmatter Task Header | 子タスク挿入先の見出しテキスト | `Tasks` |
 | Frontmatter Task Header Level | 見出しレベル（2 = `##`） | 2 |
-| Frontmatter Task Keys | Frontmatterキー名（個別にカスタマイズ可） | `tv-start` / `tv-end` / `tv-due` / `tv-status` / `tv-content` / `tv-timer-target-id` / `tv-color` / `tv-linestyle` / `tv-ignore` |
-| Default View Positions | ビューごとのデフォルト表示位置 | Timeline: tab, Schedule: right, Calendar: tab, Mini Calendar: left, Timer: right |
+| Frontmatter Task Keys | Frontmatterキー名（個別にカスタマイズ可） | `tv-start` / `tv-end` / `tv-due` / `tv-status` / `tv-content` / `tv-timer-target-id` / `tv-color` / `tv-linestyle` / `tags` / `tv-ignore` |
+| Default View Positions | ビューごとのデフォルト表示位置 | Timeline: tab, Schedule: right, Calendar: tab, Mini Calendar: left, Timer: right, Kanban: tab |
 | Pomodoro Work/Break Minutes | ポモドーロの作業/休憩時間 | 25 / 5 |
 | Countdown Minutes | カウントダウンのデフォルト時間 | 25 |
 | Calendar Week Start Day | カレンダーの週開始曜日 | 0（日曜） |
+| Calendar Show Week Numbers | ISO週番号を表示 | `false` |
+| Reuse Existing Tab | 同じビュータイプのタブを再利用 | `true` |
+| Editor Menu For Tasks | エディタメニューでタスク操作を表示 | `true` |
+| Editor Menu For Checkboxes | エディタメニューでチェックボックス操作を表示 | `true` |
+| Hide View Header | ビューヘッダーを非表示 | `true` |
+| Mobile Top Offset | モバイルでの上部オフセット（px） | 32 |
+| Pinned List Page Size | ピン留めリストのページサイズ | 10 |
+| Suggest Color | プロパティパネルで色の候補を表示 | `true` |
+| Suggest Linestyle | プロパティパネルで線スタイルの候補を表示 | `true` |
+| Suggest Sharedtags | プロパティパネルでタグの候補を表示 | `true` |
 | View Template Folder | ビューテンプレートの保存先 | *(空)* |
 | Interval Template Folder | インターバルテンプレートの保存先 | *(空)* |
 

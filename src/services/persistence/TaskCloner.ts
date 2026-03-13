@@ -163,14 +163,15 @@ export class TaskCloner {
             const newContent = TaskParser.format(newTask || task);
             const newParentLine = originalIndent + newContent.trim();
 
+            const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
             if (copyChildren) {
                 // Collect children, strip block IDs, and reset checkboxes
                 const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
                 const cleaned = this.fileOps.stripBlockIds(childrenLines);
                 const reset = this.resetChildCheckboxes(cleaned);
-                lines.splice(currentLine, 0, newParentLine, ...reset);
+                lines.splice(insertAt, 0, newParentLine, ...reset);
             } else {
-                lines.splice(currentLine, 0, newParentLine);
+                lines.splice(insertAt, 0, newParentLine);
             }
 
             return lines.join('\n');

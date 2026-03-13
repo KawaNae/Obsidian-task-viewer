@@ -44,6 +44,44 @@ export class FileOperations {
     }
 
     /**
+     * タスクが属する兄弟グループの先頭位置を返す。
+     * - トップレベル: 上方向に同インデントの兄弟を辿り、最初の兄弟位置を返す
+     * - 子タスク: 親タスクの直後（= 最初の子の位置）を返す
+     */
+    findSiblingGroupStart(lines: string[], taskLineIndex: number): number {
+        const taskLine = lines[taskLineIndex];
+        const taskIndent = taskLine.search(/\S|$/);
+
+        if (taskIndent === 0) {
+            let candidate = taskLineIndex;
+            for (let i = taskLineIndex - 1; i >= 0; i--) {
+                const line = lines[i];
+                if (line.trim() === '') break;
+                if (/^#{1,6}\s/.test(line)) break;
+                const lineIndent = line.search(/\S|$/);
+                if (lineIndent === taskIndent) {
+                    candidate = i;
+                } else if (lineIndent > taskIndent) {
+                    continue; // 前の兄弟の子をスキップ
+                } else {
+                    break;
+                }
+            }
+            return candidate;
+        } else {
+            for (let i = taskLineIndex - 1; i >= 0; i--) {
+                const line = lines[i];
+                if (line.trim() === '') break;
+                const lineIndent = line.search(/\S|$/);
+                if (lineIndent < taskIndent) {
+                    return i + 1; // 親の直後
+                }
+            }
+            return 0;
+        }
+    }
+
+    /**
      * Helper: Strip block IDs from lines
      */
     stripBlockIds(lines: string[]): string[] {

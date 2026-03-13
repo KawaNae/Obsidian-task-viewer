@@ -3,6 +3,7 @@ import { Task } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { getTaskDisplayName } from '../../../utils/TaskContent';
 import { DateUtils } from '../../../utils/DateUtils';
+import { TaskParser } from '../../../services/parsing/TaskParser';
 
 /**
  * Builder for timer-related menu items.
@@ -14,6 +15,10 @@ export class TimerMenuBuilder {
      * Adds a "Track" submenu with Countup, Pomodoro, and Countdown options.
      */
     addTimerSubmenu(menu: Menu, task: Task): void {
+        // 非オープンかつコマンド付きタスクではselfモードを提供しない（startDate変更でコマンド再発火するため）
+        if (TaskParser.isTriggerableStatus(task) && task.commands && task.commands.length > 0) {
+            return;
+        }
         menu.addItem((item) => {
             const subMenu = (item as any)
                 .setTitle('Track Self')

@@ -244,4 +244,74 @@ describe('FileOperations', () => {
             expect(ops.findTaskLineNumber(dupLines, task)).toBe(1);
         });
     });
+
+    // ── findSiblingGroupStart ──
+    describe('findSiblingGroupStart', () => {
+        it('returns position after header for top-level task', () => {
+            const lines = [
+                '## Tasks',
+                '- [ ] first',
+                '- [ ] second',
+            ];
+            expect(ops.findSiblingGroupStart(lines, 2)).toBe(1);
+        });
+
+        it('returns first sibling when siblings exist above', () => {
+            const lines = [
+                '## Tasks',
+                '- [x] older',
+                '- [x] middle',
+                '- [ ] current',
+            ];
+            expect(ops.findSiblingGroupStart(lines, 3)).toBe(1);
+        });
+
+        it('skips children of previous siblings', () => {
+            const lines = [
+                '## Tasks',
+                '- [x] sibling1',
+                '    - [x] child of sibling1',
+                '    - [x] another child',
+                '- [x] sibling2',
+                '- [ ] current',
+            ];
+            expect(ops.findSiblingGroupStart(lines, 5)).toBe(1);
+        });
+
+        it('stops at blank line boundary', () => {
+            const lines = [
+                '- [x] unrelated',
+                '',
+                '- [x] group start',
+                '- [ ] current',
+            ];
+            expect(ops.findSiblingGroupStart(lines, 3)).toBe(2);
+        });
+
+        it('returns parent+1 for child task', () => {
+            const lines = [
+                '- [ ] parent',
+                '    - [x] child1',
+                '    - [ ] child2',
+            ];
+            expect(ops.findSiblingGroupStart(lines, 2)).toBe(1);
+        });
+
+        it('returns parent+1 for child even with other siblings', () => {
+            const lines = [
+                '- [ ] parent',
+                '    - [x] child1',
+                '    - [x] child2',
+                '    - [ ] child3',
+            ];
+            expect(ops.findSiblingGroupStart(lines, 3)).toBe(1);
+        });
+
+        it('returns 0 for task at file start', () => {
+            const lines = [
+                '- [ ] only task',
+            ];
+            expect(ops.findSiblingGroupStart(lines, 0)).toBe(0);
+        });
+    });
 });
