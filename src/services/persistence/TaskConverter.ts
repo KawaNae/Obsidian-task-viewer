@@ -93,8 +93,8 @@ export class TaskConverter {
             lines.push(`${frontmatterKeys.start}: ${startValue}`);
         }
 
-        // end (endDate が未設定の場合は startDate をフォールバック — same-day 推論)
-        const endValue = DateUtils.formatDateTimeForStorage(task.endDate, task.endTime, task.startDate);
+        // end (endTime があるが endDate がない場合のみ startDate をフォールバック — same-day 推論)
+        const endValue = DateUtils.formatDateTimeForStorage(task.endDate, task.endTime, task.endTime ? task.startDate : undefined);
         if (endValue) {
             lines.push(`${frontmatterKeys.end}: ${endValue}`);
         }

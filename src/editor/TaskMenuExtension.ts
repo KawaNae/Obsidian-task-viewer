@@ -97,7 +97,7 @@ export function createTaskMenuExtension(
                 deleteLine: () => taskIndex.deleteLine(filePath, lineNumber),
             };
 
-            checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops);
+            checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops, filePath);
         }
 
         const rect = btnEl.getBoundingClientRect();

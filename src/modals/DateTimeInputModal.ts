@@ -1,5 +1,5 @@
 import { App, Modal, Setting } from 'obsidian';
-import { DateUtils } from '../utils/DateUtils';
+import { validateDateTimeFormats, validateDateRequirements, type DateTimeFields } from '../utils/TaskDateValidator';
 
 export type DateTimeType = 'start' | 'end' | 'due';
 
@@ -113,44 +113,32 @@ export class DateTimeInputModal extends Modal {
         this.timeInput.removeClass('datetime-input-modal__input--invalid');
         this.errorEl.style.display = 'none';
 
-        // Format validation
-        if (dateValue && !DateUtils.isValidDateString(dateValue)) {
-            this.dateInput.addClass('datetime-input-modal__input--invalid');
-            this.showError('Invalid date format. Use YYYY-MM-DD.');
-            return { valid: false, errorMessage: 'Invalid date format' };
+        // Build fields for the target type only
+        const fields: DateTimeFields = {
+            startDate: '', startTime: '', endDate: '', endTime: '', dueDate: '', dueTime: '',
+        };
+        fields[`${this.type}Date` as keyof DateTimeFields] = dateValue;
+        fields[`${this.type}Time` as keyof DateTimeFields] = timeValue;
+
+        // hasStartDate → end time-only is allowed (simulate startDate present)
+        if (this.type === 'end' && this.options.hasStartDate) {
+            fields.startDate = 'implicit';
         }
 
-        if (timeValue && !DateUtils.isValidTimeString(timeValue)) {
-            this.timeInput.addClass('datetime-input-modal__input--invalid');
-            this.showError('Invalid time format. Use HH:mm (00:00-23:59).');
-            return { valid: false, errorMessage: 'Invalid time format' };
+        const formatErr = validateDateTimeFormats(fields);
+        if (formatErr) {
+            const input = formatErr.field.endsWith('Date') ? this.dateInput : this.timeInput;
+            input.addClass('datetime-input-modal__input--invalid');
+            this.showError(formatErr.message);
+            return { valid: false, errorMessage: formatErr.message };
         }
 
-        // Business rule validation based on type
-        switch (this.type) {
-            case 'start':
-                if (!dateValue && timeValue) {
-                    this.timeInput.addClass('datetime-input-modal__input--invalid');
-                    this.showError('Start requires a date if time is specified.');
-                    return { valid: false, errorMessage: 'Start requires date' };
-                }
-                break;
-
-            case 'end':
-                if (!dateValue && timeValue && !this.options.hasStartDate) {
-                    this.timeInput.addClass('datetime-input-modal__input--invalid');
-                    this.showError('End time-only requires task to have a start date.');
-                    return { valid: false, errorMessage: 'End time-only requires start date' };
-                }
-                break;
-
-            case 'due':
-                if (!dateValue && timeValue) {
-                    this.timeInput.addClass('datetime-input-modal__input--invalid');
-                    this.showError('Due requires a date if time is specified.');
-                    return { valid: false, errorMessage: 'Due requires date' };
-                }
-                break;
+        const reqErr = validateDateRequirements(fields);
+        if (reqErr) {
+            const input = reqErr.field.endsWith('Date') ? this.dateInput : this.timeInput;
+            input.addClass('datetime-input-modal__input--invalid');
+            this.showError(reqErr.message);
+            return { valid: false, errorMessage: reqErr.message };
         }
 
         return { valid: true, errorMessage: '' };

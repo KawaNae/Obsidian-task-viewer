@@ -38,7 +38,7 @@ export class FrontmatterWriter {
         }
 
         if ('endDate' in updates || 'endTime' in updates) {
-            fmUpdates[frontmatterKeys.end] = DateUtils.formatDateTimeForStorage(task.endDate, task.endTime, task.startDate);
+            fmUpdates[frontmatterKeys.end] = DateUtils.formatDateTimeForStorage(task.endDate, task.endTime, task.endTime ? task.startDate : undefined);
         }
 
         if ('due' in updates) {

@@ -1,6 +1,6 @@
 {
   "name": "task-viewer",
-  "version": "0.24.6",
+  "version": "0.25.0",
   "description": "Obsidian plugin for task calendar and timeline views",
   "main": "main.js",
   "scripts": {
@@ -19,7 +19,7 @@
     "@typescript-eslint/parser": "^6.15.0",
     "builtin-modules": "^3.3.0",
     "esbuild": "^0.27.2",
-    "obsidian": "latest",
+    "obsidian": "^1.12.3",
     "obsidian-dataview": "^0.4.21",
     "tslib": "^2.6.2",
     "typescript": "^5.3.3",
