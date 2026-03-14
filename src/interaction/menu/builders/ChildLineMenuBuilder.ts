@@ -48,7 +48,7 @@ export class ChildLineMenuBuilder {
             deleteLine: () => this.taskIndex.deleteLine(filePath, lineNumber),
         };
 
-        this.checkboxMenuBuilder.addFullMenu(menu, lineText, settings, ops);
+        this.checkboxMenuBuilder.addFullMenu(menu, lineText, settings, ops, filePath);
         menu.showAtPosition({ x, y });
     }
 

@@ -3,6 +3,7 @@ import type { TaskViewerSettings } from '../../../types';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
 import { CreateTaskModal, type CreateTaskResult, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { DateUtils } from '../../../utils/DateUtils';
+import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { TaskLineClassifier } from '../../../utils/TaskLineClassifier';
 
 export type CreateFrontmatterTaskCallback = (result: CreateTaskResult, statusChar: string) => Promise<string>;
@@ -29,7 +30,7 @@ export class CheckboxMenuBuilder {
      * Build the full menu for a plain checkbox line:
      * Status + Duplicate + Convert to Inline Task + Delete
      */
-    addFullMenu(menu: Menu, lineText: string, settings: TaskViewerSettings, ops: CheckboxLineOps): boolean {
+    addFullMenu(menu: Menu, lineText: string, settings: TaskViewerSettings, ops: CheckboxLineOps, filePath?: string): boolean {
         const classified = TaskLineClassifier.classify(lineText);
         if (!classified) return false;
 
@@ -43,7 +44,7 @@ export class CheckboxMenuBuilder {
         this.addDuplicateItem(menu, lineText, ops);
 
         // Convert to > Inline Task / Frontmatter Task
-        this.addConvertSubmenu(menu, classified, lineText, ops);
+        this.addConvertSubmenu(menu, classified, lineText, ops, filePath);
 
         // Delete
         this.addDeleteItem(menu, ops);
@@ -96,11 +97,13 @@ export class CheckboxMenuBuilder {
         menu: Menu,
         classified: NonNullable<ReturnType<typeof TaskLineClassifier.classify>>,
         lineText: string,
-        ops: CheckboxLineOps
+        ops: CheckboxLineOps,
+        filePath?: string
     ): void {
         const { rawContent, statusChar, indent } = classified;
         const marker = TaskLineClassifier.extractMarker(lineText);
         const content = rawContent.trim();
+        const dailyNoteDate = filePath ? DailyNoteUtils.parseDateFromFilePath(this.app, filePath) ?? undefined : undefined;
 
         menu.addItem((item) => {
             const subMenu = (item as any)
@@ -123,7 +126,7 @@ export class CheckboxMenuBuilder {
                                 await ops.updateLine(newLine);
                             },
                             { content, startDate: today },
-                            { title: 'Convert to Inline Task', submitLabel: 'Convert', focusField: 'start', startHour: this.getStartHour() }
+                            { title: 'Convert to Inline Task', submitLabel: 'Convert', focusField: 'start', startHour: this.getStartHour(), dailyNoteDate }
                         ).open();
                     });
             });
@@ -145,7 +148,7 @@ export class CheckboxMenuBuilder {
                                     await ops.updateLine(`${indent}${marker} [[${linkTarget}|${fileName}]]`);
                                 },
                                 { content, startDate: today },
-                                { title: 'Convert to Frontmatter Task', submitLabel: 'Convert', focusField: 'start', startHour: this.getStartHour() }
+                                { title: 'Convert to Frontmatter Task', submitLabel: 'Convert', focusField: 'start', startHour: this.getStartHour(), dailyNoteDate }
                             ).open();
                         });
                 });

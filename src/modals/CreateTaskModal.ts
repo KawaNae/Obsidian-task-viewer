@@ -1,8 +1,8 @@
 import { App, Modal, Setting, setIcon } from 'obsidian';
-import { Task } from '../types';
+import { DisplayTask, Task } from '../types';
 import { TaskParser } from '../services/parsing/TaskParser';
-import { DateUtils } from '../utils/DateUtils';
 import { toDisplayTask } from '../utils/DisplayTaskConverter';
+import { validateDateTimeFormats, validateDateRequirements, validateDateRange, type DateValidationError } from '../utils/TaskDateValidator';
 import { TaskNameSuggest } from '../suggest/TaskNameSuggest';
 
 export interface CreateTaskResult {
@@ -71,6 +71,7 @@ export class CreateTaskModal extends Modal {
     private nameInput: HTMLInputElement;
     private errorEl: HTMLElement;
     private warningEl: HTMLElement;
+    private lastDisplayTask: DisplayTask | undefined;
 
     constructor(app: App, onSubmit: (result: CreateTaskResult) => void, initialValues: Partial<CreateTaskResult> = {}, options: CreateTaskModalOptions = {}) {
         super(app);
@@ -313,39 +314,28 @@ export class CreateTaskModal extends Modal {
         inputs.forEach(el => el?.classList.remove('create-task-modal__input--invalid'));
         this.errorEl.style.display = 'none';
 
-        const sd = this.startDateInput?.value.trim() || '';
-        const st = this.startTimeInput?.value.trim() || '';
-        const ed = this.endDateInput?.value.trim() || '';
-        const et = this.endTimeInput?.value.trim() || '';
-        const dd = this.dueDateInput?.value.trim() || '';
-        const dt = this.dueTimeInput?.value.trim() || '';
+        const fields = {
+            startDate: this.startDateInput?.value.trim() || '',
+            startTime: this.startTimeInput?.value.trim() || '',
+            endDate: this.endDateInput?.value.trim() || '',
+            endTime: this.endTimeInput?.value.trim() || '',
+            dueDate: this.dueDateInput?.value.trim() || '',
+            dueTime: this.dueTimeInput?.value.trim() || '',
+        };
 
-        // Format checks
-        const fields: Array<{ value: string; input: HTMLInputElement; label: string; type: 'date' | 'time' }> = [
-            { value: sd, input: this.startDateInput, label: 'Start', type: 'date' },
-            { value: st, input: this.startTimeInput, label: 'Start', type: 'time' },
-            { value: ed, input: this.endDateInput, label: 'End', type: 'date' },
-            { value: et, input: this.endTimeInput, label: 'End', type: 'time' },
-            { value: dd, input: this.dueDateInput, label: 'Due', type: 'date' },
-            { value: dt, input: this.dueTimeInput, label: 'Due', type: 'time' },
-        ];
-        for (const f of fields) {
-            if (!f.value) continue;
-            const valid = f.type === 'date' ? DateUtils.isValidDateString(f.value) : DateUtils.isValidTimeString(f.value);
-            if (!valid) {
-                f.input.classList.add('create-task-modal__input--invalid');
-                this.showError(`${f.label}: invalid ${f.type} format (${f.type === 'date' ? 'YYYY-MM-DD' : 'HH:mm'}).`);
-                return false;
-            }
+        const formatErr = validateDateTimeFormats(fields);
+        if (formatErr) return this.applyValidationError(formatErr);
+
+        const reqErr = validateDateRequirements(fields, { hasImplicitStartDate: !!this.options.dailyNoteDate });
+        if (reqErr) return this.applyValidationError(reqErr);
+
+        if (this.lastDisplayTask) {
+            const rangeErr = validateDateRange(this.lastDisplayTask);
+            if (rangeErr) return this.applyValidationError(rangeErr);
         }
 
-        // Business rules (dailyNoteDate provides an implicit startDate when omitted)
-        const hasImplicitStartDate = !!this.options.dailyNoteDate;
-        if (!sd && st && !hasImplicitStartDate) { this.startTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('Start: date is required when time is specified.'); return false; }
-        if (!ed && et && !sd && !hasImplicitStartDate) { this.endTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('End: date is required when there is no start date.'); return false; }
-        if (!dd && dt) { this.dueTimeInput.classList.add('create-task-modal__input--invalid'); this.showError('Due: date is required when time is specified.'); return false; }
-
         // Warning: empty task won't appear in viewer
+        const { startDate: sd, startTime: st, endDate: ed, endTime: et, dueDate: dd, dueTime: dt } = fields;
         if (this.options.warnOnEmptyTask && !this.result.content.trim() && !sd && !st && !ed && !et && !dd && !dt) {
             this.warningEl.setText('Task name and date are both empty — this task will not appear in the viewer.');
             this.warningEl.style.display = 'block';
@@ -354,6 +344,17 @@ export class CreateTaskModal extends Modal {
         }
 
         return true;
+    }
+
+    private applyValidationError(err: DateValidationError): false {
+        const inputMap: Record<string, HTMLInputElement> = {
+            startDate: this.startDateInput, startTime: this.startTimeInput,
+            endDate: this.endDateInput, endTime: this.endTimeInput,
+            dueDate: this.dueDateInput, dueTime: this.dueTimeInput,
+        };
+        inputMap[err.field]?.classList.add('create-task-modal__input--invalid');
+        this.showError(err.message);
+        return false;
     }
 
     private showError(message: string) {
@@ -379,7 +380,7 @@ export class CreateTaskModal extends Modal {
             statusChar: ' ',
             childIds: [],
             childLines: [],
-            startDate: this.result.startDate,
+            startDate: this.result.startDate || this.options.dailyNoteDate,
             startTime: this.result.startTime,
             endDate: this.result.endDate,
             endTime: this.result.endTime,
@@ -391,6 +392,7 @@ export class CreateTaskModal extends Modal {
         };
 
         const dt = toDisplayTask(formTask, startHour);
+        this.lastDisplayTask = dt;
 
         // --- Start Date placeholder ---
         if (this.startDateInput) {
@@ -400,10 +402,9 @@ export class CreateTaskModal extends Modal {
 
         // --- Start Time placeholder ---
         if (this.startTimeInput) {
-            // Only show time placeholder when the user has a date context (explicit or implicit)
-            // For all-day tasks (no startTime), the implicit startTime is startHour which is not useful as placeholder
+            // Show implicit time when there's a date context (explicit or resolved from end)
             this.startTimeInput.placeholder =
-                (dt.startTimeImplicit && this.result.endTime && dt.effectiveStartTime) || 'HH:mm';
+                (dt.startTimeImplicit && dt.effectiveStartDate && dt.effectiveStartTime) || 'HH:mm';
         }
 
         // --- End Date placeholder ---
@@ -414,9 +415,9 @@ export class CreateTaskModal extends Modal {
 
         // --- End Time placeholder ---
         if (this.endTimeInput) {
-            // Only show time placeholder for timed tasks (startTime or endTime is set)
+            // Show implicit time when there's an end date context
             this.endTimeInput.placeholder =
-                (dt.endTimeImplicit && this.result.startTime && dt.effectiveEndTime) || 'HH:mm';
+                (dt.endTimeImplicit && dt.effectiveEndDate && dt.effectiveEndTime) || 'HH:mm';
         }
     }
 

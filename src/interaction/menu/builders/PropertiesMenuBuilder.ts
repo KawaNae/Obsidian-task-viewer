@@ -9,6 +9,7 @@ import { DateUtils } from '../../../utils/DateUtils';
 import { getTaskDisplayName } from '../../../utils/TaskContent';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
 import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
+import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 
 type ChangePropertiesFocusField = 'name' | 'start' | 'end' | 'due';
 
@@ -207,6 +208,7 @@ export class PropertiesMenuBuilder {
                 submitLabel: 'Save',
                 focusField,
                 startHour: this.plugin.settings.startHour,
+                dailyNoteDate: DailyNoteUtils.parseDateFromFilePath(this.app, task.file) ?? undefined,
             }
         ).open();
     }

@@ -1,8 +1,8 @@
 {
   "id": "obsidian-task-viewer",
   "name": "Task Viewer",
-  "version": "0.24.6",
-  "minAppVersion": "1.4.0",
+  "version": "0.25.0",
+  "minAppVersion": "1.12.2",
   "description": "Calendar and timeline views for tasks with custom date/time syntax",
   "author": "KawaNae",
   "authorUrl": "",

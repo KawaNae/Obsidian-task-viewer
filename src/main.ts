@@ -35,6 +35,7 @@ import { TimerMenuBuilder } from './interaction/menu/builders/TimerMenuBuilder';
 import { TaskActionsMenuBuilder } from './interaction/menu/builders/TaskActionsMenuBuilder';
 import { CheckboxMenuBuilder } from './interaction/menu/builders/CheckboxMenuBuilder';
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
+import { registerCliHandlers } from './cli/CliRegistrar';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
@@ -61,6 +62,9 @@ export default class TaskViewerPlugin extends Plugin {
         // Initialize Services
         this.taskIndex = new TaskIndex(this.app, this.settings, this.manifest.version);
         await this.taskIndex.initialize();
+
+        // Register CLI handlers
+        registerCliHandlers(this);
 
         // Initialize Timer Widget
         this.timerWidget = new TimerWidget(this.app, this);

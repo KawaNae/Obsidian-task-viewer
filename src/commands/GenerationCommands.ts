@@ -85,6 +85,7 @@ export abstract class GenerationCommand implements CommandStrategy {
             childLines: [], // Children are re-collected from file by insertRecurrenceForTask
             blockId: undefined, // タイマーターゲットID等を引き継がない
             timerTargetId: undefined,
+            content: task.content.replace(/^(?:⏱️|🍅|⏳)\s*/, ''),
         };
     }
 
