@@ -1,82 +1,77 @@
 import type { CliData } from 'obsidian';
 import type TaskViewerPlugin from '../../main';
-import type { DisplayTask, PinnedListDefinition } from '../../types';
-import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
-import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
-import { TaskFilterEngine } from '../../services/filter/TaskFilterEngine';
-import { TaskSorter } from '../../services/sort/TaskSorter';
-import { hasConditions } from '../../services/filter/FilterTypes';
-import { formatTaskList, cliError } from '../CliOutputFormatter';
+import { TaskApiError } from '../../api/TaskApiTypes';
+import type { QueryResult } from '../../api/TaskApiTypes';
+import {
+    pickFields, resolveFields, cliError,
+    type OutputFormat,
+} from '../CliOutputFormatter';
+
+const VALID_FORMATS = new Set(['json', 'tsv', 'jsonl']);
 
 export function createQueryHandler(plugin: TaskViewerPlugin) {
     return async (params: CliData): Promise<string> => {
         if (!params.template) return cliError('Missing required flag: --template');
 
-        const { settings } = plugin;
-        if (!settings.viewTemplateFolder) {
-            return cliError('viewTemplateFolder is not configured in settings');
+        if (params.format && !VALID_FORMATS.has(params.format)) {
+            return cliError(`Invalid format: ${params.format}. Must be json, tsv, or jsonl`);
         }
 
-        const loader = new ViewTemplateLoader(plugin.app);
-        const summary = loader.findByBasename(settings.viewTemplateFolder, params.template);
-        if (!summary) {
-            return cliError(`Template not found: ${params.template}`);
-        }
-
-        const template = await loader.loadFullTemplate(summary.filePath);
-        if (!template) {
-            return cliError(`Failed to load template: ${params.template}`);
-        }
-
-        const taskIndex = plugin.getTaskIndex();
-        const { startHour } = settings;
-        const context = { taskLookup: (id: string) => taskIndex.getTask(id) };
-
-        const allDisplayTasks = toDisplayTasks(taskIndex.getTasks(), startHour);
-
-        // Apply view-level filter
-        let viewFiltered: DisplayTask[];
-        if (template.filterState && hasConditions(template.filterState)) {
-            viewFiltered = allDisplayTasks.filter(t =>
-                TaskFilterEngine.evaluate(t, template.filterState!, context),
-            );
-        } else {
-            viewFiltered = allDisplayTasks;
-        }
-
-        // Collect pinned lists from pinnedLists or flattened grid
-        const pinnedLists: PinnedListDefinition[] = template.pinnedLists
-            ?? (template.grid ? template.grid.flat() : []);
-
-        if (pinnedLists.length === 0) {
-            // No pinned lists — return all view-filtered tasks as a single list
-            TaskSorter.sort(viewFiltered, undefined);
-            return JSON.stringify({
-                template: template.name,
-                viewType: template.viewType,
-                lists: [{
-                    name: template.name,
-                    ...formatTaskList(viewFiltered),
-                }],
+        try {
+            const result = await plugin.api.query({
+                template: params.template,
+                date: params.date,
             });
+
+            const format = (params.format as OutputFormat) || 'json';
+            const fields = resolveFields(params.outputFields);
+            return formatQueryResult(result, format, fields);
+        } catch (e) {
+            return cliError(e instanceof TaskApiError ? e.message : String(e));
+        }
+    };
+}
+
+function formatQueryResult(
+    result: QueryResult,
+    format: OutputFormat,
+    fields: string[],
+): string {
+    switch (format) {
+        case 'tsv': {
+            const header = fields.join('\t');
+            const sections = result.lists.map(list => {
+                const rows = list.tasks.map(t =>
+                    fields.map(f => tsvVal(pickFields(t, fields)[f])).join('\t'),
+                );
+                return `## ${list.name}\n${header}\n${rows.join('\n')}`;
+            });
+            return sections.join('\n\n');
         }
 
-        const lists = pinnedLists.map(list => {
-            const source = list.applyViewFilter !== false ? viewFiltered : allDisplayTasks;
-            const matched = source.filter(t =>
-                TaskFilterEngine.evaluate(t, list.filterState, context),
-            );
-            TaskSorter.sort(matched, list.sortState);
-            return {
-                name: list.name,
-                ...formatTaskList(matched),
-            };
-        });
+        case 'jsonl':
+            return result.lists.flatMap(list =>
+                list.tasks.map(t =>
+                    JSON.stringify({ _list: list.name, ...pickFields(t, fields) }),
+                ),
+            ).join('\n');
 
-        return JSON.stringify({
-            template: template.name,
-            viewType: template.viewType,
-            lists,
-        });
-    };
+        case 'json':
+        default:
+            return JSON.stringify({
+                template: result.template,
+                viewType: result.viewType,
+                lists: result.lists.map(list => ({
+                    name: list.name,
+                    count: list.count,
+                    tasks: list.tasks.map(t => pickFields(t, fields)),
+                })),
+            });
+    }
+}
+
+function tsvVal(value: unknown): string {
+    if (value === null || value === undefined) return '';
+    if (Array.isArray(value)) return value.join(';');
+    return String(value).replace(/[\t\n\r]/g, ' ');
 }

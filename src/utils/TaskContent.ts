@@ -28,6 +28,16 @@ export function isContentMatchingBaseName(task: Pick<Task, 'content' | 'file'>):
 }
 
 /**
+ * Returns file basename for display alongside a task name, or null if redundant.
+ * Hides the file name when it matches the task name or is empty.
+ */
+export function getDisplayFileName(taskName: string, taskFile: string): string | null {
+    const baseName = getFileBaseName(taskFile);
+    if (!baseName || taskName === baseName) return null;
+    return baseName;
+}
+
+/**
  * Returns UI display name for a task.
  * Falls back to file basename when content is empty.
  */
