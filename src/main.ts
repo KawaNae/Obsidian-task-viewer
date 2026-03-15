@@ -14,7 +14,6 @@ import {
     validateFrontmatterTaskKeys,
 } from './types';
 import type { DefaultLeafPosition, PinnedListDefinition, Task } from './types';
-import { normalizeAiIndexSettings } from './services/aiindex/AiIndexSettings';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/color/ColorSuggest';
 import { LineStyleSuggest } from './suggest/line/LineStyleSuggest';
@@ -36,11 +35,13 @@ import { TaskActionsMenuBuilder } from './interaction/menu/builders/TaskActionsM
 import { CheckboxMenuBuilder } from './interaction/menu/builders/CheckboxMenuBuilder';
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 import { registerCliHandlers } from './cli/CliRegistrar';
+import { TaskApi } from './api/TaskApi';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
     private timerWidget: TimerWidget;
     public settings: TaskViewerSettings;
+    public api: TaskApi;
 
     // Day boundary check
     private lastVisualDate: string = '';
@@ -60,8 +61,11 @@ export default class TaskViewerPlugin extends Plugin {
         await this.loadSettings();
 
         // Initialize Services
-        this.taskIndex = new TaskIndex(this.app, this.settings, this.manifest.version);
+        this.taskIndex = new TaskIndex(this.app, this.settings);
         await this.taskIndex.initialize();
+
+        // Public API (plugin interop / DataviewJS)
+        this.api = new TaskApi(this);
 
         // Register CLI handlers
         registerCliHandlers(this);
@@ -188,49 +192,6 @@ export default class TaskViewerPlugin extends Plugin {
             name: kanbanViewMeta.commandName,
             callback: () => {
                 this.activateView(VIEW_TYPE_KANBAN);
-            }
-        });
-
-        this.addCommand({
-            id: 'task-viewer-rebuild-ai-index',
-            name: 'Task Viewer: Rebuild AI Index',
-            callback: async () => {
-                try {
-                    await this.taskIndex.rebuildAiIndex();
-                    new Notice('Task Viewer: AI index rebuilt.');
-                } catch (error) {
-                    console.error('[TaskViewer] Failed to rebuild AI index:', error);
-                    new Notice('Task Viewer: failed to rebuild AI index.');
-                }
-            }
-        });
-
-        this.addCommand({
-            id: 'task-viewer-toggle-ai-index',
-            name: 'Task Viewer: Toggle AI Index',
-            callback: async () => {
-                this.settings.aiIndex.enabled = !this.settings.aiIndex.enabled;
-                await this.saveSettings();
-
-                if (this.settings.aiIndex.enabled) {
-                    await this.taskIndex.rebuildAiIndex();
-                    new Notice('Task Viewer: AI index enabled.');
-                } else {
-                    new Notice('Task Viewer: AI index disabled.');
-                }
-            }
-        });
-
-        this.addCommand({
-            id: 'task-viewer-open-ai-index-file',
-            name: 'Task Viewer: Open AI Index File',
-            callback: async () => {
-                try {
-                    await this.taskIndex.openAiIndexFile();
-                } catch (error) {
-                    console.error('[TaskViewer] Failed to open AI index file:', error);
-                    new Notice('Task Viewer: failed to open AI index file.');
-                }
             }
         });
 
@@ -426,18 +387,15 @@ export default class TaskViewerPlugin extends Plugin {
         const rawObject = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {};
         const merged = Object.assign({}, DEFAULT_SETTINGS, rawObject) as TaskViewerSettings & {
             frontmatterTaskKeys?: unknown;
-            aiIndex?: unknown;
         };
         const normalizedFrontmatterKeys = normalizeFrontmatterTaskKeys(merged.frontmatterTaskKeys);
         const keysValidationError = validateFrontmatterTaskKeys(normalizedFrontmatterKeys);
-        const normalizedAiIndexSettings = normalizeAiIndexSettings(merged.aiIndex);
 
         this.settings = {
             ...merged,
             frontmatterTaskKeys: keysValidationError
                 ? { ...DEFAULT_FRONTMATTER_TASK_KEYS }
                 : normalizedFrontmatterKeys,
-            aiIndex: normalizedAiIndexSettings,
         };
     }
 

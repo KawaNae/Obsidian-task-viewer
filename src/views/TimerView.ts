@@ -109,6 +109,7 @@ export class TimerView extends ItemView {
             customLabel: '',
             recordMode: 'self' as const,
             parserId: 'at-notation',
+            taskColor: '',
         };
 
         switch (this.timerViewMode) {

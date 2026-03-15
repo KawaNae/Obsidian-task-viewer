@@ -27,6 +27,7 @@ export interface TimerBase {
     customLabel: string;
     recordMode: 'child' | 'self';
     parserId: string;
+    taskColor: string;
 }
 
 export interface CountupTimer extends TimerBase {
@@ -80,6 +81,7 @@ export interface TimerStartConfig {
     recordMode?: 'child' | 'self';
     parserId?: string;
     timerTargetId?: string;
+    taskColor?: string;
     timerType: TimerType | 'pomodoro';
     autoStart?: boolean;
     countdownSeconds?: number;

@@ -46,7 +46,8 @@ export class TimerCreator {
             intervalId: null,
             customLabel: '',
             recordMode: config.recordMode ?? 'child',
-            parserId: config.parserId ?? 'at-notation'
+            parserId: config.parserId ?? 'at-notation',
+            taskColor: config.taskColor ?? ''
         };
 
         switch (config.timerType) {

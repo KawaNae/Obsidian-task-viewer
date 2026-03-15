@@ -116,7 +116,7 @@ tv-content: プロジェクト名
 > 時刻のみを記述する場合は、YAMLのsexagesimal記法を回避するため`"14:00"`のようにクォートで囲んでください。
 
 > [!NOTE]
-> `tv-content` を省略した場合、UI表示ではファイル名フォールバックが使われ、AI Indexの`content`も basename で補完されます（inline/frontmatter）。
+> `tv-content` を省略した場合、UI表示ではファイル名がフォールバックとして使われます。
 
 #### 使用例
 
@@ -263,7 +263,7 @@ frontmatterタスクでは、子要素の表示範囲を次のように定義し
 
 ## 設定
 
-設定は7つのタブに分かれています: General / Views / Notes / Timer / Frontmatter / AI Index / Habits
+設定は6つのタブに分かれています: General / Views / Notes / Timer / Frontmatter / Habits
 
 ### 主要設定
 
@@ -294,28 +294,77 @@ frontmatterタスクでは、子要素の表示範囲を次のように定義し
 | View Template Folder | ビューテンプレートの保存先 | *(空)* |
 | Interval Template Folder | インターバルテンプレートの保存先 | *(空)* |
 
-### AI Index 出力スキーマ（v6）
+---
 
-AI Indexの1行（NDJSON）は、次のフィールドを持ちます。
+## CLI (Experimental)
 
-| フィールド | 説明 |
-|-----------|------|
-| `id` | 正規化タスクID |
-| `contentHash` | 差分検知用ハッシュ |
-| `parser` | `inline` / `frontmatter` など |
-| `sourcePath` | Vault相対パス |
-| `locator` | タスク位置アンカー（`ln:<number>` / `blk:<blockId>` / `tid:<timerTargetId>` / `fm-root`） |
-| `status` | `todo` / `done` / `cancelled` / `exception` / `unknown` |
-| `content` | タスク本文（inline/frontmatter で空の場合はファイル basename を補完） |
-| `start` | 開始日時（ISO形式または`null`） |
-| `end` | 終了日時（ISO形式または`null`） |
-| `due` | 締切日時（ISO形式または`null`） |
-| `tags` | `content`から抽出したタグ配列 |
-| `raw` | 元記法文字列（設定で有効時のみ） |
+> [!WARNING]
+> CLI サポートは試験的機能です。Obsidian v1.12.2+ の CLI API を使用しています。コマンド名やパラメータは今後変更される可能性があります。
 
-更新時刻は行単位ではなく `ai-task-index.meta.json` の `generatedAt` を参照してください。
+Obsidian CLI から本プラグインのタスクデータにアクセスできます。Obsidian が起動中である必要があります。
 
-`allDay`、`durationMinutes`、`readOnly` はv3で削除され、`updatedAt` はv4で削除され、`sourceLine/sourceCol` はv5で `locator` に統合され、v6で `content` 空値の basename 補完（inline/frontmatter限定）が追加されました。
+### コマンド一覧
+
+| コマンド | 説明 |
+|---------|------|
+| `obsidian-task-viewer:list` | タスク一覧（フィルタ/ソート/ページネーション対応） |
+| `obsidian-task-viewer:today` | 本日アクティブなタスク |
+| `obsidian-task-viewer:get` | ID指定で単一タスク取得 |
+| `obsidian-task-viewer:query` | ビューテンプレートによるクエリ |
+| `obsidian-task-viewer:create` | 新規インラインタスク作成 |
+| `obsidian-task-viewer:update` | タスク更新 |
+| `obsidian-task-viewer:delete` | タスク削除 |
+
+### 使用例
+
+```bash
+obsidian obsidian-task-viewer:list vault=MyVault tag=work format=json
+obsidian obsidian-task-viewer:today vault=MyVault
+obsidian obsidian-task-viewer:create vault=MyVault file=DailyNotes/2026-03-15.md content="Meeting" start="2026-03-15T14:00" end="15:00"
+```
+
+---
+
+## Public API (Experimental)
+
+> [!WARNING]
+> Public API は試験的機能です。メソッドのシグネチャや返却型は今後変更される可能性があります。
+
+他のプラグインや DataviewJS から本プラグインの機能にアクセスできます。
+
+### アクセス方法
+
+```javascript
+const api = app.plugins.plugins['obsidian-task-viewer'].api;
+```
+
+### メソッド一覧
+
+| メソッド | 説明 | 同期/非同期 |
+|---------|------|-----------|
+| `api.list(params?)` | タスク一覧 | sync |
+| `api.today(params?)` | 本日のタスク | sync |
+| `api.get({ id })` | 単一タスク取得 | sync |
+| `api.query({ template })` | テンプレートクエリ | async |
+| `api.create({ file, content, ... })` | タスク作成 | async |
+| `api.update({ id, ... })` | タスク更新 | async |
+| `api.delete({ id })` | タスク削除 | async |
+
+### DataviewJS 使用例
+
+```dataviewjs
+const api = app.plugins.plugins['obsidian-task-viewer'].api;
+const result = api.today({ sort: [{ property: 'startDate' }] });
+
+dv.table(
+  ['Status', 'Time', 'Content'],
+  result.tasks.map(t => [
+    t.statusChar === ' ' ? '⬜' : '✅',
+    [t.effectiveStartTime, t.effectiveEndTime].filter(Boolean).join('–') || '—',
+    t.content,
+  ])
+);
+```
 
 ---
 

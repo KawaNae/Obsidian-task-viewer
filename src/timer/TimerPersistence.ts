@@ -36,6 +36,7 @@ export interface PersistedTimer {
     timerType: TimerStartConfig['timerType'];
     recordMode: 'child' | 'self';
     parserId: string;
+    taskColor?: string;
 
     timeRemaining?: number;
     totalTime?: number;
@@ -221,7 +222,8 @@ export class TimerPersistence {
             customLabel: timer.customLabel,
             timerType: timer.timerType,
             recordMode: timer.recordMode,
-            parserId: timer.parserId
+            parserId: timer.parserId,
+            taskColor: timer.taskColor
         };
 
         switch (timer.timerType) {
@@ -286,7 +288,8 @@ export class TimerPersistence {
             intervalId: null,
             customLabel: persisted.customLabel || '',
             recordMode: persisted.recordMode || 'child',
-            parserId: persisted.parserId || 'at-notation'
+            parserId: persisted.parserId || 'at-notation',
+            taskColor: persisted.taskColor || ''
         };
 
         switch (persisted.timerType) {

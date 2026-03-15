@@ -902,7 +902,7 @@ Defined in `src/types.ts` as `TaskViewerSettings`. Defaults are in `DEFAULT_SETT
 | `taskSelectAction` | `'click'` \| `'dblclick'` | `'click'` | Task card select action to open file |
 | `zoomLevel` | number | 1.0 | Default timeline zoom level |
 | `pastDaysToShow` | number | 0 | Number of past days to show in timeline |
-| `aiIndex` | AiIndexSettings | — | AI Index generation settings (`services/aiindex/AiIndexSettings.ts`) |
+| ~~`aiIndex`~~ | — | — | Removed in v0.25.0 (replaced by CLI + Public API) |
 | `pomodoroWorkMinutes` | number | 25 | Pomodoro work segment length |
 | `pomodoroBreakMinutes` | number | 5 | Pomodoro break segment length |
 | `countdownMinutes` | number | 25 | Default countdown duration |
@@ -975,3 +975,70 @@ Modifiers and pseudo-classes follow the same pattern:
 .timer-view .timer-view__btn--primary { ... }
 .template-creator .template-creator__type-btn--work { ... }
 ```
+
+---
+
+## CLI & Public API Architecture (Experimental)
+
+> Both CLI and Public API are experimental. Signatures may change in future versions.
+
+### Overview
+
+External integration uses two channels sharing the same core logic:
+- **CLI** — for external tools / AI agents (Obsidian v1.12.2+ CLI API)
+- **Public API** — for inter-plugin communication / DataviewJS
+
+```
+CLI handler → string parse → TaskApi method → typed result → string format
+DataviewJS  →                TaskApi method → typed result (used directly)
+```
+
+### File structure
+
+```
+src/api/
+  TaskApi.ts            # Public API class (7 methods)
+  TaskApiTypes.ts       # Param/result interfaces + TaskApiError
+
+src/cli/
+  CliRegistrar.ts       # Registers 7 CLI handlers with Obsidian
+  CliFilterBuilder.ts   # String flags → FilterState
+  CliSortBuilder.ts     # String flag → SortState
+  CliDatePresetParser.ts # Date preset parsing (today, thisWeek, etc.)
+  CliOutputFormatter.ts # Field selection + JSON/TSV/JSONL formatting
+  handlers/
+    TaskQueryHandlers.ts  # list / today / get (independent implementation)
+    TaskCrudHandlers.ts   # create / update / delete (delegates to TaskApi)
+    TemplateQueryHandler.ts # query (independent implementation)
+```
+
+### API entry point
+
+Exposed on the plugin instance as `plugin.api`:
+
+```typescript
+// src/main.ts
+this.api = new TaskApi(this);
+```
+
+Consumer access:
+```javascript
+const api = app.plugins.plugins['obsidian-task-viewer'].api;
+```
+
+### Method summary
+
+| Method | Sync/Async | Returns |
+|--------|-----------|---------|
+| `list(params?)` | sync | `TaskListResult { count, tasks: DisplayTask[] }` |
+| `today(params?)` | sync | `TaskListResult` |
+| `get({ id })` | sync | `DisplayTask` |
+| `query({ template })` | async | `QueryResult { template, viewType, lists[] }` |
+| `create({ file, content, ... })` | async | `MutationResult { task: DisplayTask }` |
+| `update({ id, ... })` | async | `MutationResult` |
+| `delete({ id })` | async | `DeleteResult { deleted: string }` |
+
+### Error handling
+
+- API methods throw `TaskApiError` on validation or not-found errors.
+- CLI handlers catch `TaskApiError` and return `{ "error": "message" }` JSON.

@@ -9,7 +9,6 @@ import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { EditorObserver } from './EditorObserver';
 import { InlineToFrontmatterConversionService } from './InlineToFrontmatterConversionService';
-import { AiIndexService } from '../aiindex/AiIndexService';
 import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
 import { DateUtils as CoreDateUtils } from '../../utils/DateUtils';
 import { toDisplayTask } from '../../utils/DisplayTaskConverter';
@@ -34,13 +33,12 @@ export class TaskIndex {
     private repository: TaskRepository;
     private inlineToFrontmatterConversionService: InlineToFrontmatterConversionService;
     private commandExecutor: TaskCommandExecutor;
-    private aiIndexService: AiIndexService;
     private settings: TaskViewerSettings;
     private draggingFilePath: string | null = null;  // ドラッグ中のファイルパス
     private notifyDebounceTimer: NodeJS.Timeout | null = null;
     private readonly NOTIFY_DEBOUNCE_MS = 16; // 約1フレーム
 
-    constructor(private app: App, settings: TaskViewerSettings, pluginVersion: string) {
+    constructor(private app: App, settings: TaskViewerSettings) {
         this.settings = settings;
 
         // サービスの初期化
@@ -55,12 +53,6 @@ export class TaskIndex {
             app, this.store, this.validator,
             this.syncDetector, this.commandExecutor, settings
         );
-        this.aiIndexService = new AiIndexService(
-            app,
-            () => this.store.getTasks(),
-            () => this.settings,
-            pluginVersion
-        );
     }
 
     getRepository(): TaskRepository {
@@ -71,7 +63,6 @@ export class TaskIndex {
         this.app.workspace.onLayoutReady(async () => {
             await this.scanner.scanVault();
             this.scanner.setInitializing(false);
-            await this.aiIndexService.rebuildAll();
         });
 
         // エディタ監視の開始
@@ -92,7 +83,6 @@ export class TaskIndex {
                 await this.scanner.queueScan(file, isLocal);
                 WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
                 this.debouncedNotify();
-                this.aiIndexService.schedulePath(file.path);
             }
         });
 
@@ -100,7 +90,6 @@ export class TaskIndex {
             if (file instanceof TFile && file.extension === 'md') {
                 this.store.removeTasksByFile(file.path);
                 this.debouncedNotify();
-                this.aiIndexService.scheduleDeletePath(file.path);
             }
         });
 
@@ -109,8 +98,7 @@ export class TaskIndex {
                 this.scanner.queueScan(file).then(() => {
                     WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
                     this.debouncedNotify();
-                    this.aiIndexService.schedulePath(file.path);
-                });
+                    });
             }
         });
 
@@ -123,8 +111,7 @@ export class TaskIndex {
                 this.scanner.queueScan(file).then(() => {
                     WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
                     this.debouncedNotify();
-                    this.aiIndexService.schedulePath(file.path);
-                });
+                    });
             }
         });
 
@@ -134,7 +121,6 @@ export class TaskIndex {
                 this.store.removeTasksByFile(oldPath);
                 this.scanner.handleFileRenamed(oldPath);
                 this.debouncedNotify();
-                this.aiIndexService.scheduleDeletePath(oldPath);
                 return;
             }
 
@@ -143,7 +129,6 @@ export class TaskIndex {
                 await this.scanner.queueScan(file);
                 WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
                 this.debouncedNotify();
-                this.aiIndexService.schedulePath(file.path);
                 return;
             }
 
@@ -159,9 +144,6 @@ export class TaskIndex {
             await this.scanner.queueScan(file);
             WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
             this.debouncedNotify();
-
-            this.aiIndexService.scheduleDeletePath(oldPath);
-            this.aiIndexService.schedulePath(file.path);
         });
     }
 
@@ -219,9 +201,7 @@ export class TaskIndex {
         this.settings = settings;
         this.store.updateSettings(settings);
         this.scanner.updateSettings(settings);
-        this.aiIndexService.updateSettings()
-            .then(() => this.scanner.scanVault())
-            .then(() => this.aiIndexService.rebuildAll())
+        this.scanner.scanVault()
             .catch((error) => {
                 console.error('[TaskIndex] Failed to rescan vault after settings update:', error);
             });
@@ -232,7 +212,6 @@ export class TaskIndex {
             clearTimeout(this.notifyDebounceTimer);
             this.notifyDebounceTimer = null;
         }
-        this.aiIndexService.dispose();
     }
 
     // ===== データアクセス (TaskStoreへ委譲) =====
@@ -279,14 +258,6 @@ export class TaskIndex {
 
     async waitForScan(filePath: string): Promise<void> {
         return this.scanner.waitForScan(filePath);
-    }
-
-    async rebuildAiIndex(): Promise<void> {
-        await this.aiIndexService.rebuildAll();
-    }
-
-    async openAiIndexFile(): Promise<void> {
-        await this.aiIndexService.openIndexFile();
     }
 
     // ===== CRUD操作 =====

@@ -1,5 +1,3 @@
-import { DEFAULT_AI_INDEX_SETTINGS } from './services/aiindex/AiIndexSettings';
-import type { AiIndexSettings } from './services/aiindex/AiIndexSettings';
 import type { FilterState } from './services/filter/FilterTypes';
 import type { SortState } from './services/sort/SortTypes';
 
@@ -258,7 +256,6 @@ export interface TaskViewerSettings {
     applyGlobalStyles: boolean;
     enableStatusMenu: boolean;
     statusMenuChars: string[];
-    aiIndex: AiIndexSettings;
     frontmatterTaskKeys: FrontmatterTaskKeys;
     zoomLevel: number;
     dailyNoteHeader: string;
@@ -308,7 +305,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     applyGlobalStyles: false,
     enableStatusMenu: true,
     statusMenuChars: ['-', '!', '?', '>', '/'],
-    aiIndex: { ...DEFAULT_AI_INDEX_SETTINGS },
     frontmatterTaskKeys: { ...DEFAULT_FRONTMATTER_TASK_KEYS },
     zoomLevel: 1.0,
     dailyNoteHeader: 'Tasks',

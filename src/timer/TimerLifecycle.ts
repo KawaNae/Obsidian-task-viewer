@@ -323,6 +323,7 @@ export class TimerLifecycle {
             elapsedTime: 0,
             recordMode: 'child',
             parserId: 'at-notation',
+            taskColor: '',
         };
 
         this.ctx.timers.set(IDLE_TIMER_ID, idleTimer);

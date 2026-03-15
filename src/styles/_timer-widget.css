@@ -65,12 +65,29 @@
 
 .timer-widget__title {
     flex: 1;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.timer-widget__title-name {
+    display: block;
     font-size: 0.85rem;
     font-weight: 500;
     color: var(--tv-text);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    line-height: 1.4;
+}
+
+.timer-widget__title-file {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--file-accent, var(--tv-link));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
 }
 
 .timer-widget__header-time {
@@ -154,36 +171,40 @@
     background: var(--tv-bg-widget);
 }
 
-/* Label Input (custom task description) */
-.timer-widget__label-container {
-    margin-bottom: 12px;
-}
-
-.timer-widget .timer-widget__label-input {
+/* Title Input (child mode: inline label in header) */
+.timer-widget .timer-widget__title-input {
+    display: block;
     width: 100%;
-    height: var(--input-height);
-    padding: var(--input-padding);
-    font-size: var(--font-ui-small);
-    font-family: var(--tv-font-ui);
+    font-size: 0.85rem;
+    font-weight: 500;
     color: var(--tv-text);
-    background: var(--tv-bg-secondary) !important;
-    border-radius: var(--input-radius);
-}
-
-.timer-widget .timer-widget__label-input:hover {
-    background: var(--tv-bg-secondary) !important;
-}
-
-.timer-widget .timer-widget__label-input::placeholder {
-    color: var(--tv-text-muted);
-    font-size: 11px;
-}
-
-.timer-widget .timer-widget__label-input:focus {
-    background: var(--tv-bg-secondary) !important;
-    border-color: var(--tv-accent);
-    box-shadow: 0 0 0 2px rgba(var(--tv-accent-rgb), 0.25);
+    background: transparent !important;
+    border: none;
+    border-bottom: 1px solid transparent;
+    border-radius: 0;
+    padding: 0;
     outline: none;
+    font-family: var(--tv-font-ui);
+    box-shadow: none;
+    height: auto;
+    line-height: 1.4;
+}
+
+.timer-widget .timer-widget__title-input:hover {
+    background: transparent !important;
+    border-bottom-color: var(--tv-border);
+}
+
+.timer-widget .timer-widget__title-input:focus {
+    background: transparent !important;
+    border-bottom-color: var(--file-accent, var(--tv-accent));
+    box-shadow: none;
+    outline: none;
+}
+
+.timer-widget .timer-widget__title-input::placeholder {
+    color: var(--tv-text-muted);
+    font-weight: 400;
 }
 
 /* Progress Container */

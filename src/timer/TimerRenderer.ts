@@ -13,6 +13,8 @@ import { TimerContext } from './TimerContext';
 import { TimerCreator } from './TimerCreator';
 import { TimerLifecycle } from './TimerLifecycle';
 import { TimerRecorder } from './TimerRecorder';
+import { getDisplayFileName, getTaskDisplayName } from '../utils/TaskContent';
+import { TaskStyling } from '../views/sharedUI/TaskStyling';
 import { TimerProgressUI } from './TimerProgressUI';
 import { TimerSettingsMenu } from './TimerSettingsMenu';
 import { AudioUtils } from '../utils/AudioUtils';
@@ -120,6 +122,9 @@ export class TimerRenderer {
         if (isNewItem) {
             itemEl = this.container.createDiv('timer-widget__item');
             itemEl.dataset.taskId = taskId;
+            if (timer.taskColor) {
+                TaskStyling.applyTaskColor(itemEl, timer.taskColor);
+            }
         }
         itemEl.toggleClass('timer-widget__item--idle', this.lifecycle.isIdleTimer(taskId));
 
@@ -133,8 +138,32 @@ export class TimerRenderer {
             // Header
             const header = itemEl.createDiv('timer-widget__header');
 
-            const titleSpan = header.createSpan('timer-widget__title');
-            titleSpan.setText(timer.taskName);
+            const titleContainer = header.createDiv('timer-widget__title');
+
+            if (timer.recordMode !== 'self' && timer.timerType !== 'idle') {
+                // Child mode: inline input as title
+                const labelInput = titleContainer.createEl('input', {
+                    type: 'text',
+                    cls: 'timer-widget__title-input',
+                    placeholder: '\u2014',
+                    value: timer.customLabel,
+                    attr: { size: '1' },
+                });
+                labelInput.oninput = () => {
+                    timer.customLabel = labelInput.value;
+                    this.ctx.persistTimersToStorage();
+                };
+            } else {
+                // Self/idle mode: static task name
+                const nameSpan = titleContainer.createSpan('timer-widget__title-name');
+                nameSpan.setText(timer.taskName);
+            }
+
+            const fileName = getDisplayFileName(timer.taskName, timer.taskFile);
+            if (fileName) {
+                const fileSpan = titleContainer.createSpan('timer-widget__title-file');
+                fileSpan.setText(fileName);
+            }
 
             if (!timer.isExpanded) {
                 const timeSpan = header.createSpan('timer-widget__header-time');
@@ -246,6 +275,8 @@ export class TimerRenderer {
     }
 
     private updateTimerDisplay(itemEl: HTMLElement, timer: TimerInstance): void {
+        this.syncTimerTaskInfo(itemEl, timer);
+
         const headerTime = itemEl.querySelector('[data-time-display="header"]') as HTMLElement;
         if (headerTime) {
             headerTime.setText(this.getTimerDisplayText(timer));
@@ -254,20 +285,29 @@ export class TimerRenderer {
         TimerProgressUI.updateDisplay(itemEl, timer, this.formatSignedTime.bind(this));
     }
 
-    private renderTimerUI(container: HTMLElement, timer: TimerInstance): void {
-        if (timer.recordMode !== 'self' && timer.timerType !== 'idle') {
-            const labelContainer = container.createDiv('timer-widget__label-container');
-            const labelInput = labelContainer.createEl('input', {
-                type: 'text',
-                cls: 'timer-widget__label-input',
-                placeholder: 'What are you working on? (empty = 🍅)',
-                value: timer.customLabel
-            });
-            labelInput.oninput = () => {
-                timer.customLabel = labelInput.value;
-                this.ctx.persistTimersToStorage();
-            };
+    private syncTimerTaskInfo(itemEl: HTMLElement, timer: TimerInstance): void {
+        if (this.lifecycle.isIdleTimer(timer.id) || timer.id.startsWith('daily-')) return;
+
+        const task = this.ctx.plugin.getTaskIndex().getTask(timer.taskId);
+        if (!task) return;
+
+        const newName = getTaskDisplayName(task);
+        if (newName !== timer.taskName) {
+            timer.taskName = newName;
+            const nameEl = itemEl.querySelector('.timer-widget__title-name') as HTMLElement;
+            if (nameEl) nameEl.setText(newName);
         }
+
+        const newColor = task.color ?? '';
+        if (newColor !== timer.taskColor) {
+            timer.taskColor = newColor;
+            if (newColor) {
+                TaskStyling.applyTaskColor(itemEl, newColor);
+            }
+        }
+    }
+
+    private renderTimerUI(container: HTMLElement, timer: TimerInstance): void {
 
         const progressContainer = container.createDiv('timer-widget__progress-container');
         this.renderCircularProgress(progressContainer, timer);

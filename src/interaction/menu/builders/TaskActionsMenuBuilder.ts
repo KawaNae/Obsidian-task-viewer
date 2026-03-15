@@ -53,6 +53,7 @@ export class TaskActionsMenuBuilder {
                 taskName: displayName,
                 taskOriginalText: task.originalText,
                 taskFile: task.file,
+                taskColor: task.color ?? '',
                 recordMode: 'child' as const,
                 parserId: task.parserId,
                 timerTargetId: task.timerTargetId ?? task.blockId,
