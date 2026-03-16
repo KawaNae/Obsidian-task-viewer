@@ -40,7 +40,7 @@ describe('CliFilterBuilder', () => {
             const conditions = state!.root.children as FilterConditionNode[];
             expect(conditions).toHaveLength(1);
             expect(conditions[0].property).toBe('tag');
-            expect(conditions[0].value).toEqual({ type: 'stringSet', values: ['#work', '#urgent'] });
+            expect(conditions[0].value).toEqual({ type: 'stringSet', values: ['work', 'urgent'] });
         });
 
         it('builds date filter with two conditions (start <= date AND end >= date)', () => {

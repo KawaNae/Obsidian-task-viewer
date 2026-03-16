@@ -23,6 +23,8 @@ export interface ChildLine {
     indent: string;
     checkboxChar: string | null;
     wikilinkTarget: string | null;
+    propertyKey: string | null;
+    propertyValue: string | null;
 }
 
 export interface Task {
@@ -80,6 +82,9 @@ export interface Task {
     // File-level styling from frontmatter (resolved at scan time).
     color?: string;
     linestyle?: string;
+
+    /** Custom properties parsed from childLines (key-value pairs). Read-only. */
+    properties: Record<string, string>;
 }
 
 /**

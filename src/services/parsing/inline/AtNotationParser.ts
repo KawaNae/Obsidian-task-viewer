@@ -119,6 +119,7 @@ export class AtNotationParser implements ParserStrategy {
             blockId,
             timerTargetId,
             validationWarning,
+            properties: {},     // Will be populated by TaskScanner from childLines
         };
     }
 

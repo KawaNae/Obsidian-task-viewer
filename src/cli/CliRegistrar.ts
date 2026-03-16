@@ -23,6 +23,7 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
         to:      { value: '<date|preset>',   description: 'Filter: endDate <= value (null endDate excluded)' },
         due:     { value: '<date|preset>',   description: 'Due date equals' },
         leaf:    { description: 'Only leaf tasks (no children)' },
+        property: { value: '<key:value>',   description: 'Filter by custom property (e.g. "優先度:高")' },
         filter:  { value: '<json>',          description: 'Full FilterState JSON (overrides simple flags)' },
         sort:    { value: '<prop[:dir],..>', description: 'Sort (e.g. startDate:asc,due:desc)' },
         limit:   { value: '<number>',        description: 'Max results (default: 100)' },

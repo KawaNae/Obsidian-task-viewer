@@ -46,26 +46,35 @@ function condition(
     return { type: 'condition', id: generateId('f'), property, operator, value };
 }
 
+function normalizeStringArray(value: string | string[] | undefined, stripHash = false): string[] {
+    if (!value) return [];
+    const arr = typeof value === 'string' ? value.split(',') : value;
+    return arr.map(s => { let v = s.trim(); if (stripHash) v = v.replace(/^#/, ''); return v; }).filter(Boolean);
+}
+
 function buildFilterFromParams(params: ListParams): FilterState | null {
     if (params.filter) return params.filter;
 
     const conditions: FilterConditionNode[] = [];
 
     if (params.file) {
+        const file = params.file.endsWith('.md') ? params.file : params.file + '.md';
         conditions.push(condition('file', 'includes', {
-            type: 'stringSet', values: [params.file],
+            type: 'stringSet', values: [file],
         }));
     }
 
-    if (params.status && params.status.length > 0) {
+    const statusArr = normalizeStringArray(params.status);
+    if (statusArr.length > 0) {
         conditions.push(condition('status', 'includes', {
-            type: 'stringSet', values: params.status,
+            type: 'stringSet', values: statusArr,
         }));
     }
 
-    if (params.tag && params.tag.length > 0) {
+    const tagArr = normalizeStringArray(params.tag, true);
+    if (tagArr.length > 0) {
         conditions.push(condition('tag', 'includes', {
-            type: 'stringSet', values: params.tag,
+            type: 'stringSet', values: tagArr,
         }));
     }
 
@@ -101,6 +110,14 @@ function buildFilterFromParams(params: ListParams): FilterState | null {
 
     if (params.leaf) {
         conditions.push(condition('children', 'isNotSet', { type: 'boolean', value: true }));
+    }
+
+    if (params.property) {
+        const colonIdx = params.property.indexOf(':');
+        if (colonIdx < 1) throw new TaskApiError('Invalid property filter format. Use "key:value"');
+        const key = params.property.substring(0, colonIdx).trim();
+        const value = params.property.substring(colonIdx + 1).trim();
+        conditions.push(condition('property', 'contains', { type: 'property', key, value }));
     }
 
     if (conditions.length === 0) return null;

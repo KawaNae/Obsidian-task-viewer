@@ -144,6 +144,7 @@ export class ChildSectionRenderer {
         const markdown = items.map((item) => item.markdown).join('\n');
         await MarkdownRenderer.render(this.app, markdown, container, filePath, component);
         this.insertChildNotations(container, items, parentStartDate, 0);
+        this.markPropertyLines(container, items);
     }
 
     private insertChildNotations(
@@ -246,6 +247,24 @@ export class ChildSectionRenderer {
         });
 
         return btn;
+    }
+
+    /**
+     * Add CSS class to rendered list items that represent key-value properties.
+     * Non-checkbox items render as plain <li> (without .task-list-item).
+     */
+    private markPropertyLines(container: HTMLElement, items: ChildRenderItem[]): void {
+        const allLis = container.querySelectorAll<HTMLElement>('li:not(.task-list-item)');
+        let liIdx = 0;
+        for (const item of items) {
+            if (item.isCheckbox) continue; // checkbox items are .task-list-item, skip
+            if (liIdx >= allLis.length) break;
+            if (item.propertyKey) {
+                allLis[liIdx].addClass('task-property-line');
+                allLis[liIdx].dataset.propertyKey = item.propertyKey;
+            }
+            liIdx++;
+        }
     }
 
     private findNotationHost(taskListItem: HTMLElement): HTMLElement {

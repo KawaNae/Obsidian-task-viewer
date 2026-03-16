@@ -182,6 +182,7 @@ export class TaskScanner {
                     } else {
                         task.childLines = ChildLineClassifier.classifyLines(children);
                     }
+                    task.properties = ChildLineClassifier.collectProperties(task.childLines);
 
                     extractedTasks.push(task);
 

@@ -4,6 +4,7 @@ import { MoveCommand } from '../../src/commands/MoveCommand';
 import type { Task, FlowCommand } from '../../src/types';
 import type { CommandContext } from '../../src/commands/CommandStrategy';
 import { makeTask } from '../helpers/makeTask';
+import { DateUtils } from '../../src/utils/DateUtils';
 
 function makeFlowCommand(name: string, args: string[] = [], modifiers: FlowCommand['modifiers'] = []): FlowCommand {
     return { name, args, modifiers };
@@ -76,6 +77,47 @@ describe('RepeatCommand', () => {
         expect(nextTask.endTime).toBe('20:00');
     });
 
+    it('same-day タスク（endTime あり endDate なし）で endDate が startDate ベースでシフトされる', async () => {
+        const task = makeTask({
+            content: 'Same day task',
+            startDate: '2026-03-16',
+            startTime: '10:00',
+            endTime: '12:00',
+            // endDate is undefined (same-day optimized notation: @2026-03-16T10:00>12:00)
+            commands: [makeFlowCommand('repeat', ['2days'])],
+        });
+
+        const { ctx, insertRecurrenceForTask } = createMockContext(task);
+        const cmd = makeFlowCommand('repeat', ['2days']);
+
+        const repeat = new RepeatCommand();
+        await repeat.execute(ctx, cmd);
+
+        const nextTask: Task = insertRecurrenceForTask.mock.calls[0][2];
+        expect(nextTask.startDate).toBe('2026-03-18');
+        expect(nextTask.endDate).toBe('2026-03-18');
+        expect(nextTask.startTime).toBe('10:00');
+        expect(nextTask.endTime).toBe('12:00');
+    });
+
+    it('endTime も endDate もない場合は endDate が undefined のまま', async () => {
+        const task = makeTask({
+            content: 'Date only task',
+            startDate: '2026-03-16',
+            commands: [makeFlowCommand('repeat', ['1days'])],
+        });
+
+        const { ctx, insertRecurrenceForTask } = createMockContext(task);
+        const cmd = makeFlowCommand('repeat', ['1days']);
+
+        const repeat = new RepeatCommand();
+        await repeat.execute(ctx, cmd);
+
+        const nextTask: Task = insertRecurrenceForTask.mock.calls[0][2];
+        expect(nextTask.startDate).toBe('2026-03-17');
+        expect(nextTask.endDate).toBeUndefined();
+    });
+
     it('タイマーが変更した startDate を基準にシフトする', async () => {
         const task = makeTask({
             content: 'Shifted task',
@@ -91,6 +133,81 @@ describe('RepeatCommand', () => {
 
         const nextTask: Task = insertRecurrenceForTask.mock.calls[0][2];
         expect(nextTask.startDate).toBe('2026-03-14');
+    });
+
+    it('when-done: 今日を基準に次の日付を計算する（過去日付にならない）', async () => {
+        const task = makeTask({
+            content: 'When done task',
+            startDate: '2025-01-10',
+            endDate: '2025-01-12', // 2日間の span
+            commands: [makeFlowCommand('repeat', ['3days when done'])],
+        });
+
+        const { ctx, insertRecurrenceForTask } = createMockContext(task);
+        const cmd = makeFlowCommand('repeat', ['3days when done']);
+        await new RepeatCommand().execute(ctx, cmd);
+
+        const nextTask: Task = insertRecurrenceForTask.mock.calls[0][2];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const expectedStart = DateUtils.getLocalDateString(
+            new Date(today.getTime() + 3 * 86400000)
+        );
+        expect(nextTask.startDate).toBe(expectedStart);
+        // endDate = expectedStart + 2日（元の span 幅を保持）
+        const expectedEnd = DateUtils.getLocalDateString(
+            new Date(new Date(expectedStart + 'T00:00:00').getTime() + 2 * 86400000)
+        );
+        expect(nextTask.endDate).toBe(expectedEnd);
+    });
+
+    it('when-done: same-day タスクでも endDate が正しく設定される', async () => {
+        const task = makeTask({
+            content: 'Same day when done',
+            startDate: '2025-01-10',
+            startTime: '10:00',
+            endTime: '12:00',
+            commands: [makeFlowCommand('repeat', ['1days when done'])],
+        });
+
+        const { ctx, insertRecurrenceForTask } = createMockContext(task);
+        const cmd = makeFlowCommand('repeat', ['1days when done']);
+        await new RepeatCommand().execute(ctx, cmd);
+
+        const nextTask: Task = insertRecurrenceForTask.mock.calls[0][2];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const expectedDate = DateUtils.getLocalDateString(
+            new Date(today.getTime() + 86400000)
+        );
+        expect(nextTask.startDate).toBe(expectedDate);
+        expect(nextTask.endDate).toBe(expectedDate);
+    });
+
+    it('when-done: 時刻部分が保持される', async () => {
+        const task = makeTask({
+            content: 'Timed when done',
+            startDate: '2025-01-10T09:00',
+            startTime: '09:00',
+            endDate: '2025-01-10T17:00',
+            endTime: '17:00',
+            commands: [makeFlowCommand('repeat', ['2days when done'])],
+        });
+
+        const { ctx, insertRecurrenceForTask } = createMockContext(task);
+        const cmd = makeFlowCommand('repeat', ['2days when done']);
+        await new RepeatCommand().execute(ctx, cmd);
+
+        const nextTask: Task = insertRecurrenceForTask.mock.calls[0][2];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const expectedDateStr = DateUtils.getLocalDateString(
+            new Date(today.getTime() + 2 * 86400000)
+        );
+        expect(nextTask.startDate).toBe(`${expectedDateStr}T09:00`);
+        expect(nextTask.endDate).toBe(`${expectedDateStr}T17:00`);
+        expect(nextTask.startTime).toBe('09:00');
+        expect(nextTask.endTime).toBe('17:00');
     });
 });
 

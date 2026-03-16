@@ -303,24 +303,210 @@ frontmatterタスクでは、子要素の表示範囲を次のように定義し
 
 Obsidian CLI から本プラグインのタスクデータにアクセスできます。Obsidian が起動中である必要があります。
 
+### 共通フラグ
+
+| フラグ | 説明 | デフォルト |
+|-------|------|-----------|
+| `vault` | 対象Vault名（必須） | — |
+| `format` | 出力形式: `json`, `tsv`, `jsonl` | `json` |
+| `outputFields` | 出力フィールド（カンマ区切り） | `id` |
+
 ### コマンド一覧
 
-| コマンド | 説明 |
-|---------|------|
-| `obsidian-task-viewer:list` | タスク一覧（フィルタ/ソート/ページネーション対応） |
-| `obsidian-task-viewer:today` | 本日アクティブなタスク |
-| `obsidian-task-viewer:get` | ID指定で単一タスク取得 |
-| `obsidian-task-viewer:query` | ビューテンプレートによるクエリ |
-| `obsidian-task-viewer:create` | 新規インラインタスク作成 |
-| `obsidian-task-viewer:update` | タスク更新 |
-| `obsidian-task-viewer:delete` | タスク削除 |
+#### list — タスク一覧
 
-### 使用例
+フィルタ・ソート・ページネーション付きでタスクを取得します。
 
 ```bash
-obsidian obsidian-task-viewer:list vault=MyVault tag=work format=json
-obsidian obsidian-task-viewer:today vault=MyVault
+obsidian obsidian-task-viewer:list vault=MyVault tag=work format=json outputFields=content,status,startDate
+```
+
+**フィルタフラグ:**
+
+| フラグ | 説明 | 例 |
+|-------|------|-----|
+| `file` | ファイルパスで絞り込み（`.md` は自動補完） | `file=DailyNotes/2026-03-15` |
+| `status` | ステータス文字（カンマ区切り） | `status=x,-` |
+| `tag` | タグ名（カンマ区切り、`#` は自動除去） | `tag=work,reading` |
+| `content` | コンテンツの部分一致 | `content=会議` |
+| `date` | 指定日にアクティブなタスク | `date=today` |
+| `from` | 開始日 >= 指定値 | `from=2026-03-01` |
+| `to` | 終了日 <= 指定値 | `to=2026-03-31` |
+| `due` | 締切日 = 指定値 | `due=today` |
+| `leaf` | 子タスクを持たないタスクのみ | `leaf=true` |
+| `property` | カスタムプロパティ（`key:value` 形式） | `property=priority:high` |
+| `filter` | FilterState JSON（上記フラグより優先） | `filter={"root":...}` |
+
+> `date` と `from`/`to` を同時指定した場合、`date` が優先されます。
+
+**ソート・ページネーション:**
+
+| フラグ | 説明 | 例 |
+|-------|------|-----|
+| `sort` | ソートルール（`property[:direction]` カンマ区切り） | `sort=startDate:asc,due:desc` |
+| `limit` | 最大件数 | `limit=50`（デフォルト: 100） |
+| `offset` | スキップ件数 | `offset=10` |
+
+**ソート可能プロパティ:** `content`, `due`, `startDate`, `endDate`, `file`, `status`, `tag`
+
+#### today — 本日のタスク
+
+`list date=today` のショートカットです。
+
+```bash
+obsidian obsidian-task-viewer:today vault=MyVault outputFields=content,effectiveStartTime,effectiveEndTime
+```
+
+| フラグ | 説明 |
+|-------|------|
+| `leaf` | 子タスクを持たないタスクのみ |
+| `sort` | ソートルール |
+| `limit` / `offset` | ページネーション |
+
+#### get — 単一タスク取得
+
+```bash
+obsidian obsidian-task-viewer:get vault=MyVault id=abc123 outputFields=content,status,startDate,due
+```
+
+| フラグ | 必須 | 説明 |
+|-------|------|------|
+| `id` | ○ | タスクID |
+
+#### query — テンプレートクエリ
+
+設定済みのビューテンプレートでタスクを取得します。
+
+```bash
+obsidian obsidian-task-viewer:query vault=MyVault template=weekly-review
+```
+
+| フラグ | 必須 | 説明 |
+|-------|------|------|
+| `template` | ○ | テンプレートのベースネーム |
+| `date` | | 相対フィルタの基準日（YYYY-MM-DD） |
+
+**戻り値:** テンプレートに定義された各リストごとにタスクが返されます。
+
+```json
+{
+  "template": "weekly-review",
+  "viewType": "schedule",
+  "lists": [
+    { "name": "Today", "count": 3, "tasks": [...] },
+    { "name": "Overdue", "count": 1, "tasks": [...] }
+  ]
+}
+```
+
+#### create — タスク作成
+
+```bash
 obsidian obsidian-task-viewer:create vault=MyVault file=DailyNotes/2026-03-15.md content="Meeting" start="2026-03-15T14:00" end="15:00"
+```
+
+| フラグ | 必須 | 説明 | 例 |
+|-------|------|------|-----|
+| `file` | ○ | 対象ファイル（`.md` 自動補完） | `file=daily.md` |
+| `content` | ○ | タスクの内容 | `content="Weekly review"` |
+| `start` | | 開始日時 | `start=2026-03-15T14:00` |
+| `end` | | 終了日時 | `end=15:00` |
+| `due` | | 締切日 | `due=2026-03-20` |
+| `status` | | ステータス文字（デフォルト: ` `） | `status=!` |
+| `heading` | | 挿入先の見出し | `heading=Tasks` |
+
+**日時の形式:** `YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`, `HH:mm`
+
+#### update — タスク更新
+
+```bash
+obsidian obsidian-task-viewer:update vault=MyVault id=abc123 status=x
+```
+
+| フラグ | 必須 | 説明 |
+|-------|------|------|
+| `id` | ○ | タスクID |
+| `content` | | 新しい内容 |
+| `start` | | 新しい開始日時 |
+| `end` | | 新しい終了日時 |
+| `due` | | 新しい締切日 |
+| `status` | | 新しいステータス |
+
+#### delete — タスク削除
+
+```bash
+obsidian obsidian-task-viewer:delete vault=MyVault id=abc123
+```
+
+| フラグ | 必須 | 説明 |
+|-------|------|------|
+| `id` | ○ | タスクID |
+
+**戻り値:** `{ "deleted": "abc123" }`
+
+### 日付プリセット
+
+`date`, `from`, `to`, `due` フラグで使用可能な日付プリセット（大文字小文字不問）:
+
+| プリセット | 説明 |
+|-----------|------|
+| `today` | 本日 |
+| `thisWeek` | 今週 |
+| `pastWeek` | 先週 |
+| `nextWeek` | 来週 |
+| `thisMonth` | 今月 |
+| `thisYear` | 今年 |
+| `next7days` | 今後7日間 |
+| `next30days` | 今後30日間 |
+| `YYYY-MM-DD` | 絶対日付 |
+
+### 出力フィールド
+
+`outputFields` で指定可能なフィールド:
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| `id` | `string` | タスクID（常に含まれる） |
+| `file` | `string` | ファイルパス |
+| `line` | `number` | 行番号 |
+| `content` | `string` | タスクの内容 |
+| `status` | `string` | ステータス文字（` `, `x`, `-` 等） |
+| `startDate` | `string \| null` | 生の開始日（YYYY-MM-DD） |
+| `startTime` | `string \| null` | 生の開始時刻（HH:mm） |
+| `endDate` | `string \| null` | 生の終了日 |
+| `endTime` | `string \| null` | 生の終了時刻 |
+| `due` | `string \| null` | 生の締切日 |
+| `tags` | `string[]` | タグ一覧 |
+| `parserId` | `string` | パーサー種別（`at-notation` / `frontmatter`） |
+| `parentId` | `string \| null` | 親タスクID |
+| `childIds` | `string[]` | 子タスクID一覧 |
+| `color` | `string \| null` | カードの色 |
+| `linestyle` | `string \| null` | 線スタイル |
+| `effectiveStartDate` | `string \| null` | 暗黙値解決済み開始日 |
+| `effectiveStartTime` | `string \| null` | 暗黙値解決済み開始時刻 |
+| `effectiveEndDate` | `string \| null` | 暗黙値解決済み終了日 |
+| `effectiveEndTime` | `string \| null` | 暗黙値解決済み終了時刻 |
+| `durationMinutes` | `number \| null` | 所要時間（分） |
+| `properties` | `Record<string, string>` | カスタムプロパティ |
+
+### 出力形式の例
+
+**json**（デフォルト）:
+```json
+{ "count": 2, "tasks": [{ "id": "abc", "content": "Meeting", ... }] }
+```
+
+**tsv**:
+```
+id	content	status	startDate
+abc	Meeting	 	2026-03-15
+def	Review	x	2026-03-14
+```
+
+**jsonl**:
+```
+{"id":"abc","content":"Meeting","status":" ","startDate":"2026-03-15"}
+{"id":"def","content":"Review","status":"x","startDate":"2026-03-14"}
 ```
 
 ---
@@ -350,20 +536,172 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `api.update({ id, ... })` | タスク更新 | async |
 | `api.delete({ id })` | タスク削除 | async |
 
+### list / today
+
+```javascript
+// 全タスク（デフォルト100件）
+const result = api.list();
+
+// フィルタ付き
+const result = api.list({
+  tag: 'work',           // string または string[]
+  status: ['x', '-'],    // string または string[]
+  date: 'today',         // YYYY-MM-DD またはプリセット
+  sort: [{ property: 'startDate', direction: 'asc' }],
+  limit: 50,
+});
+
+// 本日のタスク
+const result = api.today({
+  leaf: true,
+  sort: [{ property: 'startDate' }],
+});
+```
+
+**ListParams:**
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| `file` | `string` | ファイルパスで絞り込み |
+| `status` | `string \| string[]` | ステータス文字 |
+| `tag` | `string \| string[]` | タグ名（カンマ区切り文字列も可） |
+| `content` | `string` | コンテンツ部分一致 |
+| `date` | `string` | 指定日にアクティブなタスク |
+| `from` | `string` | 開始日 >= 指定値 |
+| `to` | `string` | 終了日 <= 指定値 |
+| `due` | `string` | 締切日 = 指定値 |
+| `leaf` | `boolean` | 子なしタスクのみ |
+| `property` | `string` | カスタムプロパティ（`key:value`） |
+| `filter` | `FilterState` | 完全なフィルタ定義（上記フラグより優先） |
+| `sort` | `ApiSortRule[]` | ソートルール |
+| `limit` | `number` | 最大件数（デフォルト: 100） |
+| `offset` | `number` | スキップ件数 |
+
+**TodayParams:** `leaf`, `sort`, `limit`, `offset` のみ。
+
+**戻り値: `TaskListResult`**
+
+```typescript
+{ count: number; tasks: NormalizedTask[] }
+```
+
+### get
+
+```javascript
+const task = api.get({ id: 'abc123' });
+// => NormalizedTask
+```
+
+ID が見つからない場合は `TaskApiError` をスローします。
+
+### query
+
+```javascript
+const result = await api.query({ template: 'weekly-review', date: '2026-03-15' });
+// => { template: string; viewType: string; lists: QueryListEntry[] }
+// QueryListEntry: { name: string; count: number; tasks: NormalizedTask[] }
+```
+
+`viewTemplateFolder` が設定で未指定の場合は `TaskApiError` をスローします。
+
+### create
+
+```javascript
+const result = await api.create({
+  file: 'DailyNotes/2026-03-15.md',
+  content: 'Weekly review',
+  start: '2026-03-15T14:00',
+  end: '15:00',
+  due: '2026-03-20',
+  heading: 'Tasks',
+});
+// => { task: NormalizedTask }
+```
+
+**CreateParams:**
+
+| パラメータ | 必須 | 型 | 説明 |
+|-----------|------|-----|------|
+| `file` | ○ | `string` | 対象ファイル |
+| `content` | ○ | `string` | タスクの内容 |
+| `start` | | `string` | 開始日時（`YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`, `HH:mm`） |
+| `end` | | `string` | 終了日時 |
+| `due` | | `string` | 締切日（`YYYY-MM-DD`） |
+| `status` | | `string` | ステータス文字（デフォルト: ` `） |
+| `heading` | | `string` | 挿入先見出し |
+
+### update
+
+```javascript
+const result = await api.update({
+  id: 'abc123',
+  status: 'x',
+  content: 'Updated content',
+});
+// => { task: NormalizedTask }
+```
+
+**UpdateParams:** `id`（必須）, `content`, `start`, `end`, `due`, `status`（すべてオプション）
+
+### delete
+
+```javascript
+const result = await api.delete({ id: 'abc123' });
+// => { deleted: 'abc123' }
+```
+
+### NormalizedTask フィールド
+
+API が返すタスクオブジェクトのフィールド一覧です。CLI の `outputFields` でも同じ名前を使用します。
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| `id` | `string` | タスクID |
+| `file` | `string` | ファイルパス |
+| `line` | `number` | 行番号 |
+| `content` | `string` | タスクの内容 |
+| `status` | `string` | ステータス文字 |
+| `startDate` | `string \| null` | 生の開始日（YYYY-MM-DD） |
+| `startTime` | `string \| null` | 生の開始時刻（HH:mm） |
+| `endDate` | `string \| null` | 生の終了日 |
+| `endTime` | `string \| null` | 生の終了時刻 |
+| `due` | `string \| null` | 生の締切日 |
+| `tags` | `string[]` | タグ一覧（`#` なし） |
+| `parserId` | `string` | パーサー種別 |
+| `parentId` | `string \| null` | 親タスクID |
+| `childIds` | `string[]` | 子タスクID一覧 |
+| `color` | `string \| null` | カードの色 |
+| `linestyle` | `string \| null` | 線スタイル |
+| `effectiveStartDate` | `string \| null` | 暗黙値解決済み開始日 |
+| `effectiveStartTime` | `string \| null` | 暗黙値解決済み開始時刻 |
+| `effectiveEndDate` | `string \| null` | 暗黙値解決済み終了日 |
+| `effectiveEndTime` | `string \| null` | 暗黙値解決済み終了時刻 |
+| `durationMinutes` | `number \| null` | 所要時間（分） |
+| `properties` | `Record<string, string>` | カスタムプロパティ |
+
 ### DataviewJS 使用例
 
 ```dataviewjs
 const api = app.plugins.plugins['obsidian-task-viewer'].api;
-const result = api.today({ sort: [{ property: 'startDate' }] });
 
+// 本日のタスクをテーブル表示
+const result = api.today({ sort: [{ property: 'startDate' }] });
 dv.table(
   ['Status', 'Time', 'Content'],
   result.tasks.map(t => [
-    t.statusChar === ' ' ? '⬜' : '✅',
+    t.status === ' ' ? '⬜' : '✅',
     [t.effectiveStartTime, t.effectiveEndTime].filter(Boolean).join('–') || '—',
     t.content,
   ])
 );
+```
+
+```dataviewjs
+const api = app.plugins.plugins['obsidian-task-viewer'].api;
+
+// 特定タグのタスクを一覧
+const result = api.list({ tag: 'reading', status: ' ' });
+dv.list(result.tasks.map(t => `${t.content} (${t.due ?? 'no due'})`));
 ```
 
 ---
