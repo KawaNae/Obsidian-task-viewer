@@ -1,4 +1,4 @@
-import type { Task, DisplayTask } from '../types';
+import type { Task, DisplayTask, PropertyValue } from '../types';
 import type { NormalizedTask } from './TaskApiTypes';
 
 // ── Field extractors ──
@@ -25,10 +25,30 @@ const FIELD_EXTRACTORS: Record<string, (task: Task | DisplayTask) => unknown> = 
     effectiveEndDate:   t => ('effectiveEndDate' in t) ? (t as DisplayTask).effectiveEndDate ?? null : null,
     effectiveEndTime:   t => ('effectiveEndTime' in t) ? (t as DisplayTask).effectiveEndTime ?? null : null,
     durationMinutes:    t => computeDurationMinutes(t),
-    properties:         t => t.properties ?? {},
+    properties:         t => {
+        const result: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(t.properties ?? {})) {
+            result[k] = toNativeValue(v);
+        }
+        return result;
+    },
 };
 
 export const ALL_FIELD_NAMES: string[] = Object.keys(FIELD_EXTRACTORS);
+
+// ── Property value conversion ──
+
+function toNativeValue(pv: PropertyValue): unknown {
+    switch (pv.type) {
+        case 'number': return Number(pv.value);
+        case 'boolean': return pv.value === 'true';
+        case 'array': {
+            const inner = pv.value.startsWith('[') ? pv.value.slice(1, -1) : pv.value;
+            return inner.split(',').map(s => s.trim()).filter(s => s !== '');
+        }
+        default: return pv.value;
+    }
+}
 
 // ── Duration computation ──
 

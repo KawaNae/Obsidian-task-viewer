@@ -1,5 +1,5 @@
 import { App, Menu } from 'obsidian';
-import { Task, DisplayTask } from '../../../types';
+import { Task, DisplayTask, PropertyType } from '../../../types';
 import { TaskIndex } from '../../../services/core/TaskIndex';
 import TaskViewerPlugin from '../../../main';
 import { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } from '../PropertyCalculator';
@@ -133,6 +133,7 @@ export class PropertiesMenuBuilder {
         this.addTagsItem(menu, task);
         this.addColorItem(menu, task);
         this.addLinestyleItem(menu, task);
+        this.addCustomPropertiesItems(menu, task);
     }
 
     /**
@@ -269,6 +270,30 @@ export class PropertiesMenuBuilder {
                 .setIcon('minus')
                 .setDisabled(true);
         });
+    }
+
+    private addCustomPropertiesItems(menu: Menu, task: Task): void {
+        const keys = Object.keys(task.properties);
+        if (keys.length === 0) return;
+
+        menu.addSeparator();
+        for (const key of keys) {
+            const prop = task.properties[key];
+            menu.addItem((item) => {
+                item.setTitle(`${key}: ${prop.value}`)
+                    .setIcon(this.getPropertyTypeIcon(prop.type))
+                    .setDisabled(true);
+            });
+        }
+    }
+
+    private getPropertyTypeIcon(type: PropertyType): string {
+        switch (type) {
+            case 'number':  return 'hash';
+            case 'boolean': return 'toggle-left';
+            case 'array':   return 'list';
+            default:        return 'type';
+        }
     }
 
     private addLengthItem(menu: Menu, startParts: CalculatedProperty, endParts: CalculatedProperty, startHour: number): void {

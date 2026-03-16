@@ -12,6 +12,7 @@ import { TagExtractor } from '../../utils/TagExtractor';
 import { TaskStyleResolver } from '../styling/TaskStyleResolver';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
+import { PropertyInheritanceResolver } from './PropertyInheritanceResolver';
 
 /**
  * タスクスキャナー - ファイルのスキャンとパース処理
@@ -269,6 +270,9 @@ export class TaskScanner {
             newTasks.push(fmTask);
         }
         newTasks.push(...allExtractedTasks);
+
+        // 同一ファイル内の親→子 properties 継承
+        PropertyInheritanceResolver.resolve(newTasks);
 
         // Resolve file-level color/linestyle/tags from frontmatter
         const fileColor = TaskStyleResolver.getFileColor(this.app, file.path, this.settings.frontmatterTaskKeys.color);

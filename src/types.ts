@@ -18,6 +18,13 @@ export interface HabitDefinition {
     unit?: string;
 }
 
+export type PropertyType = 'string' | 'number' | 'boolean' | 'array';
+
+export interface PropertyValue {
+    value: string;
+    type: PropertyType;
+}
+
 export interface ChildLine {
     text: string;
     indent: string;
@@ -83,8 +90,8 @@ export interface Task {
     color?: string;
     linestyle?: string;
 
-    /** Custom properties parsed from childLines (key-value pairs). Read-only. */
-    properties: Record<string, string>;
+    /** Custom properties parsed from childLines / frontmatter. Read-only. */
+    properties: Record<string, PropertyValue>;
 }
 
 /**

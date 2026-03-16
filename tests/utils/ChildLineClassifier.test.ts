@@ -103,7 +103,10 @@ describe('ChildLineClassifier', () => {
                 '\t- [x] checkbox',
             ]);
             const props = ChildLineClassifier.collectProperties(lines);
-            expect(props).toEqual({ '金額': '2000', '優先度': '高' });
+            expect(props).toEqual({
+                '金額': { value: '2000', type: 'number' },
+                '優先度': { value: '高', type: 'string' },
+            });
         });
 
         it('returns empty object when no properties', () => {
@@ -112,6 +115,33 @@ describe('ChildLineClassifier', () => {
                 '\t- [[Link]]',
             ]);
             expect(ChildLineClassifier.collectProperties(lines)).toEqual({});
+        });
+    });
+
+    describe('inferType', () => {
+        it('number: integer', () => {
+            expect(ChildLineClassifier.inferType('2000')).toBe('number');
+        });
+        it('number: decimal', () => {
+            expect(ChildLineClassifier.inferType('3.14')).toBe('number');
+        });
+        it('boolean: true', () => {
+            expect(ChildLineClassifier.inferType('true')).toBe('boolean');
+        });
+        it('boolean: false', () => {
+            expect(ChildLineClassifier.inferType('false')).toBe('boolean');
+        });
+        it('array: [a, b]', () => {
+            expect(ChildLineClassifier.inferType('[a, b]')).toBe('array');
+        });
+        it('array: [single]', () => {
+            expect(ChildLineClassifier.inferType('[single]')).toBe('array');
+        });
+        it('string: comma without brackets', () => {
+            expect(ChildLineClassifier.inferType('apple, banana')).toBe('string');
+        });
+        it('string: plain text', () => {
+            expect(ChildLineClassifier.inferType('高')).toBe('string');
         });
     });
 
