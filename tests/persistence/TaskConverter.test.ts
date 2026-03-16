@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { TaskConverter } from '../../src/services/persistence/TaskConverter';
 import { FileOperations } from '../../src/services/persistence/utils/FileOperations';
 import { DEFAULT_FRONTMATTER_TASK_KEYS } from '../../src/types';
-import type { Task, ChildLine } from '../../src/types';
+import type { Task, ChildLine, PropertyValue } from '../../src/types';
 import { createInMemoryVault, createFakeApp } from '../helpers/fakeApp';
 
 // ---------------------------------------------------------------------------
@@ -22,6 +22,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
         childLineBodyOffsets: [],
         originalText: '- [ ] My Task @2026-03-11',
         tags: overrides.tags ?? [],
+        properties: overrides.properties ?? {},
         parserId: 'at-notation',
         ...overrides,
     };
@@ -208,6 +209,43 @@ describe('TaskConverter', () => {
             expect(content).not.toContain('tv-start');
             expect(content).not.toContain('tv-end');
             expect(content).not.toContain('tv-due');
+        });
+
+        it('includes custom properties in frontmatter', async () => {
+            const { vault, converter } = setup();
+            const pv = (value: string, type: PropertyValue['type']): PropertyValue => ({ value, type });
+            const task = makeTask({
+                startDate: '2026-03-11',
+                properties: {
+                    '金額': pv('2000', 'number'),
+                    '優先度': pv('高', 'string'),
+                    '完了': pv('true', 'boolean'),
+                    'カテゴリ': pv('[食費, 日用品]', 'array'),
+                },
+            });
+
+            const path = await converter.convertToFrontmatterTask(task, 'Tasks', 2, undefined, undefined, keys);
+
+            const content = vault.files.get(path)!;
+            expect(content).toContain('金額: 2000');
+            expect(content).toContain('優先度: 高');
+            expect(content).toContain('完了: true');
+            expect(content).toContain('カテゴリ: [食費, 日用品]');
+        });
+
+        it('quotes string properties with YAML-sensitive characters', async () => {
+            const { vault, converter } = setup();
+            const task = makeTask({
+                startDate: '2026-03-11',
+                properties: {
+                    'メモ': { value: 'key: value', type: 'string' },
+                },
+            });
+
+            const path = await converter.convertToFrontmatterTask(task, 'Tasks', 2, undefined, undefined, keys);
+
+            const content = vault.files.get(path)!;
+            expect(content).toContain('メモ: "key: value"');
         });
 
         it('includes color and sharedTags', async () => {

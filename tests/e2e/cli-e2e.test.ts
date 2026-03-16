@@ -117,8 +117,8 @@ describe('list — custom property filter', () => {
     it('properties field is populated correctly', () => {
         const r = cliList({ content: '課金A', outputFields: 'content,properties' });
         expect(r.count).toBe(1);
-        const props = r.tasks[0].properties as Record<string, string>;
-        expect(props['金額']).toBe('2000');
+        const props = r.tasks[0].properties as Record<string, unknown>;
+        expect(props['金額']).toBe(2000);
         expect(props['優先度']).toBe('高');
         expect(props['メモ']).toBe('月パス');
     });
@@ -144,7 +144,7 @@ describe('list — combined filters', () => {
         expect(r.count).toBe(2);
         for (const t of r.tasks) {
             expect((t.tags as string[]).some(tag => tag === '支出/ゲーム')).toBe(true);
-            expect((t.properties as Record<string, string>)['優先度']).toBe('高');
+            expect((t.properties as Record<string, unknown>)['優先度']).toBe('高');
         }
     });
 });

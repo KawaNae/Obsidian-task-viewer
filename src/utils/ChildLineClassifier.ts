@@ -1,4 +1,4 @@
-import type { ChildLine } from '../types';
+import type { ChildLine, PropertyType, PropertyValue } from '../types';
 
 /**
  * 子行のパース・分類ユーティリティ。
@@ -43,11 +43,22 @@ export class ChildLineClassifier {
     }
 
     /** childLines から properties を集約 */
-    static collectProperties(childLines: ChildLine[]): Record<string, string> {
-        const properties: Record<string, string> = {};
+    static collectProperties(childLines: ChildLine[]): Record<string, PropertyValue> {
+        const properties: Record<string, PropertyValue> = {};
         for (const cl of childLines) {
-            if (cl.propertyKey) properties[cl.propertyKey] = cl.propertyValue!;
+            if (cl.propertyKey) {
+                const raw = cl.propertyValue!;
+                properties[cl.propertyKey] = { value: raw, type: this.inferType(raw) };
+            }
         }
         return properties;
+    }
+
+    /** 文字列から型を推定 */
+    static inferType(raw: string): PropertyType {
+        if (/^\d+(\.\d+)?$/.test(raw)) return 'number';
+        if (raw === 'true' || raw === 'false') return 'boolean';
+        if (/^\[.*\]$/.test(raw)) return 'array';
+        return 'string';
     }
 }

@@ -1,4 +1,4 @@
-import { FrontmatterTaskKeys, Task, WikilinkRef, ChildLine } from '../../../types';
+import { FrontmatterTaskKeys, Task, WikilinkRef, ChildLine, PropertyType, PropertyValue } from '../../../types';
 import { TaskIdGenerator } from '../../../utils/TaskIdGenerator';
 import { TagExtractor } from '../../../utils/TagExtractor';
 import { ChildLineClassifier } from '../../../utils/ChildLineClassifier';
@@ -109,11 +109,19 @@ export class FrontmatterTaskBuilder {
         const excludedKeys = new Set<string>(Object.values(frontmatterKeys));
         excludedKeys.add('tags'); // Always exclude standard Obsidian tags key
 
-        const fmProperties: Record<string, string> = {};
+        const fmProperties: Record<string, PropertyValue> = {};
         for (const [key, value] of Object.entries(frontmatter)) {
             if (excludedKeys.has(key)) continue;
             if (value === null || value === undefined) continue;
-            fmProperties[key] = String(value);
+            const type: PropertyType =
+                typeof value === 'number' ? 'number'
+                : typeof value === 'boolean' ? 'boolean'
+                : Array.isArray(value) ? 'array'
+                : 'string';
+            fmProperties[key] = {
+                value: Array.isArray(value) ? value.join(', ') : String(value),
+                type,
+            };
         }
 
         // Merge: child line properties (::) override frontmatter properties

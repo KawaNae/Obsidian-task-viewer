@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import { DEFAULT_FRONTMATTER_TASK_KEYS, FrontmatterTaskKeys, Task } from '../../types';
+import { DEFAULT_FRONTMATTER_TASK_KEYS, FrontmatterTaskKeys, Task, PropertyValue } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { DateUtils } from '../../utils/DateUtils';
 import { TagExtractor } from '../../utils/TagExtractor';
@@ -140,8 +140,36 @@ export class TaskConverter {
             }
         }
 
+        // custom properties
+        for (const [key, prop] of Object.entries(task.properties)) {
+            lines.push(`${key}: ${this.formatPropertyValueForYaml(prop)}`);
+        }
+
         lines.push('---');
         return lines.join('\n');
+    }
+
+    /**
+     * PropertyValue を YAML スカラーにフォーマット。
+     */
+    private formatPropertyValueForYaml(prop: PropertyValue): string {
+        switch (prop.type) {
+            case 'number':
+            case 'boolean':
+                return prop.value;
+            case 'array': {
+                const inner = prop.value.startsWith('[') ? prop.value.slice(1, -1) : prop.value;
+                const items = inner.split(',').map(s => s.trim()).filter(s => s !== '');
+                return `[${items.join(', ')}]`;
+            }
+            default: {
+                // Quote strings that contain YAML-sensitive characters
+                if (/[:#{}[\],&*?|<>=!%@'"]/.test(prop.value) || prop.value !== prop.value.trim()) {
+                    return `"${this.escapeForDoubleQuotedYaml(prop.value)}"`;
+                }
+                return prop.value;
+            }
+        }
     }
 
     /**

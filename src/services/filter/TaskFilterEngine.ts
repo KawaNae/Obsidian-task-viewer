@@ -145,7 +145,7 @@ export class TaskFilterEngine {
     private static evalProperty(task: Task, c: FilterConditionNode): boolean {
         if (c.value.type !== 'property') return true;
         const { key, value: filterValue } = c.value;
-        const actual = task.properties?.[key];
+        const actual = task.properties?.[key]?.value;
         switch (c.operator) {
             case 'isSet': return actual !== undefined;
             case 'isNotSet': return actual === undefined;

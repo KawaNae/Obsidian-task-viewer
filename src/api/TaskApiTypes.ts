@@ -25,7 +25,7 @@ export interface NormalizedTask {
     effectiveEndDate: string | null;
     effectiveEndTime: string | null;
     durationMinutes: number | null;
-    properties: Record<string, string>;
+    properties: Record<string, unknown>;
 }
 
 // ── Error ──
