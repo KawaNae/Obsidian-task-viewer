@@ -175,6 +175,36 @@ describe('TaskFilterEngine', () => {
             const state = stateFromCondition(cond('tag', 'includes', { type: 'stringSet', values: ['personal', 'urgent'] }));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
+
+        it('includes — parent tag matches child (hierarchical)', () => {
+            const t = makeTask({ tags: ['project/sub'] });
+            const state = stateFromCondition(cond('tag', 'includes', { type: 'stringSet', values: ['project'] }));
+            expect(TaskFilterEngine.evaluate(t, state)).toBe(true);
+        });
+
+        it('includes — child tag does not match parent', () => {
+            const t = makeTask({ tags: ['project'] });
+            const state = stateFromCondition(cond('tag', 'includes', { type: 'stringSet', values: ['project/sub'] }));
+            expect(TaskFilterEngine.evaluate(t, state)).toBe(false);
+        });
+
+        it('includes — deep nested tag matches ancestor', () => {
+            const t = makeTask({ tags: ['area/work/meetings'] });
+            const state = stateFromCondition(cond('tag', 'includes', { type: 'stringSet', values: ['area'] }));
+            expect(TaskFilterEngine.evaluate(t, state)).toBe(true);
+        });
+
+        it('excludes — parent tag excludes child', () => {
+            const t = makeTask({ tags: ['project/sub'] });
+            const state = stateFromCondition(cond('tag', 'excludes', { type: 'stringSet', values: ['project'] }));
+            expect(TaskFilterEngine.evaluate(t, state)).toBe(false);
+        });
+
+        it('includes — similar prefix but not hierarchy does not match', () => {
+            const t = makeTask({ tags: ['projects'] });
+            const state = stateFromCondition(cond('tag', 'includes', { type: 'stringSet', values: ['project'] }));
+            expect(TaskFilterEngine.evaluate(t, state)).toBe(false);
+        });
     });
 
     // ── Content (case-insensitive substring) ──

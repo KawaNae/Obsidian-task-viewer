@@ -86,6 +86,8 @@ export class TaskFilterEngine {
                 if (condition.operator === 'isSet') return task.childIds.length > 0;
                 if (condition.operator === 'isNotSet') return task.childIds.length === 0;
                 return true;
+            case 'property':
+                return this.evalProperty(task, condition);
             default:
                 return true;
         }
@@ -98,13 +100,17 @@ export class TaskFilterEngine {
         return true;
     }
 
+    private static tagMatches(taskTag: string, filterTag: string): boolean {
+        return taskTag === filterTag || taskTag.startsWith(filterTag + '/');
+    }
+
     private static evalTag(task: Task, c: FilterConditionNode): boolean {
         if (c.value.type !== 'stringSet') return true;
         if (c.operator === 'includes') {
-            return c.value.values.some(v => task.tags.includes(v));
+            return c.value.values.some(v => task.tags.some(t => this.tagMatches(t, v)));
         }
         if (c.operator === 'excludes') {
-            return !c.value.values.some(v => task.tags.includes(v));
+            return !c.value.values.some(v => task.tags.some(t => this.tagMatches(t, v)));
         }
         return true;
     }
@@ -132,6 +138,20 @@ export class TaskFilterEngine {
             case 'after':      return taskDate > end;
             case 'onOrBefore': return taskDate <= end;
             case 'onOrAfter':  return taskDate >= start;
+            default: return true;
+        }
+    }
+
+    private static evalProperty(task: Task, c: FilterConditionNode): boolean {
+        if (c.value.type !== 'property') return true;
+        const { key, value: filterValue } = c.value;
+        const actual = task.properties?.[key];
+        switch (c.operator) {
+            case 'isSet': return actual !== undefined;
+            case 'isNotSet': return actual === undefined;
+            case 'equals': return actual === filterValue;
+            case 'contains': return actual?.toLowerCase().includes(filterValue.toLowerCase()) ?? false;
+            case 'notContains': return !actual?.toLowerCase().includes(filterValue.toLowerCase());
             default: return true;
         }
     }

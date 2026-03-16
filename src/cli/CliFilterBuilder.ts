@@ -44,8 +44,9 @@ export function buildFilterFromFlags(params: CliData): FilterBuildResult {
     const conditions: FilterConditionNode[] = [];
 
     if (params.file) {
+        const file = params.file.endsWith('.md') ? params.file : params.file + '.md';
         conditions.push(condition('file', 'includes', {
-            type: 'stringSet', values: [params.file],
+            type: 'stringSet', values: [file],
         }));
     }
 
@@ -59,7 +60,7 @@ export function buildFilterFromFlags(params: CliData): FilterBuildResult {
     }
 
     if (params.tag) {
-        const tags = params.tag.split(',').map(s => s.trim()).filter(Boolean);
+        const tags = params.tag.split(',').map(s => s.trim().replace(/^#/, '')).filter(Boolean);
         if (tags.length > 0) {
             conditions.push(condition('tag', 'includes', {
                 type: 'stringSet', values: tags,

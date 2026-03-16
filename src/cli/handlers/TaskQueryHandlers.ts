@@ -40,13 +40,14 @@ function cliDataToListParams(params: CliData): ListParams {
     } else {
         if (params.file) result.file = params.file;
         if (params.status) result.status = params.status.split(',').map(s => s.trim()).filter(Boolean);
-        if (params.tag) result.tag = params.tag.split(',').map(s => s.trim()).filter(Boolean);
+        if (params.tag) result.tag = params.tag.split(',').map(s => s.trim().replace(/^#/, '')).filter(Boolean);
         if (params.content) result.content = params.content;
         if (params.date) result.date = params.date;
         if (params.from) result.from = params.from;
         if (params.to) result.to = params.to;
         if (params.due) result.due = params.due;
         if (params.leaf === 'true') result.leaf = true;
+        if (params.property) result.property = params.property;
     }
 
     if (params.sort) result.sort = parseSortFlag(params.sort);

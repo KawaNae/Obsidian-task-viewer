@@ -1,5 +1,5 @@
 ﻿import { CommandStrategy, CommandContext, CommandResult } from './CommandStrategy';
-import { FlowCommand, Task } from '../types';
+import { FlowCommand, Task, ChildLine } from '../types';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { RecurrenceUtils } from '../utils/RecurrenceUtils';
 import { DateUtils } from '../utils/DateUtils';
@@ -47,8 +47,7 @@ export abstract class GenerationCommand implements CommandStrategy {
             cleanInterval = interval.replace(/when done/i, '').trim();
         }
 
-
-        // 基準日の決宁E startDate > endDate > due の優先頁E
+        // 基準日の決定: startDate > endDate > due の優先度
         let baseDateObj: Date;
 
         if (isWhenDone) {
@@ -61,37 +60,63 @@ export abstract class GenerationCommand implements CommandStrategy {
         } else if (task.due) {
             baseDateObj = this.parseDate(task.due);
         } else {
-            // Fallback: 今日を基溁E
             baseDateObj = new Date();
             baseDateObj.setHours(0, 0, 0, 0);
         }
 
         const nextDateObj = RecurrenceUtils.calculateNextDate(baseDateObj, cleanInterval);
 
-        // シフト日数を計箁E
+        const commonOverrides = {
+            id: '',
+            statusChar: ' ' as const,
+            startDateInherited: false,
+            originalText: '',
+            childLines: [] as ChildLine[],
+            childLineBodyOffsets: [] as number[],
+            blockId: undefined,
+            timerTargetId: undefined,
+            content: task.content.replace(/^(?:⏱️|🍅|⏳)\s*/, ''),
+        };
+
+        if (isWhenDone) {
+            // when-done: nextDateObj を新しい startDate とし、元の span 幅を保持
+            const nextDateStr = DateUtils.getLocalDateString(nextDateObj);
+            const baseStartDate = task.startDate ? this.parseDate(task.startDate) : baseDateObj;
+
+            return {
+                ...task,
+                ...commonOverrides,
+                startDate: task.startDate ? this.preserveTime(nextDateStr, task.startDate) : undefined,
+                endDate: task.endDate
+                    ? this.shiftDateFromBase(nextDateStr, baseStartDate, task.endDate)
+                    : (task.endTime && task.startDate) ? nextDateStr : undefined,
+                due: task.due
+                    ? this.shiftDateFromBase(nextDateStr, baseStartDate, task.due)
+                    : undefined,
+            };
+        }
+
+        // 通常パス: 基準日からのシフト日数で全日付を移動
         const shiftDays = Math.round(
             (nextDateObj.getTime() - baseDateObj.getTime()) / (1000 * 60 * 60 * 24)
         );
 
         return {
             ...task,
-            id: '',
-            statusChar: ' ',
-            startDate: task.startDate ? this.shiftDate(task.startDate, shiftDays) : undefined,
-            startDateInherited: false, // Generated task has explicit dates
-            endDate: task.endDate ? this.shiftDate(task.endDate, shiftDays) : undefined,
-            due: task.due ? this.shiftDate(task.due, shiftDays) : undefined,
-            originalText: '',
-            childLines: [], // Children are re-collected from file by insertRecurrenceForTask
-            blockId: undefined, // タイマーターゲットID等を引き継がない
-            timerTargetId: undefined,
-            content: task.content.replace(/^(?:⏱️|🍅|⏳)\s*/, ''),
+            ...commonOverrides,
+            startDate: task.startDate ? DateUtils.shiftDateString(task.startDate, shiftDays) : undefined,
+            endDate: task.endDate
+                ? DateUtils.shiftDateString(task.endDate, shiftDays)
+                : (task.endTime && task.startDate)
+                    ? DateUtils.shiftDateString(task.startDate, shiftDays)
+                    : undefined,
+            due: task.due ? DateUtils.shiftDateString(task.due, shiftDays) : undefined,
         };
     }
 
     /**
-     * 日付文字�EをDateオブジェクトに変換
-     * YYYY-MM-DD また�E YYYY-MM-DDTHH:mm 形式対忁E
+     * 日付文字列をDateオブジェクトに変換
+     * YYYY-MM-DD または YYYY-MM-DDTHH:mm 形式対応
      */
     private parseDate(dateStr: string): Date {
         const datePart = dateStr.split('T')[0];
@@ -99,20 +124,18 @@ export abstract class GenerationCommand implements CommandStrategy {
         return new Date(y, m - 1, d);
     }
 
-    /**
-     * 日付文字�Eを指定日数シフト
-     * 時刻部刁E��ある場合�E保持
-     */
-    private shiftDate(dateStr: string, days: number): string {
-        const hasTime = dateStr.includes('T');
-        const datePart = dateStr.split('T')[0];
-        const timePart = hasTime ? dateStr.split('T')[1] : null;
+    /** newBaseDate を起点に、originalStart→targetDate の日数差を適用（時刻保持） */
+    private shiftDateFromBase(newBaseDateStr: string, originalStart: Date, targetDateStr: string): string {
+        const targetDate = this.parseDate(targetDateStr);
+        const diffDays = Math.round(
+            (targetDate.getTime() - originalStart.getTime()) / (1000 * 60 * 60 * 24)
+        );
+        return DateUtils.shiftDateString(this.preserveTime(newBaseDateStr, targetDateStr), diffDays);
+    }
 
-        const [y, m, d] = datePart.split('-').map(Number);
-        const date = new Date(y, m - 1, d);
-        date.setDate(date.getDate() + days);
-
-        const newDateStr = DateUtils.getLocalDateString(date);
+    /** newDateStr に originalDateStr の時刻部分を付与 */
+    private preserveTime(newDateStr: string, originalDateStr: string): string {
+        const timePart = originalDateStr.includes('T') ? originalDateStr.split('T')[1] : null;
         return timePart ? `${newDateStr}T${timePart}` : newDateStr;
     }
 }

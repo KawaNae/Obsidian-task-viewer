@@ -25,6 +25,7 @@ const FIELD_EXTRACTORS: Record<string, (task: Task | DisplayTask) => unknown> = 
     effectiveEndDate:   t => ('effectiveEndDate' in t) ? (t as DisplayTask).effectiveEndDate ?? null : null,
     effectiveEndTime:   t => ('effectiveEndTime' in t) ? (t as DisplayTask).effectiveEndTime ?? null : null,
     durationMinutes:    t => computeDurationMinutes(t),
+    properties:         t => t.properties ?? {},
 };
 
 export const ALL_FIELD_NAMES: string[] = Object.keys(FIELD_EXTRACTORS);

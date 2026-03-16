@@ -25,6 +25,7 @@ export interface NormalizedTask {
     effectiveEndDate: string | null;
     effectiveEndTime: string | null;
     durationMinutes: number | null;
+    properties: Record<string, string>;
 }
 
 // ── Error ──
@@ -54,14 +55,15 @@ export interface PaginationParams {
 
 export interface ListParams extends PaginationParams {
     file?: string;
-    status?: string[];
-    tag?: string[];
+    status?: string | string[];
+    tag?: string | string[];
     content?: string;
     date?: string;            // YYYY-MM-DD or preset
     from?: string;
     to?: string;
     due?: string;
     leaf?: boolean;
+    property?: string;        // "key:value" — filter by custom property
     filter?: FilterState;     // overrides simple filter fields above
     sort?: ApiSortRule[];
 }

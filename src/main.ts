@@ -234,6 +234,7 @@ export default class TaskViewerPlugin extends Plugin {
                     childLineBodyOffsets: [],
                     tags: [],
                     parserId: 'at-notation',
+                    properties: {},
                 };
                 return await repository.createFrontmatterTaskFile(
                     tempTask,

@@ -74,6 +74,7 @@ export class ChildLineMenuBuilder {
             childLineBodyOffsets: [],
             tags: [],
             parserId: 'at-notation',
+            properties: {},
         };
         return await repository.createFrontmatterTaskFile(
             tempTask,

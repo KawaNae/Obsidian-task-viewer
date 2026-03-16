@@ -105,6 +105,21 @@ export class FrontmatterTaskBuilder {
         const taskTags = TagExtractor.fromFrontmatter(frontmatter['tags']);
         const sharedTags = TagExtractor.fromFrontmatter(frontmatter[frontmatterKeys.sharedtags]);
 
+        // Extract custom properties from frontmatter (non-plugin keys)
+        const excludedKeys = new Set<string>(Object.values(frontmatterKeys));
+        excludedKeys.add('tags'); // Always exclude standard Obsidian tags key
+
+        const fmProperties: Record<string, string> = {};
+        for (const [key, value] of Object.entries(frontmatter)) {
+            if (excludedKeys.has(key)) continue;
+            if (value === null || value === undefined) continue;
+            fmProperties[key] = String(value);
+        }
+
+        // Merge: child line properties (::) override frontmatter properties
+        const childLineProperties = ChildLineClassifier.collectProperties(childLines);
+        const mergedProperties = { ...fmProperties, ...childLineProperties };
+
         return {
             task: {
                 id: TaskIdGenerator.generate('frontmatter', filePath, 'fm-root'),
@@ -125,7 +140,8 @@ export class FrontmatterTaskBuilder {
                 originalText: '',
                 commands: [],
                 timerTargetId,
-                parserId: 'frontmatter'
+                parserId: 'frontmatter',
+                properties: mergedProperties
             },
             wikilinkRefs
         };

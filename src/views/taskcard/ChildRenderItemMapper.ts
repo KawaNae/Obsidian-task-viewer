@@ -63,7 +63,8 @@ export class ChildRenderItemMapper {
             isCheckbox: isCb,
             handler: isCb
                 ? { type: 'childLine', parentTask: task, childLineIndex: idx }
-                : null
+                : null,
+            propertyKey: cl.propertyKey ?? undefined,
         };
     }
 

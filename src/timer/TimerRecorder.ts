@@ -407,7 +407,8 @@ export class TimerRecorder {
             childLines: [],
             childLineBodyOffsets: [],
             tags: [],
-            parserId: 'at-notation'
+            parserId: 'at-notation',
+            properties: {},
         };
     }
 

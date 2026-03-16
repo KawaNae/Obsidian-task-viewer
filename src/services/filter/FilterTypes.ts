@@ -7,7 +7,8 @@ export type FilterProperty =
     | 'startDate' | 'endDate' | 'due'
     | 'color' | 'linestyle'
     | 'length' | 'taskType'
-    | 'parent' | 'children';
+    | 'parent' | 'children'
+    | 'property';
 
 export type FilterOperator =
     | 'includes' | 'excludes'
@@ -23,7 +24,8 @@ export type FilterValue =
     | { type: 'boolean'; value: boolean }
     | { type: 'string'; value: string }
     | { type: 'date'; value: DateFilterValue }
-    | { type: 'number'; value: number; unit?: 'hours' | 'minutes' };
+    | { type: 'number'; value: number; unit?: 'hours' | 'minutes' }
+    | { type: 'property'; key: string; value: string };
 
 export type RelativeDatePreset = 'today' | 'thisWeek' | 'nextWeek' | 'pastWeek' | 'nextNDays' | 'thisMonth' | 'thisYear';
 
@@ -174,6 +176,7 @@ export const PROPERTY_OPERATORS: Record<FilterProperty, FilterOperator[]> = {
     taskType: ['includes', 'excludes'],
     parent: ['isSet', 'isNotSet'],
     children: ['isSet', 'isNotSet'],
+    property: ['isSet', 'isNotSet', 'equals', 'contains', 'notContains'],
 };
 
 /** Display labels for operators */
@@ -210,6 +213,7 @@ export const PROPERTY_LABELS: Record<FilterProperty, string> = {
     taskType: 'Task type',
     parent: 'Parent',
     children: 'Children',
+    property: 'Property',
 };
 
 /** Operators that require no value input */
@@ -230,6 +234,7 @@ export const PROPERTY_ICONS: Record<FilterProperty, string> = {
     taskType: 'file-type',
     parent: 'arrow-up',
     children: 'arrow-down',
+    property: 'list',
 };
 
 /** Display labels for relative date presets */

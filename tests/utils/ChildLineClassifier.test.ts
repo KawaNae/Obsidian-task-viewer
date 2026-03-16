@@ -63,6 +63,58 @@ describe('ChildLineClassifier', () => {
         });
     });
 
+    describe('property lines (:: notation)', () => {
+        it('parses double-colon property line', () => {
+            const result = ChildLineClassifier.classify('\t- 金額:: 2000');
+            expect(result.propertyKey).toBe('金額');
+            expect(result.propertyValue).toBe('2000');
+            expect(result.checkboxChar).toBeNull();
+        });
+
+        it('parses property with no space after ::', () => {
+            const result = ChildLineClassifier.classify('\t- key::value');
+            expect(result.propertyKey).toBe('key');
+            expect(result.propertyValue).toBe('value');
+        });
+
+        it('does NOT parse single-colon as property', () => {
+            const result = ChildLineClassifier.classify('\t- 金額: 2000');
+            expect(result.propertyKey).toBeNull();
+            expect(result.propertyValue).toBeNull();
+        });
+
+        it('does not extract property from checkbox lines', () => {
+            const result = ChildLineClassifier.classify('\t- [x] key:: value');
+            expect(result.checkboxChar).toBe('x');
+            expect(result.propertyKey).toBeNull();
+        });
+
+        it('does not extract property from wikilink lines', () => {
+            const result = ChildLineClassifier.classify('\t- [[key:: value]]');
+            expect(result.propertyKey).toBeNull();
+        });
+    });
+
+    describe('collectProperties', () => {
+        it('collects properties from classified lines', () => {
+            const lines = ChildLineClassifier.classifyLines([
+                '\t- 金額:: 2000',
+                '\t- 優先度:: 高',
+                '\t- [x] checkbox',
+            ]);
+            const props = ChildLineClassifier.collectProperties(lines);
+            expect(props).toEqual({ '金額': '2000', '優先度': '高' });
+        });
+
+        it('returns empty object when no properties', () => {
+            const lines = ChildLineClassifier.classifyLines([
+                '\t- [x] checkbox',
+                '\t- [[Link]]',
+            ]);
+            expect(ChildLineClassifier.collectProperties(lines)).toEqual({});
+        });
+    });
+
     describe('classifyLines', () => {
         it('classifies multiple lines', () => {
             const results = ChildLineClassifier.classifyLines([

@@ -37,7 +37,8 @@ export function formatTaskLine(result: CreateTaskResult): string {
         originalText: '',
         childLineBodyOffsets: [],
         tags: [],
-        parserId: 'at-notation'
+        parserId: 'at-notation',
+        properties: {},
     };
     return TaskParser.format(task);
 }
@@ -389,6 +390,7 @@ export class CreateTaskModal extends Modal {
             childLineBodyOffsets: [],
             tags: [],
             parserId: 'at-notation',
+            properties: {},
         };
 
         const dt = toDisplayTask(formTask, startHour);

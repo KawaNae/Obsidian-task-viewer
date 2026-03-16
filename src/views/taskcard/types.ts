@@ -6,6 +6,8 @@ export interface ChildRenderItem {
     notation: string | null;
     isCheckbox: boolean;
     handler: CheckboxHandler | null;
+    /** Set when line is a key-value property (e.g. "- 金額: 2000") */
+    propertyKey?: string;
 }
 
 export type CheckboxHandler =
