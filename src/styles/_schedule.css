@@ -5,6 +5,7 @@
     width: 100%;
     overflow: hidden;
     padding: 0 !important;
+    container-type: inline-size;
 }
 
 .schedule-view__toolbar-host {
@@ -28,6 +29,21 @@
     display: none;
 }
 
+/* PC: allday stays fixed at top via sticky */
+.schedule-body-scroll > .allday-section {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+}
+
+/* Mobile: disable sticky so allday scrolls with timeline */
+@container (max-width: 768px) {
+    .schedule-body-scroll > .allday-section {
+        position: relative;
+        top: auto;
+    }
+}
+
 .schedule-view .view-toolbar {
     position: static;
     background-color: transparent;
@@ -49,17 +65,17 @@
 }
 
 .schedule-view__fixed-rows .date-header,
-.schedule-view__fixed-rows .habits-section,
-.schedule-view__fixed-rows .allday-section {
+.schedule-view .habits-section,
+.schedule-view .allday-section {
     overflow: hidden;
 }
 
-.schedule-view__fixed-rows .allday-section::before {
+.schedule-view .allday-section::before {
     display: none;
     height: 0;
 }
 
-.schedule-view__fixed-rows .allday-section__cell:not(.allday-section__axis) {
+.schedule-view .allday-section__cell:not(.allday-section__axis) {
     padding-left: 6px;
     padding-right: 6px;
     gap: var(--task-card-gap);

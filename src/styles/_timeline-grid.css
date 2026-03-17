@@ -49,6 +49,24 @@
     background-color: var(--tv-bg-timeline);
 }
 
+/* PC: allday stays fixed at top via sticky */
+.timeline-scroll-area > .allday-section {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+}
+
+/* Mobile: disable sticky so allday scrolls with timeline */
+.view-sidebar-layout--mobile .timeline-scroll-area > .allday-section {
+    position: relative;
+    top: auto;
+}
+
+/* Grid wrapper inside scroll area (time axis + day columns) */
+.timeline-scroll-area__grid {
+    width: 100%;
+}
+
 /* Webkit browsers (Chrome, Safari, Obsidian) */
 .timeline-scroll-area::-webkit-scrollbar {
     display: none;

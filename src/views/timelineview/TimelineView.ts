@@ -499,7 +499,9 @@ export class TimelineView extends ItemView {
 
         const hourHeight = 60 * this.getEffectiveZoomLevel();
         const nowPx = minutesFromStart * hourHeight / 60;
-        scrollArea.scrollTop = nowPx - scrollArea.clientHeight / 2;
+        const timeCol = scrollArea.querySelector('.time-axis-column') as HTMLElement | null;
+        const gridOffset = timeCol?.offsetTop ?? 0;
+        scrollArea.scrollTop = gridOffset + nowPx - scrollArea.clientHeight / 2;
     }
 
     private render() {
