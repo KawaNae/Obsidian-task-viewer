@@ -171,27 +171,11 @@ export class TaskScanner {
                         }
                     }
 
-                    // 子のインデントを正規化
-                    const nonEmptyChildren = children.filter(c => c.trim() !== '');
-                    if (nonEmptyChildren.length > 0) {
-                        const minIndent = Math.min(...nonEmptyChildren.map(c => c.search(/\S|$/)));
-                        const normalized = children.map(c => {
-                            if (c.trim() === '') return c;
-                            return c.substring(minIndent);
-                        });
-
-                        task.childLines = ChildLineClassifier.classifyLines(normalized);
-                    } else {
-                        task.childLines = ChildLineClassifier.classifyLines(children);
-                    }
-                    task.properties = ChildLineClassifier.collectProperties(task.childLines);
-
-                    extractedTasks.push(task);
-
-                    // 再帰的に子タスクを抽出（@記法を持つ子）
+                    // 再帰的に子タスクを抽出（@記法を持つ子）— childLines フィルタより先に実行
+                    let childTasks: ReturnType<typeof extractTasksFromLines> = [];
                     if (children.length > 0) {
                         const childLineNumber = actualLineNumber + 1;
-                        const childTasks = extractTasksFromLines(children, childLineNumber, parentStartDate);
+                        childTasks = extractTasksFromLines(children, childLineNumber, parentStartDate);
 
                         // 親子関係を設定
                         for (const childTask of childTasks) {
@@ -202,9 +186,39 @@ export class TaskScanner {
                                 task.childIds.push(childTask.id);
                             }
                         }
-
-                        extractedTasks.push(...childTasks);
                     }
+
+                    // 子のインデントを正規化 + childLines 設定
+                    // childIds に含まれる子タスクの行のみ除外（plain checkbox は残す）
+                    const childTaskLines = new Set<number>();
+                    for (const cid of task.childIds) {
+                        const ct = childTasks.find(t => t.id === cid);
+                        if (ct) childTaskLines.add(ct.line);
+                    }
+
+                    const nonEmptyChildren = children.filter(c => c.trim() !== '');
+                    if (nonEmptyChildren.length > 0) {
+                        const minIndent = Math.min(...nonEmptyChildren.map(c => c.search(/\S|$/)));
+                        const normalized = children.map(c => {
+                            if (c.trim() === '') return c;
+                            return c.substring(minIndent);
+                        });
+
+                        const ownLines: string[] = [];
+                        for (let k = 0; k < normalized.length; k++) {
+                            const absLine = actualLineNumber + 1 + k;
+                            if (childTaskLines.has(absLine)) continue;
+                            ownLines.push(normalized[k]);
+                        }
+
+                        task.childLines = ChildLineClassifier.classifyLines(ownLines);
+                    } else {
+                        task.childLines = ChildLineClassifier.classifyLines(children);
+                    }
+                    task.properties = ChildLineClassifier.collectProperties(task.childLines);
+
+                    extractedTasks.push(task);
+                    extractedTasks.push(...childTasks);
 
                     // 消費した行をスキップ
                     i = j - 1;
@@ -252,7 +266,7 @@ export class TaskScanner {
             const fmTask = fmResult.task;
 
             // Container の content フォールバック: ファイル名のbasenameを使用
-            if (fmResult.isContainer && !fmTask.content) {
+            if (fmTask.isContainer && !fmTask.content) {
                 fmTask.content = file.basename;
             }
 
@@ -277,7 +291,7 @@ export class TaskScanner {
             }
 
             // Container は子がなければ作成しない
-            if (fmResult.isContainer && fmTask.childIds.length === 0 && fmTask.childLines.length === 0) {
+            if (fmTask.isContainer && fmTask.childIds.length === 0 && fmTask.childLines.length === 0) {
                 // Container をスキップ（子もchildLinesもない）
             } else {
                 newTasks.push(fmTask);

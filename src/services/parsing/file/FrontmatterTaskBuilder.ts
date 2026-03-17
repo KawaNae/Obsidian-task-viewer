@@ -6,7 +6,6 @@ import { ChildLineClassifier } from '../../../utils/ChildLineClassifier';
 export interface FrontmatterParseResult {
     task: Task;
     wikilinkRefs: WikilinkRef[];
-    isContainer: boolean;
 }
 
 const VALID_LINE_STYLES = new Set(['solid', 'dashed', 'dotted', 'double', 'dashdotted']);
@@ -19,7 +18,7 @@ export class FrontmatterTaskBuilder {
     /**
      * Parse frontmatter object and body lines into a Task.
      * Returns null when no task-relevant fields are present.
-     * Returns isContainer=true when no date fields but container signals exist.
+     * Sets task.isContainer=true when no date fields but container signals exist.
      */
     static parse(
         filePath: string,
@@ -93,7 +92,7 @@ export class FrontmatterTaskBuilder {
             frontmatterTaskHeaderLevel
         );
         if (section) {
-            const block = this.collectFirstContiguousListBlock(
+            const block = this.collectAllListItems(
                 bodyLines,
                 section.start,
                 section.end
@@ -166,7 +165,6 @@ export class FrontmatterTaskBuilder {
                 isContainer,
             },
             wikilinkRefs,
-            isContainer,
         };
     }
 
@@ -265,7 +263,7 @@ export class FrontmatterTaskBuilder {
         return { level: match[1].length, text: match[2] };
     }
 
-    private static collectFirstContiguousListBlock(
+    private static collectAllListItems(
         bodyLines: string[],
         sectionStart: number,
         sectionEnd: number
@@ -273,29 +271,24 @@ export class FrontmatterTaskBuilder {
         const lineIndices: number[] = [];
         const listRegex = /^(\s*)(?:[-*+]|\d+[.)])\s+/;
 
-        let firstRootIndex = -1;
-        let rootIndent = 0;
+        let rootIndent: number | null = null;
 
         for (let i = sectionStart; i < sectionEnd; i++) {
-            const listMatch = bodyLines[i].match(listRegex);
-            if (!listMatch) continue;
-            firstRootIndex = i;
-            rootIndent = listMatch[1].length;
-            break;
-        }
-        if (firstRootIndex < 0) return { lineIndices };
-
-        for (let i = firstRootIndex; i < sectionEnd; i++) {
             const line = bodyLines[i];
-            if (line.trim() === '') break;
+            if (line.trim() === '') continue; // 空行をスキップ（停止しない）
 
             const listMatch = line.match(listRegex);
-            const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+            if (!listMatch) continue; // 非リスト行をスキップ
 
-            if (indent <= rootIndent && !listMatch) break;
-            if (indent < rootIndent) break;
+            const indent = listMatch[1].length;
+            if (rootIndent === null) {
+                rootIndent = indent;
+            }
 
-            lineIndices.push(i);
+            // ルートレベル以上のインデントのリスト要素のみ収集
+            if (indent >= rootIndent) {
+                lineIndices.push(i);
+            }
         }
 
         return { lineIndices };
