@@ -36,7 +36,6 @@ export class ScheduleView extends ItemView {
     private static readonly MAX_GAP_HEIGHT_PX = 100;
     private static readonly TIMELINE_TOP_PADDING_PX = 16;
     private static readonly TIMELINE_BOTTOM_PADDING_PX = 16;
-
     private readonly taskIndex: TaskIndex;
     private readonly plugin: TaskViewerPlugin;
     private readonly taskRenderer: TaskCardRenderer;
@@ -348,8 +347,10 @@ export class ScheduleView extends ItemView {
         const categorized = this.taskCategorizer.categorizeTasksBySection(tasks, date);
 
         this.renderDateHeader(fixedContainer, date, allDisplayTasks);
+
+        // Habits in fixed area (always visible), allday in scroll body (sticky on PC)
         this.renderHabitsSection(fixedContainer, date);
-        await this.sectionRenderer.renderAllDaySection(fixedContainer, categorized.allDay);
+        await this.sectionRenderer.renderAllDaySection(bodyContainer, categorized.allDay);
 
         await this.renderTimelineMain(bodyContainer, categorized.timed);
 

@@ -7,6 +7,7 @@
 body.task-viewer-hide-view-header .workspace-leaf-content[data-type="timeline-view"] .view-header,
 body.task-viewer-hide-view-header .workspace-leaf-content[data-type="schedule-view"] .view-header,
 body.task-viewer-hide-view-header .workspace-leaf-content[data-type="calendar-view"] .view-header,
+body.task-viewer-hide-view-header .workspace-leaf-content[data-type="timer-view"] .view-header,
 body.task-viewer-hide-view-header .workspace-leaf-content[data-type="kanban-view"] .view-header {
     display: none !important;
 }
@@ -15,6 +16,27 @@ body.task-viewer-hide-view-header .workspace-leaf-content[data-type="kanban-view
 body.is-phone.task-viewer-hide-view-header .workspace-leaf-content[data-type="timeline-view"] > .view-content,
 body.is-phone.task-viewer-hide-view-header .workspace-leaf-content[data-type="schedule-view"] > .view-content,
 body.is-phone.task-viewer-hide-view-header .workspace-leaf-content[data-type="calendar-view"] > .view-content,
+body.is-phone.task-viewer-hide-view-header .workspace-leaf-content[data-type="timer-view"] > .view-content,
 body.is-phone.task-viewer-hide-view-header .workspace-leaf-content[data-type="kanban-view"] > .view-content {
     margin-top: var(--tv-mobile-top-offset, 32px) !important;
+}
+
+/* Mobile: adjust linear-gradient width */
+body.is-phone.task-viewer-fix-mobile-gradient .workspace-leaf-content[data-type="timeline-view"]:after,
+body.is-phone.task-viewer-fix-mobile-gradient .workspace-leaf-content[data-type="schedule-view"]:after,
+body.is-phone.task-viewer-fix-mobile-gradient .workspace-leaf-content[data-type="calendar-view"]:after,
+body.is-phone.task-viewer-fix-mobile-gradient .workspace-leaf-content[data-type="timer-view"]:after,
+body.is-phone.task-viewer-fix-mobile-gradient .workspace-leaf-content[data-type="kanban-view"]:after {
+    width: 100%;
+}
+
+/* Mobile: remove drawer padding when header is hidden and task-viewer view is active */
+body.is-phone.task-viewer-hide-view-header .workspace-drawer-inner:has(
+    .workspace-leaf-content[data-type="timeline-view"],
+    .workspace-leaf-content[data-type="schedule-view"],
+    .workspace-leaf-content[data-type="calendar-view"],
+    .workspace-leaf-content[data-type="timer-view"],
+    .workspace-leaf-content[data-type="kanban-view"]
+) {
+    padding-top: 0;
 }

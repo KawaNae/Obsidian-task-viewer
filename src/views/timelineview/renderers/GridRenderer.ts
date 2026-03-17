@@ -146,15 +146,18 @@ export class GridRenderer {
         });
         this.applyDateHeaderCompactBehavior(headerCells);
 
-        // 1.5. Habits Row (between date header and all-day)
+        // 2. Habits Row (fixed, outside scroll area — always visible)
         if (this.plugin.settings.habits.length > 0) {
             const habitsRow = grid.createDiv('timeline-row habits-section');
             habitsRow.style.gridTemplateColumns = colTemplate;
             habitRenderer.render(habitsRow, dates);
         }
 
-        // 2. All-Day Row (Merged All-Day & Long-Term)
-        const allDayRow = grid.createDiv('timeline-row allday-section');
+        // 3. Scroll Area (allday + timeline grid)
+        const scrollArea = grid.createDiv('timeline-scroll-area');
+
+        // 3.1. All-Day Row (sticky on PC, scrolls on mobile via CSS)
+        const allDayRow = scrollArea.createDiv('timeline-row allday-section');
         allDayRow.style.gridTemplateColumns = colTemplate;
 
         // Time Axis All-Day (with toggle button)
@@ -223,21 +226,17 @@ export class GridRenderer {
         // Render Tasks (Overlaid)
         allDayRenderer.render(allDayRow, dates, owner, isTaskVisible, allDisplayTasks);
 
-        // 3. Timeline Row (Scrollable)
-        const scrollArea = grid.createDiv('timeline-row timeline-scroll-area');
-        // Overlay scrollbar doesn't take space, so all rows use same template
-        scrollArea.style.gridTemplateColumns = colTemplate;
-
-        // Note: scroll/wheel listeners for handle position updates are no longer needed
-        // since handles are now inside task cards and scroll with them naturally.
+        // 3.2. Timeline Grid (time axis + day columns)
+        const timelineGrid = scrollArea.createDiv('timeline-row timeline-scroll-area__grid');
+        timelineGrid.style.gridTemplateColumns = colTemplate;
 
         // Time Axis Column
-        const timeCol = scrollArea.createDiv('time-axis-column');
+        const timeCol = timelineGrid.createDiv('time-axis-column');
         this.renderTimeLabels(timeCol);
 
         // Day Columns
         dates.forEach(date => {
-            const col = scrollArea.createDiv('day-timeline-column');
+            const col = timelineGrid.createDiv('day-timeline-column');
             col.dataset.date = date;
             timelineRenderer.render(col, date, owner, isTaskVisible, allDisplayTasks);
 

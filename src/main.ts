@@ -422,6 +422,11 @@ export default class TaskViewerPlugin extends Plugin {
         } else {
             document.body.classList.remove('task-viewer-hide-view-header');
         }
+        if (this.settings.fixMobileGradientWidth) {
+            document.body.classList.add('task-viewer-fix-mobile-gradient');
+        } else {
+            document.body.classList.remove('task-viewer-fix-mobile-gradient');
+        }
         document.documentElement.style.setProperty(
             '--tv-mobile-top-offset', `${this.settings.mobileTopOffset}px`
         );

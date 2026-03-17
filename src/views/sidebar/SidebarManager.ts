@@ -142,6 +142,14 @@ export class SidebarManager {
         this.config.onSyncToggleButton?.();
     }
 
+    /** Whether the container is currently at or below the mobile breakpoint. */
+    isNarrow(): boolean {
+        if (!this.containerEl) return false;
+        const width = this.containerEl.clientWidth;
+        if (width <= 0) return false;
+        return width <= this.config.mobileBreakpointPx;
+    }
+
     // ----- Private Helpers -----
 
     private applyResponsiveLayout(): void {

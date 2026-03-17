@@ -179,7 +179,15 @@ export class TaskScanner {
                             if (c.trim() === '') return c;
                             return c.substring(minIndent);
                         });
-                        task.childLines = ChildLineClassifier.classifyLines(normalized);
+
+                        // 子タスク行以降を除外（子タスクの childLines が親に混入するのを防止）
+                        const ownLines: string[] = [];
+                        for (const ln of normalized) {
+                            if (/^\s*- \[.\]/.test(ln)) break;
+                            ownLines.push(ln);
+                        }
+
+                        task.childLines = ChildLineClassifier.classifyLines(ownLines);
                     } else {
                         task.childLines = ChildLineClassifier.classifyLines(children);
                     }
@@ -251,13 +259,6 @@ export class TaskScanner {
 
             // Store wikilink refs separately
             this.store.setWikilinkRefs(fmTask.id, fmResult.wikilinkRefs);
-
-            // MetadataCacheからファイル全体のタグを取得してマージ（frontmatterタスクのみ）
-            const cacheTags = this.app.metadataCache.getFileCache(file)?.tags;
-            if (cacheTags && cacheTags.length > 0) {
-                const metaTags = cacheTags.map(t => t.tag.replace(/^#/, ''));
-                fmTask.tags = TagExtractor.merge(fmTask.tags, metaTags);
-            }
 
             // frontmatter の childLine 範囲に含まれるボディタスクを frontmatter タスクの子にする
             const childLineSet = new Set<number>(fmTask.childLineBodyOffsets);

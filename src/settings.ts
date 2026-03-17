@@ -371,6 +371,16 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     });
             });
 
+        new Setting(el)
+            .setName('Fix mobile gradient width')
+            .setDesc('Set the background gradient to 100% width on mobile views.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.fixMobileGradientWidth)
+                .onChange(async (value) => {
+                    this.plugin.settings.fixMobileGradientWidth = value;
+                    await this.plugin.saveSettings();
+                }));
+
         // Pinned Lists
         el.createEl('h3', { text: 'Pinned Lists', cls: 'setting-section-header' });
 

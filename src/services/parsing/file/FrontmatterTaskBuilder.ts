@@ -124,9 +124,9 @@ export class FrontmatterTaskBuilder {
             };
         }
 
-        // Merge: child line properties (::) override frontmatter properties
-        const childLineProperties = ChildLineClassifier.collectProperties(childLines);
-        const mergedProperties = { ...fmProperties, ...childLineProperties };
+        // childLine の :: プロパティは各 inline タスクが個別に保持する
+        // frontmatter タスクには YAML カスタムキーのみ（逆方向継承を防止）
+        const mergedProperties = fmProperties;
 
         return {
             task: {

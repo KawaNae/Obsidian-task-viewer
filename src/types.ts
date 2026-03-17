@@ -310,6 +310,7 @@ export interface TaskViewerSettings {
     suggestSharedtags: boolean;
     hideViewHeader: boolean;
     mobileTopOffset: number;
+    fixMobileGradientWidth: boolean;
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -359,4 +360,5 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     suggestSharedtags: true,
     hideViewHeader: true,
     mobileTopOffset: 32,
+    fixMobileGradientWidth: true,
 };
