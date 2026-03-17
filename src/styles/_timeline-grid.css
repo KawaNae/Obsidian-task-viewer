@@ -65,6 +65,9 @@
 /* Grid wrapper inside scroll area (time axis + day columns) */
 .timeline-scroll-area__grid {
     width: 100%;
+    position: relative;
+    z-index: 0; /* Create stacking context so ghosts (z:9999) stay below sticky allday (z:30) */
+    overflow: hidden;
 }
 
 /* Webkit browsers (Chrome, Safari, Obsidian) */

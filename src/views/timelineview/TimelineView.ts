@@ -511,10 +511,12 @@ export class TimelineView extends ItemView {
         }
         this.sidebarManager.syncPresentation(this.viewState.showSidebar, { animate: false });
 
-        // Save scroll position
+        // Save scroll position relative to timeline grid (not absolute scrollTop)
+        // so allday height changes don't cause scroll drift
         const scrollArea = this.container.querySelector('.timeline-scroll-area');
-        if (scrollArea) {
-            this.lastScrollTop = scrollArea.scrollTop;
+        const timelineGrid = scrollArea?.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
+        if (scrollArea && timelineGrid) {
+            this.lastScrollTop = scrollArea.scrollTop - timelineGrid.offsetTop;
             this.hasValidScrollPosition = true;
         }
 
@@ -680,7 +682,9 @@ export class TimelineView extends ItemView {
                 this.scrollToNowOnNextRender = false;
                 requestAnimationFrame(() => this.scrollToCurrentTime());
             } else if (this.hasValidScrollPosition) {
-                newScrollArea.scrollTop = this.lastScrollTop;
+                const newGrid = newScrollArea.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
+                const gridOffset = newGrid?.offsetTop ?? 0;
+                newScrollArea.scrollTop = gridOffset + this.lastScrollTop;
             }
         }
 
