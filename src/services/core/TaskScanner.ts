@@ -8,8 +8,6 @@ import { TaskStore } from './TaskStore';
 import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
-import { TagExtractor } from '../../utils/TagExtractor';
-import { TaskStyleResolver } from '../styling/TaskStyleResolver';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
 import { PropertyInheritanceResolver } from './PropertyInheritanceResolver';
@@ -112,7 +110,8 @@ export class TaskScanner {
         const extractTasksFromLines = (
             linesToProcess: string[],
             baseLineNumber: number,
-            parentStartDate?: string
+            parentStartDate?: string,
+            hasFrontmatterParent?: boolean
         ): Task[] => {
             const extractedTasks: Task[] = [];
 
@@ -121,8 +120,9 @@ export class TaskScanner {
                 const actualLineNumber = baseLineNumber + i;
                 let task = TaskParser.parse(line, file.path, actualLineNumber);
 
-                // 非デイリーノートで時刻のみ（日付なし）のタスクはプレーンチェックボックスとして扱う
-                if (task && !parentStartDate && !task.startDate && !task.endDate && !task.due
+                // 非デイリーノートかつFM/Container親がないファイルで、時刻のみ（日付なし）のタスクはプレーンチェックボックスとして扱う
+                if (task && !parentStartDate && !hasFrontmatterParent
+                    && !task.startDate && !task.endDate && !task.due
                     && (!task.commands || task.commands.length === 0)) {
                     task = null;
                 }
@@ -180,14 +180,7 @@ export class TaskScanner {
                             return c.substring(minIndent);
                         });
 
-                        // 子タスク行以降を除外（子タスクの childLines が親に混入するのを防止）
-                        const ownLines: string[] = [];
-                        for (const ln of normalized) {
-                            if (/^\s*- \[.\]/.test(ln)) break;
-                            ownLines.push(ln);
-                        }
-
-                        task.childLines = ChildLineClassifier.classifyLines(ownLines);
+                        task.childLines = ChildLineClassifier.classifyLines(normalized);
                     } else {
                         task.childLines = ChildLineClassifier.classifyLines(children);
                     }
@@ -252,15 +245,21 @@ export class TaskScanner {
 
         // デイリーノートのファイル名から日付を抽出（親タスクからの継承は廃止）
         const dailyNoteDate = DailyNoteUtils.parseDateFromFilePath(this.app, file.path);
-        const allExtractedTasks = extractTasksFromLines(bodyLines, bodyStartIndex, dailyNoteDate ?? undefined);
+        const hasFmParent = fmResult !== null;
+        const allExtractedTasks = extractTasksFromLines(bodyLines, bodyStartIndex, dailyNoteDate ?? undefined, hasFmParent);
 
         if (fmResult) {
             const fmTask = fmResult.task;
 
+            // Container の content フォールバック: ファイル名のbasenameを使用
+            if (fmResult.isContainer && !fmTask.content) {
+                fmTask.content = file.basename;
+            }
+
             // Store wikilink refs separately
             this.store.setWikilinkRefs(fmTask.id, fmResult.wikilinkRefs);
 
-            // frontmatter の childLine 範囲に含まれるボディタスクを frontmatter タスクの子にする
+            // frontmatter の childLine 範囲に含まれるボディタスクを FM/Container タスクの子にする
             const childLineSet = new Set<number>(fmTask.childLineBodyOffsets);
             for (const bt of allExtractedTasks) {
                 if (!bt.parentId && childLineSet.has(bt.line)) {
@@ -268,25 +267,26 @@ export class TaskScanner {
                     fmTask.childIds.push(bt.id);
                 }
             }
-            newTasks.push(fmTask);
+
+            // 全孤児インラインタスクを FM/Container の子にする
+            for (const bt of allExtractedTasks) {
+                if (!bt.parentId) {
+                    bt.parentId = fmTask.id;
+                    fmTask.childIds.push(bt.id);
+                }
+            }
+
+            // Container は子がなければ作成しない
+            if (fmResult.isContainer && fmTask.childIds.length === 0 && fmTask.childLines.length === 0) {
+                // Container をスキップ（子もchildLinesもない）
+            } else {
+                newTasks.push(fmTask);
+            }
         }
         newTasks.push(...allExtractedTasks);
 
-        // 同一ファイル内の親→子 properties 継承
+        // 同一ファイル内の親→子 properties/tags/color/linestyle 継承
         PropertyInheritanceResolver.resolve(newTasks);
-
-        // Resolve file-level color/linestyle/tags from frontmatter
-        const fileColor = TaskStyleResolver.getFileColor(this.app, file.path, this.settings.frontmatterTaskKeys.color);
-        const fileLinestyle = TaskStyleResolver.getFileLinestyle(this.app, file.path, this.settings.frontmatterTaskKeys.linestyle);
-        const sharedtagsKey = this.settings.frontmatterTaskKeys.sharedtags;
-        const fileTags = TagExtractor.fromFrontmatter(
-            this.app.metadataCache.getFileCache(file)?.frontmatter?.[sharedtagsKey]
-        );
-        for (const task of newTasks) {
-            if (fileColor) task.color = fileColor;
-            if (fileLinestyle) task.linestyle = fileLinestyle;
-            if (fileTags.length > 0) task.tags = TagExtractor.merge(task.tags, fileTags);
-        }
 
         // 2. 現在の完了カウント
         const currentCounts = new Map<string, number>();

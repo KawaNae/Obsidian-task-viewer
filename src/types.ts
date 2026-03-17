@@ -90,6 +90,9 @@ export interface Task {
     color?: string;
     linestyle?: string;
 
+    // True when this is a Container task (no dates, groups inline tasks).
+    isContainer?: boolean;
+
     /** Custom properties parsed from childLines / frontmatter. Read-only. */
     properties: Record<string, PropertyValue>;
 }
