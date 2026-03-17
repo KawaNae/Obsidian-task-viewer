@@ -22,11 +22,11 @@ body.is-phone.task-viewer-hide-view-header .workspace-leaf-content[data-type="ka
 }
 
 /* Mobile: adjust linear-gradient width */
-body.is-phone.task-viewer-fix-mobile-gradient .workspace-leaf-content[data-type="timeline-view"]:after,
-body.is-phone.task-viewer-fix-mobile-gradient .workspace-leaf-content[data-type="schedule-view"]:after,
-body.is-phone.task-viewer-fix-mobile-gradient .workspace-leaf-content[data-type="calendar-view"]:after,
-body.is-phone.task-viewer-fix-mobile-gradient .workspace-leaf-content[data-type="timer-view"]:after,
-body.is-phone.task-viewer-fix-mobile-gradient .workspace-leaf-content[data-type="kanban-view"]:after {
+body.is-mobile.task-viewer-fix-mobile-gradient .workspace-leaf-content[data-type="timeline-view"]:after,
+body.is-mobile.task-viewer-fix-mobile-gradient .workspace-leaf-content[data-type="schedule-view"]:after,
+body.is-mobile.task-viewer-fix-mobile-gradient .workspace-leaf-content[data-type="calendar-view"]:after,
+body.is-mobile.task-viewer-fix-mobile-gradient .workspace-leaf-content[data-type="timer-view"]:after,
+body.is-mobile.task-viewer-fix-mobile-gradient .workspace-leaf-content[data-type="kanban-view"]:after {
     width: 100%;
 }
 

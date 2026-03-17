@@ -118,7 +118,9 @@ export class MoveStrategy extends BaseDragStrategy {
 
     private initTimelineMove(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
         this.scrollContainer = context.container.querySelector('.timeline-scroll-area') as HTMLElement;
-        this.ghostManager = new GhostManager(this.scrollContainer || context.container);
+        const ghostContainer = this.scrollContainer?.querySelector('.timeline-scroll-area__grid') as HTMLElement
+            || this.scrollContainer || context.container;
+        this.ghostManager = new GhostManager(ghostContainer);
 
         const zoomLevel = context.getZoomLevel();
         const startMinutes = Number.parseFloat(el.style.getPropertyValue('--start-minutes') || '0');
@@ -653,9 +655,13 @@ export class MoveStrategy extends BaseDragStrategy {
         if (!this.scrollContainer) return;
         const rect = this.scrollContainer.getBoundingClientRect();
         const scrollThreshold = 50;
-        const scrollSpeed = 10;
+        const scrollSpeed = 20;
 
-        const shouldScrollUp = mouseY < rect.top + scrollThreshold;
+        // Use allday bottom as effective top so auto-scroll zone doesn't overlap sticky allday
+        const allday = this.scrollContainer.querySelector('.allday-section') as HTMLElement | null;
+        const effectiveTop = allday ? allday.getBoundingClientRect().bottom : rect.top;
+
+        const shouldScrollUp = mouseY < effectiveTop + scrollThreshold;
         const shouldScrollDown = mouseY > rect.bottom - scrollThreshold;
 
         if (shouldScrollUp || shouldScrollDown) {
