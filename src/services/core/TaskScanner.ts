@@ -189,11 +189,28 @@ export class TaskScanner {
                     }
 
                     // 子のインデントを正規化 + childLines 設定
-                    // childIds に含まれる子タスクの行のみ除外（plain checkbox は残す）
-                    const childTaskLines = new Set<number>();
-                    for (const cid of task.childIds) {
-                        const ct = childTasks.find(t => t.id === cid);
-                        if (ct) childTaskLines.add(ct.line);
+                    // 子タスクとその配下行（property行等）をすべて除外（plain checkbox は残す）
+                    const childTaskLineSet = new Set<number>();
+                    for (const ct of childTasks) {
+                        childTaskLineSet.add(ct.line);
+                    }
+
+                    const excludeIndices = new Set<number>();
+                    for (let k = 0; k < children.length; k++) {
+                        const absLine = actualLineNumber + 1 + k;
+                        if (!childTaskLineSet.has(absLine)) continue;
+                        excludeIndices.add(k);
+                        // この子タスクより深いインデントの後続行も除外
+                        const ctIndent = children[k].search(/\S|$/);
+                        for (let m = k + 1; m < children.length; m++) {
+                            const nextLine = children[m];
+                            if (nextLine.trim() === '') { excludeIndices.add(m); continue; }
+                            if (nextLine.search(/\S|$/) > ctIndent) {
+                                excludeIndices.add(m);
+                            } else {
+                                break;
+                            }
+                        }
                     }
 
                     const nonEmptyChildren = children.filter(c => c.trim() !== '');
@@ -206,8 +223,7 @@ export class TaskScanner {
 
                         const ownLines: string[] = [];
                         for (let k = 0; k < normalized.length; k++) {
-                            const absLine = actualLineNumber + 1 + k;
-                            if (childTaskLines.has(absLine)) continue;
+                            if (excludeIndices.has(k)) continue;
                             ownLines.push(normalized[k]);
                         }
 
