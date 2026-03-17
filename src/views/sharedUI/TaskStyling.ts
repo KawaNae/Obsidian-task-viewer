@@ -1,10 +1,6 @@
-import { App } from 'obsidian';
-import { TaskStyleResolver } from '../../services/styling/TaskStyleResolver';
-
 /**
  * Task accent color and line style DOM utilities.
  * Applies CSS custom properties to task elements.
- * Data retrieval is delegated to TaskStyleResolver in the services layer.
  */
 export class TaskStyling {
     private static readonly VALID_LINE_STYLES = new Set(['solid', 'dashed', 'dotted', 'double', 'dashdotted']);
@@ -53,14 +49,6 @@ export class TaskStyling {
         return { h, s, l };
     }
 
-    static getFileColor(app: App, filePath: string, frontmatterKey: string | null): string | null {
-        return TaskStyleResolver.getFileColor(app, filePath, frontmatterKey);
-    }
-
-    static getFileLinestyle(app: App, filePath: string, frontmatterKey: string | null): string | null {
-        return TaskStyleResolver.getFileLinestyle(app, filePath, frontmatterKey);
-    }
-
     /**
      * Applies a file-based accent color to a task element.
      * Sets CSS custom properties for the accent color (HSL format for flexibility).
@@ -94,21 +82,5 @@ export class TaskStyling {
         const normalized = TaskStyling.VALID_LINE_STYLES.has(linestyle) ? linestyle : 'solid';
         el.style.setProperty('--file-linestyle', normalized);
         el.dataset.fileLinestyle = normalized;
-    }
-
-    /**
-     * Convenience method that combines getFileColor and applyTaskColor.
-     */
-    static applyFileColor(app: App, el: HTMLElement, filePath: string, frontmatterKey: string | null): void {
-        const color = TaskStyling.getFileColor(app, filePath, frontmatterKey);
-        TaskStyling.applyTaskColor(el, color);
-    }
-
-    /**
-     * Convenience method that combines getFileLinestyle and applyTaskLinestyle.
-     */
-    static applyFileLinestyle(app: App, el: HTMLElement, filePath: string, frontmatterKey: string | null): void {
-        const linestyle = TaskStyling.getFileLinestyle(app, filePath, frontmatterKey);
-        TaskStyling.applyTaskLinestyle(el, linestyle);
     }
 }
