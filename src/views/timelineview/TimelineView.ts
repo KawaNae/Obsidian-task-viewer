@@ -79,6 +79,7 @@ export class TimelineView extends ItemView {
     private pinchInitialMidY: number = 0;
     private pinchInitialScrollTop: number = 0;
     private isPinching: boolean = false;
+    private sidebarOpenedThisSession = false;
 
     // ==================== Lifecycle ====================
 
@@ -231,6 +232,7 @@ export class TimelineView extends ItemView {
                 onStateChange: () => { },
                 getDatesToShow: () => this.getDatesToShow(),
                 onRequestSidebarToggle: (nextOpen) => {
+                    if (nextOpen) this.sidebarOpenedThisSession = true;
                     this.viewState.showSidebar = nextOpen;
                     this.sidebarManager.applyOpen(nextOpen, { animate: true, persist: true });
                 },
@@ -501,6 +503,10 @@ export class TimelineView extends ItemView {
     }
 
     private render() {
+        // On narrow/mobile, force sidebar closed unless user explicitly opened it this session
+        if (this.sidebarManager.isNarrow() && !this.sidebarOpenedThisSession) {
+            this.viewState.showSidebar = false;
+        }
         this.sidebarManager.syncPresentation(this.viewState.showSidebar, { animate: false });
 
         // Save scroll position
@@ -633,6 +639,7 @@ export class TimelineView extends ItemView {
                 },
                 getDatesToShow: () => this.getDatesToShow(),
                 onRequestSidebarToggle: (nextOpen) => {
+                    if (nextOpen) this.sidebarOpenedThisSession = true;
                     this.viewState.showSidebar = nextOpen;
                     this.sidebarManager.applyOpen(nextOpen, { animate: true, persist: true });
                 },

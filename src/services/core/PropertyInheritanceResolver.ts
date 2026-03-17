@@ -1,8 +1,9 @@
 import type { Task } from '../../types';
+import { TagExtractor } from '../../utils/TagExtractor';
 
 export class PropertyInheritanceResolver {
     /**
-     * 同一ファイル内の親→子 properties 継承（child-wins マージ）。
+     * 同一ファイル内の親→子 properties / tags 継承（child-wins マージ）。
      * parentId/childIds が設定済みの Task 配列に対して BFS で解決。
      */
     static resolve(tasks: Task[]): void {
@@ -24,6 +25,9 @@ export class PropertyInheritanceResolver {
                 if (!child) continue;
                 if (Object.keys(parent.properties).length > 0) {
                     child.properties = { ...parent.properties, ...child.properties };
+                }
+                if (parent.tags.length > 0) {
+                    child.tags = TagExtractor.merge(parent.tags, child.tags);
                 }
                 queue.push(child);
             }

@@ -128,7 +128,7 @@
 }
 
 .view-sidebar-layout--mobile .view-sidebar-panel {
-    width: min(92vw, 360px);
+    width: min(70%, 300px);
     border-left: 1px solid var(--tv-border);
     box-shadow: -8px 0 24px var(--tv-shadow-medium);
     z-index: var(--z-overlay);

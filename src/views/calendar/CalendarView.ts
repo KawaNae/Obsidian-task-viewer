@@ -64,6 +64,7 @@ export class CalendarView extends ItemView {
     private pinnedListCollapsed: Record<string, boolean> = {};
     private pinnedLists: PinnedListDefinition[] = [];
     private customName: string | undefined;
+    private sidebarOpenedThisSession = false;
 
     constructor(leaf: WorkspaceLeaf, taskIndex: TaskIndex, plugin: TaskViewerPlugin) {
         super(leaf);
@@ -274,6 +275,10 @@ export class CalendarView extends ItemView {
             this.windowStart = normalizedWindowStart;
         }
 
+        // On narrow/mobile, force sidebar closed unless user explicitly opened it this session
+        if (this.sidebarManager.isNarrow() && !this.sidebarOpenedThisSession) {
+            this.showSidebar = false;
+        }
         this.sidebarManager.syncPresentation(this.showSidebar, { animate: false });
         this.container.empty();
 
@@ -416,6 +421,7 @@ export class CalendarView extends ItemView {
                 }
                 if (template.pinnedLists) this.pinnedLists = template.pinnedLists;
                 if (template.showSidebar != null) {
+                    if (template.showSidebar) this.sidebarOpenedThisSession = true;
                     this.showSidebar = template.showSidebar;
                     this.sidebarManager.applyOpen(template.showSidebar, { persist: true });
                 }
@@ -429,6 +435,7 @@ export class CalendarView extends ItemView {
             onReset: () => {
                 this.filterMenu.setFilterState(createEmptyFilterState());
                 this.pinnedLists = [];
+                this.sidebarOpenedThisSession = true;
                 this.showSidebar = true;
                 this.sidebarManager.applyOpen(true, { persist: true });
                 this.customName = undefined;
@@ -445,6 +452,7 @@ export class CalendarView extends ItemView {
         this.syncSidebarToggleBtn = () => updateSidebarToggleButton(toggleBtn, this.showSidebar);
         toggleBtn.onclick = () => {
             const nextOpen = !this.showSidebar;
+            if (nextOpen) this.sidebarOpenedThisSession = true;
             this.showSidebar = nextOpen;
             this.sidebarManager.applyOpen(nextOpen, { animate: true, persist: true });
         };

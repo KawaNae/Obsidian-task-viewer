@@ -60,4 +60,38 @@ describe('PropertyInheritanceResolver', () => {
         expect(c1.properties).toEqual({ shared: pv('yes'), own1: pv('a') });
         expect(c2.properties).toEqual({ shared: pv('yes'), own2: pv('b') });
     });
+
+    // --- Tag inheritance ---
+
+    it('tags: child inherits parent tags', () => {
+        const parent = makeTask({ id: 'p', childIds: ['c'], tags: ['work', 'urgent'] });
+        const child = makeTask({ id: 'c', parentId: 'p', tags: [] });
+        PropertyInheritanceResolver.resolve([parent, child]);
+        expect(child.tags).toEqual(expect.arrayContaining(['work', 'urgent']));
+        expect(child.tags).toHaveLength(2);
+    });
+
+    it('tags: child tags merged with parent, deduplicated', () => {
+        const parent = makeTask({ id: 'p', childIds: ['c'], tags: ['work', 'urgent'] });
+        const child = makeTask({ id: 'c', parentId: 'p', tags: ['urgent', 'personal'] });
+        PropertyInheritanceResolver.resolve([parent, child]);
+        expect(child.tags).toEqual(expect.arrayContaining(['work', 'urgent', 'personal']));
+        expect(child.tags).toHaveLength(3);
+    });
+
+    it('tags: multi-level cascade', () => {
+        const gp = makeTask({ id: 'gp', childIds: ['p'], tags: ['a'] });
+        const parent = makeTask({ id: 'p', parentId: 'gp', childIds: ['c'], tags: ['b'] });
+        const child = makeTask({ id: 'c', parentId: 'p', tags: ['c'] });
+        PropertyInheritanceResolver.resolve([gp, parent, child]);
+        expect(parent.tags).toEqual(expect.arrayContaining(['a', 'b']));
+        expect(child.tags).toEqual(expect.arrayContaining(['a', 'b', 'c']));
+    });
+
+    it('tags: parent with no tags does not affect child', () => {
+        const parent = makeTask({ id: 'p', childIds: ['c'], tags: [] });
+        const child = makeTask({ id: 'c', parentId: 'p', tags: ['own'] });
+        PropertyInheritanceResolver.resolve([parent, child]);
+        expect(child.tags).toEqual(['own']);
+    });
 });
