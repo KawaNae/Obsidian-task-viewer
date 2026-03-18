@@ -1,6 +1,7 @@
 import type { CliData } from 'obsidian';
 import type TaskViewerPlugin from '../../main';
 import type { FilterState } from '../../services/filter/FilterTypes';
+import { loadFilterFile } from '../../api/FilterFileLoader';
 import { TaskApiError } from '../../api/TaskApiTypes';
 import type { ListParams, TodayParams, ApiSortRule } from '../../api/TaskApiTypes';
 import {
@@ -25,17 +26,11 @@ function parseSortFlag(sortFlag: string): ApiSortRule[] {
         });
 }
 
-function cliDataToListParams(params: CliData): ListParams {
+function cliDataToListParams(params: CliData, preloadedFilter?: FilterState): ListParams {
     const result: ListParams = {};
 
-    // Filter: raw JSON takes precedence
-    if (params.filter) {
-        let parsed: unknown;
-        try { parsed = JSON.parse(params.filter); } catch { throw new TaskApiError('Failed to parse filter JSON'); }
-        if (!(parsed && typeof parsed === 'object' && 'root' in parsed)) {
-            throw new TaskApiError('Invalid filter JSON: missing root group');
-        }
-        result.filter = parsed as FilterState;
+    if (preloadedFilter) {
+        result.filter = preloadedFilter;
     } else {
         if (params.file) result.file = params.file;
         if (params.status) result.status = params.status.split(',').map(s => s.trim()).filter(Boolean);
@@ -88,17 +83,26 @@ function validateFormat(params: CliData): string | null {
 // ── Handlers ──
 
 export function createListHandler(plugin: TaskViewerPlugin) {
-    return (params: CliData): string => {
+    return async (params: CliData): Promise<string> => {
         const formatErr = validateFormat(params);
         if (formatErr) return cliError(formatErr);
 
         try {
-            const apiParams = cliDataToListParams(params);
-            const result = plugin.api.list(apiParams);
+            let preloadedFilter: FilterState | undefined;
+
+            const filterFilePath = params['filter-file'];
+            if (filterFilePath) {
+                const result = await loadFilterFile(plugin.app, filterFilePath, params.list);
+                if (typeof result === 'string') return cliError(result);
+                preloadedFilter = result;
+            }
+
+            const apiParams = cliDataToListParams(params, preloadedFilter);
+            const listResult = await plugin.api.list(apiParams);
 
             const format = (params.format as OutputFormat) || 'json';
             const fields = resolveFields(params.outputFields);
-            return formatOutput(result.tasks, format, fields);
+            return formatOutput(listResult.tasks, format, fields);
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.message : String(e));
         }

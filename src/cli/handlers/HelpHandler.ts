@@ -9,7 +9,6 @@ Commands
   list          List tasks with filters, sort, and pagination
   today         List tasks active today (visual-date aware)
   get           Get a single task by ID
-  query         Query tasks using a saved view template
   create        Create a new inline task
   update        Update an existing task
   delete        Delete a task
@@ -60,7 +59,9 @@ list: Filter Flags
   color=<colors>       Card color(s), comma-separated
   type=<types>         Task type (at-notation, frontmatter)
   property=<key:value> Custom property (e.g. "priority:high")
-  filter=<json>        Full FilterState JSON (overrides all above — see below)
+  filter-file=<path>   FilterState JSON file (.json) or view template (.md)
+                       Overrides all simple filter flags above (see below)
+  list=<name>          Pinned list name (when filter-file is a .md template)
 
 create: Flags
 -------------
@@ -81,11 +82,53 @@ update: Flags
   due=<YYYY-MM-DD>     New due date
   status=<char>        New status character
 
-FilterState JSON
-================
+filter-file: File-based Filtering
+==================================
 
-The "filter" flag accepts a FilterState JSON that overrides all simple filter flags.
-Use it for advanced filtering: OR conditions, exact tag matching, nested groups, etc.
+The filter-file flag loads a filter from a file in the vault.
+Two file types are supported:
+
+  .json — Raw FilterState JSON (standard JSON with double quotes).
+  .md   — View template saved from the plugin UI.
+
+.json files
+-----------
+Create a JSON file anywhere in your vault containing a FilterState object:
+
+  {
+    "root": {
+      "type": "group",
+      "id": "g1",
+      "logic": "and",
+      "children": [
+        {
+          "type": "condition",
+          "id": "c1",
+          "property": "tag",
+          "operator": "equals",
+          "value": { "type": "stringSet", "values": ["work"] }
+        }
+      ]
+    }
+  }
+
+  obsidian obsidian-task-viewer:list filter-file=filters/exact-tag.json
+
+.md view templates
+------------------
+Use a view template saved from the plugin's "Save view..." menu.
+Templates can contain a view-level filter and/or pinned lists.
+
+  No pinned lists — applies the view filter directly:
+    obsidian obsidian-task-viewer:list filter-file=templates/work.md
+
+  With pinned lists — specify which list to use with list=<name>:
+    obsidian obsidian-task-viewer:list filter-file=templates/work.md list=urgent
+
+  If pinned lists exist but list= is omitted, an error shows available names.
+
+FilterState JSON Reference
+==========================
 
 Structure
 ---------
@@ -150,20 +193,6 @@ Value Types
 Date Presets
 ------------
   today, thisWeek, nextWeek, pastWeek, nextNDays (with "n" field), thisMonth, thisYear
-
-Examples
---------
-1) Exact tag match ("work" only, excludes "work/meeting"):
-
-  obsidian obsidian-task-viewer:list filter='{"root":{"type":"group","id":"g1","logic":"and","children":[{"type":"condition","id":"c1","property":"tag","operator":"equals","value":{"type":"stringSet","values":["work"]}}]}}'
-
-2) OR condition (status is "x" OR due is on or before today):
-
-  obsidian obsidian-task-viewer:list filter='{"root":{"type":"group","id":"g1","logic":"or","children":[{"type":"condition","id":"c1","property":"status","operator":"includes","value":{"type":"stringSet","values":["x"]}},{"type":"condition","id":"c2","property":"due","operator":"onOrBefore","value":{"type":"date","value":{"mode":"relative","preset":"today"}}}]}}'
-
-3) Overdue tasks (due before today):
-
-  obsidian obsidian-task-viewer:list filter='{"root":{"type":"group","id":"g1","logic":"and","children":[{"type":"condition","id":"c1","property":"due","operator":"before","value":{"type":"date","value":{"mode":"relative","preset":"today"}}}]}}'
 `.trim();
 
 export function createHelpHandler() {

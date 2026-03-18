@@ -68,6 +68,8 @@ export interface ListParams extends PaginationParams {
     type?: string | string[];    // task type (at-notation, frontmatter)
     root?: boolean;              // root tasks only (no parent)
     filter?: FilterState;     // overrides simple filter fields above
+    filterFile?: string;      // vault file path (.json FilterState or .md view template)
+    list?: string;            // pinned list name (when filterFile is a .md template)
     sort?: ApiSortRule[];
 }
 

@@ -1,7 +1,7 @@
 import type { CliFlags } from 'obsidian';
 import type TaskViewerPlugin from '../main';
 import { createListHandler, createTodayHandler, createGetHandler } from './handlers/TaskQueryHandlers';
-import { createQueryHandler } from './handlers/TemplateQueryHandler';
+
 import { createCreateHandler, createUpdateHandler, createDeleteHandler } from './handlers/TaskCrudHandlers';
 import { createHelpHandler } from './handlers/HelpHandler';
 
@@ -9,7 +9,7 @@ import { createHelpHandler } from './handlers/HelpHandler';
  * Register all CLI handlers for the Task Viewer plugin.
  * Call once from plugin.onload() after TaskIndex is initialized.
  *
- * Commands (8): list, today, get, query, create, update, delete, help
+ * Commands (7): list, today, get, create, update, delete, help
  */
 export function registerCliHandlers(plugin: TaskViewerPlugin): void {
     // ── Query commands (read-only) ──
@@ -28,7 +28,8 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
         color:   { value: '<colors>',        description: 'Filter by color(s), comma-separated' },
         type:    { value: '<types>',          description: 'Filter by task type (at-notation, frontmatter)' },
         root:    { description: 'Only root tasks (no parent)' },
-        filter:  { value: '<json>',          description: 'Full FilterState JSON (overrides simple flags). Run obsidian obsidian-task-viewer:help for details' },
+        'filter-file': { value: '<path>',     description: 'FilterState JSON (.json) or view template (.md). Overrides simple filter flags' },
+        list:    { value: '<name>',          description: 'Pinned list name (for .md templates with pinnedLists)' },
         sort:    { value: '<prop[:dir],..>', description: 'Sort (e.g. startDate:asc,due:desc)' },
         limit:   { value: '<number>',        description: 'Max results (default: 100)' },
         offset:  { value: '<number>',        description: 'Skip first N results' },
@@ -70,19 +71,6 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
         'Get a single task by ID',
         getFlags,
         createGetHandler(plugin),
-    );
-
-    // ── Template query ──
-
-    plugin.registerCliHandler(
-        'obsidian-task-viewer:query',
-        'Query tasks using a saved view template',
-        {
-            template: { value: '<name>', description: 'Template basename', required: true },
-            format:   { value: 'json|tsv|jsonl', description: 'Output format' },
-            outputFields: { value: '<key,key,...>', description: 'Output fields (default: id only)' },
-        },
-        createQueryHandler(plugin),
     );
 
     // ── CRUD commands ──
