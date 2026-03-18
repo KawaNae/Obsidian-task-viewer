@@ -13,6 +13,7 @@ import { ViewTemplateLoader } from '../services/template/ViewTemplateLoader';
 import { HeadingInserter } from '../utils/HeadingInserter';
 import { parseDateTimeFlag } from '../cli/CliFilterBuilder';
 import { buildFilterFromParams } from './FilterParamsBuilder';
+import { loadFilterFile } from './FilterFileLoader';
 import {
     TaskApiError,
     type NormalizedTask,
@@ -31,6 +32,183 @@ import {
     type ApiSortRule,
     type PaginationParams,
 } from './TaskApiTypes';
+
+const API_HELP_TEXT = `
+Task Viewer API Reference
+=========================
+
+Access: app.plugins.plugins['obsidian-task-viewer'].api
+
+Methods
+-------
+
+  list(params?: ListParams): Promise<TaskListResult>
+    List tasks with optional filters, sort, and pagination.
+
+    ListParams:
+      file?: string               File path (.md auto-appended)
+      status?: string | string[]   Status char(s) (e.g. 'x' or ['x', '-'])
+      tag?: string | string[]      Tag(s) (# auto-stripped, hierarchy match)
+      content?: string             Content partial match
+      date?: string                Tasks active on date (YYYY-MM-DD or preset)
+      from?: string                startDate >= value
+      to?: string                  endDate <= value
+      due?: string                 Due date equals
+      leaf?: boolean               Only leaf tasks (no children)
+      root?: boolean               Only root tasks (no parent)
+      property?: string            Custom property ("key:value")
+      color?: string | string[]    Card color(s)
+      type?: string | string[]     Task type (at-notation, frontmatter)
+      filter?: FilterState         FilterState object (overrides simple fields)
+      filterFile?: string          Vault file path (.json or .md template)
+      list?: string                Pinned list name (for .md templates)
+      sort?: ApiSortRule[]         Sort rules [{property, direction?}]
+      limit?: number               Max results (default: 100)
+      offset?: number              Skip first N results
+
+    Returns: { count: number, tasks: NormalizedTask[] }
+
+  today(params?: TodayParams): TaskListResult
+    List tasks active today (visual-date aware).
+
+    TodayParams:
+      leaf?: boolean               Only leaf tasks
+      sort?: ApiSortRule[]         Sort rules
+      limit?: number               Max results (default: 100)
+      offset?: number              Skip first N results
+
+  get(params: GetParams): NormalizedTask
+    Get a single task by ID.
+
+    GetParams:
+      id: string                   Task ID (required)
+
+  query(params: QueryParams): Promise<QueryResult>
+    Query tasks using a saved view template.
+
+    QueryParams:
+      template: string             Template basename (required)
+
+    Returns: { template, viewType, lists: [{ name, count, tasks }] }
+
+  create(params: CreateParams): Promise<MutationResult>
+    Create a new inline task.
+
+    CreateParams:
+      file: string                 Target file path (required)
+      content: string              Task content (required)
+      start?: string               Start date (YYYY-MM-DD, YYYY-MM-DD HH:mm, HH:mm)
+      end?: string                 End date/datetime
+      due?: string                 Due date (YYYY-MM-DD)
+      status?: string              Status character (default: ' ')
+      heading?: string             Insert under heading (default: end of file)
+
+  update(params: UpdateParams): Promise<MutationResult>
+    Update an existing task.
+
+    UpdateParams:
+      id: string                   Task ID (required)
+      content?: string             New content
+      start?: string               New start date/datetime
+      end?: string                 New end date/datetime
+      due?: string                 New due date
+      status?: string              New status character
+
+  delete(params: DeleteParams): Promise<DeleteResult>
+    Delete a task.
+
+    DeleteParams:
+      id: string                   Task ID (required)
+
+  help(): string
+    Show this reference.
+
+Sort
+----
+  ApiSortRule: { property: string, direction?: 'asc' | 'desc' }
+  Properties: content, due, startDate, endDate, file, status, tag
+
+Date Formats
+------------
+  Absolute:  YYYY-MM-DD (e.g. 2026-03-15)
+  Datetime:  YYYY-MM-DD HH:mm (e.g. 2026-03-15 14:00)
+  Time only: HH:mm (e.g. 14:00)
+  Presets:   today, thisWeek, pastWeek, nextWeek, thisMonth, thisYear,
+             next7days, next30days
+
+FilterState
+-----------
+  { root: FilterGroupNode }
+
+  FilterGroupNode:
+    { type: 'group', id: string, logic: 'and' | 'or',
+      children: (FilterConditionNode | FilterGroupNode)[] }
+
+  FilterConditionNode:
+    { type: 'condition', id: string, property: string,
+      operator: string, value: FilterValue }
+
+  Properties & Operators:
+    file       : includes, excludes
+    tag        : includes, excludes, equals
+    status     : includes, excludes
+    content    : contains, notContains
+    startDate  : isSet, isNotSet, equals, before, after, onOrBefore, onOrAfter
+    endDate    : isSet, isNotSet, equals, before, after, onOrBefore, onOrAfter
+    due        : isSet, isNotSet, equals, before, after, onOrBefore, onOrAfter
+    color      : includes, excludes
+    linestyle  : includes, excludes
+    length     : lessThan, lessThanOrEqual, greaterThan, greaterThanOrEqual, equals, isSet, isNotSet
+    taskType   : includes, excludes
+    parent     : isSet, isNotSet
+    children   : isSet, isNotSet
+    property   : isSet, isNotSet, equals, contains, notContains
+
+  Value Types:
+    stringSet : { type: 'stringSet', values: ['a', 'b'] }
+    string    : { type: 'string', value: 'text' }
+    boolean   : { type: 'boolean', value: true }
+    date      : { type: 'date', value: { mode: 'absolute', date: 'YYYY-MM-DD' } }
+            or: { type: 'date', value: { mode: 'relative', preset: '<preset>' } }
+    number    : { type: 'number', value: 60, unit: 'minutes' }
+    property  : { type: 'property', key: 'priority', value: 'high' }
+
+NormalizedTask Fields
+---------------------
+  id, file, line, content, status, startDate, startTime, endDate, endTime,
+  due, tags, parserId, parentId, childIds, color, linestyle,
+  effectiveStartDate, effectiveStartTime, effectiveEndDate, effectiveEndTime,
+  durationMinutes, properties
+
+Examples
+--------
+  const api = app.plugins.plugins['obsidian-task-viewer'].api;
+
+  // List all tasks in a file
+  await api.list({ file: 'daily/2026-03-15' });
+
+  // Filter by tag (exact match)
+  await api.list({
+    filter: {
+      root: { type: 'group', id: 'g1', logic: 'and', children: [
+        { type: 'condition', id: 'c1', property: 'tag', operator: 'equals',
+          value: { type: 'stringSet', values: ['work'] } }
+      ]}
+    }
+  });
+
+  // Use a filter file
+  await api.list({ filterFile: 'filters/exact-tag.json' });
+
+  // Use a view template with pinned list
+  await api.list({ filterFile: 'templates/work.md', list: 'urgent' });
+
+  // Today's tasks, sorted by start date
+  api.today({ sort: [{ property: 'startDate', direction: 'asc' }] });
+
+  // Get a specific task
+  api.get({ id: 'at-notation:daily/2026-03-15.md:ln:5' });
+`.trim();
 
 // ── Internal helpers ──
 
@@ -85,8 +263,16 @@ export class TaskApi {
     /**
      * List tasks with optional filters, sort, and pagination.
      */
-    list(params?: ListParams): TaskListResult {
-        const p = params ?? {};
+    async list(params?: ListParams): Promise<TaskListResult> {
+        const p = { ...(params ?? {}) };
+
+        // Resolve filterFile → filter (async file read)
+        if (p.filterFile) {
+            const result = await loadFilterFile(this.plugin.app, p.filterFile, p.list);
+            if (typeof result === 'string') throw new TaskApiError(result);
+            p.filter = result;
+        }
+
         const taskIndex = this.plugin.getTaskIndex();
         const { startHour } = this.plugin.settings;
 
@@ -336,5 +522,12 @@ export class TaskApi {
 
         await taskIndex.deleteTask(params.id);
         return { deleted: params.id };
+    }
+
+    /**
+     * Return API reference text.
+     */
+    help(): string {
+        return API_HELP_TEXT;
     }
 }

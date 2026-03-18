@@ -344,11 +344,12 @@ obsidian obsidian-task-viewer:list tag=work format=json outputFields=content,sta
 | `color` | カード色で絞り込み（カンマ区切り） | `color=red,blue` |
 | `type` | タスク種別で絞り込み | `type=frontmatter` |
 | `root` | 親タスクを持たないタスクのみ | `root` |
-| `filter` | FilterState JSON（上記フラグより優先） | `filter={"root":...}` |
+| `filter-file` | FilterState JSON (.json) またはビューテンプレート (.md) | `filter-file=filters/tag.json` |
+| `list` | ピン留めリスト名（`.md` テンプレート用） | `list=urgent` |
 
 > `date` と `from`/`to` を同時指定するとエラーになります。`date` で特定日、`from`/`to` で範囲指定のいずれかを使用してください。
 >
-> `filter` フラグの詳細（JSON 構造・プロパティ・演算子・使用例）は `obsidian obsidian-task-viewer:help` で確認できます。
+> `filter-file` や FilterState JSON の詳細は `obsidian obsidian-task-viewer:help` で確認できます。
 
 **ソート・ページネーション:**
 
@@ -383,31 +384,6 @@ obsidian obsidian-task-viewer:get id=abc123 outputFields=content,status,startDat
 | フラグ | 必須 | 説明 |
 |-------|------|------|
 | `id` | ○ | タスクID |
-
-#### query — テンプレートクエリ
-
-設定済みのビューテンプレートでタスクを取得します。
-
-```bash
-obsidian obsidian-task-viewer:query template=weekly-review
-```
-
-| フラグ | 必須 | 説明 |
-|-------|------|------|
-| `template` | ○ | テンプレートのベースネーム |
-
-**戻り値:** テンプレートに定義された各リストごとにタスクが返されます。
-
-```json
-{
-  "template": "weekly-review",
-  "viewType": "schedule",
-  "lists": [
-    { "name": "Today", "count": 3, "tasks": [...] },
-    { "name": "Overdue", "count": 1, "tasks": [...] }
-  ]
-}
-```
 
 #### create — タスク作成
 
@@ -548,28 +524,35 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 
 | メソッド | 説明 | 同期/非同期 |
 |---------|------|-----------|
-| `api.list(params?)` | タスク一覧 | sync |
+| `api.list(params?)` | タスク一覧 | async |
 | `api.today(params?)` | 本日のタスク | sync |
 | `api.get({ id })` | 単一タスク取得 | sync |
 | `api.query({ template })` | テンプレートクエリ | async |
 | `api.create({ file, content, ... })` | タスク作成 | async |
 | `api.update({ id, ... })` | タスク更新 | async |
 | `api.delete({ id })` | タスク削除 | async |
+| `api.help()` | API リファレンス表示 | sync |
 
 ### list / today
 
 ```javascript
 // 全タスク（デフォルト100件）
-const result = api.list();
+const result = await api.list();
 
 // フィルタ付き
-const result = api.list({
+const result = await api.list({
   tag: 'work',           // string または string[]
   status: ['x', '-'],    // string または string[]
   date: 'today',         // YYYY-MM-DD またはプリセット
   sort: [{ property: 'startDate', direction: 'asc' }],
   limit: 50,
 });
+
+// FilterState JSON ファイルでフィルタ
+const result = await api.list({ filterFile: 'filters/exact-tag.json' });
+
+// ビューテンプレート + ピン留めリスト指定
+const result = await api.list({ filterFile: 'templates/work.md', list: 'urgent' });
 
 // 本日のタスク
 const result = api.today({
@@ -596,6 +579,8 @@ const result = api.today({
 | `type` | `string \| string[]` | タスク種別（`at-notation`, `frontmatter`） |
 | `root` | `boolean` | 親タスクを持たないタスクのみ |
 | `filter` | `FilterState` | 完全なフィルタ定義（上記フラグより優先） |
+| `filterFile` | `string` | vault 内フィルタファイルパス（`.json` / `.md` テンプレート） |
+| `list` | `string` | ピン留めリスト名（`filterFile` が `.md` テンプレートの場合） |
 | `sort` | `ApiSortRule[]` | ソートルール |
 | `limit` | `number` | 最大件数（デフォルト: 100） |
 | `offset` | `number` | スキップ件数 |
@@ -673,6 +658,23 @@ const result = await api.delete({ id: 'abc123' });
 // => { deleted: 'abc123' }
 ```
 
+### help
+
+API の詳細リファレンスを表示します。
+
+**エディタ（DataviewJS）で表示:**
+
+```dataviewjs
+const api = app.plugins.plugins['obsidian-task-viewer'].api;
+dv.paragraph("```\n" + api.help() + "\n```");
+```
+
+**コンソール（DevTools: Ctrl+Shift+I）で表示:**
+
+```javascript
+console.log(app.plugins.plugins['obsidian-task-viewer'].api.help())
+```
+
 ### NormalizedTask フィールド
 
 API が返すタスクオブジェクトのフィールド一覧です。CLI の `outputFields` でも同じ名前を使用します。
@@ -723,7 +725,7 @@ dv.table(
 const api = app.plugins.plugins['obsidian-task-viewer'].api;
 
 // 特定タグのタスクを一覧
-const result = api.list({ tag: 'reading', status: ' ' });
+const result = await api.list({ tag: 'reading', status: ' ' });
 dv.list(result.tasks.map(t => `${t.content} (${t.due ?? 'no due'})`));
 ```
 
