@@ -365,6 +365,8 @@ export class FilterMenuComponent {
     private renderValueSelector(row: HTMLElement, condition: FilterConditionNode): void {
         if (condition.property === 'content') {
             this.renderTextInput(row, condition);
+        } else if (condition.property === 'tag') {
+            this.renderTagValueSelector(row, condition);
         } else {
             this.renderValueDropdown(row, condition);
         }
@@ -405,6 +407,22 @@ export class FilterMenuComponent {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.showValueMenu(btn, condition);
+        });
+    }
+
+    private renderTagValueSelector(row: HTMLElement, condition: FilterConditionNode): void {
+        const currentValues = condition.value.type === 'stringSet' ? condition.value.values : [];
+        const label = currentValues.length > 0
+            ? this.formatValueLabel(condition.property, currentValues)
+            : 'Select or type...';
+
+        const btn = row.createEl('button', {
+            cls: `filter-popover__dropdown${currentValues.length === 0 ? ' filter-popover__dropdown--placeholder' : ''}`,
+            text: label,
+        });
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.showTagValuePopover(btn, condition);
         });
     }
 
@@ -635,6 +653,125 @@ export class FilterMenuComponent {
         };
         setTimeout(() => {
             document.addEventListener('pointerdown', handler, true);
+        }, 0);
+        this.childPopoverCleanup = () => {
+            document.removeEventListener('pointerdown', handler, true);
+        };
+    }
+
+    private showTagValuePopover(anchorEl: HTMLElement, condition: FilterConditionNode): void {
+        this.closeChildPopover();
+
+        const available = this.getAvailableValues('tag');
+        const currentValues = condition.value.type === 'stringSet'
+            ? new Set(condition.value.values) : new Set<string>();
+
+        const popover = document.createElement('div');
+        popover.className = 'filter-child-popover';
+
+        // Search / add input
+        const searchInput = popover.createEl('input', {
+            cls: 'filter-child-popover__search',
+            type: 'text',
+            attr: { placeholder: 'Type to filter or add tag...' },
+        });
+
+        // Scrollable list container
+        const listEl = popover.createDiv('filter-child-popover__list');
+
+        const rowEls: { row: HTMLElement; value: string }[] = [];
+
+        const renderItem = (val: string, container: HTMLElement): HTMLElement => {
+            const row = container.createDiv('filter-child-popover__item');
+            const checkbox = row.createEl('input', { type: 'checkbox' });
+            checkbox.checked = currentValues.has(val);
+            checkbox.classList.add('filter-child-popover__checkbox');
+            row.createSpan('filter-child-popover__label').setText(`#${val}`);
+
+            row.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (currentValues.has(val)) {
+                    currentValues.delete(val);
+                } else {
+                    currentValues.add(val);
+                }
+                checkbox.checked = currentValues.has(val);
+                condition.value = { type: 'stringSet', values: Array.from(currentValues) };
+                this.lastCallbacks?.onFilterChange();
+            });
+            return row;
+        };
+
+        for (const val of available) {
+            const row = renderItem(val, listEl);
+            rowEls.push({ row, value: val });
+        }
+
+        // Filter items on input
+        searchInput.addEventListener('input', () => {
+            const query = searchInput.value.toLowerCase().replace(/^#/, '');
+            for (const { row, value } of rowEls) {
+                row.style.display = value.toLowerCase().includes(query) ? '' : 'none';
+            }
+        });
+
+        // Enter to add custom tag
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const tag = searchInput.value.trim().replace(/^#/, '');
+                if (!tag) return;
+                if (!currentValues.has(tag)) {
+                    currentValues.add(tag);
+                    condition.value = { type: 'stringSet', values: Array.from(currentValues) };
+                    this.lastCallbacks?.onFilterChange();
+                    // Add a new row if not already in available list
+                    if (!available.includes(tag)) {
+                        const row = renderItem(tag, listEl);
+                        rowEls.push({ row, value: tag });
+                    } else {
+                        // Check the existing row
+                        const existing = rowEls.find(r => r.value === tag);
+                        if (existing) {
+                            const cb = existing.row.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+                            if (cb) cb.checked = true;
+                        }
+                    }
+                }
+                searchInput.value = '';
+                // Reset filter
+                for (const { row } of rowEls) {
+                    row.style.display = '';
+                }
+            }
+        });
+
+        document.body.appendChild(popover);
+        this.childPopoverEl = popover;
+
+        // Position below anchor
+        const anchorRect = anchorEl.getBoundingClientRect();
+        let x = anchorRect.left;
+        let y = anchorRect.bottom + 4;
+        const popRect = popover.getBoundingClientRect();
+        if (x + popRect.width > window.innerWidth) {
+            x = window.innerWidth - popRect.width - 8;
+        }
+        if (y + popRect.height > window.innerHeight) {
+            y = anchorRect.top - popRect.height - 4;
+        }
+        popover.style.left = `${Math.max(8, x)}px`;
+        popover.style.top = `${Math.max(8, y)}px`;
+
+        const handler = (e: MouseEvent) => {
+            const target = e.target as Node;
+            if (popover.contains(target)) return;
+            this.closeChildPopover();
+            this.renderContent();
+        };
+        setTimeout(() => {
+            document.addEventListener('pointerdown', handler, true);
+            searchInput.focus();
         }, 0);
         this.childPopoverCleanup = () => {
             document.removeEventListener('pointerdown', handler, true);

@@ -378,6 +378,33 @@
     text-align: center;
 }
 
+/* Tag search input */
+.filter-child-popover__search {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    font-size: var(--font-ui-small);
+    color: var(--tv-text);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--tv-border);
+    border-radius: 0;
+    outline: none;
+}
+.filter-child-popover__search:focus {
+    border-bottom-color: var(--tv-accent);
+}
+.filter-child-popover__search::placeholder {
+    color: var(--tv-text-muted);
+}
+
+/* Scrollable list within popover (used when search input is present) */
+.filter-child-popover__list {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
 /* Danger item (Remove) — red text */
 .filter-child-popover__item--danger {
     color: var(--text-error);

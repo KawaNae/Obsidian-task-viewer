@@ -112,6 +112,9 @@ export class TaskFilterEngine {
         if (c.operator === 'excludes') {
             return !c.value.values.some(v => task.tags.some(t => this.tagMatches(t, v)));
         }
+        if (c.operator === 'equals') {
+            return c.value.values.some(v => task.tags.some(t => t === v));
+        }
         return true;
     }
 

@@ -205,6 +205,24 @@ describe('TaskFilterEngine', () => {
             const state = stateFromCondition(cond('tag', 'includes', { type: 'stringSet', values: ['project'] }));
             expect(TaskFilterEngine.evaluate(t, state)).toBe(false);
         });
+
+        it('equals — exact match passes', () => {
+            const t = makeTask({ tags: ['project'] });
+            const state = stateFromCondition(cond('tag', 'equals', { type: 'stringSet', values: ['project'] }));
+            expect(TaskFilterEngine.evaluate(t, state)).toBe(true);
+        });
+
+        it('equals — hierarchical child does not match parent filter', () => {
+            const t = makeTask({ tags: ['project/sub'] });
+            const state = stateFromCondition(cond('tag', 'equals', { type: 'stringSet', values: ['project'] }));
+            expect(TaskFilterEngine.evaluate(t, state)).toBe(false);
+        });
+
+        it('equals — multiple values, one exact match passes', () => {
+            const t = makeTask({ tags: ['urgent'] });
+            const state = stateFromCondition(cond('tag', 'equals', { type: 'stringSet', values: ['work', 'urgent'] }));
+            expect(TaskFilterEngine.evaluate(t, state)).toBe(true);
+        });
     });
 
     // ── Content (case-insensitive substring) ──

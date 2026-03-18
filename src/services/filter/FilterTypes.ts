@@ -164,7 +164,7 @@ export const NUMBER_PROPERTIES: Set<FilterProperty> = new Set(['length']);
 /** Available operators per property */
 export const PROPERTY_OPERATORS: Record<FilterProperty, FilterOperator[]> = {
     file: ['includes', 'excludes'],
-    tag: ['includes', 'excludes'],
+    tag: ['includes', 'excludes', 'equals'],
     status: ['includes', 'excludes'],
     content: ['contains', 'notContains'],
     startDate: ['isSet', 'isNotSet', 'equals', 'before', 'after', 'onOrBefore', 'onOrAfter'],
