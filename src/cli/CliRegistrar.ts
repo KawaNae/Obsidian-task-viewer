@@ -3,12 +3,13 @@ import type TaskViewerPlugin from '../main';
 import { createListHandler, createTodayHandler, createGetHandler } from './handlers/TaskQueryHandlers';
 import { createQueryHandler } from './handlers/TemplateQueryHandler';
 import { createCreateHandler, createUpdateHandler, createDeleteHandler } from './handlers/TaskCrudHandlers';
+import { createHelpHandler } from './handlers/HelpHandler';
 
 /**
  * Register all CLI handlers for the Task Viewer plugin.
  * Call once from plugin.onload() after TaskIndex is initialized.
  *
- * Commands (7): list, today, get, query, create, update, delete
+ * Commands (8): list, today, get, query, create, update, delete, help
  */
 export function registerCliHandlers(plugin: TaskViewerPlugin): void {
     // ── Query commands (read-only) ──
@@ -24,7 +25,10 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
         due:     { value: '<date|preset>',   description: 'Due date equals' },
         leaf:    { description: 'Only leaf tasks (no children)' },
         property: { value: '<key:value>',   description: 'Filter by custom property (e.g. "優先度:高")' },
-        filter:  { value: '<json>',          description: 'Full FilterState JSON (overrides simple flags)' },
+        color:   { value: '<colors>',        description: 'Filter by color(s), comma-separated' },
+        type:    { value: '<types>',          description: 'Filter by task type (at-notation, frontmatter)' },
+        root:    { description: 'Only root tasks (no parent)' },
+        filter:  { value: '<json>',          description: 'Full FilterState JSON (overrides simple flags). Run obsidian obsidian-task-viewer:help for details' },
         sort:    { value: '<prop[:dir],..>', description: 'Sort (e.g. startDate:asc,due:desc)' },
         limit:   { value: '<number>',        description: 'Max results (default: 100)' },
         offset:  { value: '<number>',        description: 'Skip first N results' },
@@ -50,7 +54,7 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
 
     plugin.registerCliHandler(
         'obsidian-task-viewer:today',
-        'List tasks active today (shortcut for list date=today)',
+        'List tasks active today (visual-date aware, includes spanning tasks)',
         todayFlags,
         createTodayHandler(plugin),
     );
@@ -75,7 +79,6 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
         'Query tasks using a saved view template',
         {
             template: { value: '<name>', description: 'Template basename', required: true },
-            date:     { value: '<YYYY-MM-DD>', description: 'Override date for relative filters' },
             format:   { value: 'json|tsv|jsonl', description: 'Output format' },
             outputFields: { value: '<key,key,...>', description: 'Output fields (default: id only)' },
         },
@@ -122,5 +125,14 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
         'Delete a task',
         { id: { value: '<taskId>', description: 'Task ID', required: true } },
         createDeleteHandler(plugin),
+    );
+
+    // ── Help ──
+
+    plugin.registerCliHandler(
+        'obsidian-task-viewer:help',
+        'Show detailed CLI reference',
+        null,
+        createHelpHandler(),
     );
 }

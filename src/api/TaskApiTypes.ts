@@ -64,6 +64,9 @@ export interface ListParams extends PaginationParams {
     due?: string;
     leaf?: boolean;
     property?: string;        // "key:value" — filter by custom property
+    color?: string | string[];   // card color filter
+    type?: string | string[];    // task type (at-notation, frontmatter)
+    root?: boolean;              // root tasks only (no parent)
     filter?: FilterState;     // overrides simple filter fields above
     sort?: ApiSortRule[];
 }
@@ -85,7 +88,6 @@ export interface GetParams {
 
 export interface QueryParams {
     template: string;
-    date?: string;
 }
 
 // ── create ──

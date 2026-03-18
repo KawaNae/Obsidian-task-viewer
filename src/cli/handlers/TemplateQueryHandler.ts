@@ -20,7 +20,6 @@ export function createQueryHandler(plugin: TaskViewerPlugin) {
         try {
             const result = await plugin.api.query({
                 template: params.template,
-                date: params.date,
             });
 
             const format = (params.format as OutputFormat) || 'json';

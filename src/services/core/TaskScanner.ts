@@ -172,7 +172,7 @@ export class TaskScanner {
                     }
 
                     // 再帰的に子タスクを抽出（@記法を持つ子）— childLines フィルタより先に実行
-                    let childTasks: ReturnType<typeof extractTasksFromLines> = [];
+                    let childTasks: Task[] = [];
                     if (children.length > 0) {
                         const childLineNumber = actualLineNumber + 1;
                         childTasks = extractTasksFromLines(children, childLineNumber, parentStartDate);
@@ -289,15 +289,6 @@ export class TaskScanner {
             // Store wikilink refs separately
             this.store.setWikilinkRefs(fmTask.id, fmResult.wikilinkRefs);
 
-            // frontmatter の childLine 範囲に含まれるボディタスクを FM/Container タスクの子にする
-            const childLineSet = new Set<number>(fmTask.childLineBodyOffsets);
-            for (const bt of allExtractedTasks) {
-                if (!bt.parentId && childLineSet.has(bt.line)) {
-                    bt.parentId = fmTask.id;
-                    fmTask.childIds.push(bt.id);
-                }
-            }
-
             // 全孤児インラインタスクを FM/Container の子にする
             for (const bt of allExtractedTasks) {
                 if (!bt.parentId) {
@@ -307,9 +298,8 @@ export class TaskScanner {
             }
 
             // Container は子がなければ作成しない
-            if (fmTask.isContainer && fmTask.childIds.length === 0 && fmTask.childLines.length === 0) {
-                // Container をスキップ（子もchildLinesもない）
-            } else {
+            const isEmptyContainer = fmTask.isContainer && fmTask.childIds.length === 0 && fmTask.childLines.length === 0;
+            if (!isEmptyContainer) {
                 newTasks.push(fmTask);
             }
         }

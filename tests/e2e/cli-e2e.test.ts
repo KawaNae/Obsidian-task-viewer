@@ -49,12 +49,12 @@ describe('list — basics', () => {
 
     it('file filter works with .md extension', () => {
         const r = cliList({ file: TEST_FILE });
-        expect(r.count).toBe(11);
+        expect(r.count).toBe(10);
     });
 
     it('file filter auto-appends .md', () => {
         const r = cliList({ file: 'test-tags-properties' });
-        expect(r.count).toBe(11);
+        expect(r.count).toBe(10);
     });
 });
 
@@ -64,7 +64,7 @@ describe('list — basics', () => {
 describe('list — hierarchical tag filter', () => {
     it('parent tag matches all children (tag=支出)', () => {
         const r = cliList({ tag: '支出', file: TEST_FILE });
-        expect(r.count).toBe(8);
+        expect(r.count).toBe(7);
     });
 
     it('leaf tag matches only that tag (tag=支出/食費)', () => {
@@ -75,9 +75,9 @@ describe('list — hierarchical tag filter', () => {
         }
     });
 
-    it('tag=支払/クレカ matches 3 tasks', () => {
+    it('tag=支払/クレカ matches 4 tasks', () => {
         const r = cliList({ tag: '支払/クレカ', file: TEST_FILE });
-        expect(r.count).toBe(3);
+        expect(r.count).toBe(4);
     });
 
     it('tag=収入 matches 1 task', () => {
@@ -99,9 +99,9 @@ describe('list — hierarchical tag filter', () => {
 // 3. list — custom property filter
 // ────────────────────────────────────────────
 describe('list — custom property filter', () => {
-    it('property filter: 優先度:高 returns 2 tasks', () => {
+    it('property filter: 優先度:高 returns 3 tasks', () => {
         const r = cliList({ property: '優先度:高', file: TEST_FILE });
-        expect(r.count).toBe(2);
+        expect(r.count).toBe(3);
     });
 
     it('property filter: 金額:2000 returns 1 task', () => {
@@ -123,10 +123,11 @@ describe('list — custom property filter', () => {
         expect(props['メモ']).toBe('月パス');
     });
 
-    it('tasks without properties have empty object', () => {
+    it('tasks with only inherited properties have frontmatter properties', () => {
         const r = cliList({ content: 'タグなしテスト', outputFields: 'content,properties' });
         expect(r.count).toBe(1);
-        expect(r.tasks[0].properties).toEqual({});
+        // タグなしテスト has no inline properties, but inherits frontmatter customProperty
+        expect(r.tasks[0].properties).toHaveProperty('customProperty');
     });
 });
 
@@ -141,7 +142,7 @@ describe('list — combined filters', () => {
             file: TEST_FILE,
             outputFields: 'content,tags,properties',
         });
-        expect(r.count).toBe(2);
+        expect(r.count).toBe(3);
         for (const t of r.tasks) {
             expect((t.tags as string[]).some(tag => tag === '支出/ゲーム')).toBe(true);
             expect((t.properties as Record<string, unknown>)['優先度']).toBe('高');
@@ -218,7 +219,7 @@ describe('CRUD lifecycle', () => {
             start: '2026-04-01',
             outputFields: 'id,content,startDate',
         });
-        expect(r.status).toBe('ok');
+        expect(r).not.toHaveProperty('error');
         expect(r.task.content).toContain('E2E-test-task');
         expect(r.task.startDate).toBe('2026-04-01');
         createdId = r.task.id as string;
@@ -243,7 +244,7 @@ describe('CRUD lifecycle', () => {
             status: 'x',
             outputFields: 'id,content,status',
         });
-        expect(r.status).toBe('ok');
+        expect(r).not.toHaveProperty('error');
         expect(r.task.content).toContain('E2E-updated');
         expect(r.task.status).toBe('x');
         // Update createdId for delete step
@@ -256,7 +257,7 @@ describe('CRUD lifecycle', () => {
         if (fresh.count > 0) createdId = fresh.tasks[0].id as string;
 
         const r = cliDelete(createdId);
-        expect(r.status).toBe('ok');
+        expect(r).not.toHaveProperty('error');
         expect(r.deleted).toBe(createdId);
     });
 

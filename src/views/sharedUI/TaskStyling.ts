@@ -1,9 +1,10 @@
+import { VALID_LINE_STYLES } from '../../constants/style';
+
 /**
  * Task accent color and line style DOM utilities.
  * Applies CSS custom properties to task elements.
  */
 export class TaskStyling {
-    private static readonly VALID_LINE_STYLES = new Set(['solid', 'dashed', 'dotted', 'double', 'dashdotted']);
 
     private static hexToHSL(hex: string): { h: number, s: number, l: number } | null {
         if (!hex.startsWith('#')) return null;
@@ -79,7 +80,7 @@ export class TaskStyling {
      */
     static applyTaskLinestyle(el: HTMLElement, linestyle: string | null): void {
         if (!linestyle) return;
-        const normalized = TaskStyling.VALID_LINE_STYLES.has(linestyle) ? linestyle : 'solid';
+        const normalized = VALID_LINE_STYLES.has(linestyle) ? linestyle : 'solid';
         el.style.setProperty('--file-linestyle', normalized);
         el.dataset.fileLinestyle = normalized;
     }
