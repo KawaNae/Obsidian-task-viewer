@@ -2,13 +2,12 @@ import { FrontmatterTaskKeys, Task, WikilinkRef, ChildLine, PropertyType, Proper
 import { TaskIdGenerator } from '../../../utils/TaskIdGenerator';
 import { TagExtractor } from '../../../utils/TagExtractor';
 import { ChildLineClassifier } from '../../../utils/ChildLineClassifier';
+import { VALID_LINE_STYLES } from '../../../constants/style';
 
 export interface FrontmatterParseResult {
     task: Task;
     wikilinkRefs: WikilinkRef[];
 }
-
-const VALID_LINE_STYLES = new Set(['solid', 'dashed', 'dotted', 'double', 'dashdotted']);
 
 /**
  * Builds a frontmatter-backed Task from metadata cache data.

@@ -53,17 +53,17 @@ export function cliGet(id: string, flags: Record<string, string> = {}): Record<s
     return obsidianCli('get', { id, ...flags }) as Record<string, unknown>;
 }
 
-/** Create a task. Returns { status, task }. */
+/** Create a task. Returns { task }. */
 export function cliCreate(flags: Record<string, string>): MutationResult {
     return obsidianCli('create', flags) as MutationResult;
 }
 
-/** Update a task. Returns { status, task }. */
+/** Update a task. Returns { task }. */
 export function cliUpdate(flags: Record<string, string>): MutationResult {
     return obsidianCli('update', flags) as MutationResult;
 }
 
-/** Delete a task. Returns { status, deleted }. */
+/** Delete a task. Returns { deleted }. */
 export function cliDelete(id: string): DeleteResult {
     return obsidianCli('delete', { id }) as DeleteResult;
 }
@@ -131,11 +131,9 @@ export interface ListResult {
 }
 
 export interface MutationResult {
-    status: string;
     task: Record<string, unknown>;
 }
 
 export interface DeleteResult {
-    status: string;
     deleted: string;
 }

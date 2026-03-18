@@ -67,7 +67,7 @@ describe('repeat command', () => {
 
         // 2. Complete the task
         const updateResult = cliUpdate({ id: taskId, status: 'x' });
-        expect(updateResult.status).toBe('ok');
+        expect(updateResult).not.toHaveProperty('error');
 
         // 3. Wait for the new task to appear (startDate = 2026-04-02, status = ' ')
         const newTask = await waitForTask(

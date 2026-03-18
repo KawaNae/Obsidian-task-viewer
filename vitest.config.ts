@@ -9,5 +9,6 @@ export default defineConfig({
             obsidian: resolve(__dirname, 'tests/mocks/obsidian.ts'),
         },
         include: ['tests/**/*.test.ts'],
+        exclude: ['tests/e2e/**'],
     },
 });

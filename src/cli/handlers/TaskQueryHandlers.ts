@@ -3,7 +3,6 @@ import type TaskViewerPlugin from '../../main';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { TaskApiError } from '../../api/TaskApiTypes';
 import type { ListParams, TodayParams, ApiSortRule } from '../../api/TaskApiTypes';
-import { buildFilterFromFlags } from '../CliFilterBuilder';
 import {
     formatOutput, formatSingleTask, resolveFields, cliError,
     type OutputFormat,
@@ -48,6 +47,9 @@ function cliDataToListParams(params: CliData): ListParams {
         if (params.due) result.due = params.due;
         if (params.leaf === 'true') result.leaf = true;
         if (params.property) result.property = params.property;
+        if (params.color) result.color = params.color;
+        if (params.type) result.type = params.type;
+        if (params.root === 'true') result.root = true;
     }
 
     if (params.sort) result.sort = parseSortFlag(params.sort);

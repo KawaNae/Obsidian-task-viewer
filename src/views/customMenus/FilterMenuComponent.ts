@@ -108,6 +108,7 @@ export class FilterMenuComponent {
                 if (!this.popoverEl) return;
                 if (this.popoverEl.contains(target)) return;
                 if ((target as HTMLElement).closest?.('.filter-child-popover')) return;
+                if ((target as HTMLElement).closest?.('.filter-popover__tag-suggest')) return;
                 this.close();
             };
             document.addEventListener('pointerdown', this.outsideClickHandler, true);
@@ -365,8 +366,10 @@ export class FilterMenuComponent {
     private renderValueSelector(row: HTMLElement, condition: FilterConditionNode): void {
         if (condition.property === 'content') {
             this.renderTextInput(row, condition);
-        } else {
+        } else if (condition.property === 'property') {
             this.renderValueDropdown(row, condition);
+        } else {
+            this.renderPillValueSelector(row, condition);
         }
     }
 
@@ -405,6 +408,213 @@ export class FilterMenuComponent {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.showValueMenu(btn, condition);
+        });
+    }
+
+    private renderPillValueSelector(row: HTMLElement, condition: FilterConditionNode): void {
+        const container = row.createDiv('filter-popover__tag-value');
+        const currentValues = condition.value.type === 'stringSet' ? condition.value.values : [];
+        const prop = condition.property;
+
+        // Pill群 (only if there are selected values)
+        if (currentValues.length > 0) {
+            const pillContainer = container.createDiv('filter-popover__tag-pills');
+            for (const val of currentValues) {
+                this.renderValuePill(pillContainer, val, condition);
+            }
+        }
+
+        // Input + suggest
+        const inputWrap = container.createDiv('filter-popover__tag-input-wrap');
+        const input = inputWrap.createEl('input', {
+            cls: 'filter-popover__tag-input',
+            type: 'text',
+            attr: { placeholder: prop === 'tag' ? 'Type tag...' : 'Type to filter...' },
+        });
+
+        // Suggest state
+        let suggestEl: HTMLElement | null = null;
+        let selectedIdx = -1;
+        let suggestItems: { el: HTMLElement; value: string }[] = [];
+        let outsideHandler: ((e: MouseEvent) => void) | null = null;
+
+        const closeSuggest = () => {
+            if (suggestEl) {
+                suggestEl.remove();
+                suggestEl = null;
+            }
+            suggestItems = [];
+            selectedIdx = -1;
+            if (outsideHandler) {
+                document.removeEventListener('pointerdown', outsideHandler, true);
+                outsideHandler = null;
+            }
+        };
+
+        const addValue = (val: string) => {
+            const normalized = prop === 'tag' ? val.trim().replace(/^#/, '') : prop === 'status' ? val : val.trim();
+            if (!normalized) return;
+            if (condition.value.type !== 'stringSet') {
+                condition.value = { type: 'stringSet', values: [] };
+            }
+            if (!condition.value.values.includes(normalized)) {
+                condition.value = { type: 'stringSet', values: [...condition.value.values, normalized] };
+                this.lastCallbacks?.onFilterChange();
+            }
+            input.value = '';
+            closeSuggest();
+            this.renderContent();
+        };
+
+        const showSuggest = (query: string, showAll: boolean) => {
+            closeSuggest();
+            const available = this.getAvailableValues(prop);
+            const selected = new Set(condition.value.type === 'stringSet' ? condition.value.values : []);
+            const q = prop === 'tag' ? query.toLowerCase().replace(/^#/, '') : query.toLowerCase();
+
+            const filtered = available.filter(v => {
+                if (selected.has(v)) return false;
+                if (showAll || !q) return true;
+                return this.getValueDisplay(prop, v).toLowerCase().includes(q) || v.toLowerCase().includes(q);
+            });
+            if (filtered.length === 0) return;
+
+            suggestEl = document.createElement('div');
+            suggestEl.className = 'filter-popover__tag-suggest';
+            suggestItems = [];
+            selectedIdx = -1;
+
+            for (const val of filtered) {
+                const item = suggestEl.createDiv('filter-popover__tag-suggest-item');
+                if (prop === 'color') {
+                    const swatch = item.createSpan('filter-popover__color-swatch');
+                    swatch.style.backgroundColor = val;
+                } else if (prop === 'status') {
+                    const checkbox = item.createEl('input', { cls: 'task-list-item-checkbox filter-popover__status-checkbox' });
+                    checkbox.type = 'checkbox';
+                    checkbox.checked = val !== ' ';
+                    checkbox.readOnly = true;
+                    checkbox.tabIndex = -1;
+                    if (val !== ' ') checkbox.dataset.task = val;
+                }
+                item.createSpan().setText(this.getValueDisplay(prop, val));
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    addValue(val);
+                });
+                suggestItems.push({ el: item, value: val });
+            }
+
+            document.body.appendChild(suggestEl);
+
+            // Position below input
+            const rect = inputWrap.getBoundingClientRect();
+            let x = rect.left;
+            let y = rect.bottom + 2;
+            const suggestRect = suggestEl.getBoundingClientRect();
+            if (x + suggestRect.width > window.innerWidth) {
+                x = window.innerWidth - suggestRect.width - 8;
+            }
+            if (y + suggestRect.height > window.innerHeight) {
+                y = rect.top - suggestRect.height - 2;
+            }
+            suggestEl.style.left = `${Math.max(8, x)}px`;
+            suggestEl.style.top = `${Math.max(8, y)}px`;
+            suggestEl.style.width = `${rect.width}px`;
+
+            outsideHandler = (e: MouseEvent) => {
+                const target = e.target as Node;
+                if (suggestEl?.contains(target) || inputWrap.contains(target)) return;
+                closeSuggest();
+            };
+            setTimeout(() => {
+                document.addEventListener('pointerdown', outsideHandler!, true);
+            }, 0);
+        };
+
+        const updateHighlight = () => {
+            for (let i = 0; i < suggestItems.length; i++) {
+                suggestItems[i].el.classList.toggle('filter-popover__tag-suggest-item--active', i === selectedIdx);
+            }
+            if (selectedIdx >= 0 && suggestItems[selectedIdx]) {
+                suggestItems[selectedIdx].el.scrollIntoView({ block: 'nearest' });
+            }
+        };
+
+        // Input events
+        input.addEventListener('input', () => {
+            showSuggest(input.value, false);
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (!suggestEl) {
+                    showSuggest(input.value, !input.value);
+                } else if (suggestItems.length > 0) {
+                    selectedIdx = (selectedIdx + 1) % suggestItems.length;
+                    updateHighlight();
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (suggestItems.length > 0) {
+                    selectedIdx = selectedIdx <= 0 ? suggestItems.length - 1 : selectedIdx - 1;
+                    updateHighlight();
+                }
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (selectedIdx >= 0 && suggestItems[selectedIdx]) {
+                    addValue(suggestItems[selectedIdx].value);
+                } else if (input.value.trim()) {
+                    addValue(input.value);
+                }
+            } else if (e.key === 'Escape') {
+                closeSuggest();
+            } else if (e.key === 'Backspace' && !input.value && currentValues.length > 0) {
+                // Remove last pill on backspace in empty input
+                const last = currentValues[currentValues.length - 1];
+                if (condition.value.type === 'stringSet') {
+                    condition.value = {
+                        type: 'stringSet',
+                        values: condition.value.values.filter(v => v !== last),
+                    };
+                    this.lastCallbacks?.onFilterChange();
+                    this.renderContent();
+                }
+            }
+        });
+
+        input.addEventListener('focus', () => {
+            showSuggest(input.value, !input.value);
+        });
+    }
+
+    private renderValuePill(container: HTMLElement, value: string, condition: FilterConditionNode): void {
+        const pill = container.createDiv('filter-popover__tag-pill');
+        if (condition.property === 'color') {
+            const swatch = pill.createSpan('filter-popover__color-swatch');
+            swatch.style.backgroundColor = value;
+        } else if (condition.property === 'status') {
+            const checkbox = pill.createEl('input', { cls: 'task-list-item-checkbox filter-popover__status-checkbox' });
+            checkbox.type = 'checkbox';
+            checkbox.checked = value !== ' ';
+            checkbox.readOnly = true;
+            checkbox.tabIndex = -1;
+            if (value !== ' ') checkbox.dataset.task = value;
+        }
+        pill.createSpan().setText(this.getValueDisplay(condition.property, value));
+        const removeBtn = pill.createEl('button', { cls: 'filter-popover__tag-pill-remove' });
+        setIcon(removeBtn.createSpan(), 'x');
+        removeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (condition.value.type === 'stringSet') {
+                condition.value = {
+                    type: 'stringSet',
+                    values: condition.value.values.filter(v => v !== value),
+                };
+                this.lastCallbacks?.onFilterChange();
+                this.renderContent();
+            }
         });
     }
 
@@ -809,7 +1019,7 @@ export class FilterMenuComponent {
         if (property === 'file') return value.split('/').pop() || value;
         if (property === 'tag') return `#${value}`;
         if (property === 'status') {
-            return value === ' ' ? '[ ] Todo' : `[${value}] ${this.getStatusLabel(value)}`;
+            return this.getStatusLabel(value);
         }
         if (property === 'taskType') {
             return value === 'at-notation' ? '@notation' : 'Frontmatter';
