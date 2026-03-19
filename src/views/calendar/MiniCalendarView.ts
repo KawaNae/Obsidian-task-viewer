@@ -385,7 +385,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     private getWeekdayNames(): string[] {
-        const labels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+        const labels = t('calendar.weekdaysNarrow').split(',');
         if (this.plugin.settings.calendarWeekStartDay === 1) {
             return [...labels.slice(1), labels[0]];
         }

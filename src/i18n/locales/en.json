@@ -123,10 +123,8 @@
       "colorKeyDesc": "Frontmatter key for task/file color.",
       "lineStyleKey": "Line Style Key",
       "lineStyleKeyDesc": "Frontmatter key for task border line style (solid/dashed/dotted/double/dashdotted).",
-      "placeholderKey": "Placeholder Key",
-      "placeholderKeyDesc": "Frontmatter key for export masking. When set, task content is replaced with this value in image exports.",
-      "sharedTagsKey": "Shared Tags Key",
-      "sharedTagsKeyDesc": "Frontmatter key for file-level shared tags inherited by all tasks in the file. Use \"tags\" for Obsidian compatibility.",
+      "maskKey": "Mask Key",
+      "maskKeyDesc": "Frontmatter key for export masking. When set, task content is replaced with this value in image exports.",
       "ignoreKey": "Ignore Key",
       "ignoreKeyDesc": "Frontmatter key for file-level ignore. When truthy, this file is fully skipped from scanning and AI index.",
       "suggest": "Suggest",
@@ -134,9 +132,7 @@
       "colorSuggest": "Color suggest",
       "colorSuggestDesc": "Enable custom color suggestions for the color property.",
       "lineStyleSuggest": "Line style suggest",
-      "lineStyleSuggestDesc": "Enable custom line style suggestions for the linestyle property.",
-      "sharedTagsSuggest": "Shared tags suggest",
-      "sharedTagsSuggestDesc": "Enable custom tag suggestions for the shared tags property."
+      "lineStyleSuggestDesc": "Enable custom line style suggestions for the linestyle property."
     },
     "habits": {
       "description": "Define habits to track in your daily notes' frontmatter.",
@@ -246,11 +242,21 @@
       "greaterThanOrEqual": "is at least",
       "only": "has only"
     },
-    "operatorOverride": {
-      "tag": {
-        "equals": "has",
-        "only": "has only"
-      }
+    "operators": {
+      "file":      { "includes": "includes", "excludes": "excludes" },
+      "tag":       { "includes": "includes", "excludes": "excludes", "equals": "has", "only": "has only" },
+      "status":    { "includes": "includes", "excludes": "excludes" },
+      "content":   { "contains": "contains", "notContains": "does not contain" },
+      "startDate": { "isSet": "is set", "isNotSet": "is not set", "equals": "is", "before": "is before", "after": "is after", "onOrBefore": "is on or before", "onOrAfter": "is on or after" },
+      "endDate":   { "isSet": "is set", "isNotSet": "is not set", "equals": "is", "before": "is before", "after": "is after", "onOrBefore": "is on or before", "onOrAfter": "is on or after" },
+      "due":       { "isSet": "is set", "isNotSet": "is not set", "equals": "is", "before": "is before", "after": "is after", "onOrBefore": "is on or before", "onOrAfter": "is on or after" },
+      "color":     { "includes": "includes", "excludes": "excludes" },
+      "linestyle": { "includes": "includes", "excludes": "excludes" },
+      "length":    { "lessThan": "is less than", "lessThanOrEqual": "is at most", "greaterThan": "is greater than", "greaterThanOrEqual": "is at least", "equals": "is", "isSet": "is set", "isNotSet": "is not set" },
+      "taskType":  { "includes": "includes", "excludes": "excludes" },
+      "parent":    { "isSet": "is set", "isNotSet": "is not set" },
+      "children":  { "isSet": "is set", "isNotSet": "is not set" },
+      "property":  { "isSet": "is set", "isNotSet": "is not set", "equals": "is", "contains": "contains", "notContains": "does not contain" }
     },
     "relativeDate": {
       "today": "Today",
@@ -282,7 +288,7 @@
     "duplicate": "Duplicate",
     "remove": "Remove",
     "self": "Self",
-    "parent": "Parent",
+    "parent": "Ancestor",
     "statusTodo": "Todo",
     "statusDone": "Done",
     "statusCancelled": "Cancelled",
@@ -291,15 +297,21 @@
     "taskTypeFrontmatter": "Frontmatter",
     "glue": {
       "afterTarget": { "self": "", "parent": "" },
-      "beforeOperator": {
-        "includes": "", "excludes": "",
-        "contains": "", "notContains": "",
-        "isSet": "", "isNotSet": "",
-        "equals": "", "before": "", "after": "",
-        "onOrBefore": "", "onOrAfter": "",
-        "lessThan": "", "lessThanOrEqual": "",
-        "greaterThan": "", "greaterThanOrEqual": "",
-        "only": ""
+      "operators": {
+        "file":      { "includes": "", "excludes": "" },
+        "tag":       { "includes": "", "excludes": "", "equals": "", "only": "" },
+        "status":    { "includes": "", "excludes": "" },
+        "content":   { "contains": "", "notContains": "" },
+        "startDate": { "isSet": "", "isNotSet": "", "equals": "", "before": "", "after": "", "onOrBefore": "", "onOrAfter": "" },
+        "endDate":   { "isSet": "", "isNotSet": "", "equals": "", "before": "", "after": "", "onOrBefore": "", "onOrAfter": "" },
+        "due":       { "isSet": "", "isNotSet": "", "equals": "", "before": "", "after": "", "onOrBefore": "", "onOrAfter": "" },
+        "color":     { "includes": "", "excludes": "" },
+        "linestyle": { "includes": "", "excludes": "" },
+        "length":    { "lessThan": "", "lessThanOrEqual": "", "greaterThan": "", "greaterThanOrEqual": "", "equals": "", "isSet": "", "isNotSet": "" },
+        "taskType":  { "includes": "", "excludes": "" },
+        "parent":    { "isSet": "", "isNotSet": "" },
+        "children":  { "isSet": "", "isNotSet": "" },
+        "property":  { "isSet": "", "isNotSet": "", "equals": "", "contains": "", "notContains": "" }
       }
     }
   },
@@ -451,6 +463,8 @@
     "showMore": "Show more ({{remaining}})"
   },
   "calendar": {
+    "weekdaysShort": "Sun,Mon,Tue,Wed,Thu,Fri,Sat",
+    "weekdaysNarrow": "Su,Mo,Tu,We,Th,Fr,Sa",
     "wk": "Wk",
     "w": "W",
     "due": "Due"

@@ -590,15 +590,6 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        new Setting(el)
-            .setName(t('settings.frontmatter.sharedTagsSuggest'))
-            .setDesc(t('settings.frontmatter.sharedTagsSuggestDesc'))
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.suggestSharedtags)
-                .onChange(async (value) => {
-                    this.plugin.settings.suggestSharedtags = value;
-                    await this.plugin.saveSettings();
-                }));
     }
 
     // ─── Habits Tab ──────────────────────────────────────────
@@ -684,17 +675,10 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,
-            t('settings.frontmatter.placeholderKey'),
-            t('settings.frontmatter.placeholderKeyDesc'),
-            'tv-placeholder',
-            'placeholder'
-        );
-        this.addFrontmatterTaskKeySetting(
-            containerEl,
-            t('settings.frontmatter.sharedTagsKey'),
-            t('settings.frontmatter.sharedTagsKeyDesc'),
-            'tags',
-            'sharedtags'
+            t('settings.frontmatter.maskKey'),
+            t('settings.frontmatter.maskKeyDesc'),
+            'tv-mask',
+            'mask'
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,

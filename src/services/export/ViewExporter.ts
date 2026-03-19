@@ -95,7 +95,7 @@ export class ViewExporter {
         }
     }
 
-    /** Temporarily replace task content with placeholder text for masking. */
+    /** Temporarily replace task content with mask text for masking. */
     private static tempApplyMasking(container: HTMLElement, taskIndex: TaskIndex, restoreFns: (() => void)[]): void {
         const cards = Array.from(container.querySelectorAll<HTMLElement>('.task-card'));
         for (const card of cards) {
@@ -105,7 +105,7 @@ export class ViewExporter {
             const segment = TaskIdGenerator.parseSegmentId(taskId);
             const resolvedId = segment ? segment.baseId : taskId;
             const task = taskIndex.getTask(resolvedId);
-            if (!task?.placeholder) continue;
+            if (!task?.mask) continue;
 
             const contentEl = card.querySelector('.task-card__content');
             if (!contentEl) continue;
@@ -113,7 +113,7 @@ export class ViewExporter {
             const listItem = contentEl.querySelector('.task-list-item');
             if (!listItem) continue;
 
-            const savedTexts = this.replaceTextContent(listItem, task.placeholder);
+            const savedTexts = this.replaceTextContent(listItem, task.mask);
             const savedLinks = this.hideFileLinks(listItem);
             restoreFns.push(() => {
                 this.restoreTextContent(savedTexts);
@@ -123,10 +123,10 @@ export class ViewExporter {
     }
 
     /**
-     * Replace text nodes in a list item with placeholder text.
+     * Replace text nodes in a list item with mask text.
      * Returns saved state for restoration.
      */
-    private static replaceTextContent(listItem: Element, placeholder: string): { node: Text; original: string }[] {
+    private static replaceTextContent(listItem: Element, mask: string): { node: Text; original: string }[] {
         const saved: { node: Text; original: string }[] = [];
         let replaced = false;
         const walker = document.createTreeWalker(listItem, NodeFilter.SHOW_TEXT);
@@ -143,7 +143,7 @@ export class ViewExporter {
 
             if (!replaced && textNode.textContent?.trim()) {
                 saved.push({ node: textNode, original: textNode.textContent });
-                textNode.textContent = placeholder;
+                textNode.textContent = mask;
                 replaced = true;
             } else if (replaced && textNode.textContent?.trim()) {
                 saved.push({ node: textNode, original: textNode.textContent });

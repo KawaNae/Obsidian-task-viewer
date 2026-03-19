@@ -288,8 +288,6 @@ export class CalendarView extends ItemView {
 
         const calendarHost = main.createDiv('calendar-grid');
 
-        this.renderWeekdayHeader(calendarHost);
-
         const { startDate, endDate } = this.getCalendarDateRange();
         const rangeStartStr = DateUtils.getLocalDateString(startDate);
         const rangeEndStr = DateUtils.getLocalDateString(endDate);
@@ -297,6 +295,7 @@ export class CalendarView extends ItemView {
 
         const allVisibleTasks = this.getVisibleTasksInRange(rangeStartStr, rangeEndStr);
         const body = calendarHost.createDiv('calendar-grid__body');
+        this.renderWeekdayHeader(body);
         const referenceMonth = this.getReferenceMonth();
         const showWeekNumbers = this.shouldShowWeekNumbers();
 
@@ -560,7 +559,8 @@ export class CalendarView extends ItemView {
 
     private renderWeekdayHeader(container: HTMLElement): void {
         const header = container.createDiv('calendar-weekday-header');
-        if (this.shouldShowWeekNumbers()) {
+        const showWeekNumbers = this.shouldShowWeekNumbers();
+        if (showWeekNumbers) {
             header.addClass('has-week-numbers');
             header.createEl('div', { cls: 'calendar-weekday-cell', text: t('calendar.wk') });
         }
@@ -569,6 +569,22 @@ export class CalendarView extends ItemView {
         weekdays.forEach((label) => {
             header.createEl('div', { cls: 'calendar-weekday-cell', text: label });
         });
+
+        // Add column separators matching week rows (align vertical grid lines exactly)
+        const separatorCount = showWeekNumbers ? 7 : 6;
+        for (let i = 1; i <= separatorCount; i++) {
+            const separator = header.createDiv('calendar-col-separator');
+            if (showWeekNumbers) {
+                if (i === 1) {
+                    separator.style.left = 'var(--calendar-wk-col-width, 32px)';
+                } else {
+                    const dayBoundary = i - 1;
+                    separator.style.left = `calc(var(--calendar-wk-col-width, 32px) + (${dayBoundary} / 7) * (100% - var(--calendar-wk-col-width, 32px)))`;
+                }
+            } else {
+                separator.style.left = `calc(${i} / 7 * 100%)`;
+            }
+        }
     }
 
     private renderDateHeader(weekRow: HTMLElement, date: Date, colIndex: number, referenceMonth: { year: number; month: number }): void {
@@ -736,7 +752,7 @@ export class CalendarView extends ItemView {
     }
 
     private getWeekdayNames(): string[] {
-        const labels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const labels = t('calendar.weekdaysShort').split(',');
         if (this.plugin.settings.calendarWeekStartDay === 1) {
             return [...labels.slice(1), labels[0]];
         }

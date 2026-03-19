@@ -80,7 +80,7 @@ describe('FrontmatterTaskBuilder', () => {
         });
 
         it('extracts shared tags', () => {
-            const fm = { [keys.start]: '2026-01-15', [keys.sharedtags]: ['shared1'] };
+            const fm = { [keys.start]: '2026-01-15', tags: ['shared1'] };
             const result = FrontmatterTaskBuilder.parse('file.md', fm, [], 0, keys, defaultHeader, defaultHeaderLevel);
             expect(result!.task.tags).toContain('shared1');
         });

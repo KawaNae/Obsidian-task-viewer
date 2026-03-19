@@ -42,7 +42,7 @@
       "startHourDesc": "1日の開始時刻（0-23）。この時刻より前のタスクは前日に表示されます。",
       "pastDaysToShow": "過去の表示日数",
       "pastDaysToShowDesc": "未完了タスクがない日でもタイムラインに表示する過去の日数。",
-      "defaultZoomLevel": "デフォルトズームレベル",
+      "defaultZoomLevel": "デフォルトズーム倍率",
       "defaultZoomLevelDesc": "新しいタイムラインビューのデフォルトズームレベル。各ビューで個別に変更できます。",
       "calendar": "カレンダー",
       "weekStartsOn": "週の開始日",
@@ -56,7 +56,7 @@
       "defaultOpenPosition": "デフォルト表示位置",
       "defaultOpenPositionDesc": "コマンドパレット、リボンアイコン、またはpositionパラメータなしのURIからビューを起動した際の表示位置。URIでは position=override で既存ビューを上書きできます。",
       "viewTemplates": "ビューテンプレート",
-      "viewTemplateFolder": "ビューテンプレートフォルダ",
+      "viewTemplateFolder": "ビューテンプレート保存先",
       "viewTemplateFolderDesc": "ビューテンプレートファイル（フロントマターに _tv-view を含む .md）を保存するVaultフォルダ。デバイス間のビュー設定同期に使用します。",
       "display": "表示",
       "hideViewHeader": "ビューヘッダーを非表示",
@@ -97,12 +97,12 @@
     },
     "timer": {
       "pomodoro": "ポモドーロ",
-      "customWorkMinutes": "カスタムポモドーロ作業時間",
+      "customWorkMinutes": "ポモドーロ作業時間",
       "customWorkMinutesDesc": "ポモドーロタイマーのカスタム作業時間（分）。",
-      "customBreakMinutes": "カスタムポモドーロ休憩時間",
+      "customBreakMinutes": "ポモドーロ休憩時間",
       "customBreakMinutesDesc": "ポモドーロタイマーのカスタム休憩時間（分）。",
       "intervalTimer": "インターバルタイマー",
-      "intervalTemplateFolder": "インターバルテンプレートフォルダ",
+      "intervalTemplateFolder": "インターバルテンプレート保存先",
       "intervalTemplateFolderDesc": "インターバルタイマーテンプレートファイル（フロントマターに _tv-segments を含む .md）を保存するVaultフォルダ。空欄で無効化。"
     },
     "frontmatter": {
@@ -117,26 +117,22 @@
       "statusKeyDesc": "タスクステータス文字のフロントマターキー。",
       "contentKey": "コンテンツキー",
       "contentKeyDesc": "タスクコンテンツのフロントマターキー。",
-      "timerTargetIdKey": "タイマーターゲットIDキー",
+      "timerTargetIdKey": "タイマー対象IDキー",
       "timerTargetIdKeyDesc": "タイマーターゲットIDのフロントマターキー。",
       "colorKey": "カラーキー",
       "colorKeyDesc": "タスク/ファイルカラーのフロントマターキー。",
-      "lineStyleKey": "ラインスタイルキー",
-      "lineStyleKeyDesc": "タスクボーダーラインスタイル（solid/dashed/dotted/double/dashdotted）のフロントマターキー。",
-      "placeholderKey": "プレースホルダーキー",
-      "placeholderKeyDesc": "エクスポートマスキング用フロントマターキー。設定するとタスクコンテンツが画像エクスポート時にこの値に置換されます。",
-      "sharedTagsKey": "共有タグキー",
-      "sharedTagsKeyDesc": "ファイルレベルの共有タグ用フロントマターキー。ファイル内の全タスクに継承されます。Obsidian互換には \"tags\" を使用。",
+      "lineStyleKey": "線種キー",
+      "lineStyleKeyDesc": "タスクボーダー線種（solid/dashed/dotted/double/dashdotted）のフロントマターキー。",
+      "maskKey": "マスクキー",
+      "maskKeyDesc": "エクスポートマスキング用フロントマターキー。設定するとタスクコンテンツが画像エクスポート時にこの値に置換されます。",
       "ignoreKey": "無視キー",
       "ignoreKeyDesc": "ファイルレベルの無視用フロントマターキー。真値の場合、このファイルはスキャンとAIインデックスから完全にスキップされます。",
       "suggest": "サジェスト",
       "suggestReloadNotice": "変更を反映するにはObsidianの再読み込みが必要な場合があります。",
       "colorSuggest": "カラーサジェスト",
       "colorSuggestDesc": "カラープロパティのカスタムカラーサジェストを有効にします。",
-      "lineStyleSuggest": "ラインスタイルサジェスト",
-      "lineStyleSuggestDesc": "ラインスタイルプロパティのカスタムサジェストを有効にします。",
-      "sharedTagsSuggest": "共有タグサジェスト",
-      "sharedTagsSuggestDesc": "共有タグプロパティのカスタムタグサジェストを有効にします。"
+      "lineStyleSuggest": "線種サジェスト",
+      "lineStyleSuggestDesc": "線種プロパティのカスタムサジェストを有効にします。"
     },
     "habits": {
       "description": "デイリーノートのフロントマターで追跡する習慣を定義します。",
@@ -221,7 +217,7 @@
       "endDate": "終了",
       "due": "期限",
       "color": "カラー",
-      "linestyle": "ラインスタイル",
+      "linestyle": "線種",
       "length": "長さ",
       "taskType": "タスク種別",
       "parent": "親",
@@ -235,22 +231,32 @@
       "notContains": "含まない",
       "isSet": "設定あり",
       "isNotSet": "設定なし",
-      "equals": "一致",
+      "equals": "と一致",
       "before": "より前",
       "after": "より後",
       "onOrBefore": "以前",
       "onOrAfter": "以降",
-      "lessThan": "未満",
+      "lessThan": "より小さい",
       "lessThanOrEqual": "以下",
-      "greaterThan": "超過",
+      "greaterThan": "より大きい",
       "greaterThanOrEqual": "以上",
       "only": "のみ"
     },
-    "operatorOverride": {
-      "tag": {
-        "equals": "含む",
-        "only": "のみ含む"
-      }
+    "operators": {
+      "file":      { "includes": "含む", "excludes": "含まない" },
+      "tag":       { "includes": "含む", "excludes": "含まない", "equals": "含む", "only": "のみ含む" },
+      "status":    { "includes": "含む", "excludes": "含まない" },
+      "content":   { "contains": "含む", "notContains": "含まない" },
+      "startDate": { "isSet": "設定あり", "isNotSet": "設定なし", "equals": "と一致", "before": "より前", "after": "より後", "onOrBefore": "以前", "onOrAfter": "以降" },
+      "endDate":   { "isSet": "設定あり", "isNotSet": "設定なし", "equals": "と一致", "before": "より前", "after": "より後", "onOrBefore": "以前", "onOrAfter": "以降" },
+      "due":       { "isSet": "設定あり", "isNotSet": "設定なし", "equals": "と一致", "before": "より前", "after": "より後", "onOrBefore": "以前", "onOrAfter": "以降" },
+      "color":     { "includes": "含む", "excludes": "含まない" },
+      "linestyle": { "includes": "含む", "excludes": "含まない" },
+      "length":    { "lessThan": "より小さい", "lessThanOrEqual": "以下", "greaterThan": "より大きい", "greaterThanOrEqual": "以上", "equals": "と一致", "isSet": "設定あり", "isNotSet": "設定なし" },
+      "taskType":  { "includes": "含む", "excludes": "含まない" },
+      "parent":    { "isSet": "存在する", "isNotSet": "存在しない" },
+      "children":  { "isSet": "存在する", "isNotSet": "存在しない" },
+      "property":  { "isSet": "設定あり", "isNotSet": "設定なし", "equals": "と一致", "contains": "含む", "notContains": "含まない" }
     },
     "relativeDate": {
       "today": "今日",
@@ -282,7 +288,7 @@
     "duplicate": "複製",
     "remove": "削除",
     "self": "自身",
-    "parent": "親",
+    "parent": "祖先",
     "statusTodo": "未完了",
     "statusDone": "完了",
     "statusCancelled": "キャンセル",
@@ -291,21 +297,21 @@
     "taskTypeFrontmatter": "フロントマター",
     "glue": {
       "afterTarget": { "self": "", "parent": "の" },
-      "beforeOperator": {
-        "includes": "に以下を", "excludes": "に以下を",
-        "contains": "に以下を", "notContains": "に以下を",
-        "isSet": "が", "isNotSet": "が",
-        "equals": "が以下に", "before": "が以下", "after": "が以下",
-        "onOrBefore": "が以下", "onOrAfter": "が以下",
-        "lessThan": "が以下", "lessThanOrEqual": "が以下",
-        "greaterThan": "が以下", "greaterThanOrEqual": "が以下",
-        "only": "に以下を"
-      },
-      "beforeOperatorOverride": {
-        "tag": {
-          "equals": "に以下を",
-          "only": "に以下を"
-        }
+      "operators": {
+        "file":      { "includes": "に以下を", "excludes": "に以下を" },
+        "tag":       { "includes": "に以下を", "excludes": "に以下を", "equals": "に以下を", "only": "に以下" },
+        "status":    { "includes": "に以下を", "excludes": "に以下を" },
+        "content":   { "contains": "に以下を", "notContains": "に以下を" },
+        "startDate": { "isSet": "が", "isNotSet": "が", "equals": "が下の値", "before": "が下の値", "after": "が下の値", "onOrBefore": "が下の値", "onOrAfter": "が下の値" },
+        "endDate":   { "isSet": "が", "isNotSet": "が", "equals": "が下の値", "before": "が下の値", "after": "が下の値", "onOrBefore": "が下の値", "onOrAfter": "が下の値" },
+        "due":       { "isSet": "が", "isNotSet": "が", "equals": "が下の値", "before": "が下の値", "after": "が下の値", "onOrBefore": "が下の値", "onOrAfter": "が下の値" },
+        "color":     { "includes": "に以下を", "excludes": "に以下を" },
+        "linestyle": { "includes": "に以下を", "excludes": "に以下を" },
+        "length":    { "lessThan": "が下の値", "lessThanOrEqual": "が下の値", "greaterThan": "が下の値", "greaterThanOrEqual": "が下の値", "equals": "が下の値", "isSet": "が", "isNotSet": "が" },
+        "taskType":  { "includes": "に以下を", "excludes": "に以下を" },
+        "parent":    { "isSet": "が", "isNotSet": "が" },
+        "children":  { "isSet": "が", "isNotSet": "が" },
+        "property":  { "isSet": "が", "isNotSet": "が", "equals": "が下の値", "contains": "に以下を", "notContains": "に以下を" }
       }
     }
   },
@@ -358,7 +364,7 @@
     "lengthLabel": "長さ: {{value}}",
     "tagsLabel": "タグ: {{value}}",
     "colorLabel": "カラー: {{value}}",
-    "linestyleLabel": "ラインスタイル: {{value}}",
+    "linestyleLabel": "線種: {{value}}",
     "openInEditor": "エディターで開く",
     "duplicate": "複製",
     "inPlace": "その場で",
@@ -457,6 +463,8 @@
     "showMore": "もっと表示（残り{{remaining}}件）"
   },
   "calendar": {
+    "weekdaysShort": "日,月,火,水,木,金,土",
+    "weekdaysNarrow": "日,月,火,水,木,金,土",
     "wk": "週",
     "w": "W",
     "due": "期限"

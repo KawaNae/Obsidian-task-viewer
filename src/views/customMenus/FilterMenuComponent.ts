@@ -375,12 +375,8 @@ export class FilterMenuComponent {
     }
 
     private resolveBeforeOperatorGlue(property: FilterProperty, operator: FilterOperator): string {
-        // Check property-specific override first
-        const override = t(`filter.glue.beforeOperatorOverride.${property}.${operator}`);
-        if (!override.startsWith('filter.glue.')) return override;
-        // Fall back to generic
-        const generic = t(`filter.glue.beforeOperator.${operator}`);
-        if (!generic.startsWith('filter.glue.')) return generic;
+        const glue = t(`filter.glue.operators.${property}.${operator}`);
+        if (!glue.startsWith('filter.glue.operators.')) return glue;
         return '';
     }
 

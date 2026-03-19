@@ -390,7 +390,8 @@ export class ScheduleView extends ItemView {
         dateCell.dataset.date = date;
 
         const dateObj = this.parseLocalDate(date);
-        const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+        const weekdays = t('calendar.weekdaysShort').split(',');
+        const dayName = weekdays[new Date(date + 'T00:00:00Z').getUTCDay()];
         const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(this.app, dateObj);
         const linkLabel = DailyNoteUtils.getDailyNoteLabelForDate(this.app, dateObj);
         const fullLabel = `${linkLabel} ${dayName}`;

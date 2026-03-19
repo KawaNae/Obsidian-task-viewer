@@ -158,9 +158,8 @@ export const PROPERTY_OPERATORS: Record<FilterProperty, FilterOperator[]> = {
 
 /** Resolve the display label for an operator, respecting per-property overrides. */
 export function getOperatorLabel(property: FilterProperty, operator: FilterOperator): string {
-    const override = t(`filter.operatorOverride.${property}.${operator}`);
-    // t() returns the key itself when no translation exists
-    if (!override.startsWith('filter.operatorOverride.')) return override;
+    const label = t(`filter.operators.${property}.${operator}`);
+    if (!label.startsWith('filter.operators.')) return label;
     return t(`filter.operator.${operator}`);
 }
 

@@ -119,25 +119,11 @@ export class TaskConverter {
         }
 
         // tags
-        if (frontmatterKeys.sharedtags === 'tags') {
-            // sharedtags キーが tags と同一 → 全タグを tags: に統合
-            const allTags = sharedTags && sharedTags.length > 0
-                ? TagExtractor.merge(task.tags, sharedTags)
-                : task.tags;
-            if (allTags.length > 0) {
-                lines.push(`tags: [${allTags.join(', ')}]`);
-            }
-        } else {
-            // カスタムキー → タスク固有タグと shared タグを分離
-            const ownTags = sharedTags && sharedTags.length > 0
-                ? task.tags.filter(t => !sharedTags.includes(t))
-                : task.tags;
-            if (ownTags.length > 0) {
-                lines.push(`tags: [${ownTags.join(', ')}]`);
-            }
-            if (sharedTags && sharedTags.length > 0) {
-                lines.push(`${frontmatterKeys.sharedtags}: [${sharedTags.join(', ')}]`);
-            }
+        const allTags = sharedTags && sharedTags.length > 0
+            ? TagExtractor.merge(task.tags, sharedTags)
+            : task.tags;
+        if (allTags.length > 0) {
+            lines.push(`tags: [${allTags.join(', ')}]`);
         }
 
         // custom properties

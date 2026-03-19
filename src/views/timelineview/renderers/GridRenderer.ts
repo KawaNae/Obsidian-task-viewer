@@ -8,6 +8,7 @@ import { HandleManager } from '../HandleManager';
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { TaskLinkInteractionManager } from '../../taskcard/TaskLinkInteractionManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../../constants/hover';
+import { t } from '../../../i18n';
 
 import { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './TimelineSectionRenderer';
@@ -90,7 +91,8 @@ export class GridRenderer {
         const headerCells: DateHeaderDisplayEntry[] = [];
         dates.forEach(date => {
             const cell = headerRow.createDiv('date-header__cell');
-            const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+            const weekdays = t('calendar.weekdaysShort').split(',');
+            const dayName = weekdays[new Date(date + 'T00:00:00Z').getUTCDay()];
 
             const dateObj = this.parseLocalDate(date);
             const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(this.plugin.app, dateObj);

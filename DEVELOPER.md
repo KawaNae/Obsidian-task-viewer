@@ -926,13 +926,12 @@ Defined in `src/types.ts` as `TaskViewerSettings`. Defaults are in `DEFAULT_SETT
 | `editorMenuForCheckboxes` | boolean | `true` | Show checkbox operations in editor context menu |
 | `suggestColor` | boolean | `true` | Show color suggestions in property panel |
 | `suggestLinestyle` | boolean | `true` | Show linestyle suggestions in property panel |
-| `suggestSharedtags` | boolean | `true` | Show tag suggestions in property panel |
 | `hideViewHeader` | boolean | `true` | Hide view header |
 | `mobileTopOffset` | number | 32 | Top offset for mobile (px) |
 
 **`defaultViewPositions` defaults**: `{ timeline: 'tab', schedule: 'right', calendar: 'tab', miniCalendar: 'left', timer: 'right', kanban: 'tab' }`
 
-All `FrontmatterTaskKeys` fields (`start`, `end`, `due`, `status`, `content`, `timerTargetId`, `color`, `linestyle`, `sharedtags`, `ignore`) are independently customisable. Duplicate key values are not allowed.
+All `FrontmatterTaskKeys` fields (`start`, `end`, `due`, `status`, `content`, `timerTargetId`, `color`, `linestyle`, `placeholder`, `ignore`) are independently customisable. Duplicate key values are not allowed.
 
 ---
 
