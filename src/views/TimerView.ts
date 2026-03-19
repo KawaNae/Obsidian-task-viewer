@@ -26,6 +26,7 @@ import { TimeFormatter } from '../utils/TimeFormatter';
 import { ViewUriBuilder } from '../utils/ViewUriBuilder';
 import type { ViewUriOptions } from '../utils/ViewUriBuilder';
 import { IntervalTemplateCreator } from './customMenus/IntervalTemplateCreator';
+import { t } from '../i18n';
 
 export const VIEW_TYPE_TIMER = VIEW_META_TIMER.type;
 
@@ -292,7 +293,7 @@ export class TimerView extends ItemView {
                 }
                 if (prevRemaining > 0 && this.timer.timeRemaining <= 0) {
                     AudioUtils.playFinishSound();
-                    new Notice('Timer complete!');
+                    new Notice(t('timer.complete'));
                 }
                 this.updateDisplay();
                 return;
@@ -346,9 +347,9 @@ export class TimerView extends ItemView {
         // Play transition confirm chime (only when continuing to next segment)
         AudioUtils.playTransitionConfirm();
         if (currentSegment.type === 'work') {
-            new Notice('Work complete! Time for a break.');
+            new Notice(t('timer.workComplete'));
         } else if (currentSegment.type === 'break') {
-            new Notice('Break complete! Ready to work.');
+            new Notice(t('timer.breakComplete'));
         }
 
         const nextSegment = this.getCurrentSegment(this.timer);
@@ -369,7 +370,7 @@ export class TimerView extends ItemView {
     private handleIntervalFinish(): void {
         this.stopTicker();
         AudioUtils.playFinishSound();
-        new Notice('All intervals complete!');
+        new Notice(t('timer.allIntervalsComplete'));
         this.timer = null;
         this.render();
     }
@@ -471,10 +472,10 @@ export class TimerView extends ItemView {
         setIcon(modeIcon, 'chevrons-up-down');
 
         const labels: Record<TimerViewMode, string> = {
-            countup: 'Countup',
-            countdown: 'Countdown',
-            pomodoro: 'Pomodoro',
-            interval: 'Interval',
+            countup: t('timer.countup'),
+            countdown: t('timer.countdown'),
+            pomodoro: t('timer.pomodoro'),
+            interval: t('timer.interval'),
         };
         modeLabel.setText(labels[this.timerViewMode]);
         modeBtn.disabled = !isIdle;
@@ -507,7 +508,7 @@ export class TimerView extends ItemView {
         if (this.timerViewMode === 'interval' && isIdle) {
             const refreshBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
             setIcon(refreshBtn, 'refresh-cw');
-            refreshBtn.setAttribute('aria-label', 'Reload templates');
+            refreshBtn.setAttribute('aria-label', t('timer.reloadTemplates'));
             refreshBtn.onclick = async () => {
                 await this.loadTemplates();
                 this.render();
@@ -517,7 +518,7 @@ export class TimerView extends ItemView {
         // Settings gear (all modes)
         const settingsBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(settingsBtn, 'settings');
-        settingsBtn.setAttribute('aria-label', 'Settings');
+        settingsBtn.setAttribute('aria-label', t('timer.settings'));
         settingsBtn.onclick = (e) => this.showSettingsMenu(e);
     }
 
@@ -533,7 +534,7 @@ export class TimerView extends ItemView {
                 cls: 'timer-view__btn timer-view__btn--primary',
             });
             setIcon(startBtn, 'play');
-            startBtn.createSpan({ text: ' Start' });
+            startBtn.createSpan({ text: ` ${t('timer.start')}` });
             startBtn.onclick = () => this.startTimer();
             return;
         }
@@ -544,7 +545,7 @@ export class TimerView extends ItemView {
                 cls: 'timer-view__btn timer-view__btn--secondary',
             });
             setIcon(pauseBtn, 'pause');
-            pauseBtn.createSpan({ text: ' Pause' });
+            pauseBtn.createSpan({ text: ` ${t('timer.pause')}` });
             pauseBtn.onclick = () => {
                 this.pauseTimer();
                 AudioUtils.playPauseSound();
@@ -555,7 +556,7 @@ export class TimerView extends ItemView {
                 cls: 'timer-view__btn timer-view__btn--danger',
             });
             setIcon(stopBtn, 'square');
-            stopBtn.createSpan({ text: ' Stop' });
+            stopBtn.createSpan({ text: ` ${t('timer.stop')}` });
             stopBtn.onclick = () => {
                 AudioUtils.playFinishSound();
                 this.resetTimer();
@@ -568,14 +569,14 @@ export class TimerView extends ItemView {
             cls: 'timer-view__btn timer-view__btn--primary',
         });
         setIcon(resumeBtn, 'play');
-        resumeBtn.createSpan({ text: ' Resume' });
+        resumeBtn.createSpan({ text: ` ${t('timer.resume')}` });
         resumeBtn.onclick = () => this.resumeTimer();
 
         const resetBtn = container.createEl('button', {
             cls: 'timer-view__btn timer-view__btn--danger',
         });
         setIcon(resetBtn, 'x');
-        resetBtn.createSpan({ text: ' Reset' });
+        resetBtn.createSpan({ text: ` ${t('timer.reset')}` });
         resetBtn.onclick = () => this.resetTimer();
     }
 
@@ -598,7 +599,7 @@ export class TimerView extends ItemView {
         if (!folder) {
             parent.createDiv({
                 cls: 'timer-view__template-empty',
-                text: 'Set an interval template folder in plugin settings.',
+                text: t('timer.setIntervalFolder'),
             });
             return;
         }
@@ -608,7 +609,7 @@ export class TimerView extends ItemView {
         if (this.templates.length === 0) {
             list.createDiv({
                 cls: 'timer-view__template-empty',
-                text: 'No templates found.',
+                text: t('timer.noTemplatesFound'),
             });
         } else {
             for (const template of this.templates) {
@@ -653,7 +654,7 @@ export class TimerView extends ItemView {
         });
         const addIcon = addBtn.createSpan('timer-view__add-template-icon');
         setIcon(addIcon, 'plus');
-        addBtn.createSpan({ text: 'New Template' });
+        addBtn.createSpan({ text: t('timer.newTemplate') });
         addBtn.onclick = () => {
             if (!this.templateCreator) {
                 this.templateCreator = new IntervalTemplateCreator(this.app);
@@ -674,7 +675,7 @@ export class TimerView extends ItemView {
                 cls: 'timer-view__btn timer-view__btn--primary',
             });
             setIcon(startBtn, 'play');
-            startBtn.createSpan({ text: ' Start' });
+            startBtn.createSpan({ text: ` ${t('timer.start')}` });
             startBtn.disabled = !this.selectedTemplate;
             if (!this.selectedTemplate) {
                 startBtn.addClass('timer-view__btn--disabled');
@@ -701,25 +702,25 @@ export class TimerView extends ItemView {
 
         // Copy URI (all modes)
         menu.addItem((item) => {
-            item.setTitle('Copy URI')
+            item.setTitle(t('timer.copyUri'))
                 .setIcon('link')
                 .onClick(async () => {
                     const uri = this.buildCurrentUri();
                     await navigator.clipboard.writeText(uri);
-                    new Notice('URI copied to clipboard');
+                    new Notice(t('notice.uriCopied'));
                 });
         });
 
         // Copy as link (all modes)
         menu.addItem((item) => {
-            item.setTitle('Copy as link')
+            item.setTitle(t('timer.copyAsLink'))
                 .setIcon('external-link')
                 .onClick(async () => {
                     const uri = this.buildCurrentUri();
                     const name = VIEW_META_TIMER.displayText;
                     const link = `[${name}](${uri})`;
                     await navigator.clipboard.writeText(link);
-                    new Notice('Link copied to clipboard');
+                    new Notice(t('notice.linkCopied'));
                 });
         });
 
@@ -739,7 +740,7 @@ export class TimerView extends ItemView {
 
     private addCountdownSettings(menu: Menu): void {
         menu.addItem((item) => {
-            item.setTitle('Countdown Duration').setDisabled(true);
+            item.setTitle(t('timer.countdownDuration')).setDisabled(true);
         });
 
         const presets = [5, 10, 15, 25, 30, 45, 50, 60];
@@ -761,11 +762,11 @@ export class TimerView extends ItemView {
 
         menu.addItem((item) => {
             const isCustom = !presets.includes(current);
-            item.setTitle(`  Custom...${isCustom ? ` (${current} min) \u2713` : ''}`)
+            item.setTitle(`  ${t('timer.custom')}${isCustom ? ` (${current} min) \u2713` : ''}`)
                 .onClick(() => {
                     new InputModal(
                         this.app,
-                        'Countdown Duration',
+                        t('timer.countdownDuration'),
                         'Minutes (1-120)',
                         current.toString(),
                         async (value) => {
@@ -786,7 +787,7 @@ export class TimerView extends ItemView {
 
     private addPomodoroSettings(menu: Menu): void {
         menu.addItem((item) => {
-            item.setTitle('Work Duration').setDisabled(true);
+            item.setTitle(t('timer.workDuration')).setDisabled(true);
         });
 
         const workOptions = [15, 25, 30, 45, 50];
@@ -805,11 +806,11 @@ export class TimerView extends ItemView {
         menu.addItem((item) => {
             const current = this.plugin.settings.pomodoroWorkMinutes;
             const isCustom = !workOptions.includes(current);
-            item.setTitle(`  Custom...${isCustom ? ` (${current} min) \u2713` : ''}`)
+            item.setTitle(`  ${t('timer.custom')}${isCustom ? ` (${current} min) \u2713` : ''}`)
                 .onClick(() => {
                     new InputModal(
                         this.app,
-                        'Work Duration',
+                        t('timer.workDuration'),
                         'Minutes (1-120)',
                         current.toString(),
                         async (value) => {
@@ -827,7 +828,7 @@ export class TimerView extends ItemView {
         menu.addSeparator();
 
         menu.addItem((item) => {
-            item.setTitle('Break Duration').setDisabled(true);
+            item.setTitle(t('timer.breakDuration')).setDisabled(true);
         });
 
         const breakOptions = [5, 10, 15];
@@ -846,11 +847,11 @@ export class TimerView extends ItemView {
         menu.addItem((item) => {
             const current = this.plugin.settings.pomodoroBreakMinutes;
             const isCustom = !breakOptions.includes(current);
-            item.setTitle(`  Custom...${isCustom ? ` (${current} min) \u2713` : ''}`)
+            item.setTitle(`  ${t('timer.custom')}${isCustom ? ` (${current} min) \u2713` : ''}`)
                 .onClick(() => {
                     new InputModal(
                         this.app,
-                        'Break Duration',
+                        t('timer.breakDuration'),
                         'Minutes (1-60)',
                         current.toString(),
                         async (value) => {

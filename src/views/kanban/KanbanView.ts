@@ -1,4 +1,5 @@
 import { ItemView, Menu, WorkspaceLeaf, setIcon } from 'obsidian';
+import { t } from '../../i18n';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
@@ -196,7 +197,7 @@ export class KanbanView extends ItemView {
         // View-level filter button
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
-        filterBtn.setAttribute('aria-label', 'Filter');
+        filterBtn.setAttribute('aria-label', t('toolbar.filter'));
         filterBtn.classList.toggle('is-filtered', this.viewFilterMenu.hasActiveFilters());
         filterBtn.onclick = (e) => {
             this.viewFilterMenu.showMenu(e as MouseEvent, {
@@ -233,6 +234,8 @@ export class KanbanView extends ItemView {
                 grid: this.grid,
                 filterState: this.viewFilterMenu.getFilterState(),
             }),
+            getExportContainer: () => this.container,
+            getTaskIndex: () => this.taskIndex,
             onApplyTemplate: (template) => {
                 if (template.grid && template.grid.length > 0) {
                     this.grid = template.grid;
@@ -354,6 +357,7 @@ export class KanbanView extends ItemView {
         const settings = this.plugin.settings;
         for (const task of tasks) {
             const card = body.createDiv('task-card');
+            card.dataset.id = task.id;
             TaskStyling.applyTaskColor(card, task.color ?? null);
             TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
             this.taskRenderer.render(card, task, this, settings);
@@ -367,20 +371,20 @@ export class KanbanView extends ItemView {
         const menu = new Menu();
 
         menu.addItem(item => {
-            item.setTitle('Rename')
+            item.setTitle(t('menu.rename'))
                 .setIcon('pencil')
                 .onClick(() => this.startCellRename(nameEl, listDef));
         });
 
         menu.addItem(item => {
-            item.setTitle('Duplicate')
+            item.setTitle(t('menu.duplicate'))
                 .setIcon('copy')
                 .onClick(() => this.duplicateCell(listDef, row, col));
         });
 
         menu.addItem(item => {
             (item as any)
-                .setTitle('Apply view filter')
+                .setTitle(t('menu.applyViewFilter'))
                 .setIcon('filter')
                 .setChecked(!!listDef.applyViewFilter)
                 .onClick(() => {
@@ -393,25 +397,25 @@ export class KanbanView extends ItemView {
         menu.addSeparator();
 
         menu.addItem(item => {
-            item.setTitle('Insert Row Above')
+            item.setTitle(t('menu.insertRowAbove'))
                 .setIcon('arrow-up')
                 .onClick(() => this.insertRow(row));
         });
 
         menu.addItem(item => {
-            item.setTitle('Insert Row Below')
+            item.setTitle(t('menu.insertRowBelow'))
                 .setIcon('arrow-down')
                 .onClick(() => this.insertRow(row + 1));
         });
 
         menu.addItem(item => {
-            item.setTitle('Insert Column Left')
+            item.setTitle(t('menu.insertColumnLeft'))
                 .setIcon('arrow-left')
                 .onClick(() => this.insertColumn(col));
         });
 
         menu.addItem(item => {
-            item.setTitle('Insert Column Right')
+            item.setTitle(t('menu.insertColumnRight'))
                 .setIcon('arrow-right')
                 .onClick(() => this.insertColumn(col + 1));
         });
@@ -420,7 +424,7 @@ export class KanbanView extends ItemView {
 
         if (this.grid.length > 1) {
             menu.addItem(item => {
-                item.setTitle('Remove Row')
+                item.setTitle(t('menu.removeRow'))
                     .setIcon('trash')
                     .onClick(() => this.removeRow(row));
             });
@@ -429,7 +433,7 @@ export class KanbanView extends ItemView {
         const cols = this.grid[0]?.length ?? 1;
         if (cols > 1) {
             menu.addItem(item => {
-                item.setTitle('Remove Column')
+                item.setTitle(t('menu.removeColumn'))
                     .setIcon('trash')
                     .onClick(() => this.removeColumn(col));
             });
@@ -479,7 +483,7 @@ export class KanbanView extends ItemView {
     private createDefaultList(): PinnedListDefinition {
         return {
             id: this.generateId(),
-            name: 'New List',
+            name: t('pinnedList.newList'),
             filterState: createEmptyFilterState(),
         };
     }

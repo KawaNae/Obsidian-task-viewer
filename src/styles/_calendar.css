@@ -23,6 +23,9 @@
     grid-template-columns: repeat(7, minmax(0, 1fr));
     background: var(--tv-bg-date-header);
     border-bottom: 1px solid var(--tv-border);
+    position: sticky;
+    top: 0;
+    z-index: 2;
 }
 
 .calendar-weekday-header.has-week-numbers {
@@ -35,11 +38,6 @@
     font-size: 0.8em;
     font-weight: 700;
     color: var(--tv-text-muted);
-    border-right: 1px solid var(--tv-border);
-}
-
-.calendar-weekday-cell:last-child {
-    border-right: none;
 }
 
 .calendar-grid__body {

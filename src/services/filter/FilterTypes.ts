@@ -1,4 +1,5 @@
 import type { Task } from '../../types';
+import { t } from '../../i18n';
 
 // ── Property & Operator enums ──
 
@@ -15,23 +16,16 @@ export type FilterOperator =
     | 'isSet' | 'isNotSet'
     | 'contains' | 'notContains'
     | 'equals' | 'before' | 'after' | 'onOrBefore' | 'onOrAfter'
-    | 'lessThan' | 'lessThanOrEqual' | 'greaterThan' | 'greaterThanOrEqual';
+    | 'lessThan' | 'lessThanOrEqual' | 'greaterThan' | 'greaterThanOrEqual'
+    | 'only';
 
 // ── Value types ──
-
-export type FilterValue =
-    | { type: 'stringSet'; values: string[] }
-    | { type: 'boolean'; value: boolean }
-    | { type: 'string'; value: string }
-    | { type: 'date'; value: DateFilterValue }
-    | { type: 'number'; value: number; unit?: 'hours' | 'minutes' }
-    | { type: 'property'; key: string; value: string };
 
 export type RelativeDatePreset = 'today' | 'thisWeek' | 'nextWeek' | 'pastWeek' | 'nextNDays' | 'thisMonth' | 'thisYear';
 
 export type DateFilterValue =
-    | { mode: 'absolute'; date: string }
-    | { mode: 'relative'; preset: RelativeDatePreset; n?: number };
+    | string                                        // "2024-01-01" (absolute)
+    | { preset: RelativeDatePreset; n?: number };   // relative
 
 // ── Recursive filter tree ──
 
@@ -43,16 +37,16 @@ export type FilterTarget = 'self' | 'parent';
 
 export interface FilterConditionNode {
     type: 'condition';
-    id: string;
     property: FilterProperty;
     operator: FilterOperator;
-    value: FilterValue;
+    value?: string | number | string[] | DateFilterValue;
+    key?: string;             // property フィルタ用
+    unit?: 'hours' | 'minutes';  // length フィルタ用
     target?: FilterTarget;
 }
 
 export interface FilterGroupNode {
     type: 'group';
-    id: string;
     children: FilterNode[];
     logic: 'and' | 'or';
 }
@@ -67,17 +61,11 @@ export interface FilterContext {
     taskLookup?: (id: string) => Task | undefined;
 }
 
-/** @deprecated Use FilterConditionNode */
-export type FilterCondition = FilterConditionNode;
-/** @deprecated Use FilterGroupNode */
-export type FilterGroup = FilterGroupNode;
-
 // ── Frozen sentinel ──
 
 export const EMPTY_FILTER_STATE: FilterState = Object.freeze({
     root: Object.freeze({
         type: 'group' as const,
-        id: 'root',
         children: Object.freeze([]) as readonly FilterNode[] as FilterNode[],
         logic: 'and' as const,
     }),
@@ -85,31 +73,21 @@ export const EMPTY_FILTER_STATE: FilterState = Object.freeze({
 
 // ── Factory functions ──
 
-function generateId(prefix: string): string {
-    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
 export function createEmptyFilterState(): FilterState {
     return { root: createFilterGroup() };
 }
 
 export function createFilterGroup(): FilterGroupNode {
-    return { type: 'group', id: generateId('g'), children: [], logic: 'and' };
+    return { type: 'group', children: [], logic: 'and' };
 }
 
 export function createDefaultCondition(): FilterConditionNode {
     return {
         type: 'condition',
-        id: generateId('f'),
         property: 'tag',
         operator: 'includes',
-        value: { type: 'stringSet', values: [] },
+        value: [],
     };
-}
-
-/** @deprecated Use createFilterGroup() */
-export function createEmptyFilterGroup(): FilterGroupNode {
-    return createFilterGroup();
 }
 
 // ── Tree query helpers ──
@@ -140,14 +118,13 @@ function collectConditions(group: FilterGroupNode, out: FilterConditionNode[]): 
     }
 }
 
-/** Deep-clone a FilterNode, regenerating all IDs */
+/** Deep-clone a FilterNode */
 export function deepCloneNode(node: FilterNode): FilterNode {
     if (node.type === 'condition') {
-        return { ...JSON.parse(JSON.stringify(node)), id: generateId('f') };
+        return JSON.parse(JSON.stringify(node));
     }
     return {
         type: 'group',
-        id: generateId('g'),
         children: node.children.map(deepCloneNode),
         logic: node.logic,
     };
@@ -164,7 +141,7 @@ export const NUMBER_PROPERTIES: Set<FilterProperty> = new Set(['length']);
 /** Available operators per property */
 export const PROPERTY_OPERATORS: Record<FilterProperty, FilterOperator[]> = {
     file: ['includes', 'excludes'],
-    tag: ['includes', 'excludes', 'equals'],
+    tag: ['includes', 'excludes', 'equals', 'only'],
     status: ['includes', 'excludes'],
     content: ['contains', 'notContains'],
     startDate: ['isSet', 'isNotSet', 'equals', 'before', 'after', 'onOrBefore', 'onOrAfter'],
@@ -179,42 +156,17 @@ export const PROPERTY_OPERATORS: Record<FilterProperty, FilterOperator[]> = {
     property: ['isSet', 'isNotSet', 'equals', 'contains', 'notContains'],
 };
 
-/** Display labels for operators */
-export const OPERATOR_LABELS: Record<FilterOperator, string> = {
-    includes: 'includes',
-    excludes: 'excludes',
-    contains: 'contains',
-    notContains: 'does not contain',
-    isSet: 'is set',
-    isNotSet: 'is not set',
-    equals: 'is',
-    before: 'is before',
-    after: 'is after',
-    onOrBefore: 'is on or before',
-    onOrAfter: 'is on or after',
-    lessThan: 'is less than',
-    lessThanOrEqual: 'is at most',
-    greaterThan: 'is greater than',
-    greaterThanOrEqual: 'is at least',
-};
+/** Resolve the display label for an operator, respecting per-property overrides. */
+export function getOperatorLabel(property: FilterProperty, operator: FilterOperator): string {
+    const label = t(`filter.operators.${property}.${operator}`);
+    if (!label.startsWith('filter.operators.')) return label;
+    return t(`filter.operator.${operator}`);
+}
 
-/** Display labels for properties */
-export const PROPERTY_LABELS: Record<FilterProperty, string> = {
-    file: 'File',
-    tag: 'Tag',
-    status: 'Status',
-    content: 'Content',
-    startDate: 'Start',
-    endDate: 'End',
-    due: 'Due',
-    color: 'Color',
-    linestyle: 'Line style',
-    length: 'Length',
-    taskType: 'Task type',
-    parent: 'Parent',
-    children: 'Children',
-    property: 'Property',
-};
+/** Resolve the display label for a filter property. */
+export function getPropertyLabel(property: FilterProperty): string {
+    return t(`filter.property.${property}`);
+}
 
 /** Operators that require no value input */
 export const NO_VALUE_OPERATORS: Set<FilterOperator> = new Set(['isSet', 'isNotSet']);
@@ -237,13 +189,7 @@ export const PROPERTY_ICONS: Record<FilterProperty, string> = {
     property: 'list',
 };
 
-/** Display labels for relative date presets */
-export const RELATIVE_DATE_LABELS: Record<RelativeDatePreset, string> = {
-    today: 'Today',
-    thisWeek: 'This week',
-    nextWeek: 'Next week',
-    pastWeek: 'Past week',
-    nextNDays: 'Next N days',
-    thisMonth: 'This month',
-    thisYear: 'This year',
-};
+/** Resolve the display label for a relative date preset. */
+export function getRelativeDateLabel(preset: RelativeDatePreset): string {
+    return t(`filter.relativeDate.${preset}`);
+}

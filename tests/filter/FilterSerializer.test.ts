@@ -2,24 +2,24 @@ import { describe, it, expect } from 'vitest';
 import { FilterSerializer } from '../../src/services/filter/FilterSerializer';
 import type { FilterState, FilterConditionNode, FilterGroupNode } from '../../src/services/filter/FilterTypes';
 
-function makeCond(property: string, operator: string, values: string[]): FilterConditionNode {
-    return {
+function makeCond(property: string, operator: string, value?: unknown): FilterConditionNode {
+    const node: FilterConditionNode = {
         type: 'condition',
-        id: 'f-1',
         property: property as FilterConditionNode['property'],
         operator: operator as FilterConditionNode['operator'],
-        value: { type: 'stringSet', values },
     };
+    if (value !== undefined) node.value = value as FilterConditionNode['value'];
+    return node;
 }
 
 function makeState(conditions: FilterConditionNode[], logic: 'and' | 'or' = 'and'): FilterState {
     return {
-        root: { type: 'group', id: 'root', children: conditions, logic },
+        root: { type: 'group', children: conditions, logic },
     };
 }
 
 describe('FilterSerializer', () => {
-    describe('v4 round-trip', () => {
+    describe('v5 round-trip', () => {
         it('toJSON → fromJSON preserves structure', () => {
             const state = makeState([
                 makeCond('tag', 'includes', ['work', 'urgent']),
@@ -35,16 +35,16 @@ describe('FilterSerializer', () => {
             const c0 = restored.root.children[0] as FilterConditionNode;
             expect(c0.property).toBe('tag');
             expect(c0.operator).toBe('includes');
-            expect(c0.value).toEqual({ type: 'stringSet', values: ['work', 'urgent'] });
+            expect(c0.value).toEqual(['work', 'urgent']);
         });
 
         it('preserves nested groups', () => {
             const inner: FilterGroupNode = {
-                type: 'group', id: 'g-inner', logic: 'or',
+                type: 'group', logic: 'or',
                 children: [makeCond('status', 'includes', ['x'])],
             };
             const state: FilterState = {
-                root: { type: 'group', id: 'root', logic: 'and', children: [inner, makeCond('tag', 'includes', ['a'])] },
+                root: { type: 'group', logic: 'and', children: [inner, makeCond('tag', 'includes', ['a'])] },
             };
 
             const restored = FilterSerializer.fromJSON(FilterSerializer.toJSON(state));
@@ -53,6 +53,221 @@ describe('FilterSerializer', () => {
             const restoredInner = restored.root.children[0] as FilterGroupNode;
             expect(restoredInner.logic).toBe('or');
             expect(restoredInner.children).toHaveLength(1);
+        });
+
+        it('serializes date condition (absolute)', () => {
+            const state = makeState([makeCond('startDate', 'equals', '2026-03-10')]);
+            const json = FilterSerializer.toJSON(state);
+            const restored = FilterSerializer.fromJSON(json);
+            const c = restored.root.children[0] as FilterConditionNode;
+            expect(c.value).toBe('2026-03-10');
+        });
+
+        it('serializes date condition (relative)', () => {
+            const state = makeState([makeCond('startDate', 'equals', { preset: 'today' })]);
+            const json = FilterSerializer.toJSON(state);
+            const restored = FilterSerializer.fromJSON(json);
+            const c = restored.root.children[0] as FilterConditionNode;
+            expect(c.value).toEqual({ preset: 'today' });
+        });
+
+        it('serializes length condition with unit', () => {
+            const cond = makeCond('length', 'greaterThan', 2);
+            cond.unit = 'hours';
+            const state = makeState([cond]);
+            const json = FilterSerializer.toJSON(state);
+            const restored = FilterSerializer.fromJSON(json);
+            const c = restored.root.children[0] as FilterConditionNode;
+            expect(c.value).toBe(2);
+            expect(c.unit).toBe('hours');
+        });
+
+        it('serializes property condition with key', () => {
+            const cond = makeCond('property', 'contains', 'high');
+            cond.key = 'priority';
+            const state = makeState([cond]);
+            const json = FilterSerializer.toJSON(state);
+            const restored = FilterSerializer.fromJSON(json);
+            const c = restored.root.children[0] as FilterConditionNode;
+            expect(c.value).toBe('high');
+            expect(c.key).toBe('priority');
+        });
+
+        it('serializes isSet condition (no value)', () => {
+            const state = makeState([makeCond('parent', 'isSet')]);
+            const json = FilterSerializer.toJSON(state);
+            const restored = FilterSerializer.fromJSON(json);
+            const c = restored.root.children[0] as FilterConditionNode;
+            expect(c.property).toBe('parent');
+            expect(c.operator).toBe('isSet');
+            expect(c.value).toBeUndefined();
+        });
+
+        it('serializes target field', () => {
+            const cond = makeCond('tag', 'includes', ['work']);
+            cond.target = 'parent';
+            const state = makeState([cond]);
+            const json = FilterSerializer.toJSON(state);
+            const restored = FilterSerializer.fromJSON(json);
+            const c = restored.root.children[0] as FilterConditionNode;
+            expect(c.target).toBe('parent');
+        });
+
+        it('output format matches spec', () => {
+            const state = makeState([
+                makeCond('tag', 'includes', ['work']),
+            ]);
+            const json = FilterSerializer.toJSON(state);
+            expect(json).toEqual({
+                logic: 'and',
+                conditions: [
+                    { property: 'tag', operator: 'includes', value: ['work'] },
+                ],
+            });
+        });
+    });
+
+    describe('v4 migration (old internal format)', () => {
+        it('migrates stringSet value', () => {
+            const v4 = {
+                root: {
+                    type: 'group', id: 'root', logic: 'and',
+                    children: [{
+                        type: 'condition', id: 'f-1',
+                        property: 'tag', operator: 'includes',
+                        value: { type: 'stringSet', values: ['work', 'urgent'] },
+                    }],
+                },
+            };
+            const result = FilterSerializer.fromJSON(v4);
+            const c = result.root.children[0] as FilterConditionNode;
+            expect(c.value).toEqual(['work', 'urgent']);
+        });
+
+        it('migrates string value', () => {
+            const v4 = {
+                root: {
+                    type: 'group', id: 'root', logic: 'and',
+                    children: [{
+                        type: 'condition', id: 'f-1',
+                        property: 'content', operator: 'contains',
+                        value: { type: 'string', value: 'hello' },
+                    }],
+                },
+            };
+            const result = FilterSerializer.fromJSON(v4);
+            const c = result.root.children[0] as FilterConditionNode;
+            expect(c.value).toBe('hello');
+        });
+
+        it('migrates absolute date value', () => {
+            const v4 = {
+                root: {
+                    type: 'group', id: 'root', logic: 'and',
+                    children: [{
+                        type: 'condition', id: 'f-1',
+                        property: 'startDate', operator: 'equals',
+                        value: { type: 'date', value: { mode: 'absolute', date: '2026-03-10' } },
+                    }],
+                },
+            };
+            const result = FilterSerializer.fromJSON(v4);
+            const c = result.root.children[0] as FilterConditionNode;
+            expect(c.value).toBe('2026-03-10');
+        });
+
+        it('migrates relative date value', () => {
+            const v4 = {
+                root: {
+                    type: 'group', id: 'root', logic: 'and',
+                    children: [{
+                        type: 'condition', id: 'f-1',
+                        property: 'startDate', operator: 'equals',
+                        value: { type: 'date', value: { mode: 'relative', preset: 'today' } },
+                    }],
+                },
+            };
+            const result = FilterSerializer.fromJSON(v4);
+            const c = result.root.children[0] as FilterConditionNode;
+            expect(c.value).toEqual({ preset: 'today' });
+        });
+
+        it('migrates number value with unit', () => {
+            const v4 = {
+                root: {
+                    type: 'group', id: 'root', logic: 'and',
+                    children: [{
+                        type: 'condition', id: 'f-1',
+                        property: 'length', operator: 'greaterThan',
+                        value: { type: 'number', value: 2, unit: 'hours' },
+                    }],
+                },
+            };
+            const result = FilterSerializer.fromJSON(v4);
+            const c = result.root.children[0] as FilterConditionNode;
+            expect(c.value).toBe(2);
+            expect(c.unit).toBe('hours');
+        });
+
+        it('migrates property value with key', () => {
+            const v4 = {
+                root: {
+                    type: 'group', id: 'root', logic: 'and',
+                    children: [{
+                        type: 'condition', id: 'f-1',
+                        property: 'property', operator: 'contains',
+                        value: { type: 'property', key: 'priority', value: 'high' },
+                    }],
+                },
+            };
+            const result = FilterSerializer.fromJSON(v4);
+            const c = result.root.children[0] as FilterConditionNode;
+            expect(c.value).toBe('high');
+            expect(c.key).toBe('priority');
+        });
+
+        it('migrates boolean value (isSet)', () => {
+            const v4 = {
+                root: {
+                    type: 'group', id: 'root', logic: 'and',
+                    children: [{
+                        type: 'condition', id: 'f-1',
+                        property: 'parent', operator: 'isSet',
+                        value: { type: 'boolean', value: true },
+                    }],
+                },
+            };
+            const result = FilterSerializer.fromJSON(v4);
+            const c = result.root.children[0] as FilterConditionNode;
+            expect(c.value).toBeUndefined();
+        });
+
+        it('migrates nested groups', () => {
+            const v4 = {
+                root: {
+                    type: 'group', id: 'root', logic: 'and',
+                    children: [
+                        {
+                            type: 'group', id: 'g-inner', logic: 'or',
+                            children: [{
+                                type: 'condition', id: 'f-1',
+                                property: 'status', operator: 'includes',
+                                value: { type: 'stringSet', values: ['x'] },
+                            }],
+                        },
+                        {
+                            type: 'condition', id: 'f-2',
+                            property: 'tag', operator: 'includes',
+                            value: { type: 'stringSet', values: ['a'] },
+                        },
+                    ],
+                },
+            };
+            const result = FilterSerializer.fromJSON(v4);
+            expect(result.root.children).toHaveLength(2);
+            expect(result.root.children[0].type).toBe('group');
+            const inner = result.root.children[0] as FilterGroupNode;
+            expect(inner.logic).toBe('or');
         });
     });
 
@@ -77,6 +292,7 @@ describe('FilterSerializer', () => {
             expect(result.root.children).toHaveLength(1);
             const c = result.root.children[0] as FilterConditionNode;
             expect(c.property).toBe('tag');
+            expect(c.value).toEqual(['work']);
         });
 
         it('migrates multiple groups', () => {
@@ -118,6 +334,17 @@ describe('FilterSerializer', () => {
         });
     });
 
+    describe('v5 single condition', () => {
+        it('parses a single condition object as root', () => {
+            const v5 = { property: 'tag', operator: 'includes', value: ['work'] };
+            const result = FilterSerializer.fromJSON(v5);
+            expect(result.root.children).toHaveLength(1);
+            const c = result.root.children[0] as FilterConditionNode;
+            expect(c.property).toBe('tag');
+            expect(c.value).toEqual(['work']);
+        });
+    });
+
     describe('invalid input', () => {
         it('null → empty state', () => {
             const result = FilterSerializer.fromJSON(null);
@@ -148,7 +375,7 @@ describe('FilterSerializer', () => {
         });
 
         it('empty filter → empty string', () => {
-            const state: FilterState = { root: { type: 'group', id: 'root', children: [], logic: 'and' } };
+            const state: FilterState = { root: { type: 'group', children: [], logic: 'and' } };
             expect(FilterSerializer.toURIParam(state)).toBe('');
         });
 

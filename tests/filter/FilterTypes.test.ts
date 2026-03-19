@@ -25,7 +25,7 @@ describe('FilterTypes utilities', () => {
             expect(c.type).toBe('condition');
             expect(c.property).toBe('tag');
             expect(c.operator).toBe('includes');
-            expect(c.value).toEqual({ type: 'stringSet', values: [] });
+            expect(c.value).toEqual([]);
         });
     });
 
@@ -37,7 +37,7 @@ describe('FilterTypes utilities', () => {
         it('returns true when condition exists', () => {
             const state: FilterState = {
                 root: {
-                    type: 'group', id: 'root', logic: 'and',
+                    type: 'group', logic: 'and',
                     children: [createDefaultCondition()],
                 },
             };
@@ -46,21 +46,21 @@ describe('FilterTypes utilities', () => {
 
         it('returns true for nested condition', () => {
             const inner: FilterGroupNode = {
-                type: 'group', id: 'g-1', logic: 'and',
+                type: 'group', logic: 'and',
                 children: [createDefaultCondition()],
             };
             const state: FilterState = {
-                root: { type: 'group', id: 'root', logic: 'and', children: [inner] },
+                root: { type: 'group', logic: 'and', children: [inner] },
             };
             expect(hasConditions(state)).toBe(true);
         });
 
         it('returns false for nested empty groups', () => {
             const inner: FilterGroupNode = {
-                type: 'group', id: 'g-1', logic: 'and', children: [],
+                type: 'group', logic: 'and', children: [],
             };
             const state: FilterState = {
-                root: { type: 'group', id: 'root', logic: 'and', children: [inner] },
+                root: { type: 'group', logic: 'and', children: [inner] },
             };
             expect(hasConditions(state)).toBe(false);
         });
@@ -75,10 +75,10 @@ describe('FilterTypes utilities', () => {
             const c1 = createDefaultCondition();
             const c2 = createDefaultCondition();
             const inner: FilterGroupNode = {
-                type: 'group', id: 'g-1', logic: 'and', children: [c2],
+                type: 'group', logic: 'and', children: [c2],
             };
             const state: FilterState = {
-                root: { type: 'group', id: 'root', logic: 'and', children: [c1, inner] },
+                root: { type: 'group', logic: 'and', children: [c1, inner] },
             };
             const all = getAllConditions(state);
             expect(all).toHaveLength(2);
@@ -86,25 +86,25 @@ describe('FilterTypes utilities', () => {
     });
 
     describe('deepCloneNode', () => {
-        it('clones condition with new ID', () => {
+        it('clones condition preserving all fields', () => {
             const original = createDefaultCondition();
             const cloned = deepCloneNode(original) as FilterConditionNode;
-            expect(cloned.id).not.toBe(original.id);
             expect(cloned.property).toBe(original.property);
             expect(cloned.operator).toBe(original.operator);
             expect(cloned.value).toEqual(original.value);
+            // Verify it's a deep copy
+            expect(cloned).not.toBe(original);
         });
 
-        it('clones group with new IDs recursively', () => {
+        it('clones group recursively', () => {
             const c = createDefaultCondition();
             const group: FilterGroupNode = {
-                type: 'group', id: 'g-orig', logic: 'or', children: [c],
+                type: 'group', logic: 'or', children: [c],
             };
             const cloned = deepCloneNode(group) as FilterGroupNode;
-            expect(cloned.id).not.toBe('g-orig');
             expect(cloned.logic).toBe('or');
             expect(cloned.children).toHaveLength(1);
-            expect((cloned.children[0] as FilterConditionNode).id).not.toBe(c.id);
+            expect(cloned.children[0]).not.toBe(c);
         });
     });
 });

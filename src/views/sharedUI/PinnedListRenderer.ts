@@ -4,6 +4,7 @@
  */
 
 import { Component, Menu, setIcon } from 'obsidian';
+import { t } from '../../i18n';
 import type { Task, DisplayTask, PinnedListDefinition } from '../../types';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
@@ -62,7 +63,7 @@ export class PinnedListRenderer {
         this.visibleCounts.clear();
         if (lists.length === 0) {
             container.createDiv('pinned-lists-container__empty')
-                .setText('No pinned lists.');
+                .setText(t('pinnedList.noPinnedLists'));
             return;
         }
 
@@ -191,7 +192,7 @@ export class PinnedListRenderer {
         const menu = new Menu();
 
         menu.addItem(item => {
-            item.setTitle('Rename')
+            item.setTitle(t('menu.rename'))
                 .setIcon('pencil')
                 .onClick(() => {
                     const listEl = anchorEl.closest('.pinned-list');
@@ -202,7 +203,7 @@ export class PinnedListRenderer {
 
         if (callbacks.onMoveUp && index > 0) {
             menu.addItem(item => {
-                item.setTitle('Move up')
+                item.setTitle(t('menu.moveUp'))
                     .setIcon('arrow-up')
                     .onClick(() => callbacks.onMoveUp!(listDef));
             });
@@ -210,14 +211,14 @@ export class PinnedListRenderer {
 
         if (callbacks.onMoveDown && index < totalCount - 1) {
             menu.addItem(item => {
-                item.setTitle('Move down')
+                item.setTitle(t('menu.moveDown'))
                     .setIcon('arrow-down')
                     .onClick(() => callbacks.onMoveDown!(listDef));
             });
         }
 
         menu.addItem(item => {
-            item.setTitle('Duplicate')
+            item.setTitle(t('menu.duplicate'))
                 .setIcon('copy')
                 .onClick(() => callbacks.onDuplicate(listDef));
         });
@@ -225,7 +226,7 @@ export class PinnedListRenderer {
         if (callbacks.onToggleApplyViewFilter) {
             menu.addItem(item => {
                 (item as any)
-                    .setTitle('Apply view filter')
+                    .setTitle(t('menu.applyViewFilter'))
                     .setIcon('filter')
                     .setChecked(!!listDef.applyViewFilter)
                     .onClick(() => callbacks.onToggleApplyViewFilter!(listDef));
@@ -235,7 +236,7 @@ export class PinnedListRenderer {
         menu.addSeparator();
 
         menu.addItem(item => {
-            item.setTitle('Remove')
+            item.setTitle(t('menu.remove'))
                 .setIcon('trash')
                 .onClick(() => callbacks.onRemove(listDef));
             (item as any).dom?.addClass('is-danger');
@@ -312,7 +313,7 @@ export class PinnedListRenderer {
         const pageSize = this.plugin.settings.pinnedListPageSize;
         const remaining = allTasks.length - shownCount;
         const btn = body.createDiv('pinned-list__show-more');
-        btn.setText(`Show more (${remaining})`);
+        btn.setText(t('pinnedList.showMore', { remaining }));
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             btn.remove();
@@ -330,6 +331,7 @@ export class PinnedListRenderer {
         const settings = this.plugin.settings;
         tasks.forEach(task => {
             const card = body.createDiv('task-card');
+            card.dataset.id = task.id;
 
             TaskStyling.applyTaskColor(card, task.color ?? null);
             TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);

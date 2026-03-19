@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildFilterFromParams } from '../../src/api/FilterParamsBuilder';
-import type { FilterConditionNode, FilterGroupNode } from '../../src/services/filter/FilterTypes';
+import type { FilterConditionNode } from '../../src/services/filter/FilterTypes';
 import type { ListParams } from '../../src/api/TaskApiTypes';
 
 /** Extract condition nodes from the built FilterState */
@@ -25,7 +25,6 @@ describe('buildFilterFromParams', () => {
         const filter = {
             root: {
                 type: 'group' as const,
-                id: 'test',
                 children: [],
                 logic: 'and' as const,
             },
@@ -34,43 +33,43 @@ describe('buildFilterFromParams', () => {
     });
 
     // ── file ──
-    it('file → file includes stringSet', () => {
+    it('file → file includes', () => {
         const conditions = getConditions({ file: 'daily.md' });
         const c = findCondition(conditions, 'file');
         expect(c).toBeDefined();
         expect(c!.operator).toBe('includes');
-        expect(c!.value).toEqual({ type: 'stringSet', values: ['daily.md'] });
+        expect(c!.value).toEqual(['daily.md']);
     });
 
     it('file auto-appends .md', () => {
         const conditions = getConditions({ file: 'daily' });
         const c = findCondition(conditions, 'file');
-        expect(c!.value).toEqual({ type: 'stringSet', values: ['daily.md'] });
+        expect(c!.value).toEqual(['daily.md']);
     });
 
     // ── status ──
-    it('status → status includes stringSet', () => {
+    it('status → status includes', () => {
         const conditions = getConditions({ status: 'x,-' });
         const c = findCondition(conditions, 'status');
         expect(c).toBeDefined();
-        expect(c!.value).toEqual({ type: 'stringSet', values: ['x', '-'] });
+        expect(c!.value).toEqual(['x', '-']);
     });
 
     // ── tag ──
-    it('tag → tag includes stringSet (strips #)', () => {
+    it('tag → tag includes (strips #)', () => {
         const conditions = getConditions({ tag: '#work,reading' });
         const c = findCondition(conditions, 'tag');
         expect(c).toBeDefined();
-        expect(c!.value).toEqual({ type: 'stringSet', values: ['work', 'reading'] });
+        expect(c!.value).toEqual(['work', 'reading']);
     });
 
     // ── content ──
-    it('content → content contains string', () => {
+    it('content → content contains', () => {
         const conditions = getConditions({ content: '会議' });
         const c = findCondition(conditions, 'content');
         expect(c).toBeDefined();
         expect(c!.operator).toBe('contains');
-        expect(c!.value).toEqual({ type: 'string', value: '会議' });
+        expect(c!.value).toBe('会議');
     });
 
     // ── date ──
@@ -131,12 +130,13 @@ describe('buildFilterFromParams', () => {
     });
 
     // ── property ──
-    it('property → property contains', () => {
+    it('property → property contains with key', () => {
         const conditions = getConditions({ property: '優先度:高' });
         const c = findCondition(conditions, 'property');
         expect(c).toBeDefined();
         expect(c!.operator).toBe('contains');
-        expect(c!.value).toEqual({ type: 'property', key: '優先度', value: '高' });
+        expect(c!.value).toBe('高');
+        expect(c!.key).toBe('優先度');
     });
 
     it('invalid property format throws error', () => {
@@ -144,37 +144,37 @@ describe('buildFilterFromParams', () => {
             .toThrow(/Invalid property filter format/);
     });
 
-    // ── color (new) ──
-    it('color → color includes stringSet', () => {
+    // ── color ──
+    it('color → color includes', () => {
         const conditions = getConditions({ color: 'red,blue' });
         const c = findCondition(conditions, 'color');
         expect(c).toBeDefined();
         expect(c!.operator).toBe('includes');
-        expect(c!.value).toEqual({ type: 'stringSet', values: ['red', 'blue'] });
+        expect(c!.value).toEqual(['red', 'blue']);
     });
 
     it('color as array', () => {
         const conditions = getConditions({ color: ['green'] });
         const c = findCondition(conditions, 'color');
-        expect(c!.value).toEqual({ type: 'stringSet', values: ['green'] });
+        expect(c!.value).toEqual(['green']);
     });
 
-    // ── type (new) ──
-    it('type → taskType includes stringSet', () => {
+    // ── type ──
+    it('type → taskType includes', () => {
         const conditions = getConditions({ type: 'frontmatter' });
         const c = findCondition(conditions, 'taskType');
         expect(c).toBeDefined();
         expect(c!.operator).toBe('includes');
-        expect(c!.value).toEqual({ type: 'stringSet', values: ['frontmatter'] });
+        expect(c!.value).toEqual(['frontmatter']);
     });
 
     it('type with multiple values', () => {
         const conditions = getConditions({ type: 'at-notation,frontmatter' });
         const c = findCondition(conditions, 'taskType');
-        expect(c!.value).toEqual({ type: 'stringSet', values: ['at-notation', 'frontmatter'] });
+        expect(c!.value).toEqual(['at-notation', 'frontmatter']);
     });
 
-    // ── root (new) ──
+    // ── root ──
     it('root → parent isNotSet', () => {
         const conditions = getConditions({ root: true });
         const c = findCondition(conditions, 'parent');
@@ -194,7 +194,6 @@ describe('buildFilterFromParams', () => {
         const filter = {
             root: {
                 type: 'group' as const,
-                id: 'custom',
                 children: [],
                 logic: 'or' as const,
             },

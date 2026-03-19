@@ -7,6 +7,7 @@ import { ConfirmModal } from '../../../modals/ConfirmModal';
 import { getTaskDisplayName } from '../../../utils/TaskContent';
 import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
 import { FileOperations } from '../../../services/persistence/utils/FileOperations';
+import { t } from '../../../i18n';
 
 /**
  * Task操作メニューの構築
@@ -44,7 +45,7 @@ export class TaskActionsMenuBuilder {
 
         menu.addItem((item) => {
             const subMenu = (item as any)
-                .setTitle('Track as Child')
+                .setTitle(t('menu.trackAsChild'))
                 .setIcon('clock')
                 .setSubmenu() as Menu;
 
@@ -62,7 +63,7 @@ export class TaskActionsMenuBuilder {
 
             // Countup
             subMenu.addItem((sub) => {
-                sub.setTitle('⏱️ Open Countup')
+                sub.setTitle(t('menu.openCountup'))
                     .setIcon('play')
                     .onClick(() => {
                         const widget = this.plugin.getTimerWidget();
@@ -72,7 +73,7 @@ export class TaskActionsMenuBuilder {
 
             // Pomodoro
             subMenu.addItem((sub) => {
-                sub.setTitle('🍅 Open Pomodoro')
+                sub.setTitle(t('menu.openPomodoro'))
                     .setIcon('timer')
                     .onClick(() => {
                         const widget = this.plugin.getTimerWidget();
@@ -87,7 +88,7 @@ export class TaskActionsMenuBuilder {
      */
     private addChildTaskItem(menu: Menu, task: Task): void {
         menu.addItem((item) => {
-            item.setTitle('Add Child Task')
+            item.setTitle(t('menu.addChildTask'))
                 .setIcon('plus')
                 .onClick(() => {
                     menu.close();
@@ -117,7 +118,7 @@ export class TaskActionsMenuBuilder {
      */
     private addOpenInEditorItem(menu: Menu, task: Task): void {
         menu.addItem((item) => {
-            item.setTitle('Open in Editor')
+            item.setTitle(t('menu.openInEditor'))
                 .setIcon('document')
                 .onClick(async () => {
                     if (this.plugin.settings.reuseExistingTab) {
@@ -149,12 +150,12 @@ export class TaskActionsMenuBuilder {
     private addDuplicateSubmenu(menu: Menu, task: Task): void {
         menu.addItem((item) => {
             const subMenu = (item as any)
-                .setTitle('Duplicate')
+                .setTitle(t('menu.duplicate'))
                 .setIcon('copy')
                 .setSubmenu() as Menu;
 
             subMenu.addItem((sub) => {
-                sub.setTitle('In Place')
+                sub.setTitle(t('menu.inPlace'))
                     .setIcon('copy')
                     .onClick(async () => {
                         await this.taskIndex.duplicateTask(task.id);
@@ -162,7 +163,7 @@ export class TaskActionsMenuBuilder {
             });
 
             subMenu.addItem((sub) => {
-                sub.setTitle('For Tomorrow')
+                sub.setTitle(t('menu.forTomorrow'))
                     .setIcon('calendar-plus')
                     .onClick(async () => {
                         await this.taskIndex.duplicateTaskForTomorrow(task.id);
@@ -170,7 +171,7 @@ export class TaskActionsMenuBuilder {
             });
 
             subMenu.addItem((sub) => {
-                sub.setTitle('For Week (7 days)')
+                sub.setTitle(t('menu.forWeek'))
                     .setIcon('calendar-range')
                     .onClick(async () => {
                         await this.taskIndex.duplicateTaskForWeek(task.id);
@@ -188,20 +189,20 @@ export class TaskActionsMenuBuilder {
 
         menu.addItem((item) => {
             const subMenu = (item as any)
-                .setTitle('Convert to')
+                .setTitle(t('menu.convertTo'))
                 .setIcon('arrow-right-left')
                 .setSubmenu() as Menu;
 
             // Inline Task → Plain Checkbox
             subMenu.addItem((sub) => {
-                sub.setTitle('Plain Checkbox')
+                sub.setTitle(t('menu.plainCheckbox'))
                     .setIcon('square')
                     .onClick(() => {
                         menu.close();
                         new ConfirmModal(
                             this.app,
-                            'Convert to Plain Checkbox',
-                            'Date/time fields will be removed. Continue?',
+                            t('menu.convertToPlainCheckbox'),
+                            t('menu.convertToPlainCheckboxMessage'),
                             async () => {
                                 await this.taskIndex.updateTask(task.id, {
                                     startDate: undefined,
@@ -211,25 +212,25 @@ export class TaskActionsMenuBuilder {
                                     due: undefined,
                                 });
                             },
-                            { confirmLabel: 'Convert' }
+                            { confirmLabel: t('modal.convert') }
                         ).open();
                     });
             });
 
             // Inline Task → Frontmatter Task
             subMenu.addItem((sub) => {
-                sub.setTitle('Frontmatter Task')
+                sub.setTitle(t('menu.frontmatterTask'))
                     .setIcon('file-plus')
                     .onClick(() => {
                         menu.close();
                         new ConfirmModal(
                             this.app,
-                            'Convert to Frontmatter Task',
-                            'This will create a new file for the task. Continue?',
+                            t('menu.convertToFrontmatterTask'),
+                            t('menu.convertToFrontmatterTaskMessage'),
                             async () => {
                                 await this.taskIndex.convertToFrontmatterTask(task.id);
                             },
-                            { confirmLabel: 'Convert' }
+                            { confirmLabel: t('modal.convert') }
                         ).open();
                     });
             });
@@ -244,13 +245,13 @@ export class TaskActionsMenuBuilder {
 
         menu.addItem((item) => {
             const subMenu = (item as any)
-                .setTitle('Switch to')
+                .setTitle(t('menu.switchTo'))
                 .setIcon('repeat')
                 .setSubmenu() as Menu;
 
             if (isTimed) {
                 subMenu.addItem((sub) => {
-                    sub.setTitle('All Day')
+                    sub.setTitle(t('menu.allDay'))
                         .setIcon('calendar-with-checkmark')
                         .onClick(async () => {
                             await this.taskIndex.updateTask(task.id, {
@@ -261,7 +262,7 @@ export class TaskActionsMenuBuilder {
                 });
             } else {
                 subMenu.addItem((sub) => {
-                    sub.setTitle('Timeline')
+                    sub.setTitle(t('menu.timelineMode'))
                         .setIcon('clock')
                         .onClick(async () => {
                             const startHour = this.plugin.settings.startHour;
@@ -281,19 +282,19 @@ export class TaskActionsMenuBuilder {
      */
     private addDeleteItem(menu: Menu, task: Task): void {
         menu.addItem((item) => {
-            item.setTitle('Delete')
+            item.setTitle(t('menu.deleteTask'))
                 .setIcon('trash')
                 .setWarning(true)
                 .onClick(async () => {
                     menu.close();
                     new ConfirmModal(
                         this.app,
-                        'Delete Task',
-                        'Are you sure you want to delete this task?',
+                        t('menu.deleteTaskTitle'),
+                        t('menu.deleteTaskMessage'),
                         async () => {
                             await this.taskIndex.deleteTask(task.id);
                         },
-                        { confirmLabel: 'Delete', warning: true }
+                        { confirmLabel: t('modal.delete'), warning: true }
                     ).open();
                 });
         });

@@ -38,17 +38,14 @@ export function hasSortRules(state: SortState): boolean {
     return state.rules.length > 0;
 }
 
+import { t } from '../../i18n';
+
 // ── Constants ──
 
-export const SORT_PROPERTY_LABELS: Record<SortProperty, string> = {
-    content: 'Content',
-    due: 'Due',
-    startDate: 'Start',
-    endDate: 'End',
-    file: 'File',
-    status: 'Status',
-    tag: 'Tag',
-};
+/** Resolve the display label for a sort property. */
+export function getSortPropertyLabel(property: SortProperty): string {
+    return t(`sort.property.${property}`);
+}
 
 export const SORT_PROPERTY_ICONS: Record<SortProperty, string> = {
     content: 'text',
@@ -60,7 +57,7 @@ export const SORT_PROPERTY_ICONS: Record<SortProperty, string> = {
     tag: 'tag',
 };
 
-export const SORT_DIRECTION_LABELS: Record<SortDirection, string> = {
-    asc: 'Ascending',
-    desc: 'Descending',
-};
+/** Resolve the display label for a sort direction. */
+export function getSortDirectionLabel(direction: SortDirection): string {
+    return t(`sort.direction.${direction}`);
+}

@@ -1,4 +1,5 @@
 import { App, setIcon, type WorkspaceLeaf } from 'obsidian';
+import { t } from '../../i18n';
 import { ViewState, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
@@ -88,13 +89,11 @@ export class TimelineToolbar {
             this.filterMenu.setFilterState({
                 root: {
                     type: 'group',
-                    id: 'migrated-file-group',
                     children: [{
                         type: 'condition',
-                        id: 'migrated-file',
                         property: 'file',
                         operator: 'includes',
-                        value: { type: 'stringSet', values: this.viewState.filterFiles },
+                        value: this.viewState.filterFiles,
                     }],
                     logic: 'and',
                 },
@@ -159,6 +158,8 @@ export class TimelineToolbar {
                 this.callbacks.onRender();
                 this.app.workspace.requestSaveLayout();
             },
+            getExportContainer: () => this.container.closest('.timeline-view')?.querySelector<HTMLElement>('.timeline-grid') ?? null,
+            getTaskIndex: () => this.taskIndex,
             onReset: () => {
                 this.viewState.daysToShow = 3;
                 this.viewState.zoomLevel = 1.0;
@@ -188,7 +189,7 @@ export class TimelineToolbar {
                 this.viewState.startDate = (oldestOverdueDate && oldestOverdueDate < visualPastDate) ? oldestOverdueDate : visualPastDate;
                 this.callbacks.onScrollToNow();
             },
-            { label: 'Now' }
+            { label: t('toolbar.now') }
         );
     }
 
@@ -254,7 +255,7 @@ export class TimelineToolbar {
     private renderFilterButton(toolbar: HTMLElement): void {
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
-        filterBtn.setAttribute('aria-label', 'Filter');
+        filterBtn.setAttribute('aria-label', t('toolbar.filter'));
         filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
 
         filterBtn.onclick = (e) => {

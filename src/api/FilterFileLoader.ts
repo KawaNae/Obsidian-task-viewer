@@ -1,6 +1,7 @@
 import type { App } from 'obsidian';
 import type { FilterState, FilterGroupNode } from '../services/filter/FilterTypes';
 import { hasConditions } from '../services/filter/FilterTypes';
+import { FilterSerializer } from '../services/filter/FilterSerializer';
 import { ViewTemplateLoader } from '../services/template/ViewTemplateLoader';
 
 /**
@@ -9,7 +10,6 @@ import { ViewTemplateLoader } from '../services/template/ViewTemplateLoader';
 export function mergeFilters(a: FilterState, b: FilterState): FilterState {
     const root: FilterGroupNode = {
         type: 'group',
-        id: 'merged-root',
         logic: 'and',
         children: [a.root, b.root],
     };
@@ -35,10 +35,11 @@ export async function loadFilterFile(
         try { parsed = JSON.parse(raw); } catch {
             return `Invalid JSON in filter file: ${normalizedPath}`;
         }
-        if (!(parsed && typeof parsed === 'object' && 'root' in parsed)) {
-            return `Invalid FilterState in ${normalizedPath}: missing "root" group`;
+        const state = FilterSerializer.fromJSON(parsed);
+        if (!hasConditions(state)) {
+            return `Invalid FilterState in ${normalizedPath}: no conditions found`;
         }
-        return parsed as FilterState;
+        return state;
     }
 
     if (normalizedPath.endsWith('.md')) {

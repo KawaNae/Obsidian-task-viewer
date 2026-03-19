@@ -19,19 +19,19 @@ export function parseDatePreset(input: string): DateFilterValue | null {
 
     // Absolute date: YYYY-MM-DD
     if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-        return { mode: 'absolute', date: normalized };
+        return normalized;
     }
 
     // nextNdays pattern (e.g., next7days)
     const nextNMatch = normalized.match(/^next(\d+)days$/);
     if (nextNMatch) {
-        return { mode: 'relative', preset: 'nextNDays', n: parseInt(nextNMatch[1], 10) };
+        return { preset: 'nextNDays', n: parseInt(nextNMatch[1], 10) };
     }
 
     // Named presets
     const preset = PRESET_MAP[normalized];
     if (preset) {
-        return { mode: 'relative', preset };
+        return { preset };
     }
 
     return null;

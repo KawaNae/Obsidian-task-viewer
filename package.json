@@ -1,6 +1,6 @@
 {
   "name": "task-viewer",
-  "version": "0.27.6",
+  "version": "0.28.0",
   "description": "Obsidian plugin for task calendar and timeline views",
   "main": "main.js",
   "scripts": {
@@ -27,6 +27,7 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "date-fns": "^3.0.0"
+    "date-fns": "^3.0.0",
+    "html-to-image": "^1.11.13"
   }
 }

@@ -47,13 +47,14 @@ export class FrontmatterTaskBuilder {
 
         if (!hasDateFields) {
             // Container candidate: requires at least one plugin-relevant key
-            // (tv-content, tv-color, tv-linestyle, tv-status, or sharedtags)
+            // (tv-content, tv-color, tv-linestyle, tv-status, or tags)
             const hasContainerSignals =
                 (frontmatterKeys.content in frontmatter) ||
                 (frontmatterKeys.color in frontmatter) ||
                 (frontmatterKeys.linestyle in frontmatter) ||
                 (frontmatterKeys.status in frontmatter) ||
-                (frontmatterKeys.sharedtags in frontmatter);
+                ('tags' in frontmatter) ||
+                (frontmatterKeys.mask in frontmatter);
 
             if (!hasContainerSignals) return null;
         }
@@ -113,7 +114,6 @@ export class FrontmatterTaskBuilder {
 
         const contentTags = TagExtractor.fromContent(content);
         const taskTags = TagExtractor.fromFrontmatter(frontmatter['tags']);
-        const sharedTags = TagExtractor.fromFrontmatter(frontmatter[frontmatterKeys.sharedtags]);
 
         const fmProperties: Record<string, PropertyValue> = {};
         for (const [key, value] of Object.entries(frontmatter)) {
@@ -130,10 +130,12 @@ export class FrontmatterTaskBuilder {
             };
         }
 
-        // Resolve color/linestyle directly on the task
+        // Resolve color/linestyle/mask directly on the task
         const rawColor = frontmatter[frontmatterKeys.color];
         const color = (typeof rawColor === 'string' && rawColor.trim()) ? rawColor.trim() : undefined;
         const linestyle = this.resolveLinestyle(frontmatter[frontmatterKeys.linestyle]);
+        const rawMask = frontmatter[frontmatterKeys.mask];
+        const mask = (typeof rawMask === 'string' && rawMask.trim()) ? rawMask.trim() : undefined;
 
         const isContainer = !hasDateFields;
 
@@ -153,7 +155,7 @@ export class FrontmatterTaskBuilder {
                 endDate: end.date,
                 endTime: end.time,
                 due,
-                tags: TagExtractor.merge(contentTags, taskTags, sharedTags),
+                tags: TagExtractor.merge(contentTags, taskTags),
                 originalText: '',
                 commands: [],
                 timerTargetId,
@@ -161,6 +163,7 @@ export class FrontmatterTaskBuilder {
                 properties: fmProperties,
                 color,
                 linestyle,
+                mask,
                 isContainer,
             },
             wikilinkRefs,

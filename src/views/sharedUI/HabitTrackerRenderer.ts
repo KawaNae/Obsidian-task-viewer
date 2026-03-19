@@ -1,4 +1,5 @@
 import { App, TFile, setIcon } from 'obsidian';
+import { t } from '../../i18n';
 import TaskViewerPlugin from '../../main';
 import { HabitDefinition } from '../../types';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
@@ -26,19 +27,19 @@ export class HabitTrackerRenderer {
         const axisCell = container.createDiv('habits-section__cell habits-section__axis');
         axisCell.setAttribute('role', 'button');
         axisCell.setAttribute('tabindex', '0');
-        axisCell.setAttribute('aria-label', 'Toggle Habits section');
+        axisCell.setAttribute('aria-label', t('habits.toggleHabits'));
 
         const toggleBtn = axisCell.createEl('button', { cls: 'section-toggle-btn' });
         toggleBtn.tabIndex = -1;
         toggleBtn.setAttribute('aria-hidden', 'true');
 
-        axisCell.createEl('span', { cls: 'habits-section__label', text: 'Habits' });
+        axisCell.createEl('span', { cls: 'habits-section__label', text: t('habits.habits') });
 
         const applyCollapsedState = () => {
             container.toggleClass('collapsed', this.isCollapsed);
             setIcon(toggleBtn, this.isCollapsed ? 'plus' : 'minus');
             axisCell.setAttribute('aria-expanded', (!this.isCollapsed).toString());
-            axisCell.setAttribute('aria-label', this.isCollapsed ? 'Expand Habits' : 'Collapse Habits');
+            axisCell.setAttribute('aria-label', this.isCollapsed ? t('habits.expandHabits') : t('habits.collapseHabits'));
         };
 
         const toggleCollapsed = () => {

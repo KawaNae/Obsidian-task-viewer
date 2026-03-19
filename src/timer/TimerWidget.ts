@@ -6,6 +6,7 @@
  */
 
 import { App, Notice } from 'obsidian';
+import { t } from '../i18n';
 import TaskViewerPlugin from '../main';
 import { AudioUtils } from '../utils/AudioUtils';
 import {
@@ -121,7 +122,7 @@ export class TimerWidget implements TimerContext {
         const taskId = config.timerType === 'idle' ? IDLE_TIMER_ID : config.taskId;
         const timerTargetId = config.timerTargetId;
         if (config.timerType !== 'idle' && this.lifecycle.hasActiveTimerForTask(taskId, timerTargetId)) {
-            new Notice('This task already has an active timer');
+            new Notice(t('timer.alreadyActive'));
             return;
         }
 

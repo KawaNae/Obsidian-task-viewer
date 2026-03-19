@@ -37,6 +37,10 @@ export class PropertyInheritanceResolver {
                 if (parent.linestyle && !child.linestyle) {
                     child.linestyle = parent.linestyle;
                 }
+                // mask 継承（child-wins）
+                if (parent.mask && !child.mask) {
+                    child.mask = parent.mask;
+                }
                 queue.push(child);
             }
         }

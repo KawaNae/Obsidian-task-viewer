@@ -1,4 +1,5 @@
 import { ItemView, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
+import { t } from '../../i18n';
 import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
@@ -139,13 +140,11 @@ export class CalendarView extends ItemView {
                 this.filterMenu.setFilterState({
                     root: {
                         type: 'group',
-                        id: 'migrated-file-group',
                         children: [{
                             type: 'condition',
-                            id: 'migrated-file',
                             property: 'file',
                             operator: 'includes',
-                            value: { type: 'stringSet', values: files },
+                            value: files,
                         }],
                         logic: 'and',
                     },
@@ -289,8 +288,6 @@ export class CalendarView extends ItemView {
 
         const calendarHost = main.createDiv('calendar-grid');
 
-        this.renderWeekdayHeader(calendarHost);
-
         const { startDate, endDate } = this.getCalendarDateRange();
         const rangeStartStr = DateUtils.getLocalDateString(startDate);
         const rangeEndStr = DateUtils.getLocalDateString(endDate);
@@ -298,6 +295,7 @@ export class CalendarView extends ItemView {
 
         const allVisibleTasks = this.getVisibleTasksInRange(rangeStartStr, rangeEndStr);
         const body = calendarHost.createDiv('calendar-grid__body');
+        this.renderWeekdayHeader(body);
         const referenceMonth = this.getReferenceMonth();
         const showWeekNumbers = this.shouldShowWeekNumbers();
 
@@ -375,7 +373,7 @@ export class CalendarView extends ItemView {
 
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
-        filterBtn.setAttribute('aria-label', 'Filter');
+        filterBtn.setAttribute('aria-label', t('toolbar.filter'));
         filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
         filterBtn.addEventListener('click', (event: MouseEvent) => {
             this.filterMenu.showMenu(event, {
@@ -415,6 +413,8 @@ export class CalendarView extends ItemView {
                 filterState: this.filterMenu.getFilterState(),
                 pinnedLists: this.pinnedLists,
             }),
+            getExportContainer: () => this.container.querySelector<HTMLElement>('.calendar-grid'),
+            getTaskIndex: () => this.taskIndex,
             onApplyTemplate: (template) => {
                 if (template.filterState) {
                     this.filterMenu.setFilterState(template.filterState);
@@ -461,16 +461,16 @@ export class CalendarView extends ItemView {
     }
 
     private renderSidebarContent(header: HTMLElement, body: HTMLElement): void {
-        header.createEl('p', { cls: 'view-sidebar__title', text: 'Pinned Lists' });
+        header.createEl('p', { cls: 'view-sidebar__title', text: t('pinnedList.pinnedLists') });
 
         const addBtn = header.createEl('button', { cls: 'view-sidebar__add-btn' });
         setIcon(addBtn, 'plus');
-        addBtn.appendText('Add List');
+        addBtn.appendText(t('pinnedList.addList'));
         addBtn.addEventListener('click', () => {
             const newId = 'pl-' + Date.now();
             this.pinnedLists.push({
                 id: newId,
-                name: 'New List',
+                name: t('pinnedList.newList'),
                 filterState: createEmptyFilterState(),
             });
             this.app.workspace.requestSaveLayout();
@@ -559,15 +559,32 @@ export class CalendarView extends ItemView {
 
     private renderWeekdayHeader(container: HTMLElement): void {
         const header = container.createDiv('calendar-weekday-header');
-        if (this.shouldShowWeekNumbers()) {
+        const showWeekNumbers = this.shouldShowWeekNumbers();
+        if (showWeekNumbers) {
             header.addClass('has-week-numbers');
-            header.createEl('div', { cls: 'calendar-weekday-cell', text: 'Wk' });
+            header.createEl('div', { cls: 'calendar-weekday-cell', text: t('calendar.wk') });
         }
 
         const weekdays = this.getWeekdayNames();
         weekdays.forEach((label) => {
             header.createEl('div', { cls: 'calendar-weekday-cell', text: label });
         });
+
+        // Add column separators matching week rows (align vertical grid lines exactly)
+        const separatorCount = showWeekNumbers ? 7 : 6;
+        for (let i = 1; i <= separatorCount; i++) {
+            const separator = header.createDiv('calendar-col-separator');
+            if (showWeekNumbers) {
+                if (i === 1) {
+                    separator.style.left = 'var(--calendar-wk-col-width, 32px)';
+                } else {
+                    const dayBoundary = i - 1;
+                    separator.style.left = `calc(var(--calendar-wk-col-width, 32px) + (${dayBoundary} / 7) * (100% - var(--calendar-wk-col-width, 32px)))`;
+                }
+            } else {
+                separator.style.left = `calc(${i} / 7 * 100%)`;
+            }
+        }
     }
 
     private renderDateHeader(weekRow: HTMLElement, date: Date, colIndex: number, referenceMonth: { year: number; month: number }): void {
@@ -735,7 +752,7 @@ export class CalendarView extends ItemView {
     }
 
     private getWeekdayNames(): string[] {
-        const labels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const labels = t('calendar.weekdaysShort').split(',');
         if (this.plugin.settings.calendarWeekStartDay === 1) {
             return [...labels.slice(1), labels[0]];
         }

@@ -5,6 +5,7 @@ import { CreateTaskModal, type CreateTaskResult, formatTaskLine } from '../../..
 import { DateUtils } from '../../../utils/DateUtils';
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { TaskLineClassifier } from '../../../utils/TaskLineClassifier';
+import { t } from '../../../i18n';
 
 export type CreateFrontmatterTaskCallback = (result: CreateTaskResult, statusChar: string) => Promise<string>;
 
@@ -85,7 +86,7 @@ export class CheckboxMenuBuilder {
 
     private addDuplicateItem(menu: Menu, lineText: string, ops: CheckboxLineOps): void {
         menu.addItem((item) => {
-            item.setTitle('Duplicate')
+            item.setTitle(t('menu.duplicate'))
                 .setIcon('copy')
                 .onClick(async () => {
                     await ops.insertLineAfter(lineText);
@@ -107,13 +108,13 @@ export class CheckboxMenuBuilder {
 
         menu.addItem((item) => {
             const subMenu = (item as any)
-                .setTitle('Convert to')
+                .setTitle(t('menu.convertTo'))
                 .setIcon('arrow-right-left')
                 .setSubmenu() as Menu;
 
             // Inline Task
             subMenu.addItem((sub) => {
-                sub.setTitle('Inline Task')
+                sub.setTitle(t('menu.inlineTask'))
                     .setIcon('at-sign')
                     .onClick(() => {
                         menu.close();
@@ -126,7 +127,7 @@ export class CheckboxMenuBuilder {
                                 await ops.updateLine(newLine);
                             },
                             { content, startDate: today },
-                            { title: 'Convert to Inline Task', submitLabel: 'Convert', focusField: 'start', startHour: this.getStartHour(), dailyNoteDate }
+                            { title: t('menu.convertToInlineTask'), submitLabel: t('modal.convert'), focusField: 'start', startHour: this.getStartHour(), dailyNoteDate }
                         ).open();
                     });
             });
@@ -134,7 +135,7 @@ export class CheckboxMenuBuilder {
             // Frontmatter Task
             if (this.onCreateFrontmatterTask) {
                 subMenu.addItem((sub) => {
-                    sub.setTitle('Frontmatter Task')
+                    sub.setTitle(t('menu.frontmatterTask'))
                         .setIcon('file-plus')
                         .onClick(() => {
                             menu.close();
@@ -148,7 +149,7 @@ export class CheckboxMenuBuilder {
                                     await ops.updateLine(`${indent}${marker} [[${linkTarget}|${fileName}]]`);
                                 },
                                 { content, startDate: today },
-                                { title: 'Convert to Frontmatter Task', submitLabel: 'Convert', focusField: 'start', startHour: this.getStartHour(), dailyNoteDate }
+                                { title: t('menu.convertToFrontmatterTaskTitle'), submitLabel: t('modal.convert'), focusField: 'start', startHour: this.getStartHour(), dailyNoteDate }
                             ).open();
                         });
                 });
@@ -158,7 +159,7 @@ export class CheckboxMenuBuilder {
 
     private addDeleteItem(menu: Menu, ops: CheckboxLineOps): void {
         menu.addItem((item) => {
-            item.setTitle('Delete')
+            item.setTitle(t('menu.deleteTask'))
                 .setIcon('trash')
                 .setWarning(true)
                 .onClick(async () => {

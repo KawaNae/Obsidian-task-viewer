@@ -5,16 +5,17 @@ import type { ListParams } from './TaskApiTypes';
 
 // ── Internal helpers ──
 
-function generateId(prefix: string): string {
-    return `${prefix}-api-${Math.random().toString(36).slice(2, 7)}`;
-}
-
 function condition(
     property: FilterConditionNode['property'],
     operator: FilterConditionNode['operator'],
-    value: FilterConditionNode['value'],
+    value?: FilterConditionNode['value'],
+    extra?: { key?: string; unit?: 'hours' | 'minutes' },
 ): FilterConditionNode {
-    return { type: 'condition', id: generateId('f'), property, operator, value };
+    const node: FilterConditionNode = { type: 'condition', property, operator };
+    if (value !== undefined) node.value = value;
+    if (extra?.key) node.key = extra.key;
+    if (extra?.unit) node.unit = extra.unit;
+    return node;
 }
 
 export function normalizeStringArray(value: string | string[] | undefined, stripHash = false): string[] {
@@ -35,29 +36,21 @@ export function buildFilterFromParams(params: ListParams): FilterState | null {
 
     if (params.file) {
         const file = params.file.endsWith('.md') ? params.file : params.file + '.md';
-        conditions.push(condition('file', 'includes', {
-            type: 'stringSet', values: [file],
-        }));
+        conditions.push(condition('file', 'includes', [file]));
     }
 
     const statusArr = normalizeStringArray(params.status);
     if (statusArr.length > 0) {
-        conditions.push(condition('status', 'includes', {
-            type: 'stringSet', values: statusArr,
-        }));
+        conditions.push(condition('status', 'includes', statusArr));
     }
 
     const tagArr = normalizeStringArray(params.tag, true);
     if (tagArr.length > 0) {
-        conditions.push(condition('tag', 'includes', {
-            type: 'stringSet', values: tagArr,
-        }));
+        conditions.push(condition('tag', 'includes', tagArr));
     }
 
     if (params.content) {
-        conditions.push(condition('content', 'contains', {
-            type: 'string', value: params.content,
-        }));
+        conditions.push(condition('content', 'contains', params.content));
     }
 
     if (params.date) {
@@ -66,29 +59,29 @@ export function buildFilterFromParams(params: ListParams): FilterState | null {
         }
         const dateValue = parseDatePreset(params.date);
         if (!dateValue) throw new TaskApiError(`Invalid date value: ${params.date}. Use YYYY-MM-DD or a preset (today, thisWeek, pastWeek, nextWeek, thisMonth, thisYear, next7days)`);
-        conditions.push(condition('startDate', 'onOrBefore', { type: 'date', value: dateValue }));
-        conditions.push(condition('endDate', 'onOrAfter', { type: 'date', value: dateValue }));
+        conditions.push(condition('startDate', 'onOrBefore', dateValue));
+        conditions.push(condition('endDate', 'onOrAfter', dateValue));
     } else {
         if (params.from) {
             const fromValue = parseDatePreset(params.from);
             if (!fromValue) throw new TaskApiError(`Invalid date value for from: ${params.from}. Use YYYY-MM-DD or a preset`);
-            conditions.push(condition('startDate', 'onOrAfter', { type: 'date', value: fromValue }));
+            conditions.push(condition('startDate', 'onOrAfter', fromValue));
         }
         if (params.to) {
             const toValue = parseDatePreset(params.to);
             if (!toValue) throw new TaskApiError(`Invalid date value for to: ${params.to}. Use YYYY-MM-DD or a preset`);
-            conditions.push(condition('endDate', 'onOrBefore', { type: 'date', value: toValue }));
+            conditions.push(condition('endDate', 'onOrBefore', toValue));
         }
     }
 
     if (params.due) {
         const dueValue = parseDatePreset(params.due);
         if (!dueValue) throw new TaskApiError(`Invalid date value for due: ${params.due}. Use YYYY-MM-DD or a preset`);
-        conditions.push(condition('due', 'equals', { type: 'date', value: dueValue }));
+        conditions.push(condition('due', 'equals', dueValue));
     }
 
     if (params.leaf) {
-        conditions.push(condition('children', 'isNotSet', { type: 'boolean', value: true }));
+        conditions.push(condition('children', 'isNotSet'));
     }
 
     if (params.property) {
@@ -96,32 +89,27 @@ export function buildFilterFromParams(params: ListParams): FilterState | null {
         if (colonIdx < 1) throw new TaskApiError('Invalid property filter format. Use "key:value"');
         const key = params.property.substring(0, colonIdx).trim();
         const value = params.property.substring(colonIdx + 1).trim();
-        conditions.push(condition('property', 'contains', { type: 'property', key, value }));
+        conditions.push(condition('property', 'contains', value, { key }));
     }
 
     const colorArr = normalizeStringArray(params.color);
     if (colorArr.length > 0) {
-        conditions.push(condition('color', 'includes', {
-            type: 'stringSet', values: colorArr,
-        }));
+        conditions.push(condition('color', 'includes', colorArr));
     }
 
     const typeArr = normalizeStringArray(params.type);
     if (typeArr.length > 0) {
-        conditions.push(condition('taskType', 'includes', {
-            type: 'stringSet', values: typeArr,
-        }));
+        conditions.push(condition('taskType', 'includes', typeArr));
     }
 
     if (params.root) {
-        conditions.push(condition('parent', 'isNotSet', { type: 'boolean', value: true }));
+        conditions.push(condition('parent', 'isNotSet'));
     }
 
     if (conditions.length === 0) return null;
 
     const root: FilterGroupNode = {
         type: 'group',
-        id: generateId('g'),
         children: conditions,
         logic: 'and',
     };

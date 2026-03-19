@@ -90,6 +90,9 @@ export interface Task {
     color?: string;
     linestyle?: string;
 
+    // File-level mask for export masking (resolved at scan time).
+    mask?: string;
+
     // True when this is a Container task (no dates, groups inline tasks).
     isContainer?: boolean;
 
@@ -184,7 +187,7 @@ export interface FrontmatterTaskKeys {
     timerTargetId: string;
     color: string;
     linestyle: string;
-    sharedtags: string;
+    mask: string;
     ignore: string;
 }
 
@@ -197,7 +200,7 @@ export const DEFAULT_FRONTMATTER_TASK_KEYS: FrontmatterTaskKeys = {
     timerTargetId: 'tv-timer-target-id',
     color: 'tv-color',
     linestyle: 'tv-linestyle',
-    sharedtags: 'tags',
+    mask: 'tv-mask',
     ignore: 'tv-ignore',
 };
 
@@ -225,7 +228,7 @@ export function normalizeFrontmatterTaskKeys(value: unknown): FrontmatterTaskKey
         timerTargetId: normalize('timerTargetId'),
         color: normalize('color'),
         linestyle: normalize('linestyle'),
-        sharedtags: normalize('sharedtags'),
+        mask: normalize('mask'),
         ignore: normalize('ignore'),
     };
 }
@@ -240,6 +243,7 @@ export function validateFrontmatterTaskKeys(keys: FrontmatterTaskKeys): string |
         'timerTargetId',
         'color',
         'linestyle',
+        'mask',
         'ignore',
     ];
 
@@ -310,7 +314,6 @@ export interface TaskViewerSettings {
     };
     suggestColor: boolean;
     suggestLinestyle: boolean;
-    suggestSharedtags: boolean;
     hideViewHeader: boolean;
     mobileTopOffset: number;
     fixMobileGradientWidth: boolean;
@@ -360,7 +363,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     },
     suggestColor: true,
     suggestLinestyle: true,
-    suggestSharedtags: true,
     hideViewHeader: true,
     mobileTopOffset: 32,
     fixMobileGradientWidth: true,

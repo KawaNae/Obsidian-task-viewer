@@ -1,4 +1,5 @@
 import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
+import { t } from '../../i18n';
 import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -137,13 +138,11 @@ export class ScheduleView extends ItemView {
                 this.filterMenu.setFilterState({
                     root: {
                         type: 'group',
-                        id: 'migrated-file-group',
                         children: [{
                             type: 'condition',
-                            id: 'migrated-file',
                             property: 'file',
                             operator: 'includes',
-                            value: { type: 'stringSet', values: files },
+                            value: files,
                         }],
                         logic: 'and',
                     },
@@ -273,14 +272,14 @@ export class ScheduleView extends ItemView {
                 void this.app.workspace.requestSaveLayout();
                 void this.render();
             },
-            { label: 'Now' }
+            { label: t('toolbar.now') }
         );
 
         toolbar.createDiv('view-toolbar__spacer');
 
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
-        filterBtn.setAttribute('aria-label', 'Filter');
+        filterBtn.setAttribute('aria-label', t('toolbar.filter'));
         filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
         filterBtn.addEventListener('click', (event: MouseEvent) => {
             this.filterMenu.showMenu(event, {
@@ -316,6 +315,8 @@ export class ScheduleView extends ItemView {
                 viewType: 'schedule',
                 filterState: this.filterMenu.getFilterState(),
             }),
+            getExportContainer: () => this.container,
+            getTaskIndex: () => this.taskIndex,
             onApplyTemplate: (template) => {
                 if (template.filterState) {
                     this.filterMenu.setFilterState(template.filterState);
@@ -358,7 +359,7 @@ export class ScheduleView extends ItemView {
             await this.sectionRenderer.renderCollapsibleTaskSection(
                 bodyContainer,
                 'schedule-due-section',
-                'Due',
+                t('calendar.due'),
                 categorized.dueOnly,
                 'dueOnly'
             );
@@ -389,7 +390,8 @@ export class ScheduleView extends ItemView {
         dateCell.dataset.date = date;
 
         const dateObj = this.parseLocalDate(date);
-        const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+        const weekdays = t('calendar.weekdaysShort').split(',');
+        const dayName = weekdays[new Date(date + 'T00:00:00Z').getUTCDay()];
         const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(this.app, dateObj);
         const linkLabel = DailyNoteUtils.getDailyNoteLabelForDate(this.app, dateObj);
         const fullLabel = `${linkLabel} ${dayName}`;

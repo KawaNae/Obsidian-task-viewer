@@ -8,19 +8,20 @@ import type {
 import {
     MAX_FILTER_DEPTH,
     PROPERTY_OPERATORS,
-    OPERATOR_LABELS,
-    PROPERTY_LABELS,
+    getOperatorLabel,
+    getPropertyLabel,
     PROPERTY_ICONS,
     NO_VALUE_OPERATORS,
     DATE_PROPERTIES,
     NUMBER_PROPERTIES,
-    RELATIVE_DATE_LABELS,
+    getRelativeDateLabel,
     createDefaultCondition,
     createEmptyFilterState,
     createFilterGroup,
     deepCloneNode,
     hasConditions,
 } from '../../services/filter/FilterTypes';
+import { t } from '../../i18n';
 import { TaskFilterEngine } from '../../services/filter/TaskFilterEngine';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 
@@ -147,7 +148,7 @@ export class FilterMenuComponent {
         const root = this.state.root;
 
         if (root.children.length === 0) {
-            this.popoverEl.createDiv('filter-popover__empty').setText('No filters applied');
+            this.popoverEl.createDiv('filter-popover__empty').setText(t('filter.noFilters'));
         } else {
             this.renderChildren(this.popoverEl, root, 0);
         }
@@ -219,7 +220,7 @@ export class FilterMenuComponent {
         // Add filter button
         const addBtn = groupFooter.createEl('button', { cls: 'filter-popover__add-btn filter-popover__add-btn--inline' });
         setIcon(addBtn.createSpan(), 'plus');
-        addBtn.createSpan().setText('Add filter');
+        addBtn.createSpan().setText(t('filter.addFilter'));
         addBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             group.children.push(createDefaultCondition());
@@ -230,7 +231,7 @@ export class FilterMenuComponent {
         if (depth < MAX_FILTER_DEPTH - 1) {
             const addGroupBtn = groupFooter.createEl('button', { cls: 'filter-popover__add-btn filter-popover__add-btn--inline' });
             setIcon(addGroupBtn.createSpan(), 'plus-square');
-            addGroupBtn.createSpan().setText('Add group');
+            addGroupBtn.createSpan().setText(t('filter.addGroup'));
             addGroupBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const newGroup = createFilterGroup();
@@ -247,9 +248,9 @@ export class FilterMenuComponent {
             groupMoreBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const items: SelectItem[] = [
-                    { label: 'Duplicate group', value: 'duplicate-group', checked: false, icon: 'copy' },
-                    { label: 'Ungroup', value: 'ungroup', checked: false, icon: 'unfold-horizontal' },
-                    { label: 'Remove group', value: 'remove-group', checked: false, icon: 'trash', cls: 'filter-child-popover__item--danger' },
+                    { label: t('filter.duplicateGroup'), value: 'duplicate-group', checked: false, icon: 'copy' },
+                    { label: t('filter.ungroup'), value: 'ungroup', checked: false, icon: 'unfold-horizontal' },
+                    { label: t('filter.removeGroup'), value: 'remove-group', checked: false, icon: 'trash', cls: 'filter-child-popover__item--danger' },
                 ];
                 this.showSelectPopover(groupMoreBtn, items, (val) => {
                     if (val === 'remove-group') {
@@ -289,7 +290,7 @@ export class FilterMenuComponent {
             });
             const targetIcon = targetBtn.createSpan('filter-popover__dropdown-icon');
             setIcon(targetIcon, 'arrow-up');
-            targetBtn.createSpan().setText('Parent');
+            targetBtn.createSpan().setText(t('filter.parent'));
             targetBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.showTargetMenu(targetBtn, condition);
@@ -307,20 +308,32 @@ export class FilterMenuComponent {
             });
         }
 
+        // Glue: after target
+        const afterTargetGlue = t(`filter.glue.afterTarget.${condition.target || 'self'}`);
+        if (afterTargetGlue && !afterTargetGlue.startsWith('filter.glue.')) {
+            headerLine.createEl('span', { cls: 'filter-popover__glue', text: afterTargetGlue });
+        }
+
         // Property dropdown (with icon)
         const propBtn = headerLine.createEl('button', { cls: 'filter-popover__dropdown' });
         const propIcon = propBtn.createSpan('filter-popover__dropdown-icon');
         setIcon(propIcon, PROPERTY_ICONS[condition.property]);
-        propBtn.createSpan().setText(PROPERTY_LABELS[condition.property]);
+        propBtn.createSpan().setText(getPropertyLabel(condition.property));
         propBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.showPropertyMenu(propBtn, condition);
         });
 
+        // Glue: before operator
+        const beforeOpGlue = this.resolveBeforeOperatorGlue(condition.property, condition.operator);
+        if (beforeOpGlue) {
+            headerLine.createEl('span', { cls: 'filter-popover__glue', text: beforeOpGlue });
+        }
+
         // Operator dropdown
         const opBtn = headerLine.createEl('button', {
             cls: 'filter-popover__dropdown',
-            text: OPERATOR_LABELS[condition.operator],
+            text: getOperatorLabel(condition.property, condition.operator),
         });
         opBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -333,8 +346,8 @@ export class FilterMenuComponent {
         moreBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             const items: SelectItem[] = [
-                { label: 'Duplicate', value: 'duplicate', checked: false, icon: 'copy' },
-                { label: 'Remove', value: 'remove', checked: false, icon: 'trash', cls: 'filter-child-popover__item--danger' },
+                { label: t('filter.duplicate'), value: 'duplicate', checked: false, icon: 'copy' },
+                { label: t('filter.remove'), value: 'remove', checked: false, icon: 'trash', cls: 'filter-child-popover__item--danger' },
             ];
             this.showSelectPopover(moreBtn, items, (val) => {
                 if (val === 'remove') {
@@ -361,6 +374,12 @@ export class FilterMenuComponent {
         }
     }
 
+    private resolveBeforeOperatorGlue(property: FilterProperty, operator: FilterOperator): string {
+        const glue = t(`filter.glue.operators.${property}.${operator}`);
+        if (!glue.startsWith('filter.glue.operators.')) return glue;
+        return '';
+    }
+
     // ── Value Selector ──
 
     private renderValueSelector(row: HTMLElement, condition: FilterConditionNode): void {
@@ -377,13 +396,13 @@ export class FilterMenuComponent {
         const input = row.createEl('input', {
             cls: 'filter-popover__text-input',
             type: 'text',
-            placeholder: 'Enter text...',
+            placeholder: t('filter.enterText'),
         });
-        if (condition.value.type === 'string') {
-            input.value = condition.value.value;
+        if (typeof condition.value === 'string') {
+            input.value = condition.value;
         }
         const applyValue = () => {
-            condition.value = { type: 'string', value: input.value };
+            condition.value = input.value;
             this.lastCallbacks?.onFilterChange();
         };
         input.addEventListener('change', applyValue);
@@ -396,10 +415,10 @@ export class FilterMenuComponent {
     }
 
     private renderValueDropdown(row: HTMLElement, condition: FilterConditionNode): void {
-        const currentValues = condition.value.type === 'stringSet' ? condition.value.values : [];
+        const currentValues = Array.isArray(condition.value) ? condition.value as string[] : [];
         const label = currentValues.length > 0
             ? this.formatValueLabel(condition.property, currentValues)
-            : 'Select...';
+            : t('filter.select');
 
         const btn = row.createEl('button', {
             cls: `filter-popover__dropdown${currentValues.length === 0 ? ' filter-popover__dropdown--placeholder' : ''}`,
@@ -413,7 +432,7 @@ export class FilterMenuComponent {
 
     private renderPillValueSelector(row: HTMLElement, condition: FilterConditionNode): void {
         const container = row.createDiv('filter-popover__tag-value');
-        const currentValues = condition.value.type === 'stringSet' ? condition.value.values : [];
+        const currentValues = Array.isArray(condition.value) ? condition.value as string[] : [];
         const prop = condition.property;
 
         // Pill群 (only if there are selected values)
@@ -429,7 +448,7 @@ export class FilterMenuComponent {
         const input = inputWrap.createEl('input', {
             cls: 'filter-popover__tag-input',
             type: 'text',
-            attr: { placeholder: prop === 'tag' ? 'Type tag...' : 'Type to filter...' },
+            attr: { placeholder: prop === 'tag' ? t('filter.typeTag') : t('filter.typeToFilter') },
         });
 
         // Suggest state
@@ -454,11 +473,9 @@ export class FilterMenuComponent {
         const addValue = (val: string) => {
             const normalized = prop === 'tag' ? val.trim().replace(/^#/, '') : prop === 'status' ? val : val.trim();
             if (!normalized) return;
-            if (condition.value.type !== 'stringSet') {
-                condition.value = { type: 'stringSet', values: [] };
-            }
-            if (!condition.value.values.includes(normalized)) {
-                condition.value = { type: 'stringSet', values: [...condition.value.values, normalized] };
+            const arr = Array.isArray(condition.value) ? condition.value as string[] : [];
+            if (!arr.includes(normalized)) {
+                condition.value = [...arr, normalized];
                 this.lastCallbacks?.onFilterChange();
             }
             input.value = '';
@@ -469,7 +486,7 @@ export class FilterMenuComponent {
         const showSuggest = (query: string, showAll: boolean) => {
             closeSuggest();
             const available = this.getAvailableValues(prop);
-            const selected = new Set(condition.value.type === 'stringSet' ? condition.value.values : []);
+            const selected = new Set(Array.isArray(condition.value) ? condition.value as string[] : []);
             const q = prop === 'tag' ? query.toLowerCase().replace(/^#/, '') : query.toLowerCase();
 
             const filtered = available.filter(v => {
@@ -573,14 +590,10 @@ export class FilterMenuComponent {
             } else if (e.key === 'Backspace' && !input.value && currentValues.length > 0) {
                 // Remove last pill on backspace in empty input
                 const last = currentValues[currentValues.length - 1];
-                if (condition.value.type === 'stringSet') {
-                    condition.value = {
-                        type: 'stringSet',
-                        values: condition.value.values.filter(v => v !== last),
-                    };
-                    this.lastCallbacks?.onFilterChange();
-                    this.renderContent();
-                }
+                const arr = Array.isArray(condition.value) ? condition.value as string[] : [];
+                condition.value = arr.filter(v => v !== last);
+                this.lastCallbacks?.onFilterChange();
+                this.renderContent();
             }
         });
 
@@ -607,14 +620,10 @@ export class FilterMenuComponent {
         setIcon(removeBtn.createSpan(), 'x');
         removeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (condition.value.type === 'stringSet') {
-                condition.value = {
-                    type: 'stringSet',
-                    values: condition.value.values.filter(v => v !== value),
-                };
-                this.lastCallbacks?.onFilterChange();
-                this.renderContent();
-            }
+            const arr = Array.isArray(condition.value) ? condition.value as string[] : [];
+            condition.value = arr.filter(v => v !== value);
+            this.lastCallbacks?.onFilterChange();
+            this.renderContent();
         });
     }
 
@@ -624,34 +633,36 @@ export class FilterMenuComponent {
         const container = row.createDiv('filter-popover__date-value');
 
         // Initialize value if needed
-        if (condition.value.type !== 'date') {
-            condition.value = { type: 'date', value: { mode: 'relative', preset: 'today' } };
+        if (condition.value == null || (typeof condition.value !== 'string' && typeof condition.value !== 'object')) {
+            condition.value = { preset: 'today' } as DateFilterValue;
         }
 
-        const dateVal = condition.value.value as DateFilterValue;
+        const dateVal = condition.value as DateFilterValue;
+        const isRelative = typeof dateVal === 'object' && 'preset' in dateVal;
 
         // Mode toggle button: "Relative" / "Absolute"
         const modeBtn = container.createEl('button', {
             cls: 'filter-popover__dropdown filter-popover__date-mode-btn',
-            text: dateVal.mode === 'relative' ? 'Relative' : 'Absolute',
+            text: isRelative ? t('filter.relative') : t('filter.absolute'),
         });
         modeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (dateVal.mode === 'relative') {
-                condition.value = { type: 'date', value: { mode: 'absolute', date: this.getToday() } };
+            if (isRelative) {
+                condition.value = this.getToday();
             } else {
-                condition.value = { type: 'date', value: { mode: 'relative', preset: 'today' } };
+                condition.value = { preset: 'today' } as DateFilterValue;
             }
             this.refreshPopover();
         });
 
-        if (dateVal.mode === 'relative') {
+        if (isRelative) {
+            const relVal = dateVal as { preset: RelativeDatePreset; n?: number };
             // Relative preset dropdown
             const presetBtn = container.createEl('button', {
                 cls: 'filter-popover__dropdown',
-                text: dateVal.preset === 'nextNDays'
-                    ? `Next ${dateVal.n ?? 7} days`
-                    : RELATIVE_DATE_LABELS[dateVal.preset],
+                text: relVal.preset === 'nextNDays'
+                    ? t('filter.relativeDate.nextNDaysValue', { n: relVal.n ?? 7 })
+                    : getRelativeDateLabel(relVal.preset),
             });
             presetBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -659,18 +670,18 @@ export class FilterMenuComponent {
             });
 
             // Number input for nextNDays
-            if (dateVal.preset === 'nextNDays') {
+            if (relVal.preset === 'nextNDays') {
                 const nInput = container.createEl('input', {
                     cls: 'filter-popover__n-input',
                     type: 'number',
                 });
-                nInput.value = String(dateVal.n ?? 7);
+                nInput.value = String(relVal.n ?? 7);
                 nInput.min = '1';
                 nInput.placeholder = 'N';
                 nInput.addEventListener('change', () => {
                     const n = parseInt(nInput.value, 10);
                     if (n > 0) {
-                        condition.value = { type: 'date', value: { mode: 'relative', preset: 'nextNDays', n } };
+                        condition.value = { preset: 'nextNDays', n } as DateFilterValue;
                         this.lastCallbacks?.onFilterChange();
                     }
                 });
@@ -681,31 +692,31 @@ export class FilterMenuComponent {
                 cls: 'filter-popover__date-input',
                 type: 'date',
             });
-            dateInput.value = dateVal.date || this.getToday();
+            dateInput.value = (typeof dateVal === 'string' ? dateVal : '') || this.getToday();
             dateInput.addEventListener('change', () => {
-                condition.value = { type: 'date', value: { mode: 'absolute', date: dateInput.value } };
+                condition.value = dateInput.value;
                 this.lastCallbacks?.onFilterChange();
             });
         }
     }
 
     private showRelativeDateMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
-        const presets = Object.keys(RELATIVE_DATE_LABELS) as RelativeDatePreset[];
-        const currentPreset = condition.value.type === 'date' && condition.value.value.mode === 'relative'
-            ? condition.value.value.preset : 'today';
+        const presets: RelativeDatePreset[] = ['today', 'thisWeek', 'nextWeek', 'pastWeek', 'nextNDays', 'thisMonth', 'thisYear'];
+        const dateVal = condition.value as DateFilterValue;
+        const currentPreset = typeof dateVal === 'object' && 'preset' in dateVal
+            ? dateVal.preset : 'today';
 
         const items: SelectItem[] = presets.map(p => ({
-            label: RELATIVE_DATE_LABELS[p],
+            label: getRelativeDateLabel(p),
             value: p,
             checked: currentPreset === p,
         }));
 
         this.showSelectPopover(anchorEl, items, (val) => {
             const preset = val as RelativeDatePreset;
-            const dateValue: DateFilterValue = preset === 'nextNDays'
-                ? { mode: 'relative', preset, n: 7 }
-                : { mode: 'relative', preset };
-            condition.value = { type: 'date', value: dateValue };
+            condition.value = preset === 'nextNDays'
+                ? { preset, n: 7 } as DateFilterValue
+                : { preset } as DateFilterValue;
             this.refreshPopover();
         });
     }
@@ -715,25 +726,20 @@ export class FilterMenuComponent {
     private renderNumberValueSelector(row: HTMLElement, condition: FilterConditionNode): void {
         const container = row.createDiv('filter-popover__number-value');
 
-        if (condition.value.type !== 'number') {
-            condition.value = { type: 'number', value: 1, unit: 'hours' };
+        if (typeof condition.value !== 'number') {
+            condition.value = 1;
+            condition.unit = 'hours';
         }
-        const unit = condition.value.unit ?? 'hours';
+        const unit = condition.unit ?? 'hours';
 
         // Unit toggle button (Hours / Minutes)
         const unitBtn = container.createEl('button', {
             cls: 'filter-popover__dropdown filter-popover__unit-btn',
-            text: unit === 'hours' ? 'Hours' : 'Minutes',
+            text: unit === 'hours' ? t('filter.hours') : t('filter.minutes'),
         });
         unitBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (condition.value.type === 'number') {
-                condition.value = {
-                    type: 'number',
-                    value: condition.value.value,
-                    unit: unit === 'hours' ? 'minutes' : 'hours',
-                };
-            }
+            condition.unit = unit === 'hours' ? 'minutes' : 'hours';
             this.refreshPopover();
         });
 
@@ -742,29 +748,29 @@ export class FilterMenuComponent {
             cls: 'filter-popover__n-input',
             type: 'number',
         });
-        input.value = String(condition.value.value);
+        input.value = String(condition.value);
         input.min = '0';
         input.step = unit === 'hours' ? '0.5' : '1';
         input.addEventListener('change', () => {
             const n = parseFloat(input.value);
-            if (Number.isFinite(n) && n >= 0 && condition.value.type === 'number') {
-                condition.value = { type: 'number', value: n, unit: condition.value.unit ?? 'hours' };
+            if (Number.isFinite(n) && n >= 0) {
+                condition.value = n;
                 this.lastCallbacks?.onFilterChange();
             }
         });
     }
 
     private formatValueLabel(property: FilterProperty, values: string[]): string {
-        if (values.length === 0) return 'Select...';
+        if (values.length === 0) return t('filter.select');
         if (values.length === 1) {
             const v = values[0];
             if (property === 'file') return v.split('/').pop() || v;
             if (property === 'tag') return `#${v}`;
-            if (property === 'status') return v === ' ' ? 'Todo' : this.getStatusLabel(v);
-            if (property === 'taskType') return v === 'at-notation' ? '@notation' : 'Frontmatter';
+            if (property === 'status') return v === ' ' ? t('filter.statusTodo') : this.getStatusLabel(v);
+            if (property === 'taskType') return v === 'at-notation' ? t('filter.taskTypeAtNotation') : t('filter.taskTypeFrontmatter');
             return v;
         }
-        return `${values.length} selected`;
+        return t('filter.nSelected', { n: values.length });
     }
 
     // ── Custom Select Popover ──
@@ -781,7 +787,7 @@ export class FilterMenuComponent {
         popover.className = 'filter-child-popover';
 
         if (items.length === 0) {
-            popover.createDiv('filter-child-popover__empty').setText('No options available');
+            popover.createDiv('filter-child-popover__empty').setText(t('filter.noOptions'));
         } else {
             for (const item of items) {
                 const row = popover.createDiv(
@@ -861,7 +867,7 @@ export class FilterMenuComponent {
             'parent', 'children',
         ];
         const items: SelectItem[] = properties.map(p => ({
-            label: PROPERTY_LABELS[p],
+            label: getPropertyLabel(p),
             value: p,
             checked: condition.property === p,
             icon: PROPERTY_ICONS[p],
@@ -871,16 +877,20 @@ export class FilterMenuComponent {
             const prop = val as FilterProperty;
             condition.property = prop;
             condition.operator = PROPERTY_OPERATORS[prop][0];
+            // Reset value-related fields
+            delete condition.key;
+            delete condition.unit;
             if (NO_VALUE_OPERATORS.has(condition.operator)) {
-                condition.value = { type: 'boolean', value: true };
+                condition.value = undefined;
             } else if (DATE_PROPERTIES.has(prop)) {
-                condition.value = { type: 'date', value: { mode: 'relative', preset: 'today' } };
+                condition.value = { preset: 'today' } as DateFilterValue;
             } else if (NUMBER_PROPERTIES.has(prop)) {
-                condition.value = { type: 'number', value: 1, unit: 'hours' };
+                condition.value = 1;
+                condition.unit = 'hours';
             } else if (prop === 'content') {
-                condition.value = { type: 'string', value: '' };
+                condition.value = '';
             } else {
-                condition.value = { type: 'stringSet', values: [] };
+                condition.value = [];
             }
             this.refreshPopover();
         });
@@ -889,7 +899,7 @@ export class FilterMenuComponent {
     private showOperatorMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
         const operators = PROPERTY_OPERATORS[condition.property];
         const items: SelectItem[] = operators.map(op => ({
-            label: OPERATOR_LABELS[op],
+            label: getOperatorLabel(condition.property, op),
             value: op,
             checked: condition.operator === op,
         }));
@@ -897,7 +907,7 @@ export class FilterMenuComponent {
         this.showSelectPopover(anchorEl, items, (val) => {
             condition.operator = val as FilterOperator;
             if (NO_VALUE_OPERATORS.has(condition.operator)) {
-                condition.value = { type: 'boolean', value: true };
+                condition.value = undefined;
             }
             this.refreshPopover();
         });
@@ -905,14 +915,14 @@ export class FilterMenuComponent {
 
     private showTargetMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
         const targets: { label: string; value: FilterTarget; icon: string }[] = [
-            { label: 'Self', value: 'self', icon: 'user' },
-            { label: 'Parent', value: 'parent', icon: 'arrow-up' },
+            { label: t('filter.self'), value: 'self', icon: 'user' },
+            { label: t('filter.parent'), value: 'parent', icon: 'arrow-up' },
         ];
-        const items: SelectItem[] = targets.map(t => ({
-            label: t.label,
-            value: t.value,
-            checked: (condition.target ?? 'self') === t.value,
-            icon: t.icon,
+        const items: SelectItem[] = targets.map(tgt => ({
+            label: tgt.label,
+            value: tgt.value,
+            checked: (condition.target ?? 'self') === tgt.value,
+            icon: tgt.icon,
         }));
 
         this.showSelectPopover(anchorEl, items, (val) => {
@@ -924,8 +934,7 @@ export class FilterMenuComponent {
 
     private showValueMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
         const available = this.getAvailableValues(condition.property);
-        const currentValues = condition.value.type === 'stringSet'
-            ? new Set(condition.value.values) : new Set<string>();
+        const currentValues = new Set(Array.isArray(condition.value) ? condition.value as string[] : []);
 
         const items: SelectItem[] = available.map(val => ({
             label: this.getValueDisplay(condition.property, val),
@@ -939,7 +948,7 @@ export class FilterMenuComponent {
             } else {
                 currentValues.add(val);
             }
-            condition.value = { type: 'stringSet', values: Array.from(currentValues) };
+            condition.value = Array.from(currentValues);
             this.lastCallbacks?.onFilterChange();
         }, true);
     }
@@ -952,7 +961,7 @@ export class FilterMenuComponent {
         // Add filter
         const addBtn = footer.createEl('button', { cls: 'filter-popover__add-btn' });
         setIcon(addBtn.createSpan(), 'plus');
-        addBtn.createSpan().setText('Add filter');
+        addBtn.createSpan().setText(t('filter.addFilter'));
         addBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             group.children.push(createDefaultCondition());
@@ -963,7 +972,7 @@ export class FilterMenuComponent {
         if (depth < MAX_FILTER_DEPTH - 1) {
             const addGroupBtn = footer.createEl('button', { cls: 'filter-popover__add-btn' });
             setIcon(addGroupBtn.createSpan(), 'plus-square');
-            addGroupBtn.createSpan().setText('Add filter group');
+            addGroupBtn.createSpan().setText(t('filter.addFilterGroup'));
             addGroupBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const newGroup = createFilterGroup();
@@ -1022,17 +1031,17 @@ export class FilterMenuComponent {
             return this.getStatusLabel(value);
         }
         if (property === 'taskType') {
-            return value === 'at-notation' ? '@notation' : 'Frontmatter';
+            return value === 'at-notation' ? t('filter.taskTypeAtNotation') : t('filter.taskTypeFrontmatter');
         }
         return value;
     }
 
     private getStatusLabel(statusChar: string): string {
         switch (statusChar) {
-            case ' ': return 'Todo';
-            case 'x': case 'X': return 'Done';
-            case '-': return 'Cancelled';
-            case '!': return 'Exception';
+            case ' ': return t('filter.statusTodo');
+            case 'x': case 'X': return t('filter.statusDone');
+            case '-': return t('filter.statusCancelled');
+            case '!': return t('filter.statusException');
             default: return statusChar;
         }
     }

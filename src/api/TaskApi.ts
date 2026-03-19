@@ -136,42 +136,31 @@ Date Formats
   Presets:   today, thisWeek, pastWeek, nextWeek, thisMonth, thisYear,
              next7days, next30days
 
-FilterState
------------
-  { root: FilterGroupNode }
+FilterState (JSON format)
+-------------------------
+  { logic: 'and', conditions: [...] }
 
-  FilterGroupNode:
-    { type: 'group', id: string, logic: 'and' | 'or',
-      children: (FilterConditionNode | FilterGroupNode)[] }
-
-  FilterConditionNode:
-    { type: 'condition', id: string, property: string,
-      operator: string, value: FilterValue }
+  Condition:
+    { property: string, operator: string, value?: ... }
 
   Properties & Operators:
-    file       : includes, excludes
-    tag        : includes, excludes, equals
-    status     : includes, excludes
-    content    : contains, notContains
+    file       : includes, excludes          (value: string[])
+    tag        : includes, excludes, equals  (value: string[])
+    status     : includes, excludes          (value: string[])
+    content    : contains, notContains       (value: string)
     startDate  : isSet, isNotSet, equals, before, after, onOrBefore, onOrAfter
-    endDate    : isSet, isNotSet, equals, before, after, onOrBefore, onOrAfter
-    due        : isSet, isNotSet, equals, before, after, onOrBefore, onOrAfter
-    color      : includes, excludes
-    linestyle  : includes, excludes
+                                             (value: 'YYYY-MM-DD' or { preset: '...' })
+    endDate    : (same as startDate)
+    due        : (same as startDate)
+    color      : includes, excludes          (value: string[])
+    linestyle  : includes, excludes          (value: string[])
     length     : lessThan, lessThanOrEqual, greaterThan, greaterThanOrEqual, equals, isSet, isNotSet
-    taskType   : includes, excludes
-    parent     : isSet, isNotSet
-    children   : isSet, isNotSet
+                                             (value: number, unit?: 'hours'|'minutes')
+    taskType   : includes, excludes          (value: string[])
+    parent     : isSet, isNotSet             (no value needed)
+    children   : isSet, isNotSet             (no value needed)
     property   : isSet, isNotSet, equals, contains, notContains
-
-  Value Types:
-    stringSet : { type: 'stringSet', values: ['a', 'b'] }
-    string    : { type: 'string', value: 'text' }
-    boolean   : { type: 'boolean', value: true }
-    date      : { type: 'date', value: { mode: 'absolute', date: 'YYYY-MM-DD' } }
-            or: { type: 'date', value: { mode: 'relative', preset: '<preset>' } }
-    number    : { type: 'number', value: 60, unit: 'minutes' }
-    property  : { type: 'property', key: 'priority', value: 'high' }
+                                             (value: string, key: string)
 
 NormalizedTask Fields
 ---------------------
@@ -190,9 +179,9 @@ Examples
   // Filter by tag (exact match)
   await api.list({
     filter: {
-      root: { type: 'group', id: 'g1', logic: 'and', children: [
-        { type: 'condition', id: 'c1', property: 'tag', operator: 'equals',
-          value: { type: 'stringSet', values: ['work'] } }
+      root: { type: 'group', logic: 'and', children: [
+        { type: 'condition', property: 'tag', operator: 'equals',
+          value: ['work'] }
       ]}
     }
   });
@@ -212,10 +201,6 @@ Examples
 
 // ── Internal helpers ──
 
-function generateId(prefix: string): string {
-    return `${prefix}-api-${Math.random().toString(36).slice(2, 7)}`;
-}
-
 const VALID_SORT_PROPERTIES: Set<string> = new Set<string>([
     'content', 'due', 'startDate', 'endDate', 'file', 'status', 'tag',
 ]);
@@ -230,8 +215,8 @@ function buildSortState(rules?: ApiSortRule[]): SortState | undefined {
         }
     }
     return {
-        rules: rules.map(r => ({
-            id: generateId('s'),
+        rules: rules.map((r, i) => ({
+            id: `s-api-${i}`,
             property: r.property as SortProperty,
             direction: r.direction ?? 'asc',
         })),
