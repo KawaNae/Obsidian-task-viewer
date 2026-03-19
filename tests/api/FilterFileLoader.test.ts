@@ -29,19 +29,17 @@ function makeApp(files: Record<string, string>): App {
     } as unknown as App;
 }
 
-function makeFilterState(id = 'g1'): FilterState {
+function makeFilterState(): FilterState {
     return {
         root: {
             type: 'group',
-            id,
             logic: 'and',
             children: [
                 {
                     type: 'condition',
-                    id: 'c1',
                     property: 'tag',
                     operator: 'includes',
-                    value: { type: 'stringSet', values: ['work'] },
+                    value: ['work'],
                 } as FilterConditionNode,
             ],
         },
@@ -51,7 +49,7 @@ function makeFilterState(id = 'g1'): FilterState {
 function makePinnedList(name: string, applyViewFilter?: boolean): PinnedListDefinition {
     return {
         name,
-        filterState: makeFilterState(`pinned-${name}`),
+        filterState: makeFilterState(),
         applyViewFilter,
     } as PinnedListDefinition;
 }
@@ -69,8 +67,8 @@ function makeTemplate(overrides: Partial<ViewTemplate> = {}): ViewTemplate {
 
 describe('mergeFilters', () => {
     it('combines two FilterStates under an AND group', () => {
-        const a = makeFilterState('a');
-        const b = makeFilterState('b');
+        const a = makeFilterState();
+        const b = makeFilterState();
         const merged = mergeFilters(a, b);
 
         expect(merged.root.type).toBe('group');
@@ -113,11 +111,40 @@ describe('loadFilterFile', () => {
     // ── .json files ──
 
     describe('.json files', () => {
-        it('loads valid FilterState JSON', async () => {
-            const filterState = makeFilterState();
-            const app = makeApp({ 'filters/test.json': JSON.stringify(filterState) });
+        it('loads valid FilterState JSON (v5 format)', async () => {
+            const v5Json = {
+                logic: 'and',
+                conditions: [
+                    { property: 'tag', operator: 'includes', value: ['work'] },
+                ],
+            };
+            const app = makeApp({ 'filters/test.json': JSON.stringify(v5Json) });
             const result = await loadFilterFile(app, 'filters/test.json');
-            expect(result).toEqual(filterState);
+            expect(typeof result).not.toBe('string');
+            const state = result as FilterState;
+            expect(state.root.children).toHaveLength(1);
+            const c = state.root.children[0] as FilterConditionNode;
+            expect(c.value).toEqual(['work']);
+        });
+
+        it('loads valid FilterState JSON (v4 format with backward compat)', async () => {
+            const v4Json = {
+                root: {
+                    type: 'group', id: 'root', logic: 'and',
+                    children: [{
+                        type: 'condition', id: 'f-1',
+                        property: 'tag', operator: 'includes',
+                        value: { type: 'stringSet', values: ['work'] },
+                    }],
+                },
+            };
+            const app = makeApp({ 'filters/test.json': JSON.stringify(v4Json) });
+            const result = await loadFilterFile(app, 'filters/test.json');
+            expect(typeof result).not.toBe('string');
+            const state = result as FilterState;
+            expect(state.root.children).toHaveLength(1);
+            const c = state.root.children[0] as FilterConditionNode;
+            expect(c.value).toEqual(['work']);
         });
 
         it('returns error for invalid JSON', async () => {
@@ -126,10 +153,11 @@ describe('loadFilterFile', () => {
             expect(result).toBe('Invalid JSON in filter file: filters/bad.json');
         });
 
-        it('returns error when root key is missing', async () => {
-            const app = makeApp({ 'filters/no-root.json': '{"children": []}' });
-            const result = await loadFilterFile(app, 'filters/no-root.json');
-            expect(result).toBe('Invalid FilterState in filters/no-root.json: missing "root" group');
+        it('returns error when no conditions found', async () => {
+            const app = makeApp({ 'filters/empty.json': '{"logic": "and", "conditions": []}' });
+            const result = await loadFilterFile(app, 'filters/empty.json');
+            expect(typeof result).toBe('string');
+            expect(result).toContain('no conditions found');
         });
     });
 
@@ -203,7 +231,7 @@ describe('loadFilterFile', () => {
         });
 
         it('merges viewFilter and pinnedList filter when applyViewFilter is true', async () => {
-            const viewFilter = makeFilterState('view');
+            const viewFilter = makeFilterState();
             const pinnedList = makePinnedList('urgent', true);
             const app = makeApp({ 'templates/merged.md': '' });
             mockLoadFullTemplate.mockResolvedValue(makeTemplate({
@@ -222,7 +250,7 @@ describe('loadFilterFile', () => {
         });
 
         it('skips viewFilter merge when applyViewFilter is false', async () => {
-            const viewFilter = makeFilterState('view');
+            const viewFilter = makeFilterState();
             const pinnedList = makePinnedList('urgent', false);
             const app = makeApp({ 'templates/no-merge.md': '' });
             mockLoadFullTemplate.mockResolvedValue(makeTemplate({

@@ -88,13 +88,11 @@ export class TimelineToolbar {
             this.filterMenu.setFilterState({
                 root: {
                     type: 'group',
-                    id: 'migrated-file-group',
                     children: [{
                         type: 'condition',
-                        id: 'migrated-file',
                         property: 'file',
                         operator: 'includes',
-                        value: { type: 'stringSet', values: this.viewState.filterFiles },
+                        value: this.viewState.filterFiles,
                     }],
                     logic: 'and',
                 },
@@ -159,6 +157,8 @@ export class TimelineToolbar {
                 this.callbacks.onRender();
                 this.app.workspace.requestSaveLayout();
             },
+            getExportContainer: () => this.container.closest('.timeline-view')?.querySelector<HTMLElement>('.timeline-grid') ?? null,
+            getTaskIndex: () => this.taskIndex,
             onReset: () => {
                 this.viewState.daysToShow = 3;
                 this.viewState.zoomLevel = 1.0;

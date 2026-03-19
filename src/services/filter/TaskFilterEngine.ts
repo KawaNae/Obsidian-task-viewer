@@ -1,5 +1,5 @@
 import type { Task, DisplayTask } from '../../types';
-import type { FilterState, FilterConditionNode, FilterGroupNode, FilterNode, FilterContext } from './FilterTypes';
+import type { FilterState, FilterConditionNode, FilterGroupNode, FilterNode, FilterContext, DateFilterValue } from './FilterTypes';
 import { DateResolver } from './DateResolver';
 import { DateUtils } from '../../utils/DateUtils';
 
@@ -36,8 +36,8 @@ export class TaskFilterEngine {
     }
 
     private static evalCondition(task: Task, condition: FilterConditionNode, context?: FilterContext): boolean {
-        // Skip conditions with empty stringSet values (value not yet selected)
-        if (condition.value.type === 'stringSet' && condition.value.values.length === 0) return true;
+        // Skip conditions with empty array values (value not yet selected)
+        if (Array.isArray(condition.value) && condition.value.length === 0) return true;
 
         // Target resolution: evaluate condition against any ancestor
         if (condition.target === 'parent') {
@@ -94,9 +94,9 @@ export class TaskFilterEngine {
     }
 
     private static evalStringSet(value: string, c: FilterConditionNode): boolean {
-        if (c.value.type !== 'stringSet') return true;
-        if (c.operator === 'includes') return c.value.values.includes(value);
-        if (c.operator === 'excludes') return !c.value.values.includes(value);
+        if (!Array.isArray(c.value)) return true;
+        if (c.operator === 'includes') return c.value.includes(value);
+        if (c.operator === 'excludes') return !c.value.includes(value);
         return true;
     }
 
@@ -105,23 +105,28 @@ export class TaskFilterEngine {
     }
 
     private static evalTag(task: Task, c: FilterConditionNode): boolean {
-        if (c.value.type !== 'stringSet') return true;
+        if (!Array.isArray(c.value)) return true;
         if (c.operator === 'includes') {
-            return c.value.values.some(v => task.tags.some(t => this.tagMatches(t, v)));
+            return c.value.some(v => task.tags.some(t => this.tagMatches(t, v)));
         }
         if (c.operator === 'excludes') {
-            return !c.value.values.some(v => task.tags.some(t => this.tagMatches(t, v)));
+            return !c.value.some(v => task.tags.some(t => this.tagMatches(t, v)));
         }
         if (c.operator === 'equals') {
-            return c.value.values.some(v => task.tags.some(t => t === v));
+            return c.value.some(v => task.tags.some(t => t === v));
+        }
+        if (c.operator === 'only') {
+            const filterSet = new Set(c.value);
+            return task.tags.length === filterSet.size
+                && task.tags.every(t => filterSet.has(t));
         }
         return true;
     }
 
     private static evalContent(task: Task, c: FilterConditionNode): boolean {
-        if (c.value.type !== 'string') return true;
+        if (typeof c.value !== 'string') return true;
         const lower = task.content.toLowerCase();
-        const search = c.value.value.toLowerCase();
+        const search = c.value.toLowerCase();
         if (c.operator === 'contains') return lower.includes(search);
         if (c.operator === 'notContains') return !lower.includes(search);
         return true;
@@ -132,9 +137,9 @@ export class TaskFilterEngine {
         if (c.operator === 'isSet') return !!taskDate;
         if (c.operator === 'isNotSet') return !taskDate;
 
-        if (c.value.type !== 'date') return true;
+        if (c.value == null) return true;
         if (!taskDate) return false;
-        const { start, end } = DateResolver.resolve(c.value.value, 1, startHour);
+        const { start, end } = DateResolver.resolve(c.value as DateFilterValue, 1, startHour);
         switch (c.operator) {
             case 'equals':     return taskDate >= start && taskDate <= end;
             case 'before':     return taskDate < start;
@@ -146,9 +151,9 @@ export class TaskFilterEngine {
     }
 
     private static evalProperty(task: Task, c: FilterConditionNode): boolean {
-        if (c.value.type !== 'property') return true;
-        const { key, value: filterValue } = c.value;
-        const actual = task.properties?.[key]?.value;
+        if (c.key == null) return true;
+        const actual = task.properties?.[c.key]?.value;
+        const filterValue = typeof c.value === 'string' ? c.value : '';
         switch (c.operator) {
             case 'isSet': return actual !== undefined;
             case 'isNotSet': return actual === undefined;
@@ -168,7 +173,7 @@ export class TaskFilterEngine {
         if (c.operator === 'isSet') return hasDuration;
         if (c.operator === 'isNotSet') return !hasDuration;
 
-        if (c.value.type !== 'number') return true;
+        if (typeof c.value !== 'number') return true;
         if (!effectiveStartDate) return false;
 
         const durationMs = DateUtils.getTaskDurationMs(
@@ -179,10 +184,10 @@ export class TaskFilterEngine {
         );
         if (!Number.isFinite(durationMs) || durationMs < 0) return false;
 
-        const unit = c.value.unit ?? 'hours';
+        const unit = c.unit ?? 'hours';
         const divisor = unit === 'minutes' ? 60_000 : 3_600_000;
         const durationValue = durationMs / divisor;
-        const threshold = c.value.value;
+        const threshold = c.value;
 
         switch (c.operator) {
             case 'lessThan':            return durationValue < threshold;

@@ -233,6 +233,8 @@ export class KanbanView extends ItemView {
                 grid: this.grid,
                 filterState: this.viewFilterMenu.getFilterState(),
             }),
+            getExportContainer: () => this.container,
+            getTaskIndex: () => this.taskIndex,
             onApplyTemplate: (template) => {
                 if (template.grid && template.grid.length > 0) {
                     this.grid = template.grid;

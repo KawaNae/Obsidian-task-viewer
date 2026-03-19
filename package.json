@@ -27,6 +27,7 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "date-fns": "^3.0.0"
+    "date-fns": "^3.0.0",
+    "html-to-image": "^1.11.13"
   }
 }

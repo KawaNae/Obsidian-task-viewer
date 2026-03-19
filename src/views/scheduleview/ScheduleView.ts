@@ -137,13 +137,11 @@ export class ScheduleView extends ItemView {
                 this.filterMenu.setFilterState({
                     root: {
                         type: 'group',
-                        id: 'migrated-file-group',
                         children: [{
                             type: 'condition',
-                            id: 'migrated-file',
                             property: 'file',
                             operator: 'includes',
-                            value: { type: 'stringSet', values: files },
+                            value: files,
                         }],
                         logic: 'and',
                     },
@@ -316,6 +314,8 @@ export class ScheduleView extends ItemView {
                 viewType: 'schedule',
                 filterState: this.filterMenu.getFilterState(),
             }),
+            getExportContainer: () => this.container,
+            getTaskIndex: () => this.taskIndex,
             onApplyTemplate: (template) => {
                 if (template.filterState) {
                     this.filterMenu.setFilterState(template.filterState);

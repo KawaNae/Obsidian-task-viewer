@@ -139,13 +139,11 @@ export class CalendarView extends ItemView {
                 this.filterMenu.setFilterState({
                     root: {
                         type: 'group',
-                        id: 'migrated-file-group',
                         children: [{
                             type: 'condition',
-                            id: 'migrated-file',
                             property: 'file',
                             operator: 'includes',
-                            value: { type: 'stringSet', values: files },
+                            value: files,
                         }],
                         logic: 'and',
                     },
@@ -415,6 +413,8 @@ export class CalendarView extends ItemView {
                 filterState: this.filterMenu.getFilterState(),
                 pinnedLists: this.pinnedLists,
             }),
+            getExportContainer: () => this.container.querySelector<HTMLElement>('.calendar-grid'),
+            getTaskIndex: () => this.taskIndex,
             onApplyTemplate: (template) => {
                 if (template.filterState) {
                     this.filterMenu.setFilterState(template.filterState);

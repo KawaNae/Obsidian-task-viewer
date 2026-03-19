@@ -96,20 +96,10 @@ Two file types are supported:
 Create a JSON file anywhere in your vault containing a FilterState object:
 
   {
-    "root": {
-      "type": "group",
-      "id": "g1",
-      "logic": "and",
-      "children": [
-        {
-          "type": "condition",
-          "id": "c1",
-          "property": "tag",
-          "operator": "equals",
-          "value": { "type": "stringSet", "values": ["work"] }
-        }
-      ]
-    }
+    "logic": "and",
+    "conditions": [
+      { "property": "tag", "operator": "equals", "value": ["work"] }
+    ]
   }
 
   obsidian obsidian-task-viewer:list filter-file=filters/exact-tag.json
@@ -133,62 +123,58 @@ FilterState JSON Reference
 Structure
 ---------
 {
-  "root": {
-    "type": "group",
-    "id": "<any-unique-string>",
-    "logic": "and" | "or",
-    "children": [ <condition | group>, ... ]
-  }
+  "logic": "and" | "or",
+  "conditions": [ <condition | group>, ... ]
 }
 
 Condition:
 {
-  "type": "condition",
-  "id": "<any-unique-string>",
   "property": "<property>",
   "operator": "<operator>",
   "value": <value>
 }
 
+Single condition (shorthand):
+  { "property": "tag", "operator": "includes", "value": ["work"] }
+
 Groups can be nested up to 3 levels deep.
 
 Properties & Operators
 ----------------------
-  file        : includes, excludes
-  tag         : includes (hierarchy match), excludes, equals (exact match)
-  status      : includes, excludes
-  content     : contains, notContains
+  file        : includes, excludes          (value: ["a", "b"])
+  tag         : includes (hierarchy), excludes, equals (exact)  (value: ["a"])
+  status      : includes, excludes          (value: [" ", "x"])
+  content     : contains, notContains       (value: "text")
   startDate   : isSet, isNotSet, equals, before, after, onOrBefore, onOrAfter
   endDate     : isSet, isNotSet, equals, before, after, onOrBefore, onOrAfter
   due         : isSet, isNotSet, equals, before, after, onOrBefore, onOrAfter
-  color       : includes, excludes
-  linestyle   : includes, excludes
+  color       : includes, excludes          (value: ["red"])
+  linestyle   : includes, excludes          (value: ["dashed"])
   length      : lessThan, lessThanOrEqual, greaterThan, greaterThanOrEqual, equals, isSet, isNotSet
-  taskType    : includes, excludes
-  parent      : isSet, isNotSet
-  children    : isSet, isNotSet
+  taskType    : includes, excludes          (value: ["at-notation"])
+  parent      : isSet, isNotSet             (no value)
+  children    : isSet, isNotSet             (no value)
   property    : isSet, isNotSet, equals, contains, notContains
 
 Value Types
 -----------
-  stringSet : { "type": "stringSet", "values": ["a", "b"] }
+  string[]  : ["a", "b"]
               Used by: file, tag, status, color, linestyle, taskType
 
-  string    : { "type": "string", "value": "search text" }
+  string    : "search text"
               Used by: content
 
-  boolean   : { "type": "boolean", "value": true }
-              Used by: isSet / isNotSet operators
-
-  date      : { "type": "date", "value": { "mode": "absolute", "date": "2026-03-15" } }
-          or: { "type": "date", "value": { "mode": "relative", "preset": "<preset>" } }
+  date      : "2026-03-15" (absolute)
+          or: { "preset": "today" } (relative)
               Used by: startDate, endDate, due
 
-  number    : { "type": "number", "value": 60, "unit": "minutes" }
+  number    : 60  (with "unit": "minutes" or "hours")
               Used by: length
 
-  property  : { "type": "property", "key": "priority", "value": "high" }
+  property  : "high" (with "key": "priority")
               Used by: property
+
+  (no value): isSet / isNotSet operators need no value
 
 Date Presets
 ------------

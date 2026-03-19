@@ -683,6 +683,13 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,
+            'Placeholder Key',
+            'Frontmatter key for export masking. When set, task content is replaced with this value in image exports.',
+            'tv-placeholder',
+            'placeholder'
+        );
+        this.addFrontmatterTaskKeySetting(
+            containerEl,
             'Shared Tags Key',
             'Frontmatter key for file-level shared tags inherited by all tasks in the file. Use "tags" for Obsidian compatibility.',
             'tags',

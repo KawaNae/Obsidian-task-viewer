@@ -90,6 +90,9 @@ export interface Task {
     color?: string;
     linestyle?: string;
 
+    // File-level placeholder for export masking (resolved at scan time).
+    placeholder?: string;
+
     // True when this is a Container task (no dates, groups inline tasks).
     isContainer?: boolean;
 
@@ -184,6 +187,7 @@ export interface FrontmatterTaskKeys {
     timerTargetId: string;
     color: string;
     linestyle: string;
+    placeholder: string;
     sharedtags: string;
     ignore: string;
 }
@@ -197,6 +201,7 @@ export const DEFAULT_FRONTMATTER_TASK_KEYS: FrontmatterTaskKeys = {
     timerTargetId: 'tv-timer-target-id',
     color: 'tv-color',
     linestyle: 'tv-linestyle',
+    placeholder: 'tv-placeholder',
     sharedtags: 'tags',
     ignore: 'tv-ignore',
 };
@@ -225,6 +230,7 @@ export function normalizeFrontmatterTaskKeys(value: unknown): FrontmatterTaskKey
         timerTargetId: normalize('timerTargetId'),
         color: normalize('color'),
         linestyle: normalize('linestyle'),
+        placeholder: normalize('placeholder'),
         sharedtags: normalize('sharedtags'),
         ignore: normalize('ignore'),
     };
@@ -240,6 +246,7 @@ export function validateFrontmatterTaskKeys(keys: FrontmatterTaskKeys): string |
         'timerTargetId',
         'color',
         'linestyle',
+        'placeholder',
         'ignore',
     ];
 

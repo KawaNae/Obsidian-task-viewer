@@ -130,10 +130,12 @@ export class FrontmatterTaskBuilder {
             };
         }
 
-        // Resolve color/linestyle directly on the task
+        // Resolve color/linestyle/placeholder directly on the task
         const rawColor = frontmatter[frontmatterKeys.color];
         const color = (typeof rawColor === 'string' && rawColor.trim()) ? rawColor.trim() : undefined;
         const linestyle = this.resolveLinestyle(frontmatter[frontmatterKeys.linestyle]);
+        const rawPlaceholder = frontmatter[frontmatterKeys.placeholder];
+        const placeholder = (typeof rawPlaceholder === 'string' && rawPlaceholder.trim()) ? rawPlaceholder.trim() : undefined;
 
         const isContainer = !hasDateFields;
 
@@ -161,6 +163,7 @@ export class FrontmatterTaskBuilder {
                 properties: fmProperties,
                 color,
                 linestyle,
+                placeholder,
                 isContainer,
             },
             wikilinkRefs,

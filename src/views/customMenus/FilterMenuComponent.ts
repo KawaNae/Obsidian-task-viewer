@@ -8,7 +8,7 @@ import type {
 import {
     MAX_FILTER_DEPTH,
     PROPERTY_OPERATORS,
-    OPERATOR_LABELS,
+    getOperatorLabel,
     PROPERTY_LABELS,
     PROPERTY_ICONS,
     NO_VALUE_OPERATORS,
@@ -320,7 +320,7 @@ export class FilterMenuComponent {
         // Operator dropdown
         const opBtn = headerLine.createEl('button', {
             cls: 'filter-popover__dropdown',
-            text: OPERATOR_LABELS[condition.operator],
+            text: getOperatorLabel(condition.property, condition.operator),
         });
         opBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -379,11 +379,11 @@ export class FilterMenuComponent {
             type: 'text',
             placeholder: 'Enter text...',
         });
-        if (condition.value.type === 'string') {
-            input.value = condition.value.value;
+        if (typeof condition.value === 'string') {
+            input.value = condition.value;
         }
         const applyValue = () => {
-            condition.value = { type: 'string', value: input.value };
+            condition.value = input.value;
             this.lastCallbacks?.onFilterChange();
         };
         input.addEventListener('change', applyValue);
@@ -396,7 +396,7 @@ export class FilterMenuComponent {
     }
 
     private renderValueDropdown(row: HTMLElement, condition: FilterConditionNode): void {
-        const currentValues = condition.value.type === 'stringSet' ? condition.value.values : [];
+        const currentValues = Array.isArray(condition.value) ? condition.value as string[] : [];
         const label = currentValues.length > 0
             ? this.formatValueLabel(condition.property, currentValues)
             : 'Select...';
@@ -413,7 +413,7 @@ export class FilterMenuComponent {
 
     private renderPillValueSelector(row: HTMLElement, condition: FilterConditionNode): void {
         const container = row.createDiv('filter-popover__tag-value');
-        const currentValues = condition.value.type === 'stringSet' ? condition.value.values : [];
+        const currentValues = Array.isArray(condition.value) ? condition.value as string[] : [];
         const prop = condition.property;
 
         // Pill群 (only if there are selected values)
@@ -454,11 +454,9 @@ export class FilterMenuComponent {
         const addValue = (val: string) => {
             const normalized = prop === 'tag' ? val.trim().replace(/^#/, '') : prop === 'status' ? val : val.trim();
             if (!normalized) return;
-            if (condition.value.type !== 'stringSet') {
-                condition.value = { type: 'stringSet', values: [] };
-            }
-            if (!condition.value.values.includes(normalized)) {
-                condition.value = { type: 'stringSet', values: [...condition.value.values, normalized] };
+            const arr = Array.isArray(condition.value) ? condition.value as string[] : [];
+            if (!arr.includes(normalized)) {
+                condition.value = [...arr, normalized];
                 this.lastCallbacks?.onFilterChange();
             }
             input.value = '';
@@ -469,7 +467,7 @@ export class FilterMenuComponent {
         const showSuggest = (query: string, showAll: boolean) => {
             closeSuggest();
             const available = this.getAvailableValues(prop);
-            const selected = new Set(condition.value.type === 'stringSet' ? condition.value.values : []);
+            const selected = new Set(Array.isArray(condition.value) ? condition.value as string[] : []);
             const q = prop === 'tag' ? query.toLowerCase().replace(/^#/, '') : query.toLowerCase();
 
             const filtered = available.filter(v => {
@@ -573,14 +571,10 @@ export class FilterMenuComponent {
             } else if (e.key === 'Backspace' && !input.value && currentValues.length > 0) {
                 // Remove last pill on backspace in empty input
                 const last = currentValues[currentValues.length - 1];
-                if (condition.value.type === 'stringSet') {
-                    condition.value = {
-                        type: 'stringSet',
-                        values: condition.value.values.filter(v => v !== last),
-                    };
-                    this.lastCallbacks?.onFilterChange();
-                    this.renderContent();
-                }
+                const arr = Array.isArray(condition.value) ? condition.value as string[] : [];
+                condition.value = arr.filter(v => v !== last);
+                this.lastCallbacks?.onFilterChange();
+                this.renderContent();
             }
         });
 
@@ -607,14 +601,10 @@ export class FilterMenuComponent {
         setIcon(removeBtn.createSpan(), 'x');
         removeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (condition.value.type === 'stringSet') {
-                condition.value = {
-                    type: 'stringSet',
-                    values: condition.value.values.filter(v => v !== value),
-                };
-                this.lastCallbacks?.onFilterChange();
-                this.renderContent();
-            }
+            const arr = Array.isArray(condition.value) ? condition.value as string[] : [];
+            condition.value = arr.filter(v => v !== value);
+            this.lastCallbacks?.onFilterChange();
+            this.renderContent();
         });
     }
 
@@ -624,34 +614,36 @@ export class FilterMenuComponent {
         const container = row.createDiv('filter-popover__date-value');
 
         // Initialize value if needed
-        if (condition.value.type !== 'date') {
-            condition.value = { type: 'date', value: { mode: 'relative', preset: 'today' } };
+        if (condition.value == null || (typeof condition.value !== 'string' && typeof condition.value !== 'object')) {
+            condition.value = { preset: 'today' } as DateFilterValue;
         }
 
-        const dateVal = condition.value.value as DateFilterValue;
+        const dateVal = condition.value as DateFilterValue;
+        const isRelative = typeof dateVal === 'object' && 'preset' in dateVal;
 
         // Mode toggle button: "Relative" / "Absolute"
         const modeBtn = container.createEl('button', {
             cls: 'filter-popover__dropdown filter-popover__date-mode-btn',
-            text: dateVal.mode === 'relative' ? 'Relative' : 'Absolute',
+            text: isRelative ? 'Relative' : 'Absolute',
         });
         modeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (dateVal.mode === 'relative') {
-                condition.value = { type: 'date', value: { mode: 'absolute', date: this.getToday() } };
+            if (isRelative) {
+                condition.value = this.getToday();
             } else {
-                condition.value = { type: 'date', value: { mode: 'relative', preset: 'today' } };
+                condition.value = { preset: 'today' } as DateFilterValue;
             }
             this.refreshPopover();
         });
 
-        if (dateVal.mode === 'relative') {
+        if (isRelative) {
+            const relVal = dateVal as { preset: RelativeDatePreset; n?: number };
             // Relative preset dropdown
             const presetBtn = container.createEl('button', {
                 cls: 'filter-popover__dropdown',
-                text: dateVal.preset === 'nextNDays'
-                    ? `Next ${dateVal.n ?? 7} days`
-                    : RELATIVE_DATE_LABELS[dateVal.preset],
+                text: relVal.preset === 'nextNDays'
+                    ? `Next ${relVal.n ?? 7} days`
+                    : RELATIVE_DATE_LABELS[relVal.preset],
             });
             presetBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -659,18 +651,18 @@ export class FilterMenuComponent {
             });
 
             // Number input for nextNDays
-            if (dateVal.preset === 'nextNDays') {
+            if (relVal.preset === 'nextNDays') {
                 const nInput = container.createEl('input', {
                     cls: 'filter-popover__n-input',
                     type: 'number',
                 });
-                nInput.value = String(dateVal.n ?? 7);
+                nInput.value = String(relVal.n ?? 7);
                 nInput.min = '1';
                 nInput.placeholder = 'N';
                 nInput.addEventListener('change', () => {
                     const n = parseInt(nInput.value, 10);
                     if (n > 0) {
-                        condition.value = { type: 'date', value: { mode: 'relative', preset: 'nextNDays', n } };
+                        condition.value = { preset: 'nextNDays', n } as DateFilterValue;
                         this.lastCallbacks?.onFilterChange();
                     }
                 });
@@ -681,9 +673,9 @@ export class FilterMenuComponent {
                 cls: 'filter-popover__date-input',
                 type: 'date',
             });
-            dateInput.value = dateVal.date || this.getToday();
+            dateInput.value = (typeof dateVal === 'string' ? dateVal : '') || this.getToday();
             dateInput.addEventListener('change', () => {
-                condition.value = { type: 'date', value: { mode: 'absolute', date: dateInput.value } };
+                condition.value = dateInput.value;
                 this.lastCallbacks?.onFilterChange();
             });
         }
@@ -691,8 +683,9 @@ export class FilterMenuComponent {
 
     private showRelativeDateMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
         const presets = Object.keys(RELATIVE_DATE_LABELS) as RelativeDatePreset[];
-        const currentPreset = condition.value.type === 'date' && condition.value.value.mode === 'relative'
-            ? condition.value.value.preset : 'today';
+        const dateVal = condition.value as DateFilterValue;
+        const currentPreset = typeof dateVal === 'object' && 'preset' in dateVal
+            ? dateVal.preset : 'today';
 
         const items: SelectItem[] = presets.map(p => ({
             label: RELATIVE_DATE_LABELS[p],
@@ -702,10 +695,9 @@ export class FilterMenuComponent {
 
         this.showSelectPopover(anchorEl, items, (val) => {
             const preset = val as RelativeDatePreset;
-            const dateValue: DateFilterValue = preset === 'nextNDays'
-                ? { mode: 'relative', preset, n: 7 }
-                : { mode: 'relative', preset };
-            condition.value = { type: 'date', value: dateValue };
+            condition.value = preset === 'nextNDays'
+                ? { preset, n: 7 } as DateFilterValue
+                : { preset } as DateFilterValue;
             this.refreshPopover();
         });
     }
@@ -715,10 +707,11 @@ export class FilterMenuComponent {
     private renderNumberValueSelector(row: HTMLElement, condition: FilterConditionNode): void {
         const container = row.createDiv('filter-popover__number-value');
 
-        if (condition.value.type !== 'number') {
-            condition.value = { type: 'number', value: 1, unit: 'hours' };
+        if (typeof condition.value !== 'number') {
+            condition.value = 1;
+            condition.unit = 'hours';
         }
-        const unit = condition.value.unit ?? 'hours';
+        const unit = condition.unit ?? 'hours';
 
         // Unit toggle button (Hours / Minutes)
         const unitBtn = container.createEl('button', {
@@ -727,13 +720,7 @@ export class FilterMenuComponent {
         });
         unitBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (condition.value.type === 'number') {
-                condition.value = {
-                    type: 'number',
-                    value: condition.value.value,
-                    unit: unit === 'hours' ? 'minutes' : 'hours',
-                };
-            }
+            condition.unit = unit === 'hours' ? 'minutes' : 'hours';
             this.refreshPopover();
         });
 
@@ -742,13 +729,13 @@ export class FilterMenuComponent {
             cls: 'filter-popover__n-input',
             type: 'number',
         });
-        input.value = String(condition.value.value);
+        input.value = String(condition.value);
         input.min = '0';
         input.step = unit === 'hours' ? '0.5' : '1';
         input.addEventListener('change', () => {
             const n = parseFloat(input.value);
-            if (Number.isFinite(n) && n >= 0 && condition.value.type === 'number') {
-                condition.value = { type: 'number', value: n, unit: condition.value.unit ?? 'hours' };
+            if (Number.isFinite(n) && n >= 0) {
+                condition.value = n;
                 this.lastCallbacks?.onFilterChange();
             }
         });
@@ -871,16 +858,20 @@ export class FilterMenuComponent {
             const prop = val as FilterProperty;
             condition.property = prop;
             condition.operator = PROPERTY_OPERATORS[prop][0];
+            // Reset value-related fields
+            delete condition.key;
+            delete condition.unit;
             if (NO_VALUE_OPERATORS.has(condition.operator)) {
-                condition.value = { type: 'boolean', value: true };
+                condition.value = undefined;
             } else if (DATE_PROPERTIES.has(prop)) {
-                condition.value = { type: 'date', value: { mode: 'relative', preset: 'today' } };
+                condition.value = { preset: 'today' } as DateFilterValue;
             } else if (NUMBER_PROPERTIES.has(prop)) {
-                condition.value = { type: 'number', value: 1, unit: 'hours' };
+                condition.value = 1;
+                condition.unit = 'hours';
             } else if (prop === 'content') {
-                condition.value = { type: 'string', value: '' };
+                condition.value = '';
             } else {
-                condition.value = { type: 'stringSet', values: [] };
+                condition.value = [];
             }
             this.refreshPopover();
         });
@@ -889,7 +880,7 @@ export class FilterMenuComponent {
     private showOperatorMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
         const operators = PROPERTY_OPERATORS[condition.property];
         const items: SelectItem[] = operators.map(op => ({
-            label: OPERATOR_LABELS[op],
+            label: getOperatorLabel(condition.property, op),
             value: op,
             checked: condition.operator === op,
         }));
@@ -897,7 +888,7 @@ export class FilterMenuComponent {
         this.showSelectPopover(anchorEl, items, (val) => {
             condition.operator = val as FilterOperator;
             if (NO_VALUE_OPERATORS.has(condition.operator)) {
-                condition.value = { type: 'boolean', value: true };
+                condition.value = undefined;
             }
             this.refreshPopover();
         });
@@ -924,8 +915,7 @@ export class FilterMenuComponent {
 
     private showValueMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
         const available = this.getAvailableValues(condition.property);
-        const currentValues = condition.value.type === 'stringSet'
-            ? new Set(condition.value.values) : new Set<string>();
+        const currentValues = new Set(Array.isArray(condition.value) ? condition.value as string[] : []);
 
         const items: SelectItem[] = available.map(val => ({
             label: this.getValueDisplay(condition.property, val),
@@ -939,7 +929,7 @@ export class FilterMenuComponent {
             } else {
                 currentValues.add(val);
             }
-            condition.value = { type: 'stringSet', values: Array.from(currentValues) };
+            condition.value = Array.from(currentValues);
             this.lastCallbacks?.onFilterChange();
         }, true);
     }

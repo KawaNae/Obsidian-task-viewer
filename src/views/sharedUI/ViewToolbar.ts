@@ -5,6 +5,8 @@ import { InputModal } from '../../modals/InputModal';
 import type { ViewTemplate } from '../../types';
 import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
 import { ViewTemplateWriter } from '../../services/template/ViewTemplateWriter';
+import { ViewExporter } from '../../services/export/ViewExporter';
+import type { TaskIndex } from '../../services/core/TaskIndex';
 
 /**
  * Date navigation component with prev/next/today buttons.
@@ -199,6 +201,8 @@ export interface ViewSettingsOptions {
     getViewTemplate: () => ViewTemplate;
     onApplyTemplate: (template: ViewTemplate) => void;
     onReset: () => void;
+    getExportContainer?: () => HTMLElement | null;
+    getTaskIndex?: () => TaskIndex;
 }
 
 /**
@@ -334,6 +338,35 @@ export class ViewSettingsMenu {
                     new Notice('Link copied to clipboard');
                 });
         });
+
+        // Export as image
+        if (options.getExportContainer && options.getTaskIndex) {
+            menu.addSeparator();
+            const getContainer = options.getExportContainer;
+            const getIndex = options.getTaskIndex;
+            menu.addItem((item) => {
+                item.setTitle('Export as image')
+                    .setIcon('image')
+                    .onClick(async () => {
+                        const container = getContainer();
+                        if (!container) {
+                            new Notice('No content to export.');
+                            return;
+                        }
+                        const shortType = ViewSettingsMenu.toShortViewType(viewType);
+                        const date = new Date().toISOString().slice(0, 10);
+                        const name = getCustomName();
+                        const filename = name
+                            ? `${name}_${date}.png`
+                            : `${shortType}_${date}.png`;
+                        await ViewExporter.exportAsPng({
+                            container,
+                            taskIndex: getIndex(),
+                            filename,
+                        });
+                    });
+            });
+        }
 
         menu.addSeparator();
 

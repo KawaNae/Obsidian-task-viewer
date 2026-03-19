@@ -7,8 +7,8 @@ import type { DateFilterValue } from './FilterTypes';
  */
 export class DateResolver {
     static resolve(value: DateFilterValue, weekStartDay: 0 | 1 = 1, startHour: number = 0): { start: string; end: string } {
-        if (value.mode === 'absolute') {
-            return { start: value.date, end: value.date };
+        if (typeof value === 'string') {
+            return { start: value, end: value };
         }
 
         const now = new Date();

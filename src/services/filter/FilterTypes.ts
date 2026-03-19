@@ -15,23 +15,16 @@ export type FilterOperator =
     | 'isSet' | 'isNotSet'
     | 'contains' | 'notContains'
     | 'equals' | 'before' | 'after' | 'onOrBefore' | 'onOrAfter'
-    | 'lessThan' | 'lessThanOrEqual' | 'greaterThan' | 'greaterThanOrEqual';
+    | 'lessThan' | 'lessThanOrEqual' | 'greaterThan' | 'greaterThanOrEqual'
+    | 'only';
 
 // ── Value types ──
-
-export type FilterValue =
-    | { type: 'stringSet'; values: string[] }
-    | { type: 'boolean'; value: boolean }
-    | { type: 'string'; value: string }
-    | { type: 'date'; value: DateFilterValue }
-    | { type: 'number'; value: number; unit?: 'hours' | 'minutes' }
-    | { type: 'property'; key: string; value: string };
 
 export type RelativeDatePreset = 'today' | 'thisWeek' | 'nextWeek' | 'pastWeek' | 'nextNDays' | 'thisMonth' | 'thisYear';
 
 export type DateFilterValue =
-    | { mode: 'absolute'; date: string }
-    | { mode: 'relative'; preset: RelativeDatePreset; n?: number };
+    | string                                        // "2024-01-01" (absolute)
+    | { preset: RelativeDatePreset; n?: number };   // relative
 
 // ── Recursive filter tree ──
 
@@ -43,16 +36,16 @@ export type FilterTarget = 'self' | 'parent';
 
 export interface FilterConditionNode {
     type: 'condition';
-    id: string;
     property: FilterProperty;
     operator: FilterOperator;
-    value: FilterValue;
+    value?: string | number | string[] | DateFilterValue;
+    key?: string;             // property フィルタ用
+    unit?: 'hours' | 'minutes';  // length フィルタ用
     target?: FilterTarget;
 }
 
 export interface FilterGroupNode {
     type: 'group';
-    id: string;
     children: FilterNode[];
     logic: 'and' | 'or';
 }
@@ -67,17 +60,11 @@ export interface FilterContext {
     taskLookup?: (id: string) => Task | undefined;
 }
 
-/** @deprecated Use FilterConditionNode */
-export type FilterCondition = FilterConditionNode;
-/** @deprecated Use FilterGroupNode */
-export type FilterGroup = FilterGroupNode;
-
 // ── Frozen sentinel ──
 
 export const EMPTY_FILTER_STATE: FilterState = Object.freeze({
     root: Object.freeze({
         type: 'group' as const,
-        id: 'root',
         children: Object.freeze([]) as readonly FilterNode[] as FilterNode[],
         logic: 'and' as const,
     }),
@@ -85,31 +72,21 @@ export const EMPTY_FILTER_STATE: FilterState = Object.freeze({
 
 // ── Factory functions ──
 
-function generateId(prefix: string): string {
-    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
 export function createEmptyFilterState(): FilterState {
     return { root: createFilterGroup() };
 }
 
 export function createFilterGroup(): FilterGroupNode {
-    return { type: 'group', id: generateId('g'), children: [], logic: 'and' };
+    return { type: 'group', children: [], logic: 'and' };
 }
 
 export function createDefaultCondition(): FilterConditionNode {
     return {
         type: 'condition',
-        id: generateId('f'),
         property: 'tag',
         operator: 'includes',
-        value: { type: 'stringSet', values: [] },
+        value: [],
     };
-}
-
-/** @deprecated Use createFilterGroup() */
-export function createEmptyFilterGroup(): FilterGroupNode {
-    return createFilterGroup();
 }
 
 // ── Tree query helpers ──
@@ -140,14 +117,13 @@ function collectConditions(group: FilterGroupNode, out: FilterConditionNode[]): 
     }
 }
 
-/** Deep-clone a FilterNode, regenerating all IDs */
+/** Deep-clone a FilterNode */
 export function deepCloneNode(node: FilterNode): FilterNode {
     if (node.type === 'condition') {
-        return { ...JSON.parse(JSON.stringify(node)), id: generateId('f') };
+        return JSON.parse(JSON.stringify(node));
     }
     return {
         type: 'group',
-        id: generateId('g'),
         children: node.children.map(deepCloneNode),
         logic: node.logic,
     };
@@ -164,7 +140,7 @@ export const NUMBER_PROPERTIES: Set<FilterProperty> = new Set(['length']);
 /** Available operators per property */
 export const PROPERTY_OPERATORS: Record<FilterProperty, FilterOperator[]> = {
     file: ['includes', 'excludes'],
-    tag: ['includes', 'excludes', 'equals'],
+    tag: ['includes', 'excludes', 'equals', 'only'],
     status: ['includes', 'excludes'],
     content: ['contains', 'notContains'],
     startDate: ['isSet', 'isNotSet', 'equals', 'before', 'after', 'onOrBefore', 'onOrAfter'],
@@ -196,7 +172,18 @@ export const OPERATOR_LABELS: Record<FilterOperator, string> = {
     lessThanOrEqual: 'is at most',
     greaterThan: 'is greater than',
     greaterThanOrEqual: 'is at least',
+    only: 'has only',
 };
+
+/** Per-property label overrides (when the default OPERATOR_LABELS is not appropriate) */
+const OPERATOR_LABEL_OVERRIDES: Partial<Record<FilterProperty, Partial<Record<FilterOperator, string>>>> = {
+    tag: { equals: 'has', only: 'has only' },
+};
+
+/** Resolve the display label for an operator, respecting per-property overrides. */
+export function getOperatorLabel(property: FilterProperty, operator: FilterOperator): string {
+    return OPERATOR_LABEL_OVERRIDES[property]?.[operator] ?? OPERATOR_LABELS[operator];
+}
 
 /** Display labels for properties */
 export const PROPERTY_LABELS: Record<FilterProperty, string> = {
