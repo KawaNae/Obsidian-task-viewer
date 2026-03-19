@@ -26,6 +26,13 @@
     gap: 6px;
 }
 
+.filter-popover__glue {
+    font-size: var(--font-ui-small);
+    color: var(--text-muted);
+    white-space: nowrap;
+    align-self: center;
+}
+
 /* Lower row: Value selector */
 .filter-popover__row-value {
     padding-top: 4px;

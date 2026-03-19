@@ -288,7 +288,20 @@
     "statusCancelled": "Cancelled",
     "statusException": "Exception",
     "taskTypeAtNotation": "@notation",
-    "taskTypeFrontmatter": "Frontmatter"
+    "taskTypeFrontmatter": "Frontmatter",
+    "glue": {
+      "afterTarget": { "self": "", "parent": "" },
+      "beforeOperator": {
+        "includes": "", "excludes": "",
+        "contains": "", "notContains": "",
+        "isSet": "", "isNotSet": "",
+        "equals": "", "before": "", "after": "",
+        "onOrBefore": "", "onOrAfter": "",
+        "lessThan": "", "lessThanOrEqual": "",
+        "greaterThan": "", "greaterThanOrEqual": "",
+        "only": ""
+      }
+    }
   },
   "sort": {
     "property": {

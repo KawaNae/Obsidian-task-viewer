@@ -288,7 +288,26 @@
     "statusCancelled": "キャンセル",
     "statusException": "例外",
     "taskTypeAtNotation": "@記法",
-    "taskTypeFrontmatter": "フロントマター"
+    "taskTypeFrontmatter": "フロントマター",
+    "glue": {
+      "afterTarget": { "self": "", "parent": "が" },
+      "beforeOperator": {
+        "includes": "に以下を", "excludes": "に以下を",
+        "contains": "に以下を", "notContains": "に以下を",
+        "isSet": "が", "isNotSet": "が",
+        "equals": "が以下に", "before": "が以下", "after": "が以下",
+        "onOrBefore": "が以下", "onOrAfter": "が以下",
+        "lessThan": "が以下", "lessThanOrEqual": "が以下",
+        "greaterThan": "が以下", "greaterThanOrEqual": "が以下",
+        "only": "に以下を"
+      },
+      "beforeOperatorOverride": {
+        "tag": {
+          "equals": "に以下を",
+          "only": "に以下を"
+        }
+      }
+    }
   },
   "sort": {
     "property": {

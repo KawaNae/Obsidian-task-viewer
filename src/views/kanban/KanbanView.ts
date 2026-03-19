@@ -357,6 +357,7 @@ export class KanbanView extends ItemView {
         const settings = this.plugin.settings;
         for (const task of tasks) {
             const card = body.createDiv('task-card');
+            card.dataset.id = task.id;
             TaskStyling.applyTaskColor(card, task.color ?? null);
             TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
             this.taskRenderer.render(card, task, this, settings);

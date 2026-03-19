@@ -1,5 +1,6 @@
 import { Notice } from 'obsidian';
 import type { TaskIndex } from '../core/TaskIndex';
+import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
 
 export interface ViewExportOptions {
     container: HTMLElement;
@@ -101,7 +102,9 @@ export class ViewExporter {
             const taskId = card.dataset.id;
             if (!taskId) continue;
 
-            const task = taskIndex.getTask(taskId);
+            const segment = TaskIdGenerator.parseSegmentId(taskId);
+            const resolvedId = segment ? segment.baseId : taskId;
+            const task = taskIndex.getTask(resolvedId);
             if (!task?.placeholder) continue;
 
             const contentEl = card.querySelector('.task-card__content');

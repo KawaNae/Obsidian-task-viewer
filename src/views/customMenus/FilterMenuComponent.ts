@@ -308,6 +308,12 @@ export class FilterMenuComponent {
             });
         }
 
+        // Glue: after target
+        const afterTargetGlue = t(`filter.glue.afterTarget.${condition.target || 'self'}`);
+        if (afterTargetGlue && !afterTargetGlue.startsWith('filter.glue.')) {
+            headerLine.createEl('span', { cls: 'filter-popover__glue', text: afterTargetGlue });
+        }
+
         // Property dropdown (with icon)
         const propBtn = headerLine.createEl('button', { cls: 'filter-popover__dropdown' });
         const propIcon = propBtn.createSpan('filter-popover__dropdown-icon');
@@ -317,6 +323,12 @@ export class FilterMenuComponent {
             e.stopPropagation();
             this.showPropertyMenu(propBtn, condition);
         });
+
+        // Glue: before operator
+        const beforeOpGlue = this.resolveBeforeOperatorGlue(condition.property, condition.operator);
+        if (beforeOpGlue) {
+            headerLine.createEl('span', { cls: 'filter-popover__glue', text: beforeOpGlue });
+        }
 
         // Operator dropdown
         const opBtn = headerLine.createEl('button', {
@@ -360,6 +372,16 @@ export class FilterMenuComponent {
                 this.renderValueSelector(valueLine, condition);
             }
         }
+    }
+
+    private resolveBeforeOperatorGlue(property: FilterProperty, operator: FilterOperator): string {
+        // Check property-specific override first
+        const override = t(`filter.glue.beforeOperatorOverride.${property}.${operator}`);
+        if (!override.startsWith('filter.glue.')) return override;
+        // Fall back to generic
+        const generic = t(`filter.glue.beforeOperator.${operator}`);
+        if (!generic.startsWith('filter.glue.')) return generic;
+        return '';
     }
 
     // ── Value Selector ──
