@@ -1,4 +1,5 @@
 import { App, setIcon, type WorkspaceLeaf } from 'obsidian';
+import { t } from '../../i18n';
 import { ViewState, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
@@ -188,7 +189,7 @@ export class TimelineToolbar {
                 this.viewState.startDate = (oldestOverdueDate && oldestOverdueDate < visualPastDate) ? oldestOverdueDate : visualPastDate;
                 this.callbacks.onScrollToNow();
             },
-            { label: 'Now' }
+            { label: t('toolbar.now') }
         );
     }
 
@@ -254,7 +255,7 @@ export class TimelineToolbar {
     private renderFilterButton(toolbar: HTMLElement): void {
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
-        filterBtn.setAttribute('aria-label', 'Filter');
+        filterBtn.setAttribute('aria-label', t('toolbar.filter'));
         filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
 
         filterBtn.onclick = (e) => {

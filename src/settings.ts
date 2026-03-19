@@ -1,6 +1,7 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import TaskViewerPlugin from './main';
 import { DefaultLeafPosition, FrontmatterTaskKeys, HabitType, TaskViewerSettings, validateFrontmatterTaskKeys } from './types';
+import { t } from './i18n';
 
 export class TaskViewerSettingTab extends PluginSettingTab {
     plugin: TaskViewerPlugin;
@@ -32,12 +33,12 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         const content = wrapper.createDiv('tv-settings__content');
 
         const tabs = [
-            { id: 'general',     label: 'General',     render: (el: HTMLElement) => this.renderGeneralTab(el) },
-            { id: 'views',       label: 'Views',       render: (el: HTMLElement) => this.renderViewsTab(el) },
-            { id: 'notes',       label: 'Notes',       render: (el: HTMLElement) => this.renderNotesTab(el) },
-            { id: 'timer',       label: 'Timer',       render: (el: HTMLElement) => this.renderTimerTab(el) },
-            { id: 'frontmatter', label: 'Frontmatter', render: (el: HTMLElement) => this.renderFrontmatterTab(el) },
-            { id: 'habits',      label: 'Habits',      render: (el: HTMLElement) => this.renderHabitsTab(el) },
+            { id: 'general',     label: t('settings.tabs.general'),     render: (el: HTMLElement) => this.renderGeneralTab(el) },
+            { id: 'views',       label: t('settings.tabs.views'),       render: (el: HTMLElement) => this.renderViewsTab(el) },
+            { id: 'notes',       label: t('settings.tabs.notes'),       render: (el: HTMLElement) => this.renderNotesTab(el) },
+            { id: 'timer',       label: t('settings.tabs.timer'),       render: (el: HTMLElement) => this.renderTimerTab(el) },
+            { id: 'frontmatter', label: t('settings.tabs.frontmatter'), render: (el: HTMLElement) => this.renderFrontmatterTab(el) },
+            { id: 'habits',      label: t('settings.tabs.habits'),      render: (el: HTMLElement) => this.renderHabitsTab(el) },
         ];
 
         tabs.forEach(tab => {
@@ -76,8 +77,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
     private renderGeneralTab(el: HTMLElement): void {
         new Setting(el)
-            .setName('Long Press Threshold')
-            .setDesc('Duration in milliseconds to trigger context menu on touch/stylus long press (100-2000). Lower values make it faster.')
+            .setName(t('settings.general.longPressThreshold'))
+            .setDesc(t('settings.general.longPressThresholdDesc'))
             .addSlider(slider => slider
                 .setLimits(100, 2000, 50)
                 .setValue(this.plugin.settings.longPressThreshold)
@@ -88,11 +89,11 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Task Select Action')
-            .setDesc('How to select a task card to show drag handles. Double click can help prevent accidental selections.')
+            .setName(t('settings.general.taskSelectAction'))
+            .setDesc(t('settings.general.taskSelectActionDesc'))
             .addDropdown(dropdown => dropdown
-                .addOption('click', 'Single Click')
-                .addOption('dblclick', 'Double Click')
+                .addOption('click', t('settings.general.singleClick'))
+                .addOption('dblclick', t('settings.general.doubleClick'))
                 .setValue(this.plugin.settings.taskSelectAction)
                 .onChange(async (value) => {
                     this.plugin.settings.taskSelectAction = value as 'click' | 'dblclick';
@@ -100,8 +101,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Reuse Existing Tab')
-            .setDesc('When opening a file from a task card, switch to the existing tab if the file is already open, instead of opening a new tab.')
+            .setName(t('settings.general.reuseExistingTab'))
+            .setDesc(t('settings.general.reuseExistingTabDesc'))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.reuseExistingTab)
                 .onChange(async (value) => {
@@ -110,8 +111,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Show Editor Menu for Tasks')
-            .setDesc('Show a ··· menu button on recognized inline task lines in the editor.')
+            .setName(t('settings.general.showEditorMenuForTasks'))
+            .setDesc(t('settings.general.showEditorMenuForTasksDesc'))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.editorMenuForTasks)
                 .onChange(async (value) => {
@@ -121,8 +122,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Show Editor Menu for Checkboxes')
-            .setDesc('Show a ··· menu button on plain checkbox lines in the editor.')
+            .setName(t('settings.general.showEditorMenuForCheckboxes'))
+            .setDesc(t('settings.general.showEditorMenuForCheckboxesDesc'))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.editorMenuForCheckboxes)
                 .onChange(async (value) => {
@@ -132,11 +133,11 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         // Checkboxes
-        el.createEl('h3', { text: 'Checkboxes', cls: 'setting-section-header' });
+        el.createEl('h3', { text: t('settings.general.checkboxes'), cls: 'setting-section-header' });
 
         new Setting(el)
-            .setName('Apply Custom Checkboxes Styles')
-            .setDesc('If enabled, the plugin will apply its checkbox styles to the entire Obsidian editor, replacing the need for a separate CSS snippet.')
+            .setName(t('settings.general.applyCustomCheckboxStyles'))
+            .setDesc(t('settings.general.applyCustomCheckboxStylesDesc'))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.applyGlobalStyles)
                 .onChange(async (value) => {
@@ -146,8 +147,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Enable Status Menu')
-            .setDesc('Show a status selection menu when right-clicking checkboxes on task cards and in the editor.')
+            .setName(t('settings.general.enableStatusMenu'))
+            .setDesc(t('settings.general.enableStatusMenuDesc'))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.enableStatusMenu)
                 .onChange(async (value) => {
@@ -156,8 +157,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Status Menu Characters')
-            .setDesc('Additional status characters shown in the menu (comma or space separated). [ ] and [x] are always included.')
+            .setName(t('settings.general.statusMenuChars'))
+            .setDesc(t('settings.general.statusMenuCharsDesc'))
             .addText(text => text
                 .setPlaceholder('-, !, ?, >, /')
                 .setValue(this.plugin.settings.statusMenuChars.join(', '))
@@ -170,8 +171,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Complete Status Characters')
-            .setDesc('Characters that represent completed tasks (comma or space separated, e.g., "x, X, -, !").')
+            .setName(t('settings.general.completeStatusChars'))
+            .setDesc(t('settings.general.completeStatusCharsDesc'))
             .addText(text => text
                 .setPlaceholder('x, X, -, !')
                 .setValue(this.plugin.settings.completeStatusChars.join(', '))
@@ -184,11 +185,11 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         // Child Tasks
-        el.createEl('h3', { text: 'Child Tasks', cls: 'setting-section-header' });
+        el.createEl('h3', { text: t('settings.general.childTasks'), cls: 'setting-section-header' });
 
         new Setting(el)
-            .setName('Child Task Heading')
-            .setDesc('The heading under which new child tasks will be inserted in frontmatter task files.')
+            .setName(t('settings.general.childTaskHeading'))
+            .setDesc(t('settings.general.childTaskHeadingDesc'))
             .addText(text => text
                 .setPlaceholder('Tasks')
                 .setValue(this.plugin.settings.frontmatterTaskHeader)
@@ -198,8 +199,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Child Task Heading Level')
-            .setDesc('The level of the heading (1-6).')
+            .setName(t('settings.general.childTaskHeadingLevel'))
+            .setDesc(t('settings.general.childTaskHeadingLevelDesc'))
             .addSlider(slider => slider
                 .setLimits(1, 6, 1)
                 .setValue(this.plugin.settings.frontmatterTaskHeaderLevel)
@@ -214,11 +215,11 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
     private renderViewsTab(el: HTMLElement): void {
         // Timeline
-        el.createEl('h3', { text: 'Timeline', cls: 'setting-section-header' });
+        el.createEl('h3', { text: t('settings.views.timeline'), cls: 'setting-section-header' });
 
         new Setting(el)
-            .setName('Start Hour')
-            .setDesc('The hour when your day starts (0-23). Tasks before this hour will be shown in the previous day.')
+            .setName(t('settings.views.startHour'))
+            .setDesc(t('settings.views.startHourDesc'))
             .addText(text => text
                 .setPlaceholder('5')
                 .setValue(this.plugin.settings.startHour.toString())
@@ -232,8 +233,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Past Days to Show')
-            .setDesc('Number of past days to always display in the timeline, even when there are no incomplete tasks on those days.')
+            .setName(t('settings.views.pastDaysToShow'))
+            .setDesc(t('settings.views.pastDaysToShowDesc'))
             .addText(text => {
                 text.inputEl.type = 'number';
                 text.inputEl.min = '0';
@@ -249,8 +250,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             });
 
         new Setting(el)
-            .setName('Default Zoom Level')
-            .setDesc('Default zoom level for new Timeline views. Each view can override this independently.')
+            .setName(t('settings.views.defaultZoomLevel'))
+            .setDesc(t('settings.views.defaultZoomLevelDesc'))
             .addSlider(slider => slider
                 .setLimits(0.25, 10.0, 0.25)
                 .setValue(this.plugin.settings.zoomLevel)
@@ -261,14 +262,14 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         // Calendar
-        el.createEl('h3', { text: 'Calendar', cls: 'setting-section-header' });
+        el.createEl('h3', { text: t('settings.views.calendar'), cls: 'setting-section-header' });
 
         new Setting(el)
-            .setName('Week starts on')
-            .setDesc('Choose whether weeks start on Sunday or Monday in Calendar View.')
+            .setName(t('settings.views.weekStartsOn'))
+            .setDesc(t('settings.views.weekStartsOnDesc'))
             .addDropdown(dropdown => dropdown
-                .addOption('0', 'Sunday')
-                .addOption('1', 'Monday')
+                .addOption('0', t('settings.views.sunday'))
+                .addOption('1', t('settings.views.monday'))
                 .setValue(String(this.plugin.settings.calendarWeekStartDay))
                 .onChange(async (value) => {
                     this.plugin.settings.calendarWeekStartDay = value === '1' ? 1 : 0;
@@ -276,8 +277,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Show Completed Tasks')
-            .setDesc('Show completed tasks in Calendar View.')
+            .setName(t('settings.views.showCompletedTasks'))
+            .setDesc(t('settings.views.showCompletedTasksDesc'))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.calendarShowCompleted)
                 .onChange(async (value) => {
@@ -286,8 +287,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Show Week Numbers')
-            .setDesc('Show ISO week numbers in Calendar and Mini Calendar views.')
+            .setName(t('settings.views.showWeekNumbers'))
+            .setDesc(t('settings.views.showWeekNumbersDesc'))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.calendarShowWeekNumbers)
                 .onChange(async (value) => {
@@ -296,30 +297,30 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         // Default Open Position
-        el.createEl('h3', { text: 'Default Open Position', cls: 'setting-section-header' });
+        el.createEl('h3', { text: t('settings.views.defaultOpenPosition'), cls: 'setting-section-header' });
 
         new Setting(el)
-            .setDesc('Where each view opens when launched from the command palette, ribbon icon, or a URI without a position parameter. In URIs, use position=override to reuse an existing view in place instead of opening a new one.')
+            .setDesc(t('settings.views.defaultOpenPositionDesc'))
             .setClass('setting-item--desc-only');
 
         type ViewPositionKey = keyof TaskViewerSettings['defaultViewPositions'];
         const positionEntries: { label: string; key: ViewPositionKey }[] = [
-            { label: 'Timeline', key: 'timeline' },
-            { label: 'Schedule', key: 'schedule' },
-            { label: 'Calendar', key: 'calendar' },
-            { label: 'Mini Calendar', key: 'miniCalendar' },
-            { label: 'Timer', key: 'timer' },
-            { label: 'Kanban', key: 'kanban' },
+            { label: t('settings.views.positionTimeline'), key: 'timeline' },
+            { label: t('settings.views.positionSchedule'), key: 'schedule' },
+            { label: t('settings.views.positionCalendar'), key: 'calendar' },
+            { label: t('settings.views.positionMiniCalendar'), key: 'miniCalendar' },
+            { label: t('settings.views.positionTimer'), key: 'timer' },
+            { label: t('settings.views.positionKanban'), key: 'kanban' },
         ];
 
         for (const entry of positionEntries) {
             new Setting(el)
                 .setName(entry.label)
                 .addDropdown(dropdown => dropdown
-                    .addOption('left', 'Left sidebar')
-                    .addOption('right', 'Right sidebar')
-                    .addOption('tab', 'Tab')
-                    .addOption('window', 'Window')
+                    .addOption('left', t('position.leftSidebar'))
+                    .addOption('right', t('position.rightSidebar'))
+                    .addOption('tab', t('position.tab'))
+                    .addOption('window', t('position.window'))
                     .setValue(this.plugin.settings.defaultViewPositions[entry.key])
                     .onChange(async (value) => {
                         this.plugin.settings.defaultViewPositions[entry.key] = value as DefaultLeafPosition;
@@ -328,11 +329,11 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         }
 
         // View Templates (moved from Timer tab)
-        el.createEl('h3', { text: 'View Templates', cls: 'setting-section-header' });
+        el.createEl('h3', { text: t('settings.views.viewTemplates'), cls: 'setting-section-header' });
 
         new Setting(el)
-            .setName('View Template Folder')
-            .setDesc('Vault folder for view template files (.md with _tv-view in frontmatter). Used for cross-device sync of view configurations.')
+            .setName(t('settings.views.viewTemplateFolder'))
+            .setDesc(t('settings.views.viewTemplateFolderDesc'))
             .addText(text => text
                 .setPlaceholder('Templates/Views')
                 .setValue(this.plugin.settings.viewTemplateFolder)
@@ -342,11 +343,11 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         // Display
-        el.createEl('h3', { text: 'Display', cls: 'setting-section-header' });
+        el.createEl('h3', { text: t('settings.views.display'), cls: 'setting-section-header' });
 
         new Setting(el)
-            .setName('Hide view header')
-            .setDesc('Hide the view header (navigation bar) in task viewer panels.')
+            .setName(t('settings.views.hideViewHeader'))
+            .setDesc(t('settings.views.hideViewHeaderDesc'))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.hideViewHeader)
                 .onChange(async (value) => {
@@ -355,8 +356,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Mobile top offset (px)')
-            .setDesc('Top offset for mobile views when the header is hidden. Prevents overlap with the OS status bar.')
+            .setName(t('settings.views.mobileTopOffset'))
+            .setDesc(t('settings.views.mobileTopOffsetDesc'))
             .addText(text => {
                 text.inputEl.type = 'number';
                 text.inputEl.min = '0';
@@ -372,8 +373,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             });
 
         new Setting(el)
-            .setName('Fix mobile gradient width')
-            .setDesc('Set the background gradient to 100% width on mobile views.')
+            .setName(t('settings.views.fixMobileGradientWidth'))
+            .setDesc(t('settings.views.fixMobileGradientWidthDesc'))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.fixMobileGradientWidth)
                 .onChange(async (value) => {
@@ -382,11 +383,11 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         // Pinned Lists
-        el.createEl('h3', { text: 'Pinned Lists', cls: 'setting-section-header' });
+        el.createEl('h3', { text: t('settings.views.pinnedLists'), cls: 'setting-section-header' });
 
         new Setting(el)
-            .setName('Tasks per page')
-            .setDesc('Number of task cards to show initially in each pinned list. Click "Show more" to load the next batch.')
+            .setName(t('settings.views.tasksPerPage'))
+            .setDesc(t('settings.views.tasksPerPageDesc'))
             .addText(text => {
                 text.inputEl.type = 'number';
                 text.inputEl.min = '1';
@@ -407,11 +408,11 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
     private renderNotesTab(el: HTMLElement): void {
         // Daily Notes
-        el.createEl('h3', { text: 'Daily Notes', cls: 'setting-section-header' });
+        el.createEl('h3', { text: t('settings.notes.dailyNotes'), cls: 'setting-section-header' });
 
         new Setting(el)
-            .setName('Daily Note Header')
-            .setDesc('The header under which new tasks will be added in the Daily Note.')
+            .setName(t('settings.notes.dailyNoteHeader'))
+            .setDesc(t('settings.notes.dailyNoteHeaderDesc'))
             .addText(text => text
                 .setPlaceholder('Tasks')
                 .setValue(this.plugin.settings.dailyNoteHeader)
@@ -421,8 +422,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Daily Note Header Level')
-            .setDesc('The level of the header (1-6).')
+            .setName(t('settings.notes.dailyNoteHeaderLevel'))
+            .setDesc(t('settings.notes.dailyNoteHeaderLevelDesc'))
             .addSlider(slider => slider
                 .setLimits(1, 6, 1)
                 .setValue(this.plugin.settings.dailyNoteHeaderLevel)
@@ -433,11 +434,11 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         // Periodic Notes
-        el.createEl('h3', { text: 'Periodic Notes', cls: 'setting-section-header' });
+        el.createEl('h3', { text: t('settings.notes.periodicNotes'), cls: 'setting-section-header' });
 
         new Setting(el)
-            .setName('Weekly Note Format')
-            .setDesc('moment.js format for weekly note filenames (e.g. gggg-[W]ww).')
+            .setName(t('settings.notes.weeklyNoteFormat'))
+            .setDesc(t('settings.notes.weeklyNoteFormatDesc'))
             .addText(text => text
                 .setPlaceholder('gggg-[W]ww')
                 .setValue(this.plugin.settings.weeklyNoteFormat)
@@ -447,8 +448,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Weekly Note Folder')
-            .setDesc('Folder for weekly notes. Leave empty for vault root.')
+            .setName(t('settings.notes.weeklyNoteFolder'))
+            .setDesc(t('settings.notes.weeklyNoteFolderDesc'))
             .addText(text => text
                 .setPlaceholder('')
                 .setValue(this.plugin.settings.weeklyNoteFolder)
@@ -458,8 +459,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Monthly Note Format')
-            .setDesc('moment.js format for monthly note filenames (e.g. YYYY-MM).')
+            .setName(t('settings.notes.monthlyNoteFormat'))
+            .setDesc(t('settings.notes.monthlyNoteFormatDesc'))
             .addText(text => text
                 .setPlaceholder('YYYY-MM')
                 .setValue(this.plugin.settings.monthlyNoteFormat)
@@ -469,8 +470,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Monthly Note Folder')
-            .setDesc('Folder for monthly notes. Leave empty for vault root.')
+            .setName(t('settings.notes.monthlyNoteFolder'))
+            .setDesc(t('settings.notes.monthlyNoteFolderDesc'))
             .addText(text => text
                 .setPlaceholder('')
                 .setValue(this.plugin.settings.monthlyNoteFolder)
@@ -480,8 +481,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Yearly Note Format')
-            .setDesc('moment.js format for yearly note filenames (e.g. YYYY).')
+            .setName(t('settings.notes.yearlyNoteFormat'))
+            .setDesc(t('settings.notes.yearlyNoteFormatDesc'))
             .addText(text => text
                 .setPlaceholder('YYYY')
                 .setValue(this.plugin.settings.yearlyNoteFormat)
@@ -491,8 +492,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Yearly Note Folder')
-            .setDesc('Folder for yearly notes. Leave empty for vault root.')
+            .setName(t('settings.notes.yearlyNoteFolder'))
+            .setDesc(t('settings.notes.yearlyNoteFolderDesc'))
             .addText(text => text
                 .setPlaceholder('')
                 .setValue(this.plugin.settings.yearlyNoteFolder)
@@ -505,11 +506,11 @@ export class TaskViewerSettingTab extends PluginSettingTab {
     // ─── Timer Tab ───────────────────────────────────────────
 
     private renderTimerTab(el: HTMLElement): void {
-        el.createEl('h3', { text: 'Pomodoro', cls: 'setting-section-header' });
+        el.createEl('h3', { text: t('settings.timer.pomodoro'), cls: 'setting-section-header' });
 
         new Setting(el)
-            .setName('Custom Pomodoro Work Minutes')
-            .setDesc('Custom Work duration in minutes for the Pomodoro timer.')
+            .setName(t('settings.timer.customWorkMinutes'))
+            .setDesc(t('settings.timer.customWorkMinutesDesc'))
             .addText(text => {
                 text.inputEl.type = 'number';
                 text.inputEl.min = '1';
@@ -525,8 +526,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             });
 
         new Setting(el)
-            .setName('Custom Pomodoro Break Minutes')
-            .setDesc('Custom Break duration in minutes for the Pomodoro timer.')
+            .setName(t('settings.timer.customBreakMinutes'))
+            .setDesc(t('settings.timer.customBreakMinutesDesc'))
             .addText(text => {
                 text.inputEl.type = 'number';
                 text.inputEl.min = '1';
@@ -541,11 +542,11 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     });
             });
 
-        el.createEl('h3', { text: 'Interval Timer', cls: 'setting-section-header' });
+        el.createEl('h3', { text: t('settings.timer.intervalTimer'), cls: 'setting-section-header' });
 
         new Setting(el)
-            .setName('Interval Template Folder')
-            .setDesc('Vault folder containing interval timer template files (.md with _tv-segments in frontmatter). Leave empty to disable.')
+            .setName(t('settings.timer.intervalTemplateFolder'))
+            .setDesc(t('settings.timer.intervalTemplateFolderDesc'))
             .addText(text => text
                 .setPlaceholder('Templates/Timers')
                 .setValue(this.plugin.settings.intervalTemplateFolder)
@@ -559,19 +560,19 @@ export class TaskViewerSettingTab extends PluginSettingTab {
     // ─── Frontmatter Tab ─────────────────────────────────────
 
     private renderFrontmatterTab(el: HTMLElement): void {
-        el.createEl('h3', { text: 'Frontmatter Keys', cls: 'setting-section-header' });
+        el.createEl('h3', { text: t('settings.frontmatter.frontmatterKeys'), cls: 'setting-section-header' });
 
         this.addFrontmatterTaskKeySettings(el);
 
-        el.createEl('h3', { text: 'Suggest', cls: 'setting-section-header' });
+        el.createEl('h3', { text: t('settings.frontmatter.suggest'), cls: 'setting-section-header' });
 
         new Setting(el)
-            .setDesc('Changes may require reloading Obsidian to take effect.')
+            .setDesc(t('settings.frontmatter.suggestReloadNotice'))
             .setClass('setting-item--desc-only');
 
         new Setting(el)
-            .setName('Color suggest')
-            .setDesc('Enable custom color suggestions for the color property.')
+            .setName(t('settings.frontmatter.colorSuggest'))
+            .setDesc(t('settings.frontmatter.colorSuggestDesc'))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.suggestColor)
                 .onChange(async (value) => {
@@ -580,8 +581,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Line style suggest')
-            .setDesc('Enable custom line style suggestions for the linestyle property.')
+            .setName(t('settings.frontmatter.lineStyleSuggest'))
+            .setDesc(t('settings.frontmatter.lineStyleSuggestDesc'))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.suggestLinestyle)
                 .onChange(async (value) => {
@@ -590,8 +591,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(el)
-            .setName('Shared tags suggest')
-            .setDesc('Enable custom tag suggestions for the shared tags property.')
+            .setName(t('settings.frontmatter.sharedTagsSuggest'))
+            .setDesc(t('settings.frontmatter.sharedTagsSuggestDesc'))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.suggestSharedtags)
                 .onChange(async (value) => {
@@ -604,16 +605,16 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
     private renderHabitsTab(el: HTMLElement): void {
         const habitHeader = el.createDiv('setting-item');
-        habitHeader.createSpan({ text: 'Define habits to track in your daily notes\' frontmatter.', cls: 'setting-item-description' });
+        habitHeader.createSpan({ text: t('settings.habits.description'), cls: 'setting-item-description' });
 
         const habitsListContainer = el.createDiv('habits-list-container');
         this.renderHabitsList(habitsListContainer);
 
         new Setting(el)
-            .setName('Add Habit')
-            .setDesc('Create a new habit to track.')
+            .setName(t('settings.habits.addHabit'))
+            .setDesc(t('settings.habits.addHabitDesc'))
             .addButton(btn => btn
-                .setButtonText('+ Add')
+                .setButtonText(t('settings.habits.addButton'))
                 .onClick(async () => {
                     this.plugin.settings.habits.push({ name: '', type: 'boolean' });
                     await this.plugin.saveSettings();
@@ -627,78 +628,78 @@ export class TaskViewerSettingTab extends PluginSettingTab {
     private addFrontmatterTaskKeySettings(containerEl: HTMLElement): void {
         this.addFrontmatterTaskKeySetting(
             containerEl,
-            'Start Key',
-            'Frontmatter key for task start date/time.',
+            t('settings.frontmatter.startKey'),
+            t('settings.frontmatter.startKeyDesc'),
             'tv-start',
             'start'
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,
-            'End Key',
-            'Frontmatter key for task end date/time.',
+            t('settings.frontmatter.endKey'),
+            t('settings.frontmatter.endKeyDesc'),
             'tv-end',
             'end'
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,
-            'Due Key',
-            'Frontmatter key for task due date.',
+            t('settings.frontmatter.dueKey'),
+            t('settings.frontmatter.dueKeyDesc'),
             'tv-due',
             'due'
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,
-            'Status Key',
-            'Frontmatter key for task status character.',
+            t('settings.frontmatter.statusKey'),
+            t('settings.frontmatter.statusKeyDesc'),
             'tv-status',
             'status'
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,
-            'Content Key',
-            'Frontmatter key for task content.',
+            t('settings.frontmatter.contentKey'),
+            t('settings.frontmatter.contentKeyDesc'),
             'tv-content',
             'content'
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,
-            'Timer Target ID Key',
-            'Frontmatter key for timer target ID.',
+            t('settings.frontmatter.timerTargetIdKey'),
+            t('settings.frontmatter.timerTargetIdKeyDesc'),
             'tv-timer-target-id',
             'timerTargetId'
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,
-            'Color Key',
-            'Frontmatter key for task/file color.',
+            t('settings.frontmatter.colorKey'),
+            t('settings.frontmatter.colorKeyDesc'),
             'tv-color',
             'color'
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,
-            'Line Style Key',
-            'Frontmatter key for task border line style (solid/dashed/dotted/double/dashdotted).',
+            t('settings.frontmatter.lineStyleKey'),
+            t('settings.frontmatter.lineStyleKeyDesc'),
             'tv-linestyle',
             'linestyle'
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,
-            'Placeholder Key',
-            'Frontmatter key for export masking. When set, task content is replaced with this value in image exports.',
+            t('settings.frontmatter.placeholderKey'),
+            t('settings.frontmatter.placeholderKeyDesc'),
             'tv-placeholder',
             'placeholder'
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,
-            'Shared Tags Key',
-            'Frontmatter key for file-level shared tags inherited by all tasks in the file. Use "tags" for Obsidian compatibility.',
+            t('settings.frontmatter.sharedTagsKey'),
+            t('settings.frontmatter.sharedTagsKeyDesc'),
             'tags',
             'sharedtags'
         );
         this.addFrontmatterTaskKeySetting(
             containerEl,
-            'Ignore Key',
-            'Frontmatter key for file-level ignore. When truthy, this file is fully skipped from scanning and AI index.',
+            t('settings.frontmatter.ignoreKey'),
+            t('settings.frontmatter.ignoreKeyDesc'),
             'tv-ignore',
             'ignore'
         );
@@ -740,9 +741,9 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         container.empty();
         this.plugin.settings.habits.forEach((habit, i) => {
             const setting = new Setting(container)
-                .setName(`Habit ${i + 1}`)
+                .setName(t('settings.habits.habitN', { n: i + 1 }))
                 .addText(text => text
-                    .setPlaceholder('Habit name')
+                    .setPlaceholder(t('settings.habits.habitNamePlaceholder'))
                     .setValue(habit.name)
                     .onChange(async (value) => {
                         this.plugin.settings.habits[i].name = value.trim();
@@ -750,9 +751,9 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     })
                 )
                 .addDropdown(dropdown => dropdown
-                    .addOption('boolean', 'Boolean (on/off)')
-                    .addOption('number', 'Number')
-                    .addOption('string', 'Text')
+                    .addOption('boolean', t('settings.habits.booleanType'))
+                    .addOption('number', t('settings.habits.numberType'))
+                    .addOption('string', t('settings.habits.textType'))
                     .setValue(habit.type)
                     .onChange(async (value) => {
                         this.plugin.settings.habits[i].type = value as HabitType;
@@ -763,7 +764,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
             if (habit.type === 'number') {
                 setting.addText(text => text
-                    .setPlaceholder('Unit (e.g. kg)')
+                    .setPlaceholder(t('settings.habits.unitPlaceholder'))
                     .setValue(habit.unit ?? '')
                     .onChange(async (value) => {
                         this.plugin.settings.habits[i].unit = value.trim() || undefined;
@@ -774,7 +775,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
             setting.addButton(btn => btn
                 .setIcon('trash')
-                .setTooltip('Remove habit')
+                .setTooltip(t('settings.habits.removeHabit'))
                 .onClick(async () => {
                     this.plugin.settings.habits.splice(i, 1);
                     await this.plugin.saveSettings();

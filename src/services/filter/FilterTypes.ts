@@ -1,4 +1,5 @@
 import type { Task } from '../../types';
+import { t } from '../../i18n';
 
 // ── Property & Operator enums ──
 
@@ -155,53 +156,18 @@ export const PROPERTY_OPERATORS: Record<FilterProperty, FilterOperator[]> = {
     property: ['isSet', 'isNotSet', 'equals', 'contains', 'notContains'],
 };
 
-/** Display labels for operators */
-export const OPERATOR_LABELS: Record<FilterOperator, string> = {
-    includes: 'includes',
-    excludes: 'excludes',
-    contains: 'contains',
-    notContains: 'does not contain',
-    isSet: 'is set',
-    isNotSet: 'is not set',
-    equals: 'is',
-    before: 'is before',
-    after: 'is after',
-    onOrBefore: 'is on or before',
-    onOrAfter: 'is on or after',
-    lessThan: 'is less than',
-    lessThanOrEqual: 'is at most',
-    greaterThan: 'is greater than',
-    greaterThanOrEqual: 'is at least',
-    only: 'has only',
-};
-
-/** Per-property label overrides (when the default OPERATOR_LABELS is not appropriate) */
-const OPERATOR_LABEL_OVERRIDES: Partial<Record<FilterProperty, Partial<Record<FilterOperator, string>>>> = {
-    tag: { equals: 'has', only: 'has only' },
-};
-
 /** Resolve the display label for an operator, respecting per-property overrides. */
 export function getOperatorLabel(property: FilterProperty, operator: FilterOperator): string {
-    return OPERATOR_LABEL_OVERRIDES[property]?.[operator] ?? OPERATOR_LABELS[operator];
+    const override = t(`filter.operatorOverride.${property}.${operator}`);
+    // t() returns the key itself when no translation exists
+    if (!override.startsWith('filter.operatorOverride.')) return override;
+    return t(`filter.operator.${operator}`);
 }
 
-/** Display labels for properties */
-export const PROPERTY_LABELS: Record<FilterProperty, string> = {
-    file: 'File',
-    tag: 'Tag',
-    status: 'Status',
-    content: 'Content',
-    startDate: 'Start',
-    endDate: 'End',
-    due: 'Due',
-    color: 'Color',
-    linestyle: 'Line style',
-    length: 'Length',
-    taskType: 'Task type',
-    parent: 'Parent',
-    children: 'Children',
-    property: 'Property',
-};
+/** Resolve the display label for a filter property. */
+export function getPropertyLabel(property: FilterProperty): string {
+    return t(`filter.property.${property}`);
+}
 
 /** Operators that require no value input */
 export const NO_VALUE_OPERATORS: Set<FilterOperator> = new Set(['isSet', 'isNotSet']);
@@ -224,13 +190,7 @@ export const PROPERTY_ICONS: Record<FilterProperty, string> = {
     property: 'list',
 };
 
-/** Display labels for relative date presets */
-export const RELATIVE_DATE_LABELS: Record<RelativeDatePreset, string> = {
-    today: 'Today',
-    thisWeek: 'This week',
-    nextWeek: 'Next week',
-    pastWeek: 'Past week',
-    nextNDays: 'Next N days',
-    thisMonth: 'This month',
-    thisYear: 'This year',
-};
+/** Resolve the display label for a relative date preset. */
+export function getRelativeDateLabel(preset: RelativeDatePreset): string {
+    return t(`filter.relativeDate.${preset}`);
+}

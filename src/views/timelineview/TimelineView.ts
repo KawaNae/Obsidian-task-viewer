@@ -1,4 +1,5 @@
 import { ItemView, WorkspaceLeaf, setIcon, type Workspace } from 'obsidian';
+import { t } from '../../i18n';
 import { ViewUriBuilder } from '../../utils/ViewUriBuilder';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { TaskIndex } from '../../services/core/TaskIndex';
@@ -537,17 +538,17 @@ export class TimelineView extends ItemView {
         const { main, sidebarHeader, sidebarBody } = this.sidebarManager.buildLayout(this.container);
 
         // Sidebar header content
-        sidebarHeader.createEl('p', { cls: 'view-sidebar__title', text: 'Pinned Lists' });
+        sidebarHeader.createEl('p', { cls: 'view-sidebar__title', text: t('pinnedList.pinnedLists') });
 
         const addListBtn = sidebarHeader.createEl('button', { cls: 'view-sidebar__add-btn' });
         setIcon(addListBtn, 'plus');
-        addListBtn.appendText('Add List');
+        addListBtn.appendText(t('pinnedList.addList'));
         addListBtn.addEventListener('click', () => {
             const newId = 'pl-' + Date.now();
             if (!this.viewState.pinnedLists) this.viewState.pinnedLists = [];
             this.viewState.pinnedLists.push({
                 id: newId,
-                name: 'New List',
+                name: t('pinnedList.newList'),
                 filterState: createEmptyFilterState(),
             });
             this.app.workspace.requestSaveLayout();

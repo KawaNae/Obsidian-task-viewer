@@ -36,6 +36,7 @@ import { CheckboxMenuBuilder } from './interaction/menu/builders/CheckboxMenuBui
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 import { registerCliHandlers } from './cli/CliRegistrar';
 import { TaskApi } from './api/TaskApi';
+import { initI18n, t } from './i18n';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
@@ -56,6 +57,9 @@ export default class TaskViewerPlugin extends Plugin {
 
     async onload() {
         console.log('Loading Task Viewer Plugin (Rewrite)');
+
+        // Initialize i18n
+        initI18n();
 
         // Load Settings
         await this.loadSettings();
@@ -328,7 +332,7 @@ export default class TaskViewerPlugin extends Plugin {
                             if (template.name) uriParams.name = template.name;
                         }
                     } else {
-                        new Notice(`View template "${params.template}" not found.`);
+                        new Notice(t('notice.templateNotFound', { name: params.template }));
                     }
                 }
 

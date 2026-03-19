@@ -1,4 +1,5 @@
 import { App, Modal, Setting, setIcon } from 'obsidian';
+import { t } from '../i18n';
 import { DisplayTask, Task } from '../types';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { toDisplayTask } from '../utils/DisplayTaskConverter';
@@ -84,14 +85,14 @@ export class CreateTaskModal extends Modal {
     onOpen() {
         const { contentEl } = this;
 
-        contentEl.createEl('h2', { text: this.options.title ?? 'Create New Task' });
+        contentEl.createEl('h2', { text: this.options.title ?? t('modal.createTask') });
 
         // --- Task Name (input with [[wikilink]] / #tag suggest) ---
         const nameSection = contentEl.createDiv({ cls: 'create-task-modal__name-section' });
-        nameSection.createEl('label', { text: 'Task Name' });
+        nameSection.createEl('label', { text: t('modal.taskName') });
         this.nameInput = nameSection.createEl('input', {
             type: 'text',
-            placeholder: 'Task Name',
+            placeholder: t('modal.taskName'),
             cls: 'create-task-modal__text-input',
         });
         this.nameInput.value = this.result.content ?? '';
@@ -107,14 +108,14 @@ export class CreateTaskModal extends Modal {
 
         // --- Start ---
         this.renderDateTimeSection(
-            contentEl, 'Start',
+            contentEl, t('modal.start'),
             this.result.startDate, this.result.startTime,
             'start'
         );
 
         // --- End ---
         this.renderDateTimeSection(
-            contentEl, 'End',
+            contentEl, t('modal.end'),
             this.result.endDate, this.result.endTime,
             'end'
         );
@@ -123,7 +124,7 @@ export class CreateTaskModal extends Modal {
         // Due is stored as a single string (YYYY-MM-DD or YYYY-MM-DDThh:mm); split for inputs
         const dlParts = this.splitDue(this.result.due);
         this.renderDateTimeSection(
-            contentEl, 'Due',
+            contentEl, t('modal.due'),
             dlParts.date, dlParts.time,
             'due'
         );
@@ -141,7 +142,7 @@ export class CreateTaskModal extends Modal {
         new Setting(contentEl)
             .addButton((btn) =>
                 btn
-                    .setButtonText(this.options.submitLabel ?? 'Create')
+                    .setButtonText(this.options.submitLabel ?? t('modal.create'))
                     .setCta()
                     .onClick(() => this.submit()));
 

@@ -5,6 +5,7 @@
  */
 
 import { App, Notice } from 'obsidian';
+import { t } from '../i18n';
 import TaskViewerPlugin from '../main';
 import { TimerInstance, getTimerElapsedSeconds } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
@@ -46,7 +47,7 @@ export class TimerRecorder {
         const formattedLine = TaskParser.format(taskObj);
 
         await this.insertChildRecord(timer, formattedLine);
-        new Notice(`⏱️ Timer recorded! (${TimeFormatter.formatSeconds(elapsedSeconds)})`);
+        new Notice(t('notice.timerRecorded', { icon: '⏱️', duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
     }
 
     /**
@@ -67,7 +68,7 @@ export class TimerRecorder {
         const formattedLine = TaskParser.format(taskObj);
 
         await this.insertChildRecord(timer, formattedLine);
-        new Notice(`⏲️ Countdown recorded! (${TimeFormatter.formatSeconds(elapsedSeconds)})`);
+        new Notice(t('notice.countdownRecorded', { icon: '⏲️', duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
     }
 
     /**
@@ -95,7 +96,7 @@ export class TimerRecorder {
 
         await this.insertChildRecord(timer, formattedLine);
         const kind = isPomodoroSource ? 'Pomodoro' : 'Interval';
-        new Notice(`${icon} ${kind} recorded! (${TimeFormatter.formatSeconds(elapsedSeconds)})`);
+        new Notice(t('notice.kindRecorded', { icon, kind, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
     }
 
     /**
@@ -218,7 +219,7 @@ export class TimerRecorder {
 
         if (!child) {
             // Fallback: child was deleted, create a new record
-            new Notice('Child task not found, creating new record.');
+            new Notice(t('notice.childTaskNotFound'));
             timer.recordedChildTaskId = undefined;
             switch (timer.timerType) {
                 case 'countup': await this.addCountupRecord(timer); break;
@@ -245,7 +246,7 @@ export class TimerRecorder {
         });
 
         const kind = this.getTimerKind(timer);
-        new Notice(`${icon} ${kind} recorded! (${TimeFormatter.formatSeconds(elapsedSeconds)})`);
+        new Notice(t('notice.kindRecorded', { icon, kind, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
     }
 
     /**
@@ -291,7 +292,7 @@ export class TimerRecorder {
                 : this.resolver.resolveInlineTask(timer);
 
             if (!task) {
-                new Notice('Timer target task was not found. It may have been deleted, moved, or renamed.');
+                new Notice(t('notice.timerTargetNotFound'));
                 return;
             }
 
@@ -317,7 +318,7 @@ export class TimerRecorder {
         }
 
         const icon = this.getTimerIcon(timer);
-        new Notice(`${icon} Task updated! (${TimeFormatter.formatSeconds(elapsedSeconds)})`);
+        new Notice(t('notice.taskUpdated', { icon, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
     }
 
     /**
@@ -334,7 +335,7 @@ export class TimerRecorder {
         if (timer.parserId === 'frontmatter') {
             const resolvedFrontmatterTask = this.resolver.resolveFrontmatterTask(timer);
             if (!resolvedFrontmatterTask) {
-                new Notice('Timer target task was not found. It may have been deleted, moved, or renamed.');
+                new Notice(t('notice.timerTargetNotFound'));
                 return;
             }
 
@@ -350,7 +351,7 @@ export class TimerRecorder {
 
         const inlineTask = this.resolver.resolveInlineTask(timer);
         if (!inlineTask) {
-            new Notice('Timer target task was not found. It may have been deleted, moved, or renamed.');
+            new Notice(t('notice.timerTargetNotFound'));
             return;
         }
 

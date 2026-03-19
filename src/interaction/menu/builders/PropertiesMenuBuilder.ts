@@ -10,6 +10,7 @@ import { getTaskDisplayName } from '../../../utils/TaskContent';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
 import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
+import { t } from '../../../i18n';
 
 type ChangePropertiesFocusField = 'name' | 'start' | 'end' | 'due';
 
@@ -31,7 +32,7 @@ export class PropertiesMenuBuilder {
     buildPropertiesSubmenu(menu: Menu, task: DisplayTask, viewStartDate: string | null): void {
         menu.addItem((item) => {
             const subMenu = (item as any)
-                .setTitle('Properties')
+                .setTitle(t('menu.properties'))
                 .setIcon('settings')
                 .setSubmenu() as Menu;
 
@@ -58,7 +59,7 @@ export class PropertiesMenuBuilder {
     private addNameItem(menu: Menu, task: Task, openModal: (focusField: ChangePropertiesFocusField) => void): void {
         menu.addItem((sub) => {
             const taskName = getTaskDisplayName(task);
-            sub.setTitle(`Name: ${taskName.substring(0, 20)}${taskName.length > 20 ? '...' : ''}`)
+            sub.setTitle(t('menu.name', { name: taskName.substring(0, 20) + (taskName.length > 20 ? '...' : '') }))
                 .setIcon('pencil')
                 .onClick(() => {
                     openModal('name');
@@ -74,7 +75,7 @@ export class PropertiesMenuBuilder {
             const statusChar = task.statusChar;
             const statusDisplay = `[${statusChar}]`;
 
-            (sub as any).setTitle(`Status: ${statusDisplay}`)
+            (sub as any).setTitle(t('menu.status', { status: statusDisplay }))
                 .setIcon('check-square')
                 .setSubmenu();
 
@@ -99,7 +100,7 @@ export class PropertiesMenuBuilder {
      */
     private addFileItem(menu: Menu, task: Task): void {
         menu.addItem((sub) => {
-            sub.setTitle(`File: ${task.file.split('/').pop()}`)
+            sub.setTitle(t('menu.file', { name: task.file.split('/').pop() || '' }))
                 .setIcon('file-text')
                 .onClick(() => {
                     if (this.plugin.settings.reuseExistingTab) {
@@ -141,7 +142,7 @@ export class PropertiesMenuBuilder {
      */
     private addStartItem(menu: Menu, task: Task, parts: CalculatedProperty, openModal: (focusField: ChangePropertiesFocusField) => void): void {
         menu.addItem((item) => {
-            item.setTitle(this.propertyFormatter.createPropertyTitle('Start: ', parts))
+            item.setTitle(this.propertyFormatter.createPropertyTitle(t('menu.startLabel'), parts))
                 .setIcon('play')
                 .onClick(() => {
                     openModal('start');
@@ -154,7 +155,7 @@ export class PropertiesMenuBuilder {
      */
     private addEndItem(menu: Menu, task: Task, parts: CalculatedProperty, openModal: (focusField: ChangePropertiesFocusField) => void): void {
         menu.addItem((item) => {
-            item.setTitle(this.propertyFormatter.createPropertyTitle('End: ', parts))
+            item.setTitle(this.propertyFormatter.createPropertyTitle(t('menu.endLabel'), parts))
                 .setIcon('square')
                 .onClick(() => {
                     openModal('end');
@@ -167,7 +168,7 @@ export class PropertiesMenuBuilder {
      */
     private addDueItem(menu: Menu, task: Task, parts: CalculatedProperty, openModal: (focusField: ChangePropertiesFocusField) => void): void {
         menu.addItem((item) => {
-            item.setTitle(this.propertyFormatter.createPropertyTitle('Due: ', parts))
+            item.setTitle(this.propertyFormatter.createPropertyTitle(t('menu.dueLabel'), parts))
                 .setIcon('alert-circle')
                 .onClick(() => {
                     openModal('due');
@@ -205,8 +206,8 @@ export class PropertiesMenuBuilder {
             },
             initialValues,
             {
-                title: 'Change Properties',
-                submitLabel: 'Save',
+                title: t('modal.changeProperties'),
+                submitLabel: t('modal.save'),
                 focusField,
                 startHour: this.plugin.settings.startHour,
                 dailyNoteDate: DailyNoteUtils.parseDateFromFilePath(this.app, task.file) ?? undefined,
@@ -250,7 +251,7 @@ export class PropertiesMenuBuilder {
     private addTagsItem(menu: Menu, task: Task): void {
         const tagsText = task.tags.length > 0 ? task.tags.join(', ') : '-';
         menu.addItem((item) => {
-            item.setTitle(`Tags: ${tagsText}`)
+            item.setTitle(t('menu.tagsLabel', { value: tagsText }))
                 .setIcon('tag')
                 .setDisabled(true);
         });
@@ -258,7 +259,7 @@ export class PropertiesMenuBuilder {
 
     private addColorItem(menu: Menu, task: Task): void {
         menu.addItem((item) => {
-            item.setTitle(`Color: ${task.color || '-'}`)
+            item.setTitle(t('menu.colorLabel', { value: task.color || '-' }))
                 .setIcon('palette')
                 .setDisabled(true);
         });
@@ -266,7 +267,7 @@ export class PropertiesMenuBuilder {
 
     private addLinestyleItem(menu: Menu, task: Task): void {
         menu.addItem((item) => {
-            item.setTitle(`Linestyle: ${task.linestyle || '-'}`)
+            item.setTitle(t('menu.linestyleLabel', { value: task.linestyle || '-' }))
                 .setIcon('minus')
                 .setDisabled(true);
         });
@@ -323,7 +324,7 @@ export class PropertiesMenuBuilder {
         }
 
         menu.addItem((item) => {
-            item.setTitle(`Length: ${lengthText}`)
+            item.setTitle(t('menu.lengthLabel', { value: lengthText }))
                 .setIcon('clock')
                 .setDisabled(true);
         });

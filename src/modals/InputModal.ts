@@ -1,4 +1,5 @@
 import { App, Modal, Setting } from 'obsidian';
+import { t } from '../i18n';
 
 export class InputModal extends Modal {
     private title: string;
@@ -47,10 +48,10 @@ export class InputModal extends Modal {
 
         new Setting(contentEl)
             .addButton(btn => btn
-                .setButtonText('Cancel')
+                .setButtonText(t('modal.cancel'))
                 .onClick(() => this.close()))
             .addButton(btn => btn
-                .setButtonText('OK')
+                .setButtonText(t('modal.ok'))
                 .setCta()
                 .onClick(() => this.submit()));
     }

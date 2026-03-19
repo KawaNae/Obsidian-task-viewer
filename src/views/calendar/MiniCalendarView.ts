@@ -1,4 +1,5 @@
 import { ItemView, WorkspaceLeaf, TFile, setIcon } from 'obsidian';
+import { t } from '../../i18n';
 import type { HoverParent } from 'obsidian';
 import { Task, DisplayTask } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
@@ -249,7 +250,7 @@ export class MiniCalendarView extends ItemView {
         prevBtn.setAttribute('aria-label', 'Previous week');
         prevBtn.addEventListener('click', () => this.navigateWeek(-1));
 
-        const todayBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--today mini-calendar-toolbar__today', text: 'Today' });
+        const todayBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--today mini-calendar-toolbar__today', text: t('toolbar.today') });
         todayBtn.setAttribute('aria-label', 'Today');
         todayBtn.addEventListener('click', () => {
             if (this.isAnimating) {
@@ -272,7 +273,7 @@ export class MiniCalendarView extends ItemView {
         const header = grid.createDiv('mini-calendar-weekday-header');
         if (this.shouldShowWeekNumbers()) {
             header.addClass('has-week-numbers');
-            header.createDiv({ cls: 'mini-calendar-weekday-cell', text: 'W' });
+            header.createDiv({ cls: 'mini-calendar-weekday-cell', text: t('calendar.w') });
         }
         const weekdays = this.getWeekdayNames();
         weekdays.forEach((label) => {

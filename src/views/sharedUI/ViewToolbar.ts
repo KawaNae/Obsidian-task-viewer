@@ -1,5 +1,6 @@
 import { setIcon, Menu, Notice } from 'obsidian';
 import type { App, WorkspaceLeaf } from 'obsidian';
+import { t } from '../../i18n';
 import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../../utils/ViewUriBuilder';
 import { InputModal } from '../../modals/InputModal';
 import type { ViewTemplate } from '../../types';
@@ -25,17 +26,17 @@ export class DateNavigator {
         options?: { vertical?: boolean; label?: string; onNavigateFast?: (direction: number) => void }
     ): void {
         const vertical = options?.vertical ?? false;
-        const label = options?.label ?? 'Today';
+        const label = options?.label ?? t('toolbar.today');
         const prevIcon = vertical ? 'chevron-up' : 'chevron-left';
         const nextIcon = vertical ? 'chevron-down' : 'chevron-right';
-        const prevLabel = vertical ? 'Previous week' : 'Previous day';
-        const nextLabel = vertical ? 'Next week' : 'Next day';
+        const prevLabel = vertical ? t('toolbar.previousWeek') : t('toolbar.previousDay');
+        const nextLabel = vertical ? t('toolbar.nextWeek') : t('toolbar.nextDay');
 
         if (options?.onNavigateFast) {
             const fastPrevIcon = vertical ? 'chevrons-up' : 'chevrons-left';
             const fastPrevBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
             setIcon(fastPrevBtn, fastPrevIcon);
-            fastPrevBtn.setAttribute('aria-label', 'Previous month');
+            fastPrevBtn.setAttribute('aria-label', t('toolbar.previousMonth'));
             const onFastPrev = options.onNavigateFast;
             fastPrevBtn.onclick = () => onFastPrev(-1);
         }
@@ -61,7 +62,7 @@ export class DateNavigator {
             const fastNextIcon = vertical ? 'chevrons-down' : 'chevrons-right';
             const fastNextBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
             setIcon(fastNextBtn, fastNextIcon);
-            fastNextBtn.setAttribute('aria-label', 'Next month');
+            fastNextBtn.setAttribute('aria-label', t('toolbar.nextMonth'));
             const onFastNext = options.onNavigateFast;
             fastNextBtn.onclick = () => onFastNext(1);
         }
@@ -78,9 +79,9 @@ export class ViewModeSelector {
         onChange: (newValue: number) => void
     ): void {
         const getLabel = (val: number) => {
-            if (val === 1) return '1 Day';
-            if (val === 3) return '3 Days';
-            return 'Week';
+            if (val === 1) return t('toolbar.viewMode1Day');
+            if (val === 3) return t('toolbar.viewMode3Days');
+            return t('toolbar.viewModeWeek');
         };
 
         const button = toolbar.createEl('button', { cls: 'timeline-toolbar__btn--range timeline-toolbar__btn--view-mode' });
@@ -91,7 +92,7 @@ export class ViewModeSelector {
         const applyModeLabel = (value: number) => {
             const label = getLabel(value);
             labelEl.setText(label);
-            button.setAttribute('aria-label', `View mode: ${label}`);
+            button.setAttribute('aria-label', t('toolbar.viewModeLabel', { label }));
         };
         applyModeLabel(currentValue);
 
@@ -100,7 +101,7 @@ export class ViewModeSelector {
             const menu = new Menu();
 
             menu.addItem((item: any) => {
-                item.setTitle('1 Day')
+                item.setTitle(t('toolbar.viewMode1Day'))
                     .setChecked(currentValue === 1)
                     .onClick(() => {
                         onChange(1);
@@ -109,7 +110,7 @@ export class ViewModeSelector {
             });
 
             menu.addItem((item: any) => {
-                item.setTitle('3 Days')
+                item.setTitle(t('toolbar.viewMode3Days'))
                     .setChecked(currentValue === 3)
                     .onClick(() => {
                         onChange(3);
@@ -118,7 +119,7 @@ export class ViewModeSelector {
             });
 
             menu.addItem((item: any) => {
-                item.setTitle('Week')
+                item.setTitle(t('toolbar.viewModeWeek'))
                     .setChecked(currentValue === 7)
                     .onClick(() => {
                         onChange(7);
@@ -154,7 +155,7 @@ export class ZoomSelector {
         const applyLabel = (zoom: number) => {
             const pct = `${Math.round(zoom * 100)}%`;
             labelEl.setText(pct);
-            button.setAttribute('aria-label', `Zoom: ${pct}`);
+            button.setAttribute('aria-label', t('toolbar.zoomLabel', { pct }));
         };
         applyLabel(currentZoom);
 
@@ -181,13 +182,16 @@ export class ZoomSelector {
 /**
  * Position label mapping for display.
  */
-const POSITION_LABELS: Record<LeafPosition, string> = {
-    left: 'Left sidebar',
-    right: 'Right sidebar',
-    tab: 'Tab',
-    window: 'Window',
-    override: 'Override',
-};
+function getPositionLabel(pos: LeafPosition): string {
+    const map: Record<LeafPosition, string> = {
+        left: t('position.leftSidebar'),
+        right: t('position.rightSidebar'),
+        tab: t('position.tab'),
+        window: t('position.window'),
+        override: t('position.override'),
+    };
+    return map[pos];
+}
 
 export interface ViewSettingsOptions {
     app: App;
@@ -213,7 +217,7 @@ export class ViewSettingsMenu {
     static renderButton(toolbar: HTMLElement, options: ViewSettingsOptions): HTMLElement {
         const btn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(btn, 'settings');
-        btn.setAttribute('aria-label', 'View settings');
+        btn.setAttribute('aria-label', t('toolbar.viewSettings'));
         btn.onclick = (e) => ViewSettingsMenu.showMenu(e, options);
         return btn;
     }
@@ -228,18 +232,18 @@ export class ViewSettingsMenu {
         // Save view... (name required, saves template + updates customName)
         const folder = getViewTemplateFolder();
         menu.addItem((item) => {
-            item.setTitle('Save view...')
+            item.setTitle(t('toolbar.saveView'))
                 .setIcon('save')
                 .onClick(() => {
                     if (!folder) {
-                        new Notice('Set "View Template Folder" in Task Viewer settings first.');
+                        new Notice(t('notice.setViewTemplateFolder'));
                         return;
                     }
                     const defaultName = getCustomName() || getDefaultName();
                     new InputModal(
                         app,
-                        'Save View',
-                        'View name',
+                        t('toolbar.saveViewTitle'),
+                        t('toolbar.saveViewLabel'),
                         defaultName,
                         async (value) => {
                             const name = value.trim();
@@ -249,7 +253,7 @@ export class ViewSettingsMenu {
                             const writer = new ViewTemplateWriter(app);
                             await writer.saveTemplate(folder, template);
                             onRename(name);
-                            new Notice(`View saved as "${name}".`);
+                            new Notice(t('notice.viewSaved', { name }));
                         },
                     ).open();
                 });
@@ -257,23 +261,23 @@ export class ViewSettingsMenu {
 
         // Load view... (submenu)
         menu.addItem((item) => {
-            item.setTitle('Load view...')
+            item.setTitle(t('toolbar.loadView'))
                 .setIcon('folder-open');
 
             const shortViewType = ViewSettingsMenu.toShortViewType(viewType);
 
             if (!folder) {
                 (item as any).setSubmenu().addItem((sub: any) =>
-                    sub.setTitle('No folder configured').setDisabled(true));
+                    sub.setTitle(t('toolbar.noFolderConfigured')).setDisabled(true));
             } else {
                 const loader = new ViewTemplateLoader(app);
                 const summaries = loader.loadTemplates(folder)
-                    .filter(t => t.viewType === shortViewType);
+                    .filter(s => s.viewType === shortViewType);
 
                 const submenu = (item as any).setSubmenu();
                 if (summaries.length === 0) {
                     submenu.addItem((sub: any) =>
-                        sub.setTitle('No templates found').setDisabled(true));
+                        sub.setTitle(t('toolbar.noTemplatesFound')).setDisabled(true));
                 } else {
                     for (const summary of summaries) {
                         submenu.addItem((sub: any) => {
@@ -281,7 +285,7 @@ export class ViewSettingsMenu {
                                 .onClick(async () => {
                                     const full = await loader.loadFullTemplate(summary.filePath);
                                     if (full) onApplyTemplate(full);
-                                    else new Notice('Failed to load template.');
+                                    else new Notice(t('notice.failedToLoadTemplate'));
                                 });
                         });
                     }
@@ -291,7 +295,7 @@ export class ViewSettingsMenu {
 
         // Reset view
         menu.addItem((item) => {
-            item.setTitle('Reset view')
+            item.setTitle(t('toolbar.resetView'))
                 .setIcon('rotate-ccw')
                 .onClick(() => onReset());
         });
@@ -300,7 +304,7 @@ export class ViewSettingsMenu {
 
         // Copy URI
         menu.addItem((item) => {
-            item.setTitle('Copy URI')
+            item.setTitle(t('toolbar.copyUri'))
                 .setIcon('link')
                 .onClick(async () => {
                     const uriOpts = buildUri();
@@ -314,13 +318,13 @@ export class ViewSettingsMenu {
 
                     const uri = ViewUriBuilder.build(viewType, uriOpts);
                     await navigator.clipboard.writeText(uri);
-                    new Notice('URI copied to clipboard');
+                    new Notice(t('notice.uriCopied'));
                 });
         });
 
         // Copy as Obsidian link [name](uri)
         menu.addItem((item) => {
-            item.setTitle('Copy as link')
+            item.setTitle(t('toolbar.copyAsLink'))
                 .setIcon('external-link')
                 .onClick(async () => {
                     const uriOpts = buildUri();
@@ -335,7 +339,7 @@ export class ViewSettingsMenu {
                     const displayName = getCustomName() || getDefaultName();
                     const link = `[${displayName}](${uri})`;
                     await navigator.clipboard.writeText(link);
-                    new Notice('Link copied to clipboard');
+                    new Notice(t('notice.linkCopied'));
                 });
         });
 
@@ -345,12 +349,12 @@ export class ViewSettingsMenu {
             const getContainer = options.getExportContainer;
             const getIndex = options.getTaskIndex;
             menu.addItem((item) => {
-                item.setTitle('Export as image')
+                item.setTitle(t('toolbar.exportAsImage'))
                     .setIcon('image')
                     .onClick(async () => {
                         const container = getContainer();
                         if (!container) {
-                            new Notice('No content to export.');
+                            new Notice(t('notice.noContentToExport'));
                             return;
                         }
                         const shortType = ViewSettingsMenu.toShortViewType(viewType);
@@ -372,12 +376,12 @@ export class ViewSettingsMenu {
 
         // Position (read-only)
         menu.addItem((item) => {
-            item.setTitle('Position').setDisabled(true);
+            item.setTitle(t('toolbar.position')).setDisabled(true);
         });
 
         const pos = ViewUriBuilder.detectLeafPosition(leaf, app.workspace);
         menu.addItem((item) => {
-            item.setTitle(`  ${POSITION_LABELS[pos]}`)
+            item.setTitle(`  ${getPositionLabel(pos)}`)
                 .setChecked(true)
                 .setDisabled(true);
         });

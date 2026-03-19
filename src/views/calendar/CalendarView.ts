@@ -1,4 +1,5 @@
 import { ItemView, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
+import { t } from '../../i18n';
 import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
@@ -373,7 +374,7 @@ export class CalendarView extends ItemView {
 
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
-        filterBtn.setAttribute('aria-label', 'Filter');
+        filterBtn.setAttribute('aria-label', t('toolbar.filter'));
         filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
         filterBtn.addEventListener('click', (event: MouseEvent) => {
             this.filterMenu.showMenu(event, {
@@ -461,16 +462,16 @@ export class CalendarView extends ItemView {
     }
 
     private renderSidebarContent(header: HTMLElement, body: HTMLElement): void {
-        header.createEl('p', { cls: 'view-sidebar__title', text: 'Pinned Lists' });
+        header.createEl('p', { cls: 'view-sidebar__title', text: t('pinnedList.pinnedLists') });
 
         const addBtn = header.createEl('button', { cls: 'view-sidebar__add-btn' });
         setIcon(addBtn, 'plus');
-        addBtn.appendText('Add List');
+        addBtn.appendText(t('pinnedList.addList'));
         addBtn.addEventListener('click', () => {
             const newId = 'pl-' + Date.now();
             this.pinnedLists.push({
                 id: newId,
-                name: 'New List',
+                name: t('pinnedList.newList'),
                 filterState: createEmptyFilterState(),
             });
             this.app.workspace.requestSaveLayout();
@@ -561,7 +562,7 @@ export class CalendarView extends ItemView {
         const header = container.createDiv('calendar-weekday-header');
         if (this.shouldShowWeekNumbers()) {
             header.addClass('has-week-numbers');
-            header.createEl('div', { cls: 'calendar-weekday-cell', text: 'Wk' });
+            header.createEl('div', { cls: 'calendar-weekday-cell', text: t('calendar.wk') });
         }
 
         const weekdays = this.getWeekdayNames();

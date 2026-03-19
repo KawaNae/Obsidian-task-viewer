@@ -1,4 +1,5 @@
 import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
+import { t } from '../../i18n';
 import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -271,14 +272,14 @@ export class ScheduleView extends ItemView {
                 void this.app.workspace.requestSaveLayout();
                 void this.render();
             },
-            { label: 'Now' }
+            { label: t('toolbar.now') }
         );
 
         toolbar.createDiv('view-toolbar__spacer');
 
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
-        filterBtn.setAttribute('aria-label', 'Filter');
+        filterBtn.setAttribute('aria-label', t('toolbar.filter'));
         filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
         filterBtn.addEventListener('click', (event: MouseEvent) => {
             this.filterMenu.showMenu(event, {
@@ -358,7 +359,7 @@ export class ScheduleView extends ItemView {
             await this.sectionRenderer.renderCollapsibleTaskSection(
                 bodyContainer,
                 'schedule-due-section',
-                'Due',
+                t('calendar.due'),
                 categorized.dueOnly,
                 'dueOnly'
             );

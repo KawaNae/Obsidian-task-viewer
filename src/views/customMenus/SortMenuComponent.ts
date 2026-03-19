@@ -5,10 +5,11 @@ import type {
 import {
     createDefaultSortRule,
     createEmptySortState,
-    SORT_PROPERTY_LABELS,
+    getSortPropertyLabel,
     SORT_PROPERTY_ICONS,
-    SORT_DIRECTION_LABELS,
+    getSortDirectionLabel,
 } from '../../services/sort/SortTypes';
+import { t } from '../../i18n';
 
 export interface SortMenuCallbacks {
     onSortChange: () => void;
@@ -115,7 +116,7 @@ export class SortMenuComponent {
         const { rules } = this.state;
 
         if (rules.length === 0) {
-            this.popoverEl.createDiv('sort-popover__empty').setText('No sorts applied');
+            this.popoverEl.createDiv('sort-popover__empty').setText(t('sort.noSorts'));
         } else {
             for (let i = 0; i < rules.length; i++) {
                 this.renderRuleRow(this.popoverEl, rules[i], i);
@@ -150,7 +151,7 @@ export class SortMenuComponent {
         const propBtn = row.createEl('button', { cls: 'sort-popover__dropdown' });
         const propIcon = propBtn.createSpan('sort-popover__dropdown-icon');
         setIcon(propIcon, SORT_PROPERTY_ICONS[rule.property]);
-        propBtn.createSpan().setText(SORT_PROPERTY_LABELS[rule.property]);
+        propBtn.createSpan().setText(getSortPropertyLabel(rule.property));
         propBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.showPropertyMenu(propBtn, rule);
@@ -159,7 +160,7 @@ export class SortMenuComponent {
         // Direction dropdown
         const dirBtn = row.createEl('button', {
             cls: 'sort-popover__dropdown',
-            text: SORT_DIRECTION_LABELS[rule.direction],
+            text: getSortDirectionLabel(rule.direction),
         });
         dirBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -184,7 +185,7 @@ export class SortMenuComponent {
         // + Add sort
         const addBtn = footer.createEl('button', { cls: 'sort-popover__add-btn' });
         setIcon(addBtn.createSpan(), 'plus');
-        addBtn.createSpan().setText('Add sort');
+        addBtn.createSpan().setText(t('sort.addSort'));
         addBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.state.rules.push(createDefaultSortRule());
@@ -195,7 +196,7 @@ export class SortMenuComponent {
         if (this.state.rules.length > 0) {
             const deleteBtn = footer.createEl('button', { cls: 'sort-popover__delete-btn' });
             setIcon(deleteBtn.createSpan(), 'trash');
-            deleteBtn.createSpan().setText('Delete sort');
+            deleteBtn.createSpan().setText(t('sort.deleteSort'));
             deleteBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.state.rules = [];
@@ -211,7 +212,7 @@ export class SortMenuComponent {
             'content', 'due', 'startDate', 'endDate', 'file', 'status', 'tag',
         ];
         const items: SelectItem[] = properties.map(p => ({
-            label: SORT_PROPERTY_LABELS[p],
+            label: getSortPropertyLabel(p),
             value: p,
             checked: rule.property === p,
             icon: SORT_PROPERTY_ICONS[p],
@@ -226,7 +227,7 @@ export class SortMenuComponent {
     private showDirectionMenu(anchorEl: HTMLElement, rule: SortRule): void {
         const directions: SortDirection[] = ['asc', 'desc'];
         const items: SelectItem[] = directions.map(d => ({
-            label: SORT_DIRECTION_LABELS[d],
+            label: getSortDirectionLabel(d),
             value: d,
             checked: rule.direction === d,
         }));

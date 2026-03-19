@@ -7,6 +7,7 @@
  */
 
 import { App, Notice, setIcon, getIconIds } from 'obsidian';
+import { t } from '../../i18n';
 import { IntervalTemplateWriter } from '../../timer/IntervalTemplateWriter';
 import type { IntervalGroup } from '../../timer/TimerInstance';
 import type { IntervalTemplate } from '../../timer/IntervalTemplateLoader';
@@ -130,7 +131,7 @@ export class IntervalTemplateCreator {
         const header = parent.createDiv('template-creator__header');
         header.createSpan({
             cls: 'template-creator__title',
-            text: this.editingFilePath ? 'Edit Template' : 'New Template',
+            text: this.editingFilePath ? t('timer.editTemplate') : t('timer.newTemplate'),
         });
 
         const closeBtn = header.createEl('button', { cls: 'template-creator__close-btn' });
@@ -140,7 +141,7 @@ export class IntervalTemplateCreator {
 
     private renderNameField(parent: HTMLElement): void {
         const field = parent.createDiv('template-creator__field');
-        field.createEl('label', { cls: 'template-creator__label', text: 'Name' });
+        field.createEl('label', { cls: 'template-creator__label', text: t('timer.templateName') });
         const input = field.createEl('input', {
             cls: 'template-creator__input',
             type: 'text',
@@ -152,7 +153,7 @@ export class IntervalTemplateCreator {
 
     private renderIconField(parent: HTMLElement): void {
         const field = parent.createDiv('template-creator__field');
-        field.createEl('label', { cls: 'template-creator__label', text: 'Icon' });
+        field.createEl('label', { cls: 'template-creator__label', text: t('timer.templateIcon') });
 
         const row = field.createDiv('template-creator__icon-row');
 

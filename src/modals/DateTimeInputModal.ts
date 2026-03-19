@@ -1,4 +1,5 @@
 import { App, Modal, Setting } from 'obsidian';
+import { t } from '../i18n';
 import { validateDateTimeFormats, validateDateRequirements, type DateTimeFields } from '../utils/TaskDateValidator';
 
 export type DateTimeType = 'start' | 'end' | 'due';
@@ -43,15 +44,15 @@ export class DateTimeInputModal extends Modal {
 
         // Title
         const typeLabel = this.type.charAt(0).toUpperCase() + this.type.slice(1);
-        contentEl.createEl('h3', { text: `Edit ${typeLabel}` });
+        contentEl.createEl('h3', { text: t('modal.editType', { type: typeLabel }) });
 
         // Date + Time inputs in a horizontal row
         const row = contentEl.createDiv('datetime-input-modal__row');
 
         const dateContainer = row.createDiv('datetime-input-modal__field');
         const dateLabel = this.type === 'end' && this.options.hasStartDate
-            ? 'Date (optional)'
-            : 'Date';
+            ? t('modal.dateOptional')
+            : t('modal.date');
         dateContainer.createEl('label', { text: dateLabel });
         this.dateInput = dateContainer.createEl('input', {
             type: 'text',
@@ -62,7 +63,7 @@ export class DateTimeInputModal extends Modal {
         this.dateInput.addEventListener('input', () => this.validateInputs());
 
         const timeContainer = row.createDiv('datetime-input-modal__field');
-        timeContainer.createEl('label', { text: 'Time' });
+        timeContainer.createEl('label', { text: t('modal.time') });
         this.timeInput = timeContainer.createEl('input', {
             type: 'text',
             placeholder: 'HH:mm',
@@ -78,17 +79,17 @@ export class DateTimeInputModal extends Modal {
         // Buttons
         new Setting(contentEl)
             .addButton(btn => btn
-                .setButtonText('Clear')
+                .setButtonText(t('modal.clear'))
                 .setWarning()
                 .onClick(() => {
                     this.onSubmit({ date: null, time: null });
                     this.close();
                 }))
             .addButton(btn => btn
-                .setButtonText('Cancel')
+                .setButtonText(t('modal.cancel'))
                 .onClick(() => this.close()))
             .addButton(btn => btn
-                .setButtonText('OK')
+                .setButtonText(t('modal.ok'))
                 .setCta()
                 .onClick(() => this.submit()));
 

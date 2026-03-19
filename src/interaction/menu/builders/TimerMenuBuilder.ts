@@ -4,6 +4,7 @@ import TaskViewerPlugin from '../../../main';
 import { getTaskDisplayName } from '../../../utils/TaskContent';
 import { DateUtils } from '../../../utils/DateUtils';
 import { TaskParser } from '../../../services/parsing/TaskParser';
+import { t } from '../../../i18n';
 
 /**
  * Builder for timer-related menu items.
@@ -21,7 +22,7 @@ export class TimerMenuBuilder {
         }
         menu.addItem((item) => {
             const subMenu = (item as any)
-                .setTitle('Track Self')
+                .setTitle(t('menu.trackSelf'))
                 .setIcon('play')
                 .setSubmenu() as Menu;
 
@@ -40,7 +41,7 @@ export class TimerMenuBuilder {
 
             // Countup
             subMenu.addItem((sub) => {
-                sub.setTitle('⏱️ Start Countup')
+                sub.setTitle(t('menu.startCountup'))
                     .setIcon('play')
                     .onClick(() => {
                         const widget = this.plugin.getTimerWidget();
@@ -50,7 +51,7 @@ export class TimerMenuBuilder {
 
             // Pomodoro
             subMenu.addItem((sub) => {
-                sub.setTitle('🍅 Start Pomodoro')
+                sub.setTitle(t('menu.startPomodoro'))
                     .setIcon('timer')
                     .onClick(() => {
                         const widget = this.plugin.getTimerWidget();
@@ -62,7 +63,7 @@ export class TimerMenuBuilder {
             const countdownSeconds = this.calculateCountdownSeconds(task);
             if (countdownSeconds !== null) {
                 subMenu.addItem((sub) => {
-                    sub.setTitle('⏳ Start Countdown')
+                    sub.setTitle(t('menu.startCountdown'))
                         .setIcon('timer')
                         .onClick(() => {
                             const widget = this.plugin.getTimerWidget();
