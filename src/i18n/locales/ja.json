@@ -290,7 +290,7 @@
     "taskTypeAtNotation": "@記法",
     "taskTypeFrontmatter": "フロントマター",
     "glue": {
-      "afterTarget": { "self": "", "parent": "が" },
+      "afterTarget": { "self": "", "parent": "の" },
       "beforeOperator": {
         "includes": "に以下を", "excludes": "に以下を",
         "contains": "に以下を", "notContains": "に以下を",

@@ -53,7 +53,8 @@ export class FrontmatterTaskBuilder {
                 (frontmatterKeys.color in frontmatter) ||
                 (frontmatterKeys.linestyle in frontmatter) ||
                 (frontmatterKeys.status in frontmatter) ||
-                (frontmatterKeys.sharedtags in frontmatter);
+                (frontmatterKeys.sharedtags in frontmatter) ||
+                (frontmatterKeys.placeholder in frontmatter);
 
             if (!hasContainerSignals) return null;
         }

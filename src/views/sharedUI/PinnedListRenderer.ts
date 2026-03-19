@@ -331,6 +331,7 @@ export class PinnedListRenderer {
         const settings = this.plugin.settings;
         tasks.forEach(task => {
             const card = body.createDiv('task-card');
+            card.dataset.id = task.id;
 
             TaskStyling.applyTaskColor(card, task.color ?? null);
             TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
