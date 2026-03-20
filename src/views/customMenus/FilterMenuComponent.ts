@@ -187,7 +187,7 @@ export class FilterMenuComponent {
         const logicRow = parent.createDiv('filter-popover__logic-separator');
         const logicBtn = logicRow.createEl('button', {
             cls: 'filter-popover__logic-btn',
-            text: group.logic.toUpperCase(),
+            text: group.logic === 'and' ? t('filter.logicAnd') : t('filter.logicOr'),
         });
         logicBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -314,6 +314,12 @@ export class FilterMenuComponent {
             headerLine.createEl('span', { cls: 'filter-popover__glue', text: afterTargetGlue });
         }
 
+        // Glue: before property
+        const beforePropGlue = this.resolveGlue('beforeProperty', condition.property, condition.operator);
+        if (beforePropGlue) {
+            headerLine.createEl('span', { cls: 'filter-popover__glue', text: beforePropGlue });
+        }
+
         // Property dropdown (with icon)
         const propBtn = headerLine.createEl('button', { cls: 'filter-popover__dropdown' });
         const propIcon = propBtn.createSpan('filter-popover__dropdown-icon');
@@ -324,10 +330,10 @@ export class FilterMenuComponent {
             this.showPropertyMenu(propBtn, condition);
         });
 
-        // Glue: before operator
-        const beforeOpGlue = this.resolveBeforeOperatorGlue(condition.property, condition.operator);
-        if (beforeOpGlue) {
-            headerLine.createEl('span', { cls: 'filter-popover__glue', text: beforeOpGlue });
+        // Glue: after property (before operator)
+        const afterPropGlue = this.resolveGlue('afterProperty', condition.property, condition.operator);
+        if (afterPropGlue) {
+            headerLine.createEl('span', { cls: 'filter-popover__glue', text: afterPropGlue });
         }
 
         // Operator dropdown
@@ -374,9 +380,9 @@ export class FilterMenuComponent {
         }
     }
 
-    private resolveBeforeOperatorGlue(property: FilterProperty, operator: FilterOperator): string {
-        const glue = t(`filter.glue.operators.${property}.${operator}`);
-        if (!glue.startsWith('filter.glue.operators.')) return glue;
+    private resolveGlue(slot: string, property: FilterProperty, operator: FilterOperator): string {
+        const glue = t(`filter.glue.${slot}.${property}.${operator}`);
+        if (!glue.startsWith(`filter.glue.${slot}.`)) return glue;
         return '';
     }
 

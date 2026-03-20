@@ -243,20 +243,20 @@
       "only": "のみ"
     },
     "operators": {
-      "file":      { "includes": "含む", "excludes": "含まない" },
-      "tag":       { "includes": "含む", "excludes": "含まない", "equals": "含む", "only": "のみ含む" },
+      "file":      { "includes": "含まれる", "excludes": "含まれない" },
+      "tag":       { "includes": "含む", "excludes": "含まない", "equals": "含む", "only": "含む" },
       "status":    { "includes": "含む", "excludes": "含まない" },
       "content":   { "contains": "含む", "notContains": "含まない" },
-      "startDate": { "isSet": "設定あり", "isNotSet": "設定なし", "equals": "と一致", "before": "より前", "after": "より後", "onOrBefore": "以前", "onOrAfter": "以降" },
-      "endDate":   { "isSet": "設定あり", "isNotSet": "設定なし", "equals": "と一致", "before": "より前", "after": "より後", "onOrBefore": "以前", "onOrAfter": "以降" },
-      "due":       { "isSet": "設定あり", "isNotSet": "設定なし", "equals": "と一致", "before": "より前", "after": "より後", "onOrBefore": "以前", "onOrAfter": "以降" },
+      "startDate": { "isSet": "設定あり", "isNotSet": "設定なし", "equals": "一致", "before": "より前", "after": "より後", "onOrBefore": "以前", "onOrAfter": "以降" },
+      "endDate":   { "isSet": "設定あり", "isNotSet": "設定なし", "equals": "一致", "before": "より前", "after": "より後", "onOrBefore": "以前", "onOrAfter": "以降" },
+      "due":       { "isSet": "設定あり", "isNotSet": "設定なし", "equals": "一致", "before": "より前", "after": "より後", "onOrBefore": "以前", "onOrAfter": "以降" },
       "color":     { "includes": "含む", "excludes": "含まない" },
       "linestyle": { "includes": "含む", "excludes": "含まない" },
-      "length":    { "lessThan": "より小さい", "lessThanOrEqual": "以下", "greaterThan": "より大きい", "greaterThanOrEqual": "以上", "equals": "と一致", "isSet": "設定あり", "isNotSet": "設定なし" },
+      "length":    { "lessThan": "より小さい", "lessThanOrEqual": "以下", "greaterThan": "より大きい", "greaterThanOrEqual": "以上", "equals": "一致", "isSet": "存在する", "isNotSet": "存在しない" },
       "taskType":  { "includes": "含む", "excludes": "含まない" },
       "parent":    { "isSet": "存在する", "isNotSet": "存在しない" },
       "children":  { "isSet": "存在する", "isNotSet": "存在しない" },
-      "property":  { "isSet": "設定あり", "isNotSet": "設定なし", "equals": "と一致", "contains": "含む", "notContains": "含まない" }
+      "property":  { "isSet": "設定あり", "isNotSet": "設定なし", "equals": "一致", "contains": "含む", "notContains": "含まない" }
     },
     "relativeDate": {
       "today": "今日",
@@ -268,6 +268,8 @@
       "thisMonth": "今月",
       "thisYear": "今年"
     },
+    "logicAnd": "かつ",
+    "logicOr": "または",
     "addFilter": "フィルターを追加",
     "addGroup": "グループを追加",
     "addFilterGroup": "フィルターグループを追加",
@@ -296,22 +298,38 @@
     "taskTypeAtNotation": "@記法",
     "taskTypeFrontmatter": "フロントマター",
     "glue": {
-      "afterTarget": { "self": "", "parent": "の" },
-      "operators": {
-        "file":      { "includes": "に以下を", "excludes": "に以下を" },
-        "tag":       { "includes": "に以下を", "excludes": "に以下を", "equals": "に以下を", "only": "に以下" },
-        "status":    { "includes": "に以下を", "excludes": "に以下を" },
-        "content":   { "contains": "に以下を", "notContains": "に以下を" },
-        "startDate": { "isSet": "が", "isNotSet": "が", "equals": "が下の値", "before": "が下の値", "after": "が下の値", "onOrBefore": "が下の値", "onOrAfter": "が下の値" },
-        "endDate":   { "isSet": "が", "isNotSet": "が", "equals": "が下の値", "before": "が下の値", "after": "が下の値", "onOrBefore": "が下の値", "onOrAfter": "が下の値" },
-        "due":       { "isSet": "が", "isNotSet": "が", "equals": "が下の値", "before": "が下の値", "after": "が下の値", "onOrBefore": "が下の値", "onOrAfter": "が下の値" },
-        "color":     { "includes": "に以下を", "excludes": "に以下を" },
-        "linestyle": { "includes": "に以下を", "excludes": "に以下を" },
-        "length":    { "lessThan": "が下の値", "lessThanOrEqual": "が下の値", "greaterThan": "が下の値", "greaterThanOrEqual": "が下の値", "equals": "が下の値", "isSet": "が", "isNotSet": "が" },
-        "taskType":  { "includes": "に以下を", "excludes": "に以下を" },
+      "afterTarget": { "self": "", "parent": "が" },
+      "beforeProperty": {
+        "file":      { "includes": "以下の", "excludes": "以下の" },
+        "tag":       { "includes": "以下の", "excludes": "以下の", "equals": "以下の", "only": "以下の" },
+        "status":    { "includes": "以下の", "excludes": "以下の" },
+        "content":   { "contains": "以下の", "notContains": "以下の" },
+        "startDate": { "isSet": "", "isNotSet": "", "equals": "", "before": "", "after": "", "onOrBefore": "", "onOrAfter": "" },
+        "endDate":   { "isSet": "", "isNotSet": "", "equals": "", "before": "", "after": "", "onOrBefore": "", "onOrAfter": "" },
+        "due":       { "isSet": "", "isNotSet": "", "equals": "", "before": "", "after": "", "onOrBefore": "", "onOrAfter": "" },
+        "color":     { "includes": "以下の", "excludes": "以下の" },
+        "linestyle": { "includes": "以下の", "excludes": "以下の" },
+        "length":    { "lessThan": "", "lessThanOrEqual": "", "greaterThan": "", "greaterThanOrEqual": "", "equals": "", "isSet": "", "isNotSet": "" },
+        "taskType":  { "includes": "以下の", "excludes": "以下の" },
+        "parent":    { "isSet": "", "isNotSet": "" },
+        "children":  { "isSet": "", "isNotSet": "" },
+        "property":  { "isSet": "", "isNotSet": "", "equals": "", "contains": "以下の", "notContains": "以下の" }
+      },
+      "afterProperty": {
+        "file":      { "includes": "に", "excludes": "に" },
+        "tag":       { "includes": "を", "excludes": "を", "equals": "を", "only": "のみを" },
+        "status":    { "includes": "を", "excludes": "を" },
+        "content":   { "contains": "を", "notContains": "を" },
+        "startDate": { "isSet": "が", "isNotSet": "が", "equals": "が下の値と", "before": "が下の値", "after": "が下の値", "onOrBefore": "が下の値", "onOrAfter": "が下の値" },
+        "endDate":   { "isSet": "が", "isNotSet": "が", "equals": "が下の値と", "before": "が下の値", "after": "が下の値", "onOrBefore": "が下の値", "onOrAfter": "が下の値" },
+        "due":       { "isSet": "が", "isNotSet": "が", "equals": "が下の値と", "before": "が下の値", "after": "が下の値", "onOrBefore": "が下の値", "onOrAfter": "が下の値" },
+        "color":     { "includes": "を", "excludes": "を" },
+        "linestyle": { "includes": "を", "excludes": "を" },
+        "length":    { "lessThan": "が下の値", "lessThanOrEqual": "が下の値", "greaterThan": "が下の値", "greaterThanOrEqual": "が下の値", "equals": "が下の値と", "isSet": "が", "isNotSet": "が" },
+        "taskType":  { "includes": "を", "excludes": "を" },
         "parent":    { "isSet": "が", "isNotSet": "が" },
         "children":  { "isSet": "が", "isNotSet": "が" },
-        "property":  { "isSet": "が", "isNotSet": "が", "equals": "が下の値", "contains": "に以下を", "notContains": "に以下を" }
+        "property":  { "isSet": "が", "isNotSet": "が", "equals": "が以下と", "contains": "を", "notContains": "を" }
       }
     }
   },

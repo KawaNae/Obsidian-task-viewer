@@ -268,6 +268,8 @@
       "thisMonth": "This month",
       "thisYear": "This year"
     },
+    "logicAnd": "AND",
+    "logicOr": "OR",
     "addFilter": "Add filter",
     "addGroup": "Add group",
     "addFilterGroup": "Add filter group",
@@ -297,7 +299,23 @@
     "taskTypeFrontmatter": "Frontmatter",
     "glue": {
       "afterTarget": { "self": "", "parent": "" },
-      "operators": {
+      "beforeProperty": {
+        "file":      { "includes": "", "excludes": "" },
+        "tag":       { "includes": "", "excludes": "", "equals": "", "only": "" },
+        "status":    { "includes": "", "excludes": "" },
+        "content":   { "contains": "", "notContains": "" },
+        "startDate": { "isSet": "", "isNotSet": "", "equals": "", "before": "", "after": "", "onOrBefore": "", "onOrAfter": "" },
+        "endDate":   { "isSet": "", "isNotSet": "", "equals": "", "before": "", "after": "", "onOrBefore": "", "onOrAfter": "" },
+        "due":       { "isSet": "", "isNotSet": "", "equals": "", "before": "", "after": "", "onOrBefore": "", "onOrAfter": "" },
+        "color":     { "includes": "", "excludes": "" },
+        "linestyle": { "includes": "", "excludes": "" },
+        "length":    { "lessThan": "", "lessThanOrEqual": "", "greaterThan": "", "greaterThanOrEqual": "", "equals": "", "isSet": "", "isNotSet": "" },
+        "taskType":  { "includes": "", "excludes": "" },
+        "parent":    { "isSet": "", "isNotSet": "" },
+        "children":  { "isSet": "", "isNotSet": "" },
+        "property":  { "isSet": "", "isNotSet": "", "equals": "", "contains": "", "notContains": "" }
+      },
+      "afterProperty": {
         "file":      { "includes": "", "excludes": "" },
         "tag":       { "includes": "", "excludes": "", "equals": "", "only": "" },
         "status":    { "includes": "", "excludes": "" },
