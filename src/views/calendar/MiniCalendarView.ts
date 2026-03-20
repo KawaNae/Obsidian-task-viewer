@@ -373,7 +373,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     private isTaskCompleted(task: Task): boolean {
-        return isTaskCompletedUtil(task, this.plugin.settings.completeStatusChars);
+        return isTaskCompletedUtil(task, this.plugin.settings.statusDefinitions);
     }
 
     private getCalendarDateRange(): { startDate: Date; endDate: Date } {

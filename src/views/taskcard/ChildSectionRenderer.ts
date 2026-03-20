@@ -20,12 +20,12 @@ function countChildCompletion(
         total++;
         if (item.handler.type === 'task') {
             const child = taskIndex.getTask(item.handler.taskId);
-            if (child && isCompleteStatusChar(child.statusChar, settings.completeStatusChars)) {
+            if (child && isCompleteStatusChar(child.statusChar, settings.statusDefinitions)) {
                 completed++;
             }
         } else {
             const cl = item.handler.parentTask.childLines[item.handler.childLineIndex];
-            if (cl?.checkboxChar !== null && cl?.checkboxChar !== undefined && isCompleteStatusChar(cl.checkboxChar, settings.completeStatusChars)) {
+            if (cl?.checkboxChar !== null && cl?.checkboxChar !== undefined && isCompleteStatusChar(cl.checkboxChar, settings.statusDefinitions)) {
                 completed++;
             }
         }

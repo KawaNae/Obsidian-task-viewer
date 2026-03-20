@@ -1,10 +1,4 @@
-/**
- * Fixed status options that always appear in menus.
- */
-export const FIXED_STATUS_OPTIONS: StatusOption[] = [
-    { char: ' ', label: '' },
-    { char: 'x', label: 'x' },
-];
+import type { StatusDefinition } from '../types';
 
 export interface StatusOption {
     readonly char: string;
@@ -12,14 +6,17 @@ export interface StatusOption {
 }
 
 /**
- * Build the full status options list from fixed options + user-configured chars.
- * Filters out duplicates of fixed chars (' ' and 'x').
+ * Build the full status options list from status definitions.
  */
-export function buildStatusOptions(customChars: string[]): StatusOption[] {
-    const custom = customChars
-        .filter(c => c.length === 1 && c !== ' ' && c !== 'x')
-        .map(c => ({ char: c, label: c }));
-    return [...FIXED_STATUS_OPTIONS, ...custom];
+export function buildStatusOptions(defs: StatusDefinition[]): StatusOption[] {
+    return defs.map(d => ({ char: d.char, label: d.label }));
+}
+
+/**
+ * Get the label for a status character from definitions.
+ */
+export function getStatusLabel(char: string, defs: StatusDefinition[]): string {
+    return defs.find(d => d.char === char)?.label || char;
 }
 
 /**

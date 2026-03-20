@@ -111,6 +111,7 @@ export class ScheduleView extends ItemView {
         });
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.filterMenu.setTaskLookupProvider((id) => this.taskIndex.getTask(id));
+        this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
     }
 
     getViewType(): string {
@@ -412,7 +413,7 @@ export class ScheduleView extends ItemView {
             const hasOverdueTasks = allDisplayTasks.some(dt =>
                 isDisplayTaskOnVisualDate(dt, date, startHour) &&
                 this.filterMenu.isTaskVisible(dt) &&
-                !isCompleteStatusChar(dt.statusChar, this.plugin.settings.completeStatusChars)
+                !isCompleteStatusChar(dt.statusChar, this.plugin.settings.statusDefinitions)
             );
             if (hasOverdueTasks) {
                 dateCell.addClass('has-overdue');

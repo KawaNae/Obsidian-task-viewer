@@ -45,6 +45,7 @@ export class TimelineToolbar {
     ) {
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.filterMenu.setTaskLookupProvider((id) => this.taskIndex.getTask(id));
+        this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
     }
 
     /**
@@ -205,7 +206,7 @@ export class TimelineToolbar {
         // Get all incomplete, visible tasks with dates (including E/ED types)
         const rawTasks = this.taskIndex.getTasks().filter(t =>
             isVisible(t) &&
-            !isCompleteStatusChar(t.statusChar, this.plugin.settings.completeStatusChars) &&
+            !isCompleteStatusChar(t.statusChar, this.plugin.settings.statusDefinitions) &&
             (t.startDate || t.endDate)
         );
 

@@ -1,6 +1,7 @@
 import { Component, Menu } from 'obsidian';
 
 import TaskViewerPlugin from '../../main';
+import { t } from '../../i18n';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../utils/DateUtils';
 import { TaskStyling } from './TaskStyling';
@@ -126,7 +127,7 @@ export class AllDaySectionRenderer {
 
         // Create Task (All-Day type)
         menu.addItem((item) => {
-            item.setTitle('Create Task for Daily Note')
+            item.setTitle(t('menu.createTaskForDailyNote'))
                 .setIcon('plus')
                 .onClick(() => this.handleCreateTask(date));
         });
@@ -135,14 +136,14 @@ export class AllDaySectionRenderer {
 
         // Open Pomodoro (Daily Note)
         menu.addItem((item) => {
-            item.setTitle('🍅 Open Pomodoro for Daily Note')
+            item.setTitle(t('menu.openPomodoroForDailyNote'))
                 .setIcon('timer')
                 .onClick(() => this.openDailyNoteTimer(date, 'pomodoro'));
         });
 
         // Open Timer (Daily Note)
         menu.addItem((item) => {
-            item.setTitle('⏱️ Open Tracker for Daily Note')
+            item.setTitle(t('menu.openCountupForDailyNote'))
                 .setIcon('clock')
                 .onClick(() => this.openDailyNoteTimer(date, 'countup'));
         });

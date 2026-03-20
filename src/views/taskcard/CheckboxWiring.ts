@@ -159,7 +159,7 @@ export class CheckboxWiring {
 
     private showStatusMenu(e: MouseEvent, settings: TaskViewerSettings, onSelect: (statusChar: string) => Promise<void>): void {
         const menu = new Menu();
-        const options = buildStatusOptions(settings.statusMenuChars);
+        const options = buildStatusOptions(settings.statusDefinitions);
 
         for (const option of options) {
             menu.addItem((item) => {

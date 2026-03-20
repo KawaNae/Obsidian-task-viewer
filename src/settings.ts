@@ -1,7 +1,8 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import TaskViewerPlugin from './main';
-import { DefaultLeafPosition, FrontmatterTaskKeys, HabitType, TaskViewerSettings, validateFrontmatterTaskKeys } from './types';
+import { DefaultLeafPosition, FIXED_STATUS_CHARS, FrontmatterTaskKeys, HabitType, StatusDefinition, TaskViewerSettings, validateFrontmatterTaskKeys } from './types';
 import { t } from './i18n';
+import { FolderSuggest } from './suggest/FolderSuggest';
 
 export class TaskViewerSettingTab extends PluginSettingTab {
     plugin: TaskViewerPlugin;
@@ -33,12 +34,12 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         const content = wrapper.createDiv('tv-settings__content');
 
         const tabs = [
-            { id: 'general',     label: t('settings.tabs.general'),     render: (el: HTMLElement) => this.renderGeneralTab(el) },
-            { id: 'views',       label: t('settings.tabs.views'),       render: (el: HTMLElement) => this.renderViewsTab(el) },
-            { id: 'notes',       label: t('settings.tabs.notes'),       render: (el: HTMLElement) => this.renderNotesTab(el) },
-            { id: 'timer',       label: t('settings.tabs.timer'),       render: (el: HTMLElement) => this.renderTimerTab(el) },
-            { id: 'frontmatter', label: t('settings.tabs.frontmatter'), render: (el: HTMLElement) => this.renderFrontmatterTab(el) },
-            { id: 'habits',      label: t('settings.tabs.habits'),      render: (el: HTMLElement) => this.renderHabitsTab(el) },
+            { id: 'general',      label: t('settings.tabs.general'),      render: (el: HTMLElement) => this.renderGeneralTab(el) },
+            { id: 'views',        label: t('settings.tabs.views'),        render: (el: HTMLElement) => this.renderViewsTab(el) },
+            { id: 'viewDetails',  label: t('settings.tabs.viewDetails'),  render: (el: HTMLElement) => this.renderViewDetailsTab(el) },
+            { id: 'notes',        label: t('settings.tabs.notes'),        render: (el: HTMLElement) => this.renderNotesTab(el) },
+            { id: 'frontmatter',  label: t('settings.tabs.frontmatter'),  render: (el: HTMLElement) => this.renderFrontmatterTab(el) },
+            { id: 'habits',       label: t('settings.tabs.habits'),       render: (el: HTMLElement) => this.renderHabitsTab(el) },
         ];
 
         tabs.forEach(tab => {
@@ -76,39 +77,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
     // ─── General Tab ─────────────────────────────────────────
 
     private renderGeneralTab(el: HTMLElement): void {
-        new Setting(el)
-            .setName(t('settings.general.longPressThreshold'))
-            .setDesc(t('settings.general.longPressThresholdDesc'))
-            .addSlider(slider => slider
-                .setLimits(100, 2000, 50)
-                .setValue(this.plugin.settings.longPressThreshold)
-                .setDynamicTooltip()
-                .onChange(async (value) => {
-                    this.plugin.settings.longPressThreshold = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(el)
-            .setName(t('settings.general.taskSelectAction'))
-            .setDesc(t('settings.general.taskSelectActionDesc'))
-            .addDropdown(dropdown => dropdown
-                .addOption('click', t('settings.general.singleClick'))
-                .addOption('dblclick', t('settings.general.doubleClick'))
-                .setValue(this.plugin.settings.taskSelectAction)
-                .onChange(async (value) => {
-                    this.plugin.settings.taskSelectAction = value as 'click' | 'dblclick';
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(el)
-            .setName(t('settings.general.reuseExistingTab'))
-            .setDesc(t('settings.general.reuseExistingTabDesc'))
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.reuseExistingTab)
-                .onChange(async (value) => {
-                    this.plugin.settings.reuseExistingTab = value;
-                    await this.plugin.saveSettings();
-                }));
+        // Editor
+        el.createEl('h3', { text: t('settings.general.editor'), cls: 'setting-section-header' });
 
         new Setting(el)
             .setName(t('settings.general.showEditorMenuForTasks'))
@@ -156,67 +126,31 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        new Setting(el)
-            .setName(t('settings.general.statusMenuChars'))
-            .setDesc(t('settings.general.statusMenuCharsDesc'))
-            .addText(text => text
-                .setPlaceholder('-, !, ?, >, /')
-                .setValue(this.plugin.settings.statusMenuChars.join(', '))
-                .onChange(async (value) => {
-                    const chars = value.split(/[,\s]+/)
-                        .map(c => c.trim())
-                        .filter(c => c.length === 1);
-                    this.plugin.settings.statusMenuChars = chars.length > 0 ? chars : ['-', '!', '?', '>', '/'];
-                    await this.plugin.saveSettings();
-                }));
+        // Status Definitions
+        el.createEl('h4', { text: t('settings.general.statusDefinitions') });
+        const statusDesc = el.createDiv('setting-item');
+        statusDesc.createSpan({ text: t('settings.general.statusDefinitionsDesc'), cls: 'setting-item-description' });
+
+        const statusListContainer = el.createDiv('status-definitions-list-container');
+        this.renderStatusDefinitionsList(statusListContainer);
 
         new Setting(el)
-            .setName(t('settings.general.completeStatusChars'))
-            .setDesc(t('settings.general.completeStatusCharsDesc'))
-            .addText(text => text
-                .setPlaceholder('x, X, -, !')
-                .setValue(this.plugin.settings.completeStatusChars.join(', '))
-                .onChange(async (value) => {
-                    const chars = value.split(/[,\s]+/)
-                        .map(c => c.trim())
-                        .filter(c => c.length > 0);
-                    this.plugin.settings.completeStatusChars = chars.length > 0 ? chars : ['x', 'X', '-', '!'];
+            .setName(t('settings.general.addStatus'))
+            .setDesc(t('settings.general.addStatusDesc'))
+            .addButton(btn => btn
+                .setButtonText(t('settings.general.addButton'))
+                .onClick(async () => {
+                    this.plugin.settings.statusDefinitions.push({ char: '', label: '', isComplete: false });
                     await this.plugin.saveSettings();
-                }));
-
-        // Child Tasks
-        el.createEl('h3', { text: t('settings.general.childTasks'), cls: 'setting-section-header' });
-
-        new Setting(el)
-            .setName(t('settings.general.childTaskHeading'))
-            .setDesc(t('settings.general.childTaskHeadingDesc'))
-            .addText(text => text
-                .setPlaceholder('Tasks')
-                .setValue(this.plugin.settings.frontmatterTaskHeader)
-                .onChange(async (value) => {
-                    this.plugin.settings.frontmatterTaskHeader = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(el)
-            .setName(t('settings.general.childTaskHeadingLevel'))
-            .setDesc(t('settings.general.childTaskHeadingLevelDesc'))
-            .addSlider(slider => slider
-                .setLimits(1, 6, 1)
-                .setValue(this.plugin.settings.frontmatterTaskHeaderLevel)
-                .setDynamicTooltip()
-                .onChange(async (value) => {
-                    this.plugin.settings.frontmatterTaskHeaderLevel = value;
-                    await this.plugin.saveSettings();
-                }));
+                    this.renderStatusDefinitionsList(statusListContainer);
+                })
+            );
     }
 
     // ─── Views Tab ───────────────────────────────────────────
 
     private renderViewsTab(el: HTMLElement): void {
-        // Timeline
-        el.createEl('h3', { text: t('settings.views.timeline'), cls: 'setting-section-header' });
-
+        // Start Hour (top-level, shared across views)
         new Setting(el)
             .setName(t('settings.views.startHour'))
             .setDesc(t('settings.views.startHourDesc'))
@@ -232,67 +166,69 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
+        // Templates
+        el.createEl('h3', { text: t('settings.views.templates'), cls: 'setting-section-header' });
+
         new Setting(el)
-            .setName(t('settings.views.pastDaysToShow'))
-            .setDesc(t('settings.views.pastDaysToShowDesc'))
+            .setName(t('settings.views.viewTemplateFolder'))
+            .setDesc(t('settings.views.viewTemplateFolderDesc'))
             .addText(text => {
-                text.inputEl.type = 'number';
-                text.inputEl.min = '0';
-                text
-                    .setPlaceholder('0')
-                    .setValue(this.plugin.settings.pastDaysToShow.toString())
+                text.setPlaceholder('Templates/Views')
+                    .setValue(this.plugin.settings.viewTemplateFolder)
                     .onChange(async (value) => {
-                        let days = parseInt(value);
-                        if (isNaN(days) || days < 0) days = 0;
-                        this.plugin.settings.pastDaysToShow = days;
+                        this.plugin.settings.viewTemplateFolder = value.trim();
                         await this.plugin.saveSettings();
                     });
+                new FolderSuggest(this.app, text.inputEl);
             });
 
         new Setting(el)
-            .setName(t('settings.views.defaultZoomLevel'))
-            .setDesc(t('settings.views.defaultZoomLevelDesc'))
+            .setName(t('settings.views.intervalTemplateFolder'))
+            .setDesc(t('settings.views.intervalTemplateFolderDesc'))
+            .addText(text => {
+                text.setPlaceholder('Templates/Timers')
+                    .setValue(this.plugin.settings.intervalTemplateFolder)
+                    .onChange(async (value) => {
+                        this.plugin.settings.intervalTemplateFolder = value.trim();
+                        await this.plugin.saveSettings();
+                    });
+                new FolderSuggest(this.app, text.inputEl);
+            });
+
+        // Interaction
+        el.createEl('h3', { text: t('settings.views.interaction'), cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName(t('settings.views.longPressThreshold'))
+            .setDesc(t('settings.views.longPressThresholdDesc'))
             .addSlider(slider => slider
-                .setLimits(0.25, 10.0, 0.25)
-                .setValue(this.plugin.settings.zoomLevel)
+                .setLimits(100, 2000, 50)
+                .setValue(this.plugin.settings.longPressThreshold)
                 .setDynamicTooltip()
                 .onChange(async (value) => {
-                    this.plugin.settings.zoomLevel = value;
+                    this.plugin.settings.longPressThreshold = value;
                     await this.plugin.saveSettings();
                 }));
 
-        // Calendar
-        el.createEl('h3', { text: t('settings.views.calendar'), cls: 'setting-section-header' });
-
         new Setting(el)
-            .setName(t('settings.views.weekStartsOn'))
-            .setDesc(t('settings.views.weekStartsOnDesc'))
+            .setName(t('settings.views.taskSelectAction'))
+            .setDesc(t('settings.views.taskSelectActionDesc'))
             .addDropdown(dropdown => dropdown
-                .addOption('0', t('settings.views.sunday'))
-                .addOption('1', t('settings.views.monday'))
-                .setValue(String(this.plugin.settings.calendarWeekStartDay))
+                .addOption('click', t('settings.views.singleClick'))
+                .addOption('dblclick', t('settings.views.doubleClick'))
+                .setValue(this.plugin.settings.taskSelectAction)
                 .onChange(async (value) => {
-                    this.plugin.settings.calendarWeekStartDay = value === '1' ? 1 : 0;
+                    this.plugin.settings.taskSelectAction = value as 'click' | 'dblclick';
                     await this.plugin.saveSettings();
                 }));
 
         new Setting(el)
-            .setName(t('settings.views.showCompletedTasks'))
-            .setDesc(t('settings.views.showCompletedTasksDesc'))
+            .setName(t('settings.views.reuseExistingTab'))
+            .setDesc(t('settings.views.reuseExistingTabDesc'))
             .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.calendarShowCompleted)
+                .setValue(this.plugin.settings.reuseExistingTab)
                 .onChange(async (value) => {
-                    this.plugin.settings.calendarShowCompleted = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(el)
-            .setName(t('settings.views.showWeekNumbers'))
-            .setDesc(t('settings.views.showWeekNumbersDesc'))
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.calendarShowWeekNumbers)
-                .onChange(async (value) => {
-                    this.plugin.settings.calendarShowWeekNumbers = value;
+                    this.plugin.settings.reuseExistingTab = value;
                     await this.plugin.saveSettings();
                 }));
 
@@ -327,20 +263,6 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                     }));
         }
-
-        // View Templates (moved from Timer tab)
-        el.createEl('h3', { text: t('settings.views.viewTemplates'), cls: 'setting-section-header' });
-
-        new Setting(el)
-            .setName(t('settings.views.viewTemplateFolder'))
-            .setDesc(t('settings.views.viewTemplateFolderDesc'))
-            .addText(text => text
-                .setPlaceholder('Templates/Views')
-                .setValue(this.plugin.settings.viewTemplateFolder)
-                .onChange(async (value) => {
-                    this.plugin.settings.viewTemplateFolder = value.trim();
-                    await this.plugin.saveSettings();
-                }));
 
         // Display
         el.createEl('h3', { text: t('settings.views.display'), cls: 'setting-section-header' });
@@ -381,6 +303,104 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     this.plugin.settings.fixMobileGradientWidth = value;
                     await this.plugin.saveSettings();
                 }));
+    }
+
+    // ─── View Details Tab ─────────────────────────────────────
+
+    private renderViewDetailsTab(el: HTMLElement): void {
+        // Timeline
+        el.createEl('h3', { text: t('settings.views.timeline'), cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName(t('settings.views.pastDaysToShow'))
+            .setDesc(t('settings.views.pastDaysToShowDesc'))
+            .addText(text => {
+                text.inputEl.type = 'number';
+                text.inputEl.min = '0';
+                text
+                    .setPlaceholder('0')
+                    .setValue(this.plugin.settings.pastDaysToShow.toString())
+                    .onChange(async (value) => {
+                        let days = parseInt(value);
+                        if (isNaN(days) || days < 0) days = 0;
+                        this.plugin.settings.pastDaysToShow = days;
+                        await this.plugin.saveSettings();
+                    });
+            });
+
+        new Setting(el)
+            .setName(t('settings.views.defaultZoomLevel'))
+            .setDesc(t('settings.views.defaultZoomLevelDesc'))
+            .addSlider(slider => slider
+                .setLimits(0.25, 10.0, 0.25)
+                .setValue(this.plugin.settings.zoomLevel)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.zoomLevel = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        // Calendar / Mini Calendar
+        el.createEl('h3', { text: t('settings.views.calendarMiniCalendar'), cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName(t('settings.views.weekStartsOn'))
+            .setDesc(t('settings.views.weekStartsOnDesc'))
+            .addDropdown(dropdown => dropdown
+                .addOption('0', t('settings.views.sunday'))
+                .addOption('1', t('settings.views.monday'))
+                .setValue(String(this.plugin.settings.calendarWeekStartDay))
+                .onChange(async (value) => {
+                    this.plugin.settings.calendarWeekStartDay = value === '1' ? 1 : 0;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName(t('settings.views.showWeekNumbers'))
+            .setDesc(t('settings.views.showWeekNumbersDesc'))
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.calendarShowWeekNumbers)
+                .onChange(async (value) => {
+                    this.plugin.settings.calendarShowWeekNumbers = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        // Timer
+        el.createEl('h3', { text: t('settings.views.timer'), cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName(t('settings.views.customWorkMinutes'))
+            .setDesc(t('settings.views.customWorkMinutesDesc'))
+            .addText(text => {
+                text.inputEl.type = 'number';
+                text.inputEl.min = '1';
+                text
+                    .setPlaceholder('25')
+                    .setValue(this.plugin.settings.pomodoroWorkMinutes.toString())
+                    .onChange(async (value) => {
+                        let mins = parseInt(value);
+                        if (isNaN(mins) || mins < 1) mins = 1;
+                        this.plugin.settings.pomodoroWorkMinutes = mins;
+                        await this.plugin.saveSettings();
+                    });
+            });
+
+        new Setting(el)
+            .setName(t('settings.views.customBreakMinutes'))
+            .setDesc(t('settings.views.customBreakMinutesDesc'))
+            .addText(text => {
+                text.inputEl.type = 'number';
+                text.inputEl.min = '1';
+                text
+                    .setPlaceholder('5')
+                    .setValue(this.plugin.settings.pomodoroBreakMinutes.toString())
+                    .onChange(async (value) => {
+                        let mins = parseInt(value);
+                        if (isNaN(mins) || mins < 1) mins = 1;
+                        this.plugin.settings.pomodoroBreakMinutes = mins;
+                        await this.plugin.saveSettings();
+                    });
+            });
 
         // Pinned Lists
         el.createEl('h3', { text: t('settings.views.pinnedLists'), cls: 'setting-section-header' });
@@ -430,6 +450,32 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 .setDynamicTooltip()
                 .onChange(async (value) => {
                     this.plugin.settings.dailyNoteHeaderLevel = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        // Child Tasks
+        el.createEl('h3', { text: t('settings.notes.childTasks'), cls: 'setting-section-header' });
+
+        new Setting(el)
+            .setName(t('settings.notes.childTaskHeading'))
+            .setDesc(t('settings.notes.childTaskHeadingDesc'))
+            .addText(text => text
+                .setPlaceholder('Tasks')
+                .setValue(this.plugin.settings.frontmatterTaskHeader)
+                .onChange(async (value) => {
+                    this.plugin.settings.frontmatterTaskHeader = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(el)
+            .setName(t('settings.notes.childTaskHeadingLevel'))
+            .setDesc(t('settings.notes.childTaskHeadingLevelDesc'))
+            .addSlider(slider => slider
+                .setLimits(1, 6, 1)
+                .setValue(this.plugin.settings.frontmatterTaskHeaderLevel)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.frontmatterTaskHeaderLevel = value;
                     await this.plugin.saveSettings();
                 }));
 
@@ -501,60 +547,6 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     this.plugin.settings.yearlyNoteFolder = value;
                     await this.plugin.saveSettings();
                 }));
-    }
-
-    // ─── Timer Tab ───────────────────────────────────────────
-
-    private renderTimerTab(el: HTMLElement): void {
-        el.createEl('h3', { text: t('settings.timer.pomodoro'), cls: 'setting-section-header' });
-
-        new Setting(el)
-            .setName(t('settings.timer.customWorkMinutes'))
-            .setDesc(t('settings.timer.customWorkMinutesDesc'))
-            .addText(text => {
-                text.inputEl.type = 'number';
-                text.inputEl.min = '1';
-                text
-                    .setPlaceholder('25')
-                    .setValue(this.plugin.settings.pomodoroWorkMinutes.toString())
-                    .onChange(async (value) => {
-                        let mins = parseInt(value);
-                        if (isNaN(mins) || mins < 1) mins = 1;
-                        this.plugin.settings.pomodoroWorkMinutes = mins;
-                        await this.plugin.saveSettings();
-                    });
-            });
-
-        new Setting(el)
-            .setName(t('settings.timer.customBreakMinutes'))
-            .setDesc(t('settings.timer.customBreakMinutesDesc'))
-            .addText(text => {
-                text.inputEl.type = 'number';
-                text.inputEl.min = '1';
-                text
-                    .setPlaceholder('5')
-                    .setValue(this.plugin.settings.pomodoroBreakMinutes.toString())
-                    .onChange(async (value) => {
-                        let mins = parseInt(value);
-                        if (isNaN(mins) || mins < 1) mins = 1;
-                        this.plugin.settings.pomodoroBreakMinutes = mins;
-                        await this.plugin.saveSettings();
-                    });
-            });
-
-        el.createEl('h3', { text: t('settings.timer.intervalTimer'), cls: 'setting-section-header' });
-
-        new Setting(el)
-            .setName(t('settings.timer.intervalTemplateFolder'))
-            .setDesc(t('settings.timer.intervalTemplateFolderDesc'))
-            .addText(text => text
-                .setPlaceholder('Templates/Timers')
-                .setValue(this.plugin.settings.intervalTemplateFolder)
-                .onChange(async (value) => {
-                    this.plugin.settings.intervalTemplateFolder = value.trim();
-                    await this.plugin.saveSettings();
-                }));
-
     }
 
     // ─── Frontmatter Tab ─────────────────────────────────────
@@ -719,6 +711,123 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 });
             });
+    }
+
+    private renderStatusDefinitionsList(container: HTMLElement): void {
+        container.empty();
+        const fixedChars = new Set<string>(FIXED_STATUS_CHARS as unknown as string[]);
+        const defs = this.plugin.settings.statusDefinitions;
+
+        defs.forEach((def, i) => {
+            const isFixed = fixedChars.has(def.char);
+
+            const setting = new Setting(container);
+
+            // Checkbox preview in nameEl
+            const previewCheckbox = document.createElement('input');
+            previewCheckbox.type = 'checkbox';
+            previewCheckbox.classList.add('task-list-item-checkbox');
+            previewCheckbox.checked = def.char !== ' ';
+            previewCheckbox.readOnly = true;
+            previewCheckbox.tabIndex = -1;
+            previewCheckbox.style.pointerEvents = 'none';
+            if (def.char && def.char !== ' ') {
+                previewCheckbox.setAttribute('data-task', def.char);
+            }
+            setting.nameEl.empty();
+            setting.nameEl.appendChild(previewCheckbox);
+
+            // Char input
+            setting.addText(text => {
+                text.setPlaceholder(t('settings.general.statusCharPlaceholder'))
+                    .setValue(def.char)
+                    .onChange(async (value) => {
+                        const c = value.slice(0, 1);
+                        // Check for duplicates
+                        if (c && defs.some((d, j) => j !== i && d.char === c)) {
+                            text.setValue(def.char);
+                            return;
+                        }
+                        defs[i].char = c;
+                        await this.plugin.saveSettings();
+                        // Update preview
+                        previewCheckbox.checked = c !== ' ';
+                        if (c && c !== ' ') {
+                            previewCheckbox.setAttribute('data-task', c);
+                        } else {
+                            previewCheckbox.removeAttribute('data-task');
+                        }
+                    });
+                text.inputEl.maxLength = 1;
+                text.inputEl.style.width = '3em';
+                text.inputEl.style.textAlign = 'center';
+                if (isFixed) text.inputEl.readOnly = true;
+            });
+
+            // Label input
+            setting.addText(text => text
+                .setPlaceholder(t('settings.general.statusLabelPlaceholder'))
+                .setValue(def.label)
+                .onChange(async (value) => {
+                    defs[i].label = value;
+                    await this.plugin.saveSettings();
+                })
+            );
+
+            // Complete toggle with tooltip
+            setting.addToggle(toggle => {
+                toggle.setValue(def.isComplete)
+                    .onChange(async (value) => {
+                        defs[i].isComplete = value;
+                        await this.plugin.saveSettings();
+                    });
+                toggle.toggleEl.title = t('settings.general.isCompleteTooltip');
+            });
+
+            // Move up button
+            setting.addExtraButton(btn => {
+                btn.setIcon('chevron-up').setTooltip(t('menu.moveUp'));
+                if (i === 0) {
+                    btn.setDisabled(true);
+                    btn.extraSettingsEl.style.opacity = '0.2';
+                }
+                btn.onClick(async () => {
+                    [defs[i], defs[i - 1]] = [defs[i - 1], defs[i]];
+                    await this.plugin.saveSettings();
+                    this.renderStatusDefinitionsList(container);
+                });
+            });
+
+            // Move down button
+            setting.addExtraButton(btn => {
+                btn.setIcon('chevron-down').setTooltip(t('menu.moveDown'));
+                if (i === defs.length - 1) {
+                    btn.setDisabled(true);
+                    btn.extraSettingsEl.style.opacity = '0.2';
+                }
+                btn.onClick(async () => {
+                    [defs[i], defs[i + 1]] = [defs[i + 1], defs[i]];
+                    await this.plugin.saveSettings();
+                    this.renderStatusDefinitionsList(container);
+                });
+            });
+
+            // Trash button (disabled for fixed entries)
+            setting.addExtraButton(btn => {
+                btn.setIcon('trash').setTooltip(t('settings.general.removeStatus'));
+                if (isFixed) {
+                    btn.setDisabled(true);
+                    btn.extraSettingsEl.style.opacity = '0.2';
+                    btn.extraSettingsEl.style.cursor = 'default';
+                } else {
+                    btn.onClick(async () => {
+                        defs.splice(i, 1);
+                        await this.plugin.saveSettings();
+                        this.renderStatusDefinitionsList(container);
+                    });
+                }
+            });
+        });
     }
 
     private renderHabitsList(container: HTMLElement): void {

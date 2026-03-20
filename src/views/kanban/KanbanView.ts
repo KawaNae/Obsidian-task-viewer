@@ -61,8 +61,10 @@ export class KanbanView extends ItemView {
         });
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.filterMenu.setTaskLookupProvider((id) => this.taskIndex.getTask(id));
+        this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
         this.viewFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.viewFilterMenu.setTaskLookupProvider((id) => this.taskIndex.getTask(id));
+        this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
     }
 
     getViewType(): string {
