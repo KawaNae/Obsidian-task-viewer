@@ -31,7 +31,6 @@ export class HabitTrackerRenderer {
 
         const toggleBtn = axisCell.createEl('button', { cls: 'section-toggle-btn' });
         toggleBtn.tabIndex = -1;
-        toggleBtn.setAttribute('aria-hidden', 'true');
 
         axisCell.createEl('span', { cls: 'habits-section__label', text: t('habits.habits') });
 
@@ -64,7 +63,10 @@ export class HabitTrackerRenderer {
         // Per-date cells
         dates.forEach((date, i) => {
             const cell = container.createDiv('habits-section__cell');
-            if (i === 0) cell.addClass('is-first-cell');
+            if (i === 0) {
+                cell.addClass('is-first-cell');
+                cell.dataset.collapsedLabel = t('habits.habits');
+            }
             if (i === dates.length - 1) cell.addClass('is-last-cell');
             cell.dataset.date = date;
 

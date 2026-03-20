@@ -1,11 +1,29 @@
 import type { FilterState } from './services/filter/FilterTypes';
 import type { SortState } from './services/sort/SortTypes';
 
+export interface StatusDefinition {
+    char: string;
+    label: string;
+    isComplete: boolean;
+}
+
+export const FIXED_STATUS_CHARS = [' ', 'x'] as const;
+
+export const DEFAULT_STATUS_DEFINITIONS: StatusDefinition[] = [
+    { char: ' ', label: 'Todo',        isComplete: false },
+    { char: '/', label: 'Doing',       isComplete: false },
+    { char: 'x', label: 'Done',        isComplete: true },
+    { char: '-', label: 'Cancelled',   isComplete: true },
+    { char: '!', label: 'Important',   isComplete: true },
+    { char: '?', label: 'Question',    isComplete: false },
+    { char: '>', label: 'Deferred',    isComplete: false },
+];
+
 /**
  * Returns true when statusChar is considered completed by settings.
  */
-export function isCompleteStatusChar(statusChar: string, completeChars: string[]): boolean {
-    return completeChars.includes(statusChar);
+export function isCompleteStatusChar(statusChar: string, defs: StatusDefinition[]): boolean {
+    return defs.some(d => d.char === statusChar && d.isComplete);
 }
 
 export type HabitType = 'boolean' | 'number' | 'string';
@@ -274,7 +292,7 @@ export interface TaskViewerSettings {
     startHour: number;
     applyGlobalStyles: boolean;
     enableStatusMenu: boolean;
-    statusMenuChars: string[];
+    statusDefinitions: StatusDefinition[];
     frontmatterTaskKeys: FrontmatterTaskKeys;
     zoomLevel: number;
     dailyNoteHeader: string;
@@ -282,7 +300,6 @@ export interface TaskViewerSettings {
     pomodoroWorkMinutes: number;
     pomodoroBreakMinutes: number;
     countdownMinutes: number;
-    completeStatusChars: string[];
     pastDaysToShow: number;
     habits: HabitDefinition[];
     frontmatterTaskHeader: string;
@@ -293,7 +310,6 @@ export interface TaskViewerSettings {
     editorMenuForTasks: boolean;
     editorMenuForCheckboxes: boolean;
     calendarWeekStartDay: 0 | 1;
-    calendarShowCompleted: boolean;
     calendarShowWeekNumbers: boolean;
     weeklyNoteFormat: string;
     weeklyNoteFolder: string;
@@ -323,7 +339,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     startHour: 5,
     applyGlobalStyles: false,
     enableStatusMenu: true,
-    statusMenuChars: ['-', '!', '?', '>', '/'],
+    statusDefinitions: [...DEFAULT_STATUS_DEFINITIONS],
     frontmatterTaskKeys: { ...DEFAULT_FRONTMATTER_TASK_KEYS },
     zoomLevel: 1.0,
     dailyNoteHeader: 'Tasks',
@@ -331,7 +347,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     pomodoroWorkMinutes: 25,
     pomodoroBreakMinutes: 5,
     countdownMinutes: 25,
-    completeStatusChars: ['x', 'X', '-', '!'],
     pastDaysToShow: 0,
     habits: [],
     frontmatterTaskHeader: 'Tasks',
@@ -342,7 +357,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     editorMenuForTasks: true,
     editorMenuForCheckboxes: true,
     calendarWeekStartDay: 0,
-    calendarShowCompleted: true,
     calendarShowWeekNumbers: false,
     weeklyNoteFormat: 'gggg-[W]ww',
     weeklyNoteFolder: '',

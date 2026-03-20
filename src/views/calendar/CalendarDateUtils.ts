@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import type { Task, DisplayTask } from '../../types';
+import type { StatusDefinition, Task, DisplayTask } from '../../types';
 import { isCompleteStatusChar } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
@@ -50,7 +50,7 @@ export function getTaskDateRange(
 
 export function isTaskCompleted(
     task: Task,
-    completeStatusChars: string[]
+    completeStatusChars: StatusDefinition[]
 ): boolean {
     let completed = isCompleteStatusChar(task.statusChar || ' ', completeStatusChars);
     if (!completed || task.childLines.length === 0) {

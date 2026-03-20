@@ -176,7 +176,7 @@
 
 /* Horizontal "Habits" label overlay when collapsed */
 .habits-section.collapsed .habits-section__cell.is-first-cell::after {
-    content: 'Habits';
+    content: attr(data-collapsed-label);
     position: absolute;
     left: 0;
     top: 0;

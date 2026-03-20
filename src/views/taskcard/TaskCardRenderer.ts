@@ -92,14 +92,14 @@ export class TaskCardRenderer {
                 const child = this.childItemBuilder.getTaskIndex().getTask(childId);
                 if (!child) continue;
                 total++;
-                if (isCompleteStatusChar(child.statusChar, settings.completeStatusChars)) completed++;
+                if (isCompleteStatusChar(child.statusChar, settings.statusDefinitions)) completed++;
             }
         }
 
         for (const cl of task.childLines) {
             if (cl.checkboxChar === null) continue;
             total++;
-            if (isCompleteStatusChar(cl.checkboxChar, settings.completeStatusChars)) completed++;
+            if (isCompleteStatusChar(cl.checkboxChar, settings.statusDefinitions)) completed++;
         }
 
         return { completed, total };
@@ -134,7 +134,7 @@ export class TaskCardRenderer {
         const statusChar = task.statusChar || ' ';
 
         let overdueIcon = '';
-        if (!isCompleteStatusChar(task.statusChar, settings.completeStatusChars)) {
+        if (!isCompleteStatusChar(task.statusChar, settings.statusDefinitions)) {
             if (task.due && DateUtils.isPastDue(task.due, settings.startHour)) {
                 overdueIcon = '🚨 ';
             } else {

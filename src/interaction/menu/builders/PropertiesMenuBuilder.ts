@@ -81,7 +81,7 @@ export class PropertiesMenuBuilder {
 
             const statusMenu = (sub as any).submenu as Menu;
 
-            buildStatusOptions(this.plugin.settings.statusMenuChars).forEach(s => {
+            buildStatusOptions(this.plugin.settings.statusDefinitions).forEach(s => {
                 statusMenu.addItem(item => {
                     item.setTitle(createStatusTitle(s))
                         .setChecked(task.statusChar === s.char)

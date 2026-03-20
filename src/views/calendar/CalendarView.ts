@@ -95,8 +95,10 @@ export class CalendarView extends ItemView {
         this.windowStart = DateUtils.getLocalDateString(weekStart);
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.filterMenu.setTaskLookupProvider((id) => this.taskIndex.getTask(id));
+        this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
         this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.sidebarFilterMenu.setTaskLookupProvider((id) => this.taskIndex.getTask(id));
+        this.sidebarFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
     }
 
     getViewType(): string {
@@ -671,9 +673,6 @@ export class CalendarView extends ItemView {
         const startHour = this.plugin.settings.startHour;
         const allTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
         return allTasks.filter((dt) => {
-            if (!this.plugin.settings.calendarShowCompleted && this.isTaskCompleted(dt)) {
-                return false;
-            }
             if (!this.filterMenu.isTaskVisible(dt)) {
                 return false;
             }
@@ -735,7 +734,7 @@ export class CalendarView extends ItemView {
     }
 
     private isTaskCompleted(task: Task): boolean {
-        return isTaskCompletedUtil(task, this.plugin.settings.completeStatusChars);
+        return isTaskCompletedUtil(task, this.plugin.settings.statusDefinitions);
     }
 
     private getViewStartDateString(): string {

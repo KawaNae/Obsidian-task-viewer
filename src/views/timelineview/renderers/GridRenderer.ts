@@ -74,7 +74,7 @@ export class GridRenderer {
         const todayVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
 
         // Pre-compute overdue dates set
-        const completeChars = this.plugin.settings.completeStatusChars;
+        const completeChars = this.plugin.settings.statusDefinitions;
         const overdueDates = new Set<string>();
         for (const dt of allDisplayTasks) {
             if (isCompleteStatusChar(dt.statusChar, completeChars)) continue;
@@ -166,16 +166,15 @@ export class GridRenderer {
         const axisCell = allDayRow.createDiv('allday-section__cell allday-section__axis');
         axisCell.setAttribute('role', 'button');
         axisCell.setAttribute('tabindex', '0');
-        axisCell.setAttribute('aria-label', 'Toggle All Day section');
+        axisCell.setAttribute('aria-label', t('allDaySection.toggleAllDay'));
 
         // Toggle button
         const toggleBtn = axisCell.createEl('button', { cls: 'section-toggle-btn' });
         toggleBtn.tabIndex = -1;
-        toggleBtn.setAttribute('aria-hidden', 'true');
 
         // Label
         const axisLabel = axisCell.createEl('span', { cls: 'allday-section__label' });
-        axisLabel.setText('All Day');
+        axisLabel.setText(t('allDaySection.allDay'));
 
         axisCell.style.gridColumn = '1';
         axisCell.style.gridRow = '1 / span 50'; // Span all implicit rows
@@ -184,7 +183,7 @@ export class GridRenderer {
             setIcon(toggleBtn, this.isAllDayCollapsed ? 'plus' : 'minus');
             allDayRow.toggleClass('collapsed', this.isAllDayCollapsed);
             axisCell.setAttribute('aria-expanded', (!this.isAllDayCollapsed).toString());
-            axisCell.setAttribute('aria-label', this.isAllDayCollapsed ? 'Expand All Day' : 'Collapse All Day');
+            axisCell.setAttribute('aria-label', this.isAllDayCollapsed ? t('allDaySection.expandAllDay') : t('allDaySection.collapseAllDay'));
         };
 
         const toggleAllDayCollapsed = () => {
@@ -212,6 +211,7 @@ export class GridRenderer {
             const cell = allDayRow.createDiv('allday-section__cell');
             if (i === 0) {
                 cell.addClass('is-first-cell');
+                cell.dataset.collapsedLabel = t('allDaySection.allDay');
             }
             if (i === dates.length - 1) {
                 cell.addClass('is-last-cell');

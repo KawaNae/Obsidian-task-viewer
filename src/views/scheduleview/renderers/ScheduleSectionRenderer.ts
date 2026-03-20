@@ -1,4 +1,5 @@
 import { setIcon } from 'obsidian';
+import { t } from '../../../i18n';
 import type { DisplayTask } from '../../../types';
 import type { CollapsibleSectionKey } from '../ScheduleTypes';
 import type { ScheduleTaskRenderer } from './ScheduleTaskRenderer';
@@ -27,15 +28,16 @@ export class ScheduleSectionRenderer {
         const axisCell = row.createDiv('allday-section__cell allday-section__axis');
         axisCell.setAttribute('role', 'button');
         axisCell.setAttribute('tabindex', '0');
-        axisCell.setAttribute('aria-label', 'Toggle All Day section');
+        axisCell.setAttribute('aria-label', t('allDaySection.toggleAllDay'));
 
         const toggleBtn = axisCell.createEl('button', { cls: 'schedule-section__toggle' });
         toggleBtn.tabIndex = -1;
         toggleBtn.setAttribute('aria-hidden', 'true');
 
-        axisCell.createEl('span', { cls: 'allday-section__label', text: 'All Day' });
+        axisCell.createEl('span', { cls: 'allday-section__label', text: t('allDaySection.allDay') });
 
         const taskCell = row.createDiv('allday-section__cell is-first-cell is-last-cell');
+        taskCell.dataset.collapsedLabel = t('allDaySection.allDay');
         taskCell.dataset.date = this.currentVisualDateProvider();
 
         const applyCollapsedState = () => {
@@ -43,7 +45,7 @@ export class ScheduleSectionRenderer {
             row.toggleClass('collapsed', isCollapsed);
             setIcon(toggleBtn, isCollapsed ? 'plus' : 'minus');
             axisCell.setAttribute('aria-expanded', (!isCollapsed).toString());
-            axisCell.setAttribute('aria-label', isCollapsed ? 'Expand All Day' : 'Collapse All Day');
+            axisCell.setAttribute('aria-label', isCollapsed ? t('allDaySection.expandAllDay') : t('allDaySection.collapseAllDay'));
         };
 
         const toggleCollapsed = () => {

@@ -1,5 +1,5 @@
 import { App, Menu } from 'obsidian';
-import type { TaskViewerSettings } from '../../../types';
+import type { StatusDefinition, TaskViewerSettings } from '../../../types';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
 import { CreateTaskModal, type CreateTaskResult, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { DateUtils } from '../../../utils/DateUtils';
@@ -37,7 +37,7 @@ export class CheckboxMenuBuilder {
 
         // Status submenu
         if (settings.enableStatusMenu) {
-            this.addStatusSubmenu(menu, classified.prefix, classified.suffix, classified.statusChar, settings.statusMenuChars, ops);
+            this.addStatusSubmenu(menu, classified.prefix, classified.suffix, classified.statusChar, settings.statusDefinitions, ops);
             menu.addSeparator();
         }
 
@@ -58,7 +58,7 @@ export class CheckboxMenuBuilder {
         prefix: string,
         suffix: string,
         currentChar: string,
-        statusMenuChars: string[],
+        statusMenuChars: StatusDefinition[],
         ops: CheckboxLineOps
     ): void {
         const options = buildStatusOptions(statusMenuChars);

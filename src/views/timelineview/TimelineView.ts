@@ -256,6 +256,7 @@ export class TimelineView extends ItemView {
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
         this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.sidebarFilterMenu.setTaskLookupProvider((id) => this.taskIndex.getTask(id));
+        this.sidebarFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
         // Initialize DragHandler with selection callback, move callback, and view start date provider
         this.dragHandler = new DragHandler(this.container, this.taskIndex, this.plugin,
@@ -789,7 +790,7 @@ export class TimelineView extends ItemView {
         // Get all incomplete, visible tasks with dates (including E/ED types)
         const rawTasks = this.taskIndex.getTasks().filter(t =>
             isVisible(t) &&
-            !isCompleteStatusChar(t.statusChar, this.plugin.settings.completeStatusChars) &&
+            !isCompleteStatusChar(t.statusChar, this.plugin.settings.statusDefinitions) &&
             (t.startDate || t.endDate)
         );
 

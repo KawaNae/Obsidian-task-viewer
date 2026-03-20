@@ -1,5 +1,6 @@
 import { setIcon } from 'obsidian';
-import type { Task } from '../../types';
+import type { StatusDefinition, Task } from '../../types';
+import { getStatusLabel } from '../../constants/statusOptions';
 import type {
     FilterState, FilterConditionNode, FilterGroupNode, FilterNode,
     FilterProperty, FilterOperator, DateFilterValue, RelativeDatePreset,
@@ -53,6 +54,7 @@ export class FilterMenuComponent {
     private lastCallbacks: FilterMenuCallbacks | null = null;
     private startHourProvider: (() => number) | null = null;
     private taskLookupProvider: ((id: string) => Task | undefined) | null = null;
+    private statusDefs: StatusDefinition[] = [];
 
     getFilterState(): FilterState {
         return this.state;
@@ -68,6 +70,10 @@ export class FilterMenuComponent {
 
     setTaskLookupProvider(provider: (id: string) => Task | undefined): void {
         this.taskLookupProvider = provider;
+    }
+
+    setStatusDefinitions(defs: StatusDefinition[]): void {
+        this.statusDefs = defs;
     }
 
     isTaskVisible(task: Task): boolean {
@@ -187,7 +193,7 @@ export class FilterMenuComponent {
         const logicRow = parent.createDiv('filter-popover__logic-separator');
         const logicBtn = logicRow.createEl('button', {
             cls: 'filter-popover__logic-btn',
-            text: group.logic.toUpperCase(),
+            text: group.logic === 'and' ? t('filter.logicAnd') : t('filter.logicOr'),
         });
         logicBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -314,6 +320,12 @@ export class FilterMenuComponent {
             headerLine.createEl('span', { cls: 'filter-popover__glue', text: afterTargetGlue });
         }
 
+        // Glue: before property
+        const beforePropGlue = this.resolveGlue('beforeProperty', condition.property, condition.operator);
+        if (beforePropGlue) {
+            headerLine.createEl('span', { cls: 'filter-popover__glue', text: beforePropGlue });
+        }
+
         // Property dropdown (with icon)
         const propBtn = headerLine.createEl('button', { cls: 'filter-popover__dropdown' });
         const propIcon = propBtn.createSpan('filter-popover__dropdown-icon');
@@ -324,10 +336,10 @@ export class FilterMenuComponent {
             this.showPropertyMenu(propBtn, condition);
         });
 
-        // Glue: before operator
-        const beforeOpGlue = this.resolveBeforeOperatorGlue(condition.property, condition.operator);
-        if (beforeOpGlue) {
-            headerLine.createEl('span', { cls: 'filter-popover__glue', text: beforeOpGlue });
+        // Glue: after property (before operator)
+        const afterPropGlue = this.resolveGlue('afterProperty', condition.property, condition.operator);
+        if (afterPropGlue) {
+            headerLine.createEl('span', { cls: 'filter-popover__glue', text: afterPropGlue });
         }
 
         // Operator dropdown
@@ -374,9 +386,9 @@ export class FilterMenuComponent {
         }
     }
 
-    private resolveBeforeOperatorGlue(property: FilterProperty, operator: FilterOperator): string {
-        const glue = t(`filter.glue.operators.${property}.${operator}`);
-        if (!glue.startsWith('filter.glue.operators.')) return glue;
+    private resolveGlue(slot: string, property: FilterProperty, operator: FilterOperator): string {
+        const glue = t(`filter.glue.${slot}.${property}.${operator}`);
+        if (!glue.startsWith(`filter.glue.${slot}.`)) return glue;
         return '';
     }
 
@@ -766,7 +778,7 @@ export class FilterMenuComponent {
             const v = values[0];
             if (property === 'file') return v.split('/').pop() || v;
             if (property === 'tag') return `#${v}`;
-            if (property === 'status') return v === ' ' ? t('filter.statusTodo') : this.getStatusLabel(v);
+            if (property === 'status') return this.getStatusLabelForChar(v);
             if (property === 'taskType') return v === 'at-notation' ? t('filter.taskTypeAtNotation') : t('filter.taskTypeFrontmatter');
             return v;
         }
@@ -1028,7 +1040,7 @@ export class FilterMenuComponent {
         if (property === 'file') return value.split('/').pop() || value;
         if (property === 'tag') return `#${value}`;
         if (property === 'status') {
-            return this.getStatusLabel(value);
+            return this.getStatusLabelForChar(value);
         }
         if (property === 'taskType') {
             return value === 'at-notation' ? t('filter.taskTypeAtNotation') : t('filter.taskTypeFrontmatter');
@@ -1036,13 +1048,7 @@ export class FilterMenuComponent {
         return value;
     }
 
-    private getStatusLabel(statusChar: string): string {
-        switch (statusChar) {
-            case ' ': return t('filter.statusTodo');
-            case 'x': case 'X': return t('filter.statusDone');
-            case '-': return t('filter.statusCancelled');
-            case '!': return t('filter.statusException');
-            default: return statusChar;
-        }
+    private getStatusLabelForChar(statusChar: string): string {
+        return getStatusLabel(statusChar, this.statusDefs);
     }
 }

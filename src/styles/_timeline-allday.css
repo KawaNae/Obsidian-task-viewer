@@ -102,7 +102,7 @@
 /* Show horizontal label when collapsed */
 /* Attach to the first cell instead of container to avoid grid layout issues */
 .allday-section.collapsed .allday-section__cell.is-first-cell::after {
-    content: 'All Day';
+    content: attr(data-collapsed-label);
     position: absolute;
     left: 0;
     top: 0;
