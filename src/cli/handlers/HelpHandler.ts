@@ -97,7 +97,7 @@ Create a JSON file anywhere in your vault containing a FilterState object:
 
   {
     "logic": "and",
-    "conditions": [
+    "filters": [
       { "property": "tag", "operator": "equals", "value": ["work"] }
     ]
   }
@@ -124,18 +124,28 @@ Structure
 ---------
 {
   "logic": "and" | "or",
-  "conditions": [ <condition | group>, ... ]
+  "filters": [ <condition | group>, ... ]
 }
 
 Condition:
 {
   "property": "<property>",
   "operator": "<operator>",
-  "value": <value>
+  "value": <value>,
+  "target": "parent"       (optional: match against parent/ancestor task)
 }
 
 Single condition (shorthand):
   { "property": "tag", "operator": "includes", "value": ["work"] }
+
+Target
+------
+  Add "target": "parent" to evaluate the condition against the task's
+  parent (and ancestors). Useful for filtering tasks whose parent has
+  a specific tag, status, etc.
+
+  Example: tasks whose parent has tag "project":
+  { "property": "tag", "operator": "includes", "value": ["project"], "target": "parent" }
 
 Groups can be nested up to 3 levels deep.
 

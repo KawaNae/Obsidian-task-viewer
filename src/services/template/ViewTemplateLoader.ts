@@ -14,7 +14,7 @@ import { App, TFile, TFolder } from 'obsidian';
 import type { ViewTemplateSummary, ViewTemplate, PinnedListDefinition } from '../../types';
 import { FilterSerializer } from '../filter/FilterSerializer';
 import type { FilterState } from '../filter/FilterTypes';
-import type { SortState } from '../sort/SortTypes';
+import type { SortState, SortRule } from '../sort/SortTypes';
 
 const VALID_VIEWS = new Set(['timeline', 'calendar', 'schedule', 'mini-calendar', 'kanban']);
 
@@ -113,8 +113,9 @@ export class ViewTemplateLoader {
         if (typeof data.zoom === 'number') template.zoom = data.zoom;
         if (typeof data.showSidebar === 'boolean') template.showSidebar = data.showSidebar;
 
-        if (data.filter && typeof data.filter === 'object') {
-            template.filterState = FilterSerializer.fromJSON(data.filter);
+        const filterData = data.filterState ?? data.filter;
+        if (filterData && typeof filterData === 'object') {
+            template.filterState = FilterSerializer.fromJSON(filterData);
         }
 
         if (Array.isArray(data.pinnedLists)) {
@@ -134,9 +135,11 @@ export class ViewTemplateLoader {
             if (!entry || typeof entry !== 'object') continue;
             const obj = entry as Record<string, unknown>;
 
-            const id = typeof obj.id === 'string' ? obj.id : '';
             const name = typeof obj.name === 'string' ? obj.name : '';
-            if (!id || !name) continue;
+            if (!name) continue;
+            const id = typeof obj.id === 'string' && obj.id
+                ? obj.id
+                : 'pl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5);
 
             let filterState: FilterState | undefined;
             if (obj.filterState && typeof obj.filterState === 'object') {
@@ -147,7 +150,18 @@ export class ViewTemplateLoader {
             const def: PinnedListDefinition = { id, name, filterState };
 
             if (obj.sortState && typeof obj.sortState === 'object') {
-                def.sortState = obj.sortState as SortState;
+                const rawSort = obj.sortState as Record<string, unknown>;
+                if (Array.isArray(rawSort.rules)) {
+                    def.sortState = {
+                        rules: (rawSort.rules as Record<string, unknown>[]).map(r => ({
+                            id: (typeof r.id === 'string' && r.id)
+                                ? r.id
+                                : `s-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                            property: r.property as SortRule['property'],
+                            direction: r.direction as SortRule['direction'],
+                        })),
+                    };
+                }
             }
 
             if (typeof obj.applyViewFilter === 'boolean') {

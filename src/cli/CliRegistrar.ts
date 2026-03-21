@@ -39,7 +39,7 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
 
     plugin.registerCliHandler(
         'obsidian-task-viewer:list',
-        'List tasks with optional filters',
+        'List tasks with optional filters. Details: obsidian obsidian-task-viewer:help',
         listFlags,
         createListHandler(plugin),
     );
@@ -55,7 +55,7 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
 
     plugin.registerCliHandler(
         'obsidian-task-viewer:today',
-        'List tasks active today (visual-date aware, includes spanning tasks)',
+        'List tasks active today (visual-date aware). Details: obsidian obsidian-task-viewer:help',
         todayFlags,
         createTodayHandler(plugin),
     );
@@ -68,7 +68,7 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
 
     plugin.registerCliHandler(
         'obsidian-task-viewer:get',
-        'Get a single task by ID',
+        'Get a single task by ID. Details: obsidian obsidian-task-viewer:help',
         getFlags,
         createGetHandler(plugin),
     );
@@ -88,14 +88,14 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
 
     plugin.registerCliHandler(
         'obsidian-task-viewer:create',
-        'Create a new inline task',
+        'Create a new inline task. Details: obsidian obsidian-task-viewer:help',
         createFlags,
         createCreateHandler(plugin),
     );
 
     plugin.registerCliHandler(
         'obsidian-task-viewer:update',
-        'Update an existing task',
+        'Update an existing task. Details: obsidian obsidian-task-viewer:help',
         {
             id:      { value: '<taskId>',        description: 'Task ID', required: true },
             content: { value: '<text>',          description: 'New content' },
@@ -110,7 +110,7 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
 
     plugin.registerCliHandler(
         'obsidian-task-viewer:delete',
-        'Delete a task',
+        'Delete a task. Details: obsidian obsidian-task-viewer:help',
         { id: { value: '<taskId>', description: 'Task ID', required: true } },
         createDeleteHandler(plugin),
     );

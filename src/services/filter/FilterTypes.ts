@@ -31,12 +31,11 @@ export type DateFilterValue =
 
 export const MAX_FILTER_DEPTH = 3;
 
-export type FilterNode = FilterConditionNode | FilterGroupNode;
+export type FilterItem = FilterCondition | FilterGroup;
 
 export type FilterTarget = 'self' | 'parent';
 
-export interface FilterConditionNode {
-    type: 'condition';
+export interface FilterCondition {
     property: FilterProperty;
     operator: FilterOperator;
     value?: string | number | string[] | DateFilterValue;
@@ -45,15 +44,12 @@ export interface FilterConditionNode {
     target?: FilterTarget;
 }
 
-export interface FilterGroupNode {
-    type: 'group';
-    children: FilterNode[];
+export interface FilterGroup {
+    filters: FilterItem[];
     logic: 'and' | 'or';
 }
 
-export interface FilterState {
-    root: FilterGroupNode;
-}
+export type FilterState = FilterGroup;
 
 /** Optional context for filter evaluation (e.g., view-level settings). */
 export interface FilterContext {
@@ -61,29 +57,35 @@ export interface FilterContext {
     taskLookup?: (id: string) => Task | undefined;
 }
 
+// ── Type guards ──
+
+export function isFilterCondition(node: FilterItem): node is FilterCondition {
+    return 'property' in node;
+}
+
+export function isFilterGroup(node: FilterItem): node is FilterGroup {
+    return 'filters' in node;
+}
+
 // ── Frozen sentinel ──
 
 export const EMPTY_FILTER_STATE: FilterState = Object.freeze({
-    root: Object.freeze({
-        type: 'group' as const,
-        children: Object.freeze([]) as readonly FilterNode[] as FilterNode[],
-        logic: 'and' as const,
-    }),
+    filters: Object.freeze([]) as readonly FilterItem[] as FilterItem[],
+    logic: 'and' as const,
 });
 
 // ── Factory functions ──
 
 export function createEmptyFilterState(): FilterState {
-    return { root: createFilterGroup() };
+    return { filters: [], logic: 'and' };
 }
 
-export function createFilterGroup(): FilterGroupNode {
-    return { type: 'group', children: [], logic: 'and' };
+export function createFilterGroup(): FilterGroup {
+    return { filters: [], logic: 'and' };
 }
 
-export function createDefaultCondition(): FilterConditionNode {
+export function createDefaultCondition(): FilterCondition {
     return {
-        type: 'condition',
         property: 'tag',
         operator: 'includes',
         value: [],
@@ -93,24 +95,24 @@ export function createDefaultCondition(): FilterConditionNode {
 // ── Tree query helpers ──
 
 export function hasConditions(state: FilterState): boolean {
-    return hasConditionsInGroup(state.root);
+    return hasConditionsInGroup(state);
 }
 
-function hasConditionsInGroup(group: FilterGroupNode): boolean {
-    return group.children.some(child =>
-        child.type === 'condition' || hasConditionsInGroup(child),
+function hasConditionsInGroup(group: FilterGroup): boolean {
+    return group.filters.some(child =>
+        isFilterCondition(child) || hasConditionsInGroup(child),
     );
 }
 
-export function getAllConditions(state: FilterState): FilterConditionNode[] {
-    const result: FilterConditionNode[] = [];
-    collectConditions(state.root, result);
+export function getAllConditions(state: FilterState): FilterCondition[] {
+    const result: FilterCondition[] = [];
+    collectConditions(state, result);
     return result;
 }
 
-function collectConditions(group: FilterGroupNode, out: FilterConditionNode[]): void {
-    for (const child of group.children) {
-        if (child.type === 'condition') {
+function collectConditions(group: FilterGroup, out: FilterCondition[]): void {
+    for (const child of group.filters) {
+        if (isFilterCondition(child)) {
             out.push(child);
         } else {
             collectConditions(child, out);
@@ -118,17 +120,25 @@ function collectConditions(group: FilterGroupNode, out: FilterConditionNode[]): 
     }
 }
 
-/** Deep-clone a FilterNode */
-export function deepCloneNode(node: FilterNode): FilterNode {
-    if (node.type === 'condition') {
+/** Deep-clone a FilterItem */
+export function deepCloneNode(node: FilterItem): FilterItem {
+    if (isFilterCondition(node)) {
         return JSON.parse(JSON.stringify(node));
     }
     return {
-        type: 'group',
-        children: node.children.map(deepCloneNode),
+        filters: node.filters.map(deepCloneNode),
         logic: node.logic,
     };
 }
+
+// ── Deprecated aliases (remove in next major) ──
+
+/** @deprecated Use FilterCondition */
+export type FilterConditionNode = FilterCondition;
+/** @deprecated Use FilterGroup */
+export type FilterGroupNode = FilterGroup;
+/** @deprecated Use FilterItem */
+export type FilterNode = FilterItem;
 
 // ── Constants ──
 

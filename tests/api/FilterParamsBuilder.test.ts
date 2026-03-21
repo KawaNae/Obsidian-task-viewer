@@ -1,18 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import { buildFilterFromParams } from '../../src/api/FilterParamsBuilder';
-import type { FilterConditionNode } from '../../src/services/filter/FilterTypes';
+import type { FilterCondition } from '../../src/services/filter/FilterTypes';
+import { isFilterCondition } from '../../src/services/filter/FilterTypes';
 import type { ListParams } from '../../src/api/TaskApiTypes';
 
 /** Extract condition nodes from the built FilterState */
-function getConditions(params: ListParams): FilterConditionNode[] {
+function getConditions(params: ListParams): FilterCondition[] {
     const state = buildFilterFromParams(params);
     if (!state) return [];
-    return state.root.children.filter(
-        (c): c is FilterConditionNode => c.type === 'condition',
+    return state.filters.filter(
+        (c): c is FilterCondition => isFilterCondition(c),
     );
 }
 
-function findCondition(conditions: FilterConditionNode[], property: string): FilterConditionNode | undefined {
+function findCondition(conditions: FilterCondition[], property: string): FilterCondition | undefined {
     return conditions.find(c => c.property === property);
 }
 
@@ -23,11 +24,8 @@ describe('buildFilterFromParams', () => {
 
     it('returns filter JSON directly when params.filter is set', () => {
         const filter = {
-            root: {
-                type: 'group' as const,
-                children: [],
-                logic: 'and' as const,
-            },
+            filters: [],
+            logic: 'or' as const,
         };
         expect(buildFilterFromParams({ filter })).toBe(filter);
     });
@@ -186,17 +184,14 @@ describe('buildFilterFromParams', () => {
     it('multiple flags produce AND group', () => {
         const state = buildFilterFromParams({ file: 'test.md', tag: 'work', leaf: true });
         expect(state).not.toBeNull();
-        expect(state!.root.logic).toBe('and');
-        expect(state!.root.children).toHaveLength(3);
+        expect(state!.logic).toBe('and');
+        expect(state!.filters).toHaveLength(3);
     });
 
     it('filter JSON overrides all simple flags', () => {
         const filter = {
-            root: {
-                type: 'group' as const,
-                children: [],
-                logic: 'or' as const,
-            },
+            filters: [],
+            logic: 'or' as const,
         };
         const result = buildFilterFromParams({ file: 'test.md', tag: 'work', filter });
         expect(result).toBe(filter);

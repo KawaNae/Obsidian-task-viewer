@@ -138,16 +138,12 @@ export class ScheduleView extends ItemView {
             const files = state.filterFiles.filter((value: unknown): value is string => typeof value === 'string');
             if (files.length > 0) {
                 this.filterMenu.setFilterState({
-                    root: {
-                        type: 'group',
-                        children: [{
-                            type: 'condition',
-                            property: 'file',
-                            operator: 'includes',
-                            value: files,
-                        }],
-                        logic: 'and',
-                    },
+                    filters: [{
+                        property: 'file',
+                        operator: 'includes',
+                        value: files,
+                    }],
+                    logic: 'and',
                 });
             } else {
                 this.filterMenu.setFilterState(createEmptyFilterState());

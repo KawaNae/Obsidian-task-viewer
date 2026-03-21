@@ -6,7 +6,7 @@
  */
 
 import { App, TFile, TFolder, normalizePath } from 'obsidian';
-import type { ViewTemplate } from '../../types';
+import type { ViewTemplate, PinnedListDefinition } from '../../types';
 import { FilterSerializer } from '../filter/FilterSerializer';
 import { hasConditions } from '../filter/FilterTypes';
 
@@ -47,13 +47,13 @@ export class ViewTemplateWriter {
         if (template.zoom != null) data.zoom = template.zoom;
         if (template.showSidebar != null) data.showSidebar = template.showSidebar;
         if (template.filterState && hasConditions(template.filterState)) {
-            data.filter = FilterSerializer.toJSON(template.filterState);
+            data.filterState = FilterSerializer.toJSON(template.filterState);
         }
         if (template.pinnedLists && template.pinnedLists.length > 0) {
-            data.pinnedLists = template.pinnedLists;
+            data.pinnedLists = template.pinnedLists.map(pl => this.serializePinnedList(pl));
         }
         if (template.grid && template.grid.length > 0) {
-            data.grid = template.grid;
+            data.grid = template.grid.map(row => row.map(pl => this.serializePinnedList(pl)));
         }
         if (Object.keys(data).length > 0) {
             lines.push('```json');
@@ -63,6 +63,23 @@ export class ViewTemplateWriter {
         }
 
         return lines.join('\n');
+    }
+
+    private serializePinnedList(pl: PinnedListDefinition): Record<string, unknown> {
+        const result: Record<string, unknown> = {
+            name: pl.name,
+            filterState: FilterSerializer.toJSON(pl.filterState),
+        };
+        if (pl.sortState) {
+            result.sortState = {
+                rules: pl.sortState.rules.map(r => ({
+                    property: r.property,
+                    direction: r.direction,
+                })),
+            };
+        }
+        if (pl.applyViewFilter !== undefined) result.applyViewFilter = pl.applyViewFilter;
+        return result;
     }
 
     private escapeYamlString(str: string): string {

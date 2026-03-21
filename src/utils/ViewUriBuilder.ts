@@ -70,14 +70,22 @@ export class ViewUriBuilder {
                 uri += `&filter=${FilterSerializer.toURIParam(opts.filterState)}`;
             }
 
-            // PinnedLists (base64)
+            // PinnedLists (base64, with serialized filterState)
             if (opts.pinnedLists && opts.pinnedLists.length > 0) {
-                uri += `&pinnedLists=${unicodeBtoa(JSON.stringify(opts.pinnedLists))}`;
+                const serialized = opts.pinnedLists.map(pl => {
+                    const { id, ...rest } = pl;
+                    return { ...rest, filterState: FilterSerializer.toJSON(pl.filterState) };
+                });
+                uri += `&pinnedLists=${unicodeBtoa(JSON.stringify(serialized))}`;
             }
 
-            // Grid (base64)
+            // Grid (base64, with serialized filterState)
             if (opts.grid && opts.grid.length > 0) {
-                uri += `&grid=${unicodeBtoa(JSON.stringify(opts.grid))}`;
+                const serialized = opts.grid.map(row => row.map(pl => {
+                    const { id, ...rest } = pl;
+                    return { ...rest, filterState: FilterSerializer.toJSON(pl.filterState) };
+                }));
+                uri += `&grid=${unicodeBtoa(JSON.stringify(serialized))}`;
             }
         }
 

@@ -1,4 +1,4 @@
-import type { FilterState, FilterConditionNode, FilterGroupNode } from '../services/filter/FilterTypes';
+import type { FilterState, FilterCondition, FilterGroup } from '../services/filter/FilterTypes';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
 import { parseDatePreset } from '../cli/CliDatePresetParser';
 import { TaskApiError } from './TaskApiTypes';
@@ -7,12 +7,12 @@ import type { ListParams } from './TaskApiTypes';
 // ── Internal helpers ──
 
 function condition(
-    property: FilterConditionNode['property'],
-    operator: FilterConditionNode['operator'],
-    value?: FilterConditionNode['value'],
+    property: FilterCondition['property'],
+    operator: FilterCondition['operator'],
+    value?: FilterCondition['value'],
     extra?: { key?: string; unit?: 'hours' | 'minutes' },
-): FilterConditionNode {
-    const node: FilterConditionNode = { type: 'condition', property, operator };
+): FilterCondition {
+    const node: FilterCondition = { property, operator };
     if (value !== undefined) node.value = value;
     if (extra?.key) node.key = extra.key;
     if (extra?.unit) node.unit = extra.unit;
@@ -32,11 +32,11 @@ export function normalizeStringArray(value: string | string[] | undefined, strip
  */
 export function buildFilterFromParams(params: ListParams): FilterState | null {
     if (params.filter) {
-        if ((params.filter as FilterState).root) return params.filter;
+        if ('filters' in params.filter) return params.filter;
         return FilterSerializer.fromJSON(params.filter);
     }
 
-    const conditions: FilterConditionNode[] = [];
+    const conditions: FilterCondition[] = [];
 
     if (params.file) {
         const file = params.file.endsWith('.md') ? params.file : params.file + '.md';
@@ -112,10 +112,5 @@ export function buildFilterFromParams(params: ListParams): FilterState | null {
 
     if (conditions.length === 0) return null;
 
-    const root: FilterGroupNode = {
-        type: 'group',
-        children: conditions,
-        logic: 'and',
-    };
-    return { root };
+    return { filters: conditions, logic: 'and' };
 }

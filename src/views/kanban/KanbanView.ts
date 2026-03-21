@@ -364,6 +364,7 @@ export class KanbanView extends ItemView {
             card.dataset.id = task.id;
             TaskStyling.applyTaskColor(card, task.color ?? null);
             TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
+            TaskStyling.applyReadOnly(card, task);
             this.taskRenderer.render(card, task, this, settings);
             this.menuHandler.addTaskContextMenu(card, task);
         }

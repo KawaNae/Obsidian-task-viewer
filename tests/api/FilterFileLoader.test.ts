@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { loadFilterFile, mergeFilters } from '../../src/api/FilterFileLoader';
-import type { FilterState, FilterGroupNode, FilterConditionNode } from '../../src/services/filter/FilterTypes';
+import type { FilterState, FilterCondition } from '../../src/services/filter/FilterTypes';
+import { isFilterCondition, isFilterGroup } from '../../src/services/filter/FilterTypes';
 import type { App } from 'obsidian';
 import type { ViewTemplate, PinnedListDefinition } from '../../src/types';
 
@@ -31,18 +32,14 @@ function makeApp(files: Record<string, string>): App {
 
 function makeFilterState(): FilterState {
     return {
-        root: {
-            type: 'group',
-            logic: 'and',
-            children: [
-                {
-                    type: 'condition',
-                    property: 'tag',
-                    operator: 'includes',
-                    value: ['work'],
-                } as FilterConditionNode,
-            ],
-        },
+        filters: [
+            {
+                property: 'tag',
+                operator: 'includes',
+                value: ['work'],
+            } as FilterCondition,
+        ],
+        logic: 'and',
     };
 }
 
@@ -71,11 +68,10 @@ describe('mergeFilters', () => {
         const b = makeFilterState();
         const merged = mergeFilters(a, b);
 
-        expect(merged.root.type).toBe('group');
-        expect(merged.root.logic).toBe('and');
-        expect(merged.root.children).toHaveLength(2);
-        expect(merged.root.children[0]).toBe(a.root);
-        expect(merged.root.children[1]).toBe(b.root);
+        expect(merged.logic).toBe('and');
+        expect(merged.filters).toHaveLength(2);
+        expect(merged.filters[0]).toBe(a);
+        expect(merged.filters[1]).toBe(b);
     });
 });
 
@@ -111,6 +107,22 @@ describe('loadFilterFile', () => {
     // ── .json files ──
 
     describe('.json files', () => {
+        it('loads valid FilterState JSON (v6 format)', async () => {
+            const v6Json = {
+                logic: 'and',
+                filters: [
+                    { property: 'tag', operator: 'includes', value: ['work'] },
+                ],
+            };
+            const app = makeApp({ 'filters/test.json': JSON.stringify(v6Json) });
+            const result = await loadFilterFile(app, 'filters/test.json');
+            expect(typeof result).not.toBe('string');
+            const state = result as FilterState;
+            expect(state.filters).toHaveLength(1);
+            const c = state.filters[0] as FilterCondition;
+            expect(c.value).toEqual(['work']);
+        });
+
         it('loads valid FilterState JSON (v5 format)', async () => {
             const v5Json = {
                 logic: 'and',
@@ -122,8 +134,8 @@ describe('loadFilterFile', () => {
             const result = await loadFilterFile(app, 'filters/test.json');
             expect(typeof result).not.toBe('string');
             const state = result as FilterState;
-            expect(state.root.children).toHaveLength(1);
-            const c = state.root.children[0] as FilterConditionNode;
+            expect(state.filters).toHaveLength(1);
+            const c = state.filters[0] as FilterCondition;
             expect(c.value).toEqual(['work']);
         });
 
@@ -142,8 +154,8 @@ describe('loadFilterFile', () => {
             const result = await loadFilterFile(app, 'filters/test.json');
             expect(typeof result).not.toBe('string');
             const state = result as FilterState;
-            expect(state.root.children).toHaveLength(1);
-            const c = state.root.children[0] as FilterConditionNode;
+            expect(state.filters).toHaveLength(1);
+            const c = state.filters[0] as FilterCondition;
             expect(c.value).toEqual(['work']);
         });
 
@@ -243,10 +255,10 @@ describe('loadFilterFile', () => {
             // Should be a merged AND group
             expect(typeof result).not.toBe('string');
             const merged = result as FilterState;
-            expect(merged.root.logic).toBe('and');
-            expect(merged.root.children).toHaveLength(2);
-            expect(merged.root.children[0]).toBe(viewFilter.root);
-            expect(merged.root.children[1]).toBe(pinnedList.filterState.root);
+            expect(merged.logic).toBe('and');
+            expect(merged.filters).toHaveLength(2);
+            expect(merged.filters[0]).toBe(viewFilter);
+            expect(merged.filters[1]).toBe(pinnedList.filterState);
         });
 
         it('skips viewFilter merge when applyViewFilter is false', async () => {

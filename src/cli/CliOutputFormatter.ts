@@ -100,5 +100,5 @@ export function cliOk(data: Record<string, unknown>): string {
 }
 
 export function cliError(message: string): string {
-    return JSON.stringify({ error: message });
+    return JSON.stringify({ error: message, help: 'obsidian obsidian-task-viewer:help' });
 }
