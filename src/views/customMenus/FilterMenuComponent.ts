@@ -779,7 +779,7 @@ export class FilterMenuComponent {
             if (property === 'file') return v.split('/').pop() || v;
             if (property === 'tag') return `#${v}`;
             if (property === 'status') return this.getStatusLabelForChar(v);
-            if (property === 'taskType') return v === 'at-notation' ? t('filter.taskTypeAtNotation') : t('filter.taskTypeFrontmatter');
+            if (property === 'taskType') { const key = `filter.taskType.${v}`; return t(key) !== key ? t(key) : v; }
             return v;
         }
         return t('filter.nSelected', { n: values.length });
@@ -1043,7 +1043,7 @@ export class FilterMenuComponent {
             return this.getStatusLabelForChar(value);
         }
         if (property === 'taskType') {
-            return value === 'at-notation' ? t('filter.taskTypeAtNotation') : t('filter.taskTypeFrontmatter');
+            const key = `filter.taskType.${value}`; return t(key) !== key ? t(key) : value;
         }
         return value;
     }

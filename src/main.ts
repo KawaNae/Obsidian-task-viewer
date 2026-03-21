@@ -38,6 +38,7 @@ import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 import { registerCliHandlers } from './cli/CliRegistrar';
 import { TaskApi } from './api/TaskApi';
 import { initI18n, t } from './i18n';
+import { TaskParser } from './services/parsing/TaskParser';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
@@ -64,6 +65,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Load Settings
         await this.loadSettings();
+        TaskParser.rebuildChain(this.settings);
 
         // Initialize Services
         this.taskIndex = new TaskIndex(this.app, this.settings);

@@ -6,7 +6,8 @@
       "viewDetails": "View Details",
       "notes": "Notes",
       "frontmatter": "Frontmatter",
-      "habits": "Habits"
+      "habits": "Habits",
+      "parsers": "Parsers"
     },
     "general": {
       "editor": "Editor",
@@ -149,6 +150,22 @@
       "textType": "Text",
       "unitPlaceholder": "Unit (e.g. kg)",
       "removeHabit": "Remove habit"
+    },
+    "parsers": {
+      "heading": "External Parser Support",
+      "description": "Enable read-only support for external task formats. Tasks parsed by these parsers are displayed but cannot be edited.",
+      "enableDayPlanner": "Day Planner format",
+      "enableDayPlannerDesc": "Parse time-based tasks in daily notes (e.g. - [ ] 08:00 - 09:00 Meeting).",
+      "enableTasksPlugin": "Tasks plugin format",
+      "enableTasksPluginDesc": "Parse emoji-based tasks (e.g. - [ ] Task 📅 2024-01-01 🛫 2024-01-02).",
+      "mappingHeading": "Tasks plugin field mapping",
+      "emojiStart": "Start",
+      "emojiScheduled": "Scheduled",
+      "emojiDue": "Due",
+      "fieldStartDate": "Start Date",
+      "fieldEndDate": "End Date",
+      "fieldDue": "Due Date",
+      "fieldIgnore": "Ignore"
     }
   },
   "view": {
@@ -301,6 +318,12 @@
     "statusException": "Exception",
     "taskTypeAtNotation": "@notation",
     "taskTypeFrontmatter": "Frontmatter",
+    "taskType": {
+      "at-notation": "@notation",
+      "frontmatter": "Frontmatter",
+      "tasks-plugin": "Tasks plugin",
+      "day-planner": "Day Planner"
+    },
     "glue": {
       "afterTarget": { "self": "", "parent": "" },
       "beforeProperty": {

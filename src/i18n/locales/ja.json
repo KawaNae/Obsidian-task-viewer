@@ -6,7 +6,8 @@
       "viewDetails": "ビュー固有",
       "notes": "ノート",
       "frontmatter": "フロントマター",
-      "habits": "習慣"
+      "habits": "習慣",
+      "parsers": "パーサー"
     },
     "general": {
       "editor": "エディター",
@@ -149,6 +150,22 @@
       "textType": "テキスト",
       "unitPlaceholder": "単位（例：kg）",
       "removeHabit": "習慣を削除"
+    },
+    "parsers": {
+      "heading": "外部パーサー対応",
+      "description": "外部タスク形式の読み取り専用サポートを有効にします。これらのパーサーで解析されたタスクは表示のみで編集できません。",
+      "enableDayPlanner": "Day Planner 形式",
+      "enableDayPlannerDesc": "デイリーノート内の時刻ベースタスクをパースします（例: - [ ] 08:00 - 09:00 ミーティング）。",
+      "enableTasksPlugin": "Tasks プラグイン形式",
+      "enableTasksPluginDesc": "絵文字ベースのタスクをパースします（例: - [ ] タスク 📅 2024-01-01 🛫 2024-01-02）。",
+      "mappingHeading": "Tasks プラグインのフィールドマッピング",
+      "emojiStart": "開始",
+      "emojiScheduled": "予定",
+      "emojiDue": "期限",
+      "fieldStartDate": "開始日",
+      "fieldEndDate": "終了日",
+      "fieldDue": "期限日",
+      "fieldIgnore": "無視"
     }
   },
   "view": {
@@ -301,6 +318,12 @@
     "statusException": "例外",
     "taskTypeAtNotation": "@記法",
     "taskTypeFrontmatter": "フロントマター",
+    "taskType": {
+      "at-notation": "@記法",
+      "frontmatter": "フロントマター",
+      "tasks-plugin": "Tasks プラグイン",
+      "day-planner": "Day Planner"
+    },
     "glue": {
       "afterTarget": { "self": "", "parent": "が" },
       "beforeProperty": {

@@ -12,6 +12,7 @@ import { InlineToFrontmatterConversionService } from './InlineToFrontmatterConve
 import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
 import { DateUtils as CoreDateUtils } from '../../utils/DateUtils';
 import { toDisplayTask } from '../../utils/DisplayTaskConverter';
+import { TaskParser } from '../parsing/TaskParser';
 
 export interface ValidationError {
     file: string;
@@ -199,6 +200,7 @@ export class TaskIndex {
 
     updateSettings(settings: TaskViewerSettings): void {
         this.settings = settings;
+        TaskParser.rebuildChain(settings);
         this.store.updateSettings(settings);
         this.scanner.updateSettings(settings);
         this.scanner.scanVault()
@@ -347,6 +349,7 @@ export class TaskIndex {
             console.warn(`[TaskIndex] Task ${taskId} not found`);
             return;
         }
+        if (task.isReadOnly) return;
 
         this.syncDetector.markLocalEdit(task.file);
         Object.assign(task, updates);
@@ -372,6 +375,7 @@ export class TaskIndex {
     async deleteTask(taskId: string): Promise<void> {
         const task = this.store.getTask(taskId);
         if (!task) return;
+        if (task.isReadOnly) return;
 
         this.syncDetector.markLocalEdit(task.file);
 
@@ -387,6 +391,7 @@ export class TaskIndex {
     async duplicateTask(taskId: string): Promise<void> {
         const task = this.store.getTask(taskId);
         if (!task) return;
+        if (task.isReadOnly) return;
 
         this.syncDetector.markLocalEdit(task.file);
 

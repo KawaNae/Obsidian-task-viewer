@@ -7,6 +7,7 @@ import { ParserStrategy } from './ParserStrategy';
  */
 export class ParserChain implements ParserStrategy {
     readonly id = 'chain';
+    readonly isReadOnly = false;
     private parsers: ParserStrategy[];
 
     constructor(parsers: ParserStrategy[]) {

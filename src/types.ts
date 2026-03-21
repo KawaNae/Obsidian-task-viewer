@@ -114,6 +114,9 @@ export interface Task {
     // True when this is a Container task (no dates, groups inline tasks).
     isContainer?: boolean;
 
+    /** True when parsed by a read-only parser (no writeback support). */
+    isReadOnly?: boolean;
+
     /** Custom properties parsed from childLines / frontmatter. Read-only. */
     properties: Record<string, PropertyValue>;
 }
@@ -147,7 +150,6 @@ export interface DisplayTask extends Task {
     originalTaskId: string;
     isSplit: boolean;
     splitSegment?: 'head' | 'tail';
-    _isReadOnly?: boolean;
 }
 
 export interface FlowCommand {
@@ -333,6 +335,22 @@ export interface TaskViewerSettings {
     hideViewHeader: boolean;
     mobileTopOffset: number;
     fixMobileGradientWidth: boolean;
+
+    // External parser support (read-only).
+    enableTasksPlugin: boolean;
+    enableDayPlanner: boolean;
+    tasksPluginMapping: TasksPluginMapping;
+}
+
+export type TaskFieldMapping = 'startDate' | 'endDate' | 'due' | 'ignore';
+
+export interface TasksPluginMapping {
+    /** 🛫 start date mapping */
+    start: TaskFieldMapping;
+    /** ⏳ scheduled date mapping */
+    scheduled: TaskFieldMapping;
+    /** 📅 due date mapping */
+    due: TaskFieldMapping;
 }
 
 export const DEFAULT_SETTINGS: TaskViewerSettings = {
@@ -380,4 +398,11 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     hideViewHeader: true,
     mobileTopOffset: 32,
     fixMobileGradientWidth: true,
+    enableTasksPlugin: false,
+    enableDayPlanner: false,
+    tasksPluginMapping: {
+        start: 'startDate',
+        scheduled: 'startDate',
+        due: 'due',
+    },
 };

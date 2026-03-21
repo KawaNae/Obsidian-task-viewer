@@ -1,6 +1,6 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import TaskViewerPlugin from './main';
-import { DefaultLeafPosition, FIXED_STATUS_CHARS, FrontmatterTaskKeys, HabitType, StatusDefinition, TaskViewerSettings, validateFrontmatterTaskKeys } from './types';
+import { DefaultLeafPosition, FIXED_STATUS_CHARS, FrontmatterTaskKeys, HabitType, StatusDefinition, TaskFieldMapping, TaskViewerSettings, validateFrontmatterTaskKeys } from './types';
 import { t } from './i18n';
 import { FolderSuggest } from './suggest/FolderSuggest';
 
@@ -40,6 +40,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             { id: 'notes',        label: t('settings.tabs.notes'),        render: (el: HTMLElement) => this.renderNotesTab(el) },
             { id: 'frontmatter',  label: t('settings.tabs.frontmatter'),  render: (el: HTMLElement) => this.renderFrontmatterTab(el) },
             { id: 'habits',       label: t('settings.tabs.habits'),       render: (el: HTMLElement) => this.renderHabitsTab(el) },
+            { id: 'parsers',      label: t('settings.tabs.parsers'),      render: (el: HTMLElement) => this.renderParsersTab(el) },
         ];
 
         tabs.forEach(tab => {
@@ -876,5 +877,88 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 })
             );
         });
+    }
+
+    // ── Parsers Tab ──
+
+    private renderParsersTab(el: HTMLElement): void {
+        el.createEl('h3', { text: t('settings.parsers.heading') });
+        el.createEl('p', { text: t('settings.parsers.description'), cls: 'setting-item-description' });
+
+        // Day Planner toggle
+        new Setting(el)
+            .setName(t('settings.parsers.enableDayPlanner'))
+            .setDesc(t('settings.parsers.enableDayPlannerDesc'))
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.enableDayPlanner)
+                .onChange(async (value) => {
+                    this.plugin.settings.enableDayPlanner = value;
+                    await this.plugin.saveSettings();
+                })
+            );
+
+        // Tasks Plugin toggle
+        new Setting(el)
+            .setName(t('settings.parsers.enableTasksPlugin'))
+            .setDesc(t('settings.parsers.enableTasksPluginDesc'))
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.enableTasksPlugin)
+                .onChange(async (value) => {
+                    this.plugin.settings.enableTasksPlugin = value;
+                    await this.plugin.saveSettings();
+                    this.display(); // Re-render to show/hide mapping section
+                })
+            );
+
+        // Tasks Plugin mapping (only when enabled)
+        if (this.plugin.settings.enableTasksPlugin) {
+            const mappingContainer = el.createDiv('tv-settings__mapping');
+            mappingContainer.createEl('h4', { text: t('settings.parsers.mappingHeading') });
+
+            const fieldOptions: { value: TaskFieldMapping; label: string }[] = [
+                { value: 'startDate', label: t('settings.parsers.fieldStartDate') },
+                { value: 'endDate',   label: t('settings.parsers.fieldEndDate') },
+                { value: 'due',       label: t('settings.parsers.fieldDue') },
+                { value: 'ignore',    label: t('settings.parsers.fieldIgnore') },
+            ];
+
+            // 🛫 Start
+            this.addMappingDropdown(mappingContainer, '🛫 ' + t('settings.parsers.emojiStart'), fieldOptions,
+                this.plugin.settings.tasksPluginMapping.start,
+                async (value) => { this.plugin.settings.tasksPluginMapping.start = value; await this.plugin.saveSettings(); }
+            );
+
+            // ⏳ Scheduled
+            this.addMappingDropdown(mappingContainer, '⏳ ' + t('settings.parsers.emojiScheduled'), fieldOptions,
+                this.plugin.settings.tasksPluginMapping.scheduled,
+                async (value) => { this.plugin.settings.tasksPluginMapping.scheduled = value; await this.plugin.saveSettings(); }
+            );
+
+            // 📅 Due
+            this.addMappingDropdown(mappingContainer, '📅 ' + t('settings.parsers.emojiDue'), fieldOptions,
+                this.plugin.settings.tasksPluginMapping.due,
+                async (value) => { this.plugin.settings.tasksPluginMapping.due = value; await this.plugin.saveSettings(); }
+            );
+        }
+    }
+
+    private addMappingDropdown(
+        container: HTMLElement,
+        name: string,
+        options: { value: TaskFieldMapping; label: string }[],
+        currentValue: TaskFieldMapping,
+        onChange: (value: TaskFieldMapping) => Promise<void>,
+    ): void {
+        new Setting(container)
+            .setName(name)
+            .addDropdown(dropdown => {
+                for (const opt of options) {
+                    dropdown.addOption(opt.value, opt.label);
+                }
+                dropdown.setValue(currentValue);
+                dropdown.onChange(async (value) => {
+                    await onChange(value as TaskFieldMapping);
+                });
+            });
     }
 }

@@ -1,28 +1,33 @@
-import { Task } from '../../types';
+import type { Task, TaskViewerSettings } from '../../types';
 import { ParserStrategy } from './strategies/ParserStrategy';
 import { ParserChain } from './strategies/ParserChain';
 import { AtNotationParser } from './inline/AtNotationParser';
+import { DayPlannerParser } from './inline/DayPlannerParser';
+import { TasksPluginParser } from './inline/TasksPluginParser';
 
 /**
  * TaskParser facade - delegates to the active parser strategy.
- * Currently uses TaskViewerParser by default.
- * 
- * To support multiple parsers simultaneously:
- * ```
- * import { ParserChain } from './parsers/inline/ParserChain';
- * import { AtNotationParser } from './parsers/inline/AtNotationParser';
- * import { DataviewParser } from './parsers/inline/DataviewParser';
- * 
- * TaskParser.setStrategy(new ParserChain([
- *     new AtNotationParser(),
- *     new DataviewParser(),
- * ]));
- * ```
+ * Call rebuildChain() to update the parser chain based on settings.
  */
 export class TaskParser {
     private static strategy: ParserStrategy = new ParserChain([
         new AtNotationParser()
     ]);
+
+    /**
+     * Rebuild the parser chain based on current settings.
+     * AtNotationParser is always first (native format, highest priority).
+     */
+    static rebuildChain(settings: TaskViewerSettings): void {
+        const parsers: ParserStrategy[] = [new AtNotationParser()];
+        if (settings.enableDayPlanner) {
+            parsers.push(new DayPlannerParser());
+        }
+        if (settings.enableTasksPlugin) {
+            parsers.push(new TasksPluginParser(settings.tasksPluginMapping));
+        }
+        this.strategy = new ParserChain(parsers);
+    }
 
     /**
      * Set a different parser strategy.
