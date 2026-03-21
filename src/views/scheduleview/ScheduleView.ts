@@ -13,6 +13,7 @@ import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineM
 import TaskViewerPlugin from '../../main';
 
 import { DateNavigator, ViewSettingsMenu } from '../sharedUI/ViewToolbar';
+import { ScheduleExportStrategy } from '../../services/export/ScheduleExportStrategy';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
@@ -318,6 +319,7 @@ export class ScheduleView extends ItemView {
             }),
             getExportContainer: () => this.container,
             getTaskIndex: () => this.taskIndex,
+            getExportStrategy: () => new ScheduleExportStrategy(),
             onApplyTemplate: (template) => {
                 if (template.filterState) {
                     this.filterMenu.setFilterState(template.filterState);

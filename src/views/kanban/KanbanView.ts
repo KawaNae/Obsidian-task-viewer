@@ -8,6 +8,7 @@ import TaskViewerPlugin from '../../main';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { ViewSettingsMenu } from '../sharedUI/ViewToolbar';
+import { KanbanExportStrategy } from '../../services/export/KanbanExportStrategy';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import type { FilterState } from '../../services/filter/FilterTypes';
@@ -238,6 +239,7 @@ export class KanbanView extends ItemView {
             }),
             getExportContainer: () => this.container,
             getTaskIndex: () => this.taskIndex,
+            getExportStrategy: () => new KanbanExportStrategy(),
             onApplyTemplate: (template) => {
                 if (template.grid && template.grid.length > 0) {
                     this.grid = template.grid;

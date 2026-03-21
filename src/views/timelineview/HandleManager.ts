@@ -13,6 +13,12 @@ export class HandleManager {
         private taskIndex: TaskIndex
     ) { }
 
+    /** Returns task cards scoped to the main content area (excludes pinned lists in sidebar). */
+    private getMainTaskCards(): NodeListOf<Element> {
+        const main = this.container.querySelector('.view-sidebar-main');
+        return (main ?? this.container).querySelectorAll('.task-card');
+    }
+
     /**
      * Creates the handle overlay element.
      * @deprecated Kept for backwards compatibility, no longer needed.
@@ -36,8 +42,8 @@ export class HandleManager {
         // Remove handles from previously selected task and restore z-index
         if (this.selectedTaskId) {
             this.removeHandles(this.selectedTaskId);
-            // Need to find ALL previous cards (including split ones)
-            const prevEls = this.container.querySelectorAll('.task-card');
+            // Need to find ALL previous cards (including split ones) within main content
+            const prevEls = this.getMainTaskCards();
             prevEls.forEach(el => {
                 const htmlEl = el as HTMLElement;
                 // Check direct ID or split original ID
@@ -51,8 +57,8 @@ export class HandleManager {
 
         this.selectedTaskId = taskId;
 
-        // Update .selected class on all task cards
-        const taskCards = this.container.querySelectorAll('.task-card');
+        // Update .selected class on main content task cards only (not pinned lists)
+        const taskCards = this.getMainTaskCards();
         taskCards.forEach(el => {
             const htmlEl = el as HTMLElement;
             // Match ID or Split ID
@@ -84,8 +90,8 @@ export class HandleManager {
      * Removes handles from a task card.
      */
     private removeHandles(taskId: string): void {
-        // Find ALL matching cards
-        const taskCards = this.container.querySelectorAll('.task-card');
+        // Find ALL matching cards in main content area
+        const taskCards = this.getMainTaskCards();
         taskCards.forEach(el => {
             const htmlEl = el as HTMLElement;
             if (htmlEl.dataset.id === taskId || htmlEl.dataset.splitOriginalId === taskId) {
@@ -99,8 +105,8 @@ export class HandleManager {
      * Renders handles directly inside the task card element.
      */
     private renderHandles(taskId: string): void {
-        // Find ALL matching cards
-        const taskCards = Array.from(this.container.querySelectorAll('.task-card')).filter(el => {
+        // Find ALL matching cards in main content area
+        const taskCards = Array.from(this.getMainTaskCards()).filter(el => {
             const htmlEl = el as HTMLElement;
             return htmlEl.dataset.id === taskId || htmlEl.dataset.splitOriginalId === taskId;
         });

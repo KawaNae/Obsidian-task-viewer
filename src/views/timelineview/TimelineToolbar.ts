@@ -8,6 +8,7 @@ import TaskViewerPlugin from '../../main';
 import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu } from '../sharedUI/ViewToolbar';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
+import { TimelineExportStrategy } from '../../services/export/TimelineExportStrategy';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import type { Task } from '../../types';
@@ -161,6 +162,7 @@ export class TimelineToolbar {
             },
             getExportContainer: () => this.container.closest('.timeline-view')?.querySelector<HTMLElement>('.timeline-grid') ?? null,
             getTaskIndex: () => this.taskIndex,
+            getExportStrategy: () => new TimelineExportStrategy(),
             onReset: () => {
                 this.viewState.daysToShow = 3;
                 this.viewState.zoomLevel = 1.0;

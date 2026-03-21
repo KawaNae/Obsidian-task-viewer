@@ -37,6 +37,7 @@ import { HandleManager } from '../timelineview/HandleManager';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
+import { CalendarExportStrategy } from '../../services/export/CalendarExportStrategy';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
@@ -417,6 +418,7 @@ export class CalendarView extends ItemView {
             }),
             getExportContainer: () => this.container.querySelector<HTMLElement>('.calendar-grid'),
             getTaskIndex: () => this.taskIndex,
+            getExportStrategy: () => new CalendarExportStrategy(),
             onApplyTemplate: (template) => {
                 if (template.filterState) {
                     this.filterMenu.setFilterState(template.filterState);

@@ -1,4 +1,5 @@
 import type { FilterState, FilterConditionNode, FilterGroupNode } from '../services/filter/FilterTypes';
+import { FilterSerializer } from '../services/filter/FilterSerializer';
 import { parseDatePreset } from '../cli/CliDatePresetParser';
 import { TaskApiError } from './TaskApiTypes';
 import type { ListParams } from './TaskApiTypes';
@@ -30,7 +31,10 @@ export function normalizeStringArray(value: string | string[] | undefined, strip
  * If params.filter is provided, it overrides all simple fields.
  */
 export function buildFilterFromParams(params: ListParams): FilterState | null {
-    if (params.filter) return params.filter;
+    if (params.filter) {
+        if ((params.filter as FilterState).root) return params.filter;
+        return FilterSerializer.fromJSON(params.filter);
+    }
 
     const conditions: FilterConditionNode[] = [];
 
