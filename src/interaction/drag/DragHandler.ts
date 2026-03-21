@@ -116,6 +116,7 @@ export class DragHandler implements DragContext {
 
         const task = this.taskIndex.getTask(taskId);
         if (!task) return;
+        if (task.isReadOnly && isFromHandle) return;
 
         // Select Strategy based on handle type (move or resize)
         const isResizeHandle = target.closest('.task-card__handle--resize-top') ||

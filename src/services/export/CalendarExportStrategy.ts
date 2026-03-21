@@ -17,4 +17,8 @@ export class CalendarExportStrategy implements ExportStrategy {
             ExportUtils.simulateScroll(area, restoreFns);
         }
     }
+
+    getScrollAreaSelectors(): string[] {
+        return ['.calendar-grid__body'];
+    }
 }

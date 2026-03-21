@@ -115,6 +115,7 @@ export class HandleManager {
 
         const task = this.taskIndex.getTask(taskId);
         if (!task) return;
+        if (task.isReadOnly) return;
 
         taskCards.forEach(el => {
             const taskEl = el as HTMLElement;

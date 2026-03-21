@@ -5,6 +5,8 @@ export interface ExportStrategy {
     expandScrollAreas(container: HTMLElement, restoreFns: (() => void)[]): void;
     /** Simulate scroll position to capture the visible viewport. */
     simulateScrollPosition(container: HTMLElement, restoreFns: (() => void)[]): void;
+    /** Return CSS selectors for scroll areas (used to transfer scrollTop to clone). */
+    getScrollAreaSelectors(): string[];
 }
 
 export interface ViewExportOptions {

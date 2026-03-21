@@ -45,4 +45,8 @@ export class KanbanExportStrategy implements ExportStrategy {
             ExportUtils.simulateScroll(area, restoreFns);
         }
     }
+
+    getScrollAreaSelectors(): string[] {
+        return ['.kanban-view__grid-host', '.kanban-view__cell-body'];
+    }
 }

@@ -7,26 +7,41 @@ export class ViewExporter {
         const { container, taskIndex, filename, expandScrollAreas = true } = options;
 
         const progress = new Notice('Exporting image…', 0);
-        const restoreFns: (() => void)[] = [];
 
         try {
-            if (expandScrollAreas) {
-                strategy.expandScrollAreas(container, restoreFns);
-            } else {
-                strategy.simulateScrollPosition(container, restoreFns);
-            }
-            ExportUtils.applyMasking(container, taskIndex, restoreFns);
+            // Clone the container off-screen so the original DOM is never modified
+            const clone = container.cloneNode(true) as HTMLElement;
+            clone.style.position = 'absolute';
+            clone.style.left = '-99999px';
+            clone.style.top = '0';
+            clone.style.width = `${container.offsetWidth}px`;
+            container.parentElement!.appendChild(clone);
 
-            const blob = await ExportUtils.captureToBlob(container);
-            ExportUtils.downloadBlob(blob, filename);
-            progress.hide();
-            new Notice('Image exported.');
+            // Transfer scrollTop values (cloneNode doesn't copy them)
+            for (const selector of strategy.getScrollAreaSelectors()) {
+                ExportUtils.transferScrollPositions(container, clone, selector);
+            }
+
+            try {
+                const restoreFns: (() => void)[] = [];
+                if (expandScrollAreas) {
+                    strategy.expandScrollAreas(clone, restoreFns);
+                } else {
+                    strategy.simulateScrollPosition(clone, restoreFns);
+                }
+                ExportUtils.applyMasking(clone, taskIndex, restoreFns);
+
+                const blob = await ExportUtils.captureToBlob(clone);
+                ExportUtils.downloadBlob(blob, filename);
+                progress.hide();
+                new Notice('Image exported.');
+            } finally {
+                clone.remove();
+            }
         } catch (err) {
             console.error('[ViewExporter] Export failed:', err);
             progress.hide();
             new Notice('Export failed. See console for details.');
-        } finally {
-            for (const restore of restoreFns) restore();
         }
     }
 }

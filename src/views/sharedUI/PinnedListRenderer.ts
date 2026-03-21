@@ -335,6 +335,7 @@ export class PinnedListRenderer {
 
             TaskStyling.applyTaskColor(card, task.color ?? null);
             TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
+            TaskStyling.applyReadOnly(card, task);
 
             this.taskRenderer.render(card, task, owner, settings);
             this.menuHandler.addTaskContextMenu(card, task);

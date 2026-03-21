@@ -80,7 +80,7 @@ export class TaskCardRenderer {
         }
 
         this.bindInternalLinks(contentContainer, task.file);
-        this.bindParentCheckbox(contentContainer, task.originalTaskId ?? task.id, settings);
+        this.bindParentCheckbox(contentContainer, task.originalTaskId ?? task.id, settings, task.isReadOnly);
     }
 
     private getChildCompletion(task: Task, settings: TaskViewerSettings): { completed: number; total: number } {
@@ -249,11 +249,12 @@ export class TaskCardRenderer {
     private bindParentCheckbox(
         contentContainer: HTMLElement,
         taskId: string,
-        settings: TaskViewerSettings
+        settings: TaskViewerSettings,
+        readOnly?: boolean
     ): void {
         const mainCheckbox = contentContainer.querySelector(':scope > ul > li > input[type="checkbox"]');
         if (mainCheckbox) {
-            this.checkboxWiring.wireParentCheckbox(mainCheckbox, taskId, settings);
+            this.checkboxWiring.wireParentCheckbox(mainCheckbox, taskId, settings, readOnly);
         }
     }
 }

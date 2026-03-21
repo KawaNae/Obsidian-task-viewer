@@ -561,3 +561,10 @@
 .due-arrow--clipped::before {
     display: none;
 }
+
+/* Read-only task cards */
+.task-card[data-read-only] input[type="checkbox"] {
+    opacity: 0.6;
+    pointer-events: none;
+    cursor: default;
+}

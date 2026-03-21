@@ -17,4 +17,8 @@ export class ScheduleExportStrategy implements ExportStrategy {
             ExportUtils.simulateScroll(area, restoreFns);
         }
     }
+
+    getScrollAreaSelectors(): string[] {
+        return ['.schedule-view__body-scroll'];
+    }
 }

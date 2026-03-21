@@ -13,11 +13,13 @@ export class ExportUtils {
     static expandScrollArea(area: HTMLElement, restoreFns: RestoreFn[]): void {
         const origOverflow = area.style.overflow;
         const origHeight = area.style.height;
+        const origScrollTop = area.scrollTop;
         area.style.overflow = 'visible';
         area.style.height = `${area.scrollHeight}px`;
         restoreFns.push(() => {
             area.style.overflow = origOverflow;
             area.style.height = origHeight;
+            area.scrollTop = origScrollTop;
         });
     }
 
@@ -32,11 +34,13 @@ export class ExportUtils {
                 computed.overflowY === 'scroll' || computed.overflowY === 'auto') {
                 const origOverflow = el.style.overflow;
                 const origHeight = el.style.height;
+                const origScrollTop = el.scrollTop;
                 el.style.overflow = 'visible';
                 el.style.height = 'auto';
                 restoreFns.push(() => {
                     el.style.overflow = origOverflow;
                     el.style.height = origHeight;
+                    el.scrollTop = origScrollTop;
                 });
             }
         }
@@ -61,7 +65,7 @@ export class ExportUtils {
 
         const origOverflow = area.style.overflow;
         area.style.overflow = 'hidden';
-        restoreFns.push(() => { area.style.overflow = origOverflow; });
+        restoreFns.push(() => { area.style.overflow = origOverflow; area.scrollTop = scrollTop; });
 
         const children = Array.from(area.children) as HTMLElement[];
         for (const child of children) {
@@ -70,6 +74,17 @@ export class ExportUtils {
             child.style.marginTop = `-${scrollTop}px`;
             restoreFns.push(() => { child.style.marginTop = origMargin; });
             break;
+        }
+    }
+
+    // ── Clone helpers ──
+
+    /** Transfer scrollTop values from original to clone for matching elements. */
+    static transferScrollPositions(original: HTMLElement, clone: HTMLElement, selector: string): void {
+        const origAreas = Array.from(original.querySelectorAll<HTMLElement>(selector));
+        const cloneAreas = Array.from(clone.querySelectorAll<HTMLElement>(selector));
+        for (let i = 0; i < origAreas.length && i < cloneAreas.length; i++) {
+            cloneAreas[i].scrollTop = origAreas[i].scrollTop;
         }
     }
 

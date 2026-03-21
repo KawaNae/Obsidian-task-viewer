@@ -113,6 +113,7 @@ export class ScheduleTaskRenderer {
 
         TaskStyling.applyTaskColor(card, task.color ?? null);
         TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
+        TaskStyling.applyReadOnly(card, task);
         const options = flowCard ? {} : { compact: true };
         await this.taskRenderer.render(card, task, this.component, this.getSettings(), options);
         this.menuHandler.addTaskContextMenu(card, task);

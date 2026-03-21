@@ -17,4 +17,8 @@ export class TimelineExportStrategy implements ExportStrategy {
             ExportUtils.simulateScroll(area, restoreFns);
         }
     }
+
+    getScrollAreaSelectors(): string[] {
+        return ['.timeline-scroll-area'];
+    }
 }
