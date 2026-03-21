@@ -8,6 +8,7 @@ import TaskViewerPlugin from '../../main';
 import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu } from '../sharedUI/ViewToolbar';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
+import { TimelineExportStrategy } from '../../services/export/TimelineExportStrategy';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import type { Task } from '../../types';
@@ -88,16 +89,12 @@ export class TimelineToolbar {
         } else if (this.viewState.filterFiles && this.viewState.filterFiles.length > 0) {
             // Migrate legacy filterFiles to FilterState
             this.filterMenu.setFilterState({
-                root: {
-                    type: 'group',
-                    children: [{
-                        type: 'condition',
-                        property: 'file',
-                        operator: 'includes',
-                        value: this.viewState.filterFiles,
-                    }],
-                    logic: 'and',
-                },
+                filters: [{
+                    property: 'file',
+                    operator: 'includes',
+                    value: this.viewState.filterFiles,
+                }],
+                logic: 'and',
             });
         } else {
             this.filterMenu.setFilterState(createEmptyFilterState());
@@ -161,6 +158,7 @@ export class TimelineToolbar {
             },
             getExportContainer: () => this.container.closest('.timeline-view')?.querySelector<HTMLElement>('.timeline-grid') ?? null,
             getTaskIndex: () => this.taskIndex,
+            getExportStrategy: () => new TimelineExportStrategy(),
             onReset: () => {
                 this.viewState.daysToShow = 3;
                 this.viewState.zoomLevel = 1.0;

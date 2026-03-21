@@ -1,19 +1,14 @@
 import type { App } from 'obsidian';
-import type { FilterState, FilterGroupNode } from '../services/filter/FilterTypes';
+import type { FilterState } from '../services/filter/FilterTypes';
 import { hasConditions } from '../services/filter/FilterTypes';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
 import { ViewTemplateLoader } from '../services/template/ViewTemplateLoader';
 
 /**
- * Merge two FilterStates by combining their root groups under a new AND group.
+ * Merge two FilterStates by combining them under a new AND group.
  */
 export function mergeFilters(a: FilterState, b: FilterState): FilterState {
-    const root: FilterGroupNode = {
-        type: 'group',
-        logic: 'and',
-        children: [a.root, b.root],
-    };
-    return { root };
+    return { filters: [a, b], logic: 'and' };
 }
 
 /**

@@ -84,4 +84,8 @@ export class TaskStyling {
         el.style.setProperty('--file-linestyle', normalized);
         el.dataset.fileLinestyle = normalized;
     }
+
+    static applyReadOnly(el: HTMLElement, task: { isReadOnly?: boolean }): void {
+        if (task.isReadOnly) el.dataset.readOnly = 'true';
+    }
 }

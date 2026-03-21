@@ -102,6 +102,7 @@ export class AllDaySectionRenderer {
 
         TaskStyling.applyTaskColor(el, task.color ?? null);
         TaskStyling.applyTaskLinestyle(el, task.linestyle ?? null);
+        TaskStyling.applyReadOnly(el, task);
 
         this.taskRenderer.render(el, task, owner, this.plugin.settings, { topRight: 'none', compact: true });
         this.menuHandler.addTaskContextMenu(el, task);

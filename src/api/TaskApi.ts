@@ -138,10 +138,15 @@ Date Formats
 
 FilterState (JSON format)
 -------------------------
-  { logic: 'and', conditions: [...] }
+  { logic: 'and', filters: [...] }
 
   Condition:
-    { property: string, operator: string, value?: ... }
+    { property: string, operator: string, value?: ..., target?: 'parent' }
+
+  Target:
+    Add target: 'parent' to evaluate the condition against the task's
+    parent (and ancestors). Example: tasks whose parent has tag "project":
+    { property: 'tag', operator: 'includes', value: ['project'], target: 'parent' }
 
   Properties & Operators:
     file       : includes, excludes          (value: string[])
@@ -176,13 +181,13 @@ Examples
   // List all tasks in a file
   await api.list({ file: 'daily/2026-03-15' });
 
-  // Filter by tag (exact match)
+  // Filter by tag (exact match) using FilterState
   await api.list({
     filter: {
-      root: { type: 'group', logic: 'and', children: [
-        { type: 'condition', property: 'tag', operator: 'equals',
-          value: ['work'] }
-      ]}
+      logic: 'and',
+      filters: [
+        { property: 'tag', operator: 'equals', value: ['work'] }
+      ]
     }
   });
 

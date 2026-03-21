@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TaskFilterEngine } from '../../src/services/filter/TaskFilterEngine';
 import type { Task, DisplayTask } from '../../src/types';
-import type { FilterState, FilterConditionNode, FilterGroupNode } from '../../src/services/filter/FilterTypes';
+import type { FilterState, FilterCondition, FilterGroup } from '../../src/services/filter/FilterTypes';
 
 // ── Helper: minimal Task factory ──
 
@@ -44,24 +44,22 @@ function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
 // ── Helper: build FilterState from conditions ──
 
 function cond(
-    property: FilterConditionNode['property'],
-    operator: FilterConditionNode['operator'],
-    value?: FilterConditionNode['value'],
+    property: FilterCondition['property'],
+    operator: FilterCondition['operator'],
+    value?: FilterCondition['value'],
     target?: 'self' | 'parent',
-): FilterConditionNode {
-    const node: FilterConditionNode = { type: 'condition', property, operator };
+): FilterCondition {
+    const node: FilterCondition = { property, operator };
     if (value !== undefined) node.value = value;
     if (target === 'parent') node.target = 'parent';
     return node;
 }
 
-function stateFromConditions(conditions: FilterConditionNode[], logic: 'and' | 'or' = 'and'): FilterState {
-    return {
-        root: { type: 'group', children: conditions, logic },
-    };
+function stateFromConditions(conditions: FilterCondition[], logic: 'and' | 'or' = 'and'): FilterState {
+    return { filters: conditions, logic };
 }
 
-function stateFromCondition(c: FilterConditionNode): FilterState {
+function stateFromCondition(c: FilterCondition): FilterState {
     return stateFromConditions([c]);
 }
 
@@ -490,7 +488,7 @@ describe('TaskFilterEngine', () => {
         });
 
         it('empty group — returns true', () => {
-            const state: FilterState = { root: { type: 'group', children: [], logic: 'and' } };
+            const state: FilterState = { filters: [], logic: 'and' };
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
     });
@@ -499,42 +497,38 @@ describe('TaskFilterEngine', () => {
     describe('nested groups', () => {
         it('nested AND inside OR', () => {
             const task = makeTask({ tags: ['work'], statusChar: 'x' });
-            const innerGroup: FilterGroupNode = {
-                type: 'group', logic: 'and',
-                children: [
+            const innerGroup: FilterGroup = {
+                filters: [
                     cond('tag', 'includes', ['work']),
                     cond('status', 'includes', ['x']),
                 ],
+                logic: 'and',
             };
             const state: FilterState = {
-                root: {
-                    type: 'group', logic: 'or',
-                    children: [
-                        cond('file', 'includes', ['nonexistent.md']),
-                        innerGroup,
-                    ],
-                },
+                filters: [
+                    cond('file', 'includes', ['nonexistent.md']),
+                    innerGroup,
+                ],
+                logic: 'or',
             };
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
 
         it('nested group fails — outer OR still needs one pass', () => {
             const task = makeTask({ tags: ['work'], statusChar: ' ' });
-            const innerGroup: FilterGroupNode = {
-                type: 'group', logic: 'and',
-                children: [
+            const innerGroup: FilterGroup = {
+                filters: [
                     cond('tag', 'includes', ['work']),
                     cond('status', 'includes', ['x']), // fails
                 ],
+                logic: 'and',
             };
             const state: FilterState = {
-                root: {
-                    type: 'group', logic: 'or',
-                    children: [
-                        cond('file', 'includes', ['nonexistent.md']), // fails
-                        innerGroup, // fails (status mismatch)
-                    ],
-                },
+                filters: [
+                    cond('file', 'includes', ['nonexistent.md']), // fails
+                    innerGroup, // fails (status mismatch)
+                ],
+                logic: 'or',
             };
             expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
         });

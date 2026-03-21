@@ -2,7 +2,7 @@ import { setIcon } from 'obsidian';
 import type { StatusDefinition, Task } from '../../types';
 import { getStatusLabel } from '../../constants/statusOptions';
 import type {
-    FilterState, FilterConditionNode, FilterGroupNode, FilterNode,
+    FilterState, FilterCondition, FilterGroup, FilterItem,
     FilterProperty, FilterOperator, DateFilterValue, RelativeDatePreset,
     FilterContext, FilterTarget,
 } from '../../services/filter/FilterTypes';
@@ -21,6 +21,7 @@ import {
     createFilterGroup,
     deepCloneNode,
     hasConditions,
+    isFilterCondition,
 } from '../../services/filter/FilterTypes';
 import { t } from '../../i18n';
 import { TaskFilterEngine } from '../../services/filter/TaskFilterEngine';
@@ -151,15 +152,13 @@ export class FilterMenuComponent {
         if (!this.popoverEl) return;
         this.popoverEl.empty();
 
-        const root = this.state.root;
-
-        if (root.children.length === 0) {
+        if (this.state.filters.length === 0) {
             this.popoverEl.createDiv('filter-popover__empty').setText(t('filter.noFilters'));
         } else {
-            this.renderChildren(this.popoverEl, root, 0);
+            this.renderChildren(this.popoverEl, this.state, 0);
         }
 
-        this.renderFooterButtons(this.popoverEl, root, 0);
+        this.renderFooterButtons(this.popoverEl, this.state, 0);
     }
 
     private refreshPopover(): void {
@@ -170,16 +169,16 @@ export class FilterMenuComponent {
 
     // ── Recursive Children Rendering ──
 
-    private renderChildren(parent: HTMLElement, group: FilterGroupNode, depth: number): void {
-        for (let i = 0; i < group.children.length; i++) {
-            const child = group.children[i];
+    private renderChildren(parent: HTMLElement, group: FilterGroup, depth: number): void {
+        for (let i = 0; i < group.filters.length; i++) {
+            const child = group.filters[i];
 
             // Inter-sibling logic separator (between nodes, not before the first)
             if (i > 0) {
                 this.renderLogicSeparator(parent, group, depth);
             }
 
-            if (child.type === 'condition') {
+            if (isFilterCondition(child)) {
                 this.renderConditionRow(parent, group, child, i);
             } else {
                 this.renderGroup(parent, child, depth + 1, group, i);
@@ -189,7 +188,7 @@ export class FilterMenuComponent {
 
     // ── Logic Separator ──
 
-    private renderLogicSeparator(parent: HTMLElement, group: FilterGroupNode, _depth: number): void {
+    private renderLogicSeparator(parent: HTMLElement, group: FilterGroup, _depth: number): void {
         const logicRow = parent.createDiv('filter-popover__logic-separator');
         const logicBtn = logicRow.createEl('button', {
             cls: 'filter-popover__logic-btn',
@@ -206,9 +205,9 @@ export class FilterMenuComponent {
 
     private renderGroup(
         parent: HTMLElement,
-        group: FilterGroupNode,
+        group: FilterGroup,
         depth: number,
-        parentGroup: FilterGroupNode,
+        parentGroup: FilterGroup,
         indexInParent: number,
     ): void {
         const groupEl = parent.createDiv('filter-popover__group');
@@ -229,7 +228,7 @@ export class FilterMenuComponent {
         addBtn.createSpan().setText(t('filter.addFilter'));
         addBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            group.children.push(createDefaultCondition());
+            group.filters.push(createDefaultCondition());
             this.refreshPopover();
         });
 
@@ -241,14 +240,14 @@ export class FilterMenuComponent {
             addGroupBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const newGroup = createFilterGroup();
-                newGroup.children.push(createDefaultCondition());
-                group.children.push(newGroup);
+                newGroup.filters.push(createDefaultCondition());
+                group.filters.push(newGroup);
                 this.refreshPopover();
             });
         }
 
         // Group more menu (...) — only when parent has multiple children
-        if (parentGroup.children.length > 1) {
+        if (parentGroup.filters.length > 1) {
             const groupMoreBtn = groupFooter.createEl('button', { cls: 'filter-popover__more-btn' });
             setIcon(groupMoreBtn, 'more-horizontal');
             groupMoreBtn.addEventListener('click', (e) => {
@@ -260,15 +259,15 @@ export class FilterMenuComponent {
                 ];
                 this.showSelectPopover(groupMoreBtn, items, (val) => {
                     if (val === 'remove-group') {
-                        parentGroup.children.splice(indexInParent, 1);
+                        parentGroup.filters.splice(indexInParent, 1);
                         this.refreshPopover();
                     } else if (val === 'duplicate-group') {
-                        const dup = deepCloneNode(group) as FilterGroupNode;
-                        parentGroup.children.splice(indexInParent + 1, 0, dup);
+                        const dup = deepCloneNode(group) as FilterGroup;
+                        parentGroup.filters.splice(indexInParent + 1, 0, dup);
                         this.refreshPopover();
                     } else if (val === 'ungroup') {
-                        // Move all children of this group into the parent
-                        parentGroup.children.splice(indexInParent, 1, ...group.children);
+                        // Move all filters of this group into the parent
+                        parentGroup.filters.splice(indexInParent, 1, ...group.filters);
                         this.refreshPopover();
                     }
                 });
@@ -280,8 +279,8 @@ export class FilterMenuComponent {
 
     private renderConditionRow(
         parent: HTMLElement,
-        ownerGroup: FilterGroupNode,
-        condition: FilterConditionNode,
+        ownerGroup: FilterGroup,
+        condition: FilterCondition,
         indexInGroup: number,
     ): void {
         const row = parent.createDiv('filter-popover__row');
@@ -363,11 +362,11 @@ export class FilterMenuComponent {
             ];
             this.showSelectPopover(moreBtn, items, (val) => {
                 if (val === 'remove') {
-                    ownerGroup.children.splice(indexInGroup, 1);
+                    ownerGroup.filters.splice(indexInGroup, 1);
                     this.refreshPopover();
                 } else if (val === 'duplicate') {
-                    const dup = deepCloneNode(condition) as FilterConditionNode;
-                    ownerGroup.children.splice(indexInGroup + 1, 0, dup);
+                    const dup = deepCloneNode(condition) as FilterCondition;
+                    ownerGroup.filters.splice(indexInGroup + 1, 0, dup);
                     this.refreshPopover();
                 }
             });
@@ -394,7 +393,7 @@ export class FilterMenuComponent {
 
     // ── Value Selector ──
 
-    private renderValueSelector(row: HTMLElement, condition: FilterConditionNode): void {
+    private renderValueSelector(row: HTMLElement, condition: FilterCondition): void {
         if (condition.property === 'content') {
             this.renderTextInput(row, condition);
         } else if (condition.property === 'property') {
@@ -404,7 +403,7 @@ export class FilterMenuComponent {
         }
     }
 
-    private renderTextInput(row: HTMLElement, condition: FilterConditionNode): void {
+    private renderTextInput(row: HTMLElement, condition: FilterCondition): void {
         const input = row.createEl('input', {
             cls: 'filter-popover__text-input',
             type: 'text',
@@ -426,7 +425,7 @@ export class FilterMenuComponent {
         });
     }
 
-    private renderValueDropdown(row: HTMLElement, condition: FilterConditionNode): void {
+    private renderValueDropdown(row: HTMLElement, condition: FilterCondition): void {
         const currentValues = Array.isArray(condition.value) ? condition.value as string[] : [];
         const label = currentValues.length > 0
             ? this.formatValueLabel(condition.property, currentValues)
@@ -442,7 +441,7 @@ export class FilterMenuComponent {
         });
     }
 
-    private renderPillValueSelector(row: HTMLElement, condition: FilterConditionNode): void {
+    private renderPillValueSelector(row: HTMLElement, condition: FilterCondition): void {
         const container = row.createDiv('filter-popover__tag-value');
         const currentValues = Array.isArray(condition.value) ? condition.value as string[] : [];
         const prop = condition.property;
@@ -614,7 +613,7 @@ export class FilterMenuComponent {
         });
     }
 
-    private renderValuePill(container: HTMLElement, value: string, condition: FilterConditionNode): void {
+    private renderValuePill(container: HTMLElement, value: string, condition: FilterCondition): void {
         const pill = container.createDiv('filter-popover__tag-pill');
         if (condition.property === 'color') {
             const swatch = pill.createSpan('filter-popover__color-swatch');
@@ -641,7 +640,7 @@ export class FilterMenuComponent {
 
     // ── Date Value Selector ──
 
-    private renderDateValueSelector(row: HTMLElement, condition: FilterConditionNode): void {
+    private renderDateValueSelector(row: HTMLElement, condition: FilterCondition): void {
         const container = row.createDiv('filter-popover__date-value');
 
         // Initialize value if needed
@@ -712,7 +711,7 @@ export class FilterMenuComponent {
         }
     }
 
-    private showRelativeDateMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
+    private showRelativeDateMenu(anchorEl: HTMLElement, condition: FilterCondition): void {
         const presets: RelativeDatePreset[] = ['today', 'thisWeek', 'nextWeek', 'pastWeek', 'nextNDays', 'thisMonth', 'thisYear'];
         const dateVal = condition.value as DateFilterValue;
         const currentPreset = typeof dateVal === 'object' && 'preset' in dateVal
@@ -735,7 +734,7 @@ export class FilterMenuComponent {
 
     // ── Number Value Selector (Length filter) ──
 
-    private renderNumberValueSelector(row: HTMLElement, condition: FilterConditionNode): void {
+    private renderNumberValueSelector(row: HTMLElement, condition: FilterCondition): void {
         const container = row.createDiv('filter-popover__number-value');
 
         if (typeof condition.value !== 'number') {
@@ -779,7 +778,7 @@ export class FilterMenuComponent {
             if (property === 'file') return v.split('/').pop() || v;
             if (property === 'tag') return `#${v}`;
             if (property === 'status') return this.getStatusLabelForChar(v);
-            if (property === 'taskType') return v === 'at-notation' ? t('filter.taskTypeAtNotation') : t('filter.taskTypeFrontmatter');
+            if (property === 'taskType') { const key = `filter.taskType.${v}`; return t(key) !== key ? t(key) : v; }
             return v;
         }
         return t('filter.nSelected', { n: values.length });
@@ -871,7 +870,7 @@ export class FilterMenuComponent {
 
     // ── Property / Operator / Value Menus ──
 
-    private showPropertyMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
+    private showPropertyMenu(anchorEl: HTMLElement, condition: FilterCondition): void {
         const properties: FilterProperty[] = [
             'file', 'tag', 'status', 'content',
             'startDate', 'endDate', 'due',
@@ -908,7 +907,7 @@ export class FilterMenuComponent {
         });
     }
 
-    private showOperatorMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
+    private showOperatorMenu(anchorEl: HTMLElement, condition: FilterCondition): void {
         const operators = PROPERTY_OPERATORS[condition.property];
         const items: SelectItem[] = operators.map(op => ({
             label: getOperatorLabel(condition.property, op),
@@ -925,7 +924,7 @@ export class FilterMenuComponent {
         });
     }
 
-    private showTargetMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
+    private showTargetMenu(anchorEl: HTMLElement, condition: FilterCondition): void {
         const targets: { label: string; value: FilterTarget; icon: string }[] = [
             { label: t('filter.self'), value: 'self', icon: 'user' },
             { label: t('filter.parent'), value: 'parent', icon: 'arrow-up' },
@@ -944,7 +943,7 @@ export class FilterMenuComponent {
         });
     }
 
-    private showValueMenu(anchorEl: HTMLElement, condition: FilterConditionNode): void {
+    private showValueMenu(anchorEl: HTMLElement, condition: FilterCondition): void {
         const available = this.getAvailableValues(condition.property);
         const currentValues = new Set(Array.isArray(condition.value) ? condition.value as string[] : []);
 
@@ -967,7 +966,7 @@ export class FilterMenuComponent {
 
     // ── Footer Buttons ──
 
-    private renderFooterButtons(parent: HTMLElement, group: FilterGroupNode, depth: number): void {
+    private renderFooterButtons(parent: HTMLElement, group: FilterGroup, depth: number): void {
         const footer = parent.createDiv('filter-popover__footer');
 
         // Add filter
@@ -976,7 +975,7 @@ export class FilterMenuComponent {
         addBtn.createSpan().setText(t('filter.addFilter'));
         addBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            group.children.push(createDefaultCondition());
+            group.filters.push(createDefaultCondition());
             this.refreshPopover();
         });
 
@@ -988,8 +987,8 @@ export class FilterMenuComponent {
             addGroupBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const newGroup = createFilterGroup();
-                newGroup.children.push(createDefaultCondition());
-                group.children.push(newGroup);
+                newGroup.filters.push(createDefaultCondition());
+                group.filters.push(newGroup);
                 this.refreshPopover();
             });
         }
@@ -1043,7 +1042,7 @@ export class FilterMenuComponent {
             return this.getStatusLabelForChar(value);
         }
         if (property === 'taskType') {
-            return value === 'at-notation' ? t('filter.taskTypeAtNotation') : t('filter.taskTypeFrontmatter');
+            const key = `filter.taskType.${value}`; return t(key) !== key ? t(key) : value;
         }
         return value;
     }

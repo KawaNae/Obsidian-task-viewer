@@ -83,6 +83,7 @@ export class MenuHandler {
             new Notice('Task not found in index');
             return;
         }
+        if (task.isReadOnly) return;
 
         // Convert to DisplayTask for property display (implicit/explicit flags)
         const displayTask = toDisplayTask(task, this.plugin.settings.startHour);

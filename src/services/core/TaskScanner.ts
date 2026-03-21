@@ -119,7 +119,6 @@ export class TaskScanner {
                 const line = linesToProcess[i];
                 const actualLineNumber = baseLineNumber + i;
                 let task = TaskParser.parse(line, file.path, actualLineNumber);
-
                 // 非デイリーノートかつFM/Container親がないファイルで、時刻のみ（日付なし）のタスクはプレーンチェックボックスとして扱う
                 if (task && !parentStartDate && !hasFrontmatterParent
                     && !task.startDate && !task.endDate && !task.due

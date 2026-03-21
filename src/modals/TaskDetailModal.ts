@@ -45,6 +45,7 @@ export class TaskDetailModal extends Modal {
         const card = contentEl.createDiv('task-card');
         TaskStyling.applyTaskColor(card, this.task.color ?? null);
         TaskStyling.applyTaskLinestyle(card, this.task.linestyle ?? null);
+        TaskStyling.applyReadOnly(card, this.task);
         this.menuHandler.addTaskContextMenu(card, this.task);
 
         const dt = toDisplayTask(this.task, this.settings.startHour);

@@ -7,9 +7,12 @@ import { Task } from '../../../types';
 export interface ParserStrategy {
     /**
      * Unique identifier for this parser.
-     * Examples: 'taskviewer', 'dataview', 'dayplanner', 'frontmatter'
+     * Examples: 'at-notation', 'frontmatter', 'tasks-plugin', 'day-planner'
      */
     readonly id: string;
+
+    /** True when this parser is read-only (no writeback support). */
+    readonly isReadOnly: boolean;
 
     /**
      * Parse a line of text into a Task object.

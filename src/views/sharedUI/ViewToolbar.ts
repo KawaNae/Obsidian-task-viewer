@@ -7,6 +7,7 @@ import type { ViewTemplate } from '../../types';
 import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
 import { ViewTemplateWriter } from '../../services/template/ViewTemplateWriter';
 import { ViewExporter } from '../../services/export/ViewExporter';
+import type { ExportStrategy } from '../../services/export/ExportTypes';
 import type { TaskIndex } from '../../services/core/TaskIndex';
 
 /**
@@ -207,6 +208,7 @@ export interface ViewSettingsOptions {
     onReset: () => void;
     getExportContainer?: () => HTMLElement | null;
     getTaskIndex?: () => TaskIndex;
+    getExportStrategy?: () => ExportStrategy;
 }
 
 /**
@@ -344,31 +346,41 @@ export class ViewSettingsMenu {
         });
 
         // Export as image
-        if (options.getExportContainer && options.getTaskIndex) {
+        if (options.getExportContainer && options.getTaskIndex && options.getExportStrategy) {
             menu.addSeparator();
             const getContainer = options.getExportContainer;
             const getIndex = options.getTaskIndex;
+            const getStrategy = options.getExportStrategy;
+
+            const doExport = async (expandScrollAreas: boolean) => {
+                const container = getContainer();
+                if (!container) {
+                    new Notice(t('notice.noContentToExport'));
+                    return;
+                }
+                const shortType = ViewSettingsMenu.toShortViewType(viewType);
+                const date = new Date().toISOString().slice(0, 10);
+                const name = getCustomName();
+                const filename = name
+                    ? `${name}_${date}.png`
+                    : `${shortType}_${date}.png`;
+                await ViewExporter.exportAsPng({
+                    container,
+                    taskIndex: getIndex(),
+                    filename,
+                    expandScrollAreas,
+                }, getStrategy());
+            };
+
             menu.addItem((item) => {
-                item.setTitle(t('toolbar.exportAsImage'))
+                item.setTitle(t('toolbar.exportVisibleAsImage'))
                     .setIcon('image')
-                    .onClick(async () => {
-                        const container = getContainer();
-                        if (!container) {
-                            new Notice(t('notice.noContentToExport'));
-                            return;
-                        }
-                        const shortType = ViewSettingsMenu.toShortViewType(viewType);
-                        const date = new Date().toISOString().slice(0, 10);
-                        const name = getCustomName();
-                        const filename = name
-                            ? `${name}_${date}.png`
-                            : `${shortType}_${date}.png`;
-                        await ViewExporter.exportAsPng({
-                            container,
-                            taskIndex: getIndex(),
-                            filename,
-                        });
-                    });
+                    .onClick(() => doExport(false));
+            });
+            menu.addItem((item) => {
+                item.setTitle(t('toolbar.exportFullAsImage'))
+                    .setIcon('maximize')
+                    .onClick(() => doExport(true));
             });
         }
 

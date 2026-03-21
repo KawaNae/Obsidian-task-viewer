@@ -21,6 +21,7 @@ interface DateBlockResult {
  */
 export class AtNotationParser implements ParserStrategy {
     readonly id = 'at-notation';
+    readonly isReadOnly = false;
 
     // Regex for locating the Date block: @start>end>due
     // Each segment accepts: YYYY-MM-DD, YYYY-MM-DDTHH:mm, T?HH:mm, or empty

@@ -37,6 +37,7 @@ import { HandleManager } from '../timelineview/HandleManager';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
+import { CalendarExportStrategy } from '../../services/export/CalendarExportStrategy';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
@@ -140,16 +141,12 @@ export class CalendarView extends ItemView {
             const files = state.filterFiles.filter((value: unknown): value is string => typeof value === 'string');
             if (files.length > 0) {
                 this.filterMenu.setFilterState({
-                    root: {
-                        type: 'group',
-                        children: [{
-                            type: 'condition',
-                            property: 'file',
-                            operator: 'includes',
-                            value: files,
-                        }],
-                        logic: 'and',
-                    },
+                    filters: [{
+                        property: 'file',
+                        operator: 'includes',
+                        value: files,
+                    }],
+                    logic: 'and',
                 });
             } else {
                 this.filterMenu.setFilterState(createEmptyFilterState());
@@ -417,6 +414,7 @@ export class CalendarView extends ItemView {
             }),
             getExportContainer: () => this.container.querySelector<HTMLElement>('.calendar-grid'),
             getTaskIndex: () => this.taskIndex,
+            getExportStrategy: () => new CalendarExportStrategy(),
             onApplyTemplate: (template) => {
                 if (template.filterState) {
                     this.filterMenu.setFilterState(template.filterState);
@@ -717,6 +715,7 @@ export class CalendarView extends ItemView {
 
             TaskStyling.applyTaskColor(barEl, entry.task.color ?? null);
             TaskStyling.applyTaskLinestyle(barEl, entry.task.linestyle ?? null);
+            TaskStyling.applyReadOnly(barEl, entry.task);
 
             this.menuHandler.addTaskContextMenu(barEl, entry.task);
             await this.taskRenderer.render(barEl, entry.task, this, this.plugin.settings, { topRight: 'none', compact: true });
@@ -729,6 +728,7 @@ export class CalendarView extends ItemView {
 
         TaskStyling.applyTaskColor(card, entry.task.color ?? null);
         TaskStyling.applyTaskLinestyle(card, entry.task.linestyle ?? null);
+        TaskStyling.applyReadOnly(card, entry.task);
         this.menuHandler.addTaskContextMenu(card, entry.task);
         await this.taskRenderer.render(card, entry.task, this, this.plugin.settings, { compact: true });
     }

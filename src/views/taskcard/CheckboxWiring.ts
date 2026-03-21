@@ -25,8 +25,10 @@ export class CheckboxWiring {
     wireParentCheckbox(
         checkbox: Element,
         taskId: string,
-        settings: TaskViewerSettings
+        settings: TaskViewerSettings,
+        readOnly = false
     ): void {
+        if (readOnly) return;
         checkbox.addEventListener('click', () => {
             const isChecked = (checkbox as HTMLInputElement).checked;
             const newStatusChar = isChecked ? 'x' : ' ';

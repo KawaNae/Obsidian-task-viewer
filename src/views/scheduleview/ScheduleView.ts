@@ -13,6 +13,7 @@ import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineM
 import TaskViewerPlugin from '../../main';
 
 import { DateNavigator, ViewSettingsMenu } from '../sharedUI/ViewToolbar';
+import { ScheduleExportStrategy } from '../../services/export/ScheduleExportStrategy';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
@@ -137,16 +138,12 @@ export class ScheduleView extends ItemView {
             const files = state.filterFiles.filter((value: unknown): value is string => typeof value === 'string');
             if (files.length > 0) {
                 this.filterMenu.setFilterState({
-                    root: {
-                        type: 'group',
-                        children: [{
-                            type: 'condition',
-                            property: 'file',
-                            operator: 'includes',
-                            value: files,
-                        }],
-                        logic: 'and',
-                    },
+                    filters: [{
+                        property: 'file',
+                        operator: 'includes',
+                        value: files,
+                    }],
+                    logic: 'and',
                 });
             } else {
                 this.filterMenu.setFilterState(createEmptyFilterState());
@@ -318,6 +315,7 @@ export class ScheduleView extends ItemView {
             }),
             getExportContainer: () => this.container,
             getTaskIndex: () => this.taskIndex,
+            getExportStrategy: () => new ScheduleExportStrategy(),
             onApplyTemplate: (template) => {
                 if (template.filterState) {
                     this.filterMenu.setFilterState(template.filterState);

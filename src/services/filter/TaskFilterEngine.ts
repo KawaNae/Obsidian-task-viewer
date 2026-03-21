@@ -1,5 +1,6 @@
 import type { Task, DisplayTask } from '../../types';
-import type { FilterState, FilterConditionNode, FilterGroupNode, FilterNode, FilterContext, DateFilterValue } from './FilterTypes';
+import type { FilterState, FilterCondition, FilterGroup, FilterItem, FilterContext, DateFilterValue } from './FilterTypes';
+import { isFilterCondition } from './FilterTypes';
 import { DateResolver } from './DateResolver';
 import { DateUtils } from '../../utils/DateUtils';
 
@@ -16,32 +17,32 @@ import { DateUtils } from '../../utils/DateUtils';
  */
 export class TaskFilterEngine {
     static evaluate(task: Task, filterState: FilterState, context?: FilterContext): boolean {
-        return this.evaluateGroup(task, filterState.root, context);
+        return this.evaluateGroup(task, filterState, context);
     }
 
-    private static evaluateGroup(task: Task, group: FilterGroupNode, context?: FilterContext): boolean {
-        if (group.children.length === 0) return true;
+    private static evaluateGroup(task: Task, group: FilterGroup, context?: FilterContext): boolean {
+        if (group.filters.length === 0) return true;
 
         if (group.logic === 'or') {
-            return group.children.some(child => this.evaluateNode(task, child, context));
+            return group.filters.some(child => this.evaluateItem(task, child, context));
         }
-        return group.children.every(child => this.evaluateNode(task, child, context));
+        return group.filters.every(child => this.evaluateItem(task, child, context));
     }
 
-    private static evaluateNode(task: Task, node: FilterNode, context?: FilterContext): boolean {
-        if (node.type === 'condition') {
+    private static evaluateItem(task: Task, node: FilterItem, context?: FilterContext): boolean {
+        if (isFilterCondition(node)) {
             return this.evalCondition(task, node, context);
         }
         return this.evaluateGroup(task, node, context);
     }
 
-    private static evalCondition(task: Task, condition: FilterConditionNode, context?: FilterContext): boolean {
+    private static evalCondition(task: Task, condition: FilterCondition, context?: FilterContext): boolean {
         // Skip conditions with empty array values (value not yet selected)
         if (Array.isArray(condition.value) && condition.value.length === 0) return true;
 
         // Target resolution: evaluate condition against any ancestor
         if (condition.target === 'parent') {
-            const selfCondition = { ...condition, target: undefined } as FilterConditionNode;
+            const selfCondition = { ...condition, target: undefined } as FilterCondition;
             const seen = new Set<string>();
             let current: Task | undefined = task;
             while (current?.parentId && !seen.has(current.parentId)) {
@@ -93,7 +94,7 @@ export class TaskFilterEngine {
         }
     }
 
-    private static evalStringSet(value: string, c: FilterConditionNode): boolean {
+    private static evalStringSet(value: string, c: FilterCondition): boolean {
         if (!Array.isArray(c.value)) return true;
         if (c.operator === 'includes') return c.value.includes(value);
         if (c.operator === 'excludes') return !c.value.includes(value);
@@ -104,7 +105,7 @@ export class TaskFilterEngine {
         return taskTag === filterTag || taskTag.startsWith(filterTag + '/');
     }
 
-    private static evalTag(task: Task, c: FilterConditionNode): boolean {
+    private static evalTag(task: Task, c: FilterCondition): boolean {
         if (!Array.isArray(c.value)) return true;
         if (c.operator === 'includes') {
             return c.value.some(v => task.tags.some(t => this.tagMatches(t, v)));
@@ -123,7 +124,7 @@ export class TaskFilterEngine {
         return true;
     }
 
-    private static evalContent(task: Task, c: FilterConditionNode): boolean {
+    private static evalContent(task: Task, c: FilterCondition): boolean {
         if (typeof c.value !== 'string') return true;
         const lower = task.content.toLowerCase();
         const search = c.value.toLowerCase();
@@ -132,7 +133,7 @@ export class TaskFilterEngine {
         return true;
     }
 
-    private static evalDate(taskDate: string | undefined, c: FilterConditionNode, startHour: number = 0): boolean {
+    private static evalDate(taskDate: string | undefined, c: FilterCondition, startHour: number = 0): boolean {
         // isSet / isNotSet — existence check, no date value needed
         if (c.operator === 'isSet') return !!taskDate;
         if (c.operator === 'isNotSet') return !taskDate;
@@ -150,7 +151,7 @@ export class TaskFilterEngine {
         }
     }
 
-    private static evalProperty(task: Task, c: FilterConditionNode): boolean {
+    private static evalProperty(task: Task, c: FilterCondition): boolean {
         if (c.key == null) return true;
         const actual = task.properties?.[c.key]?.value;
         const filterValue = typeof c.value === 'string' ? c.value : '';
@@ -164,7 +165,7 @@ export class TaskFilterEngine {
         }
     }
 
-    private static evalLength(task: Task, c: FilterConditionNode, startHour: number): boolean {
+    private static evalLength(task: Task, c: FilterCondition, startHour: number): boolean {
         const dt = task as Partial<DisplayTask>;
         const effectiveStartDate = dt.effectiveStartDate ?? task.startDate;
         const effectiveStartTime = dt.effectiveStartTime ?? task.startTime;

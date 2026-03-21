@@ -142,7 +142,7 @@ describe('CliOutputFormatter', () => {
     describe('cliError', () => {
         it('returns JSON with error field', () => {
             const result = cliError('Something went wrong');
-            expect(JSON.parse(result)).toEqual({ error: 'Something went wrong' });
+            expect(JSON.parse(result)).toEqual({ error: 'Something went wrong', help: 'obsidian obsidian-task-viewer:help' });
         });
     });
 });
