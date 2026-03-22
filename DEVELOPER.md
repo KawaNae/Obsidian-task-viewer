@@ -38,9 +38,8 @@ src/views/taskcard/
 ### Shared type policy
 
 1. `src/types.ts` is reserved for cross-layer models/settings only.
-2. View-only split helpers moved to `src/views/sharedLogic/RenderableTaskUtils.ts` (@deprecated — new code should import from `src/utils/DisplayTaskConverter.ts` directly).
-3. `RenderableTask`, `shouldSplitTask`, and `splitTaskAtBoundary` are re-exported from `src/views/sharedLogic/RenderableTaskUtils.ts` for backward compatibility, but are @deprecated. New code should use `DisplayTask`, `shouldSplitDisplayTask`, and `splitDisplayTaskAtBoundary` from `DisplayTaskConverter`.
-4. Task-card-local render helper types are defined in `src/views/taskcard/types.ts`.
+2. Split helpers (`DisplayTask`, `shouldSplitDisplayTask`, `splitDisplayTaskAtBoundary`) are in `src/utils/DisplayTaskConverter.ts`.
+3. Task-card-local render helper types are defined in `src/views/taskcard/types.ts`.
 
 ### Task content invariant
 
@@ -113,7 +112,7 @@ src/
 │   ├── kanban/                # Kanban view
 │   ├── taskcard/              # Task card rendering (see section above)
 │   ├── sharedUI/              # Shared UI components (ViewToolbar, PinnedListRenderer, etc.)
-│   ├── sharedLogic/           # Shared logic (RenderableTaskUtils, GridTaskLayout, etc.)
+│   ├── sharedLogic/           # Shared logic (GridTaskLayout, etc.)
 │   ├── customMenus/           # Filter/Sort popover menus, IntervalTemplateCreator
 │   ├── sidebar/               # SidebarManager, SidebarToggleButton
 │   └── TimerView.ts           # Timer view (Pomodoro / Countdown / Countup / Interval)
@@ -477,7 +476,6 @@ npm run build     # Production build
 |----------|----------|
 | `src/types.ts` | Cross-layer model types and settings only |
 | `src/views/taskcard/types.ts` | Task-card-local render helper types |
-| `src/views/sharedLogic/RenderableTaskUtils.ts` | `RenderableTask` and split helpers |
 | Inside each subsystem directory | Subsystem-specific types (do not promote to cross-layer) |
 
 ### Tooltip convention

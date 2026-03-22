@@ -1,5 +1,5 @@
 import { setIcon, Menu, Notice } from 'obsidian';
-import type { App, WorkspaceLeaf } from 'obsidian';
+import type { App, MenuItem, WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../../utils/ViewUriBuilder';
 import { InputModal } from '../../modals/InputModal';
@@ -98,10 +98,9 @@ export class ViewModeSelector {
         applyModeLabel(currentValue);
 
         button.onclick = (e) => {
-            const { Menu } = require('obsidian');
             const menu = new Menu();
 
-            menu.addItem((item: any) => {
+            menu.addItem((item: MenuItem) => {
                 item.setTitle(t('toolbar.viewMode1Day'))
                     .setChecked(currentValue === 1)
                     .onClick(() => {
@@ -110,7 +109,7 @@ export class ViewModeSelector {
                     });
             });
 
-            menu.addItem((item: any) => {
+            menu.addItem((item: MenuItem) => {
                 item.setTitle(t('toolbar.viewMode3Days'))
                     .setChecked(currentValue === 3)
                     .onClick(() => {
@@ -119,7 +118,7 @@ export class ViewModeSelector {
                     });
             });
 
-            menu.addItem((item: any) => {
+            menu.addItem((item: MenuItem) => {
                 item.setTitle(t('toolbar.viewModeWeek'))
                     .setChecked(currentValue === 7)
                     .onClick(() => {
@@ -162,11 +161,10 @@ export class ZoomSelector {
 
         const zoomLevels = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
         button.onclick = (e) => {
-            const { Menu } = require('obsidian');
             const menu = new Menu();
             for (const level of zoomLevels) {
                 const pct = `${Math.round(level * 100)}%`;
-                menu.addItem((item: any) => {
+                menu.addItem((item: MenuItem) => {
                     item.setTitle(pct)
                         .setChecked(currentZoom === level)
                         .onClick(async () => {

@@ -1,9 +1,11 @@
 import { Task } from '../../types';
+import type TaskViewerPlugin from '../../main';
+import type { TaskIndex } from '../../services/core/TaskIndex';
 
 export interface DragContext {
     container: HTMLElement;
-    plugin: any;
-    taskIndex: any;
+    plugin: TaskViewerPlugin;
+    taskIndex: TaskIndex;
     onTaskMove: () => void;
     onTaskClick: (taskId: string) => void;
     // Helper to get visual date from column element

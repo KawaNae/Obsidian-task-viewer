@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, setIcon, type Workspace } from 'obsidian';
+import { ItemView, WorkspaceLeaf, setIcon, type Workspace, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
 import { ViewUriBuilder } from '../../utils/ViewUriBuilder';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -13,6 +13,7 @@ import { toDisplayTask, toDisplayTasks } from '../../utils/DisplayTaskConverter'
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 
 import TaskViewerPlugin from '../../main';
+import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
 
 import { HandleManager } from './HandleManager';
 import { TimelineToolbar } from './TimelineToolbar';
@@ -23,7 +24,7 @@ import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
 import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
-import { createEmptyFilterState } from '../../services/filter/FilterTypes';
+import { createEmptyFilterState, type FilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
@@ -43,8 +44,19 @@ export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
  * - Color & Styling: applyTaskColor
  * - Task Creation: addCreateTaskListeners, handleCreateTaskTrigger
  */
+interface TimelineViewState {
+    daysToShow?: number;
+    zoomLevel?: number;
+    startDate?: string;
+    filterState?: FilterState;
+    filterFiles?: string[];
+    showSidebar?: boolean;
+    pinnedListCollapsed?: Record<string, boolean>;
+    pinnedLists?: PinnedListDefinition[];
+    customName?: string;
+}
+
 export class TimelineView extends ItemView {
-    private static readonly MOBILE_BREAKPOINT_PX = 768;
     // ==================== Services & Handlers ====================
     private taskIndex: TaskIndex;
     private plugin: TaskViewerPlugin;
@@ -96,7 +108,7 @@ export class TimelineView extends ItemView {
             pinnedLists: [],
         };
         this.sidebarManager = new SidebarManager({
-            mobileBreakpointPx: TimelineView.MOBILE_BREAKPOINT_PX,
+            mobileBreakpointPx: MOBILE_BREAKPOINT_PX,
             onPersist: () => this.app.workspace.requestSaveLayout(),
             onSyncToggleButton: () => this.toolbar?.syncSidebarToggleState(),
             onRequestClose: () => {
@@ -123,7 +135,7 @@ export class TimelineView extends ItemView {
         return VIEW_META_TIMELINE.icon;
     }
 
-    async setState(state: any, result: any): Promise<void> {
+    async setState(state: TimelineViewState, result: ViewStateResult): Promise<void> {
         if (state) {
             if (typeof state.daysToShow === 'number') {
                 this.viewState.daysToShow = state.daysToShow;
@@ -263,9 +275,7 @@ export class TimelineView extends ItemView {
             (taskId) => {
                 this.handleManager.selectTask(taskId);
             },
-            () => {
-                this.handleManager.updatePositions();
-            },
+            () => { /* no-op: handles are inside task cards */ },
             () => this.viewState.startDate,
             () => this.getEffectiveZoomLevel()
         );
@@ -342,13 +352,6 @@ export class TimelineView extends ItemView {
                 return;
             }
             this.render();
-        });
-
-        // Window resize listener
-        // Use the window of the container (handles popout windows)
-        const win = this.container.ownerDocument.defaultView || window;
-        this.registerDomEvent(win, 'resize', () => {
-            this.handleManager.updatePositions();
         });
 
         // Ctrl+wheel zoom
@@ -674,7 +677,6 @@ export class TimelineView extends ItemView {
             allDisplayTasks
         );
 
-        this.handleManager.createOverlay();
         this.renderCurrentTimeIndicator();
 
         // Restore scroll position or scroll to now

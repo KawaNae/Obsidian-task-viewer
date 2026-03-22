@@ -134,9 +134,9 @@
 
 /* Danger menu item (Remove) — used across all Obsidian menus */
 .menu-item.is-danger {
-    color: var(--text-error);
+    color: var(--tv-text-danger);
 }
 
 .menu-item.is-danger .menu-item-icon {
-    color: var(--text-error);
+    color: var(--tv-text-danger);
 }

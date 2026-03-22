@@ -1,3 +1,5 @@
+import { isFrontmatterTask } from '../types';
+
 export interface ParsedTaskId {
     parserId: string;
     filePath: string;
@@ -35,7 +37,7 @@ export class TaskIdGenerator {
             return `tid:${timerTargetId}`;
         }
 
-        if (input.parserId === 'frontmatter') {
+        if (isFrontmatterTask(input)) {
             return 'fm-root';
         }
 

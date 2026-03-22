@@ -34,6 +34,11 @@ type TimerViewMode = 'countup' | 'countdown' | 'pomodoro' | 'interval';
 
 const TIMER_VIEW_ID = '__timer-view__';
 
+interface TimerViewState {
+    timerViewMode?: 'countup' | 'countdown' | 'pomodoro' | 'interval';
+    intervalTemplate?: string;
+}
+
 export class TimerView extends ItemView {
     private plugin: TaskViewerPlugin;
     private container: HTMLElement;
@@ -71,7 +76,7 @@ export class TimerView extends ItemView {
         this.render();
     }
 
-    async setState(state: any, result: ViewStateResult): Promise<void> {
+    async setState(state: TimerViewState, result: ViewStateResult): Promise<void> {
         await super.setState(state, result);
 
         const mode = state?.timerViewMode;

@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
+import { ItemView, WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
 import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../../services/core/TaskIndex';
@@ -16,7 +16,7 @@ import { DateNavigator, ViewSettingsMenu } from '../sharedUI/ViewToolbar';
 import { ScheduleExportStrategy } from '../../services/export/ScheduleExportStrategy';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
-import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
+import { createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
@@ -31,6 +31,13 @@ import { toDisplayTasks, isDisplayTaskOnVisualDate } from '../../utils/DisplayTa
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 
 export const VIEW_TYPE_SCHEDULE = VIEW_META_SCHEDULE.type;
+
+interface ScheduleViewState {
+    currentDate?: string;
+    filterState?: FilterState;
+    filterFiles?: string[];
+    customName?: string;
+}
 
 export class ScheduleView extends ItemView {
     private static readonly HOURS_PER_DAY = 24;
@@ -129,7 +136,7 @@ export class ScheduleView extends ItemView {
         return VIEW_META_SCHEDULE.icon;
     }
 
-    async setState(state: any, result: any): Promise<void> {
+    async setState(state: ScheduleViewState, result: ViewStateResult): Promise<void> {
         if (state && typeof state.currentDate === 'string' && this.isValidDateKey(state.currentDate)) {
             this.currentVisualDate = state.currentDate;
         }

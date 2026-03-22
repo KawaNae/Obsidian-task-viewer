@@ -1,12 +1,12 @@
 import { App, TFile } from 'obsidian';
-import { Task } from '../../types';
+import { Task, isFrontmatterTask } from '../../types';
 
 /**
  * Resolves the absolute line number for a child line within a task.
  * Returns -1 if the line number cannot be determined.
  */
 export function resolveChildLineNumber(app: App, task: Task, childLineIndex: number): number {
-    if (task.parserId === 'frontmatter') {
+    if (isFrontmatterTask(task)) {
         const bodyOffset = task.childLineBodyOffsets[childLineIndex];
         if (bodyOffset === undefined) return -1;
 

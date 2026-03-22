@@ -1,4 +1,4 @@
-import { ItemView, Menu, WorkspaceLeaf, setIcon } from 'obsidian';
+import { ItemView, Menu, WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -24,6 +24,13 @@ import type { PinnedListDefinition, DisplayTask } from '../../types';
 import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
 
 export const VIEW_TYPE_KANBAN = VIEW_META_KANBAN.type;
+
+interface KanbanViewState {
+    grid?: PinnedListDefinition[][];
+    gridCollapsed?: Record<string, boolean>;
+    customName?: string;
+    filterState?: FilterState;
+}
 
 export class KanbanView extends ItemView {
     private readonly taskIndex: TaskIndex;
@@ -80,7 +87,7 @@ export class KanbanView extends ItemView {
         return VIEW_META_KANBAN.icon;
     }
 
-    async setState(state: any, result: any): Promise<void> {
+    async setState(state: KanbanViewState, result: ViewStateResult): Promise<void> {
         if (state?.grid && Array.isArray(state.grid)) {
             this.grid = state.grid;
         }

@@ -329,10 +329,8 @@ export class TaskScanner {
             isFirstScan = true;
         }
 
-        console.log(`[🔄SYNC] Scan: ${file.path}, isLocalChange=${isLocalChange}, isFirstScan=${isFirstScan}, isInitializing=${this.isInitializing}`);
-
         if (!isLocalChange && !isFirstScan && !this.isInitializing) {
-            console.log(`[🔄SYNC] ⛔ Sync-driven change detected, skipping command: ${file.path}`);
+            // Sync-driven change detected — skip command execution
         }
 
         for (const task of doneTasks) {
@@ -343,19 +341,14 @@ export class TaskScanner {
             const currentCount = currentCounts.get(sig) || 0;
             const previousCount = this.processedCompletions.get(sig) || 0;
 
-            console.log(`[🔄SYNC] Task: ${task.content.substring(0, 30)}..., cur=${currentCount}, prev=${previousCount}, local=${isLocalChange}`);
-
             if (currentCount > previousCount) {
                 const diff = currentCount - previousCount;
 
                 // トリガー条件: 初期化中でない、初回スキャンでない、ローカル変更である
                 if (!this.isInitializing && !isFirstScan && isLocalChange) {
-                    console.log(`[🔄SYNC] ✅ Executing command for: ${task.content.substring(0, 30)}...`);
                     for (let k = 0; k < diff; k++) {
                         tasksToTrigger.push(task);
                     }
-                } else {
-                    console.log(`[TaskIndex] Skipping command - isInitializing=${this.isInitializing}, isFirstScan=${isFirstScan}, isLocalChange=${isLocalChange}`);
                 }
             }
         }

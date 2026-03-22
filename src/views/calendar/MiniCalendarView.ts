@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, TFile, setIcon } from 'obsidian';
+import { ItemView, WorkspaceLeaf, TFile, setIcon, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
 import type { HoverParent } from 'obsidian';
 import { Task, DisplayTask } from '../../types';
@@ -28,6 +28,11 @@ export const VIEW_TYPE_MINI_CALENDAR = VIEW_META_MINI_CALENDAR.type;
 interface IndicatorState {
     hasIncomplete: boolean;
     hasComplete: boolean;
+}
+
+interface MiniCalendarViewState {
+    windowStart?: string;
+    monthKey?: string;
 }
 
 export class MiniCalendarView extends ItemView {
@@ -66,7 +71,7 @@ export class MiniCalendarView extends ItemView {
         return VIEW_META_MINI_CALENDAR.icon;
     }
 
-    async setState(state: any, result: any): Promise<void> {
+    async setState(state: MiniCalendarViewState, result: ViewStateResult): Promise<void> {
         if (state && typeof state.windowStart === 'string') {
             const parsedWindowStart = this.parseLocalDateString(state.windowStart);
             if (parsedWindowStart) {

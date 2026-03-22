@@ -20,15 +20,6 @@ export class HandleManager {
     }
 
     /**
-     * Creates the handle overlay element.
-     * @deprecated Kept for backwards compatibility, no longer needed.
-     */
-    createOverlay(): HTMLElement {
-        // No-op: handles are now inside task cards
-        return this.container;
-    }
-
-    /**
      * Gets the currently selected task ID.
      */
     getSelectedTaskId(): string | null {
@@ -76,14 +67,6 @@ export class HandleManager {
         if (taskId) {
             this.renderHandles(taskId);
         }
-    }
-
-    /**
-     * Updates handle positions (call on scroll/resize).
-     * @deprecated No longer needed - handles are inside task cards and scroll with them.
-     */
-    updatePositions(): void {
-        // No-op: handles are inside task cards, CSS handles positioning
     }
 
     /**

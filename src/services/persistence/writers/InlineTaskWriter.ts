@@ -33,7 +33,6 @@ export class InlineTaskWriter {
 
             // Re-format line
             const newLine = TaskParser.format(updatedTask);
-            console.log(`[InlineTaskWriter] Updating line ${currentLine}: "${lines[currentLine]}" -> "${newLine}"`);
 
             // Preserve indentation if possible
             const originalIndent = lines[currentLine].match(/^(\s*)/)?.[1] || '';

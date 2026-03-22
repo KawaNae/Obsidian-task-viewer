@@ -1,5 +1,5 @@
 import { App, MarkdownRenderer, Component, setIcon } from 'obsidian';
-import { Task, DisplayTask, TaskViewerSettings, isCompleteStatusChar } from '../../types';
+import { Task, DisplayTask, TaskViewerSettings, isCompleteStatusChar, isFrontmatterTask } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
 import { getFileBaseName, hasTaskContent, isContentMatchingBaseName } from '../../utils/TaskContent';
@@ -70,7 +70,7 @@ export class TaskCardRenderer {
                 e.stopPropagation();
                 this.onDetailClick?.(task);
             });
-        } else if (task.parserId === 'frontmatter') {
+        } else if (isFrontmatterTask(task)) {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
             await this.renderFrontmatterChildren(contentContainer, task, component, settings, forceExpand);
         } else if (task.childLines.length > 0) {
@@ -87,7 +87,7 @@ export class TaskCardRenderer {
         let completed = 0;
         let total = 0;
 
-        if (task.parserId === 'frontmatter') {
+        if (isFrontmatterTask(task)) {
             for (const childId of task.childIds) {
                 const child = this.childItemBuilder.getTaskIndex().getTask(childId);
                 if (!child) continue;

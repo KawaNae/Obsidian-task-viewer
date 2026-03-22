@@ -145,8 +145,7 @@ export class PropertySuggestObserver {
 
             const settings = this.getSettings();
             const colorKey = settings.frontmatterTaskKeys.color;
-            // @ts-ignore - processFrontMatter
-            await this.app.fileManager.processFrontMatter(activeFile, (frontmatter: any) => {
+            await this.app.fileManager.processFrontMatter(activeFile, (frontmatter: Record<string, unknown>) => {
                 frontmatter[colorKey] = colorInput.value;
             });
 

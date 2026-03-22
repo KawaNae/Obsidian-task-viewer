@@ -225,8 +225,8 @@
 }
 
 .template-creator .template-creator__type-btn--break {
-    border-color: var(--text-error);
-    color: var(--text-error);
+    border-color: var(--tv-text-danger);
+    color: var(--tv-text-danger);
 }
 
 /* ── Add / Remove Buttons ── */
@@ -282,7 +282,7 @@
 }
 
 .template-creator .template-creator__remove-btn:hover {
-    color: var(--text-error);
+    color: var(--tv-text-danger);
     background-color: var(--tv-bg-hover);
     box-shadow: none;
 }
@@ -305,7 +305,7 @@
 .template-creator__error {
     flex: 1;
     font-size: 0.75em;
-    color: var(--text-error);
+    color: var(--tv-text-danger);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;

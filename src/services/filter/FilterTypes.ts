@@ -131,15 +131,6 @@ export function deepCloneNode(node: FilterItem): FilterItem {
     };
 }
 
-// ── Deprecated aliases (remove in next major) ──
-
-/** @deprecated Use FilterCondition */
-export type FilterConditionNode = FilterCondition;
-/** @deprecated Use FilterGroup */
-export type FilterGroupNode = FilterGroup;
-/** @deprecated Use FilterItem */
-export type FilterNode = FilterItem;
-
 // ── Constants ──
 
 /** Date properties that use date comparison operators */

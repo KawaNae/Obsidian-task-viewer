@@ -1,4 +1,4 @@
-import { ItemView, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
+import { ItemView, TFile, WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
 import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../../services/core/TaskIndex';
@@ -9,6 +9,7 @@ import { DateUtils } from '../../utils/DateUtils';
 import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
 import {
     getTaskDateRange,
     isTaskCompleted as isTaskCompletedUtil,
@@ -28,7 +29,7 @@ import { DateNavigator, ViewSettingsMenu } from '../sharedUI/ViewToolbar';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
-import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
+import { createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
@@ -43,6 +44,17 @@ import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
+
+interface CalendarViewState {
+    windowStart?: string;
+    monthKey?: string;
+    filterState?: FilterState;
+    filterFiles?: string[];
+    showSidebar?: boolean;
+    pinnedListCollapsed?: Record<string, boolean>;
+    pinnedLists?: PinnedListDefinition[];
+    customName?: string;
+}
 
 export class CalendarView extends ItemView {
     private readonly taskIndex: TaskIndex;
@@ -83,7 +95,7 @@ export class CalendarView extends ItemView {
         });
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.sidebarManager = new SidebarManager({
-            mobileBreakpointPx: 768,
+            mobileBreakpointPx: MOBILE_BREAKPOINT_PX,
             onPersist: () => this.app.workspace.requestSaveLayout(),
             onSyncToggleButton: () => this.syncSidebarToggleBtn?.(),
             onRequestClose: () => {
@@ -116,7 +128,7 @@ export class CalendarView extends ItemView {
         return VIEW_META_CALENDAR.icon;
     }
 
-    async setState(state: any, result: any): Promise<void> {
+    async setState(state: CalendarViewState, result: ViewStateResult): Promise<void> {
         if (state && typeof state.windowStart === 'string') {
             const parsedWindowStart = this.parseLocalDateString(state.windowStart);
             if (parsedWindowStart) {
@@ -222,9 +234,7 @@ export class CalendarView extends ItemView {
             (taskId: string) => {
                 this.handleManager?.selectTask(taskId);
             },
-            () => {
-                this.handleManager?.updatePositions();
-            },
+            () => { /* no-op: handles are inside task cards */ },
             () => this.getViewStartDateString(),
             () => this.plugin.settings.zoomLevel
         );

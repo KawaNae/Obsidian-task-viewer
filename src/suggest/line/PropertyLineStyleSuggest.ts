@@ -49,8 +49,7 @@ export class PropertyLineStyleSuggest extends AbstractInputSuggest<string> {
         }
 
         const linestyleKey = this.plugin.settings.frontmatterTaskKeys.linestyle;
-        // @ts-ignore - processFrontMatter
-        await this.plugin.app.fileManager.processFrontMatter(activeFile, (frontmatter: any) => {
+        await this.plugin.app.fileManager.processFrontMatter(activeFile, (frontmatter: Record<string, unknown>) => {
             frontmatter[linestyleKey] = value;
         });
 

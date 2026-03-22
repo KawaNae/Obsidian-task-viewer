@@ -1,5 +1,5 @@
 import { App, MarkdownView, Menu } from 'obsidian';
-import { Task } from '../../../types';
+import { Task, isFrontmatterTask } from '../../../types';
 import { TaskIndex } from '../../../services/core/TaskIndex';
 import TaskViewerPlugin from '../../../main';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
@@ -96,7 +96,7 @@ export class TaskActionsMenuBuilder {
                         const taskLine = formatTaskLine(result);
                         const repository = this.plugin.getTaskRepository();
 
-                        if (task.parserId === 'frontmatter') {
+                        if (isFrontmatterTask(task)) {
                             await repository.insertLineAfterFrontmatter(
                                 task.file, taskLine,
                                 this.plugin.settings.frontmatterTaskHeader,

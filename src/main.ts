@@ -58,7 +58,6 @@ export default class TaskViewerPlugin extends Plugin {
     private taskMenuNotifySettingsChanged: (() => void) | null = null;
 
     async onload() {
-        console.log('Loading Task Viewer Plugin (Rewrite)');
 
         // Initialize i18n
         initI18n();
@@ -488,7 +487,6 @@ export default class TaskViewerPlugin extends Plugin {
         this.dateCheckInterval = setInterval(() => {
             const currentVisualDate = DateUtils.getVisualDateOfNow(this.settings.startHour);
             if (currentVisualDate !== this.lastVisualDate) {
-                console.log(`[TaskViewer] Day boundary crossed: ${this.lastVisualDate} -> ${currentVisualDate}`);
                 this.lastVisualDate = currentVisualDate;
                 this.refreshAllViews();
             }
@@ -590,7 +588,6 @@ export default class TaskViewerPlugin extends Plugin {
     }
 
     onunload() {
-        console.log('Unloading Task Viewer Plugin');
         this.taskMenuCleanup?.();
         this.taskIndex?.dispose();
         AudioUtils.dispose();
