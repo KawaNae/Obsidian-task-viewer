@@ -270,7 +270,7 @@ export class CalendarView extends ItemView {
             return;
         }
 
-        const oldMain = this.container.querySelector('.view-sidebar-main') as HTMLElement | null;
+        const oldMain = this.container.querySelector('.calendar-grid__body') as HTMLElement | null;
         if (oldMain) {
             this.lastScrollTop = oldMain.scrollTop;
             this.hasValidScrollPosition = true;
@@ -359,7 +359,7 @@ export class CalendarView extends ItemView {
         if (this.hasValidScrollPosition) {
             const savedScrollTop = this.lastScrollTop;
             requestAnimationFrame(() => {
-                const newMain = this.container.querySelector('.view-sidebar-main') as HTMLElement | null;
+                const newMain = this.container.querySelector('.calendar-grid__body') as HTMLElement | null;
                 if (newMain) {
                     newMain.scrollTop = savedScrollTop;
                 }
