@@ -161,7 +161,7 @@ export class CreateTaskModal extends Modal {
 
         // Date field (placeholder set later by updatePlaceholders())
         const dateDiv = row.createDiv({ cls: 'create-task-modal__date-row__field' });
-        dateDiv.createEl('label', { text: 'Date' });
+        dateDiv.createEl('label', { text: t('modal.date') });
         const dateInput = this.createPickerTextInput(
             dateDiv,
             'date',
@@ -171,7 +171,7 @@ export class CreateTaskModal extends Modal {
 
         // Time field (placeholder set later by updatePlaceholders())
         const timeDiv = row.createDiv({ cls: 'create-task-modal__date-row__field' });
-        timeDiv.createEl('label', { text: 'Time' });
+        timeDiv.createEl('label', { text: t('modal.time') });
         const timeInput = this.createPickerTextInput(
             timeDiv,
             'time',
@@ -222,7 +222,7 @@ export class CreateTaskModal extends Modal {
             cls: 'create-task-modal__picker-button'
         });
         pickerButton.setAttribute('aria-label',
-            pickerType === 'date' ? 'Open date picker' : 'Open time picker');
+            pickerType === 'date' ? t('modal.openDatePicker') : t('modal.openTimePicker'));
         setIcon(pickerButton, pickerType === 'date' ? 'calendar' : 'clock');
 
         // Hidden native picker input — pointer-events: auto (CSS) so iPad users
@@ -339,7 +339,7 @@ export class CreateTaskModal extends Modal {
         // Warning: empty task won't appear in viewer
         const { startDate: sd, startTime: st, endDate: ed, endTime: et, dueDate: dd, dueTime: dt } = fields;
         if (this.options.warnOnEmptyTask && !this.result.content.trim() && !sd && !st && !ed && !et && !dd && !dt) {
-            this.warningEl.setText('Task name and date are both empty — this task will not appear in the viewer.');
+            this.warningEl.setText(t('modal.emptyTaskWarning'));
             this.warningEl.style.display = 'block';
         } else {
             this.warningEl.style.display = 'none';

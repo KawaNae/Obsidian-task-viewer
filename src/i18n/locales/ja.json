@@ -396,7 +396,9 @@
     "dateOptional": "日付（オプション）",
     "editType": "{{type}}を編集",
     "changeProperties": "プロパティを変更",
-    "emptyTaskWarning": "タスク名と日付が両方空です — このタスクはビューアーに表示されません。"
+    "emptyTaskWarning": "タスク名と日付が両方空です — このタスクはビューアーに表示されません。",
+    "openDatePicker": "日付ピッカーを開く",
+    "openTimePicker": "時刻ピッカーを開く"
   },
   "menu": {
     "properties": "プロパティ",
