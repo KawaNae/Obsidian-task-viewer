@@ -1,7 +1,7 @@
 import { Task, ChildLine, isFrontmatterTask } from '../../types';
 import { NotationUtils } from './NotationUtils';
 import { ChildRenderItem } from './types';
-import { getFileBaseName } from '../../utils/TaskContent';
+import { getFileBaseName } from '../../services/parsing/utils/TaskContent';
 
 /**
  * Pure conversion: Task / raw line → ChildRenderItem.

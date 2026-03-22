@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { WikiLinkResolver } from '../../src/services/core/WikiLinkResolver';
 import type { Task, WikilinkRef, ChildLine } from '../../src/types';
 import { createInMemoryVault, createFakeApp } from '../helpers/fakeApp';
-import { TaskIdGenerator } from '../../src/utils/TaskIdGenerator';
+import { TaskIdGenerator } from '../../src/services/display/TaskIdGenerator';
 
 // ---------------------------------------------------------------------------
 // Helpers

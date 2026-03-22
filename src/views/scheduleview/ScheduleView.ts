@@ -27,7 +27,7 @@ import { ScheduleOverlapLayout } from './utils/ScheduleOverlapLayout';
 import { ScheduleGridRenderer } from './renderers/ScheduleGridRenderer';
 import { ScheduleTaskRenderer } from './renderers/ScheduleTaskRenderer';
 import { ScheduleSectionRenderer } from './renderers/ScheduleSectionRenderer';
-import { toDisplayTasks, isDisplayTaskOnVisualDate } from '../../utils/DisplayTaskConverter';
+import { toDisplayTasks, isDisplayTaskOnVisualDate } from '../../services/display/DisplayTaskConverter';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 
 export const VIEW_TYPE_SCHEDULE = VIEW_META_SCHEDULE.type;

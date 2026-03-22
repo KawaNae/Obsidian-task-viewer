@@ -8,7 +8,7 @@ import { PropertyFormatter } from './PropertyFormatter';
 import { PropertiesMenuBuilder } from './builders/PropertiesMenuBuilder';
 import { TimerMenuBuilder } from './builders/TimerMenuBuilder';
 import { TaskActionsMenuBuilder } from './builders/TaskActionsMenuBuilder';
-import { toDisplayTask, getOriginalTaskId } from '../../utils/DisplayTaskConverter';
+import { toDisplayTask, getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 
 /**
  * MenuHandler - タスクコンテキストメニューの統括ファサード

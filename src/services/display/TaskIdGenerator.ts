@@ -1,4 +1,4 @@
-import { isFrontmatterTask } from '../types';
+import { isFrontmatterTask } from '../../types';
 
 export interface ParsedTaskId {
     parserId: string;

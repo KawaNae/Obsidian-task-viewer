@@ -8,13 +8,13 @@
 import { App, Notice } from 'obsidian';
 import { t } from '../i18n';
 import TaskViewerPlugin from '../main';
-import { AudioUtils } from '../utils/AudioUtils';
+import { AudioUtils } from './AudioUtils';
 import {
     TimerInstance,
     TimerStartConfig
 } from './TimerInstance';
 import { TimerRecorder } from './TimerRecorder';
-import { TaskIdGenerator } from '../utils/TaskIdGenerator';
+import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
 import { TimerStorageUtils } from './TimerStorageUtils';
 import { TimerCreator } from './TimerCreator';
 import { TimerLifecycle } from './TimerLifecycle';

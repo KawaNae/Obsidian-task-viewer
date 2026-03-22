@@ -1,6 +1,6 @@
 import { Task, isFrontmatterTask } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
-import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
+import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 
 /**
  * Resolves child lines to Task references.

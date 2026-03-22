@@ -1,5 +1,5 @@
-import type { Task, DisplayTask } from '../types';
-import { DateUtils } from './DateUtils';
+import type { Task, DisplayTask } from '../../types';
+import { DateUtils } from '../../utils/DateUtils';
 import { TaskIdGenerator } from './TaskIdGenerator';
 
 /** Get the original (pre-split) task ID. Works for both Task and DisplayTask. */

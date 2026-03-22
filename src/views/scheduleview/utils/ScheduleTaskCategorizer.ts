@@ -5,7 +5,7 @@ import {
     toDisplayTask,
     shouldSplitDisplayTask,
     splitDisplayTaskAtBoundary,
-} from '../../../utils/DisplayTaskConverter';
+} from '../../../services/display/DisplayTaskConverter';
 import type { FilterMenuComponent } from '../../customMenus/FilterMenuComponent';
 import type { CategorizedTasks, TimedDisplayTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from './ScheduleGridCalculator';

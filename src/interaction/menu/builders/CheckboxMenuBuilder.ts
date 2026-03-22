@@ -4,7 +4,7 @@ import { buildStatusOptions, createStatusTitle } from '../../../constants/status
 import { CreateTaskModal, type CreateTaskResult, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { DateUtils } from '../../../utils/DateUtils';
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
-import { TaskLineClassifier } from '../../../utils/TaskLineClassifier';
+import { TaskLineClassifier } from '../../../services/parsing/utils/TaskLineClassifier';
 import { t } from '../../../i18n';
 
 export type CreateFrontmatterTaskCallback = (result: CreateTaskResult, statusChar: string) => Promise<string>;

@@ -1,6 +1,6 @@
 import { ItemView, WorkspaceLeaf, setIcon, type Workspace, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
-import { ViewUriBuilder } from '../../utils/ViewUriBuilder';
+import { ViewUriBuilder } from '../sharedLogic/ViewUriBuilder';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { Task, ViewState, PinnedListDefinition, isCompleteStatusChar } from '../../types';
@@ -9,7 +9,7 @@ import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
 
 import { DateUtils } from '../../utils/DateUtils';
-import { toDisplayTask, toDisplayTasks } from '../../utils/DisplayTaskConverter';
+import { toDisplayTask, toDisplayTasks } from '../../services/display/DisplayTaskConverter';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 
 import TaskViewerPlugin from '../../main';

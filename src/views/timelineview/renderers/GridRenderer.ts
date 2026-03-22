@@ -13,7 +13,7 @@ import { t } from '../../../i18n';
 import { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './TimelineSectionRenderer';
 import { TaskIndex } from '../../../services/core/TaskIndex';
-import { isDisplayTaskOnVisualDate } from '../../../utils/DisplayTaskConverter';
+import { isDisplayTaskOnVisualDate } from '../../../services/display/DisplayTaskConverter';
 import type { DisplayTask } from '../../../types';
 import { HabitTrackerRenderer } from '../../sharedUI/HabitTrackerRenderer';
 

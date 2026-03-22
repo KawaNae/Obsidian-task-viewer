@@ -13,11 +13,11 @@ import { TimerContext } from './TimerContext';
 import { TimerCreator } from './TimerCreator';
 import { TimerLifecycle } from './TimerLifecycle';
 import { TimerRecorder } from './TimerRecorder';
-import { getDisplayFileName, getTaskDisplayName } from '../utils/TaskContent';
+import { getDisplayFileName, getTaskDisplayName } from '../services/parsing/utils/TaskContent';
 import { TaskStyling } from '../views/sharedUI/TaskStyling';
 import { TimerProgressUI } from './TimerProgressUI';
 import { TimerSettingsMenu } from './TimerSettingsMenu';
-import { AudioUtils } from '../utils/AudioUtils';
+import { AudioUtils } from './AudioUtils';
 import { TimeFormatter } from '../utils/TimeFormatter';
 
 export class TimerRenderer {

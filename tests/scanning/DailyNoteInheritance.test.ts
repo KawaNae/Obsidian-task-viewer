@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ImplicitCalendarDateResolver } from '../../src/utils/ImplicitCalendarDateResolver';
+import { ImplicitCalendarDateResolver } from '../../src/services/display/ImplicitCalendarDateResolver';
 
 /**
  * Daily note inheritance tests.

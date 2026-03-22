@@ -4,7 +4,7 @@ import { TaskCardRenderer } from '../views/taskcard/TaskCardRenderer';
 import { TaskStyling } from '../views/sharedUI/TaskStyling';
 import { MenuHandler } from '../interaction/menu/MenuHandler';
 import { TaskIndex } from '../services/core/TaskIndex';
-import { toDisplayTask } from '../utils/DisplayTaskConverter';
+import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 
 export class TaskDetailModal extends Modal {
     private renderComponent: Component;

@@ -5,8 +5,8 @@ import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner } from './TaskCloner';
 import { TaskConverter } from './TaskConverter';
-import { getFileBaseName } from '../../utils/TaskContent';
-import { TaskLineClassifier } from '../../utils/TaskLineClassifier';
+import { getFileBaseName } from '../parsing/utils/TaskContent';
+import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 
 /**
  * TaskRepository - タスクのファイル操作を統括するファサードクラス

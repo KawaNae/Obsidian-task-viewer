@@ -1,7 +1,7 @@
 import { Menu } from 'obsidian';
 import { Task } from '../../../types';
 import TaskViewerPlugin from '../../../main';
-import { getTaskDisplayName } from '../../../utils/TaskContent';
+import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
 import { DateUtils } from '../../../utils/DateUtils';
 import { TaskParser } from '../../../services/parsing/TaskParser';
 import { t } from '../../../i18n';

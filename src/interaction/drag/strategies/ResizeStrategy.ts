@@ -8,7 +8,7 @@ import {
     toLogicalHeightPx,
     toLogicalTopPx
 } from '../../../views/sharedLogic/TimelineCardPosition';
-import { getOriginalTaskId } from '../../../utils/DisplayTaskConverter';
+import { getOriginalTaskId } from '../../../services/display/DisplayTaskConverter';
 
 /**
  * リサイズ操作を処理するドラッグストラテジー。

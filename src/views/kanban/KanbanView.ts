@@ -21,7 +21,7 @@ import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManag
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
 import type { PinnedListDefinition, DisplayTask } from '../../types';
-import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
+import { toDisplayTasks } from '../../services/display/DisplayTaskConverter';
 
 export const VIEW_TYPE_KANBAN = VIEW_META_KANBAN.type;
 

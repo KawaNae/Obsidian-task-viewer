@@ -4,7 +4,7 @@ import { Task } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
 import { GhostManager, GhostSegment } from '../ghost/GhostManager';
 import { createGhostElement, removeGhostElement } from '../ghost/GhostFactory';
-import { getOriginalTaskId } from '../../../utils/DisplayTaskConverter';
+import { getOriginalTaskId } from '../../../services/display/DisplayTaskConverter';
 
 /**
  * 移動操作を処理するドラッグストラテジー。

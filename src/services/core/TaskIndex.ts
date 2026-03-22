@@ -10,9 +10,9 @@ import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { EditorObserver } from './EditorObserver';
 import { InlineToFrontmatterConversionService } from './InlineToFrontmatterConversionService';
-import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
+import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { DateUtils as CoreDateUtils } from '../../utils/DateUtils';
-import { toDisplayTask } from '../../utils/DisplayTaskConverter';
+import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { TaskParser } from '../parsing/TaskParser';
 
 export interface ValidationError {

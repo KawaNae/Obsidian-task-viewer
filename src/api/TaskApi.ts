@@ -1,7 +1,7 @@
 import { TFile } from 'obsidian';
 import type TaskViewerPlugin from '../main';
 import type { Task, DisplayTask, PinnedListDefinition } from '../types';
-import { toDisplayTasks, toDisplayTask } from '../utils/DisplayTaskConverter';
+import { toDisplayTasks, toDisplayTask } from '../services/display/DisplayTaskConverter';
 import { normalizeTask } from './TaskNormalizer';
 import { TaskFilterEngine } from '../services/filter/TaskFilterEngine';
 import { TaskSorter } from '../services/sort/TaskSorter';

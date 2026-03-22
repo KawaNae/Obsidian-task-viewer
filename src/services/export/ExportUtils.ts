@@ -1,6 +1,6 @@
 import { Notice, type App, TFile } from 'obsidian';
 import type { TaskIndex } from '../core/TaskIndex';
-import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
+import { TaskIdGenerator } from '../display/TaskIdGenerator';
 
 type RestoreFn = () => void;
 

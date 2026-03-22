@@ -6,9 +6,9 @@ import { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } fr
 import { PropertyFormatter } from '../PropertyFormatter';
 import { CreateTaskModal, CreateTaskResult } from '../../../modals/CreateTaskModal';
 import { DateUtils } from '../../../utils/DateUtils';
-import { getTaskDisplayName } from '../../../utils/TaskContent';
+import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
-import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
+import { openFileInExistingOrNewTab } from '../../../views/sharedLogic/NavigationUtils';
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { t } from '../../../i18n';
 

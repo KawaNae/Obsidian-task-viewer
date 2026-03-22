@@ -1,7 +1,7 @@
 ﻿import { CommandStrategy, CommandContext, CommandResult } from './CommandStrategy';
 import { FlowCommand, Task, ChildLine } from '../types';
 import { TaskParser } from '../services/parsing/TaskParser';
-import { RecurrenceUtils } from '../utils/RecurrenceUtils';
+import { RecurrenceUtils } from './RecurrenceUtils';
 import { DateUtils } from '../utils/DateUtils';
 
 export abstract class GenerationCommand implements CommandStrategy {

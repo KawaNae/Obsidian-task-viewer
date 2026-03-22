@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ChildLineClassifier } from '../../src/utils/ChildLineClassifier';
+import { ChildLineClassifier } from '../../src/services/parsing/utils/ChildLineClassifier';
 
 describe('ChildLineClassifier', () => {
     describe('classify', () => {

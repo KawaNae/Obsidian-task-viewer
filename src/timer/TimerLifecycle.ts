@@ -2,7 +2,7 @@
  * Timer lifecycle: tick, pause, resume, close, idle management.
  */
 
-import { AudioUtils } from '../utils/AudioUtils';
+import { AudioUtils } from './AudioUtils';
 import {
     CountdownTimer,
     CountupTimer,

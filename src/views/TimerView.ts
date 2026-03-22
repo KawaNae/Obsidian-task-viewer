@@ -21,10 +21,10 @@ import {
 } from '../timer/TimerInstance';
 import { TimerProgressUI } from '../timer/TimerProgressUI';
 import { IntervalTemplateLoader, IntervalTemplate } from '../timer/IntervalTemplateLoader';
-import { AudioUtils } from '../utils/AudioUtils';
+import { AudioUtils } from '../timer/AudioUtils';
 import { TimeFormatter } from '../utils/TimeFormatter';
-import { ViewUriBuilder } from '../utils/ViewUriBuilder';
-import type { ViewUriOptions } from '../utils/ViewUriBuilder';
+import { ViewUriBuilder } from './sharedLogic/ViewUriBuilder';
+import type { ViewUriOptions } from './sharedLogic/ViewUriBuilder';
 import { IntervalTemplateCreator } from './customMenus/IntervalTemplateCreator';
 import { t } from '../i18n';
 

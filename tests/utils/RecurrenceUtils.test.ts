@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RecurrenceUtils } from '../../src/utils/RecurrenceUtils';
+import { RecurrenceUtils } from '../../src/commands/RecurrenceUtils';
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toDisplayTask, shouldSplitDisplayTask, toDisplayTaskWithSplit } from '../../src/utils/DisplayTaskConverter';
+import { toDisplayTask, shouldSplitDisplayTask, toDisplayTaskWithSplit } from '../../src/services/display/DisplayTaskConverter';
 import type { Task } from '../../src/types';
 
 /** Build a minimal Task for testing. */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TaskIdGenerator } from '../../src/utils/TaskIdGenerator';
+import { TaskIdGenerator } from '../../src/services/display/TaskIdGenerator';
 
 describe('TaskIdGenerator', () => {
     describe('generate', () => {

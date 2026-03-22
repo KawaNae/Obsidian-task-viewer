@@ -2,7 +2,7 @@ import { App, MarkdownRenderer, Component, setIcon } from 'obsidian';
 import { Task, DisplayTask, TaskViewerSettings, isCompleteStatusChar, isFrontmatterTask } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
-import { getFileBaseName, hasTaskContent, isContentMatchingBaseName } from '../../utils/TaskContent';
+import { getFileBaseName, hasTaskContent, isContentMatchingBaseName } from '../../services/parsing/utils/TaskContent';
 import { ChildItemBuilder } from './ChildItemBuilder';
 import { ChildSectionRenderer, ChildMenuCallback, ChildLineEditCallback } from './ChildSectionRenderer';
 import { CheckboxWiring } from './CheckboxWiring';

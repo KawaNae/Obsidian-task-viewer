@@ -1,7 +1,7 @@
 import { setIcon, Menu, Notice } from 'obsidian';
 import type { App, MenuItem, WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
-import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../../utils/ViewUriBuilder';
+import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../sharedLogic/ViewUriBuilder';
 import { InputModal } from '../../modals/InputModal';
 import type { ViewTemplate } from '../../types';
 import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';

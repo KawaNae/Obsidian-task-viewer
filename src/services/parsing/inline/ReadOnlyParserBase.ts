@@ -1,8 +1,8 @@
 import type { Task } from '../../../types';
 import { ParserStrategy } from '../strategies/ParserStrategy';
-import { TaskIdGenerator } from '../../../utils/TaskIdGenerator';
-import { TagExtractor } from '../../../utils/TagExtractor';
-import { TaskLineClassifier } from '../../../utils/TaskLineClassifier';
+import { TaskIdGenerator } from '../../display/TaskIdGenerator';
+import { TagExtractor } from '../utils/TagExtractor';
+import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 
 export interface ReadOnlyTaskParams {
     filePath: string;

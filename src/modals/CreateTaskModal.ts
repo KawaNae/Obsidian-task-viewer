@@ -2,8 +2,8 @@ import { App, Modal, Setting, setIcon } from 'obsidian';
 import { t } from '../i18n';
 import { DisplayTask, Task } from '../types';
 import { TaskParser } from '../services/parsing/TaskParser';
-import { toDisplayTask } from '../utils/DisplayTaskConverter';
-import { validateDateTimeFormats, validateDateRequirements, validateDateRange, type DateValidationError } from '../utils/TaskDateValidator';
+import { toDisplayTask } from '../services/display/DisplayTaskConverter';
+import { validateDateTimeFormats, validateDateRequirements, validateDateRange, type DateValidationError } from './TaskDateValidator';
 import { TaskNameSuggest } from '../suggest/TaskNameSuggest';
 
 export interface CreateTaskResult {

@@ -1,6 +1,6 @@
 import { App, TFile } from 'obsidian';
 import { Task, WikilinkRef, isFrontmatterTask } from '../../types';
-import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
+import { TaskIdGenerator } from '../display/TaskIdGenerator';
 
 /**
  * `- [[name]]` パターンのwikilink子タスクを解決し、親子関係をワイアーする。

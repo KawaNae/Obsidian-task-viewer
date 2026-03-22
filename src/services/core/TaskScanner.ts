@@ -1,6 +1,6 @@
 import { App, TFile } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
-import { ChildLineClassifier } from '../../utils/ChildLineClassifier';
+import { ChildLineClassifier } from '../parsing/utils/ChildLineClassifier';
 import { TaskParser } from '../parsing/TaskParser';
 import { FrontmatterTaskBuilder } from '../parsing/file/FrontmatterTaskBuilder';
 import { WikiLinkResolver } from './WikiLinkResolver';
@@ -9,7 +9,7 @@ import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
-import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
+import { ImplicitCalendarDateResolver } from '../display/ImplicitCalendarDateResolver';
 import { PropertyInheritanceResolver } from './PropertyInheritanceResolver';
 
 /**

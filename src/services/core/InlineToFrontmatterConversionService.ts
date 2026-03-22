@@ -1,7 +1,7 @@
 import { App, TFile } from 'obsidian';
 import type { FrontmatterTaskKeys, Task } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
-import { TagExtractor } from '../../utils/TagExtractor';
+import { TagExtractor } from '../parsing/utils/TagExtractor';
 
 /**
  * inline タスクを frontmatter タスクファイルへ変換する業務フローを担当。

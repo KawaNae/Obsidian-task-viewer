@@ -14,7 +14,7 @@ import { TimerCreator } from './TimerCreator';
 import { TimerLifecycle } from './TimerLifecycle';
 import { TimerRenderer } from './TimerRenderer';
 import { TimerStorageUtils } from './TimerStorageUtils';
-import { TaskIdGenerator } from '../utils/TaskIdGenerator';
+import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
 import TaskViewerPlugin from '../main';
 
 export interface PersistedTimer {

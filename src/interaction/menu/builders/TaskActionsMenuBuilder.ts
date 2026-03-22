@@ -4,8 +4,8 @@ import { TaskIndex } from '../../../services/core/TaskIndex';
 import TaskViewerPlugin from '../../../main';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { ConfirmModal } from '../../../modals/ConfirmModal';
-import { getTaskDisplayName } from '../../../utils/TaskContent';
-import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
+import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
+import { openFileInExistingOrNewTab } from '../../../views/sharedLogic/NavigationUtils';
 import { FileOperations } from '../../../services/persistence/utils/FileOperations';
 import { t } from '../../../i18n';
 
