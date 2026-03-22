@@ -93,12 +93,12 @@
 .timer-widget__header-time {
     font-size: 0.8rem;
     font-weight: 600;
-    color: var(--tv-text-accent);
+    color: var(--file-accent, var(--tv-text-accent));
     margin-left: auto;
 }
 
 .timer-widget__header-time--break {
-    color: var(--tv-text-success);
+    color: var(--file-accent, var(--tv-text-success));
 }
 
 .timer-widget__header-repeat {
