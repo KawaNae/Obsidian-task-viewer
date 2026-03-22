@@ -1,5 +1,5 @@
-import type { FilterState } from './services/filter/FilterTypes';
-import type { SortState } from './services/sort/SortTypes';
+import type { FilterState } from '../services/filter/FilterTypes';
+import type { SortState } from '../services/sort/SortTypes';
 
 export interface StatusDefinition {
     char: string;
