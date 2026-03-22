@@ -2,6 +2,11 @@ import type { Task, DisplayTask } from '../types';
 import { DateUtils } from './DateUtils';
 import { TaskIdGenerator } from './TaskIdGenerator';
 
+/** Get the original (pre-split) task ID. Works for both Task and DisplayTask. */
+export function getOriginalTaskId(task: Task): string {
+    return ('originalTaskId' in task) ? (task as DisplayTask).originalTaskId : task.id;
+}
+
 /**
  * Converts raw Task objects into DisplayTask with resolved effective fields.
  * This is the single entry point for implicit value resolution.

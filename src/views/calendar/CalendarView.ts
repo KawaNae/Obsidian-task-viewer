@@ -378,7 +378,8 @@ export class CalendarView extends ItemView {
     }
 
     private renderToolbar(): HTMLElement {
-        const toolbar = this.container.createDiv('view-toolbar');
+        const toolbarHost = this.container.createDiv('calendar-view__toolbar-host');
+        const toolbar = toolbarHost.createDiv('view-toolbar');
         DateNavigator.render(
             toolbar,
             (days) => this.navigateWeek(days),
@@ -422,7 +423,7 @@ export class CalendarView extends ItemView {
             getDefaultName: () => VIEW_META_CALENDAR.displayText,
             onRename: (newName) => {
                 this.customName = newName;
-                (this.leaf as any).updateHeader();
+                this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
             },
             buildUri: () => ({
@@ -455,7 +456,7 @@ export class CalendarView extends ItemView {
                 }
                 if (template.name) {
                     this.customName = template.name;
-                    (this.leaf as any).updateHeader();
+                    this.leaf.updateHeader();
                 }
                 this.app.workspace.requestSaveLayout();
                 void this.render();
@@ -467,7 +468,7 @@ export class CalendarView extends ItemView {
                 this.showSidebar = true;
                 this.sidebarManager.applyOpen(true, { persist: true });
                 this.customName = undefined;
-                (this.leaf as any).updateHeader();
+                this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
                 void this.render();
             },
@@ -520,8 +521,8 @@ export class CalendarView extends ItemView {
                     ...listDef,
                     id: 'pl-' + Date.now(),
                     name: listDef.name + ' (copy)',
-                    filterState: JSON.parse(JSON.stringify(listDef.filterState)),
-                    sortState: listDef.sortState ? JSON.parse(JSON.stringify(listDef.sortState)) : undefined,
+                    filterState: structuredClone(listDef.filterState),
+                    sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
                 });
                 this.app.workspace.requestSaveLayout();
                 void this.render();

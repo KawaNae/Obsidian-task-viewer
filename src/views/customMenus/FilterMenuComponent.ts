@@ -62,7 +62,7 @@ export class FilterMenuComponent {
     }
 
     setFilterState(state: FilterState): void {
-        this.state = JSON.parse(JSON.stringify(state));
+        this.state = structuredClone(state);
     }
 
     setStartHourProvider(provider: () => number): void {

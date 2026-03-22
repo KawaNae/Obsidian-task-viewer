@@ -35,7 +35,7 @@ export class HabitTrackerRenderer {
         axisCell.createEl('span', { cls: 'habits-section__label', text: t('habits.habits') });
 
         const applyCollapsedState = () => {
-            container.toggleClass('collapsed', this.isCollapsed);
+            container.toggleClass('habits-section--collapsed', this.isCollapsed);
             setIcon(toggleBtn, this.isCollapsed ? 'plus' : 'minus');
             axisCell.setAttribute('aria-expanded', (!this.isCollapsed).toString());
             axisCell.setAttribute('aria-label', this.isCollapsed ? t('habits.expandHabits') : t('habits.collapseHabits'));

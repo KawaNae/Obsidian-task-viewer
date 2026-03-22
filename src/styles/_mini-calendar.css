@@ -199,3 +199,7 @@
     border: 1px solid var(--tv-text);
     background: var(--tv-text);
 }
+
+.mini-calendar-view__toolbar-host {
+    flex-shrink: 0;
+}

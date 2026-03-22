@@ -322,7 +322,7 @@ export class ScheduleView extends ItemView {
             getDefaultName: () => VIEW_META_SCHEDULE.displayText,
             onRename: (newName) => {
                 this.customName = newName;
-                (this.leaf as any).updateHeader();
+                this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
             },
             buildUri: () => ({
@@ -345,7 +345,7 @@ export class ScheduleView extends ItemView {
                 }
                 if (template.name) {
                     this.customName = template.name;
-                    (this.leaf as any).updateHeader();
+                    this.leaf.updateHeader();
                 }
                 this.app.workspace.requestSaveLayout();
                 void this.render();
@@ -353,7 +353,7 @@ export class ScheduleView extends ItemView {
             onReset: () => {
                 this.filterMenu.setFilterState(createEmptyFilterState());
                 this.customName = undefined;
-                (this.leaf as any).updateHeader();
+                this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
                 void this.render();
             },

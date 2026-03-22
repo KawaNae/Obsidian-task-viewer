@@ -225,7 +225,7 @@ export class PinnedListRenderer {
 
         if (callbacks.onToggleApplyViewFilter) {
             menu.addItem(item => {
-                (item as any)
+                item
                     .setTitle(t('menu.applyViewFilter'))
                     .setIcon('filter')
                     .setChecked(!!listDef.applyViewFilter)
@@ -239,7 +239,7 @@ export class PinnedListRenderer {
             item.setTitle(t('menu.remove'))
                 .setIcon('trash')
                 .onClick(() => callbacks.onRemove(listDef));
-            (item as any).dom?.addClass('is-danger');
+            item.dom?.addClass('is-danger');
         });
 
         menu.showAtMouseEvent(e);

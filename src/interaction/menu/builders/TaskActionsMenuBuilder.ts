@@ -44,10 +44,10 @@ export class TaskActionsMenuBuilder {
         const displayName = getTaskDisplayName(task);
 
         menu.addItem((item) => {
-            const subMenu = (item as any)
+            const subMenu = item
                 .setTitle(t('menu.trackAsChild'))
                 .setIcon('clock')
-                .setSubmenu() as Menu;
+                .setSubmenu();
 
             const baseParams = {
                 taskId: task.id,
@@ -149,10 +149,10 @@ export class TaskActionsMenuBuilder {
      */
     private addDuplicateSubmenu(menu: Menu, task: Task): void {
         menu.addItem((item) => {
-            const subMenu = (item as any)
+            const subMenu = item
                 .setTitle(t('menu.duplicate'))
                 .setIcon('copy')
-                .setSubmenu() as Menu;
+                .setSubmenu();
 
             subMenu.addItem((sub) => {
                 sub.setTitle(t('menu.inPlace'))
@@ -188,10 +188,10 @@ export class TaskActionsMenuBuilder {
         if (task.parserId !== 'at-notation') return;
 
         menu.addItem((item) => {
-            const subMenu = (item as any)
+            const subMenu = item
                 .setTitle(t('menu.convertTo'))
                 .setIcon('arrow-right-left')
-                .setSubmenu() as Menu;
+                .setSubmenu();
 
             // Inline Task → Plain Checkbox
             subMenu.addItem((sub) => {
@@ -244,10 +244,10 @@ export class TaskActionsMenuBuilder {
         const isTimed = !!task.startTime;
 
         menu.addItem((item) => {
-            const subMenu = (item as any)
+            const subMenu = item
                 .setTitle(t('menu.switchTo'))
                 .setIcon('repeat')
-                .setSubmenu() as Menu;
+                .setSubmenu();
 
             if (isTimed) {
                 subMenu.addItem((sub) => {

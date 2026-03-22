@@ -36,7 +36,7 @@ export class EditorObserver {
         // 既存のリスナーを解除
         if (this.currentEditorEl) {
             if (this.editorListenerBound) {
-                this.currentEditorEl.removeEventListener('beforeinput', this.editorListenerBound as any);
+                this.currentEditorEl.removeEventListener('beforeinput', this.editorListenerBound as EventListener);
             }
             if (this.mousedownListenerBound) {
                 this.currentEditorEl.removeEventListener('mousedown', this.mousedownListenerBound);
@@ -66,7 +66,7 @@ export class EditorObserver {
                 }
             }
         };
-        editorEl.addEventListener('beforeinput', this.editorListenerBound as any);
+        editorEl.addEventListener('beforeinput', this.editorListenerBound as EventListener);
 
         // mousedown: チェックボックスクリック対応
         // Obsidianのチェックボックスクリックはbeforeinputを発火しないため、

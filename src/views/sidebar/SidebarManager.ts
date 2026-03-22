@@ -38,7 +38,7 @@ export class SidebarManager {
      */
     attach(
         container: HTMLElement,
-        registerDomEvent: (el: HTMLElement | Window | Document, event: string, handler: (e: any) => void) => void,
+        registerDomEvent: (el: HTMLElement | Window | Document, event: string, handler: (e: Event) => void) => void,
     ): void {
         this.containerEl = container;
 

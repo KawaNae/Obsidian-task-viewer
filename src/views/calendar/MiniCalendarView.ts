@@ -193,7 +193,8 @@ export class MiniCalendarView extends ItemView {
     }
 
     private renderToolbar(): void {
-        const toolbar = this.container.createDiv('view-toolbar mini-calendar-toolbar');
+        const toolbarHost = this.container.createDiv('mini-calendar-view__toolbar-host');
+        const toolbar = toolbarHost.createDiv('view-toolbar mini-calendar-toolbar');
 
         const labelGroup = toolbar.createDiv('mini-calendar-toolbar__label');
         const referenceMonth = this.getReferenceMonth();

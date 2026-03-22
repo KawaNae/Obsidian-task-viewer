@@ -267,20 +267,20 @@ export class ViewSettingsMenu {
             const shortViewType = ViewSettingsMenu.toShortViewType(viewType);
 
             if (!folder) {
-                (item as any).setSubmenu().addItem((sub: any) =>
+                item.setSubmenu().addItem((sub: MenuItem) =>
                     sub.setTitle(t('toolbar.noFolderConfigured')).setDisabled(true));
             } else {
                 const loader = new ViewTemplateLoader(app);
                 const summaries = loader.loadTemplates(folder)
                     .filter(s => s.viewType === shortViewType);
 
-                const submenu = (item as any).setSubmenu();
+                const submenu = item.setSubmenu();
                 if (summaries.length === 0) {
-                    submenu.addItem((sub: any) =>
+                    submenu.addItem((sub: MenuItem) =>
                         sub.setTitle(t('toolbar.noTemplatesFound')).setDisabled(true));
                 } else {
                     for (const summary of summaries) {
-                        submenu.addItem((sub: any) => {
+                        submenu.addItem((sub: MenuItem) => {
                             sub.setTitle(summary.name)
                                 .onClick(async () => {
                                     const full = await loader.loadFullTemplate(summary.filePath);

@@ -21,10 +21,10 @@ export class TimerMenuBuilder {
             return;
         }
         menu.addItem((item) => {
-            const subMenu = (item as any)
+            const subMenu = item
                 .setTitle(t('menu.trackSelf'))
                 .setIcon('play')
-                .setSubmenu() as Menu;
+                .setSubmenu();
 
             const displayName = getTaskDisplayName(task);
             const baseParams = {

@@ -251,3 +251,7 @@
         padding: 3px 2px 3px 6px;
     }
 }
+
+.calendar-view__toolbar-host {
+    flex-shrink: 0;
+}

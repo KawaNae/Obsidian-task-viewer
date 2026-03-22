@@ -499,6 +499,7 @@ export default class TaskViewerPlugin extends Plugin {
     public refreshAllViews(): void {
         [VIEW_TYPE_TIMELINE, VIEW_TYPE_SCHEDULE, VIEW_TYPE_CALENDAR, VIEW_TYPE_MINI_CALENDAR, VIEW_TYPE_KANBAN].forEach(viewType => {
             this.app.workspace.getLeavesOfType(viewType).forEach(leaf => {
+                // @ts-ignore — refresh() is a custom method on plugin views, not in Obsidian typings
                 (leaf.view as any).refresh?.();
             });
         });

@@ -228,7 +228,7 @@ export class KanbanView extends ItemView {
             getDefaultName: () => VIEW_META_KANBAN.displayText,
             onRename: (newName) => {
                 this.customName = newName;
-                (this.leaf as any).updateHeader();
+                this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
             },
             buildUri: () => ({
@@ -395,7 +395,7 @@ export class KanbanView extends ItemView {
         });
 
         menu.addItem(item => {
-            (item as any)
+            item
                 .setTitle(t('menu.applyViewFilter'))
                 .setIcon('filter')
                 .setChecked(!!listDef.applyViewFilter)
@@ -563,8 +563,8 @@ export class KanbanView extends ItemView {
         const dup: PinnedListDefinition = {
             id: this.generateId(),
             name: listDef.name + ' (copy)',
-            filterState: JSON.parse(JSON.stringify(listDef.filterState)),
-            sortState: listDef.sortState ? JSON.parse(JSON.stringify(listDef.sortState)) : undefined,
+            filterState: structuredClone(listDef.filterState),
+            sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
         };
 
         // Insert duplicated cell to the right in the same row, and add a new cell to all other rows

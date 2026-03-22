@@ -97,6 +97,7 @@ export class ViewUriBuilder {
      */
     static detectLeafPosition(leaf: WorkspaceLeaf, workspace: Workspace): LeafPosition {
         // Walk up the parent chain to check sidebars
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let item: any = leaf;
         while (item?.parent) {
             if (item === workspace.leftSplit || item.parent === workspace.leftSplit) return 'left';

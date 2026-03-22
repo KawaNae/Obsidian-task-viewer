@@ -31,10 +31,10 @@ export class PropertiesMenuBuilder {
      */
     buildPropertiesSubmenu(menu: Menu, task: DisplayTask, viewStartDate: string | null): void {
         menu.addItem((item) => {
-            const subMenu = (item as any)
+            const subMenu = item
                 .setTitle(t('menu.properties'))
                 .setIcon('settings')
-                .setSubmenu() as Menu;
+                .setSubmenu();
 
             // Closure that closes the root menu before opening a modal.
             // On mobile, Obsidian menus stay open until explicitly closed.
@@ -75,11 +75,11 @@ export class PropertiesMenuBuilder {
             const statusChar = task.statusChar;
             const statusDisplay = `[${statusChar}]`;
 
-            (sub as any).setTitle(t('menu.status', { status: statusDisplay }))
+            sub.setTitle(t('menu.status', { status: statusDisplay }))
                 .setIcon('check-square')
                 .setSubmenu();
 
-            const statusMenu = (sub as any).submenu as Menu;
+            const statusMenu = sub.submenu;
 
             buildStatusOptions(this.plugin.settings.statusDefinitions).forEach(s => {
                 statusMenu.addItem(item => {

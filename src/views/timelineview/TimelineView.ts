@@ -253,7 +253,7 @@ export class TimelineView extends ItemView {
                 getCustomName: () => this.viewState.customName,
                 onRename: (newName) => {
                     this.viewState.customName = newName;
-                    (this.leaf as any).updateHeader();
+                    this.leaf.updateHeader();
                     this.app.workspace.requestSaveLayout();
                 },
                 getLeaf: () => this.leaf,
@@ -585,8 +585,8 @@ export class TimelineView extends ItemView {
                         ...listDef,
                         id: 'pl-' + Date.now(),
                         name: listDef.name + ' (copy)',
-                        filterState: JSON.parse(JSON.stringify(listDef.filterState)),
-                        sortState: listDef.sortState ? JSON.parse(JSON.stringify(listDef.sortState)) : undefined,
+                        filterState: structuredClone(listDef.filterState),
+                        sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
                     };
                     lists.splice(idx + 1, 0, dup);
                     this.app.workspace.requestSaveLayout();
@@ -656,7 +656,7 @@ export class TimelineView extends ItemView {
                 getCustomName: () => this.viewState.customName,
                 onRename: (newName) => {
                     this.viewState.customName = newName;
-                    (this.leaf as any).updateHeader();
+                    this.leaf.updateHeader();
                     this.app.workspace.requestSaveLayout();
                 },
                 getLeaf: () => this.leaf,

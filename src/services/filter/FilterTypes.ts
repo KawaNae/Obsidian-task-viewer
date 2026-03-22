@@ -123,7 +123,7 @@ function collectConditions(group: FilterGroup, out: FilterCondition[]): void {
 /** Deep-clone a FilterItem */
 export function deepCloneNode(node: FilterItem): FilterItem {
     if (isFilterCondition(node)) {
-        return JSON.parse(JSON.stringify(node));
+        return structuredClone(node);
     }
     return {
         filters: node.filters.map(deepCloneNode),

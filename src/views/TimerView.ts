@@ -466,7 +466,8 @@ export class TimerView extends ItemView {
     }
 
     private renderToolbar(): void {
-        const toolbar = this.container.createDiv('view-toolbar');
+        const toolbarHost = this.container.createDiv('timer-view__toolbar-host');
+        const toolbar = toolbarHost.createDiv('view-toolbar');
 
         const isIdle = !this.timer || this.timer.phase === 'idle';
 

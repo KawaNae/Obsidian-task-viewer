@@ -1,5 +1,6 @@
 import { App, setIcon } from 'obsidian';
 import type { TaskViewerSettings } from '../types';
+import TaskViewerPlugin from '../main';
 import { PropertyColorSuggest } from './color/PropertyColorSuggest';
 import { PropertyLineStyleSuggest } from './line/PropertyLineStyleSuggest';
 
@@ -15,7 +16,7 @@ export class PropertySuggestObserver {
     constructor(
         private app: App,
         private getSettings: () => TaskViewerSettings,
-        private suggestHost: any // Plugin instance passed to PropertyColorSuggest
+        private suggestHost: TaskViewerPlugin
     ) {}
 
     start(): void {
