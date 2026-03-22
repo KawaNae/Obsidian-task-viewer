@@ -123,42 +123,6 @@ describe('loadFilterFile', () => {
             expect(c.value).toEqual(['work']);
         });
 
-        it('loads valid FilterState JSON (v5 format)', async () => {
-            const v5Json = {
-                logic: 'and',
-                conditions: [
-                    { property: 'tag', operator: 'includes', value: ['work'] },
-                ],
-            };
-            const app = makeApp({ 'filters/test.json': JSON.stringify(v5Json) });
-            const result = await loadFilterFile(app, 'filters/test.json');
-            expect(typeof result).not.toBe('string');
-            const state = result as FilterState;
-            expect(state.filters).toHaveLength(1);
-            const c = state.filters[0] as FilterCondition;
-            expect(c.value).toEqual(['work']);
-        });
-
-        it('loads valid FilterState JSON (v4 format with backward compat)', async () => {
-            const v4Json = {
-                root: {
-                    type: 'group', id: 'root', logic: 'and',
-                    children: [{
-                        type: 'condition', id: 'f-1',
-                        property: 'tag', operator: 'includes',
-                        value: { type: 'stringSet', values: ['work'] },
-                    }],
-                },
-            };
-            const app = makeApp({ 'filters/test.json': JSON.stringify(v4Json) });
-            const result = await loadFilterFile(app, 'filters/test.json');
-            expect(typeof result).not.toBe('string');
-            const state = result as FilterState;
-            expect(state.filters).toHaveLength(1);
-            const c = state.filters[0] as FilterCondition;
-            expect(c.value).toEqual(['work']);
-        });
-
         it('returns error for invalid JSON', async () => {
             const app = makeApp({ 'filters/bad.json': '{not valid json' });
             const result = await loadFilterFile(app, 'filters/bad.json');

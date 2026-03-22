@@ -172,7 +172,6 @@ export interface ViewState {
     startDate: string;
     daysToShow: number;
     showSidebar: boolean;
-    filterFiles: string[] | null;
     filterState?: FilterState;
     zoomLevel?: number;
     pinnedListCollapsed?: Record<string, boolean>;

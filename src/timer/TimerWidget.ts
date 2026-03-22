@@ -49,7 +49,6 @@ export class TimerWidget implements TimerContext {
         this.renderer = new TimerRenderer(this, this.lifecycle, this.creator);
         this.persistence = new TimerPersistence(this, this.creator, this.lifecycle, this.renderer, this.storageUtils);
         this.targetManager = new TimerTargetManager(this, this.storageUtils);
-        this.storageUtils.cleanupLegacyStorage();
         this.persistence.restoreTimersFromStorage((timerId) => {
             if (!this.lifecycle.isIdleTimer(timerId)) {
                 const timer = this.timers.get(timerId);
@@ -57,57 +56,6 @@ export class TimerWidget implements TimerContext {
                     void this.targetManager.ensureTimerTargetId(timerId);
                 }
             }
-        });
-    }
-
-    /**
-     * Backward-compatible helper: open pomodoro timer.
-     */
-    show(
-        taskId: string,
-        taskName: string,
-        taskOriginalText: string = '',
-        taskFile: string = '',
-        recordMode: 'child' | 'self' = 'self',
-        parserId: string = 'at-notation',
-        timerTargetId?: string
-    ): void {
-        this.startTimer({
-            taskId,
-            taskName,
-            taskOriginalText,
-            taskFile,
-            recordMode,
-            parserId,
-            timerTargetId,
-            timerType: 'pomodoro',
-            autoStart: false
-        });
-    }
-
-    /**
-     * Backward-compatible helper: open countup timer.
-     */
-    showCountup(
-        taskId: string,
-        taskName: string,
-        taskOriginalText: string = '',
-        taskFile: string = '',
-        recordMode: 'child' | 'self' = 'child',
-        autoStart: boolean = false,
-        parserId: string = 'at-notation',
-        timerTargetId?: string
-    ): void {
-        this.startTimer({
-            taskId,
-            taskName,
-            taskOriginalText,
-            taskFile,
-            recordMode,
-            parserId,
-            timerTargetId,
-            timerType: 'countup',
-            autoStart
         });
     }
 

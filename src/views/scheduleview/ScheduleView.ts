@@ -35,7 +35,6 @@ export const VIEW_TYPE_SCHEDULE = VIEW_META_SCHEDULE.type;
 interface ScheduleViewState {
     currentDate?: string;
     filterState?: FilterState;
-    filterFiles?: string[];
     customName?: string;
 }
 
@@ -143,20 +142,6 @@ export class ScheduleView extends ItemView {
 
         if (state && state.filterState) {
             this.filterMenu.setFilterState(FilterSerializer.fromJSON(state.filterState));
-        } else if (state && Object.prototype.hasOwnProperty.call(state, 'filterFiles') && Array.isArray(state.filterFiles) && state.filterFiles.length > 0) {
-            const files = state.filterFiles.filter((value: unknown): value is string => typeof value === 'string');
-            if (files.length > 0) {
-                this.filterMenu.setFilterState({
-                    filters: [{
-                        property: 'file',
-                        operator: 'includes',
-                        value: files,
-                    }],
-                    logic: 'and',
-                });
-            } else {
-                this.filterMenu.setFilterState(createEmptyFilterState());
-            }
         } else {
             this.filterMenu.setFilterState(createEmptyFilterState());
         }

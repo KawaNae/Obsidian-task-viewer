@@ -86,16 +86,6 @@ export class TimelineToolbar {
         // Restore persisted filter state
         if (this.viewState.filterState) {
             this.filterMenu.setFilterState(FilterSerializer.fromJSON(this.viewState.filterState));
-        } else if (this.viewState.filterFiles && this.viewState.filterFiles.length > 0) {
-            // Migrate legacy filterFiles to FilterState
-            this.filterMenu.setFilterState({
-                filters: [{
-                    property: 'file',
-                    operator: 'includes',
-                    value: this.viewState.filterFiles,
-                }],
-                logic: 'and',
-            });
         } else {
             this.filterMenu.setFilterState(createEmptyFilterState());
         }
@@ -277,7 +267,6 @@ export class TimelineToolbar {
         this.viewState.filterState = hasConditions(state)
             ? FilterSerializer.fromJSON(FilterSerializer.toJSON(state))
             : undefined;
-        this.viewState.filterFiles = null; // Clear legacy field
         this.app.workspace.requestSaveLayout();
     }
 

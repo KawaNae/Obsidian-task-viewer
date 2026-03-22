@@ -13,8 +13,7 @@ import {
     normalizeFrontmatterTaskKeys,
     validateFrontmatterTaskKeys,
 } from './types';
-import { DEFAULT_STATUS_DEFINITIONS } from './types';
-import type { DefaultLeafPosition, PinnedListDefinition, StatusDefinition, Task } from './types';
+import type { DefaultLeafPosition, PinnedListDefinition, Task } from './types';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/color/ColorSuggest';
 import { LineStyleSuggest } from './suggest/line/LineStyleSuggest';
@@ -397,27 +396,6 @@ export default class TaskViewerPlugin extends Plugin {
         };
         const normalizedFrontmatterKeys = normalizeFrontmatterTaskKeys(merged.frontmatterTaskKeys);
         const keysValidationError = validateFrontmatterTaskKeys(normalizedFrontmatterKeys);
-
-        // Migrate statusMenuChars + completeStatusChars → statusDefinitions
-        if (!rawObject.statusDefinitions) {
-            const menuChars: string[] = (rawObject.statusMenuChars as string[]) ?? ['-', '!', '?', '>', '/'];
-            const completeChars: string[] = (rawObject.completeStatusChars as string[]) ?? ['x', '-', '!'];
-            const labelMap = new Map(DEFAULT_STATUS_DEFINITIONS.map(d => [d.char, d.label]));
-            const defs: StatusDefinition[] = [
-                { char: ' ', label: 'Todo', isComplete: false },
-                { char: 'x', label: 'Done', isComplete: true },
-            ];
-            for (const c of menuChars) {
-                if (c === ' ' || c === 'x') continue;
-                defs.push({ char: c, label: labelMap.get(c) ?? c, isComplete: completeChars.includes(c) });
-            }
-            for (const c of completeChars) {
-                if (!defs.some(d => d.char === c)) {
-                    defs.push({ char: c, label: labelMap.get(c) ?? c, isComplete: true });
-                }
-            }
-            merged.statusDefinitions = defs;
-        }
 
         this.settings = {
             ...merged,

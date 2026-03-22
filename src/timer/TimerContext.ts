@@ -15,7 +15,6 @@ import { TimerRecorder } from './TimerRecorder';
 export const IDLE_TIMER_ID = '__idle__';
 export const STORAGE_VERSION = 5;
 export const STORAGE_KEY_PREFIX = 'task-viewer.active-timers';
-export const LEGACY_STORAGE_KEY = 'task-viewer.active-timers.v2';
 export const DEVICE_ID_KEY = 'task-viewer.device-id.v1';
 
 // ─── Interface ────────────────────────────────────────────────

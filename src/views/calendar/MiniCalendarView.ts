@@ -78,18 +78,6 @@ export class MiniCalendarView extends ItemView {
                 const weekStart = this.getWeekStart(parsedWindowStart, this.plugin.settings.calendarWeekStartDay);
                 this.windowStart = DateUtils.getLocalDateString(weekStart);
             }
-        } else if (state && typeof state.monthKey === 'string') {
-            // Backward compatibility for older saved layout state.
-            const monthMatch = state.monthKey.match(/^(\d{4})-(\d{2})$/);
-            if (monthMatch) {
-                const year = Number(monthMatch[1]);
-                const month = Number(monthMatch[2]);
-                if (month >= 1 && month <= 12) {
-                    const monthStart = new Date(year, month - 1, 1);
-                    const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
-                    this.windowStart = DateUtils.getLocalDateString(weekStart);
-                }
-            }
         }
 
         await super.setState(state, result);

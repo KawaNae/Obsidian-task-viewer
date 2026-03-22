@@ -99,38 +99,25 @@ export class TimerPersistence {
     restoreTimersFromStorage(onTimerRestored?: (timerId: string) => void): void {
         const storageKey = this.storageUtils.getStorageKey();
         try {
-            let sourceKey = storageKey;
-            let raw = window.localStorage.getItem(storageKey);
-            if (!raw) {
-                const legacyV4Key = this.storageUtils.getStorageKeyForVersion(4);
-                raw = window.localStorage.getItem(legacyV4Key);
-                sourceKey = legacyV4Key;
-            }
+            const raw = window.localStorage.getItem(storageKey);
             if (!raw) return;
 
-            const parsed = JSON.parse(raw) as PersistedTimerState | {
-                version?: number;
-                ownerDeviceId?: string;
-                vaultFingerprint?: string;
-                updatedAtMs?: number;
-                timers?: PersistedTimer[];
-            };
-            const normalized = this.migratePersistedState(parsed);
+            const parsed = JSON.parse(raw) as PersistedTimerState;
 
             if (
-                !normalized
-                || normalized.version !== STORAGE_VERSION
-                || normalized.vaultFingerprint !== this.storageUtils.vaultFingerprint
-                || !Array.isArray(normalized.timers)
+                !parsed
+                || parsed.version !== STORAGE_VERSION
+                || parsed.vaultFingerprint !== this.storageUtils.vaultFingerprint
+                || !Array.isArray(parsed.timers)
             ) {
-                window.localStorage.removeItem(sourceKey);
+                window.localStorage.removeItem(storageKey);
                 return;
             }
-            if (normalized.ownerDeviceId !== this.storageUtils.deviceId) {
+            if (parsed.ownerDeviceId !== this.storageUtils.deviceId) {
                 return;
             }
 
-            for (const persisted of normalized.timers) {
+            for (const persisted of parsed.timers) {
                 const timer = this.fromPersistedTimer(persisted);
                 if (!timer) continue;
 
@@ -162,44 +149,10 @@ export class TimerPersistence {
             }
 
             this.ctx.render();
-            if (sourceKey !== storageKey) {
-                window.localStorage.removeItem(sourceKey);
-                this.persistTimersToStorage();
-            }
         } catch (error) {
             window.localStorage.removeItem(storageKey);
             console.error('[TimerWidget] Failed to restore timers:', error);
         }
-    }
-
-    // ─── Migration ───────────────────────────────────────────
-
-    private migratePersistedState(
-        parsed: PersistedTimerState | { version?: number; ownerDeviceId?: string; vaultFingerprint?: string; updatedAtMs?: number; timers?: PersistedTimer[] }
-    ): PersistedTimerState | null {
-        if (!parsed || !Array.isArray(parsed.timers)) {
-            return null;
-        }
-
-        if (parsed.version === STORAGE_VERSION) {
-            return parsed as PersistedTimerState;
-        }
-
-        if (parsed.version === 3 || parsed.version === 4) {
-            const migratedTimers = parsed.timers.map((timer) => ({
-                ...timer,
-                phase: timer.phase ?? timer.mode ?? 'idle'
-            }));
-            return {
-                version: STORAGE_VERSION,
-                ownerDeviceId: parsed.ownerDeviceId ?? this.storageUtils.deviceId,
-                vaultFingerprint: parsed.vaultFingerprint ?? this.storageUtils.vaultFingerprint,
-                updatedAtMs: parsed.updatedAtMs ?? Date.now(),
-                timers: migratedTimers
-            };
-        }
-
-        return null;
     }
 
     // ─── Serialization ───────────────────────────────────────

@@ -49,7 +49,6 @@ interface TimelineViewState {
     zoomLevel?: number;
     startDate?: string;
     filterState?: FilterState;
-    filterFiles?: string[];
     showSidebar?: boolean;
     pinnedListCollapsed?: Record<string, boolean>;
     pinnedLists?: PinnedListDefinition[];
@@ -104,7 +103,6 @@ export class TimelineView extends ItemView {
             startDate: DateUtils.getVisualDateOfNow(this.plugin.settings.startHour),
             daysToShow: 3,
             showSidebar: true,
-            filterFiles: null,
             pinnedLists: [],
         };
         this.sidebarManager = new SidebarManager({
@@ -148,13 +146,8 @@ export class TimelineView extends ItemView {
             }
             if (state.filterState) {
                 this.viewState.filterState = state.filterState;
-                this.viewState.filterFiles = null;
-            } else if (Object.prototype.hasOwnProperty.call(state, 'filterFiles') && Array.isArray(state.filterFiles) && state.filterFiles.length > 0) {
-                this.viewState.filterFiles = state.filterFiles;
-                this.viewState.filterState = undefined;
             } else {
                 this.viewState.filterState = undefined;
-                this.viewState.filterFiles = null;
             }
             if (typeof state.showSidebar === 'boolean') {
                 this.viewState.showSidebar = state.showSidebar;
@@ -194,8 +187,6 @@ export class TimelineView extends ItemView {
         }
         if (this.viewState.filterState) {
             state.filterState = this.viewState.filterState;
-        } else if (this.viewState.filterFiles) {
-            state.filterFiles = this.viewState.filterFiles;
         }
         if (this.viewState.customName) {
             state.customName = this.viewState.customName;

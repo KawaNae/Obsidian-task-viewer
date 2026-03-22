@@ -11,11 +11,8 @@ export function resolveChildLineNumber(app: App, task: Task, childLineIndex: num
         if (bodyOffset === undefined) return -1;
 
         const fmEndLine = getFrontmatterEndLine(app, task.file);
-        // New frontmatter parser stores absolute lines. Keep legacy fallback for old offsets.
-        if (fmEndLine !== -1 && bodyOffset <= fmEndLine) {
-            return fmEndLine + 1 + bodyOffset;
-        }
-        return bodyOffset;
+        if (fmEndLine === -1) return -1;
+        return fmEndLine + 1 + bodyOffset;
     }
 
     return task.line + 1 + childLineIndex;

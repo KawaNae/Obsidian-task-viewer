@@ -47,9 +47,7 @@ export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
 
 interface CalendarViewState {
     windowStart?: string;
-    monthKey?: string;
     filterState?: FilterState;
-    filterFiles?: string[];
     showSidebar?: boolean;
     pinnedListCollapsed?: Record<string, boolean>;
     pinnedLists?: PinnedListDefinition[];
@@ -135,36 +133,10 @@ export class CalendarView extends ItemView {
                 const weekStart = this.getWeekStart(parsedWindowStart, this.plugin.settings.calendarWeekStartDay);
                 this.windowStart = DateUtils.getLocalDateString(weekStart);
             }
-        } else if (state && typeof state.monthKey === 'string') {
-            // Backward compatibility for older saved layout state.
-            const monthMatch = state.monthKey.match(/^(\d{4})-(\d{2})$/);
-            if (monthMatch) {
-                const year = Number(monthMatch[1]);
-                const month = Number(monthMatch[2]);
-                if (month >= 1 && month <= 12) {
-                    const monthStart = new Date(year, month - 1, 1);
-                    const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
-                    this.windowStart = DateUtils.getLocalDateString(weekStart);
-                }
-            }
         }
 
         if (state && state.filterState) {
             this.filterMenu.setFilterState(FilterSerializer.fromJSON(state.filterState));
-        } else if (state && Object.prototype.hasOwnProperty.call(state, 'filterFiles') && Array.isArray(state.filterFiles) && state.filterFiles.length > 0) {
-            const files = state.filterFiles.filter((value: unknown): value is string => typeof value === 'string');
-            if (files.length > 0) {
-                this.filterMenu.setFilterState({
-                    filters: [{
-                        property: 'file',
-                        operator: 'includes',
-                        value: files,
-                    }],
-                    logic: 'and',
-                });
-            } else {
-                this.filterMenu.setFilterState(createEmptyFilterState());
-            }
         } else {
             this.filterMenu.setFilterState(createEmptyFilterState());
         }
