@@ -15,6 +15,7 @@ export class ViewExporter {
             clone.style.left = '-99999px';
             clone.style.top = '0';
             clone.style.width = `${container.offsetWidth}px`;
+            clone.style.height = `${container.offsetHeight}px`;
             container.parentElement!.appendChild(clone);
 
             // Transfer scrollTop values (cloneNode doesn't copy them)

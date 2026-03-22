@@ -56,6 +56,8 @@ export class ScheduleView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private currentVisualDate = '';
     private scrollToNowOnNextRender = false;
+    private lastScrollTop = 0;
+    private hasValidScrollPosition = false;
     private customName: string | undefined;
     private collapsedSections: Record<CollapsibleSectionKey, boolean> = {
         allDay: false,
@@ -235,6 +237,12 @@ export class ScheduleView extends ItemView {
             return;
         }
 
+        const oldBodyScroll = this.container.querySelector('.schedule-view__body-scroll') as HTMLElement | null;
+        if (oldBodyScroll) {
+            this.lastScrollTop = oldBodyScroll.scrollTop;
+            this.hasValidScrollPosition = true;
+        }
+
         this.container.empty();
         const toolbarHost = this.container.createDiv('schedule-view__toolbar-host');
         this.renderToolbar(toolbarHost);
@@ -256,6 +264,14 @@ export class ScheduleView extends ItemView {
         if (this.scrollToNowOnNextRender) {
             this.scrollToNowOnNextRender = false;
             requestAnimationFrame(() => this.scrollToCurrentTime());
+        } else if (this.hasValidScrollPosition) {
+            const savedScrollTop = this.lastScrollTop;
+            requestAnimationFrame(() => {
+                const newBodyScroll = this.container.querySelector('.schedule-view__body-scroll') as HTMLElement | null;
+                if (newBodyScroll) {
+                    newBodyScroll.scrollTop = savedScrollTop;
+                }
+            });
         }
     }
 

@@ -117,6 +117,11 @@ export class ExportUtils {
             pixelRatio: 2,
             backgroundColor: undefined,
             filter: this.getExportFilter(),
+            style: {
+                position: 'static',
+                left: 'auto',
+                top: 'auto',
+            },
         });
         if (!blob) throw new Error('Failed to create blob');
         return blob;

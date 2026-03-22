@@ -66,6 +66,8 @@ export class CalendarView extends ItemView {
     private pinnedListCollapsed: Record<string, boolean> = {};
     private pinnedLists: PinnedListDefinition[] = [];
     private customName: string | undefined;
+    private lastScrollTop = 0;
+    private hasValidScrollPosition = false;
     private sidebarOpenedThisSession = false;
 
     constructor(leaf: WorkspaceLeaf, taskIndex: TaskIndex, plugin: TaskViewerPlugin) {
@@ -268,6 +270,12 @@ export class CalendarView extends ItemView {
             return;
         }
 
+        const oldMain = this.container.querySelector('.view-sidebar-main') as HTMLElement | null;
+        if (oldMain) {
+            this.lastScrollTop = oldMain.scrollTop;
+            this.hasValidScrollPosition = true;
+        }
+
         const normalizedWindowStart = this.getNormalizedWindowStart(this.windowStart);
         if (normalizedWindowStart !== this.windowStart) {
             this.windowStart = normalizedWindowStart;
@@ -346,6 +354,16 @@ export class CalendarView extends ItemView {
         const selectedTaskId = this.handleManager?.getSelectedTaskId();
         if (selectedTaskId) {
             this.handleManager?.selectTask(selectedTaskId);
+        }
+
+        if (this.hasValidScrollPosition) {
+            const savedScrollTop = this.lastScrollTop;
+            requestAnimationFrame(() => {
+                const newMain = this.container.querySelector('.view-sidebar-main') as HTMLElement | null;
+                if (newMain) {
+                    newMain.scrollTop = savedScrollTop;
+                }
+            });
         }
     }
 

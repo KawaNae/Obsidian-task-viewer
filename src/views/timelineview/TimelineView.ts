@@ -684,9 +684,12 @@ export class TimelineView extends ItemView {
                 this.scrollToNowOnNextRender = false;
                 requestAnimationFrame(() => this.scrollToCurrentTime());
             } else if (this.hasValidScrollPosition) {
-                const newGrid = newScrollArea.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
-                const gridOffset = newGrid?.offsetTop ?? 0;
-                newScrollArea.scrollTop = gridOffset + this.lastScrollTop;
+                const savedScrollTop = this.lastScrollTop;
+                requestAnimationFrame(() => {
+                    const newGrid = newScrollArea.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
+                    const gridOffset = newGrid?.offsetTop ?? 0;
+                    newScrollArea.scrollTop = gridOffset + savedScrollTop;
+                });
             }
         }
 
