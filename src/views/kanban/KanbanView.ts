@@ -1,4 +1,4 @@
-import { ItemView, Menu, WorkspaceLeaf, setIcon } from 'obsidian';
+import { ItemView, Menu, WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -21,9 +21,16 @@ import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManag
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
 import type { PinnedListDefinition, DisplayTask } from '../../types';
-import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
+import { toDisplayTasks } from '../../services/display/DisplayTaskConverter';
 
 export const VIEW_TYPE_KANBAN = VIEW_META_KANBAN.type;
+
+interface KanbanViewState {
+    grid?: PinnedListDefinition[][];
+    gridCollapsed?: Record<string, boolean>;
+    customName?: string;
+    filterState?: FilterState;
+}
 
 export class KanbanView extends ItemView {
     private readonly taskIndex: TaskIndex;
@@ -80,7 +87,7 @@ export class KanbanView extends ItemView {
         return VIEW_META_KANBAN.icon;
     }
 
-    async setState(state: any, result: any): Promise<void> {
+    async setState(state: KanbanViewState, result: ViewStateResult): Promise<void> {
         if (state?.grid && Array.isArray(state.grid)) {
             this.grid = state.grid;
         }
@@ -221,7 +228,7 @@ export class KanbanView extends ItemView {
             getDefaultName: () => VIEW_META_KANBAN.displayText,
             onRename: (newName) => {
                 this.customName = newName;
-                (this.leaf as any).updateHeader();
+                this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
             },
             buildUri: () => ({
@@ -388,7 +395,7 @@ export class KanbanView extends ItemView {
         });
 
         menu.addItem(item => {
-            (item as any)
+            item
                 .setTitle(t('menu.applyViewFilter'))
                 .setIcon('filter')
                 .setChecked(!!listDef.applyViewFilter)
@@ -556,8 +563,8 @@ export class KanbanView extends ItemView {
         const dup: PinnedListDefinition = {
             id: this.generateId(),
             name: listDef.name + ' (copy)',
-            filterState: JSON.parse(JSON.stringify(listDef.filterState)),
-            sortState: listDef.sortState ? JSON.parse(JSON.stringify(listDef.sortState)) : undefined,
+            filterState: structuredClone(listDef.filterState),
+            sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
         };
 
         // Insert duplicated cell to the right in the same row, and add a new cell to all other rows

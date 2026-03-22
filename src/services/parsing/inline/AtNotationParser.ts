@@ -1,10 +1,10 @@
 import type { Task, FlowCommand, FlowModifier } from '../../../types';
 import { ParserStrategy } from '../strategies/ParserStrategy';
 import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
-import { TaskIdGenerator } from '../../../utils/TaskIdGenerator';
-import { TagExtractor } from '../../../utils/TagExtractor';
+import { TaskIdGenerator } from '../../display/TaskIdGenerator';
+import { TagExtractor } from '../utils/TagExtractor';
 import { DateUtils } from '../../../utils/DateUtils';
-import { TaskLineClassifier } from '../../../utils/TaskLineClassifier';
+import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 
 interface DateBlockResult {
     date: string;

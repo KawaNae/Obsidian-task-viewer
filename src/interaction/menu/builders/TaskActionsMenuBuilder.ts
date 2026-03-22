@@ -1,11 +1,11 @@
 import { App, MarkdownView, Menu } from 'obsidian';
-import { Task } from '../../../types';
+import { Task, isFrontmatterTask } from '../../../types';
 import { TaskIndex } from '../../../services/core/TaskIndex';
 import TaskViewerPlugin from '../../../main';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { ConfirmModal } from '../../../modals/ConfirmModal';
-import { getTaskDisplayName } from '../../../utils/TaskContent';
-import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
+import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
+import { openFileInExistingOrNewTab } from '../../../views/sharedLogic/NavigationUtils';
 import { FileOperations } from '../../../services/persistence/utils/FileOperations';
 import { t } from '../../../i18n';
 
@@ -44,10 +44,10 @@ export class TaskActionsMenuBuilder {
         const displayName = getTaskDisplayName(task);
 
         menu.addItem((item) => {
-            const subMenu = (item as any)
+            const subMenu = item
                 .setTitle(t('menu.trackAsChild'))
                 .setIcon('clock')
-                .setSubmenu() as Menu;
+                .setSubmenu();
 
             const baseParams = {
                 taskId: task.id,
@@ -96,7 +96,7 @@ export class TaskActionsMenuBuilder {
                         const taskLine = formatTaskLine(result);
                         const repository = this.plugin.getTaskRepository();
 
-                        if (task.parserId === 'frontmatter') {
+                        if (isFrontmatterTask(task)) {
                             await repository.insertLineAfterFrontmatter(
                                 task.file, taskLine,
                                 this.plugin.settings.frontmatterTaskHeader,
@@ -149,10 +149,10 @@ export class TaskActionsMenuBuilder {
      */
     private addDuplicateSubmenu(menu: Menu, task: Task): void {
         menu.addItem((item) => {
-            const subMenu = (item as any)
+            const subMenu = item
                 .setTitle(t('menu.duplicate'))
                 .setIcon('copy')
-                .setSubmenu() as Menu;
+                .setSubmenu();
 
             subMenu.addItem((sub) => {
                 sub.setTitle(t('menu.inPlace'))
@@ -188,10 +188,10 @@ export class TaskActionsMenuBuilder {
         if (task.parserId !== 'at-notation') return;
 
         menu.addItem((item) => {
-            const subMenu = (item as any)
+            const subMenu = item
                 .setTitle(t('menu.convertTo'))
                 .setIcon('arrow-right-left')
-                .setSubmenu() as Menu;
+                .setSubmenu();
 
             // Inline Task → Plain Checkbox
             subMenu.addItem((sub) => {
@@ -244,10 +244,10 @@ export class TaskActionsMenuBuilder {
         const isTimed = !!task.startTime;
 
         menu.addItem((item) => {
-            const subMenu = (item as any)
+            const subMenu = item
                 .setTitle(t('menu.switchTo'))
                 .setIcon('repeat')
-                .setSubmenu() as Menu;
+                .setSubmenu();
 
             if (isTimed) {
                 subMenu.addItem((sub) => {

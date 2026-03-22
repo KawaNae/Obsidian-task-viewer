@@ -3,7 +3,7 @@ import { resolveFields, pickFields, formatOutput, cliOk, cliError } from '../../
 import { taskToRecord } from '../../src/api/TaskNormalizer';
 import { normalizeTask } from '../../src/api/TaskNormalizer';
 import { makeTask } from '../helpers/makeTask';
-import { toDisplayTask } from '../../src/utils/DisplayTaskConverter';
+import { toDisplayTask } from '../../src/services/display/DisplayTaskConverter';
 
 /** Helper: makeTask → DisplayTask → NormalizedTask */
 function makeNormalized(overrides: Parameters<typeof makeTask>[0] = {}) {

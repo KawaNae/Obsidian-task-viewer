@@ -21,10 +21,10 @@ import {
 } from '../timer/TimerInstance';
 import { TimerProgressUI } from '../timer/TimerProgressUI';
 import { IntervalTemplateLoader, IntervalTemplate } from '../timer/IntervalTemplateLoader';
-import { AudioUtils } from '../utils/AudioUtils';
+import { AudioUtils } from '../timer/AudioUtils';
 import { TimeFormatter } from '../utils/TimeFormatter';
-import { ViewUriBuilder } from '../utils/ViewUriBuilder';
-import type { ViewUriOptions } from '../utils/ViewUriBuilder';
+import { ViewUriBuilder } from './sharedLogic/ViewUriBuilder';
+import type { ViewUriOptions } from './sharedLogic/ViewUriBuilder';
 import { IntervalTemplateCreator } from './customMenus/IntervalTemplateCreator';
 import { t } from '../i18n';
 
@@ -33,6 +33,11 @@ export const VIEW_TYPE_TIMER = VIEW_META_TIMER.type;
 type TimerViewMode = 'countup' | 'countdown' | 'pomodoro' | 'interval';
 
 const TIMER_VIEW_ID = '__timer-view__';
+
+interface TimerViewState {
+    timerViewMode?: 'countup' | 'countdown' | 'pomodoro' | 'interval';
+    intervalTemplate?: string;
+}
 
 export class TimerView extends ItemView {
     private plugin: TaskViewerPlugin;
@@ -71,7 +76,7 @@ export class TimerView extends ItemView {
         this.render();
     }
 
-    async setState(state: any, result: ViewStateResult): Promise<void> {
+    async setState(state: TimerViewState, result: ViewStateResult): Promise<void> {
         await super.setState(state, result);
 
         const mode = state?.timerViewMode;
@@ -461,7 +466,8 @@ export class TimerView extends ItemView {
     }
 
     private renderToolbar(): void {
-        const toolbar = this.container.createDiv('view-toolbar');
+        const toolbarHost = this.container.createDiv('timer-view__toolbar-host');
+        const toolbar = toolbarHost.createDiv('view-toolbar');
 
         const isIdle = !this.timer || this.timer.phase === 'idle';
 

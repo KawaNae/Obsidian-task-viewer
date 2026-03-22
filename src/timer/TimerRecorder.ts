@@ -10,7 +10,7 @@ import TaskViewerPlugin from '../main';
 import { TimerInstance, getTimerElapsedSeconds } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { TaskParser } from '../services/parsing/TaskParser';
-import { Task } from '../types';
+import { Task, isFrontmatterTask } from '../types';
 import { FileOperations } from '../services/persistence/utils/FileOperations';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
@@ -134,7 +134,7 @@ export class TimerRecorder {
     async updateTaskStartTime(timer: TimerInstance): Promise<void> {
         const now = new Date();
         const taskIndex = this.plugin.getTaskIndex();
-        const task = timer.parserId === 'frontmatter'
+        const task = isFrontmatterTask(timer)
             ? this.resolver.resolveFrontmatterTask(timer)
             : this.resolver.resolveInlineTask(timer);
 
@@ -196,7 +196,7 @@ export class TimerRecorder {
         await this.insertChildRecord(timer, formattedLine);
 
         // Wait for scan to pick up the new child, then find it by blockId
-        const parentTask = timer.parserId === 'frontmatter'
+        const parentTask = isFrontmatterTask(timer)
             ? this.resolver.resolveFrontmatterTask(timer)
             : this.resolver.resolveInlineTask(timer);
         if (!parentTask) return undefined;
@@ -287,7 +287,7 @@ export class TimerRecorder {
 
         if (timer.taskId) {
             const taskIndex = this.plugin.getTaskIndex();
-            const task = timer.parserId === 'frontmatter'
+            const task = isFrontmatterTask(timer)
                 ? this.resolver.resolveFrontmatterTask(timer)
                 : this.resolver.resolveInlineTask(timer);
 
@@ -332,7 +332,7 @@ export class TimerRecorder {
             return;
         }
 
-        if (timer.parserId === 'frontmatter') {
+        if (isFrontmatterTask(timer)) {
             const resolvedFrontmatterTask = this.resolver.resolveFrontmatterTask(timer);
             if (!resolvedFrontmatterTask) {
                 new Notice(t('notice.timerTargetNotFound'));

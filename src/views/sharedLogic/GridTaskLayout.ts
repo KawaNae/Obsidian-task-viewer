@@ -1,6 +1,6 @@
 import { DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
+import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 
 /**
  * Effective date range for a task, provided by the consumer.

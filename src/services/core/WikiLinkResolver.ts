@@ -1,6 +1,6 @@
 import { App, TFile } from 'obsidian';
-import { Task, WikilinkRef } from '../../types';
-import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
+import { Task, WikilinkRef, isFrontmatterTask } from '../../types';
+import { TaskIdGenerator } from '../display/TaskIdGenerator';
 
 /**
  * `- [[name]]` パターンのwikilink子タスクを解決し、親子関係をワイアーする。
@@ -60,7 +60,7 @@ export class WikiLinkResolver {
 
         // frontmatter タスクの childIds をファイル内の出現順にソート
         for (const [parentId, parentTask] of tasks) {
-            if (parentTask.parserId !== 'frontmatter' || parentTask.childIds.length <= 1) continue;
+            if (!isFrontmatterTask(parentTask) || parentTask.childIds.length <= 1) continue;
             const childLineMap = wikiChildLineMap.get(parentId);
             parentTask.childIds.sort((a, b) => {
                 const lineA = this.getChildBodyLine(a, childLineMap, tasks);

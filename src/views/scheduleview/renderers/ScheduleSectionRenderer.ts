@@ -42,7 +42,7 @@ export class ScheduleSectionRenderer {
 
         const applyCollapsedState = () => {
             const isCollapsed = this.collapsedSections.allDay;
-            row.toggleClass('collapsed', isCollapsed);
+            row.toggleClass('allday-section--collapsed', isCollapsed);
             setIcon(toggleBtn, isCollapsed ? 'plus' : 'minus');
             axisCell.setAttribute('aria-expanded', (!isCollapsed).toString());
             axisCell.setAttribute('aria-label', isCollapsed ? t('allDaySection.expandAllDay') : t('allDaySection.collapseAllDay'));

@@ -10,7 +10,6 @@ import {
 import {
     STORAGE_VERSION,
     STORAGE_KEY_PREFIX,
-    LEGACY_STORAGE_KEY,
     DEVICE_ID_KEY,
 } from './TimerContext';
 
@@ -31,14 +30,6 @@ export class TimerStorageUtils {
 
     getStorageKeyForVersion(version: number): string {
         return `${STORAGE_KEY_PREFIX}.v${version}:${this.vaultFingerprint}`;
-    }
-
-    cleanupLegacyStorage(): void {
-        try {
-            window.localStorage.removeItem(LEGACY_STORAGE_KEY);
-        } catch {
-            // noop
-        }
     }
 
     // ─── ID Generation ────────────────────────────────────────

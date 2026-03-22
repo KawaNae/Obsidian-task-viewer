@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TaskLineClassifier } from '../../src/utils/TaskLineClassifier';
+import { TaskLineClassifier } from '../../src/services/parsing/utils/TaskLineClassifier';
 
 describe('TaskLineClassifier', () => {
     describe('classify', () => {

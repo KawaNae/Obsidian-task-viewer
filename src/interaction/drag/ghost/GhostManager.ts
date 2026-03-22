@@ -62,7 +62,7 @@ export class GhostManager {
                 ghost.style.top = `${dayCol.offsetTop + borderTop + toDisplayTopPx(seg.top)}px`;
                 ghost.style.width = `${dayCol.offsetWidth - 8}px`; // -8px for padding
                 ghost.style.height = `${toDisplayHeightPx(seg.height)}px`;
-                ghost.style.opacity = '0.8';
+                ghost.classList.remove('drag-hidden');
                 ghost.style.display = 'block';
 
                 // --- Manage Split Classes and Inline Styles Dynamically ---

@@ -1,5 +1,6 @@
 import { App, setIcon } from 'obsidian';
 import type { TaskViewerSettings } from '../types';
+import TaskViewerPlugin from '../main';
 import { PropertyColorSuggest } from './color/PropertyColorSuggest';
 import { PropertyLineStyleSuggest } from './line/PropertyLineStyleSuggest';
 
@@ -15,7 +16,7 @@ export class PropertySuggestObserver {
     constructor(
         private app: App,
         private getSettings: () => TaskViewerSettings,
-        private suggestHost: any // Plugin instance passed to PropertyColorSuggest
+        private suggestHost: TaskViewerPlugin
     ) {}
 
     start(): void {
@@ -145,8 +146,7 @@ export class PropertySuggestObserver {
 
             const settings = this.getSettings();
             const colorKey = settings.frontmatterTaskKeys.color;
-            // @ts-ignore - processFrontMatter
-            await this.app.fileManager.processFrontMatter(activeFile, (frontmatter: any) => {
+            await this.app.fileManager.processFrontMatter(activeFile, (frontmatter: Record<string, unknown>) => {
                 frontmatter[colorKey] = colorInput.value;
             });
 

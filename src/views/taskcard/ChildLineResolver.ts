@@ -1,6 +1,6 @@
-import { Task } from '../../types';
+import { Task, isFrontmatterTask } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
-import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
+import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 
 /**
  * Resolves child lines to Task references.
@@ -73,7 +73,7 @@ export class ChildLineResolver {
         const target = this.extractWikiLinkTarget(linkName);
         for (const childId of task.childIds) {
             const child = this.taskIndex.getTask(childId);
-            if (!child || child.parserId !== 'frontmatter') continue;
+            if (!child || !isFrontmatterTask(child)) continue;
 
             const baseName = child.file.replace(/\.md$/, '').split('/').pop() || '';
             const fullPath = child.file.replace(/\.md$/, '');

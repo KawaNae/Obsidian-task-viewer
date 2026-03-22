@@ -1,3 +1,4 @@
+import type { App } from 'obsidian';
 import type { TaskIndex } from '../core/TaskIndex';
 
 export interface ExportStrategy {
@@ -10,6 +11,7 @@ export interface ExportStrategy {
 }
 
 export interface ViewExportOptions {
+    app: App;
     container: HTMLElement;
     taskIndex: TaskIndex;
     filename: string;

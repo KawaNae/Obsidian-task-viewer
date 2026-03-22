@@ -1,5 +1,5 @@
 import TaskViewerPlugin from '../main';
-import { Task } from '../types';
+import { Task, isFrontmatterTask } from '../types';
 import { TimerInstance } from './TimerInstance';
 
 /**
@@ -61,7 +61,7 @@ export class TimerTaskResolver {
         if (timer.timerTargetId) {
             const byTargetInFile = timer.taskFile
                 ? allTasks.find((task) =>
-                    task.parserId === 'frontmatter'
+                    isFrontmatterTask(task)
                     && task.file === timer.taskFile
                     && task.timerTargetId === timer.timerTargetId
                 )
@@ -71,7 +71,7 @@ export class TimerTaskResolver {
             }
 
             const byTarget = allTasks.find((task) =>
-                task.parserId === 'frontmatter'
+                isFrontmatterTask(task)
                 && task.timerTargetId === timer.timerTargetId
             );
             if (byTarget) {
@@ -80,7 +80,7 @@ export class TimerTaskResolver {
         }
 
         const byId = taskIndex.getTask(timer.taskId);
-        if (byId && byId.parserId === 'frontmatter') {
+        if (byId && isFrontmatterTask(byId)) {
             return byId;
         }
 
@@ -88,7 +88,7 @@ export class TimerTaskResolver {
             return undefined;
         }
 
-        return allTasks.find((task) => task.parserId === 'frontmatter' && task.file === timer.taskFile);
+        return allTasks.find((task) => isFrontmatterTask(task) && task.file === timer.taskFile);
     }
 }
 

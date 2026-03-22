@@ -260,7 +260,6 @@ export class ChildSectionRenderer {
             if (item.isCheckbox) continue; // checkbox items are .task-list-item, skip
             if (liIdx >= allLis.length) break;
             if (item.propertyKey) {
-                allLis[liIdx].addClass('task-property-line');
                 allLis[liIdx].dataset.propertyKey = item.propertyKey;
             }
             liIdx++;

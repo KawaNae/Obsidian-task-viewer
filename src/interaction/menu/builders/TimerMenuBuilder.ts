@@ -1,7 +1,7 @@
 import { Menu } from 'obsidian';
 import { Task } from '../../../types';
 import TaskViewerPlugin from '../../../main';
-import { getTaskDisplayName } from '../../../utils/TaskContent';
+import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
 import { DateUtils } from '../../../utils/DateUtils';
 import { TaskParser } from '../../../services/parsing/TaskParser';
 import { t } from '../../../i18n';
@@ -21,10 +21,10 @@ export class TimerMenuBuilder {
             return;
         }
         menu.addItem((item) => {
-            const subMenu = (item as any)
+            const subMenu = item
                 .setTitle(t('menu.trackSelf'))
                 .setIcon('play')
-                .setSubmenu() as Menu;
+                .setSubmenu();
 
             const displayName = getTaskDisplayName(task);
             const baseParams = {

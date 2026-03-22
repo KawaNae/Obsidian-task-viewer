@@ -1,5 +1,6 @@
+import { Notice, type App, TFile } from 'obsidian';
 import type { TaskIndex } from '../core/TaskIndex';
-import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
+import { TaskIdGenerator } from '../display/TaskIdGenerator';
 
 type RestoreFn = () => void;
 
@@ -117,19 +118,31 @@ export class ExportUtils {
             pixelRatio: 2,
             backgroundColor: undefined,
             filter: this.getExportFilter(),
+            style: {
+                position: 'static',
+                left: 'auto',
+                top: 'auto',
+            },
         });
         if (!blob) throw new Error('Failed to create blob');
         return blob;
     }
 
-    /** Download a Blob as a file. */
-    static downloadBlob(blob: Blob, filename: string): void {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
+    /** Save a Blob to the vault as a binary file. */
+    static async downloadBlob(blob: Blob, filename: string, app: App): Promise<void> {
+        const buffer = await blob.arrayBuffer();
+        const folder = 'task-viewer-export';
+        if (!app.vault.getAbstractFileByPath(folder)) {
+            await app.vault.createFolder(folder);
+        }
+        const filePath = `${folder}/${filename}`;
+        const existing = app.vault.getAbstractFileByPath(filePath);
+        if (existing instanceof TFile) {
+            await app.vault.modifyBinary(existing, buffer);
+        } else {
+            await app.vault.createBinary(filePath, buffer);
+        }
+        new Notice(`Image saved to ${filePath}`);
     }
 
     // ── Masking ──

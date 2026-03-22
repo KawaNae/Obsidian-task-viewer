@@ -64,7 +64,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
         if (this.dragEl) {
             this.dragEl.removeClass('is-dragging');
             this.dragEl.style.zIndex = '';
-            this.dragEl.style.opacity = '';
+            this.dragEl.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
             this.dragEl.style.transform = '';
         }
 
@@ -179,7 +179,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
         preview.style.gridColumn = `${colStart + colOffset} / span ${span}`;
         preview.style.gridRow = `${trackIndex + 2}`;
         preview.style.transform = '';
-        preview.style.opacity = '';
+        preview.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
         preview.style.zIndex = '1001';
         preview.style.pointerEvents = 'none';
         if (splitClass) preview.addClass(splitClass);

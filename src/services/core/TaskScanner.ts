@@ -1,6 +1,6 @@
 import { App, TFile } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
-import { ChildLineClassifier } from '../../utils/ChildLineClassifier';
+import { ChildLineClassifier } from '../parsing/utils/ChildLineClassifier';
 import { TaskParser } from '../parsing/TaskParser';
 import { FrontmatterTaskBuilder } from '../parsing/file/FrontmatterTaskBuilder';
 import { WikiLinkResolver } from './WikiLinkResolver';
@@ -9,7 +9,7 @@ import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
-import { ImplicitCalendarDateResolver } from '../../utils/ImplicitCalendarDateResolver';
+import { ImplicitCalendarDateResolver } from '../display/ImplicitCalendarDateResolver';
 import { PropertyInheritanceResolver } from './PropertyInheritanceResolver';
 
 /**
@@ -329,10 +329,8 @@ export class TaskScanner {
             isFirstScan = true;
         }
 
-        console.log(`[🔄SYNC] Scan: ${file.path}, isLocalChange=${isLocalChange}, isFirstScan=${isFirstScan}, isInitializing=${this.isInitializing}`);
-
         if (!isLocalChange && !isFirstScan && !this.isInitializing) {
-            console.log(`[🔄SYNC] ⛔ Sync-driven change detected, skipping command: ${file.path}`);
+            // Sync-driven change detected — skip command execution
         }
 
         for (const task of doneTasks) {
@@ -343,19 +341,14 @@ export class TaskScanner {
             const currentCount = currentCounts.get(sig) || 0;
             const previousCount = this.processedCompletions.get(sig) || 0;
 
-            console.log(`[🔄SYNC] Task: ${task.content.substring(0, 30)}..., cur=${currentCount}, prev=${previousCount}, local=${isLocalChange}`);
-
             if (currentCount > previousCount) {
                 const diff = currentCount - previousCount;
 
                 // トリガー条件: 初期化中でない、初回スキャンでない、ローカル変更である
                 if (!this.isInitializing && !isFirstScan && isLocalChange) {
-                    console.log(`[🔄SYNC] ✅ Executing command for: ${task.content.substring(0, 30)}...`);
                     for (let k = 0; k < diff; k++) {
                         tasksToTrigger.push(task);
                     }
-                } else {
-                    console.log(`[TaskIndex] Skipping command - isInitializing=${this.isInitializing}, isFirstScan=${isFirstScan}, isLocalChange=${isLocalChange}`);
                 }
             }
         }

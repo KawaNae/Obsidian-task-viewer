@@ -8,6 +8,7 @@ import {
     toLogicalHeightPx,
     toLogicalTopPx
 } from '../../../views/sharedLogic/TimelineCardPosition';
+import { getOriginalTaskId } from '../../../services/display/DisplayTaskConverter';
 
 /**
  * リサイズ操作を処理するドラッグストラテジー。
@@ -182,7 +183,7 @@ export class ResizeStrategy extends BaseDragStrategy {
             return;
         }
 
-        const originalId = (this.dragTask as any).originalTaskId || this.dragTask.id;
+        const originalId = getOriginalTaskId(this.dragTask);
         const originalTask = context.taskIndex.getTask(originalId);
         if (!originalTask) {
             this.cleanup();
@@ -264,7 +265,7 @@ export class ResizeStrategy extends BaseDragStrategy {
         this.hiddenElements = [];
         this.clearCalendarPreviewGhosts();
 
-        const originalId = (task as any).originalTaskId || task.id;
+        const originalId = getOriginalTaskId(task);
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         context.container.querySelectorAll(selector).forEach(segment => {
             if (segment instanceof HTMLElement) {
@@ -291,15 +292,15 @@ export class ResizeStrategy extends BaseDragStrategy {
             this.calendarPreviewTargetDate = boundedEnd;
 
             if (crossWeek) {
-                this.hiddenElements.forEach(el => el.style.opacity = '0');
-                this.dragEl.style.opacity = '0.15';
+                this.hiddenElements.forEach(el => el.classList.add('drag-hidden'));
+                this.dragEl.classList.add('drag-source-faint');
                 this.updateCalendarSplitPreview(context, this.initialCalendarDate, boundedEnd);
                 return;
             }
 
-            this.hiddenElements.forEach(el => el.style.opacity = '');
+            this.hiddenElements.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
             this.clearCalendarPreviewGhosts();
-            this.dragEl.style.opacity = '';
+            this.dragEl.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
             const newSpan = Math.max(1, target.col - this.startCol + 1);
             this.dragEl.style.gridColumn = `${this.startCol + colOffset} / span ${newSpan}`;
         } else if (this.resizeDirection === 'left') {
@@ -307,15 +308,15 @@ export class ResizeStrategy extends BaseDragStrategy {
             this.calendarPreviewTargetDate = boundedStart;
 
             if (crossWeek) {
-                this.hiddenElements.forEach(el => el.style.opacity = '0');
-                this.dragEl.style.opacity = '0.15';
+                this.hiddenElements.forEach(el => el.classList.add('drag-hidden'));
+                this.dragEl.classList.add('drag-source-faint');
                 this.updateCalendarSplitPreview(context, boundedStart, this.initialCalendarEndDate);
                 return;
             }
 
-            this.hiddenElements.forEach(el => el.style.opacity = '');
+            this.hiddenElements.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
             this.clearCalendarPreviewGhosts();
-            this.dragEl.style.opacity = '';
+            this.dragEl.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
             const currentEndCol = this.startCol + this.initialSpan - 1;
             let targetStartCol = target.col;
             targetStartCol = Math.min(targetStartCol, currentEndCol);
@@ -328,7 +329,7 @@ export class ResizeStrategy extends BaseDragStrategy {
     private async finishCalendarResize(e: PointerEvent, context: DragContext) {
         if (!this.dragTask || !this.dragEl) {
             this.clearCalendarPreviewGhosts();
-            this.hiddenElements.forEach(el => el.style.opacity = '');
+            this.hiddenElements.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
             this.cleanup();
             return;
         }
@@ -337,8 +338,8 @@ export class ResizeStrategy extends BaseDragStrategy {
         const targetDate = this.calendarPreviewTargetDate || target?.targetDate;
         if (!targetDate) {
             this.clearCalendarPreviewGhosts();
-            this.hiddenElements.forEach(el => el.style.opacity = '');
-            if (this.dragEl) this.dragEl.style.opacity = '';
+            this.hiddenElements.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
+            if (this.dragEl) this.dragEl.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
             this.cleanup();
             return;
         }
@@ -362,8 +363,8 @@ export class ResizeStrategy extends BaseDragStrategy {
 
         if (Object.keys(updates).length === 0) {
             this.clearCalendarPreviewGhosts();
-            this.hiddenElements.forEach(el => el.style.opacity = '');
-            if (this.dragEl) this.dragEl.style.opacity = '';
+            this.hiddenElements.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
+            if (this.dragEl) this.dragEl.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
             this.cleanup();
             return;
         }
@@ -378,11 +379,11 @@ export class ResizeStrategy extends BaseDragStrategy {
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 this.clearCalendarPreviewGhosts();
-                hiddenEls.forEach(el => el.style.opacity = '');
+                hiddenEls.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
                 const selector = `.task-card[data-id="${taskIdToRestore}"], .task-card[data-split-original-id="${taskIdToRestore}"]`;
                 containerRef.querySelectorAll(selector).forEach(el => {
                     if (el instanceof HTMLElement) {
-                        el.style.opacity = '';
+                        el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
                     }
                 });
             });

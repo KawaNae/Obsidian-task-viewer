@@ -4,6 +4,7 @@ import { Task } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
 import { GhostManager, GhostSegment } from '../ghost/GhostManager';
 import { createGhostElement, removeGhostElement } from '../ghost/GhostFactory';
+import { getOriginalTaskId } from '../../../services/display/DisplayTaskConverter';
 
 /**
  * 移動操作を処理するドラッグストラテジー。
@@ -80,13 +81,13 @@ export class MoveStrategy extends BaseDragStrategy {
         if (this.viewType === 'timeline') {
             // 最初の移動時に要素を非表示
             if (this.hiddenElements.length > 0) {
-                this.hiddenElements.forEach(el => el.style.opacity = '0');
+                this.hiddenElements.forEach(el => el.classList.add('drag-hidden'));
             }
             this.processTimelineMove(e.clientX, e.clientY);
             this.checkAutoScroll(e.clientY);
         } else if (this.viewType === 'calendar') {
             if (this.hiddenElements.length > 0) {
-                this.hiddenElements.forEach(el => el.style.opacity = '0');
+                this.hiddenElements.forEach(el => el.classList.add('drag-hidden'));
             }
             this.processCalendarMove(e, context);
         } else {
@@ -143,7 +144,7 @@ export class MoveStrategy extends BaseDragStrategy {
         }
 
         // 分割タスク処理
-        const originalId = (task as any).originalTaskId || task.id;
+        const originalId = getOriginalTaskId(task);
         const originalTask = context.taskIndex.getTask(originalId);
 
         let originalTaskStartMinutes: number | null = null;
@@ -321,7 +322,7 @@ export class MoveStrategy extends BaseDragStrategy {
                 const selector = `.task-card[data-id="${taskIdToRestore}"], .task-card[data-split-original-id="${taskIdToRestore}"]`;
                 containerRef.querySelectorAll(selector).forEach(el => {
                     if (el instanceof HTMLElement) {
-                        el.style.opacity = '';
+                        el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
                     }
                 });
             });
@@ -363,7 +364,7 @@ export class MoveStrategy extends BaseDragStrategy {
         this.ghostEl = createGhostElement(el, doc, { useCloneNode: true });
         this.clearCalendarPreviewGhosts();
 
-        const originalId = (task as any).originalTaskId || task.id;
+        const originalId = getOriginalTaskId(task);
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         context.container.querySelectorAll(selector).forEach(segment => {
             if (segment instanceof HTMLElement) {
@@ -385,7 +386,7 @@ export class MoveStrategy extends BaseDragStrategy {
         }
 
         if (this.ghostEl) {
-            this.ghostEl.style.opacity = '0';
+            this.ghostEl.classList.add('drag-hidden');
             this.ghostEl.style.left = '-9999px';
         }
 
@@ -401,7 +402,7 @@ export class MoveStrategy extends BaseDragStrategy {
 
         if (!this.dragTask || !this.dragEl) {
             this.clearCalendarPreviewGhosts();
-            this.hiddenElements.forEach(el => el.style.opacity = '');
+            this.hiddenElements.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
             this.cleanup();
             return;
         }
@@ -417,7 +418,7 @@ export class MoveStrategy extends BaseDragStrategy {
 
         if (dayDelta === 0) {
             this.clearCalendarPreviewGhosts();
-            this.hiddenElements.forEach(el => el.style.opacity = '');
+            this.hiddenElements.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
             this.cleanup();
             return;
         }
@@ -439,11 +440,11 @@ export class MoveStrategy extends BaseDragStrategy {
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 this.clearCalendarPreviewGhosts();
-                hiddenEls.forEach(el => el.style.opacity = '');
+                hiddenEls.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
                 const selector = `.task-card[data-id="${taskIdToRestore}"], .task-card[data-split-original-id="${taskIdToRestore}"]`;
                 containerRef.querySelectorAll(selector).forEach(el => {
                     if (el instanceof HTMLElement) {
-                        el.style.opacity = '';
+                        el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
                     }
                 });
             });
@@ -497,19 +498,19 @@ export class MoveStrategy extends BaseDragStrategy {
         this.isOutsideSection = !!timelineSection;
 
         if (this.isOutsideSection && this.ghostEl) {
-            this.ghostEl.style.opacity = '0.8';
+            this.ghostEl.classList.remove('drag-hidden');
             this.ghostEl.style.left = `${e.clientX + 10}px`;
             this.ghostEl.style.top = `${e.clientY + 10}px`;
-            this.dragEl.style.opacity = '0.3';
+            this.dragEl.classList.add('drag-source-dimmed');
             this.dragEl.style.transform = '';
             this.dragEl.style.gridColumn = this.initialGridColumn;
 
             const originalEndLine = this.startCol + this.initialSpan;
             this.updateArrowPosition(originalEndLine);
         } else if (this.ghostEl) {
-            this.ghostEl.style.opacity = '0';
+            this.ghostEl.classList.add('drag-hidden');
             this.ghostEl.style.left = '-9999px';
-            this.dragEl.style.opacity = '';
+            this.dragEl.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
             this.dragEl.style.transform = `translateX(${snappedDeltaX}px)`;
 
             const newTaskEndLine = this.startCol + this.initialSpan + dayDelta;

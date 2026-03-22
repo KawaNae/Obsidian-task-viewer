@@ -1,9 +1,9 @@
 import type { Workspace, WorkspaceLeaf } from 'obsidian';
-import type { FilterState } from '../services/filter/FilterTypes';
-import { hasConditions } from '../services/filter/FilterTypes';
-import { FilterSerializer } from '../services/filter/FilterSerializer';
-import type { PinnedListDefinition } from '../types';
-import { unicodeBtoa } from './base64';
+import type { FilterState } from '../../services/filter/FilterTypes';
+import { hasConditions } from '../../services/filter/FilterTypes';
+import { FilterSerializer } from '../../services/filter/FilterSerializer';
+import type { PinnedListDefinition } from '../../types';
+import { unicodeBtoa } from '../../utils/base64';
 
 export type LeafPosition = 'left' | 'right' | 'tab' | 'window' | 'override';
 
@@ -97,6 +97,7 @@ export class ViewUriBuilder {
      */
     static detectLeafPosition(leaf: WorkspaceLeaf, workspace: Workspace): LeafPosition {
         // Walk up the parent chain to check sidebars
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let item: any = leaf;
         while (item?.parent) {
             if (item === workspace.leftSplit || item.parent === workspace.leftSplit) return 'left';

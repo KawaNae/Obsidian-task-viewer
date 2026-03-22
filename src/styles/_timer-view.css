@@ -395,3 +395,7 @@
     outline: none;
     border-color: var(--tv-accent);
 }
+
+.timer-view__toolbar-host {
+    flex-shrink: 0;
+}

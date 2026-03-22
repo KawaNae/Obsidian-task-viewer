@@ -21,7 +21,7 @@
     z-index: var(--z-negative);
 }
 
-.allday-section.collapsed::before {
+.allday-section--collapsed::before {
     display: none;
 }
 
@@ -74,34 +74,34 @@
 
 /* --- Collapsed State --- */
 /* Show cells but hide borders (except the last one) */
-.allday-section.collapsed .allday-section__cell:not(.allday-section__axis) {
+.allday-section--collapsed .allday-section__cell:not(.allday-section__axis) {
     display: flex;
     border-right: none;
     min-height: 36px;
 }
 
 /* Maintain right border for the last cell */
-.allday-section.collapsed .allday-section__cell.is-last-cell {
+.allday-section--collapsed .allday-section__cell.is-last-cell {
     border-right: 1px solid var(--tv-border);
 }
 
-.allday-section.collapsed .allday-section__axis {
+.allday-section--collapsed .allday-section__axis {
     grid-row: 1 / span 1 !important;
     min-height: 36px;
 }
 
-.allday-section.collapsed .task-card,
-.allday-section.collapsed .due-arrow {
+.allday-section--collapsed .task-card,
+.allday-section--collapsed .due-arrow {
     display: none !important;
 }
 
-.allday-section.collapsed .allday-section__label {
+.allday-section--collapsed .allday-section__label {
     display: none;
 }
 
 /* Show horizontal label when collapsed */
 /* Attach to the first cell instead of container to avoid grid layout issues */
-.allday-section.collapsed .allday-section__cell.is-first-cell::after {
+.allday-section--collapsed .allday-section__cell.is-first-cell::after {
     content: attr(data-collapsed-label);
     position: absolute;
     left: 0;

@@ -11,7 +11,6 @@ export class SyncDetector {
      */
     markLocalEdit(filePath: string): void {
         this.pendingLocalEdit.set(filePath, true);
-        console.log(`[🔄SYNC] Marked local edit: ${filePath}`);
     }
 
     /**

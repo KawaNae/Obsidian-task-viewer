@@ -13,14 +13,13 @@ import {
     normalizeFrontmatterTaskKeys,
     validateFrontmatterTaskKeys,
 } from './types';
-import { DEFAULT_STATUS_DEFINITIONS } from './types';
-import type { DefaultLeafPosition, PinnedListDefinition, StatusDefinition, Task } from './types';
+import type { DefaultLeafPosition, PinnedListDefinition, Task } from './types';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/color/ColorSuggest';
 import { LineStyleSuggest } from './suggest/line/LineStyleSuggest';
 import { PropertySuggestObserver } from './suggest/PropertySuggestObserver';
 import { DateUtils } from './utils/DateUtils';
-import { AudioUtils } from './utils/AudioUtils';
+import { AudioUtils } from './timer/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
 import { getViewMeta } from './constants/viewRegistry';
 import type { FilterState } from './services/filter/FilterTypes';
@@ -58,7 +57,6 @@ export default class TaskViewerPlugin extends Plugin {
     private taskMenuNotifySettingsChanged: (() => void) | null = null;
 
     async onload() {
-        console.log('Loading Task Viewer Plugin (Rewrite)');
 
         // Initialize i18n
         initI18n();
@@ -399,27 +397,6 @@ export default class TaskViewerPlugin extends Plugin {
         const normalizedFrontmatterKeys = normalizeFrontmatterTaskKeys(merged.frontmatterTaskKeys);
         const keysValidationError = validateFrontmatterTaskKeys(normalizedFrontmatterKeys);
 
-        // Migrate statusMenuChars + completeStatusChars → statusDefinitions
-        if (!rawObject.statusDefinitions) {
-            const menuChars: string[] = (rawObject.statusMenuChars as string[]) ?? ['-', '!', '?', '>', '/'];
-            const completeChars: string[] = (rawObject.completeStatusChars as string[]) ?? ['x', '-', '!'];
-            const labelMap = new Map(DEFAULT_STATUS_DEFINITIONS.map(d => [d.char, d.label]));
-            const defs: StatusDefinition[] = [
-                { char: ' ', label: 'Todo', isComplete: false },
-                { char: 'x', label: 'Done', isComplete: true },
-            ];
-            for (const c of menuChars) {
-                if (c === ' ' || c === 'x') continue;
-                defs.push({ char: c, label: labelMap.get(c) ?? c, isComplete: completeChars.includes(c) });
-            }
-            for (const c of completeChars) {
-                if (!defs.some(d => d.char === c)) {
-                    defs.push({ char: c, label: labelMap.get(c) ?? c, isComplete: true });
-                }
-            }
-            merged.statusDefinitions = defs;
-        }
-
         this.settings = {
             ...merged,
             frontmatterTaskKeys: keysValidationError
@@ -488,7 +465,6 @@ export default class TaskViewerPlugin extends Plugin {
         this.dateCheckInterval = setInterval(() => {
             const currentVisualDate = DateUtils.getVisualDateOfNow(this.settings.startHour);
             if (currentVisualDate !== this.lastVisualDate) {
-                console.log(`[TaskViewer] Day boundary crossed: ${this.lastVisualDate} -> ${currentVisualDate}`);
                 this.lastVisualDate = currentVisualDate;
                 this.refreshAllViews();
             }
@@ -501,6 +477,7 @@ export default class TaskViewerPlugin extends Plugin {
     public refreshAllViews(): void {
         [VIEW_TYPE_TIMELINE, VIEW_TYPE_SCHEDULE, VIEW_TYPE_CALENDAR, VIEW_TYPE_MINI_CALENDAR, VIEW_TYPE_KANBAN].forEach(viewType => {
             this.app.workspace.getLeavesOfType(viewType).forEach(leaf => {
+                // @ts-ignore — refresh() is a custom method on plugin views, not in Obsidian typings
                 (leaf.view as any).refresh?.();
             });
         });
@@ -590,7 +567,6 @@ export default class TaskViewerPlugin extends Plugin {
     }
 
     onunload() {
-        console.log('Unloading Task Viewer Plugin');
         this.taskMenuCleanup?.();
         this.taskIndex?.dispose();
         AudioUtils.dispose();

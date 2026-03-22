@@ -396,7 +396,9 @@
     "dateOptional": "Date (optional)",
     "editType": "Edit {{type}}",
     "changeProperties": "Change Properties",
-    "emptyTaskWarning": "Task name and date are both empty — this task will not appear in the viewer."
+    "emptyTaskWarning": "Task name and date are both empty — this task will not appear in the viewer.",
+    "openDatePicker": "Open date picker",
+    "openTimePicker": "Open time picker"
   },
   "menu": {
     "properties": "Properties",

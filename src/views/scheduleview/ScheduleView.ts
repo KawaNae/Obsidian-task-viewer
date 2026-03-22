@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
+import { ItemView, WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
 import type { HoverParent } from 'obsidian';
 import { TaskIndex } from '../../services/core/TaskIndex';
@@ -16,7 +16,7 @@ import { DateNavigator, ViewSettingsMenu } from '../sharedUI/ViewToolbar';
 import { ScheduleExportStrategy } from '../../services/export/ScheduleExportStrategy';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
-import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
+import { createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
@@ -27,10 +27,16 @@ import { ScheduleOverlapLayout } from './utils/ScheduleOverlapLayout';
 import { ScheduleGridRenderer } from './renderers/ScheduleGridRenderer';
 import { ScheduleTaskRenderer } from './renderers/ScheduleTaskRenderer';
 import { ScheduleSectionRenderer } from './renderers/ScheduleSectionRenderer';
-import { toDisplayTasks, isDisplayTaskOnVisualDate } from '../../utils/DisplayTaskConverter';
+import { toDisplayTasks, isDisplayTaskOnVisualDate } from '../../services/display/DisplayTaskConverter';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 
 export const VIEW_TYPE_SCHEDULE = VIEW_META_SCHEDULE.type;
+
+interface ScheduleViewState {
+    currentDate?: string;
+    filterState?: FilterState;
+    customName?: string;
+}
 
 export class ScheduleView extends ItemView {
     private static readonly HOURS_PER_DAY = 24;
@@ -56,6 +62,8 @@ export class ScheduleView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private currentVisualDate = '';
     private scrollToNowOnNextRender = false;
+    private lastScrollTop = 0;
+    private hasValidScrollPosition = false;
     private customName: string | undefined;
     private collapsedSections: Record<CollapsibleSectionKey, boolean> = {
         allDay: false,
@@ -127,27 +135,13 @@ export class ScheduleView extends ItemView {
         return VIEW_META_SCHEDULE.icon;
     }
 
-    async setState(state: any, result: any): Promise<void> {
+    async setState(state: ScheduleViewState, result: ViewStateResult): Promise<void> {
         if (state && typeof state.currentDate === 'string' && this.isValidDateKey(state.currentDate)) {
             this.currentVisualDate = state.currentDate;
         }
 
         if (state && state.filterState) {
             this.filterMenu.setFilterState(FilterSerializer.fromJSON(state.filterState));
-        } else if (state && Object.prototype.hasOwnProperty.call(state, 'filterFiles') && Array.isArray(state.filterFiles) && state.filterFiles.length > 0) {
-            const files = state.filterFiles.filter((value: unknown): value is string => typeof value === 'string');
-            if (files.length > 0) {
-                this.filterMenu.setFilterState({
-                    filters: [{
-                        property: 'file',
-                        operator: 'includes',
-                        value: files,
-                    }],
-                    logic: 'and',
-                });
-            } else {
-                this.filterMenu.setFilterState(createEmptyFilterState());
-            }
         } else {
             this.filterMenu.setFilterState(createEmptyFilterState());
         }
@@ -235,6 +229,12 @@ export class ScheduleView extends ItemView {
             return;
         }
 
+        const oldBodyScroll = this.container.querySelector('.schedule-view__body-scroll') as HTMLElement | null;
+        if (oldBodyScroll) {
+            this.lastScrollTop = oldBodyScroll.scrollTop;
+            this.hasValidScrollPosition = true;
+        }
+
         this.container.empty();
         const toolbarHost = this.container.createDiv('schedule-view__toolbar-host');
         this.renderToolbar(toolbarHost);
@@ -256,6 +256,14 @@ export class ScheduleView extends ItemView {
         if (this.scrollToNowOnNextRender) {
             this.scrollToNowOnNextRender = false;
             requestAnimationFrame(() => this.scrollToCurrentTime());
+        } else if (this.hasValidScrollPosition) {
+            const savedScrollTop = this.lastScrollTop;
+            requestAnimationFrame(() => {
+                const newBodyScroll = this.container.querySelector('.schedule-view__body-scroll') as HTMLElement | null;
+                if (newBodyScroll) {
+                    newBodyScroll.scrollTop = savedScrollTop;
+                }
+            });
         }
     }
 
@@ -299,7 +307,7 @@ export class ScheduleView extends ItemView {
             getDefaultName: () => VIEW_META_SCHEDULE.displayText,
             onRename: (newName) => {
                 this.customName = newName;
-                (this.leaf as any).updateHeader();
+                this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
             },
             buildUri: () => ({
@@ -322,7 +330,7 @@ export class ScheduleView extends ItemView {
                 }
                 if (template.name) {
                     this.customName = template.name;
-                    (this.leaf as any).updateHeader();
+                    this.leaf.updateHeader();
                 }
                 this.app.workspace.requestSaveLayout();
                 void this.render();
@@ -330,7 +338,7 @@ export class ScheduleView extends ItemView {
             onReset: () => {
                 this.filterMenu.setFilterState(createEmptyFilterState());
                 this.customName = undefined;
-                (this.leaf as any).updateHeader();
+                this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
                 void this.render();
             },

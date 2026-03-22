@@ -232,8 +232,8 @@
 .task-name-suggest__footer {
     padding: 4px 8px;
     font-size: 0.8em;
-    color: var(--text-faint);
-    border-top: 1px solid var(--background-modifier-border);
+    color: var(--tv-text-faint);
+    border-top: 1px solid var(--tv-border);
     text-align: center;
 }
 

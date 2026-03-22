@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TagExtractor } from '../../src/utils/TagExtractor';
+import { TagExtractor } from '../../src/services/parsing/utils/TagExtractor';
 
 describe('TagExtractor', () => {
     describe('fromContent', () => {

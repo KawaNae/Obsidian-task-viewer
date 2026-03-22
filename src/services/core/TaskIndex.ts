@@ -1,5 +1,6 @@
 import { App, TFile, Notice } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
+import { isFrontmatterTask } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
 import { WikiLinkResolver } from './WikiLinkResolver';
@@ -9,9 +10,9 @@ import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { EditorObserver } from './EditorObserver';
 import { InlineToFrontmatterConversionService } from './InlineToFrontmatterConversionService';
-import { TaskIdGenerator } from '../../utils/TaskIdGenerator';
+import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { DateUtils as CoreDateUtils } from '../../utils/DateUtils';
-import { toDisplayTask } from '../../utils/DisplayTaskConverter';
+import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { TaskParser } from '../parsing/TaskParser';
 
 export interface ValidationError {
@@ -77,7 +78,6 @@ export class TaskIndex {
 
                 // ドラッグ中のファイルはスキャンをスキップ（古い値でストアが上書きされるのを防止）
                 if (this.draggingFilePath === file.path) {
-                    console.log(`[🔄SYNC] ⏸️ Skipping scan during drag: ${file.path}`);
                     return;
                 }
 
@@ -265,7 +265,6 @@ export class TaskIndex {
     // ===== CRUD操作 =====
 
     async updateTask(taskId: string, updates: Partial<Task>): Promise<void> {
-        console.log(`[TaskIndex] updateTask called for ${taskId}`, updates);
 
         // スプリットタスク処理（##seg:YYYY-MM-DD）
         const segmentInfo = TaskIdGenerator.parseSegmentId(taskId);
@@ -365,7 +364,7 @@ export class TaskIndex {
             this.store.notifyListeners(taskId, Object.keys(updates));
         }
 
-        if (task.parserId === 'frontmatter') {
+        if (isFrontmatterTask(task)) {
             await this.repository.updateFrontmatterTask(task, updates, this.settings.frontmatterTaskKeys);
         } else {
             await this.repository.updateTaskInFile(task, { ...task, ...updates });
@@ -379,7 +378,7 @@ export class TaskIndex {
 
         this.syncDetector.markLocalEdit(task.file);
 
-        if (task.parserId === 'frontmatter') {
+        if (isFrontmatterTask(task)) {
             await this.repository.deleteFrontmatterTask(task, this.settings.frontmatterTaskKeys);
         } else {
             await this.repository.deleteTaskFromFile(task);
@@ -395,7 +394,7 @@ export class TaskIndex {
 
         this.syncDetector.markLocalEdit(task.file);
 
-        if (task.parserId === 'frontmatter') {
+        if (isFrontmatterTask(task)) {
             await this.repository.duplicateFrontmatterTask(task);
         } else {
             await this.repository.duplicateTaskInFile(task);
@@ -445,7 +444,7 @@ export class TaskIndex {
 
         this.syncDetector.markLocalEdit(task.file);
 
-        if (task.parserId === 'frontmatter') {
+        if (isFrontmatterTask(task)) {
             await this.repository.duplicateFrontmatterTaskForWeek(task, this.settings.frontmatterTaskKeys);
         } else {
             await this.repository.duplicateTaskForWeek(task);
@@ -460,7 +459,7 @@ export class TaskIndex {
 
         this.syncDetector.markLocalEdit(task.file);
 
-        if (task.parserId === 'frontmatter') {
+        if (isFrontmatterTask(task)) {
             await this.repository.duplicateFrontmatterTaskForTomorrow(task, this.settings.frontmatterTaskKeys);
         } else {
             await this.repository.duplicateTaskForTomorrow(task);

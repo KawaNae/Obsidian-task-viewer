@@ -1,4 +1,4 @@
-import type { ChildLine, PropertyType, PropertyValue } from '../types';
+import type { ChildLine, PropertyType, PropertyValue } from '../../../types';
 
 /**
  * 子行のパース・分類ユーティリティ。

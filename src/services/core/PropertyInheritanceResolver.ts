@@ -1,5 +1,5 @@
 import type { Task } from '../../types';
-import { TagExtractor } from '../../utils/TagExtractor';
+import { TagExtractor } from '../parsing/utils/TagExtractor';
 
 export class PropertyInheritanceResolver {
     /**

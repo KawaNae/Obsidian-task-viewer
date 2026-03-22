@@ -1,10 +1,10 @@
-import { ItemView, WorkspaceLeaf, TFile, setIcon } from 'obsidian';
+import { ItemView, WorkspaceLeaf, TFile, setIcon, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
 import type { HoverParent } from 'obsidian';
 import { Task, DisplayTask } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
-import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
+import { toDisplayTasks } from '../../services/display/DisplayTaskConverter';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import {
     getTaskDateRange,
@@ -28,6 +28,11 @@ export const VIEW_TYPE_MINI_CALENDAR = VIEW_META_MINI_CALENDAR.type;
 interface IndicatorState {
     hasIncomplete: boolean;
     hasComplete: boolean;
+}
+
+interface MiniCalendarViewState {
+    windowStart?: string;
+    monthKey?: string;
 }
 
 export class MiniCalendarView extends ItemView {
@@ -66,24 +71,12 @@ export class MiniCalendarView extends ItemView {
         return VIEW_META_MINI_CALENDAR.icon;
     }
 
-    async setState(state: any, result: any): Promise<void> {
+    async setState(state: MiniCalendarViewState, result: ViewStateResult): Promise<void> {
         if (state && typeof state.windowStart === 'string') {
             const parsedWindowStart = this.parseLocalDateString(state.windowStart);
             if (parsedWindowStart) {
                 const weekStart = this.getWeekStart(parsedWindowStart, this.plugin.settings.calendarWeekStartDay);
                 this.windowStart = DateUtils.getLocalDateString(weekStart);
-            }
-        } else if (state && typeof state.monthKey === 'string') {
-            // Backward compatibility for older saved layout state.
-            const monthMatch = state.monthKey.match(/^(\d{4})-(\d{2})$/);
-            if (monthMatch) {
-                const year = Number(monthMatch[1]);
-                const month = Number(monthMatch[2]);
-                if (month >= 1 && month <= 12) {
-                    const monthStart = new Date(year, month - 1, 1);
-                    const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
-                    this.windowStart = DateUtils.getLocalDateString(weekStart);
-                }
             }
         }
 
@@ -188,7 +181,8 @@ export class MiniCalendarView extends ItemView {
     }
 
     private renderToolbar(): void {
-        const toolbar = this.container.createDiv('view-toolbar mini-calendar-toolbar');
+        const toolbarHost = this.container.createDiv('mini-calendar-view__toolbar-host');
+        const toolbar = toolbarHost.createDiv('view-toolbar mini-calendar-toolbar');
 
         const labelGroup = toolbar.createDiv('mini-calendar-toolbar__label');
         const referenceMonth = this.getReferenceMonth();

@@ -48,7 +48,7 @@ export class SortMenuComponent {
     }
 
     setSortState(state: SortState): void {
-        this.state = JSON.parse(JSON.stringify(state));
+        this.state = structuredClone(state);
     }
 
     showMenuAtElement(anchorEl: HTMLElement, callbacks: SortMenuCallbacks): void {

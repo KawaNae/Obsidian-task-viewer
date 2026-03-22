@@ -35,7 +35,7 @@ export class HabitTrackerRenderer {
         axisCell.createEl('span', { cls: 'habits-section__label', text: t('habits.habits') });
 
         const applyCollapsedState = () => {
-            container.toggleClass('collapsed', this.isCollapsed);
+            container.toggleClass('habits-section--collapsed', this.isCollapsed);
             setIcon(toggleBtn, this.isCollapsed ? 'plus' : 'minus');
             axisCell.setAttribute('aria-expanded', (!this.isCollapsed).toString());
             axisCell.setAttribute('aria-label', this.isCollapsed ? t('habits.expandHabits') : t('habits.collapseHabits'));
@@ -84,7 +84,7 @@ export class HabitTrackerRenderer {
      * Read a habit value from the daily note's frontmatter for a given date.
      * Returns undefined if daily note doesn't exist or key is not set.
      */
-    private getHabitValue(date: string, habitName: string): any {
+    private getHabitValue(date: string, habitName: string): boolean | string | number | undefined {
         const [y, m, d] = date.split('-').map(Number);
         const dateObj = new Date(y, m - 1, d);
         const file = DailyNoteUtils.getDailyNote(this.app, dateObj);
@@ -100,7 +100,7 @@ export class HabitTrackerRenderer {
      *
      * Uses vault.process() directly (NOT processFrontMatter) to avoid race conditions.
      */
-    private async setHabitValue(date: string, habitName: string, value: any): Promise<void> {
+    private async setHabitValue(date: string, habitName: string, value: boolean | string | number | undefined | null): Promise<void> {
         const [y, m, d] = date.split('-').map(Number);
         const dateObj = new Date(y, m - 1, d);
 
@@ -133,7 +133,7 @@ export class HabitTrackerRenderer {
     /**
      * Render one habit row (label + interactive value) inside a date cell.
      */
-    private renderHabitItem(cell: HTMLElement, date: string, habit: HabitDefinition, currentValue: any): void {
+    private renderHabitItem(cell: HTMLElement, date: string, habit: HabitDefinition, currentValue: boolean | string | number | undefined): void {
         const row = cell.createDiv('habits-section__habit-row');
         row.createEl('span', { cls: 'habits-section__habit-label', text: habit.name });
 
@@ -147,7 +147,7 @@ export class HabitTrackerRenderer {
     /**
      * Boolean: native checkbox, toggling persists true / deletes the key.
      */
-    private renderBooleanToggle(container: HTMLElement, date: string, habit: HabitDefinition, currentValue: any): void {
+    private renderBooleanToggle(container: HTMLElement, date: string, habit: HabitDefinition, currentValue: boolean | string | number | undefined): void {
         const checkbox = container.createEl('input', { cls: 'habits-section__checkbox' });
         checkbox.type = 'checkbox';
         checkbox.checked = currentValue === true;
@@ -160,7 +160,7 @@ export class HabitTrackerRenderer {
     /**
      * Number / String: click shows inline <input>, Enter/blur saves, Escape cancels.
      */
-    private renderValueInput(container: HTMLElement, date: string, habit: HabitDefinition, currentValue: any): void {
+    private renderValueInput(container: HTMLElement, date: string, habit: HabitDefinition, currentValue: boolean | string | number | undefined): void {
         const hasValue = currentValue !== undefined && currentValue !== null;
         const displayText = hasValue ? String(currentValue) : '—';
 
@@ -204,7 +204,7 @@ export class HabitTrackerRenderer {
             const commit = async () => {
                 if (escaped) return;
                 const raw = input.value.trim();
-                let newValue: any;
+                let newValue: string | number | undefined;
 
                 if (raw === '') {
                     newValue = undefined; // delete key

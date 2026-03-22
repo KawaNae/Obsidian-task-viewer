@@ -28,7 +28,7 @@
 
 .filter-popover__glue {
     font-size: var(--font-ui-small);
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
     white-space: nowrap;
     align-self: center;
 }
@@ -108,7 +108,7 @@
 
 /* Target selector: active "parent" state */
 .filter-popover__dropdown--target {
-    color: var(--interactive-accent);
+    color: var(--tv-accent);
 }
 
 /* Text input for content filter */
@@ -544,9 +544,9 @@
 
 /* Danger item (Remove) — red text */
 .filter-child-popover__item--danger {
-    color: var(--text-error);
+    color: var(--tv-text-danger);
 }
 
 .filter-child-popover__item--danger .filter-child-popover__icon {
-    color: var(--text-error);
+    color: var(--tv-text-danger);
 }

@@ -8,7 +8,7 @@ import { PropertyFormatter } from './PropertyFormatter';
 import { PropertiesMenuBuilder } from './builders/PropertiesMenuBuilder';
 import { TimerMenuBuilder } from './builders/TimerMenuBuilder';
 import { TaskActionsMenuBuilder } from './builders/TaskActionsMenuBuilder';
-import { toDisplayTask } from '../../utils/DisplayTaskConverter';
+import { toDisplayTask, getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 
 /**
  * MenuHandler - タスクコンテキストメニューの統括ファサード
@@ -76,7 +76,7 @@ export class MenuHandler {
      */
     private showContextMenu(x: number, y: number, taskInput: Task) {
         // Resolve the real task from the index
-        const originalId = (taskInput as any).originalTaskId || taskInput.id;
+        const originalId = getOriginalTaskId(taskInput);
         const task = this.taskIndex.getTask(originalId);
 
         if (!task) {

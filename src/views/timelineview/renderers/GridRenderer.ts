@@ -13,7 +13,7 @@ import { t } from '../../../i18n';
 import { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './TimelineSectionRenderer';
 import { TaskIndex } from '../../../services/core/TaskIndex';
-import { isDisplayTaskOnVisualDate } from '../../../utils/DisplayTaskConverter';
+import { isDisplayTaskOnVisualDate } from '../../../services/display/DisplayTaskConverter';
 import type { DisplayTask } from '../../../types';
 import { HabitTrackerRenderer } from '../../sharedUI/HabitTrackerRenderer';
 
@@ -181,7 +181,7 @@ export class GridRenderer {
 
         const applyAllDayCollapsedState = () => {
             setIcon(toggleBtn, this.isAllDayCollapsed ? 'plus' : 'minus');
-            allDayRow.toggleClass('collapsed', this.isAllDayCollapsed);
+            allDayRow.toggleClass('allday-section--collapsed', this.isAllDayCollapsed);
             axisCell.setAttribute('aria-expanded', (!this.isAllDayCollapsed).toString());
             axisCell.setAttribute('aria-label', this.isAllDayCollapsed ? t('allDaySection.expandAllDay') : t('allDaySection.collapseAllDay'));
         };

@@ -4,7 +4,7 @@ import { buildStatusOptions, createStatusTitle } from '../../../constants/status
 import { CreateTaskModal, type CreateTaskResult, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { DateUtils } from '../../../utils/DateUtils';
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
-import { TaskLineClassifier } from '../../../utils/TaskLineClassifier';
+import { TaskLineClassifier } from '../../../services/parsing/utils/TaskLineClassifier';
 import { t } from '../../../i18n';
 
 export type CreateFrontmatterTaskCallback = (result: CreateTaskResult, statusChar: string) => Promise<string>;
@@ -65,11 +65,11 @@ export class CheckboxMenuBuilder {
 
         menu.addItem((item) => {
             const statusDisplay = `[${currentChar}]`;
-            (item as any).setTitle(`Status: ${statusDisplay}`)
+            item.setTitle(`Status: ${statusDisplay}`)
                 .setIcon('check-square')
                 .setSubmenu();
 
-            const statusMenu = (item as any).submenu as Menu;
+            const statusMenu = item.submenu;
 
             options.forEach(s => {
                 statusMenu.addItem(sub => {
@@ -107,10 +107,10 @@ export class CheckboxMenuBuilder {
         const dailyNoteDate = filePath ? DailyNoteUtils.parseDateFromFilePath(this.app, filePath) ?? undefined : undefined;
 
         menu.addItem((item) => {
-            const subMenu = (item as any)
+            const subMenu = item
                 .setTitle(t('menu.convertTo'))
                 .setIcon('arrow-right-left')
-                .setSubmenu() as Menu;
+                .setSubmenu();
 
             // Inline Task
             subMenu.addItem((sub) => {

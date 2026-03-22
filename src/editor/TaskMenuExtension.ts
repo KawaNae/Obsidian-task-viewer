@@ -4,12 +4,12 @@ import { editorInfoField, Menu, setIcon, MarkdownView } from 'obsidian';
 import type { App } from 'obsidian';
 import type { TaskIndex } from '../services/core/TaskIndex';
 import type { TaskViewerSettings } from '../types';
-import { toDisplayTask } from '../utils/DisplayTaskConverter';
+import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 import type { PropertiesMenuBuilder } from '../interaction/menu/builders/PropertiesMenuBuilder';
 import type { TimerMenuBuilder } from '../interaction/menu/builders/TimerMenuBuilder';
 import type { TaskActionsMenuBuilder } from '../interaction/menu/builders/TaskActionsMenuBuilder';
 import type { CheckboxMenuBuilder, CheckboxLineOps } from '../interaction/menu/builders/CheckboxMenuBuilder';
-import { TaskLineClassifier } from '../utils/TaskLineClassifier';
+import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 
 const taskIndexChanged = StateEffect.define<void>();
 const settingsChanged = StateEffect.define<void>();

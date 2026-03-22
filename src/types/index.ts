@@ -1,5 +1,5 @@
-import type { FilterState } from './services/filter/FilterTypes';
-import type { SortState } from './services/sort/SortTypes';
+import type { FilterState } from '../services/filter/FilterTypes';
+import type { SortState } from '../services/sort/SortTypes';
 
 export interface StatusDefinition {
     char: string;
@@ -121,6 +121,11 @@ export interface Task {
     properties: Record<string, PropertyValue>;
 }
 
+/** Check whether a task was produced by the frontmatter parser. */
+export function isFrontmatterTask(task: Pick<Task, 'parserId'>): boolean {
+    return task.parserId === 'frontmatter';
+}
+
 /**
  * Wikilink reference extracted from frontmatter task body.
  * Stored separately from Task and consumed by WikiLinkResolver.
@@ -167,7 +172,6 @@ export interface ViewState {
     startDate: string;
     daysToShow: number;
     showSidebar: boolean;
-    filterFiles: string[] | null;
     filterState?: FilterState;
     zoomLevel?: number;
     pinnedListCollapsed?: Record<string, boolean>;

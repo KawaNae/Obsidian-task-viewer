@@ -1,6 +1,6 @@
-import { ItemView, WorkspaceLeaf, setIcon, type Workspace } from 'obsidian';
+import { ItemView, WorkspaceLeaf, setIcon, type Workspace, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
-import { ViewUriBuilder } from '../../utils/ViewUriBuilder';
+import { ViewUriBuilder } from '../sharedLogic/ViewUriBuilder';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { Task, ViewState, PinnedListDefinition, isCompleteStatusChar } from '../../types';
@@ -9,10 +9,11 @@ import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
 
 import { DateUtils } from '../../utils/DateUtils';
-import { toDisplayTask, toDisplayTasks } from '../../utils/DisplayTaskConverter';
+import { toDisplayTask, toDisplayTasks } from '../../services/display/DisplayTaskConverter';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 
 import TaskViewerPlugin from '../../main';
+import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
 
 import { HandleManager } from './HandleManager';
 import { TimelineToolbar } from './TimelineToolbar';
@@ -23,7 +24,7 @@ import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
 import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
-import { createEmptyFilterState } from '../../services/filter/FilterTypes';
+import { createEmptyFilterState, type FilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
@@ -43,8 +44,18 @@ export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
  * - Color & Styling: applyTaskColor
  * - Task Creation: addCreateTaskListeners, handleCreateTaskTrigger
  */
+interface TimelineViewState {
+    daysToShow?: number;
+    zoomLevel?: number;
+    startDate?: string;
+    filterState?: FilterState;
+    showSidebar?: boolean;
+    pinnedListCollapsed?: Record<string, boolean>;
+    pinnedLists?: PinnedListDefinition[];
+    customName?: string;
+}
+
 export class TimelineView extends ItemView {
-    private static readonly MOBILE_BREAKPOINT_PX = 768;
     // ==================== Services & Handlers ====================
     private taskIndex: TaskIndex;
     private plugin: TaskViewerPlugin;
@@ -92,11 +103,10 @@ export class TimelineView extends ItemView {
             startDate: DateUtils.getVisualDateOfNow(this.plugin.settings.startHour),
             daysToShow: 3,
             showSidebar: true,
-            filterFiles: null,
             pinnedLists: [],
         };
         this.sidebarManager = new SidebarManager({
-            mobileBreakpointPx: TimelineView.MOBILE_BREAKPOINT_PX,
+            mobileBreakpointPx: MOBILE_BREAKPOINT_PX,
             onPersist: () => this.app.workspace.requestSaveLayout(),
             onSyncToggleButton: () => this.toolbar?.syncSidebarToggleState(),
             onRequestClose: () => {
@@ -123,7 +133,7 @@ export class TimelineView extends ItemView {
         return VIEW_META_TIMELINE.icon;
     }
 
-    async setState(state: any, result: any): Promise<void> {
+    async setState(state: TimelineViewState, result: ViewStateResult): Promise<void> {
         if (state) {
             if (typeof state.daysToShow === 'number') {
                 this.viewState.daysToShow = state.daysToShow;
@@ -136,13 +146,8 @@ export class TimelineView extends ItemView {
             }
             if (state.filterState) {
                 this.viewState.filterState = state.filterState;
-                this.viewState.filterFiles = null;
-            } else if (Object.prototype.hasOwnProperty.call(state, 'filterFiles') && Array.isArray(state.filterFiles) && state.filterFiles.length > 0) {
-                this.viewState.filterFiles = state.filterFiles;
-                this.viewState.filterState = undefined;
             } else {
                 this.viewState.filterState = undefined;
-                this.viewState.filterFiles = null;
             }
             if (typeof state.showSidebar === 'boolean') {
                 this.viewState.showSidebar = state.showSidebar;
@@ -182,8 +187,6 @@ export class TimelineView extends ItemView {
         }
         if (this.viewState.filterState) {
             state.filterState = this.viewState.filterState;
-        } else if (this.viewState.filterFiles) {
-            state.filterFiles = this.viewState.filterFiles;
         }
         if (this.viewState.customName) {
             state.customName = this.viewState.customName;
@@ -241,7 +244,7 @@ export class TimelineView extends ItemView {
                 getCustomName: () => this.viewState.customName,
                 onRename: (newName) => {
                     this.viewState.customName = newName;
-                    (this.leaf as any).updateHeader();
+                    this.leaf.updateHeader();
                     this.app.workspace.requestSaveLayout();
                 },
                 getLeaf: () => this.leaf,
@@ -263,9 +266,7 @@ export class TimelineView extends ItemView {
             (taskId) => {
                 this.handleManager.selectTask(taskId);
             },
-            () => {
-                this.handleManager.updatePositions();
-            },
+            () => { /* no-op: handles are inside task cards */ },
             () => this.viewState.startDate,
             () => this.getEffectiveZoomLevel()
         );
@@ -342,13 +343,6 @@ export class TimelineView extends ItemView {
                 return;
             }
             this.render();
-        });
-
-        // Window resize listener
-        // Use the window of the container (handles popout windows)
-        const win = this.container.ownerDocument.defaultView || window;
-        this.registerDomEvent(win, 'resize', () => {
-            this.handleManager.updatePositions();
         });
 
         // Ctrl+wheel zoom
@@ -582,8 +576,8 @@ export class TimelineView extends ItemView {
                         ...listDef,
                         id: 'pl-' + Date.now(),
                         name: listDef.name + ' (copy)',
-                        filterState: JSON.parse(JSON.stringify(listDef.filterState)),
-                        sortState: listDef.sortState ? JSON.parse(JSON.stringify(listDef.sortState)) : undefined,
+                        filterState: structuredClone(listDef.filterState),
+                        sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
                     };
                     lists.splice(idx + 1, 0, dup);
                     this.app.workspace.requestSaveLayout();
@@ -653,7 +647,7 @@ export class TimelineView extends ItemView {
                 getCustomName: () => this.viewState.customName,
                 onRename: (newName) => {
                     this.viewState.customName = newName;
-                    (this.leaf as any).updateHeader();
+                    this.leaf.updateHeader();
                     this.app.workspace.requestSaveLayout();
                 },
                 getLeaf: () => this.leaf,
@@ -674,7 +668,6 @@ export class TimelineView extends ItemView {
             allDisplayTasks
         );
 
-        this.handleManager.createOverlay();
         this.renderCurrentTimeIndicator();
 
         // Restore scroll position or scroll to now
@@ -684,9 +677,12 @@ export class TimelineView extends ItemView {
                 this.scrollToNowOnNextRender = false;
                 requestAnimationFrame(() => this.scrollToCurrentTime());
             } else if (this.hasValidScrollPosition) {
-                const newGrid = newScrollArea.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
-                const gridOffset = newGrid?.offsetTop ?? 0;
-                newScrollArea.scrollTop = gridOffset + this.lastScrollTop;
+                const savedScrollTop = this.lastScrollTop;
+                requestAnimationFrame(() => {
+                    const newGrid = newScrollArea.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
+                    const gridOffset = newGrid?.offsetTop ?? 0;
+                    newScrollArea.scrollTop = gridOffset + savedScrollTop;
+                });
             }
         }
 

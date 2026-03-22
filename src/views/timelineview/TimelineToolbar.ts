@@ -3,7 +3,7 @@ import { t } from '../../i18n';
 import { ViewState, isCompleteStatusChar } from '../../types';
 import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
-import type { LeafPosition } from '../../utils/ViewUriBuilder';
+import type { LeafPosition } from '../sharedLogic/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
 import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu } from '../sharedUI/ViewToolbar';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
@@ -12,7 +12,7 @@ import { TimelineExportStrategy } from '../../services/export/TimelineExportStra
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import type { Task } from '../../types';
-import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
+import { toDisplayTasks } from '../../services/display/DisplayTaskConverter';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 
@@ -86,16 +86,6 @@ export class TimelineToolbar {
         // Restore persisted filter state
         if (this.viewState.filterState) {
             this.filterMenu.setFilterState(FilterSerializer.fromJSON(this.viewState.filterState));
-        } else if (this.viewState.filterFiles && this.viewState.filterFiles.length > 0) {
-            // Migrate legacy filterFiles to FilterState
-            this.filterMenu.setFilterState({
-                filters: [{
-                    property: 'file',
-                    operator: 'includes',
-                    value: this.viewState.filterFiles,
-                }],
-                logic: 'and',
-            });
         } else {
             this.filterMenu.setFilterState(createEmptyFilterState());
         }
@@ -277,7 +267,6 @@ export class TimelineToolbar {
         this.viewState.filterState = hasConditions(state)
             ? FilterSerializer.fromJSON(FilterSerializer.toJSON(state))
             : undefined;
-        this.viewState.filterFiles = null; // Clear legacy field
         this.app.workspace.requestSaveLayout();
     }
 

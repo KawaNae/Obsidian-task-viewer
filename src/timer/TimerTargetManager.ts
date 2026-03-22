@@ -7,7 +7,7 @@ import { TimerInstance } from './TimerInstance';
 import { TimerContext } from './TimerContext';
 import { TimerStorageUtils } from './TimerStorageUtils';
 import { TimerTaskResolver } from './TimerTaskResolver';
-import { Task } from '../types';
+import { Task, isFrontmatterTask } from '../types';
 
 export class TimerTargetManager {
     private resolver: TimerTaskResolver;
@@ -37,7 +37,7 @@ export class TimerTargetManager {
             return;
         }
 
-        if (timer.parserId === 'frontmatter') {
+        if (isFrontmatterTask(timer)) {
             await this.ensureFrontmatterTimerTargetId(timer);
         }
     }
@@ -108,8 +108,7 @@ export class TimerTargetManager {
         const newTargetId = this.storageUtils.generateTimerTargetId();
         try {
             const timerTargetIdKey = this.ctx.plugin.settings.frontmatterTaskKeys.timerTargetId;
-            // @ts-ignore - processFrontMatter is available in Obsidian API
-            await this.ctx.app.fileManager.processFrontMatter(file, (frontmatter: any) => {
+            await this.ctx.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
                 frontmatter[timerTargetIdKey] = newTargetId;
             });
             await taskIndex.waitForScan(currentTask.file);
@@ -142,7 +141,7 @@ export class TimerTargetManager {
             return;
         }
 
-        if (timer.parserId === 'frontmatter') {
+        if (isFrontmatterTask(timer)) {
             await this.removeFrontmatterTimerTargetId(timer);
         }
     }
@@ -195,8 +194,7 @@ export class TimerTargetManager {
 
         try {
             const timerTargetIdKey = this.ctx.plugin.settings.frontmatterTaskKeys.timerTargetId;
-            // @ts-ignore - processFrontMatter is available in Obsidian API
-            await this.ctx.app.fileManager.processFrontMatter(file, (frontmatter: any) => {
+            await this.ctx.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
                 if (frontmatter?.[timerTargetIdKey] === timer.timerTargetId) {
                     delete frontmatter[timerTargetIdKey];
                 }
@@ -215,7 +213,7 @@ export class TimerTargetManager {
     }
 
     private resolveFrontmatterTaskForTimer(timer: TimerInstance): Task | undefined {
-        if (timer.parserId !== 'frontmatter') return undefined;
+        if (!isFrontmatterTask(timer)) return undefined;
         return this.resolver.resolveFrontmatterTask(timer);
     }
 
@@ -235,7 +233,7 @@ export class TimerTargetManager {
             .getTaskIndex()
             .getTasks()
             .find((task) =>
-                task.parserId === 'frontmatter'
+                isFrontmatterTask(task)
                 && task.timerTargetId === timerTargetId
                 && (!filePath || task.file === filePath)
             );

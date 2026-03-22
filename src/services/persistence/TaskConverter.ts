@@ -2,7 +2,7 @@ import { App, TFile } from 'obsidian';
 import { DEFAULT_FRONTMATTER_TASK_KEYS, FrontmatterTaskKeys, Task, PropertyValue } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { DateUtils } from '../../utils/DateUtils';
-import { TagExtractor } from '../../utils/TagExtractor';
+import { TagExtractor } from '../parsing/utils/TagExtractor';
 
 /**
  * Inline タスクを Frontmatter タスクファイルに変換する。

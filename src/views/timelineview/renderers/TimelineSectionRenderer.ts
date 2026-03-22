@@ -4,7 +4,7 @@ import type { Task, DisplayTask } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
-import { shouldSplitDisplayTask, splitDisplayTaskAtBoundary } from '../../../utils/DisplayTaskConverter';
+import { shouldSplitDisplayTask, splitDisplayTaskAtBoundary } from '../../../services/display/DisplayTaskConverter';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
 import { TaskLayout } from '../TaskLayout';
 import { TaskIndex } from '../../../services/core/TaskIndex';

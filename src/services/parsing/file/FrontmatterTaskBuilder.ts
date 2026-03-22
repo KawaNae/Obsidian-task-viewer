@@ -1,7 +1,7 @@
 import { FrontmatterTaskKeys, Task, WikilinkRef, ChildLine, PropertyType, PropertyValue } from '../../../types';
-import { TaskIdGenerator } from '../../../utils/TaskIdGenerator';
-import { TagExtractor } from '../../../utils/TagExtractor';
-import { ChildLineClassifier } from '../../../utils/ChildLineClassifier';
+import { TaskIdGenerator } from '../../display/TaskIdGenerator';
+import { TagExtractor } from '../utils/TagExtractor';
+import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { VALID_LINE_STYLES } from '../../../constants/style';
 
 export interface FrontmatterParseResult {

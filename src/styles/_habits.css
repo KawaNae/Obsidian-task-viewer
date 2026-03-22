@@ -149,33 +149,33 @@
 }
 
 /* --- Collapsed State --- */
-.habits-section.collapsed .habits-section__axis {
+.habits-section--collapsed .habits-section__axis {
     min-height: 36px;
     border-right: 1px solid var(--tv-border);
 }
 
-.habits-section.collapsed .habits-section__label {
+.habits-section--collapsed .habits-section__label {
     display: none;
 }
 
-.habits-section.collapsed .habits-section__cell:not(.habits-section__axis) {
+.habits-section--collapsed .habits-section__cell:not(.habits-section__axis) {
     min-height: 36px;
     border-right: none;
     justify-content: center;
 }
 
 /* Restore right border on last cell when collapsed */
-.habits-section.collapsed .habits-section__cell.is-last-cell {
+.habits-section--collapsed .habits-section__cell.is-last-cell {
     border-right: 1px solid var(--tv-border);
 }
 
 /* Hide all habit rows when collapsed */
-.habits-section.collapsed .habits-section__habit-row {
+.habits-section--collapsed .habits-section__habit-row {
     display: none !important;
 }
 
 /* Horizontal "Habits" label overlay when collapsed */
-.habits-section.collapsed .habits-section__cell.is-first-cell::after {
+.habits-section--collapsed .habits-section__cell.is-first-cell::after {
     content: attr(data-collapsed-label);
     position: absolute;
     left: 0;

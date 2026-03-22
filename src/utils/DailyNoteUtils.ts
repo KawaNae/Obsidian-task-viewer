@@ -5,7 +5,7 @@ import { TaskViewerSettings } from '../types';
 export class DailyNoteUtils {
     static getDailyNoteSettings(app: App) {
         try {
-            // @ts-ignore
+            // @ts-ignore — app.internalPlugins is an internal Obsidian API (not in public typings)
             const dailyNotesPlugin = app.internalPlugins.getPluginById("daily-notes");
             if (dailyNotesPlugin && dailyNotesPlugin.instance) {
                 return {

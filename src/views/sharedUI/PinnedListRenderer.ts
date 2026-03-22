@@ -15,7 +15,7 @@ import { TaskSorter } from '../../services/sort/TaskSorter';
 import { hasSortRules } from '../../services/sort/SortTypes';
 import TaskViewerPlugin from '../../main';
 import { TaskStyling } from './TaskStyling';
-import { toDisplayTasks } from '../../utils/DisplayTaskConverter';
+import { toDisplayTasks } from '../../services/display/DisplayTaskConverter';
 
 export interface PinnedListCallbacks {
     onCollapsedChange: (listId: string, collapsed: boolean) => void;
@@ -225,7 +225,7 @@ export class PinnedListRenderer {
 
         if (callbacks.onToggleApplyViewFilter) {
             menu.addItem(item => {
-                (item as any)
+                item
                     .setTitle(t('menu.applyViewFilter'))
                     .setIcon('filter')
                     .setChecked(!!listDef.applyViewFilter)
@@ -239,7 +239,7 @@ export class PinnedListRenderer {
             item.setTitle(t('menu.remove'))
                 .setIcon('trash')
                 .onClick(() => callbacks.onRemove(listDef));
-            (item as any).dom?.addClass('is-danger');
+            item.dom?.addClass('is-danger');
         });
 
         menu.showAtMouseEvent(e);
