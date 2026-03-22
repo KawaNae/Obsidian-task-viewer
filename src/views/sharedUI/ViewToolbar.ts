@@ -365,6 +365,7 @@ export class ViewSettingsMenu {
                     ? `${name}_${date}.png`
                     : `${shortType}_${date}.png`;
                 await ViewExporter.exportAsPng({
+                    app: options.app,
                     container,
                     taskIndex: getIndex(),
                     filename,

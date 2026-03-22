@@ -45,6 +45,12 @@
     overflow: auto;
     display: flex;
     flex-direction: column;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.calendar-grid__body::-webkit-scrollbar {
+    display: none;
 }
 
 .calendar-week-row {

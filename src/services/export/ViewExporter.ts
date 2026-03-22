@@ -4,7 +4,7 @@ import { ExportUtils } from './ExportUtils';
 
 export class ViewExporter {
     static async exportAsPng(options: ViewExportOptions, strategy: ExportStrategy): Promise<void> {
-        const { container, taskIndex, filename, expandScrollAreas = true } = options;
+        const { app, container, taskIndex, filename, expandScrollAreas = true } = options;
 
         const progress = new Notice('Exporting image…', 0);
 
@@ -33,9 +33,8 @@ export class ViewExporter {
                 ExportUtils.applyMasking(clone, taskIndex, restoreFns);
 
                 const blob = await ExportUtils.captureToBlob(clone);
-                ExportUtils.downloadBlob(blob, filename);
+                await ExportUtils.downloadBlob(blob, filename, app);
                 progress.hide();
-                new Notice('Image exported.');
             } finally {
                 clone.remove();
             }
