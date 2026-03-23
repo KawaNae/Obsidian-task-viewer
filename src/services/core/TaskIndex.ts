@@ -475,6 +475,38 @@ export class TaskIndex {
         await this.scanner.waitForScan(task.file);
     }
 
+    async createFrontmatterTaskFromData(taskData: Partial<Task>): Promise<string> {
+        const tempTask: Task = {
+            id: 'convert-temp',
+            file: '',
+            line: -1,
+            indent: 0,
+            content: taskData.content ?? '',
+            statusChar: taskData.statusChar ?? ' ',
+            childIds: [],
+            childLines: [],
+            startDate: taskData.startDate,
+            startTime: taskData.startTime,
+            endDate: taskData.endDate,
+            endTime: taskData.endTime,
+            due: taskData.due,
+            commands: [],
+            originalText: '',
+            childLineBodyOffsets: [],
+            tags: [],
+            parserId: 'at-notation',
+            properties: {},
+        };
+        return await this.repository.createFrontmatterTaskFile(
+            tempTask,
+            this.settings.frontmatterTaskHeader,
+            this.settings.frontmatterTaskHeaderLevel,
+            undefined,
+            undefined,
+            this.settings.frontmatterTaskKeys
+        );
+    }
+
     async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
         this.syncDetector.markLocalEdit(filePath);
         await this.repository.updateLine(filePath, lineNumber, newContent);

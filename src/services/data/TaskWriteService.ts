@@ -38,6 +38,10 @@ export class TaskWriteService {
         return this.taskIndex.insertChildTask(parentTaskId, childLine);
     }
 
+    async createFrontmatterTaskFromData(taskData: Partial<Task>): Promise<string> {
+        return this.taskIndex.createFrontmatterTaskFromData(taskData);
+    }
+
     // ===== Line-level operations =====
 
     async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {

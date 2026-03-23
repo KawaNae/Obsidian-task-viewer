@@ -86,12 +86,6 @@ export interface GetParams {
     id: string;
 }
 
-// ── query (template) ──
-
-export interface QueryParams {
-    template: string;
-}
-
 // ── create ──
 
 export interface CreateParams {
@@ -128,18 +122,6 @@ export interface TaskListResult {
     tasks: NormalizedTask[];
 }
 
-export interface QueryListEntry {
-    name: string;
-    count: number;
-    tasks: NormalizedTask[];
-}
-
-export interface QueryResult {
-    template: string;
-    viewType: string;
-    lists: QueryListEntry[];
-}
-
 export interface MutationResult {
     task: NormalizedTask;
 }
@@ -174,13 +156,3 @@ export interface DateRangeParams extends PaginationParams {
     sort?: ApiSortRule[];
 }
 
-export interface DateParams {
-    date: string;
-    filter?: FilterState;
-}
-
-export interface CategorizedTasksResult {
-    allDay: NormalizedTask[];
-    timed: NormalizedTask[];
-    dueOnly: NormalizedTask[];
-}

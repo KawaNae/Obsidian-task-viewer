@@ -1,9 +1,9 @@
 import { App, Menu } from 'obsidian';
-import { Task } from '../../../types';
 import { TaskWriteService } from '../../../services/data/TaskWriteService';
 import { CheckboxMenuBuilder, type CheckboxLineOps, type CreateFrontmatterTaskCallback } from './CheckboxMenuBuilder';
 import { resolveChildLineNumber } from '../../../views/taskcard/ChildLineUtils';
 import TaskViewerPlugin from '../../../main';
+import type { Task } from '../../../types';
 import type { CreateTaskResult } from '../../../modals/CreateTaskModal';
 
 /**
@@ -53,36 +53,14 @@ export class ChildLineMenuBuilder {
     }
 
     private async createFrontmatterTask(result: CreateTaskResult, statusChar: string): Promise<string> {
-        const repository = this.plugin.getTaskRepository();
-        const settings = this.plugin.settings;
-        const tempTask: Task = {
-            id: 'convert-temp',
-            file: '',
-            line: -1,
-            indent: 0,
+        return this.writeService.createFrontmatterTaskFromData({
             content: result.content,
             statusChar,
-            childIds: [],
-            childLines: [],
             startDate: result.startDate,
             startTime: result.startTime,
             endDate: result.endDate || (result.endTime && result.startDate ? result.startDate : undefined),
             endTime: result.endTime,
             due: result.due,
-            commands: [],
-            originalText: '',
-            childLineBodyOffsets: [],
-            tags: [],
-            parserId: 'at-notation',
-            properties: {},
-        };
-        return await repository.createFrontmatterTaskFile(
-            tempTask,
-            settings.frontmatterTaskHeader,
-            settings.frontmatterTaskHeaderLevel,
-            undefined,
-            undefined,
-            settings.frontmatterTaskKeys
-        );
+        });
     }
 }

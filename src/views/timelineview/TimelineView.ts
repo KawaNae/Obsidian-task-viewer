@@ -86,7 +86,6 @@ export class TimelineView extends ItemView {
     private scrollToNowOnNextRender = false;
     private hasInitializedStartDate: boolean = false;
     private lastPartialUpdateTime = 0;
-    private lastFullRenderTime = 0;
     // ==================== Pinch zoom state ====================
     private pinchInitialDistance: number = 0;
     private pinchInitialZoom: number = 1;
@@ -343,9 +342,9 @@ export class TimelineView extends ItemView {
                 }
             }
 
-            // Skip redundant full render from re-scan after local update
-            const timeSinceLastRender = Date.now() - Math.max(this.lastPartialUpdateTime, this.lastFullRenderTime);
-            if (!taskId && !changes && timeSinceLastRender < 200) {
+            // Skip redundant full render from re-scan after local partial update
+            const timeSinceLastUpdate = Date.now() - this.lastPartialUpdateTime;
+            if (!taskId && !changes && timeSinceLastUpdate < 200) {
                 return;
             }
             this.render();
@@ -507,8 +506,6 @@ export class TimelineView extends ItemView {
     }
 
     private render() {
-        this.lastFullRenderTime = Date.now();
-
         // On narrow/mobile, force sidebar closed unless user explicitly opened it this session
         if (this.sidebarManager.isNarrow() && !this.sidebarOpenedThisSession) {
             this.viewState.showSidebar = false;

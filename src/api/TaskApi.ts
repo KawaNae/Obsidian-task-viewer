@@ -1,16 +1,14 @@
 import { TFile } from 'obsidian';
 import type TaskViewerPlugin from '../main';
-import type { Task, DisplayTask, PinnedListDefinition } from '../types';
+import type { Task, DisplayTask } from '../types';
 import type { TaskReadService } from '../services/data/TaskReadService';
 import type { TaskWriteService } from '../services/data/TaskWriteService';
 import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 import { normalizeTask } from './TaskNormalizer';
 import { TaskSorter } from '../services/sort/TaskSorter';
-import { combineFilterStates } from '../services/filter/FilterTypes';
 import type { FilterState } from '../services/filter/FilterTypes';
 import type { SortState, SortProperty } from '../services/sort/SortTypes';
 import { DateUtils } from '../utils/DateUtils';
-import { ViewTemplateLoader } from '../services/template/ViewTemplateLoader';
 import { parseDateTimeFlag } from '../cli/CliFilterBuilder';
 import { buildFilterFromParams } from './FilterParamsBuilder';
 import { loadFilterFile } from './FilterFileLoader';
@@ -20,13 +18,10 @@ import {
     type ListParams,
     type TodayParams,
     type GetParams,
-    type QueryParams,
     type CreateParams,
     type UpdateParams,
     type DeleteParams,
     type TaskListResult,
-    type QueryResult,
-    type QueryListEntry,
     type MutationResult,
     type DeleteResult,
     type ApiSortRule,
@@ -36,8 +31,6 @@ import {
     type ConvertParams,
     type ConvertResult,
     type DateRangeParams,
-    type DateParams,
-    type CategorizedTasksResult,
 } from './TaskApiTypes';
 
 const API_HELP_TEXT = `
@@ -89,14 +82,6 @@ Methods
 
     GetParams:
       id: string                   Task ID (required)
-
-  query(params: QueryParams): Promise<QueryResult>
-    Query tasks using a saved view template.
-
-    QueryParams:
-      template: string             Template basename (required)
-
-    Returns: { template, viewType, lists: [{ name, count, tasks }] }
 
   create(params: CreateParams): Promise<MutationResult>
     Create a new inline task.
@@ -154,13 +139,6 @@ Methods
       sort?: ApiSortRule[]         Sort rules
       limit?: number               Max results (default: 100)
       offset?: number              Skip first N results
-
-  categorize(params: DateParams): CategorizedTasksResult
-    Get tasks for a date, categorized into allDay/timed/dueOnly.
-
-    DateParams:
-      date: string                 Date YYYY-MM-DD (required)
-      filter?: FilterState         FilterState object
 
   onChange(callback): () => void
     Subscribe to task changes. Returns unsubscribe function.
@@ -263,9 +241,6 @@ Examples
     end: '2026-03-31',
     sort: [{ property: 'startDate', direction: 'asc' }],
   });
-
-  // Categorize tasks for a specific date
-  api.categorize({ date: '2026-03-23' });
 
   // Subscribe to task changes
   const unsubscribe = api.onChange((taskId) => {
@@ -398,61 +373,6 @@ export class TaskApi {
         const dt = this.readService.getDisplayTask(params.id);
         if (!dt) throw new TaskApiError(`Task not found: ${params.id}`);
         return normalizeTask(dt);
-    }
-
-    /**
-     * Query tasks using a saved view template.
-     */
-    async query(params: QueryParams): Promise<QueryResult> {
-        if (!params.template) throw new TaskApiError('Missing required parameter: template');
-
-        const { settings } = this.plugin;
-        if (!settings.viewTemplateFolder) {
-            throw new TaskApiError('viewTemplateFolder is not configured in settings');
-        }
-
-        const loader = new ViewTemplateLoader(this.plugin.app);
-        const summary = loader.findByBasename(settings.viewTemplateFolder, params.template);
-        if (!summary) throw new TaskApiError(`Template not found: ${params.template}`);
-
-        const template = await loader.loadFullTemplate(summary.filePath);
-        if (!template) throw new TaskApiError(`Failed to load template: ${params.template}`);
-
-        const readService = this.readService;
-        const allDisplayTasks = readService.getAllDisplayTasks();
-        const viewFiltered = template.filterState
-            ? readService.getFilteredTasks(template.filterState)
-            : allDisplayTasks;
-
-        const pinnedLists: PinnedListDefinition[] = template.pinnedLists
-            ?? (template.grid ? template.grid.flat() : []);
-
-        if (pinnedLists.length === 0) {
-            TaskSorter.sort(viewFiltered, undefined);
-            return {
-                template: template.name,
-                viewType: template.viewType,
-                lists: [{
-                    name: template.name,
-                    count: viewFiltered.length,
-                    tasks: viewFiltered.map(normalizeTask),
-                }],
-            };
-        }
-
-        const lists: QueryListEntry[] = pinnedLists.map(list => {
-            const combinedFilter = list.applyViewFilter !== false && template.filterState
-                ? combineFilterStates(list.filterState, template.filterState)
-                : list.filterState;
-            const matched = readService.getFilteredTasks(combinedFilter, list.sortState);
-            return { name: list.name, count: matched.length, tasks: matched.map(normalizeTask) };
-        });
-
-        return {
-            template: template.name,
-            viewType: template.viewType,
-            lists,
-        };
     }
 
     /**
@@ -601,19 +521,6 @@ export class TaskApi {
         }
         const paged = paginate(tasks, params);
         return { count: paged.length, tasks: paged.map(normalizeTask) };
-    }
-
-    /**
-     * Get tasks for a date, categorized into allDay/timed/dueOnly.
-     */
-    categorize(params: DateParams): CategorizedTasksResult {
-        if (!params.date) throw new TaskApiError('Missing required parameter: date');
-        const result = this.readService.getTasksForDate(params.date, params.filter);
-        return {
-            allDay: result.allDay.map(normalizeTask),
-            timed: result.timed.map(normalizeTask),
-            dueOnly: result.dueOnly.map(normalizeTask),
-        };
     }
 
     /**

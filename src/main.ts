@@ -261,7 +261,7 @@ export default class TaskViewerPlugin extends Plugin {
         // Register inline menu button on checkbox lines (CM6 extension)
         const taskMenuResult = createTaskMenuExtension(
             this.app,
-            this.taskIndex,
+            this.readService,
             this.writeService,
             editorPropertiesBuilder,
             editorTimerBuilder,
