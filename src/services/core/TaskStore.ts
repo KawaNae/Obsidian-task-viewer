@@ -8,8 +8,19 @@ export class TaskStore {
     private tasks: Map<string, Task> = new Map();
     private wikilinkRefs: Map<string, WikilinkRef[]> = new Map(); // taskId → refs
     private listeners: ((taskId?: string, changes?: string[]) => void)[] = [];
+    private revision: number = 0;
 
     constructor(private settings: TaskViewerSettings) { }
+
+    /** Current revision number. Incremented on every mutation. */
+    getRevision(): number {
+        return this.revision;
+    }
+
+    /** Bump revision without changing task data (for in-place mutations). */
+    bumpRevision(): void {
+        this.revision++;
+    }
 
     // ===== データアクセス =====
 
@@ -34,6 +45,7 @@ export class TaskStore {
      */
     setTask(taskId: string, task: Task): void {
         this.tasks.set(taskId, task);
+        this.revision++;
     }
 
     /**
@@ -41,6 +53,7 @@ export class TaskStore {
      */
     deleteTask(taskId: string): void {
         this.tasks.delete(taskId);
+        this.revision++;
     }
 
     /**
@@ -49,6 +62,7 @@ export class TaskStore {
     clear(): void {
         this.tasks.clear();
         this.wikilinkRefs.clear();
+        this.revision++;
     }
 
     /**
@@ -61,9 +75,12 @@ export class TaskStore {
                 toRemove.push(id);
             }
         }
-        for (const id of toRemove) {
-            this.tasks.delete(id);
-            this.wikilinkRefs.delete(id);
+        if (toRemove.length > 0) {
+            for (const id of toRemove) {
+                this.tasks.delete(id);
+                this.wikilinkRefs.delete(id);
+            }
+            this.revision++;
         }
     }
 

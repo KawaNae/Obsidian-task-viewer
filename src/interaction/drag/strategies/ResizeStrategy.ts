@@ -184,7 +184,7 @@ export class ResizeStrategy extends BaseDragStrategy {
         }
 
         const originalId = getOriginalTaskId(this.dragTask);
-        const originalTask = context.taskIndex.getTask(originalId);
+        const originalTask = context.readService.getTask(originalId);
         if (!originalTask) {
             this.cleanup();
             return;
@@ -236,7 +236,7 @@ export class ResizeStrategy extends BaseDragStrategy {
 
         if (Object.keys(updates).length > 0) {
             const taskIdToRestore = this.dragTask.id;
-            await context.taskIndex.updateTask(this.dragTask.id, updates);
+            await context.writeService.updateTask(this.dragTask.id, updates);
             this.restoreSelection(context, taskIdToRestore);
         }
 
@@ -268,7 +268,7 @@ export class ResizeStrategy extends BaseDragStrategy {
         const originalId = getOriginalTaskId(task);
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         context.container.querySelectorAll(selector).forEach(segment => {
-            if (segment instanceof HTMLElement) {
+            if (segment instanceof HTMLElement && !segment.closest('.pinned-list')) {
                 this.hiddenElements.push(segment);
             }
         });
@@ -369,25 +369,8 @@ export class ResizeStrategy extends BaseDragStrategy {
             return;
         }
 
-        const taskIdToRestore = this.dragTask.id;
-        const containerRef = context.container;
-        const hiddenEls = [...this.hiddenElements];
-
-        await context.taskIndex.updateTask(this.dragTask.id, updates);
-
-        // DOM更新後にゴースト・opacity復元（再レンダリング完了を待つ）
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                this.clearCalendarPreviewGhosts();
-                hiddenEls.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
-                const selector = `.task-card[data-id="${taskIdToRestore}"], .task-card[data-split-original-id="${taskIdToRestore}"]`;
-                containerRef.querySelectorAll(selector).forEach(el => {
-                    if (el instanceof HTMLElement) {
-                        el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
-                    }
-                });
-            });
-        });
+        await context.writeService.updateTask(this.dragTask.id, updates);
+        this.clearCalendarPreviewGhosts();
 
         this.cleanup();
     }
@@ -481,7 +464,7 @@ export class ResizeStrategy extends BaseDragStrategy {
         }
 
         if (Object.keys(updates).length > 0) {
-            await context.taskIndex.updateTask(this.dragTask.id, updates);
+            await context.writeService.updateTask(this.dragTask.id, updates);
         }
 
         this.cleanup();

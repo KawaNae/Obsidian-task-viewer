@@ -86,12 +86,6 @@ export interface GetParams {
     id: string;
 }
 
-// ── query (template) ──
-
-export interface QueryParams {
-    template: string;
-}
-
 // ── create ──
 
 export interface CreateParams {
@@ -128,18 +122,6 @@ export interface TaskListResult {
     tasks: NormalizedTask[];
 }
 
-export interface QueryListEntry {
-    name: string;
-    count: number;
-    tasks: NormalizedTask[];
-}
-
-export interface QueryResult {
-    template: string;
-    viewType: string;
-    lists: QueryListEntry[];
-}
-
 export interface MutationResult {
     task: NormalizedTask;
 }
@@ -147,3 +129,74 @@ export interface MutationResult {
 export interface DeleteResult {
     deleted: string;
 }
+
+export interface DuplicateParams {
+    id: string;
+    dayOffset?: number;
+    count?: number;
+}
+
+export interface DuplicateResult {
+    duplicated: string;
+}
+
+export interface ConvertParams {
+    id: string;
+}
+
+export interface ConvertResult {
+    convertedFrom: string;
+    newFile: string;
+}
+
+export interface TasksForDateRangeParams extends PaginationParams {
+    start: string;
+    end: string;
+    filter?: FilterState;
+    sort?: ApiSortRule[];
+}
+
+// ── tasksForDate ──
+
+export interface TasksForDateParams {
+    date: string;
+    filter?: FilterState;
+}
+
+export interface CategorizedTasksResult {
+    allDay: NormalizedTask[];
+    timed: NormalizedTask[];
+    dueOnly: NormalizedTask[];
+}
+
+// ── insertChildTask ──
+
+export interface InsertChildTaskParams {
+    parentId: string;
+    content: string;
+}
+
+export interface InsertChildTaskResult {
+    parentId: string;
+}
+
+// ── createFrontmatterTask ──
+
+export interface CreateFrontmatterParams {
+    content: string;
+    start?: string;
+    end?: string;
+    due?: string;
+    status?: string;
+}
+
+export interface CreateFrontmatterResult {
+    newFile: string;
+}
+
+// ── startHour ──
+
+export interface StartHourResult {
+    startHour: number;
+}
+

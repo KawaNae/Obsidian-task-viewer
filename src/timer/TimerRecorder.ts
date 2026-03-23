@@ -11,7 +11,6 @@ import { TimerInstance, getTimerElapsedSeconds } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { Task, isFrontmatterTask } from '../types';
-import { FileOperations } from '../services/persistence/utils/FileOperations';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
 import { TimerStorageUtils } from './TimerStorageUtils';
@@ -332,33 +331,16 @@ export class TimerRecorder {
             return;
         }
 
-        if (isFrontmatterTask(timer)) {
-            const resolvedFrontmatterTask = this.resolver.resolveFrontmatterTask(timer);
-            if (!resolvedFrontmatterTask) {
-                new Notice(t('notice.timerTargetNotFound'));
-                return;
-            }
+        const resolvedTask = isFrontmatterTask(timer)
+            ? this.resolver.resolveFrontmatterTask(timer)
+            : this.resolver.resolveInlineTask(timer);
 
-            const taskRepository = this.plugin.getTaskRepository();
-            await taskRepository.insertLineAfterFrontmatter(
-                resolvedFrontmatterTask.file,
-                formattedLine,
-                this.plugin.settings.frontmatterTaskHeader,
-                this.plugin.settings.frontmatterTaskHeaderLevel
-            );
-            return;
-        }
-
-        const inlineTask = this.resolver.resolveInlineTask(timer);
-        if (!inlineTask) {
+        if (!resolvedTask) {
             new Notice(t('notice.timerTargetNotFound'));
             return;
         }
 
-        const childIndent = FileOperations.getChildIndent(inlineTask.originalText);
-        const childLine = childIndent + formattedLine;
-        const taskRepository = this.plugin.getTaskRepository();
-        await taskRepository.insertLineAsFirstChild(inlineTask, childLine);
+        await this.plugin.getTaskWriteService().insertChildTask(resolvedTask.id, formattedLine);
     }
 
     /**

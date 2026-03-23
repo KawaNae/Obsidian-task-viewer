@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import type { FrontmatterTaskKeys, Task } from '../../types';
+import type { DuplicateOptions, FrontmatterTaskKeys, Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
@@ -87,28 +87,12 @@ export class TaskRepository {
 
     // --- Task Cloning Operations ---
 
-    async duplicateTaskInFile(task: Task): Promise<void> {
-        return this.cloner.duplicateTaskInFile(task);
+    async duplicateInlineTask(task: Task, options?: DuplicateOptions): Promise<void> {
+        return this.cloner.duplicateInlineTask(task, options);
     }
 
-    async duplicateTaskForTomorrow(task: Task): Promise<void> {
-        return this.cloner.duplicateTaskForTomorrow(task);
-    }
-
-    async duplicateTaskForWeek(task: Task): Promise<void> {
-        return this.cloner.duplicateTaskForWeek(task);
-    }
-
-    async duplicateFrontmatterTask(task: Task): Promise<void> {
-        return this.cloner.duplicateFrontmatterTask(task);
-    }
-
-    async duplicateFrontmatterTaskForTomorrow(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
-        return this.cloner.duplicateFrontmatterTaskForTomorrow(task, frontmatterKeys);
-    }
-
-    async duplicateFrontmatterTaskForWeek(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
-        return this.cloner.duplicateFrontmatterTaskForWeek(task, frontmatterKeys);
+    async duplicateFrontmatterTask(task: Task, keys: FrontmatterTaskKeys, options?: DuplicateOptions): Promise<void> {
+        return this.cloner.duplicateFrontmatterTask(task, keys, options);
     }
 
     async insertRecurrenceForTask(task: Task, content: string, newTask?: Task, copyChildren = true): Promise<void> {

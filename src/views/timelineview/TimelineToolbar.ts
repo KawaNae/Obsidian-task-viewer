@@ -1,7 +1,7 @@
 import { App, setIcon, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import { ViewState, isCompleteStatusChar } from '../../types';
-import { TaskIndex } from '../../services/core/TaskIndex';
+import { TaskReadService } from '../../services/data/TaskReadService';
 import { DateUtils } from '../../utils/DateUtils';
 import type { LeafPosition } from '../sharedLogic/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
@@ -11,8 +11,6 @@ import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { TimelineExportStrategy } from '../../services/export/TimelineExportStrategy';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
-import type { Task } from '../../types';
-import { toDisplayTasks } from '../../services/display/DisplayTaskConverter';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 
@@ -41,19 +39,19 @@ export class TimelineToolbar {
         private app: App,
         private viewState: ViewState,
         private plugin: TaskViewerPlugin,
-        private taskIndex: TaskIndex,
+        private readService: TaskReadService,
         private callbacks: ToolbarCallbacks
     ) {
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.taskIndex.getTask(id));
+        this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
     }
 
     /**
-     * Returns a predicate that checks if a task passes the current filter.
+     * Returns the current FilterState object (for readService queries).
      */
-    getTaskFilter(): (task: Task) => boolean {
-        return (task: Task) => this.filterMenu.isTaskVisible(task);
+    getFilterState(): FilterState {
+        return this.filterMenu.getFilterState();
     }
 
     /**
@@ -147,7 +145,7 @@ export class TimelineToolbar {
                 this.app.workspace.requestSaveLayout();
             },
             getExportContainer: () => this.container.closest('.timeline-view')?.querySelector<HTMLElement>('.timeline-grid') ?? null,
-            getTaskIndex: () => this.taskIndex,
+            getReadService: () => this.readService,
             getExportStrategy: () => new TimelineExportStrategy(),
             onReset: () => {
                 this.viewState.daysToShow = 3;
@@ -189,22 +187,16 @@ export class TimelineToolbar {
     private findOldestOverdueDate(): string | null {
         const startHour = this.plugin.settings.startHour;
         const visualToday = DateUtils.getVisualDateOfNow(startHour);
-        const isVisible = this.getTaskFilter();
-
-        // Get all incomplete, visible tasks with dates (including E/ED types)
-        const rawTasks = this.taskIndex.getTasks().filter(t =>
-            isVisible(t) &&
-            !isCompleteStatusChar(t.statusChar, this.plugin.settings.statusDefinitions) &&
-            (t.startDate || t.endDate)
-        );
-
-        const displayTasks = toDisplayTasks(rawTasks, startHour);
+        const readService = this.plugin.getTaskReadService();
+        const filterState = this.getFilterState();
+        const displayTasks = readService.getFilteredTasks(filterState);
 
         // Find the oldest past date among incomplete tasks
         let oldestDate: string | null = null;
 
         for (const dt of displayTasks) {
             if (!dt.effectiveStartDate) continue;
+            if (isCompleteStatusChar(dt.statusChar, this.plugin.settings.statusDefinitions)) continue;
 
             if (dt.effectiveStartDate < visualToday) {
                 if (!oldestDate || dt.effectiveStartDate < oldestDate) {
@@ -248,7 +240,7 @@ export class TimelineToolbar {
         filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
 
         filterBtn.onclick = (e) => {
-            const allTasks = this.taskIndex.getTasks();
+            const allTasks = this.readService.getTasks();
 
             this.filterMenu.showMenu(e, {
                 onFilterChange: () => {

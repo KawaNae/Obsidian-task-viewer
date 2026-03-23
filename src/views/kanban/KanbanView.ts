@@ -1,6 +1,5 @@
 import { ItemView, Menu, WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
-import { TaskIndex } from '../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
@@ -10,18 +9,17 @@ import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { ViewSettingsMenu } from '../sharedUI/ViewToolbar';
 import { KanbanExportStrategy } from '../../services/export/KanbanExportStrategy';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
-import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
+import { combineFilterStates, createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState, hasSortRules } from '../../services/sort/SortTypes';
-import { TaskFilterEngine } from '../../services/filter/TaskFilterEngine';
-import { TaskSorter } from '../../services/sort/TaskSorter';
 import { TaskStyling } from '../sharedUI/TaskStyling';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
 import type { PinnedListDefinition, DisplayTask } from '../../types';
-import { toDisplayTasks } from '../../services/display/DisplayTaskConverter';
+import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { TaskWriteService } from '../../services/data/TaskWriteService';
 
 export const VIEW_TYPE_KANBAN = VIEW_META_KANBAN.type;
 
@@ -33,8 +31,9 @@ interface KanbanViewState {
 }
 
 export class KanbanView extends ItemView {
-    private readonly taskIndex: TaskIndex;
     private readonly plugin: TaskViewerPlugin;
+    private readonly readService: TaskReadService;
+    private readonly writeService: TaskWriteService;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly menuHandler: MenuHandler;
@@ -49,29 +48,30 @@ export class KanbanView extends ItemView {
     private grid: PinnedListDefinition[][] = [];
     private gridCollapsed: Record<string, boolean> = {};
 
-    constructor(leaf: WorkspaceLeaf, taskIndex: TaskIndex, plugin: TaskViewerPlugin) {
+    constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
-        this.taskIndex = taskIndex;
         this.plugin = plugin;
-        this.taskRenderer = new TaskCardRenderer(this.app, this.taskIndex, {
+        this.readService = this.plugin.getTaskReadService();
+        this.writeService = this.plugin.getTaskWriteService();
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.leaf,
         }, () => this.plugin.settings);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
-        this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
+        this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
-        const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.taskIndex, this.plugin);
+        const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.writeService, this.plugin);
         this.taskRenderer.setChildLineEditCallback((parentTask, childLineIndex, x, y) => {
             childLineMenuBuilder.showMenu(parentTask, childLineIndex, x, y);
         });
         this.taskRenderer.setDetailCallback((task) => {
-            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.taskIndex).open();
+            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
         });
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.taskIndex.getTask(id));
+        this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
         this.viewFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.viewFilterMenu.setTaskLookupProvider((id) => this.taskIndex.getTask(id));
+        this.viewFilterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
     }
 
@@ -147,7 +147,7 @@ export class KanbanView extends ItemView {
 
         this.render();
 
-        this.unsubscribe = this.taskIndex.onChange(() => {
+        this.unsubscribe = this.readService.onChange(() => {
             this.render();
         });
     }
@@ -179,21 +179,10 @@ export class KanbanView extends ItemView {
         const gridEl = gridHost.createDiv('kanban-view__grid');
         gridEl.style.gridTemplateColumns = `repeat(${cols}, minmax(250px, 1fr))`;
 
-        const startHour = this.plugin.settings.startHour;
-        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
-        const filterContext = { startHour, taskLookup: (id: string) => this.taskIndex.getTask(id) };
-
-        // Pre-apply view-level filter once (instead of per-cell)
-        const hasViewFilter = !!this.viewFilterState && hasConditions(this.viewFilterState);
-        const viewFiltered = hasViewFilter
-            ? allDisplayTasks.filter(t => TaskFilterEngine.evaluate(t, this.viewFilterState!, filterContext))
-            : allDisplayTasks;
-
         for (let r = 0; r < this.grid.length; r++) {
             for (let c = 0; c < this.grid[r].length; c++) {
                 const listDef = this.grid[r][c];
-                const baseTasks = (listDef.applyViewFilter && hasViewFilter) ? viewFiltered : allDisplayTasks;
-                this.renderCell(gridEl, listDef, r, c, baseTasks, startHour);
+                this.renderCell(gridEl, listDef, r, c);
             }
         }
 
@@ -216,7 +205,7 @@ export class KanbanView extends ItemView {
                     this.render();
                     filterBtn.classList.toggle('is-filtered', this.viewFilterMenu.hasActiveFilters());
                 },
-                getTasks: () => this.taskIndex.getTasks(),
+                getTasks: () => this.readService.getTasks(),
                 getStartHour: () => this.plugin.settings.startHour,
             });
         };
@@ -245,7 +234,7 @@ export class KanbanView extends ItemView {
                 filterState: this.viewFilterMenu.getFilterState(),
             }),
             getExportContainer: () => this.container,
-            getTaskIndex: () => this.taskIndex,
+            getReadService: () => this.readService,
             getExportStrategy: () => new KanbanExportStrategy(),
             onApplyTemplate: (template) => {
                 if (template.grid && template.grid.length > 0) {
@@ -271,7 +260,7 @@ export class KanbanView extends ItemView {
         });
     }
 
-    private renderCell(gridEl: HTMLElement, listDef: PinnedListDefinition, row: number, col: number, allDisplayTasks: DisplayTask[], startHour: number): void {
+    private renderCell(gridEl: HTMLElement, listDef: PinnedListDefinition, row: number, col: number): void {
         const isCollapsed = this.gridCollapsed[listDef.id] ?? false;
 
         const cell = gridEl.createDiv('kanban-view__cell');
@@ -280,11 +269,10 @@ export class KanbanView extends ItemView {
         // ─── Header ─────────────────────────
         const header = cell.createDiv('kanban-view__cell-header');
 
-        const filterContext = { startHour, taskLookup: (id: string) => this.taskIndex.getTask(id) };
-        const tasks = allDisplayTasks.filter(t =>
-            TaskFilterEngine.evaluate(t, listDef.filterState, filterContext)
-        );
-        TaskSorter.sort(tasks, listDef.sortState);
+        const combinedFilter = (this.viewFilterState && hasConditions(this.viewFilterState) && listDef.applyViewFilter)
+            ? combineFilterStates(listDef.filterState, this.viewFilterState)
+            : listDef.filterState;
+        const tasks = this.readService.getFilteredTasks(combinedFilter, listDef.sortState);
 
         const toggle = header.createSpan({ text: isCollapsed ? '▶' : '▼', cls: 'kanban-view__cell-toggle' });
         const nameEl = header.createSpan({ text: listDef.name, cls: 'kanban-view__cell-name' });
@@ -323,7 +311,7 @@ export class KanbanView extends ItemView {
                     this.requestSaveLayout();
                     this.render();
                 },
-                getTasks: () => this.taskIndex.getTasks(),
+                getTasks: () => this.readService.getTasks(),
                 getStartHour: () => this.plugin.settings.startHour,
             });
         });

@@ -1,5 +1,5 @@
 import { Task } from '../../types';
-import { TaskIndex } from '../../services/core/TaskIndex';
+import { TaskReadService } from '../../services/data/TaskReadService';
 import { ChildRenderItem } from './types';
 import { ChildLineResolver } from './ChildLineResolver';
 import { ChildRenderItemMapper } from './ChildRenderItemMapper';
@@ -16,13 +16,13 @@ export class ChildItemBuilder {
     private resolver: ChildLineResolver;
     private mapper: ChildRenderItemMapper;
 
-    constructor(private taskIndex: TaskIndex) {
-        this.resolver = new ChildLineResolver(taskIndex);
+    constructor(private readService: TaskReadService) {
+        this.resolver = new ChildLineResolver(readService);
         this.mapper = new ChildRenderItemMapper();
     }
 
-    getTaskIndex(): TaskIndex {
-        return this.taskIndex;
+    getReadService(): TaskReadService {
+        return this.readService;
     }
 
     /**
@@ -208,7 +208,7 @@ export class ChildItemBuilder {
             if (renderedChildIds.has(childId) || visitedIds.has(childId) || childId === rootId) continue;
 
             visitedIds.add(childId);
-            const child = this.taskIndex.getTask(childId);
+            const child = this.readService.getTask(childId);
             if (!child) continue;
 
             items.push(this.mapper.createTaskItem(child, indent, task.file));

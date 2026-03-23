@@ -1,16 +1,14 @@
 import { TFile } from 'obsidian';
 import type TaskViewerPlugin from '../main';
-import type { Task, DisplayTask, PinnedListDefinition } from '../types';
-import { toDisplayTasks, toDisplayTask } from '../services/display/DisplayTaskConverter';
+import type { Task, DisplayTask } from '../types';
+import type { TaskReadService } from '../services/data/TaskReadService';
+import type { TaskWriteService } from '../services/data/TaskWriteService';
+import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 import { normalizeTask } from './TaskNormalizer';
-import { TaskFilterEngine } from '../services/filter/TaskFilterEngine';
 import { TaskSorter } from '../services/sort/TaskSorter';
-import { hasConditions } from '../services/filter/FilterTypes';
 import type { FilterState } from '../services/filter/FilterTypes';
 import type { SortState, SortProperty } from '../services/sort/SortTypes';
 import { DateUtils } from '../utils/DateUtils';
-import { ViewTemplateLoader } from '../services/template/ViewTemplateLoader';
-import { HeadingInserter } from '../utils/HeadingInserter';
 import { parseDateTimeFlag } from '../cli/CliFilterBuilder';
 import { buildFilterFromParams } from './FilterParamsBuilder';
 import { loadFilterFile } from './FilterFileLoader';
@@ -20,17 +18,26 @@ import {
     type ListParams,
     type TodayParams,
     type GetParams,
-    type QueryParams,
     type CreateParams,
     type UpdateParams,
     type DeleteParams,
     type TaskListResult,
-    type QueryResult,
-    type QueryListEntry,
     type MutationResult,
     type DeleteResult,
     type ApiSortRule,
     type PaginationParams,
+    type DuplicateParams,
+    type DuplicateResult,
+    type ConvertParams,
+    type ConvertResult,
+    type TasksForDateRangeParams,
+    type TasksForDateParams,
+    type CategorizedTasksResult,
+    type InsertChildTaskParams,
+    type InsertChildTaskResult,
+    type CreateFrontmatterParams,
+    type CreateFrontmatterResult,
+    type StartHourResult,
 } from './TaskApiTypes';
 
 const API_HELP_TEXT = `
@@ -83,14 +90,6 @@ Methods
     GetParams:
       id: string                   Task ID (required)
 
-  query(params: QueryParams): Promise<QueryResult>
-    Query tasks using a saved view template.
-
-    QueryParams:
-      template: string             Template basename (required)
-
-    Returns: { template, viewType, lists: [{ name, count, tasks }] }
-
   create(params: CreateParams): Promise<MutationResult>
     Create a new inline task.
 
@@ -122,6 +121,67 @@ Methods
 
   help(): string
     Show this reference.
+
+  duplicate(params: DuplicateParams): Promise<DuplicateResult>
+    Duplicate a task with optional date shifting.
+
+    DuplicateParams:
+      id: string                   Task ID (required)
+      dayOffset?: number           Days to shift dates (default: 0)
+      count?: number               Number of copies (default: 1)
+
+  convertToFrontmatter(params: ConvertParams): Promise<ConvertResult>
+    Convert an inline task to a frontmatter task file.
+
+    ConvertParams:
+      id: string                   Task ID (required)
+
+  tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult>
+    List tasks in a date range.
+
+    TasksForDateRangeParams:
+      start: string                Start date YYYY-MM-DD (required)
+      end: string                  End date YYYY-MM-DD (required)
+      filter?: FilterState         FilterState object
+      sort?: ApiSortRule[]         Sort rules
+      limit?: number               Max results (default: 100)
+      offset?: number              Skip first N results
+
+  tasksForDate(params: TasksForDateParams): CategorizedTasksResult
+    Get tasks for a date, categorized into allDay/timed/dueOnly.
+
+    TasksForDateParams:
+      date: string                 Date YYYY-MM-DD (required)
+      filter?: FilterState         FilterState object
+
+    Returns: { allDay: NormalizedTask[], timed: NormalizedTask[], dueOnly: NormalizedTask[] }
+
+  insertChildTask(params: InsertChildTaskParams): Promise<InsertChildTaskResult>
+    Insert a child task under a parent task.
+
+    InsertChildTaskParams:
+      parentId: string             Parent task ID (required)
+      content: string              Child task content (required)
+
+  createFrontmatterTask(params: CreateFrontmatterParams): Promise<CreateFrontmatterResult>
+    Create a new frontmatter task file from structured data.
+
+    CreateFrontmatterParams:
+      content: string              Task content (required)
+      start?: string               Start date/datetime
+      end?: string                 End date/datetime
+      due?: string                 Due date (YYYY-MM-DD)
+      status?: string              Status character (default: ' ')
+
+    Returns: { newFile: string }
+
+  getStartHour(): StartHourResult
+    Get the current startHour setting (visual day boundary).
+
+    Returns: { startHour: number }
+
+  onChange(callback): () => void
+    Subscribe to task changes. Returns unsubscribe function.
 
 Sort
 ----
@@ -202,6 +262,43 @@ Examples
 
   // Get a specific task
   api.get({ id: 'at-notation:daily/2026-03-15.md:ln:5' });
+
+  // Duplicate a task, shifting dates by 1 day
+  await api.duplicate({ id: 'at-notation:daily/2026-03-15.md:ln:5', dayOffset: 1 });
+
+  // Duplicate a task 3 times (no date shift)
+  await api.duplicate({ id: 'at-notation:daily/2026-03-15.md:ln:5', count: 3 });
+
+  // Convert an inline task to a frontmatter task file
+  await api.convertToFrontmatter({ id: 'at-notation:daily/2026-03-15.md:ln:5' });
+
+  // List tasks in a date range
+  await api.tasksForDateRange({ start: '2026-03-01', end: '2026-03-31' });
+
+  // List tasks in a date range with sort
+  await api.tasksForDateRange({
+    start: '2026-03-01',
+    end: '2026-03-31',
+    sort: [{ property: 'startDate', direction: 'asc' }],
+  });
+
+  // Get categorized tasks for a date
+  api.tasksForDate({ date: '2026-03-23' });
+
+  // Insert a child task
+  await api.insertChildTask({ parentId: 'at-notation:daily/2026-03-15.md:ln:5', content: 'Sub-task' });
+
+  // Create a frontmatter task
+  await api.createFrontmatterTask({ content: 'Project task', start: '2026-03-20 10:00' });
+
+  // Get visual day boundary setting
+  api.getStartHour();
+
+  // Subscribe to task changes
+  const unsubscribe = api.onChange((taskId) => {
+    console.log('Task changed:', taskId);
+  });
+  // Later: unsubscribe();
 `.trim();
 
 // ── Internal helpers ──
@@ -248,7 +345,13 @@ function parseDateTimeParam(value: string, fieldName: string): { date: string; t
 // ── Public API ──
 
 export class TaskApi {
-    constructor(private plugin: TaskViewerPlugin) {}
+    private readService: TaskReadService;
+    private writeService: TaskWriteService;
+
+    constructor(private plugin: TaskViewerPlugin) {
+        this.readService = plugin.getTaskReadService();
+        this.writeService = plugin.getTaskWriteService();
+    }
 
     /**
      * List tasks with optional filters, sort, and pagination.
@@ -263,23 +366,18 @@ export class TaskApi {
             p.filter = result;
         }
 
-        const taskIndex = this.plugin.getTaskIndex();
-        const { startHour } = this.plugin.settings;
-
-        const displayTasks = toDisplayTasks(taskIndex.getTasks(), startHour);
+        const readService = this.readService;
 
         const filterState = buildFilterFromParams(p);
+        const sortState = buildSortState(p.sort);
 
         let filtered: DisplayTask[];
         if (filterState) {
-            const context = { taskLookup: (id: string) => taskIndex.getTask(id) };
-            filtered = displayTasks.filter(t => TaskFilterEngine.evaluate(t, filterState, context));
+            filtered = readService.getFilteredTasks(filterState, sortState);
         } else {
-            filtered = displayTasks;
+            filtered = [...readService.getAllDisplayTasks()];
+            TaskSorter.sort(filtered, sortState);
         }
-
-        const sortState = buildSortState(p.sort);
-        TaskSorter.sort(filtered, sortState);
 
         const paged = paginate(filtered, p);
         return { count: paged.length, tasks: paged.map(normalizeTask) };
@@ -290,11 +388,11 @@ export class TaskApi {
      */
     today(params?: TodayParams): TaskListResult {
         const p = params ?? {};
-        const taskIndex = this.plugin.getTaskIndex();
+        const readService = this.readService;
         const { startHour } = this.plugin.settings;
         const today = DateUtils.getVisualDateOfNow(startHour);
 
-        const displayTasks = toDisplayTasks(taskIndex.getTasks(), startHour);
+        const displayTasks = readService.getAllDisplayTasks();
 
         let filtered = displayTasks.filter(t => {
             const start = t.effectiveStartDate;
@@ -324,75 +422,9 @@ export class TaskApi {
     get(params: GetParams): NormalizedTask {
         if (!params.id) throw new TaskApiError('Missing required parameter: id');
 
-        const task = this.plugin.getTaskIndex().getTask(params.id);
-        if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
-
-        return normalizeTask(toDisplayTask(task, this.plugin.settings.startHour));
-    }
-
-    /**
-     * Query tasks using a saved view template.
-     */
-    async query(params: QueryParams): Promise<QueryResult> {
-        if (!params.template) throw new TaskApiError('Missing required parameter: template');
-
-        const { settings } = this.plugin;
-        if (!settings.viewTemplateFolder) {
-            throw new TaskApiError('viewTemplateFolder is not configured in settings');
-        }
-
-        const loader = new ViewTemplateLoader(this.plugin.app);
-        const summary = loader.findByBasename(settings.viewTemplateFolder, params.template);
-        if (!summary) throw new TaskApiError(`Template not found: ${params.template}`);
-
-        const template = await loader.loadFullTemplate(summary.filePath);
-        if (!template) throw new TaskApiError(`Failed to load template: ${params.template}`);
-
-        const taskIndex = this.plugin.getTaskIndex();
-        const { startHour } = settings;
-        const context = { taskLookup: (id: string) => taskIndex.getTask(id) };
-
-        const allDisplayTasks = toDisplayTasks(taskIndex.getTasks(), startHour);
-
-        let viewFiltered: DisplayTask[];
-        if (template.filterState && hasConditions(template.filterState)) {
-            viewFiltered = allDisplayTasks.filter(t =>
-                TaskFilterEngine.evaluate(t, template.filterState!, context),
-            );
-        } else {
-            viewFiltered = allDisplayTasks;
-        }
-
-        const pinnedLists: PinnedListDefinition[] = template.pinnedLists
-            ?? (template.grid ? template.grid.flat() : []);
-
-        if (pinnedLists.length === 0) {
-            TaskSorter.sort(viewFiltered, undefined);
-            return {
-                template: template.name,
-                viewType: template.viewType,
-                lists: [{
-                    name: template.name,
-                    count: viewFiltered.length,
-                    tasks: viewFiltered.map(normalizeTask),
-                }],
-            };
-        }
-
-        const lists: QueryListEntry[] = pinnedLists.map(list => {
-            const source = list.applyViewFilter !== false ? viewFiltered : allDisplayTasks;
-            const matched = source.filter(t =>
-                TaskFilterEngine.evaluate(t, list.filterState, context),
-            );
-            TaskSorter.sort(matched, list.sortState);
-            return { name: list.name, count: matched.length, tasks: matched.map(normalizeTask) };
-        });
-
-        return {
-            template: template.name,
-            viewType: template.viewType,
-            lists,
-        };
+        const dt = this.readService.getDisplayTask(params.id);
+        if (!dt) throw new TaskApiError(`Task not found: ${params.id}`);
+        return normalizeTask(dt);
     }
 
     /**
@@ -436,19 +468,9 @@ export class TaskApi {
             line += ` ${dateBlock}`;
         }
 
-        if (params.heading) {
-            await this.plugin.app.vault.process(file, (fileContent) =>
-                HeadingInserter.insertUnderHeading(fileContent, line, params.heading!, 2),
-            );
-        } else {
-            const repo = this.plugin.getTaskRepository();
-            await repo.appendTaskToFile(params.file, line);
-        }
+        await this.writeService.createTask(params.file, line, params.heading);
 
-        const taskIndex = this.plugin.getTaskIndex();
-        await taskIndex.waitForScan(params.file);
-
-        const tasks = taskIndex.getTasks().filter(
+        const tasks = this.readService.getTasks().filter(
             t => t.file === params.file && t.content === content,
         );
         const created = tasks.length > 0
@@ -466,35 +488,50 @@ export class TaskApi {
     async update(params: UpdateParams): Promise<MutationResult> {
         if (!params.id) throw new TaskApiError('Missing required parameter: id');
 
-        const taskIndex = this.plugin.getTaskIndex();
-        const task = taskIndex.getTask(params.id);
+        const task = this.readService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
 
         const updates: Partial<Task> = {};
 
         if (params.content !== undefined) updates.content = params.content;
-        if (params.status !== undefined) updates.statusChar = params.status;
+        if (params.status !== undefined) {
+            updates.statusChar = params.status === 'none' ? ' ' : params.status;
+        }
 
         if (params.start !== undefined) {
-            const parsed = parseDateTimeParam(params.start, 'start');
-            if (parsed.date) updates.startDate = parsed.date;
-            if (parsed.time) updates.startTime = parsed.time;
+            if (params.start === 'none') {
+                updates.startDate = undefined;
+                updates.startTime = undefined;
+            } else {
+                const parsed = parseDateTimeParam(params.start, 'start');
+                if (parsed.date) updates.startDate = parsed.date;
+                if (parsed.time) updates.startTime = parsed.time;
+            }
         }
 
         if (params.end !== undefined) {
-            const parsed = parseDateTimeParam(params.end, 'end');
-            if (parsed.date) updates.endDate = parsed.date;
-            if (parsed.time) updates.endTime = parsed.time;
+            if (params.end === 'none') {
+                updates.endDate = undefined;
+                updates.endTime = undefined;
+            } else {
+                const parsed = parseDateTimeParam(params.end, 'end');
+                if (parsed.date) updates.endDate = parsed.date;
+                if (parsed.time) updates.endTime = parsed.time;
+            }
         }
 
         if (params.due !== undefined) {
-            const parsed = parseDateTimeParam(params.due, 'due');
-            updates.due = parsed.date;
+            if (params.due === 'none') {
+                updates.due = undefined;
+            } else {
+                const parsed = parseDateTimeParam(params.due, 'due');
+                updates.due = parsed.date;
+            }
         }
 
-        await taskIndex.updateTask(params.id, updates);
+        await this.writeService.updateTask(params.id, updates);
 
-        const updated = taskIndex.getTask(params.id);
+        const updated = this.readService.getTask(params.id);
         if (!updated) throw new TaskApiError(`Task not found after update: ${params.id}`);
 
         return { task: normalizeTask(toDisplayTask(updated, this.plugin.settings.startHour)) };
@@ -506,12 +543,110 @@ export class TaskApi {
     async delete(params: DeleteParams): Promise<DeleteResult> {
         if (!params.id) throw new TaskApiError('Missing required parameter: id');
 
-        const taskIndex = this.plugin.getTaskIndex();
-        const task = taskIndex.getTask(params.id);
+        const task = this.readService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
 
-        await taskIndex.deleteTask(params.id);
+        await this.writeService.deleteTask(params.id);
         return { deleted: params.id };
+    }
+
+    /**
+     * Duplicate a task with optional date shifting.
+     */
+    async duplicate(params: DuplicateParams): Promise<DuplicateResult> {
+        if (!params.id) throw new TaskApiError('Missing required parameter: id');
+        const task = this.readService.getTask(params.id);
+        if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
+        await this.writeService.duplicateTask(params.id, {
+            dayOffset: params.dayOffset,
+            count: params.count,
+        });
+        return { duplicated: params.id };
+    }
+
+    /**
+     * Convert an inline task to a frontmatter task file.
+     */
+    async convertToFrontmatter(params: ConvertParams): Promise<ConvertResult> {
+        if (!params.id) throw new TaskApiError('Missing required parameter: id');
+        const task = this.readService.getTask(params.id);
+        if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
+        const newPath = await this.writeService.convertToFrontmatterTask(params.id);
+        return { convertedFrom: params.id, newFile: newPath };
+    }
+
+    /**
+     * List tasks in a date range with optional filter, sort, and pagination.
+     */
+    async tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult> {
+        if (!params.start) throw new TaskApiError('Missing required parameter: start');
+        if (!params.end) throw new TaskApiError('Missing required parameter: end');
+        let tasks = this.readService.getTasksForDateRange(params.start, params.end, params.filter);
+        const sortState = buildSortState(params.sort);
+        if (sortState) {
+            tasks = [...tasks];
+            TaskSorter.sort(tasks, sortState);
+        }
+        const paged = paginate(tasks, params);
+        return { count: paged.length, tasks: paged.map(normalizeTask) };
+    }
+
+    /**
+     * Get tasks for a date, categorized into allDay/timed/dueOnly.
+     */
+    tasksForDate(params: TasksForDateParams): CategorizedTasksResult {
+        if (!params.date) throw new TaskApiError('Missing required parameter: date');
+        const result = this.readService.getTasksForDate(params.date, params.filter);
+        return {
+            allDay: result.allDay.map(normalizeTask),
+            timed: result.timed.map(normalizeTask),
+            dueOnly: result.dueOnly.map(normalizeTask),
+        };
+    }
+
+    /**
+     * Insert a child task under a parent task.
+     */
+    async insertChildTask(params: InsertChildTaskParams): Promise<InsertChildTaskResult> {
+        if (!params.parentId) throw new TaskApiError('Missing required parameter: parentId');
+        if (!params.content) throw new TaskApiError('Missing required parameter: content');
+        const task = this.readService.getTask(params.parentId);
+        if (!task) throw new TaskApiError(`Task not found: ${params.parentId}`);
+        await this.writeService.insertChildTask(params.parentId, `- [ ] ${params.content}`);
+        return { parentId: params.parentId };
+    }
+
+    /**
+     * Create a new frontmatter task file from structured data.
+     */
+    async createFrontmatterTask(params: CreateFrontmatterParams): Promise<CreateFrontmatterResult> {
+        if (!params.content) throw new TaskApiError('Missing required parameter: content');
+        const parsed = params.start ? parseDateTimeFlag(params.start) : null;
+        const parsedEnd = params.end ? parseDateTimeFlag(params.end) : null;
+        const newFile = await this.writeService.createFrontmatterTaskFromData({
+            content: params.content,
+            statusChar: params.status ?? ' ',
+            startDate: parsed?.date,
+            startTime: parsed?.time,
+            endDate: parsedEnd?.date || (parsedEnd?.time && parsed?.date ? parsed.date : undefined),
+            endTime: parsedEnd?.time,
+            due: params.due,
+        });
+        return { newFile };
+    }
+
+    /**
+     * Get the current startHour setting (visual day boundary).
+     */
+    getStartHour(): StartHourResult {
+        return { startHour: this.readService.getStartHour() };
+    }
+
+    /**
+     * Subscribe to task changes. Returns an unsubscribe function.
+     */
+    onChange(callback: (taskId?: string) => void): () => void {
+        return this.readService.onChange(callback);
     }
 
     /**

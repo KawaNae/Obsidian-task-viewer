@@ -500,7 +500,9 @@
     "kindRecorded": "{{icon}} {{kind}}記録完了！（{{duration}}）",
     "taskUpdated": "{{icon}} タスク更新完了！（{{duration}}）",
     "childTaskNotFound": "子タスクが見つかりません。新しいレコードを作成します。",
-    "timerTargetNotFound": "タイマーターゲットタスクが見つかりません。削除、移動、またはリネームされた可能性があります。"
+    "timerTargetNotFound": "タイマーターゲットタスクが見つかりません。削除、移動、またはリネームされた可能性があります。",
+    "taskConverted": "タスクをfrontmatterファイルに変換しました",
+    "taskConvertFailed": "タスクの変換に失敗しました"
   },
   "pinnedList": {
     "noPinnedLists": "ピン留めリストがありません。",

@@ -89,7 +89,22 @@
 }
 
 .calendar-week-number.is-current-week {
-    color: var(--tv-text-accent);
+    position: relative;
+    z-index: var(--z-task-card);
+    color: var(--tv-text-on-accent);
+}
+
+.calendar-week-number.is-current-week::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--tv-accent);
+    opacity: 0.9;
+    z-index: var(--z-negative);
+    pointer-events: none;
 }
 
 .calendar-week-number:hover {
@@ -205,8 +220,22 @@
 }
 
 .calendar-date-header.is-today {
-    background: rgba(var(--tv-accent-rgb), 0.12);
-    color: var(--tv-text-accent);
+    position: relative;
+    z-index: var(--z-task-card);
+    color: var(--tv-text-on-accent);
+}
+
+.calendar-date-header.is-today::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--tv-accent);
+    opacity: 0.9;
+    z-index: var(--z-negative);
+    pointer-events: none;
 }
 
 .calendar-date-header .internal-link {

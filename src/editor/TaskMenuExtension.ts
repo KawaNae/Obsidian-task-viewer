@@ -2,7 +2,8 @@ import { ViewPlugin, ViewUpdate, Decoration, WidgetType, EditorView, DecorationS
 import { StateEffect, RangeSet, type Extension } from '@codemirror/state';
 import { editorInfoField, Menu, setIcon, MarkdownView } from 'obsidian';
 import type { App } from 'obsidian';
-import type { TaskIndex } from '../services/core/TaskIndex';
+import type { TaskReadService } from '../services/data/TaskReadService';
+import type { TaskWriteService } from '../services/data/TaskWriteService';
 import type { TaskViewerSettings } from '../types';
 import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 import type { PropertiesMenuBuilder } from '../interaction/menu/builders/PropertiesMenuBuilder';
@@ -62,7 +63,8 @@ export interface TaskMenuExtensionResult {
 
 export function createTaskMenuExtension(
     app: App,
-    taskIndex: TaskIndex,
+    readService: TaskReadService,
+    writeService: TaskWriteService,
     propertiesBuilder: PropertiesMenuBuilder,
     timerBuilder: TimerMenuBuilder,
     actionsBuilder: TaskActionsMenuBuilder,
@@ -75,7 +77,7 @@ export function createTaskMenuExtension(
         const filePath = info?.file?.path;
         if (!filePath) return;
 
-        const task = taskIndex.getTaskByFileLine(filePath, lineNumber);
+        const task = readService.getTaskByFileLine(filePath, lineNumber);
         const menu = new Menu();
 
         if (task) {
@@ -92,9 +94,9 @@ export function createTaskMenuExtension(
             const lineText = view.state.doc.line(lineNumber + 1).text; // CM6 lines are 1-based
 
             const ops: CheckboxLineOps = {
-                updateLine: (content) => taskIndex.updateLine(filePath, lineNumber, content),
-                insertLineAfter: (content) => taskIndex.insertLineAfterLine(filePath, lineNumber, content),
-                deleteLine: () => taskIndex.deleteLine(filePath, lineNumber),
+                updateLine: (content) => writeService.updateLine(filePath, lineNumber, content),
+                insertLineAfter: (content) => writeService.insertLineAfterLine(filePath, lineNumber, content),
+                deleteLine: () => writeService.deleteLine(filePath, lineNumber),
             };
 
             checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops, filePath);
@@ -131,7 +133,7 @@ export function createTaskMenuExtension(
                     seen.add(line.number);
                     let show = true;
                     if (needsFilter && filePath) {
-                        const isTask = !!taskIndex.getTaskByFileLine(filePath, lineNumber);
+                        const isTask = !!readService.getTaskByFileLine(filePath, lineNumber);
                         show = isTask ? settings.editorMenuForTasks : settings.editorMenuForCheckboxes;
                     }
                     if (show) {
@@ -178,7 +180,7 @@ export function createTaskMenuExtension(
         }
     );
 
-    const unsubscribe = taskIndex.onChange(() => {
+    const unsubscribe = readService.onChange(() => {
         app.workspace.iterateAllLeaves((leaf) => {
             if (leaf.view instanceof MarkdownView) {
                 const cm = (leaf.view.editor as any).cm as EditorView | undefined;

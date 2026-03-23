@@ -84,8 +84,7 @@ export class FrontmatterTaskBuilder {
         const childLines: ChildLine[] = [];
         const childBodyIndices: number[] = [];
 
-        const wikilinkRefs: WikilinkRef[] = [];
-
+        // Collect childLines from configured heading section (for card display)
         const section = this.findHeaderSection(
             bodyLines,
             frontmatterTaskHeader,
@@ -97,18 +96,22 @@ export class FrontmatterTaskBuilder {
                 section.start,
                 section.end
             );
-            const wikiRegex = /^\s*(?:[-*+]|\d+[.)])\s+\[\[([^\]]+)\]\]\s*$/;
-
             for (const relIndex of block.lineIndices) {
                 const line = bodyLines[relIndex];
                 const absoluteLine = bodyStartIndex + relIndex;
                 childLines.push(ChildLineClassifier.classify(line));
                 childBodyIndices.push(absoluteLine);
+            }
+        }
 
-                const wikiMatch = line.match(wikiRegex);
-                if (wikiMatch) {
-                    wikilinkRefs.push({ target: wikiMatch[1].trim(), bodyLine: absoluteLine });
-                }
+        // Extract wikilinkRefs from entire body (for parent-child resolution)
+        // Safe because WikiLinkResolver.wireChild() validates the target exists as a frontmatter task
+        const wikilinkRefs: WikilinkRef[] = [];
+        const wikiRegex = /^\s*(?:[-*+]|\d+[.)])\s+\[\[([^\]]+)\]\]\s*$/;
+        for (let i = 0; i < bodyLines.length; i++) {
+            const wikiMatch = bodyLines[i].match(wikiRegex);
+            if (wikiMatch) {
+                wikilinkRefs.push({ target: wikiMatch[1].trim(), bodyLine: bodyStartIndex + i });
             }
         }
 

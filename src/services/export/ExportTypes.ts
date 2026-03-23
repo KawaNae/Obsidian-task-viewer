@@ -1,5 +1,5 @@
 import type { App } from 'obsidian';
-import type { TaskIndex } from '../core/TaskIndex';
+import type { TaskReadService } from '../data/TaskReadService';
 
 export interface ExportStrategy {
     /** Expand scroll areas to capture full content. */
@@ -13,7 +13,7 @@ export interface ExportStrategy {
 export interface ViewExportOptions {
     app: App;
     container: HTMLElement;
-    taskIndex: TaskIndex;
+    readService: TaskReadService;
     filename: string;
     expandScrollAreas?: boolean;
 }

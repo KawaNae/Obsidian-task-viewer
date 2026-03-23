@@ -1,4 +1,5 @@
-import { TaskIndex } from '../../services/core/TaskIndex';
+import { TaskReadService } from '../../services/data/TaskReadService';
+import { TaskWriteService } from '../../services/data/TaskWriteService';
 
 import TaskViewerPlugin from '../../main';
 import { DragStrategy, DragContext } from './DragStrategy';
@@ -8,7 +9,8 @@ import { ResizeStrategy } from './strategies/ResizeStrategy';
 
 export class DragHandler implements DragContext {
     container: HTMLElement;
-    taskIndex: TaskIndex;
+    readService: TaskReadService;
+    writeService: TaskWriteService;
     plugin: TaskViewerPlugin;
     onTaskMove: () => void;
     public onTaskClick: (taskId: string) => void;
@@ -27,9 +29,10 @@ export class DragHandler implements DragContext {
     private lastClickTaskId: string | null = null;
     private lastClickTime: number = 0;
 
-    constructor(container: HTMLElement, taskIndex: TaskIndex, plugin: TaskViewerPlugin, onTaskClick: (taskId: string) => void, onTaskMove: () => void, getViewStartDate: () => string, getZoomLevel: () => number) {
+    constructor(container: HTMLElement, readService: TaskReadService, writeService: TaskWriteService, plugin: TaskViewerPlugin, onTaskClick: (taskId: string) => void, onTaskMove: () => void, getViewStartDate: () => string, getZoomLevel: () => number) {
         this.container = container;
-        this.taskIndex = taskIndex;
+        this.readService = readService;
+        this.writeService = writeService;
         this.plugin = plugin;
         this.onTaskClick = onTaskClick;
         this.onTaskMove = onTaskMove;
@@ -114,7 +117,7 @@ export class DragHandler implements DragContext {
 
         if (!taskEl || !taskId) return;
 
-        const task = this.taskIndex.getTask(taskId);
+        const task = this.readService.getTask(taskId);
         if (!task) return;
         if (task.isReadOnly && isFromHandle) return;
 
@@ -146,7 +149,7 @@ export class DragHandler implements DragContext {
             ? new ResizeStrategy()
             : new MoveStrategy();
 
-        this.taskIndex.setDraggingFile(task.file);
+        this.writeService.setDraggingFile(task.file);
         this.currentStrategy.onDown(e, task, taskEl, this);
         e.preventDefault();
         this.container.style.touchAction = 'none';
@@ -167,12 +170,12 @@ export class DragHandler implements DragContext {
 
             // 即座にDOMを再構築。cleanup()と同一JSフレーム内で実行されるため
             // ブラウザがペイントする前に旧カードが新カードで置き換わる。
-            this.taskIndex.notifyImmediate();
+            this.writeService.notifyImmediate();
 
             // draggingFilePathは遅延イベント(metadataCache.changed)を
             // ブロックするためRAF内でクリア
             requestAnimationFrame(() => {
-                this.taskIndex.setDraggingFile(null);
+                this.writeService.setDraggingFile(null);
             });
         }
         this.currentStrategy = null;

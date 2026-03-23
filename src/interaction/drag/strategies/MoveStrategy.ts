@@ -145,7 +145,7 @@ export class MoveStrategy extends BaseDragStrategy {
 
         // 分割タスク処理
         const originalId = getOriginalTaskId(task);
-        const originalTask = context.taskIndex.getTask(originalId);
+        const originalTask = context.readService.getTask(originalId);
 
         let originalTaskStartMinutes: number | null = null;
         let originalTaskEndMinutes: number | null = null;
@@ -190,11 +190,11 @@ export class MoveStrategy extends BaseDragStrategy {
             this.dragTimeOffset = mouseMinutes - visualStartMinutes;
         }
 
-        // 分割タスクの全セグメントを非表示リストに追加
+        // 分割タスクの全セグメントを非表示リストに追加（pinnedList内のカードは除外）
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         const allSegments = context.container.querySelectorAll(selector);
         allSegments.forEach(segment => {
-            if (segment instanceof HTMLElement) {
+            if (segment instanceof HTMLElement && !segment.closest('.pinned-list')) {
                 this.hiddenElements.push(segment);
             }
         });
@@ -310,23 +310,10 @@ export class MoveStrategy extends BaseDragStrategy {
         };
 
         const taskIdToRestore = this.dragTask.id;
-        const containerRef = context.container;
 
-        await context.taskIndex.updateTask(this.dragTask.id, updates);
+        await context.writeService.updateTask(this.dragTask.id, updates);
         this.restoreSelection(context, taskIdToRestore);
-
-        // DOM更新後にゴーストクリア
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                ghostManagerToClean?.clear();
-                const selector = `.task-card[data-id="${taskIdToRestore}"], .task-card[data-split-original-id="${taskIdToRestore}"]`;
-                containerRef.querySelectorAll(selector).forEach(el => {
-                    if (el instanceof HTMLElement) {
-                        el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
-                    }
-                });
-            });
-        });
+        ghostManagerToClean?.clear();
 
         this.cleanup();
     }
@@ -367,7 +354,7 @@ export class MoveStrategy extends BaseDragStrategy {
         const originalId = getOriginalTaskId(task);
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         context.container.querySelectorAll(selector).forEach(segment => {
-            if (segment instanceof HTMLElement) {
+            if (segment instanceof HTMLElement && !segment.closest('.pinned-list')) {
                 this.hiddenElements.push(segment);
             }
         });
@@ -427,28 +414,11 @@ export class MoveStrategy extends BaseDragStrategy {
         const duration = DateUtils.getDiffDays(this.initialCalendarDate, this.initialCalendarEndDate);
         const newEnd = DateUtils.addDays(newStart, duration);
 
-        const taskIdToRestore = this.dragTask.id;
-        const containerRef = context.container;
-        const hiddenEls = [...this.hiddenElements];
-
         const updates: Partial<Task> = this.buildAllDayMoveUpdates(newStart, newEnd);
         if (Object.keys(updates).length > 0) {
-            await context.taskIndex.updateTask(this.dragTask.id, updates);
+            await context.writeService.updateTask(this.dragTask.id, updates);
         }
-
-        // DOM更新後にゴースト・opacity復元（再レンダリング完了を待つ）
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                this.clearCalendarPreviewGhosts();
-                hiddenEls.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
-                const selector = `.task-card[data-id="${taskIdToRestore}"], .task-card[data-split-original-id="${taskIdToRestore}"]`;
-                containerRef.querySelectorAll(selector).forEach(el => {
-                    if (el instanceof HTMLElement) {
-                        el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
-                    }
-                });
-            });
-        });
+        this.clearCalendarPreviewGhosts();
 
         this.cleanup();
     }
@@ -560,7 +530,7 @@ export class MoveStrategy extends BaseDragStrategy {
                     endDate: DateUtils.addDays(targetDate, endDayOffset)
                 };
 
-                await context.taskIndex.updateTask(this.dragTask.id, updates);
+                await context.writeService.updateTask(this.dragTask.id, updates);
                 this.cleanup();
                 return;
             }
@@ -582,7 +552,7 @@ export class MoveStrategy extends BaseDragStrategy {
         const updates: Partial<Task> = this.buildAllDayMoveUpdates(newStart, newEnd);
 
         if (Object.keys(updates).length > 0) {
-            await context.taskIndex.updateTask(this.dragTask.id, updates);
+            await context.writeService.updateTask(this.dragTask.id, updates);
         }
 
         this.cleanup();

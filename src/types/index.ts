@@ -136,6 +136,16 @@ export interface WikilinkRef {
 }
 
 /**
+ * Options for duplicating tasks.
+ * dayOffset: number of days to shift dates (default: 0 = in-place copy)
+ * count: number of copies to create (default: 1)
+ */
+export interface DuplicateOptions {
+    dayOffset?: number;
+    count?: number;
+}
+
+/**
  * 表示用タスク型。暗黙値解決 + split 情報を統合。
  * Task（生データ）→ toDisplayTask() → DisplayTask の 2 層構造。
  * 編集パスは raw フィールド (startDate 等) のみを参照する。

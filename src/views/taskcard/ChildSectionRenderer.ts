@@ -1,6 +1,6 @@
 import { App, MarkdownRenderer, Component, setIcon } from 'obsidian';
 import { Task, TaskViewerSettings, isCompleteStatusChar } from '../../types';
-import { TaskIndex } from '../../services/core/TaskIndex';
+import { TaskReadService } from '../../services/data/TaskReadService';
 import { ChildRenderItem } from './types';
 import { CheckboxWiring } from './CheckboxWiring';
 import { NotationUtils } from './NotationUtils';
@@ -10,7 +10,7 @@ export type ChildLineEditCallback = (parentTask: Task, childLineIndex: number, x
 
 function countChildCompletion(
     items: ChildRenderItem[],
-    taskIndex: TaskIndex,
+    readService: TaskReadService,
     settings: TaskViewerSettings
 ): { completed: number; total: number } {
     let completed = 0;
@@ -19,7 +19,7 @@ function countChildCompletion(
         if (!item.isCheckbox || !item.handler) continue;
         total++;
         if (item.handler.type === 'task') {
-            const child = taskIndex.getTask(item.handler.taskId);
+            const child = readService.getTask(item.handler.taskId);
             if (child && isCompleteStatusChar(child.statusChar, settings.statusDefinitions)) {
                 completed++;
             }
@@ -43,7 +43,7 @@ export class ChildSectionRenderer {
     constructor(
         private app: App,
         private checkboxWiring: CheckboxWiring,
-        private taskIndex: TaskIndex
+        private readService: TaskReadService
     ) {}
 
     setChildMenuCallback(cb: ChildMenuCallback): void {
@@ -64,7 +64,7 @@ export class ChildSectionRenderer {
         settings: TaskViewerSettings,
         parentStartDate?: string
     ): Promise<void> {
-        const { completed, total } = countChildCompletion(items, this.taskIndex, settings);
+        const { completed, total } = countChildCompletion(items, this.readService, settings);
         const label = `${completed}/${total}`;
         const wasExpanded = expandedTaskIds.has(expandKey);
 

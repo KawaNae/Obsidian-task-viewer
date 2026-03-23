@@ -1,6 +1,6 @@
 import { App, Menu, Notice } from 'obsidian';
 import { Task, TaskViewerSettings } from '../../types';
-import { TaskIndex } from '../../services/core/TaskIndex';
+import { TaskWriteService } from '../../services/data/TaskWriteService';
 import { ChildRenderItem } from './types';
 import { buildStatusOptions, createStatusTitle } from '../../constants/statusOptions';
 import { resolveChildLineNumber } from './ChildLineUtils';
@@ -11,7 +11,7 @@ import { resolveChildLineNumber } from './ChildLineUtils';
 export class CheckboxWiring {
     constructor(
         private app: App,
-        private taskIndex: TaskIndex
+        private writeService: TaskWriteService
     ) {}
 
     wireChildCheckboxes(
@@ -32,7 +32,7 @@ export class CheckboxWiring {
         checkbox.addEventListener('click', () => {
             const isChecked = (checkbox as HTMLInputElement).checked;
             const newStatusChar = isChecked ? 'x' : ' ';
-            this.taskIndex.updateTask(taskId, { statusChar: newStatusChar });
+            this.writeService.updateTask(taskId, { statusChar: newStatusChar });
         });
         checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
 
@@ -42,7 +42,7 @@ export class CheckboxWiring {
             e.preventDefault();
             e.stopPropagation();
             this.showStatusMenu(e as MouseEvent, settings, async (statusChar) => {
-                await this.taskIndex.updateTask(taskId, { statusChar });
+                await this.writeService.updateTask(taskId, { statusChar });
             });
         });
         checkbox.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
@@ -88,7 +88,7 @@ export class CheckboxWiring {
             const isChecked = (checkbox as HTMLInputElement).checked;
             const newStatusChar = isChecked ? 'x' : ' ';
             this.updateCheckboxDataTask(checkbox as HTMLElement, newStatusChar);
-            this.taskIndex.updateTask(taskId, { statusChar: newStatusChar });
+            this.writeService.updateTask(taskId, { statusChar: newStatusChar });
         });
         checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
 
@@ -98,7 +98,7 @@ export class CheckboxWiring {
             e.preventDefault();
             e.stopPropagation();
             this.showStatusMenu(e as MouseEvent, settings, async (statusChar) => {
-                await this.taskIndex.updateTask(taskId, { statusChar });
+                await this.writeService.updateTask(taskId, { statusChar });
             });
         });
         checkbox.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
@@ -127,7 +127,7 @@ export class CheckboxWiring {
                 return;
             }
 
-            await this.taskIndex.updateLine(task.file, absoluteLineNumber, newText);
+            await this.writeService.updateLine(task.file, absoluteLineNumber, newText);
         });
         checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
 
@@ -153,7 +153,7 @@ export class CheckboxWiring {
                     return;
                 }
 
-                await this.taskIndex.updateLine(task.file, absoluteLineNumber, newText);
+                await this.writeService.updateLine(task.file, absoluteLineNumber, newText);
             });
         });
         checkbox.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });

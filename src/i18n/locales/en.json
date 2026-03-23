@@ -500,7 +500,9 @@
     "kindRecorded": "{{icon}} {{kind}} recorded! ({{duration}})",
     "taskUpdated": "{{icon}} Task updated! ({{duration}})",
     "childTaskNotFound": "Child task not found, creating new record.",
-    "timerTargetNotFound": "Timer target task was not found. It may have been deleted, moved, or renamed."
+    "timerTargetNotFound": "Timer target task was not found. It may have been deleted, moved, or renamed.",
+    "taskConverted": "Task converted to frontmatter file",
+    "taskConvertFailed": "Failed to convert task"
   },
   "pinnedList": {
     "noPinnedLists": "No pinned lists.",

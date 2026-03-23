@@ -5,17 +5,14 @@
 
 import { Component, Menu, setIcon } from 'obsidian';
 import { t } from '../../i18n';
-import type { Task, DisplayTask, PinnedListDefinition } from '../../types';
+import type { DisplayTask, PinnedListDefinition } from '../../types';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { TaskFilterEngine } from '../../services/filter/TaskFilterEngine';
-import { hasConditions } from '../../services/filter/FilterTypes';
-import { TaskIndex } from '../../services/core/TaskIndex';
-import { TaskSorter } from '../../services/sort/TaskSorter';
+import { combineFilterStates, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
 import { hasSortRules } from '../../services/sort/SortTypes';
 import TaskViewerPlugin from '../../main';
 import { TaskStyling } from './TaskStyling';
-import { toDisplayTasks } from '../../services/display/DisplayTaskConverter';
+import type { TaskReadService } from '../../services/data/TaskReadService';
 
 export interface PinnedListCallbacks {
     onCollapsedChange: (listId: string, collapsed: boolean) => void;
@@ -41,7 +38,7 @@ export class PinnedListRenderer {
         private taskRenderer: TaskCardRenderer,
         private plugin: TaskViewerPlugin,
         private menuHandler: MenuHandler,
-        private taskIndex: TaskIndex,
+        private readService: TaskReadService,
     ) {}
 
     /** Schedule inline rename for a list on the next render. */
@@ -55,8 +52,7 @@ export class PinnedListRenderer {
         lists: PinnedListDefinition[],
         collapsedState: Record<string, boolean>,
         callbacks: PinnedListCallbacks,
-        viewFilter?: (task: Task) => boolean,
-        precomputedDisplayTasks?: DisplayTask[],
+        viewFilterState?: FilterState,
     ): void {
         container.empty();
         container.addClass('pinned-lists-container');
@@ -67,19 +63,12 @@ export class PinnedListRenderer {
             return;
         }
 
-        const startHour = this.plugin.settings.startHour;
-        const allDisplayTasks = precomputedDisplayTasks ?? toDisplayTasks(this.taskIndex.getTasks(), startHour);
-        const filterContext = { startHour, taskLookup: (id: string) => this.taskIndex.getTask(id) };
-
         for (let i = 0; i < lists.length; i++) {
             const listDef = lists[i];
-            const tasks = allDisplayTasks.filter(task => {
-                if (!TaskFilterEngine.evaluate(task, listDef.filterState, filterContext)) return false;
-                if (listDef.applyViewFilter && viewFilter && !viewFilter(task)) return false;
-                return true;
-            });
-
-            TaskSorter.sort(tasks, listDef.sortState);
+            const combinedFilter = listDef.applyViewFilter && viewFilterState
+                ? combineFilterStates(listDef.filterState, viewFilterState)
+                : listDef.filterState;
+            const tasks = this.readService.getFilteredTasks(combinedFilter, listDef.sortState);
 
             this.renderList(container, listDef, tasks, owner, collapsedState, callbacks, i, lists.length);
         }

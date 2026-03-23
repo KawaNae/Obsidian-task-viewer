@@ -104,6 +104,17 @@ function hasConditionsInGroup(group: FilterGroup): boolean {
     );
 }
 
+/**
+ * Combine multiple FilterStates into a single AND group.
+ * Skips states with no conditions.
+ */
+export function combineFilterStates(...states: FilterState[]): FilterState {
+    const active = states.filter(s => hasConditions(s));
+    if (active.length === 0) return EMPTY_FILTER_STATE;
+    if (active.length === 1) return active[0];
+    return { filters: active, logic: 'and' };
+}
+
 export function getAllConditions(state: FilterState): FilterCondition[] {
     const result: FilterCondition[] = [];
     collectConditions(state, result);

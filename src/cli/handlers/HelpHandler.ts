@@ -6,13 +6,20 @@ Task Viewer CLI Reference
 
 Commands
 --------
-  list          List tasks with filters, sort, and pagination
-  today         List tasks active today (visual-date aware)
-  get           Get a single task by ID
-  create        Create a new inline task
-  update        Update an existing task
-  delete        Delete a task
-  help          Show this reference
+  list               List tasks with filters, sort, and pagination
+  today              List tasks active today (visual-date aware)
+  get                Get a single task by ID
+  create             Create a new inline task
+  update             Update an existing task
+  delete             Delete a task
+  duplicate          Duplicate a task with optional date shifting
+  convert            Convert an inline task to a frontmatter file
+  tasks-for-date-range  List tasks overlapping a date range
+  tasks-for-date        Get tasks for a date, categorized (allDay/timed/dueOnly)
+  insert-child-task     Insert a child task under a parent task
+  create-frontmatter    Create a new frontmatter task file
+  get-start-hour        Get the current startHour setting
+  help               Show this reference
 
 Run "obsidian help obsidian-task-viewer:<command>" for each command's flags.
 
@@ -81,6 +88,54 @@ update: Flags
   end=<date|datetime>  New end date/datetime
   due=<YYYY-MM-DD>     New due date
   status=<char>        New status character
+
+duplicate: Flags
+----------------
+  id=<taskId>          Task ID [required]
+  day-offset=<n>       Days to shift all dates (positive=future, negative=past, default: 0)
+  count=<n>            Number of copies to create (default: 1)
+
+convert: Flags
+--------------
+  id=<taskId>          Task ID [required]
+                       Converts the inline task to a new frontmatter task file.
+                       Returns the path of the newly created file.
+
+tasks-for-date: Flags
+---------------------
+  date=<YYYY-MM-DD>  Date to query [required]
+                     Returns { allDay: [...], timed: [...], dueOnly: [...] }
+
+insert-child-task: Flags
+------------------------
+  parent-id=<taskId> Parent task ID [required]
+  content=<text>     Child task content [required]
+                     Inserts a new child task (- [ ] content) under the parent.
+
+create-frontmatter: Flags
+-------------------------
+  content=<text>       Task content [required]
+  start=<date|datetime> Start date/datetime
+  end=<date|datetime>  End date/datetime
+  due=<YYYY-MM-DD>     Due date
+  status=<char>        Status character (default: space)
+                       Creates a new frontmatter task file. Returns the new file path.
+
+get-start-hour: Flags
+---------------------
+  (no flags)           Returns the current startHour setting (visual day boundary).
+
+tasks-for-date-range: Flags
+---------------------------
+  start=<YYYY-MM-DD>   Start date (inclusive) [required]
+  end=<YYYY-MM-DD>     End date (inclusive) [required]
+  sort=<prop[:dir],..> Sort (e.g. startDate:asc,due:desc)
+  limit=<number>       Max results
+  offset=<number>      Skip first N results
+  format=json|tsv|jsonl Output format (default: json)
+  outputFields=<key,..> Output fields (default: id only)
+                       Includes tasks whose effective start..end range overlaps [start, end].
+                       Due-only tasks (no start/end) are included if due falls in range.
 
 filter-file: File-based Filtering
 ==================================

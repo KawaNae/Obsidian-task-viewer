@@ -5,17 +5,15 @@ import { t } from '../../i18n';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../utils/DateUtils';
 import { TaskStyling } from './TaskStyling';
-import { TaskIndex } from '../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { HandleManager } from '../timelineview/HandleManager';
-import { Task, DisplayTask } from '../../types';
+import { DisplayTask } from '../../types';
 import { CreateTaskModal, formatTaskLine } from '../../modals/CreateTaskModal';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from './DueArrowRenderer';
 
 export class AllDaySectionRenderer {
     constructor(
-        private taskIndex: TaskIndex,
         private plugin: TaskViewerPlugin,
         private menuHandler: MenuHandler,
         private handleManager: HandleManager,
@@ -23,13 +21,13 @@ export class AllDaySectionRenderer {
         private getDaysToShow: () => number
     ) { }
 
-    public render(container: HTMLElement, dates: string[], owner: Component, isTaskVisible: (task: Task) => boolean, allDisplayTasks: DisplayTask[]) {
+    public render(container: HTMLElement, dates: string[], owner: Component, displayTasks: DisplayTask[]) {
         const viewStart = dates[0];
         const viewEnd = dates[dates.length - 1];
         const startHour = this.plugin.settings.startHour;
 
         // Filter for allDay tasks
-        let tasks = allDisplayTasks.filter(dt => {
+        const tasks = displayTasks.filter(dt => {
             if (!dt.effectiveStartDate) return false;  // D type: excluded
 
             // Use visual start date considering startHour
@@ -45,8 +43,6 @@ export class AllDaySectionRenderer {
                 dt.effectiveStartDate, dt.effectiveStartTime, dt.effectiveEndDate, dt.effectiveEndTime, startHour
             );
         });
-
-        tasks = tasks.filter(isTaskVisible);
 
         // Use shared layout engine
         const entries = computeGridLayout(tasks, {
