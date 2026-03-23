@@ -1,12 +1,12 @@
 import { Task } from '../../types';
 import type TaskViewerPlugin from '../../main';
-import type { TaskDataService } from '../../services/data/TaskDataService';
+import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 
 export interface DragContext {
     container: HTMLElement;
     plugin: TaskViewerPlugin;
-    dataService: TaskDataService;
+    readService: TaskReadService;
     writeService: TaskWriteService;
     onTaskMove: () => void;
     onTaskClick: (taskId: string) => void;

@@ -1,4 +1,4 @@
-import { TaskDataService } from '../../services/data/TaskDataService';
+import { TaskReadService } from '../../services/data/TaskReadService';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
 
 import TaskViewerPlugin from '../../main';
@@ -9,7 +9,7 @@ import { ResizeStrategy } from './strategies/ResizeStrategy';
 
 export class DragHandler implements DragContext {
     container: HTMLElement;
-    dataService: TaskDataService;
+    readService: TaskReadService;
     writeService: TaskWriteService;
     plugin: TaskViewerPlugin;
     onTaskMove: () => void;
@@ -29,9 +29,9 @@ export class DragHandler implements DragContext {
     private lastClickTaskId: string | null = null;
     private lastClickTime: number = 0;
 
-    constructor(container: HTMLElement, dataService: TaskDataService, writeService: TaskWriteService, plugin: TaskViewerPlugin, onTaskClick: (taskId: string) => void, onTaskMove: () => void, getViewStartDate: () => string, getZoomLevel: () => number) {
+    constructor(container: HTMLElement, readService: TaskReadService, writeService: TaskWriteService, plugin: TaskViewerPlugin, onTaskClick: (taskId: string) => void, onTaskMove: () => void, getViewStartDate: () => string, getZoomLevel: () => number) {
         this.container = container;
-        this.dataService = dataService;
+        this.readService = readService;
         this.writeService = writeService;
         this.plugin = plugin;
         this.onTaskClick = onTaskClick;
@@ -117,7 +117,7 @@ export class DragHandler implements DragContext {
 
         if (!taskEl || !taskId) return;
 
-        const task = this.dataService.getTask(taskId);
+        const task = this.readService.getTask(taskId);
         if (!task) return;
         if (task.isReadOnly && isFromHandle) return;
 

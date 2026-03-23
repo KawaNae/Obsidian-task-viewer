@@ -1,6 +1,6 @@
 import { App, MarkdownRenderer, Component, setIcon } from 'obsidian';
 import { Task, DisplayTask, TaskViewerSettings, isCompleteStatusChar, isFrontmatterTask } from '../../types';
-import { TaskDataService } from '../../services/data/TaskDataService';
+import { TaskReadService } from '../../services/data/TaskReadService';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
 import { DateUtils } from '../../utils/DateUtils';
 import { getFileBaseName, hasTaskContent, isContentMatchingBaseName } from '../../services/parsing/utils/TaskContent';
@@ -20,10 +20,10 @@ export class TaskCardRenderer {
     private linkInteractionManager: TaskLinkInteractionManager;
     private onDetailClick: ((task: Task) => void) | null = null;
 
-    constructor(private app: App, dataService: TaskDataService, writeService: TaskWriteService, private linkRuntime: TaskCardLinkRuntime, getSettings: () => TaskViewerSettings) {
+    constructor(private app: App, readService: TaskReadService, writeService: TaskWriteService, private linkRuntime: TaskCardLinkRuntime, getSettings: () => TaskViewerSettings) {
         this.checkboxWiring = new CheckboxWiring(app, writeService);
-        this.childItemBuilder = new ChildItemBuilder(dataService);
-        this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, dataService);
+        this.childItemBuilder = new ChildItemBuilder(readService);
+        this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, readService);
         this.linkInteractionManager = new TaskLinkInteractionManager(app, getSettings);
     }
 
@@ -90,7 +90,7 @@ export class TaskCardRenderer {
 
         if (isFrontmatterTask(task)) {
             for (const childId of task.childIds) {
-                const child = this.childItemBuilder.getDataService().getTask(childId);
+                const child = this.childItemBuilder.getReadService().getTask(childId);
                 if (!child) continue;
                 total++;
                 if (isCompleteStatusChar(child.statusChar, settings.statusDefinitions)) completed++;

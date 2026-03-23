@@ -1,7 +1,6 @@
 import type { TFile } from 'obsidian';
 import type { Task } from '../../types';
 import type { TaskIndex } from '../core/TaskIndex';
-import type { TaskRepository } from '../persistence/TaskRepository';
 
 /**
  * Write-side entry point for views and interaction handlers.
@@ -70,9 +69,4 @@ export class TaskWriteService {
         return this.taskIndex.waitForScan(filePath);
     }
 
-    // ===== Repository access (for menu builders needing file operations) =====
-
-    getRepository(): TaskRepository {
-        return this.taskIndex.getRepository();
-    }
 }

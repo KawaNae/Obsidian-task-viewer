@@ -145,7 +145,7 @@ export class MoveStrategy extends BaseDragStrategy {
 
         // 分割タスク処理
         const originalId = getOriginalTaskId(task);
-        const originalTask = context.dataService.getTask(originalId);
+        const originalTask = context.readService.getTask(originalId);
 
         let originalTaskStartMinutes: number | null = null;
         let originalTaskEndMinutes: number | null = null;
@@ -190,11 +190,11 @@ export class MoveStrategy extends BaseDragStrategy {
             this.dragTimeOffset = mouseMinutes - visualStartMinutes;
         }
 
-        // 分割タスクの全セグメントを非表示リストに追加
+        // 分割タスクの全セグメントを非表示リストに追加（pinnedList内のカードは除外）
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         const allSegments = context.container.querySelectorAll(selector);
         allSegments.forEach(segment => {
-            if (segment instanceof HTMLElement) {
+            if (segment instanceof HTMLElement && !segment.closest('.pinned-list')) {
                 this.hiddenElements.push(segment);
             }
         });
@@ -354,7 +354,7 @@ export class MoveStrategy extends BaseDragStrategy {
         const originalId = getOriginalTaskId(task);
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         context.container.querySelectorAll(selector).forEach(segment => {
-            if (segment instanceof HTMLElement) {
+            if (segment instanceof HTMLElement && !segment.closest('.pinned-list')) {
                 this.hiddenElements.push(segment);
             }
         });

@@ -8,7 +8,7 @@ import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
 
 import { DateUtils } from '../../utils/DateUtils';
-import { TaskDataService } from '../../services/data/TaskDataService';
+import { TaskReadService } from '../../services/data/TaskReadService';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 
@@ -57,7 +57,7 @@ interface TimelineViewState {
 
 export class TimelineView extends ItemView {
     // ==================== Services & Handlers ====================
-    private dataService: TaskDataService;
+    private readService: TaskReadService;
     private writeService: TaskWriteService;
     private plugin: TaskViewerPlugin;
     private taskRenderer: TaskCardRenderer;
@@ -86,6 +86,7 @@ export class TimelineView extends ItemView {
     private scrollToNowOnNextRender = false;
     private hasInitializedStartDate: boolean = false;
     private lastPartialUpdateTime = 0;
+    private lastFullRenderTime = 0;
     // ==================== Pinch zoom state ====================
     private pinchInitialDistance: number = 0;
     private pinchInitialZoom: number = 1;
@@ -98,7 +99,7 @@ export class TimelineView extends ItemView {
 
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
-        this.dataService = plugin.getTaskDataService();
+        this.readService = plugin.getTaskReadService();
         this.writeService = plugin.getTaskWriteService();
         this.plugin = plugin;
         this.viewState = {
@@ -117,7 +118,7 @@ export class TimelineView extends ItemView {
             },
             getIsOpen: () => this.viewState.showSidebar,
         });
-        this.taskRenderer = new TaskCardRenderer(this.app, this.dataService, this.writeService, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.leaf,
         }, () => this.plugin.settings);
@@ -209,19 +210,19 @@ export class TimelineView extends ItemView {
         );
 
         // Initialize MenuHandler
-        this.menuHandler = new MenuHandler(this.app, this.dataService, this.writeService, this.plugin);
+        this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.writeService, this.plugin);
         this.taskRenderer.setChildLineEditCallback((parentTask, childLineIndex, x, y) => {
             childLineMenuBuilder.showMenu(parentTask, childLineIndex, x, y);
         });
         this.taskRenderer.setDetailCallback((task) => {
-            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.dataService).open();
+            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
         });
 
         // Initialize HandleManager
         this.handleManager = new HandleManager(this.container, {
-            getTask: (id) => this.dataService.getTask(id),
+            getTask: (id) => this.readService.getTask(id),
             getStartHour: () => this.plugin.settings.startHour,
         });
 
@@ -231,7 +232,7 @@ export class TimelineView extends ItemView {
             this.app,
             this.viewState,
             this.plugin,
-            this.dataService,
+            this.readService,
             {
                 onRender: () => this.render(),
                 onScrollToNow: () => {
@@ -260,14 +261,14 @@ export class TimelineView extends ItemView {
         this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow);
         this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel());
         this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler);
-        this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.menuHandler, this.dataService);
+        this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.menuHandler, this.readService);
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
         this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.sidebarFilterMenu.setTaskLookupProvider((id) => this.dataService.getTask(id));
+        this.sidebarFilterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.sidebarFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
         // Initialize DragHandler with selection callback, move callback, and view start date provider
-        this.dragHandler = new DragHandler(this.container, this.dataService, this.writeService, this.plugin,
+        this.dragHandler = new DragHandler(this.container, this.readService, this.writeService, this.plugin,
             (taskId: string) => {
                 this.handleManager.selectTask(taskId);
             },
@@ -291,9 +292,9 @@ export class TimelineView extends ItemView {
         });
 
         // Subscribe to data changes
-        this.unsubscribe = this.dataService.onChange((taskId, changes) => {
+        this.unsubscribe = this.readService.onChange((taskId, changes) => {
             // On first data load, re-evaluate startDate and scroll to now
-            if (!this.hasInitializedStartDate && this.dataService.getTasks().length > 0) {
+            if (!this.hasInitializedStartDate && this.readService.getTasks().length > 0) {
                 this.hasInitializedStartDate = true;
                 const oldestOverdue = this.findOldestOverdueDate();
                 const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
@@ -320,7 +321,7 @@ export class TimelineView extends ItemView {
                 if (isSafe) {
                     const card = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
                     if (card) {
-                        const dt = this.dataService.getDisplayTask(taskId);
+                        const dt = this.readService.getDisplayTask(taskId);
                         if (dt) {
                             // Partial Update: Re-render content only
                             const contentContainer = card.querySelector('.task-card__content');
@@ -342,8 +343,9 @@ export class TimelineView extends ItemView {
                 }
             }
 
-            // Skip redundant full render from re-scan after local partial update
-            if (!taskId && !changes && Date.now() - this.lastPartialUpdateTime < 200) {
+            // Skip redundant full render from re-scan after local update
+            const timeSinceLastRender = Date.now() - Math.max(this.lastPartialUpdateTime, this.lastFullRenderTime);
+            if (!taskId && !changes && timeSinceLastRender < 200) {
                 return;
             }
             this.render();
@@ -505,6 +507,8 @@ export class TimelineView extends ItemView {
     }
 
     private render() {
+        this.lastFullRenderTime = Date.now();
+
         // On narrow/mobile, force sidebar closed unless user explicitly opened it this session
         if (this.sidebarManager.isNarrow() && !this.sidebarOpenedThisSession) {
             this.viewState.showSidebar = false;
@@ -555,8 +559,8 @@ export class TimelineView extends ItemView {
             this.render();
         });
 
-        // Get all DisplayTasks (revision-cached by TaskDataService)
-        const allDisplayTasks = this.dataService.getAllDisplayTasks();
+        // Get all DisplayTasks (revision-cached by TaskReadService)
+        const allDisplayTasks = this.readService.getAllDisplayTasks();
 
         // Render pinned lists into sidebar body
         this.pinnedListRenderer.render(
@@ -629,7 +633,7 @@ export class TimelineView extends ItemView {
             this.app,
             this.viewState,
             this.plugin,
-            this.dataService,
+            this.readService,
             {
                 onRender: () => this.render(),
                 onScrollToNow: () => {
@@ -747,7 +751,7 @@ export class TimelineView extends ItemView {
                 this.app.workspace.requestSaveLayout();
                 this.render();
             },
-            getTasks: () => this.dataService.getTasks(),
+            getTasks: () => this.readService.getTasks(),
             getStartHour: () => this.plugin.settings.startHour,
         });
     }
@@ -784,7 +788,7 @@ export class TimelineView extends ItemView {
         const startHour = this.plugin.settings.startHour;
         const visualToday = DateUtils.getVisualDateOfNow(startHour);
         const filterState = this.toolbar.getFilterState();
-        const displayTasks = this.dataService.getFilteredTasks(filterState);
+        const displayTasks = this.readService.getFilteredTasks(filterState);
 
         // Find the oldest past date among incomplete, visible tasks
         let oldestDate: string | null = null;

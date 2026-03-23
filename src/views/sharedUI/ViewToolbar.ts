@@ -8,7 +8,7 @@ import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
 import { ViewTemplateWriter } from '../../services/template/ViewTemplateWriter';
 import { ViewExporter } from '../../services/export/ViewExporter';
 import type { ExportStrategy } from '../../services/export/ExportTypes';
-import type { TaskDataService } from '../../services/data/TaskDataService';
+import type { TaskReadService } from '../../services/data/TaskReadService';
 
 /**
  * Date navigation component with prev/next/today buttons.
@@ -205,7 +205,7 @@ export interface ViewSettingsOptions {
     onApplyTemplate: (template: ViewTemplate) => void;
     onReset: () => void;
     getExportContainer?: () => HTMLElement | null;
-    getDataService?: () => TaskDataService;
+    getReadService?: () => TaskReadService;
     getExportStrategy?: () => ExportStrategy;
 }
 
@@ -344,10 +344,10 @@ export class ViewSettingsMenu {
         });
 
         // Export as image
-        if (options.getExportContainer && options.getDataService && options.getExportStrategy) {
+        if (options.getExportContainer && options.getReadService && options.getExportStrategy) {
             menu.addSeparator();
             const getContainer = options.getExportContainer;
-            const getDataService = options.getDataService;
+            const getReadService = options.getReadService;
             const getStrategy = options.getExportStrategy;
 
             const doExport = async (expandScrollAreas: boolean) => {
@@ -365,7 +365,7 @@ export class ViewSettingsMenu {
                 await ViewExporter.exportAsPng({
                     app: options.app,
                     container,
-                    dataService: getDataService(),
+                    readService: getReadService(),
                     filename,
                     expandScrollAreas,
                 }, getStrategy());

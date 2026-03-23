@@ -1,6 +1,6 @@
 import type { DisplayTask } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
-import type { CategorizedTasks as BaseCategorizedTasks } from '../../../services/data/TaskDataService';
+import type { CategorizedTasks as BaseCategorizedTasks } from '../../../services/data/TaskReadService';
 import type { CategorizedTasks, TimedDisplayTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from './ScheduleGridCalculator';
 
@@ -19,7 +19,7 @@ export class ScheduleTaskCategorizer {
     }
 
     /**
-     * Convert base CategorizedTasks (from TaskDataService) to Schedule-specific format.
+     * Convert base CategorizedTasks (from TaskReadService) to Schedule-specific format.
      * Adds visualStartMinute/visualEndMinute to timed tasks and applies sorting.
      */
     toScheduleFormat(base: BaseCategorizedTasks): CategorizedTasks {

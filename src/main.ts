@@ -36,14 +36,14 @@ import { CheckboxMenuBuilder } from './interaction/menu/builders/CheckboxMenuBui
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 import { registerCliHandlers } from './cli/CliRegistrar';
 import { TaskApi } from './api/TaskApi';
-import { TaskDataService } from './services/data/TaskDataService';
+import { TaskReadService } from './services/data/TaskReadService';
 import { TaskWriteService } from './services/data/TaskWriteService';
 import { initI18n, t } from './i18n';
 import { TaskParser } from './services/parsing/TaskParser';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
-    private dataService: TaskDataService;
+    private readService: TaskReadService;
     private writeService: TaskWriteService;
     private timerWidget: TimerWidget;
     public settings: TaskViewerSettings;
@@ -72,7 +72,7 @@ export default class TaskViewerPlugin extends Plugin {
         // Initialize Services
         this.taskIndex = new TaskIndex(this.app, this.settings);
         await this.taskIndex.initialize();
-        this.dataService = new TaskDataService(this.taskIndex, this.settings.startHour);
+        this.readService = new TaskReadService(this.taskIndex, this.settings.startHour);
         this.writeService = new TaskWriteService(this.taskIndex);
 
         // Public API (plugin interop / DataviewJS)
@@ -414,7 +414,7 @@ export default class TaskViewerPlugin extends Plugin {
     async saveSettings() {
         await this.saveData(this.settings);
         this.taskIndex.updateSettings(this.settings);
-        this.dataService.updateStartHour(this.settings.startHour);
+        this.readService.updateStartHour(this.settings.startHour);
         this.updateViewHeaderStyles();
 
         this.refreshAllViews();
@@ -453,8 +453,8 @@ export default class TaskViewerPlugin extends Plugin {
         return this.taskIndex;
     }
 
-    getTaskDataService(): TaskDataService {
-        return this.dataService;
+    getTaskReadService(): TaskReadService {
+        return this.readService;
     }
 
     getTaskWriteService(): TaskWriteService {

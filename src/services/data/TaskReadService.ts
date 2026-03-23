@@ -15,13 +15,13 @@ export interface CategorizedTasks {
 }
 
 /**
- * Centralized data processing service for task views.
+ * Read-side entry point for views and interaction handlers.
  *
  * Provides cached DisplayTask conversion, date-based filtering/splitting,
  * and shared FilterContext creation. Used by both internal views and
  * the public TaskApi.
  */
-export class TaskDataService {
+export class TaskReadService {
     private cachedDisplayTasks: DisplayTask[] | null = null;
     private cacheRevision: number = -1;
 

@@ -4,7 +4,7 @@ import type { DisplayTask } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
-import type { TaskDataService } from '../../../services/data/TaskDataService';
+import type { TaskReadService } from '../../../services/data/TaskReadService';
 import type { FilterState } from '../../../services/filter/FilterTypes';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
 import { TaskLayout } from '../TaskLayout';
@@ -22,9 +22,9 @@ export class TimelineSectionRenderer {
         private getZoomLevel: () => number
     ) { }
 
-    public render(container: HTMLElement, date: string, owner: Component, dataService: TaskDataService, filterState?: FilterState) {
+    public render(container: HTMLElement, date: string, owner: Component, readService: TaskReadService, filterState?: FilterState) {
         const startHour = this.plugin.settings.startHour;
-        const { timed: renderableTasks } = dataService.getTasksForDate(date, filterState);
+        const { timed: renderableTasks } = readService.getTasksForDate(date, filterState);
 
         // Calculate layout for overlapping tasks
         const layout = TaskLayout.calculateTaskLayout(renderableTasks, date, startHour);

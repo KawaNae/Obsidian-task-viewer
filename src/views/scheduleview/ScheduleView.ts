@@ -27,7 +27,7 @@ import { ScheduleGridRenderer } from './renderers/ScheduleGridRenderer';
 import { ScheduleTaskRenderer } from './renderers/ScheduleTaskRenderer';
 import { ScheduleSectionRenderer } from './renderers/ScheduleSectionRenderer';
 import { isDisplayTaskOnVisualDate } from '../../services/display/DisplayTaskConverter';
-import { TaskDataService, type CategorizedTasks as BaseCategorizedTasks } from '../../services/data/TaskDataService';
+import { TaskReadService, type CategorizedTasks as BaseCategorizedTasks } from '../../services/data/TaskReadService';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 
@@ -46,7 +46,7 @@ export class ScheduleView extends ItemView {
     private static readonly TIMELINE_TOP_PADDING_PX = 16;
     private static readonly TIMELINE_BOTTOM_PADDING_PX = 16;
     private readonly plugin: TaskViewerPlugin;
-    private readonly dataService: TaskDataService;
+    private readonly readService: TaskReadService;
     private readonly writeService: TaskWriteService;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
@@ -75,22 +75,22 @@ export class ScheduleView extends ItemView {
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
         this.plugin = plugin;
-        this.dataService = plugin.getTaskDataService();
+        this.readService = plugin.getTaskReadService();
         this.writeService = plugin.getTaskWriteService();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.dataService, this.writeService, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.leaf,
         }, () => this.plugin.settings);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
-        this.menuHandler = new MenuHandler(this.app, this.dataService, this.writeService, this.plugin);
+        this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.writeService, this.plugin);
         this.taskRenderer.setChildLineEditCallback((parentTask, childLineIndex, x, y) => {
             childLineMenuBuilder.showMenu(parentTask, childLineIndex, x, y);
         });
         this.taskRenderer.setDetailCallback((task) => {
-            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.dataService).open();
+            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
         });
         this.gridCalculator = new ScheduleGridCalculator({
             getStartHour: () => this.plugin.settings.startHour,
@@ -120,7 +120,7 @@ export class ScheduleView extends ItemView {
             currentVisualDateProvider: () => this.currentVisualDate,
         });
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.dataService.getTask(id));
+        this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
     }
 
@@ -186,7 +186,7 @@ export class ScheduleView extends ItemView {
         this.scrollToNowOnNextRender = true;
         await this.render();
 
-        this.unsubscribe = this.dataService.onChange(() => {
+        this.unsubscribe = this.readService.onChange(() => {
             void this.render();
         });
     }
@@ -241,10 +241,10 @@ export class ScheduleView extends ItemView {
         this.renderToolbar(toolbarHost);
 
         const filterState = this.filterMenu.getFilterState();
-        const baseCategorized = this.dataService.getTasksForDate(this.currentVisualDate, filterState);
+        const baseCategorized = this.readService.getTasksForDate(this.currentVisualDate, filterState);
         this.menuHandler.setViewStartDate(this.currentVisualDate);
 
-        const allDisplayTasks = this.dataService.getAllDisplayTasks();
+        const allDisplayTasks = this.readService.getAllDisplayTasks();
 
         const fixedHost = this.container.createDiv('schedule-view__fixed-host');
         const fixedContainer = fixedHost.createDiv('schedule-view__container schedule-view__fixed-rows');
@@ -295,7 +295,7 @@ export class ScheduleView extends ItemView {
                     void this.render();
                     filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
                 },
-                getTasks: () => this.dataService.getTasks(),
+                getTasks: () => this.readService.getTasks(),
                 getStartHour: () => this.plugin.settings.startHour,
             });
         });
@@ -323,7 +323,7 @@ export class ScheduleView extends ItemView {
                 filterState: this.filterMenu.getFilterState(),
             }),
             getExportContainer: () => this.container,
-            getDataService: () => this.dataService,
+            getReadService: () => this.readService,
             getExportStrategy: () => new ScheduleExportStrategy(),
             onApplyTemplate: (template) => {
                 if (template.filterState) {
@@ -418,7 +418,7 @@ export class ScheduleView extends ItemView {
         if (date < todayVisualDate) {
             const startHour = this.plugin.settings.startHour;
             const filterState = this.filterMenu.getFilterState();
-            const filteredTasks = this.dataService.getFilteredTasks(filterState);
+            const filteredTasks = this.readService.getFilteredTasks(filterState);
             const hasOverdueTasks = filteredTasks.some(dt =>
                 isDisplayTaskOnVisualDate(dt, date, startHour) &&
                 !isCompleteStatusChar(dt.statusChar, this.plugin.settings.statusDefinitions)

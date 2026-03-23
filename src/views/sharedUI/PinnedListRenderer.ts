@@ -12,7 +12,7 @@ import { combineFilterStates, hasConditions, type FilterState } from '../../serv
 import { hasSortRules } from '../../services/sort/SortTypes';
 import TaskViewerPlugin from '../../main';
 import { TaskStyling } from './TaskStyling';
-import type { TaskDataService } from '../../services/data/TaskDataService';
+import type { TaskReadService } from '../../services/data/TaskReadService';
 
 export interface PinnedListCallbacks {
     onCollapsedChange: (listId: string, collapsed: boolean) => void;
@@ -38,7 +38,7 @@ export class PinnedListRenderer {
         private taskRenderer: TaskCardRenderer,
         private plugin: TaskViewerPlugin,
         private menuHandler: MenuHandler,
-        private dataService: TaskDataService,
+        private readService: TaskReadService,
     ) {}
 
     /** Schedule inline rename for a list on the next render. */
@@ -68,7 +68,7 @@ export class PinnedListRenderer {
             const combinedFilter = listDef.applyViewFilter && viewFilterState
                 ? combineFilterStates(listDef.filterState, viewFilterState)
                 : listDef.filterState;
-            const tasks = this.dataService.getFilteredTasks(combinedFilter, listDef.sortState);
+            const tasks = this.readService.getFilteredTasks(combinedFilter, listDef.sortState);
 
             this.renderList(container, listDef, tasks, owner, collapsedState, callbacks, i, lists.length);
         }

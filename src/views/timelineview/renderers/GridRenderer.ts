@@ -15,7 +15,7 @@ import { TimelineSectionRenderer } from './TimelineSectionRenderer';
 import { isDisplayTaskOnVisualDate } from '../../../services/display/DisplayTaskConverter';
 import type { DisplayTask } from '../../../types';
 import type { FilterState } from '../../../services/filter/FilterTypes';
-import type { TaskDataService } from '../../../services/data/TaskDataService';
+import type { TaskReadService } from '../../../services/data/TaskReadService';
 import { HabitTrackerRenderer } from '../../sharedUI/HabitTrackerRenderer';
 
 type DateHeaderDisplayEntry = {
@@ -30,7 +30,7 @@ export class GridRenderer {
     private isAllDayCollapsed: boolean = false;
     private headerResizeObserver: ResizeObserver | null = null;
     private dateLinkInteractionManager: TaskLinkInteractionManager;
-    private dataService: TaskDataService;
+    private readService: TaskReadService;
 
     constructor(
         private container: HTMLElement,
@@ -38,7 +38,7 @@ export class GridRenderer {
         private plugin: TaskViewerPlugin,
         private menuHandler: MenuHandler,
     ) {
-        this.dataService = this.plugin.getTaskDataService();
+        this.readService = this.plugin.getTaskReadService();
         this.dateLinkInteractionManager = new TaskLinkInteractionManager(
             this.plugin.app, () => this.plugin.settings
         );
@@ -79,7 +79,7 @@ export class GridRenderer {
         const completeChars = this.plugin.settings.statusDefinitions;
         const overdueDates = new Set<string>();
         const filteredTasks = filterState
-            ? this.dataService.getFilteredTasks(filterState)
+            ? this.readService.getFilteredTasks(filterState)
             : allDisplayTasks;
         for (const dt of filteredTasks) {
             if (isCompleteStatusChar(dt.statusChar, completeChars)) continue;
@@ -244,7 +244,7 @@ export class GridRenderer {
         dates.forEach(date => {
             const col = timelineGrid.createDiv('day-timeline-column');
             col.dataset.date = date;
-            timelineRenderer.render(col, date, owner, this.dataService, filterState);
+            timelineRenderer.render(col, date, owner, this.readService, filterState);
 
             // Add interaction listeners for creating tasks
             timelineRenderer.addCreateTaskListeners(col, date);

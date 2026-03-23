@@ -184,7 +184,7 @@ export class ResizeStrategy extends BaseDragStrategy {
         }
 
         const originalId = getOriginalTaskId(this.dragTask);
-        const originalTask = context.dataService.getTask(originalId);
+        const originalTask = context.readService.getTask(originalId);
         if (!originalTask) {
             this.cleanup();
             return;
@@ -268,7 +268,7 @@ export class ResizeStrategy extends BaseDragStrategy {
         const originalId = getOriginalTaskId(task);
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         context.container.querySelectorAll(selector).forEach(segment => {
-            if (segment instanceof HTMLElement) {
+            if (segment instanceof HTMLElement && !segment.closest('.pinned-list')) {
                 this.hiddenElements.push(segment);
             }
         });

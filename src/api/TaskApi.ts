@@ -1,7 +1,7 @@
 import { TFile } from 'obsidian';
 import type TaskViewerPlugin from '../main';
 import type { Task, DisplayTask, PinnedListDefinition } from '../types';
-import type { TaskDataService } from '../services/data/TaskDataService';
+import type { TaskReadService } from '../services/data/TaskReadService';
 import type { TaskWriteService } from '../services/data/TaskWriteService';
 import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 import { normalizeTask } from './TaskNormalizer';
@@ -249,11 +249,11 @@ function parseDateTimeParam(value: string, fieldName: string): { date: string; t
 // ── Public API ──
 
 export class TaskApi {
-    private dataService: TaskDataService;
+    private readService: TaskReadService;
     private writeService: TaskWriteService;
 
     constructor(private plugin: TaskViewerPlugin) {
-        this.dataService = plugin.getTaskDataService();
+        this.readService = plugin.getTaskReadService();
         this.writeService = plugin.getTaskWriteService();
     }
 
@@ -270,16 +270,16 @@ export class TaskApi {
             p.filter = result;
         }
 
-        const dataService = this.dataService;
+        const readService = this.readService;
 
         const filterState = buildFilterFromParams(p);
         const sortState = buildSortState(p.sort);
 
         let filtered: DisplayTask[];
         if (filterState) {
-            filtered = dataService.getFilteredTasks(filterState, sortState);
+            filtered = readService.getFilteredTasks(filterState, sortState);
         } else {
-            filtered = [...dataService.getAllDisplayTasks()];
+            filtered = [...readService.getAllDisplayTasks()];
             TaskSorter.sort(filtered, sortState);
         }
 
@@ -292,11 +292,11 @@ export class TaskApi {
      */
     today(params?: TodayParams): TaskListResult {
         const p = params ?? {};
-        const dataService = this.dataService;
+        const readService = this.readService;
         const { startHour } = this.plugin.settings;
         const today = DateUtils.getVisualDateOfNow(startHour);
 
-        const displayTasks = dataService.getAllDisplayTasks();
+        const displayTasks = readService.getAllDisplayTasks();
 
         let filtered = displayTasks.filter(t => {
             const start = t.effectiveStartDate;
@@ -326,7 +326,7 @@ export class TaskApi {
     get(params: GetParams): NormalizedTask {
         if (!params.id) throw new TaskApiError('Missing required parameter: id');
 
-        const dt = this.dataService.getDisplayTask(params.id);
+        const dt = this.readService.getDisplayTask(params.id);
         if (!dt) throw new TaskApiError(`Task not found: ${params.id}`);
         return normalizeTask(dt);
     }
@@ -349,10 +349,10 @@ export class TaskApi {
         const template = await loader.loadFullTemplate(summary.filePath);
         if (!template) throw new TaskApiError(`Failed to load template: ${params.template}`);
 
-        const dataService = this.dataService;
-        const allDisplayTasks = dataService.getAllDisplayTasks();
+        const readService = this.readService;
+        const allDisplayTasks = readService.getAllDisplayTasks();
         const viewFiltered = template.filterState
-            ? dataService.getFilteredTasks(template.filterState)
+            ? readService.getFilteredTasks(template.filterState)
             : allDisplayTasks;
 
         const pinnedLists: PinnedListDefinition[] = template.pinnedLists
@@ -375,7 +375,7 @@ export class TaskApi {
             const combinedFilter = list.applyViewFilter !== false && template.filterState
                 ? combineFilterStates(list.filterState, template.filterState)
                 : list.filterState;
-            const matched = dataService.getFilteredTasks(combinedFilter, list.sortState);
+            const matched = readService.getFilteredTasks(combinedFilter, list.sortState);
             return { name: list.name, count: matched.length, tasks: matched.map(normalizeTask) };
         });
 
@@ -438,7 +438,7 @@ export class TaskApi {
 
         await this.writeService.waitForScan(params.file);
 
-        const tasks = this.dataService.getTasks().filter(
+        const tasks = this.readService.getTasks().filter(
             t => t.file === params.file && t.content === content,
         );
         const created = tasks.length > 0
@@ -456,7 +456,7 @@ export class TaskApi {
     async update(params: UpdateParams): Promise<MutationResult> {
         if (!params.id) throw new TaskApiError('Missing required parameter: id');
 
-        const task = this.dataService.getTask(params.id);
+        const task = this.readService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
 
         const updates: Partial<Task> = {};
@@ -483,7 +483,7 @@ export class TaskApi {
 
         await this.writeService.updateTask(params.id, updates);
 
-        const updated = this.dataService.getTask(params.id);
+        const updated = this.readService.getTask(params.id);
         if (!updated) throw new TaskApiError(`Task not found after update: ${params.id}`);
 
         return { task: normalizeTask(toDisplayTask(updated, this.plugin.settings.startHour)) };
@@ -495,7 +495,7 @@ export class TaskApi {
     async delete(params: DeleteParams): Promise<DeleteResult> {
         if (!params.id) throw new TaskApiError('Missing required parameter: id');
 
-        const task = this.dataService.getTask(params.id);
+        const task = this.readService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
 
         await this.writeService.deleteTask(params.id);

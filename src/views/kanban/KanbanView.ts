@@ -18,7 +18,7 @@ import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManag
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
 import type { PinnedListDefinition, DisplayTask } from '../../types';
-import type { TaskDataService } from '../../services/data/TaskDataService';
+import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 
 export const VIEW_TYPE_KANBAN = VIEW_META_KANBAN.type;
@@ -32,7 +32,7 @@ interface KanbanViewState {
 
 export class KanbanView extends ItemView {
     private readonly plugin: TaskViewerPlugin;
-    private readonly dataService: TaskDataService;
+    private readonly readService: TaskReadService;
     private readonly writeService: TaskWriteService;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
@@ -51,27 +51,27 @@ export class KanbanView extends ItemView {
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
         this.plugin = plugin;
-        this.dataService = this.plugin.getTaskDataService();
+        this.readService = this.plugin.getTaskReadService();
         this.writeService = this.plugin.getTaskWriteService();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.dataService, this.writeService, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.leaf,
         }, () => this.plugin.settings);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
-        this.menuHandler = new MenuHandler(this.app, this.dataService, this.writeService, this.plugin);
+        this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.writeService, this.plugin);
         this.taskRenderer.setChildLineEditCallback((parentTask, childLineIndex, x, y) => {
             childLineMenuBuilder.showMenu(parentTask, childLineIndex, x, y);
         });
         this.taskRenderer.setDetailCallback((task) => {
-            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.dataService).open();
+            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
         });
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.dataService.getTask(id));
+        this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
         this.viewFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.viewFilterMenu.setTaskLookupProvider((id) => this.dataService.getTask(id));
+        this.viewFilterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
     }
 
@@ -147,7 +147,7 @@ export class KanbanView extends ItemView {
 
         this.render();
 
-        this.unsubscribe = this.dataService.onChange(() => {
+        this.unsubscribe = this.readService.onChange(() => {
             this.render();
         });
     }
@@ -205,7 +205,7 @@ export class KanbanView extends ItemView {
                     this.render();
                     filterBtn.classList.toggle('is-filtered', this.viewFilterMenu.hasActiveFilters());
                 },
-                getTasks: () => this.dataService.getTasks(),
+                getTasks: () => this.readService.getTasks(),
                 getStartHour: () => this.plugin.settings.startHour,
             });
         };
@@ -234,7 +234,7 @@ export class KanbanView extends ItemView {
                 filterState: this.viewFilterMenu.getFilterState(),
             }),
             getExportContainer: () => this.container,
-            getDataService: () => this.dataService,
+            getReadService: () => this.readService,
             getExportStrategy: () => new KanbanExportStrategy(),
             onApplyTemplate: (template) => {
                 if (template.grid && template.grid.length > 0) {
@@ -272,7 +272,7 @@ export class KanbanView extends ItemView {
         const combinedFilter = (this.viewFilterState && hasConditions(this.viewFilterState) && listDef.applyViewFilter)
             ? combineFilterStates(listDef.filterState, this.viewFilterState)
             : listDef.filterState;
-        const tasks = this.dataService.getFilteredTasks(combinedFilter, listDef.sortState);
+        const tasks = this.readService.getFilteredTasks(combinedFilter, listDef.sortState);
 
         const toggle = header.createSpan({ text: isCollapsed ? '▶' : '▼', cls: 'kanban-view__cell-toggle' });
         const nameEl = header.createSpan({ text: listDef.name, cls: 'kanban-view__cell-name' });
@@ -311,7 +311,7 @@ export class KanbanView extends ItemView {
                     this.requestSaveLayout();
                     this.render();
                 },
-                getTasks: () => this.dataService.getTasks(),
+                getTasks: () => this.readService.getTasks(),
                 getStartHour: () => this.plugin.settings.startHour,
             });
         });

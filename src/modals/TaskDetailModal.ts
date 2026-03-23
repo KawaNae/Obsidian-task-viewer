@@ -3,7 +3,7 @@ import { Task, TaskViewerSettings } from '../types';
 import { TaskCardRenderer } from '../views/taskcard/TaskCardRenderer';
 import { TaskStyling } from '../views/sharedUI/TaskStyling';
 import { MenuHandler } from '../interaction/menu/MenuHandler';
-import type { TaskDataService } from '../services/data/TaskDataService';
+import type { TaskReadService } from '../services/data/TaskReadService';
 import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 
 export class TaskDetailModal extends Modal {
@@ -16,7 +16,7 @@ export class TaskDetailModal extends Modal {
         private taskRenderer: TaskCardRenderer,
         private menuHandler: MenuHandler,
         private settings: TaskViewerSettings,
-        private dataService: TaskDataService
+        private readService: TaskReadService
     ) {
         super(app);
     }
@@ -24,8 +24,8 @@ export class TaskDetailModal extends Modal {
     async onOpen(): Promise<void> {
         await this.renderCard();
 
-        this.unsubscribe = this.dataService.onChange(() => {
-            const fresh = this.dataService.getTask(this.task.id);
+        this.unsubscribe = this.readService.onChange(() => {
+            const fresh = this.readService.getTask(this.task.id);
             if (fresh) {
                 this.task = fresh;
                 void this.renderCard();

@@ -1,6 +1,6 @@
 import { App, Menu, Notice } from 'obsidian';
 import { Task } from '../../types';
-import { TaskDataService } from '../../services/data/TaskDataService';
+import { TaskReadService } from '../../services/data/TaskReadService';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
 import TaskViewerPlugin from '../../main';
 import { TouchEventHandler } from './TouchEventHandler';
@@ -27,7 +27,7 @@ export class MenuHandler {
 
     constructor(
         private app: App,
-        private dataService: TaskDataService,
+        private readService: TaskReadService,
         private writeService: TaskWriteService,
         private plugin: TaskViewerPlugin
     ) {
@@ -68,7 +68,7 @@ export class MenuHandler {
      * Show context menu for a task by its ID at the given position.
      */
     showMenuForTask(taskId: string, x: number, y: number): void {
-        const task = this.dataService.getTask(taskId);
+        const task = this.readService.getTask(taskId);
         if (!task) return;
         this.showContextMenu(x, y, task);
     }
@@ -79,7 +79,7 @@ export class MenuHandler {
     private showContextMenu(x: number, y: number, taskInput: Task) {
         // Resolve the real task from the index
         const originalId = getOriginalTaskId(taskInput);
-        const task = this.dataService.getTask(originalId);
+        const task = this.readService.getTask(originalId);
 
         if (!task) {
             new Notice('Task not found in index');

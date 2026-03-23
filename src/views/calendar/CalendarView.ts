@@ -5,7 +5,7 @@ import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { Task, DisplayTask, PinnedListDefinition } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { TaskDataService } from '../../services/data/TaskDataService';
+import { TaskReadService } from '../../services/data/TaskReadService';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
@@ -56,7 +56,7 @@ interface CalendarViewState {
 
 export class CalendarView extends ItemView {
     private readonly plugin: TaskViewerPlugin;
-    private readonly dataService: TaskDataService;
+    private readonly readService: TaskReadService;
     private readonly writeService: TaskWriteService;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
@@ -84,14 +84,14 @@ export class CalendarView extends ItemView {
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
         this.plugin = plugin;
-        this.dataService = plugin.getTaskDataService();
+        this.readService = plugin.getTaskReadService();
         this.writeService = plugin.getTaskWriteService();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.dataService, this.writeService, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.leaf,
         }, () => this.plugin.settings);
         this.taskRenderer.setDetailCallback((task) => {
-            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.dataService).open();
+            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
         });
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.sidebarManager = new SidebarManager({
@@ -109,10 +109,10 @@ export class CalendarView extends ItemView {
         const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
         this.windowStart = DateUtils.getLocalDateString(weekStart);
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.dataService.getTask(id));
+        this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
         this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.sidebarFilterMenu.setTaskLookupProvider((id) => this.dataService.getTask(id));
+        this.sidebarFilterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.sidebarFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
     }
 
@@ -191,22 +191,22 @@ export class CalendarView extends ItemView {
             this.registerDomEvent(el as any, ev as any, handler),
         );
 
-        this.menuHandler = new MenuHandler(this.app, this.dataService, this.writeService, this.plugin);
+        this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.writeService, this.plugin);
         this.taskRenderer.setChildLineEditCallback((parentTask, childLineIndex, x, y) => {
             childLineMenuBuilder.showMenu(parentTask, childLineIndex, x, y);
         });
         this.pinnedListRenderer = new PinnedListRenderer(
-            this.taskRenderer, this.plugin, this.menuHandler, this.dataService,
+            this.taskRenderer, this.plugin, this.menuHandler, this.readService,
         );
         this.handleManager = new HandleManager(this.container, {
-            getTask: (id) => this.dataService.getTask(id),
+            getTask: (id) => this.readService.getTask(id),
             getStartHour: () => this.plugin.settings.startHour,
         });
         this.dragHandler = new DragHandler(
             this.container,
-            this.dataService,
+            this.readService,
             this.writeService,
             this.plugin,
             (taskId: string) => {
@@ -229,7 +229,7 @@ export class CalendarView extends ItemView {
 
         await this.render();
 
-        this.unsubscribe = this.dataService.onChange(() => {
+        this.unsubscribe = this.readService.onChange(() => {
             void this.render();
         });
     }
@@ -388,7 +388,7 @@ export class CalendarView extends ItemView {
                     void this.render();
                     filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
                 },
-                getTasks: () => this.dataService.getTasks(),
+                getTasks: () => this.readService.getTasks(),
                 getStartHour: () => this.plugin.settings.startHour,
             });
         });
@@ -420,7 +420,7 @@ export class CalendarView extends ItemView {
                 pinnedLists: this.pinnedLists,
             }),
             getExportContainer: () => this.container.querySelector<HTMLElement>('.calendar-grid'),
-            getDataService: () => this.dataService,
+            getReadService: () => this.readService,
             getExportStrategy: () => new CalendarExportStrategy(),
             onApplyTemplate: (template) => {
                 if (template.filterState) {
@@ -559,7 +559,7 @@ export class CalendarView extends ItemView {
                 this.app.workspace.requestSaveLayout();
                 void this.render();
             },
-            getTasks: () => this.dataService.getTasks(),
+            getTasks: () => this.readService.getTasks(),
             getStartHour: () => this.plugin.settings.startHour,
         });
     }
@@ -676,7 +676,7 @@ export class CalendarView extends ItemView {
 
     private getVisibleTasksInRange(rangeStart: string, rangeEnd: string): DisplayTask[] {
         const filterState = this.filterMenu.getFilterState();
-        return this.dataService.getTasksForDateRange(rangeStart, rangeEnd, filterState);
+        return this.readService.getTasksForDateRange(rangeStart, rangeEnd, filterState);
     }
 
     private async renderGridTask(

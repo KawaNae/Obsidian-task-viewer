@@ -1,7 +1,7 @@
 import { App, setIcon, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import { ViewState, isCompleteStatusChar } from '../../types';
-import { TaskDataService } from '../../services/data/TaskDataService';
+import { TaskReadService } from '../../services/data/TaskReadService';
 import { DateUtils } from '../../utils/DateUtils';
 import type { LeafPosition } from '../sharedLogic/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
@@ -39,16 +39,16 @@ export class TimelineToolbar {
         private app: App,
         private viewState: ViewState,
         private plugin: TaskViewerPlugin,
-        private dataService: TaskDataService,
+        private readService: TaskReadService,
         private callbacks: ToolbarCallbacks
     ) {
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.dataService.getTask(id));
+        this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
     }
 
     /**
-     * Returns the current FilterState object (for dataService queries).
+     * Returns the current FilterState object (for readService queries).
      */
     getFilterState(): FilterState {
         return this.filterMenu.getFilterState();
@@ -145,7 +145,7 @@ export class TimelineToolbar {
                 this.app.workspace.requestSaveLayout();
             },
             getExportContainer: () => this.container.closest('.timeline-view')?.querySelector<HTMLElement>('.timeline-grid') ?? null,
-            getDataService: () => this.dataService,
+            getReadService: () => this.readService,
             getExportStrategy: () => new TimelineExportStrategy(),
             onReset: () => {
                 this.viewState.daysToShow = 3;
@@ -187,9 +187,9 @@ export class TimelineToolbar {
     private findOldestOverdueDate(): string | null {
         const startHour = this.plugin.settings.startHour;
         const visualToday = DateUtils.getVisualDateOfNow(startHour);
-        const dataService = this.plugin.getTaskDataService();
+        const readService = this.plugin.getTaskReadService();
         const filterState = this.getFilterState();
-        const displayTasks = dataService.getFilteredTasks(filterState);
+        const displayTasks = readService.getFilteredTasks(filterState);
 
         // Find the oldest past date among incomplete tasks
         let oldestDate: string | null = null;
@@ -240,7 +240,7 @@ export class TimelineToolbar {
         filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
 
         filterBtn.onclick = (e) => {
-            const allTasks = this.dataService.getTasks();
+            const allTasks = this.readService.getTasks();
 
             this.filterMenu.showMenu(e, {
                 onFilterChange: () => {
