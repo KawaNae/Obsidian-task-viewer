@@ -12,7 +12,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import {
     cliList, cliToday, cliGet, cliCreate, cliUpdate, cliDelete,
     isObsidianRunning, obsidianCli,
-} from './cli-helper';
+} from '../helpers/cli-helper';
 
 const TEST_FILE = 'test-tags-properties.md';
 

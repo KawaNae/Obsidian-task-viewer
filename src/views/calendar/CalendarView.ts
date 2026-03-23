@@ -772,7 +772,6 @@ export class CalendarView extends ItemView {
         const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.calendarWeekStartDay);
         if (DateUtils.getLocalDateString(weekStartDate) === DateUtils.getLocalDateString(todayWeekStart)) {
             weekNumberEl.addClass('is-current-week');
-            weekRow.addClass('is-current-week');
         }
 
         const weekLinkTarget = DailyNoteUtils.getWeeklyNoteLinkTarget(this.plugin.settings, weekStartDate);

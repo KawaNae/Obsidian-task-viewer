@@ -10,7 +10,10 @@ export function obsidianCli(command: string, flags: Record<string, string | bool
         if (val === true) {
             parts.push(key);
         } else if (val !== false && val !== '') {
-            parts.push(`${key}=${val}`);
+            // Quote values that contain spaces so the CLI parser doesn't split them
+            const strVal = String(val);
+            const needsQuoting = strVal.includes(' ');
+            parts.push(needsQuoting ? `${key}='${strVal}'` : `${key}=${strVal}`);
         }
     }
     const args = parts.join(' ');

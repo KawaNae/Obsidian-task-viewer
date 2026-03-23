@@ -4,11 +4,10 @@ import { resolve } from 'node:path';
 export default defineConfig({
     test: {
         environment: 'node',
-        setupFiles: ['tests/setup/vitest.setup.ts'],
+        setupFiles: ['tests/unit/setup/vitest.setup.ts'],
         alias: {
-            obsidian: resolve(__dirname, 'tests/mocks/obsidian.ts'),
+            obsidian: resolve(__dirname, 'tests/unit/mocks/obsidian.ts'),
         },
-        include: ['tests/**/*.test.ts'],
-        exclude: ['tests/e2e/**'],
+        include: ['tests/unit/**/*.test.ts'],
     },
 });

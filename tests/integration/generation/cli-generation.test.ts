@@ -14,7 +14,7 @@ import * as path from 'path';
 import {
     cliList, cliGet, cliUpdate, cliDelete,
     isObsidianRunning, waitForTask, waitForTaskGone, sleep,
-} from './cli-helper';
+} from '../helpers/cli-helper';
 
 const TEST_FILE = 'test-generation-commands.md';
 const VAULT_PATH = 'C:\\Obsidian\\Dev';

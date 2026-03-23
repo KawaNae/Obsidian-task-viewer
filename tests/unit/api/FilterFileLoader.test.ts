@@ -9,7 +9,7 @@ import type { ViewTemplate, PinnedListDefinition } from '../../../src/types';
 
 const mockLoadFullTemplate = vi.fn<(path: string) => Promise<ViewTemplate | null>>();
 
-vi.mock('../../src/services/template/ViewTemplateLoader', () => {
+vi.mock('../../../src/services/template/ViewTemplateLoader', () => {
     return {
         ViewTemplateLoader: class {
             loadFullTemplate = mockLoadFullTemplate;
