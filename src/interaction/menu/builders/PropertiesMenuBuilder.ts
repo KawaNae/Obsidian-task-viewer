@@ -1,6 +1,6 @@
 import { App, Menu } from 'obsidian';
 import { Task, DisplayTask, PropertyType, isFrontmatterTask } from '../../../types';
-import { TaskIndex } from '../../../services/core/TaskIndex';
+import { TaskWriteService } from '../../../services/data/TaskWriteService';
 import TaskViewerPlugin from '../../../main';
 import { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } from '../PropertyCalculator';
 import { PropertyFormatter } from '../PropertyFormatter';
@@ -20,7 +20,7 @@ type ChangePropertiesFocusField = 'name' | 'start' | 'end' | 'due';
 export class PropertiesMenuBuilder {
     constructor(
         private app: App,
-        private taskIndex: TaskIndex,
+        private writeService: TaskWriteService,
         private plugin: TaskViewerPlugin,
         private propertyCalculator: PropertyCalculator,
         private propertyFormatter: PropertyFormatter
@@ -86,7 +86,7 @@ export class PropertiesMenuBuilder {
                     item.setTitle(createStatusTitle(s))
                         .setChecked(task.statusChar === s.char)
                         .onClick(async () => {
-                            await this.taskIndex.updateTask(task.id, {
+                            await this.writeService.updateTask(task.id, {
                                 statusChar: s.char
                             });
                         });
@@ -199,7 +199,7 @@ export class PropertiesMenuBuilder {
         new CreateTaskModal(
             this.app,
             async (result) => {
-                await this.taskIndex.updateTask(
+                await this.writeService.updateTask(
                     task.id,
                     this.buildTaskUpdatesFromResult(result, task, startCalc, endCalc)
                 );

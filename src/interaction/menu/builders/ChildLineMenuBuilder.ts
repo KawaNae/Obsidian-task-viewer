@@ -1,6 +1,6 @@
 import { App, Menu } from 'obsidian';
 import { Task } from '../../../types';
-import { TaskIndex } from '../../../services/core/TaskIndex';
+import { TaskWriteService } from '../../../services/data/TaskWriteService';
 import { CheckboxMenuBuilder, type CheckboxLineOps, type CreateFrontmatterTaskCallback } from './CheckboxMenuBuilder';
 import { resolveChildLineNumber } from '../../../views/taskcard/ChildLineUtils';
 import TaskViewerPlugin from '../../../main';
@@ -9,14 +9,14 @@ import type { CreateTaskResult } from '../../../modals/CreateTaskModal';
 /**
  * Menu builder for plain checkbox child lines on task cards.
  * Delegates menu construction to CheckboxMenuBuilder,
- * providing TaskIndex-based line operations.
+ * providing TaskWriteService-based line operations.
  */
 export class ChildLineMenuBuilder {
     private checkboxMenuBuilder: CheckboxMenuBuilder;
 
     constructor(
         private app: App,
-        private taskIndex: TaskIndex,
+        private writeService: TaskWriteService,
         private plugin: TaskViewerPlugin
     ) {
         const onCreateFrontmatterTask: CreateFrontmatterTaskCallback = async (result, statusChar) => {
@@ -43,9 +43,9 @@ export class ChildLineMenuBuilder {
         const menu = new Menu();
 
         const ops: CheckboxLineOps = {
-            updateLine: (content) => this.taskIndex.updateLine(filePath, lineNumber, content),
-            insertLineAfter: (content) => this.taskIndex.insertLineAfterLine(filePath, lineNumber, content),
-            deleteLine: () => this.taskIndex.deleteLine(filePath, lineNumber),
+            updateLine: (content) => this.writeService.updateLine(filePath, lineNumber, content),
+            insertLineAfter: (content) => this.writeService.insertLineAfterLine(filePath, lineNumber, content),
+            deleteLine: () => this.writeService.deleteLine(filePath, lineNumber),
         };
 
         this.checkboxMenuBuilder.addFullMenu(menu, lineText, settings, ops, filePath);

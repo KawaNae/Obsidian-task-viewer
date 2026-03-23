@@ -2,14 +2,14 @@ import { ItemView, WorkspaceLeaf, setIcon, type Workspace, type ViewStateResult 
 import { t } from '../../i18n';
 import { ViewUriBuilder } from '../sharedLogic/ViewUriBuilder';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import { TaskIndex } from '../../services/core/TaskIndex';
-import { Task, ViewState, PinnedListDefinition, isCompleteStatusChar } from '../../types';
+import { ViewState, PinnedListDefinition, isCompleteStatusChar } from '../../types';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
 
 import { DateUtils } from '../../utils/DateUtils';
-import { toDisplayTask, toDisplayTasks } from '../../services/display/DisplayTaskConverter';
+import { TaskDataService } from '../../services/data/TaskDataService';
+import { TaskWriteService } from '../../services/data/TaskWriteService';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 
 import TaskViewerPlugin from '../../main';
@@ -57,7 +57,8 @@ interface TimelineViewState {
 
 export class TimelineView extends ItemView {
     // ==================== Services & Handlers ====================
-    private taskIndex: TaskIndex;
+    private dataService: TaskDataService;
+    private writeService: TaskWriteService;
     private plugin: TaskViewerPlugin;
     private taskRenderer: TaskCardRenderer;
     private dragHandler: DragHandler;
@@ -95,9 +96,10 @@ export class TimelineView extends ItemView {
 
     // ==================== Lifecycle ====================
 
-    constructor(leaf: WorkspaceLeaf, taskIndex: TaskIndex, plugin: TaskViewerPlugin) {
+    constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
-        this.taskIndex = taskIndex;
+        this.dataService = plugin.getTaskDataService();
+        this.writeService = plugin.getTaskWriteService();
         this.plugin = plugin;
         this.viewState = {
             startDate: DateUtils.getVisualDateOfNow(this.plugin.settings.startHour),
@@ -115,7 +117,7 @@ export class TimelineView extends ItemView {
             },
             getIsOpen: () => this.viewState.showSidebar,
         });
-        this.taskRenderer = new TaskCardRenderer(this.app, this.taskIndex, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.dataService, this.writeService, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.leaf,
         }, () => this.plugin.settings);
@@ -207,18 +209,21 @@ export class TimelineView extends ItemView {
         );
 
         // Initialize MenuHandler
-        this.menuHandler = new MenuHandler(this.app, this.taskIndex, this.plugin);
+        this.menuHandler = new MenuHandler(this.app, this.dataService, this.writeService, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
-        const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.taskIndex, this.plugin);
+        const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.writeService, this.plugin);
         this.taskRenderer.setChildLineEditCallback((parentTask, childLineIndex, x, y) => {
             childLineMenuBuilder.showMenu(parentTask, childLineIndex, x, y);
         });
         this.taskRenderer.setDetailCallback((task) => {
-            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.taskIndex).open();
+            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.dataService).open();
         });
 
         // Initialize HandleManager
-        this.handleManager = new HandleManager(this.container, this.taskIndex);
+        this.handleManager = new HandleManager(this.container, {
+            getTask: (id) => this.dataService.getTask(id),
+            getStartHour: () => this.plugin.settings.startHour,
+        });
 
         // Initialize Toolbar
         this.toolbar = new TimelineToolbar(
@@ -226,7 +231,7 @@ export class TimelineView extends ItemView {
             this.app,
             this.viewState,
             this.plugin,
-            this.taskIndex,
+            this.dataService,
             {
                 onRender: () => this.render(),
                 onScrollToNow: () => {
@@ -252,18 +257,18 @@ export class TimelineView extends ItemView {
         );
 
         // Initialize Renderers
-        this.allDayRenderer = new AllDaySectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow);
-        this.timelineRenderer = new TimelineSectionRenderer(this.taskIndex, this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel());
-        this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler, this.taskIndex);
-        this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.menuHandler, this.taskIndex);
+        this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow);
+        this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel());
+        this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler);
+        this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.menuHandler, this.dataService);
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
         this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.sidebarFilterMenu.setTaskLookupProvider((id) => this.taskIndex.getTask(id));
+        this.sidebarFilterMenu.setTaskLookupProvider((id) => this.dataService.getTask(id));
         this.sidebarFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
         // Initialize DragHandler with selection callback, move callback, and view start date provider
-        this.dragHandler = new DragHandler(this.container, this.taskIndex, this.plugin,
-            (taskId) => {
+        this.dragHandler = new DragHandler(this.container, this.dataService, this.writeService, this.plugin,
+            (taskId: string) => {
                 this.handleManager.selectTask(taskId);
             },
             () => { /* no-op: handles are inside task cards */ },
@@ -286,9 +291,9 @@ export class TimelineView extends ItemView {
         });
 
         // Subscribe to data changes
-        this.unsubscribe = this.taskIndex.onChange((taskId, changes) => {
+        this.unsubscribe = this.dataService.onChange((taskId, changes) => {
             // On first data load, re-evaluate startDate and scroll to now
-            if (!this.hasInitializedStartDate && this.taskIndex.getTasks().length > 0) {
+            if (!this.hasInitializedStartDate && this.dataService.getTasks().length > 0) {
                 this.hasInitializedStartDate = true;
                 const oldestOverdue = this.findOldestOverdueDate();
                 const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
@@ -313,10 +318,10 @@ export class TimelineView extends ItemView {
                 const isSafe = changes.every(k => safeKeys.includes(k));
 
                 if (isSafe) {
-                    const task = this.taskIndex.getTask(taskId);
-                    if (task) {
-                        const card = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
-                        if (card) {
+                    const card = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
+                    if (card) {
+                        const dt = this.dataService.getDisplayTask(taskId);
+                        if (dt) {
                             // Partial Update: Re-render content only
                             const contentContainer = card.querySelector('.task-card__content');
                             if (contentContainer) contentContainer.remove();
@@ -329,7 +334,6 @@ export class TimelineView extends ItemView {
                             const opts = isAllDay
                                 ? { topRight: 'none' as const, compact: true }
                                 : undefined;
-                            const dt = toDisplayTask(task, this.plugin.settings.startHour);
                             this.taskRenderer.render(card, dt, this, this.plugin.settings, opts);
                             this.lastPartialUpdateTime = Date.now();
                             return;
@@ -551,9 +555,8 @@ export class TimelineView extends ItemView {
             this.render();
         });
 
-        // Convert all tasks to DisplayTask once for the entire render pass
-        const startHour = this.plugin.settings.startHour;
-        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
+        // Get all DisplayTasks (revision-cached by TaskDataService)
+        const allDisplayTasks = this.dataService.getAllDisplayTasks();
 
         // Render pinned lists into sidebar body
         this.pinnedListRenderer.render(
@@ -617,8 +620,7 @@ export class TimelineView extends ItemView {
                     this.app.workspace.requestSaveLayout();
                 },
             },
-            this.toolbar?.getTaskFilter(),
-            allDisplayTasks,
+            this.toolbar?.getFilterState(),
         );
 
         // Render Toolbar (above both columns)
@@ -627,7 +629,7 @@ export class TimelineView extends ItemView {
             this.app,
             this.viewState,
             this.plugin,
-            this.taskIndex,
+            this.dataService,
             {
                 onRender: () => this.render(),
                 onScrollToNow: () => {
@@ -664,8 +666,8 @@ export class TimelineView extends ItemView {
             this.handleManager,
             () => this.getDatesToShow(),
             this,
-            this.toolbar.getTaskFilter(),
-            allDisplayTasks
+            allDisplayTasks,
+            this.toolbar.getFilterState()
         );
 
         this.renderCurrentTimeIndicator();
@@ -745,7 +747,7 @@ export class TimelineView extends ItemView {
                 this.app.workspace.requestSaveLayout();
                 this.render();
             },
-            getTasks: () => this.taskIndex.getTasks(),
+            getTasks: () => this.dataService.getTasks(),
             getStartHour: () => this.plugin.settings.startHour,
         });
     }
@@ -781,28 +783,19 @@ export class TimelineView extends ItemView {
     private findOldestOverdueDate(): string | null {
         const startHour = this.plugin.settings.startHour;
         const visualToday = DateUtils.getVisualDateOfNow(startHour);
-        const isVisible = this.toolbar.getTaskFilter();
+        const filterState = this.toolbar.getFilterState();
+        const displayTasks = this.dataService.getFilteredTasks(filterState);
 
-        // Get all incomplete, visible tasks with dates (including E/ED types)
-        const rawTasks = this.taskIndex.getTasks().filter(t =>
-            isVisible(t) &&
-            !isCompleteStatusChar(t.statusChar, this.plugin.settings.statusDefinitions) &&
-            (t.startDate || t.endDate)
-        );
-
-        const displayTasks = toDisplayTasks(rawTasks, startHour);
-
-        // Find the oldest past date among incomplete tasks
+        // Find the oldest past date among incomplete, visible tasks
         let oldestDate: string | null = null;
 
         for (const dt of displayTasks) {
             if (!dt.effectiveStartDate) continue;
+            if (isCompleteStatusChar(dt.statusChar, this.plugin.settings.statusDefinitions)) continue;
+            if (dt.effectiveStartDate >= visualToday) continue;
 
-            // Only consider tasks that are before today (visual date)
-            if (dt.effectiveStartDate < visualToday) {
-                if (!oldestDate || dt.effectiveStartDate < oldestDate) {
-                    oldestDate = dt.effectiveStartDate;
-                }
+            if (!oldestDate || dt.effectiveStartDate < oldestDate) {
+                oldestDate = dt.effectiveStartDate;
             }
         }
 

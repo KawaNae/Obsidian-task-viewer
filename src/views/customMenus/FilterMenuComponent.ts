@@ -19,9 +19,7 @@ import {
     hasConditions,
     isFilterCondition,
 } from '../../services/filter/FilterTypes';
-import type { FilterContext } from '../../services/filter/FilterTypes';
 import { t } from '../../i18n';
-import { TaskFilterEngine } from '../../services/filter/TaskFilterEngine';
 import { resolveGlue } from './FilterValueHelpers';
 import { FilterDropdownMenus } from './FilterDropdownMenus';
 import type { SelectItem } from './FilterDropdownMenus';
@@ -92,13 +90,6 @@ export class FilterMenuComponent {
 
     setStatusDefinitions(defs: StatusDefinition[]): void {
         this.statusDefs = defs;
-    }
-
-    isTaskVisible(task: Task): boolean {
-        const context: FilterContext = {};
-        if (this.startHourProvider) context.startHour = this.startHourProvider();
-        if (this.taskLookupProvider) context.taskLookup = this.taskLookupProvider;
-        return TaskFilterEngine.evaluate(task, this.state, Object.keys(context).length > 0 ? context : undefined);
     }
 
     hasActiveFilters(): boolean {

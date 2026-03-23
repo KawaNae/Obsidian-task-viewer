@@ -1,5 +1,9 @@
-import { TaskIndex } from '../../services/core/TaskIndex';
 import { Task } from '../../types';
+
+interface HandleManagerDeps {
+    getTask(id: string): Task | undefined;
+    getStartHour(): number;
+}
 
 /**
  * Manages drag handles for selected tasks in TimelineView.
@@ -10,7 +14,7 @@ export class HandleManager {
 
     constructor(
         private container: HTMLElement,
-        private taskIndex: TaskIndex
+        private deps: HandleManagerDeps
     ) { }
 
     /** Returns task cards scoped to the main content area (excludes pinned lists in sidebar). */
@@ -96,7 +100,7 @@ export class HandleManager {
 
         if (taskCards.length === 0) return;
 
-        const task = this.taskIndex.getTask(taskId);
+        const task = this.deps.getTask(taskId);
         if (!task) return;
         if (task.isReadOnly) return;
 
@@ -156,7 +160,7 @@ export class HandleManager {
                 // Let's rely on time check for generic case, and class for split case if easier.
                 // But time check is more robust for non-split tasks that just happen to start at boundary.
 
-                const startHour = this.taskIndex.getSettings().startHour;
+                const startHour = this.deps.getStartHour();
                 const [startH, startM] = (task.startTime || '00:00').split(':').map(Number);
 
                 // Touching Top Boundary if:

@@ -1,5 +1,5 @@
 import { Notice, type App, TFile } from 'obsidian';
-import type { TaskIndex } from '../core/TaskIndex';
+import type { TaskDataService } from '../data/TaskDataService';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 
 type RestoreFn = () => void;
@@ -148,7 +148,7 @@ export class ExportUtils {
     // ── Masking ──
 
     /** Temporarily replace task content with mask text for export. */
-    static applyMasking(container: HTMLElement, taskIndex: TaskIndex, restoreFns: RestoreFn[]): void {
+    static applyMasking(container: HTMLElement, dataService: TaskDataService, restoreFns: RestoreFn[]): void {
         const cards = Array.from(container.querySelectorAll<HTMLElement>('.task-card'));
         for (const card of cards) {
             const taskId = card.dataset.id;
@@ -156,7 +156,7 @@ export class ExportUtils {
 
             const segment = TaskIdGenerator.parseSegmentId(taskId);
             const resolvedId = segment ? segment.baseId : taskId;
-            const task = taskIndex.getTask(resolvedId);
+            const task = dataService.getTask(resolvedId);
             if (!task?.mask) continue;
 
             const contentEl = card.querySelector('.task-card__content');

@@ -12,9 +12,10 @@ import { t } from '../../../i18n';
 
 import { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './TimelineSectionRenderer';
-import { TaskIndex } from '../../../services/core/TaskIndex';
 import { isDisplayTaskOnVisualDate } from '../../../services/display/DisplayTaskConverter';
 import type { DisplayTask } from '../../../types';
+import type { FilterState } from '../../../services/filter/FilterTypes';
+import type { TaskDataService } from '../../../services/data/TaskDataService';
 import { HabitTrackerRenderer } from '../../sharedUI/HabitTrackerRenderer';
 
 type DateHeaderDisplayEntry = {
@@ -29,14 +30,15 @@ export class GridRenderer {
     private isAllDayCollapsed: boolean = false;
     private headerResizeObserver: ResizeObserver | null = null;
     private dateLinkInteractionManager: TaskLinkInteractionManager;
+    private dataService: TaskDataService;
 
     constructor(
         private container: HTMLElement,
         private viewState: ViewState,
         private plugin: TaskViewerPlugin,
         private menuHandler: MenuHandler,
-        private taskIndex: TaskIndex
     ) {
+        this.dataService = this.plugin.getTaskDataService();
         this.dateLinkInteractionManager = new TaskLinkInteractionManager(
             this.plugin.app, () => this.plugin.settings
         );
@@ -50,8 +52,8 @@ export class GridRenderer {
         handleManager: HandleManager,
         getDatesToShow: () => string[],
         owner: Component,
-        isTaskVisible: (task: import('../../../types').Task) => boolean,
-        allDisplayTasks: DisplayTask[]
+        allDisplayTasks: DisplayTask[],
+        filterState?: FilterState
     ) {
         // Use parentContainer for rendering the grid
         const grid = parentContainer.createDiv('timeline-grid');
@@ -76,9 +78,11 @@ export class GridRenderer {
         // Pre-compute overdue dates set
         const completeChars = this.plugin.settings.statusDefinitions;
         const overdueDates = new Set<string>();
-        for (const dt of allDisplayTasks) {
+        const filteredTasks = filterState
+            ? this.dataService.getFilteredTasks(filterState)
+            : allDisplayTasks;
+        for (const dt of filteredTasks) {
             if (isCompleteStatusChar(dt.statusChar, completeChars)) continue;
-            if (!isTaskVisible(dt)) continue;
             for (const date of dates) {
                 if (date >= todayVisualDate) continue;
                 if (isDisplayTaskOnVisualDate(dt, date, startHour)) {
@@ -226,7 +230,7 @@ export class GridRenderer {
         });
 
         // Render Tasks (Overlaid)
-        allDayRenderer.render(allDayRow, dates, owner, isTaskVisible, allDisplayTasks);
+        allDayRenderer.render(allDayRow, dates, owner, filteredTasks);
 
         // 3.2. Timeline Grid (time axis + day columns)
         const timelineGrid = scrollArea.createDiv('timeline-row timeline-scroll-area__grid');
@@ -240,7 +244,7 @@ export class GridRenderer {
         dates.forEach(date => {
             const col = timelineGrid.createDiv('day-timeline-column');
             col.dataset.date = date;
-            timelineRenderer.render(col, date, owner, isTaskVisible, allDisplayTasks);
+            timelineRenderer.render(col, date, owner, this.dataService, filterState);
 
             // Add interaction listeners for creating tasks
             timelineRenderer.addCreateTaskListeners(col, date);

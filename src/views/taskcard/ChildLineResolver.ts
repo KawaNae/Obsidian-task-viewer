@@ -1,5 +1,5 @@
 import { Task, isFrontmatterTask } from '../../types';
-import { TaskIndex } from '../../services/core/TaskIndex';
+import { TaskDataService } from '../../services/data/TaskDataService';
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 
 /**
@@ -11,10 +11,10 @@ import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 export class ChildLineResolver {
     private static readonly MAX_RENDER_DEPTH = 10;
 
-    constructor(private taskIndex: TaskIndex) {}
+    constructor(private dataService: TaskDataService) {}
 
-    getTaskIndex(): TaskIndex {
-        return this.taskIndex;
+    getDataService(): TaskDataService {
+        return this.dataService;
     }
 
     /**
@@ -23,7 +23,7 @@ export class ChildLineResolver {
     buildChildIdByLine(task: Task): Map<number, Task> {
         const map = new Map<number, Task>();
         for (const childId of task.childIds) {
-            const child = this.taskIndex.getTask(childId);
+            const child = this.dataService.getTask(childId);
             if (child && child.line >= 0) map.set(child.line, child);
         }
         return map;
@@ -48,7 +48,7 @@ export class ChildLineResolver {
      */
     findOrphanTask(file: string, absLine: number): Task | undefined {
         const orphanTaskId = TaskIdGenerator.generate('at-notation', file, `ln:${absLine + 1}`);
-        return this.taskIndex.getTask(orphanTaskId);
+        return this.dataService.getTask(orphanTaskId);
     }
 
     /**
@@ -72,7 +72,7 @@ export class ChildLineResolver {
     private searchWikiChild(task: Task, linkName: string): Task | null {
         const target = this.extractWikiLinkTarget(linkName);
         for (const childId of task.childIds) {
-            const child = this.taskIndex.getTask(childId);
+            const child = this.dataService.getTask(childId);
             if (!child || !isFrontmatterTask(child)) continue;
 
             const baseName = child.file.replace(/\.md$/, '').split('/').pop() || '';
@@ -109,7 +109,7 @@ export class ChildLineResolver {
         }
 
         for (const childId of task.childIds) {
-            const child = this.taskIndex.getTask(childId);
+            const child = this.dataService.getTask(childId);
             if (!child) continue;
             this.markTaskSubtreeLines(child, consumedLineKeys, depth + 1);
         }

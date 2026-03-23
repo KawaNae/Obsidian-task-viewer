@@ -1,13 +1,13 @@
 import { Component, Menu } from 'obsidian';
 import { t } from '../../../i18n';
-import type { Task, DisplayTask } from '../../../types';
+import type { DisplayTask } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
-import { shouldSplitDisplayTask, splitDisplayTaskAtBoundary } from '../../../services/display/DisplayTaskConverter';
+import type { TaskDataService } from '../../../services/data/TaskDataService';
+import type { FilterState } from '../../../services/filter/FilterTypes';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
 import { TaskLayout } from '../TaskLayout';
-import { TaskIndex } from '../../../services/core/TaskIndex';
 import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { HandleManager } from '../HandleManager';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
@@ -15,7 +15,6 @@ import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal
 
 export class TimelineSectionRenderer {
     constructor(
-        private taskIndex: TaskIndex,
         private plugin: TaskViewerPlugin,
         private menuHandler: MenuHandler,
         private handleManager: HandleManager,
@@ -23,71 +22,9 @@ export class TimelineSectionRenderer {
         private getZoomLevel: () => number
     ) { }
 
-    public render(container: HTMLElement, date: string, owner: Component, isTaskVisible: (task: Task) => boolean, allDisplayTasks: DisplayTask[]) {
+    public render(container: HTMLElement, date: string, owner: Component, dataService: TaskDataService, filterState?: FilterState) {
         const startHour = this.plugin.settings.startHour;
-
-        // Filter for timed tasks in this column
-        let tasks = allDisplayTasks.filter(dt => {
-            if (!dt.effectiveStartTime) return false; // No startTime = not a timed task
-
-            // Calculate visual date range for this task
-            const visualStart = dt.effectiveStartDate
-                ? DateUtils.getVisualStartDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour)
-                : date;
-
-            // For tasks with endDate/endTime, check if they span into this visual day
-            if (dt.effectiveEndDate && dt.effectiveEndTime) {
-                // If endTime is exactly startHour (e.g. 05:00), it belongs to the previous visual day
-                const endDateTime = new Date(`${dt.effectiveEndDate}T${dt.effectiveEndTime}`);
-
-                const [endH, endM] = dt.effectiveEndTime.split(':').map(Number);
-                if (endH === startHour && endM === 0) {
-                    endDateTime.setMinutes(endDateTime.getMinutes() - 1);
-                }
-
-                const adjEndDate = DateUtils.getLocalDateString(endDateTime);
-                const adjEndTime = `${endDateTime.getHours().toString().padStart(2, '0')}:${endDateTime.getMinutes().toString().padStart(2, '0')}`;
-
-                const visualEnd = DateUtils.getVisualStartDate(adjEndDate, adjEndTime, startHour);
-
-                // Task appears in this column if: visualStart <= date <= visualEnd
-                if (visualStart > date || visualEnd < date) return false;
-            } else {
-                // Single-point or no-end task: only show on visualStart day
-                if (visualStart !== date) return false;
-            }
-
-            // Check if it's an all-day task (>= 24 hours)
-            const isAllDay = DateUtils.isAllDayTask(
-                dt.effectiveStartDate || date, dt.effectiveStartTime,
-                dt.effectiveEndDate, dt.effectiveEndTime, startHour
-            );
-            return !isAllDay;
-        });
-
-        tasks = tasks.filter(isTaskVisible);
-
-        // Split tasks that cross day boundary
-        const renderableTasks: DisplayTask[] = [];
-        tasks.forEach(task => {
-            if (shouldSplitDisplayTask(task, startHour)) {
-                const [before, after] = splitDisplayTaskAtBoundary(task, startHour);
-
-                // Calculate visual dates for each segment
-                const beforeVisualStart = DateUtils.getVisualStartDate(before.effectiveStartDate, before.effectiveStartTime!, startHour);
-                const afterVisualStart = DateUtils.getVisualStartDate(after.effectiveStartDate, after.effectiveStartTime!, startHour);
-
-                // Add segment only if its visual start matches this column
-                if (beforeVisualStart === date) {
-                    renderableTasks.push(before);
-                }
-                if (afterVisualStart === date) {
-                    renderableTasks.push(after);
-                }
-            } else {
-                renderableTasks.push(task);
-            }
-        });
+        const { timed: renderableTasks } = dataService.getTasksForDate(date, filterState);
 
         // Calculate layout for overlapping tasks
         const layout = TaskLayout.calculateTaskLayout(renderableTasks, date, startHour);

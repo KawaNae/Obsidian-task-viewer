@@ -218,6 +218,11 @@ export class TaskIndex {
 
     // ===== データアクセス (TaskStoreへ委譲) =====
 
+    /** Current store revision number (incremented on every mutation). */
+    getRevision(): number {
+        return this.store.getRevision();
+    }
+
     getTasks(): Task[] {
         return this.store.getTasks();
     }
@@ -352,6 +357,7 @@ export class TaskIndex {
 
         this.syncDetector.markLocalEdit(task.file);
         Object.assign(task, updates);
+        this.store.bumpRevision();
 
         // startDate が明示的に更新された → 継承フラグをクリア
         // (undefined = Propertiesモーダル未変更 → フラグ維持)

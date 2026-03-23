@@ -1,6 +1,6 @@
 import { App, MarkdownView, Menu } from 'obsidian';
 import { Task, isFrontmatterTask } from '../../../types';
-import { TaskIndex } from '../../../services/core/TaskIndex';
+import { TaskWriteService } from '../../../services/data/TaskWriteService';
 import TaskViewerPlugin from '../../../main';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { ConfirmModal } from '../../../modals/ConfirmModal';
@@ -15,7 +15,7 @@ import { t } from '../../../i18n';
 export class TaskActionsMenuBuilder {
     constructor(
         private app: App,
-        private taskIndex: TaskIndex,
+        private writeService: TaskWriteService,
         private plugin: TaskViewerPlugin
     ) { }
 
@@ -158,7 +158,7 @@ export class TaskActionsMenuBuilder {
                 sub.setTitle(t('menu.inPlace'))
                     .setIcon('copy')
                     .onClick(async () => {
-                        await this.taskIndex.duplicateTask(task.id);
+                        await this.writeService.duplicateTask(task.id);
                     });
             });
 
@@ -166,7 +166,7 @@ export class TaskActionsMenuBuilder {
                 sub.setTitle(t('menu.forTomorrow'))
                     .setIcon('calendar-plus')
                     .onClick(async () => {
-                        await this.taskIndex.duplicateTaskForTomorrow(task.id);
+                        await this.writeService.duplicateTaskForTomorrow(task.id);
                     });
             });
 
@@ -174,7 +174,7 @@ export class TaskActionsMenuBuilder {
                 sub.setTitle(t('menu.forWeek'))
                     .setIcon('calendar-range')
                     .onClick(async () => {
-                        await this.taskIndex.duplicateTaskForWeek(task.id);
+                        await this.writeService.duplicateTaskForWeek(task.id);
                     });
             });
         });
@@ -204,7 +204,7 @@ export class TaskActionsMenuBuilder {
                             t('menu.convertToPlainCheckbox'),
                             t('menu.convertToPlainCheckboxMessage'),
                             async () => {
-                                await this.taskIndex.updateTask(task.id, {
+                                await this.writeService.updateTask(task.id, {
                                     startDate: undefined,
                                     startTime: undefined,
                                     endDate: undefined,
@@ -228,7 +228,7 @@ export class TaskActionsMenuBuilder {
                             t('menu.convertToFrontmatterTask'),
                             t('menu.convertToFrontmatterTaskMessage'),
                             async () => {
-                                await this.taskIndex.convertToFrontmatterTask(task.id);
+                                await this.writeService.convertToFrontmatterTask(task.id);
                             },
                             { confirmLabel: t('modal.convert') }
                         ).open();
@@ -254,7 +254,7 @@ export class TaskActionsMenuBuilder {
                     sub.setTitle(t('menu.allDay'))
                         .setIcon('calendar-with-checkmark')
                         .onClick(async () => {
-                            await this.taskIndex.updateTask(task.id, {
+                            await this.writeService.updateTask(task.id, {
                                 startTime: undefined,
                                 endTime: undefined,
                             });
@@ -267,7 +267,7 @@ export class TaskActionsMenuBuilder {
                         .onClick(async () => {
                             const startHour = this.plugin.settings.startHour;
                             const h = startHour.toString().padStart(2, '0');
-                            await this.taskIndex.updateTask(task.id, {
+                            await this.writeService.updateTask(task.id, {
                                 startTime: `${h}:00`,
                                 endTime: undefined,
                             });
@@ -292,7 +292,7 @@ export class TaskActionsMenuBuilder {
                         t('menu.deleteTaskTitle'),
                         t('menu.deleteTaskMessage'),
                         async () => {
-                            await this.taskIndex.deleteTask(task.id);
+                            await this.writeService.deleteTask(task.id);
                         },
                         { confirmLabel: t('modal.delete'), warning: true }
                     ).open();

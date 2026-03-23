@@ -36,11 +36,15 @@ import { CheckboxMenuBuilder } from './interaction/menu/builders/CheckboxMenuBui
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 import { registerCliHandlers } from './cli/CliRegistrar';
 import { TaskApi } from './api/TaskApi';
+import { TaskDataService } from './services/data/TaskDataService';
+import { TaskWriteService } from './services/data/TaskWriteService';
 import { initI18n, t } from './i18n';
 import { TaskParser } from './services/parsing/TaskParser';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
+    private dataService: TaskDataService;
+    private writeService: TaskWriteService;
     private timerWidget: TimerWidget;
     public settings: TaskViewerSettings;
     public api: TaskApi;
@@ -68,6 +72,8 @@ export default class TaskViewerPlugin extends Plugin {
         // Initialize Services
         this.taskIndex = new TaskIndex(this.app, this.settings);
         await this.taskIndex.initialize();
+        this.dataService = new TaskDataService(this.taskIndex, this.settings.startHour);
+        this.writeService = new TaskWriteService(this.taskIndex);
 
         // Public API (plugin interop / DataviewJS)
         this.api = new TaskApi(this);
@@ -91,12 +97,12 @@ export default class TaskViewerPlugin extends Plugin {
 
         this.registerView(
             VIEW_TYPE_TIMELINE,
-            (leaf) => new TimelineView(leaf, this.taskIndex, this)
+            (leaf) => new TimelineView(leaf, this)
         );
 
         this.registerView(
             VIEW_TYPE_SCHEDULE,
-            (leaf) => new ScheduleView(leaf, this.taskIndex, this)
+            (leaf) => new ScheduleView(leaf, this)
         );
 
         this.registerView(
@@ -106,17 +112,17 @@ export default class TaskViewerPlugin extends Plugin {
 
         this.registerView(
             VIEW_TYPE_CALENDAR,
-            (leaf) => new CalendarView(leaf, this.taskIndex, this)
+            (leaf) => new CalendarView(leaf, this)
         );
 
         this.registerView(
             VIEW_TYPE_MINI_CALENDAR,
-            (leaf) => new MiniCalendarView(leaf, this.taskIndex, this)
+            (leaf) => new MiniCalendarView(leaf, this)
         );
 
         this.registerView(
             VIEW_TYPE_KANBAN,
-            (leaf) => new KanbanView(leaf, this.taskIndex, this)
+            (leaf) => new KanbanView(leaf, this)
         );
 
         const timelineViewMeta = getViewMeta(VIEW_TYPE_TIMELINE);
@@ -209,11 +215,11 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Menu builders for inline task menu button
         const editorPropertiesBuilder = new PropertiesMenuBuilder(
-            this.app, this.taskIndex, this,
+            this.app, this.writeService, this,
             new PropertyCalculator(), new PropertyFormatter()
         );
         const editorTimerBuilder = new TimerMenuBuilder(this);
-        const editorActionsBuilder = new TaskActionsMenuBuilder(this.app, this.taskIndex, this);
+        const editorActionsBuilder = new TaskActionsMenuBuilder(this.app, this.writeService, this);
         const editorCheckboxBuilder = new CheckboxMenuBuilder(
             this.app,
             () => this.settings.startHour,
@@ -408,6 +414,7 @@ export default class TaskViewerPlugin extends Plugin {
     async saveSettings() {
         await this.saveData(this.settings);
         this.taskIndex.updateSettings(this.settings);
+        this.dataService.updateStartHour(this.settings.startHour);
         this.updateViewHeaderStyles();
 
         this.refreshAllViews();
@@ -444,6 +451,14 @@ export default class TaskViewerPlugin extends Plugin {
     // Public accessors for services
     getTaskIndex(): TaskIndex {
         return this.taskIndex;
+    }
+
+    getTaskDataService(): TaskDataService {
+        return this.dataService;
+    }
+
+    getTaskWriteService(): TaskWriteService {
+        return this.writeService;
     }
 
     getTaskRepository() {

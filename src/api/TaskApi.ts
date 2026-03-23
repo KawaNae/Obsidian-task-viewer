@@ -1,11 +1,12 @@
 import { TFile } from 'obsidian';
 import type TaskViewerPlugin from '../main';
 import type { Task, DisplayTask, PinnedListDefinition } from '../types';
-import { toDisplayTasks, toDisplayTask } from '../services/display/DisplayTaskConverter';
+import type { TaskDataService } from '../services/data/TaskDataService';
+import type { TaskWriteService } from '../services/data/TaskWriteService';
+import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 import { normalizeTask } from './TaskNormalizer';
-import { TaskFilterEngine } from '../services/filter/TaskFilterEngine';
 import { TaskSorter } from '../services/sort/TaskSorter';
-import { hasConditions } from '../services/filter/FilterTypes';
+import { combineFilterStates } from '../services/filter/FilterTypes';
 import type { FilterState } from '../services/filter/FilterTypes';
 import type { SortState, SortProperty } from '../services/sort/SortTypes';
 import { DateUtils } from '../utils/DateUtils';
@@ -248,7 +249,13 @@ function parseDateTimeParam(value: string, fieldName: string): { date: string; t
 // ── Public API ──
 
 export class TaskApi {
-    constructor(private plugin: TaskViewerPlugin) {}
+    private dataService: TaskDataService;
+    private writeService: TaskWriteService;
+
+    constructor(private plugin: TaskViewerPlugin) {
+        this.dataService = plugin.getTaskDataService();
+        this.writeService = plugin.getTaskWriteService();
+    }
 
     /**
      * List tasks with optional filters, sort, and pagination.
@@ -263,23 +270,18 @@ export class TaskApi {
             p.filter = result;
         }
 
-        const taskIndex = this.plugin.getTaskIndex();
-        const { startHour } = this.plugin.settings;
-
-        const displayTasks = toDisplayTasks(taskIndex.getTasks(), startHour);
+        const dataService = this.dataService;
 
         const filterState = buildFilterFromParams(p);
+        const sortState = buildSortState(p.sort);
 
         let filtered: DisplayTask[];
         if (filterState) {
-            const context = { taskLookup: (id: string) => taskIndex.getTask(id) };
-            filtered = displayTasks.filter(t => TaskFilterEngine.evaluate(t, filterState, context));
+            filtered = dataService.getFilteredTasks(filterState, sortState);
         } else {
-            filtered = displayTasks;
+            filtered = [...dataService.getAllDisplayTasks()];
+            TaskSorter.sort(filtered, sortState);
         }
-
-        const sortState = buildSortState(p.sort);
-        TaskSorter.sort(filtered, sortState);
 
         const paged = paginate(filtered, p);
         return { count: paged.length, tasks: paged.map(normalizeTask) };
@@ -290,11 +292,11 @@ export class TaskApi {
      */
     today(params?: TodayParams): TaskListResult {
         const p = params ?? {};
-        const taskIndex = this.plugin.getTaskIndex();
+        const dataService = this.dataService;
         const { startHour } = this.plugin.settings;
         const today = DateUtils.getVisualDateOfNow(startHour);
 
-        const displayTasks = toDisplayTasks(taskIndex.getTasks(), startHour);
+        const displayTasks = dataService.getAllDisplayTasks();
 
         let filtered = displayTasks.filter(t => {
             const start = t.effectiveStartDate;
@@ -324,10 +326,9 @@ export class TaskApi {
     get(params: GetParams): NormalizedTask {
         if (!params.id) throw new TaskApiError('Missing required parameter: id');
 
-        const task = this.plugin.getTaskIndex().getTask(params.id);
-        if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
-
-        return normalizeTask(toDisplayTask(task, this.plugin.settings.startHour));
+        const dt = this.dataService.getDisplayTask(params.id);
+        if (!dt) throw new TaskApiError(`Task not found: ${params.id}`);
+        return normalizeTask(dt);
     }
 
     /**
@@ -348,20 +349,11 @@ export class TaskApi {
         const template = await loader.loadFullTemplate(summary.filePath);
         if (!template) throw new TaskApiError(`Failed to load template: ${params.template}`);
 
-        const taskIndex = this.plugin.getTaskIndex();
-        const { startHour } = settings;
-        const context = { taskLookup: (id: string) => taskIndex.getTask(id) };
-
-        const allDisplayTasks = toDisplayTasks(taskIndex.getTasks(), startHour);
-
-        let viewFiltered: DisplayTask[];
-        if (template.filterState && hasConditions(template.filterState)) {
-            viewFiltered = allDisplayTasks.filter(t =>
-                TaskFilterEngine.evaluate(t, template.filterState!, context),
-            );
-        } else {
-            viewFiltered = allDisplayTasks;
-        }
+        const dataService = this.dataService;
+        const allDisplayTasks = dataService.getAllDisplayTasks();
+        const viewFiltered = template.filterState
+            ? dataService.getFilteredTasks(template.filterState)
+            : allDisplayTasks;
 
         const pinnedLists: PinnedListDefinition[] = template.pinnedLists
             ?? (template.grid ? template.grid.flat() : []);
@@ -380,11 +372,10 @@ export class TaskApi {
         }
 
         const lists: QueryListEntry[] = pinnedLists.map(list => {
-            const source = list.applyViewFilter !== false ? viewFiltered : allDisplayTasks;
-            const matched = source.filter(t =>
-                TaskFilterEngine.evaluate(t, list.filterState, context),
-            );
-            TaskSorter.sort(matched, list.sortState);
+            const combinedFilter = list.applyViewFilter !== false && template.filterState
+                ? combineFilterStates(list.filterState, template.filterState)
+                : list.filterState;
+            const matched = dataService.getFilteredTasks(combinedFilter, list.sortState);
             return { name: list.name, count: matched.length, tasks: matched.map(normalizeTask) };
         });
 
@@ -445,10 +436,9 @@ export class TaskApi {
             await repo.appendTaskToFile(params.file, line);
         }
 
-        const taskIndex = this.plugin.getTaskIndex();
-        await taskIndex.waitForScan(params.file);
+        await this.writeService.waitForScan(params.file);
 
-        const tasks = taskIndex.getTasks().filter(
+        const tasks = this.dataService.getTasks().filter(
             t => t.file === params.file && t.content === content,
         );
         const created = tasks.length > 0
@@ -466,8 +456,7 @@ export class TaskApi {
     async update(params: UpdateParams): Promise<MutationResult> {
         if (!params.id) throw new TaskApiError('Missing required parameter: id');
 
-        const taskIndex = this.plugin.getTaskIndex();
-        const task = taskIndex.getTask(params.id);
+        const task = this.dataService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
 
         const updates: Partial<Task> = {};
@@ -492,9 +481,9 @@ export class TaskApi {
             updates.due = parsed.date;
         }
 
-        await taskIndex.updateTask(params.id, updates);
+        await this.writeService.updateTask(params.id, updates);
 
-        const updated = taskIndex.getTask(params.id);
+        const updated = this.dataService.getTask(params.id);
         if (!updated) throw new TaskApiError(`Task not found after update: ${params.id}`);
 
         return { task: normalizeTask(toDisplayTask(updated, this.plugin.settings.startHour)) };
@@ -506,11 +495,10 @@ export class TaskApi {
     async delete(params: DeleteParams): Promise<DeleteResult> {
         if (!params.id) throw new TaskApiError('Missing required parameter: id');
 
-        const taskIndex = this.plugin.getTaskIndex();
-        const task = taskIndex.getTask(params.id);
+        const task = this.dataService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
 
-        await taskIndex.deleteTask(params.id);
+        await this.writeService.deleteTask(params.id);
         return { deleted: params.id };
     }
 

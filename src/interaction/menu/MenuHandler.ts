@@ -1,6 +1,7 @@
 import { App, Menu, Notice } from 'obsidian';
 import { Task } from '../../types';
-import { TaskIndex } from '../../services/core/TaskIndex';
+import { TaskDataService } from '../../services/data/TaskDataService';
+import { TaskWriteService } from '../../services/data/TaskWriteService';
 import TaskViewerPlugin from '../../main';
 import { TouchEventHandler } from './TouchEventHandler';
 import { PropertyCalculator } from './PropertyCalculator';
@@ -26,7 +27,8 @@ export class MenuHandler {
 
     constructor(
         private app: App,
-        private taskIndex: TaskIndex,
+        private dataService: TaskDataService,
+        private writeService: TaskWriteService,
         private plugin: TaskViewerPlugin
     ) {
         // Initialize services
@@ -37,13 +39,13 @@ export class MenuHandler {
         // Initialize builders
         this.propertiesMenuBuilder = new PropertiesMenuBuilder(
             app,
-            taskIndex,
+            writeService,
             plugin,
             this.propertyCalculator,
             this.propertyFormatter
         );
         this.timerMenuBuilder = new TimerMenuBuilder(plugin);
-        this.taskActionsMenuBuilder = new TaskActionsMenuBuilder(app, taskIndex, plugin);
+        this.taskActionsMenuBuilder = new TaskActionsMenuBuilder(app, writeService, plugin);
     }
 
     /**
@@ -66,7 +68,7 @@ export class MenuHandler {
      * Show context menu for a task by its ID at the given position.
      */
     showMenuForTask(taskId: string, x: number, y: number): void {
-        const task = this.taskIndex.getTask(taskId);
+        const task = this.dataService.getTask(taskId);
         if (!task) return;
         this.showContextMenu(x, y, task);
     }
@@ -77,7 +79,7 @@ export class MenuHandler {
     private showContextMenu(x: number, y: number, taskInput: Task) {
         // Resolve the real task from the index
         const originalId = getOriginalTaskId(taskInput);
-        const task = this.taskIndex.getTask(originalId);
+        const task = this.dataService.getTask(originalId);
 
         if (!task) {
             new Notice('Task not found in index');

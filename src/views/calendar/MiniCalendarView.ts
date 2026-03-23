@@ -2,9 +2,8 @@ import { ItemView, WorkspaceLeaf, TFile, setIcon, type ViewStateResult } from 'o
 import { t } from '../../i18n';
 import type { HoverParent } from 'obsidian';
 import { Task, DisplayTask } from '../../types';
-import { TaskIndex } from '../../services/core/TaskIndex';
 import { DateUtils } from '../../utils/DateUtils';
-import { toDisplayTasks } from '../../services/display/DisplayTaskConverter';
+import type { TaskDataService } from '../../services/data/TaskDataService';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import {
     getTaskDateRange,
@@ -36,8 +35,8 @@ interface MiniCalendarViewState {
 }
 
 export class MiniCalendarView extends ItemView {
-    private readonly taskIndex: TaskIndex;
     private readonly plugin: TaskViewerPlugin;
+    private readonly dataService: TaskDataService;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
 
     private container: HTMLElement;
@@ -47,10 +46,10 @@ export class MiniCalendarView extends ItemView {
     private navigateWeekDebounceTimer: number | null = null;
     private pendingWeekOffset: number = 0;
 
-    constructor(leaf: WorkspaceLeaf, taskIndex: TaskIndex, plugin: TaskViewerPlugin) {
+    constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
-        this.taskIndex = taskIndex;
         this.plugin = plugin;
+        this.dataService = this.plugin.getTaskDataService();
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
 
         const now = new Date();
@@ -97,7 +96,7 @@ export class MiniCalendarView extends ItemView {
 
         await this.render();
 
-        this.unsubscribe = this.taskIndex.onChange(() => {
+        this.unsubscribe = this.dataService.onChange(() => {
             void this.render();
         });
     }
@@ -335,7 +334,7 @@ export class MiniCalendarView extends ItemView {
     private computeIndicators(rangeStart: string, rangeEnd: string): Map<string, IndicatorState> {
         const indicatorMap = new Map<string, IndicatorState>();
         const startHour = this.plugin.settings.startHour;
-        const allDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour);
+        const allDisplayTasks = this.dataService.getAllDisplayTasks();
 
         for (const dt of allDisplayTasks) {
             const { effectiveStart, effectiveEnd } = getTaskDateRange(dt, startHour);
