@@ -8,11 +8,14 @@
  *
  * Run:  npx vitest run tests/e2e/cli-e2e.test.ts
  */
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
     cliList, cliToday, cliGet, cliCreate, cliUpdate, cliDelete,
-    isObsidianRunning, obsidianCli,
+    cliDuplicate, cliConvert, cliTasksForDateRange, cliTasksForDate,
+    cliInsertChildTask, cliCreateFrontmatter, cliGetStartHour, cliHelp,
+    isObsidianRunning, obsidianCli, waitForTask, waitForTaskGone,
 } from '../helpers/cli-helper';
+import { deleteTestFile, writeTestFile, waitForFileIndexed, readTestFile } from '../helpers/test-file-manager';
 
 const TEST_FILE = 'test-tags-properties.md';
 
@@ -289,5 +292,262 @@ describe('error cases', () => {
     it('invalid outputFields returns error', () => {
         const r = obsidianCli('list', { outputFields: 'nonexistent', limit: '1' }) as Record<string, unknown>;
         expect(r).toHaveProperty('error');
+    });
+});
+
+// ────────────────────────────────────────────
+// 10. duplicate
+// ────────────────────────────────────────────
+describe('duplicate', () => {
+    const MUTATION_FILE = 'test-cli-dup.md';
+    const MUTATION_CONTENT = '- [ ] E2E-dup-src @2026-04-10\n';
+
+    beforeAll(async () => {
+        writeTestFile(MUTATION_FILE, MUTATION_CONTENT);
+        await waitForFileIndexed(MUTATION_FILE);
+    });
+
+    afterAll(() => {
+        deleteTestFile(MUTATION_FILE);
+    });
+
+    it('duplicates a task', async () => {
+        const src = cliList({ file: MUTATION_FILE, outputFields: 'id,content' });
+        expect(src.count).toBe(1);
+        const srcId = src.tasks[0].id as string;
+
+        const r = cliDuplicate({ id: srcId });
+        expect(r).not.toHaveProperty('error');
+        expect(r.duplicated).toBe(srcId);
+
+        // Wait for the duplicate to appear
+        await waitForTask(
+            { file: MUTATION_FILE, outputFields: 'id' },
+            () => true,
+            5000,
+        );
+        const all = cliList({ file: MUTATION_FILE, outputFields: 'id' });
+        expect(all.count).toBe(2);
+    });
+
+    it('duplicate with day-offset shifts dates', async () => {
+        // Reset file to single task
+        writeTestFile(MUTATION_FILE, '- [ ] E2E-dup-offset @2026-04-01\n');
+        await waitForFileIndexed(MUTATION_FILE);
+
+        const src = cliList({ file: MUTATION_FILE, outputFields: 'id' });
+        const srcId = src.tasks[0].id as string;
+
+        cliDuplicate({ id: srcId, 'day-offset': '3' });
+
+        const dup = await waitForTask(
+            { file: MUTATION_FILE, outputFields: 'id,startDate' },
+            t => t.startDate === '2026-04-04',
+            5000,
+        );
+        expect(dup).not.toBeNull();
+        expect(dup!.startDate).toBe('2026-04-04');
+    });
+
+    it('duplicate nonexistent ID returns error', () => {
+        const r = cliDuplicate({ id: 'nonexistent-id-99999' });
+        expect(r).toHaveProperty('error');
+    });
+});
+
+// ────────────────────────────────────────────
+// 11. convert (inline → frontmatter)
+// ────────────────────────────────────────────
+describe('convert', () => {
+    const MUTATION_FILE = 'test-cli-convert.md';
+    const filesToCleanup: string[] = [MUTATION_FILE];
+
+    beforeAll(async () => {
+        writeTestFile(MUTATION_FILE, '- [ ] E2E-convert-test @2026-04-15\n');
+        await waitForFileIndexed(MUTATION_FILE);
+    });
+
+    afterAll(() => {
+        for (const f of filesToCleanup) {
+            deleteTestFile(f);
+        }
+    });
+
+    it('converts inline task to frontmatter file', () => {
+        const src = cliList({ file: MUTATION_FILE, outputFields: 'id' });
+        expect(src.count).toBe(1);
+        const id = src.tasks[0].id as string;
+
+        const r = cliConvert(id);
+        expect(r).not.toHaveProperty('error');
+        expect(r.convertedFrom).toBe(id);
+        expect(r.newFile).toBeTruthy();
+        filesToCleanup.push(r.newFile);
+    });
+
+    it('convert nonexistent ID returns error', () => {
+        const r = cliConvert('nonexistent-id-99999');
+        expect(r).toHaveProperty('error');
+    });
+});
+
+// ────────────────────────────────────────────
+// 12. tasks-for-date-range
+// ────────────────────────────────────────────
+describe('tasks-for-date-range', () => {
+    it('returns tasks in date range', () => {
+        // TEST_FILE has tasks spanning 2026-03-09 to 2026-04-02
+        const r = cliTasksForDateRange({
+            start: '2026-03-15',
+            end: '2026-03-17',
+            outputFields: 'id,content,startDate',
+        });
+        expect(r).toHaveProperty('count');
+        expect(r).toHaveProperty('tasks');
+        expect(r.count).toBeGreaterThan(0);
+    });
+
+    it('respects outputFields', () => {
+        const r = cliTasksForDateRange({
+            start: '2026-03-01',
+            end: '2026-03-31',
+            outputFields: 'content,startDate',
+            limit: '2',
+        });
+        expect(r.count).toBeLessThanOrEqual(2);
+        if (r.count > 0) {
+            expect(r.tasks[0]).toHaveProperty('content');
+            expect(r.tasks[0]).toHaveProperty('startDate');
+            expect(r.tasks[0]).not.toHaveProperty('tags');
+        }
+    });
+
+    it('missing start returns error', () => {
+        const r = obsidianCli('tasks-for-date-range', { end: '2026-03-31' }) as Record<string, unknown>;
+        expect(r).toHaveProperty('error');
+    });
+});
+
+// ────────────────────────────────────────────
+// 13. tasks-for-date
+// ────────────────────────────────────────────
+describe('tasks-for-date', () => {
+    it('returns categorized result with allDay/timed/dueOnly keys', () => {
+        // 2026-03-16 has multiple tasks in TEST_FILE
+        const r = cliTasksForDate('2026-03-16');
+        expect(r).toHaveProperty('allDay');
+        expect(r).toHaveProperty('timed');
+        expect(r).toHaveProperty('dueOnly');
+        expect(Array.isArray(r.allDay)).toBe(true);
+        expect(Array.isArray(r.timed)).toBe(true);
+        expect(Array.isArray(r.dueOnly)).toBe(true);
+        // At least some tasks should be returned for this date
+        const total = r.allDay.length + r.timed.length + r.dueOnly.length;
+        expect(total).toBeGreaterThan(0);
+    });
+
+    it('missing date returns error', () => {
+        const r = obsidianCli('tasks-for-date', {}) as Record<string, unknown>;
+        expect(r).toHaveProperty('error');
+    });
+});
+
+// ────────────────────────────────────────────
+// 14. insert-child-task
+// ────────────────────────────────────────────
+describe('insert-child-task', () => {
+    const MUTATION_FILE = 'test-cli-child.md';
+
+    beforeAll(async () => {
+        writeTestFile(MUTATION_FILE, '- [ ] E2E-parent-task @2026-04-20\n');
+        await waitForFileIndexed(MUTATION_FILE);
+    });
+
+    afterAll(() => {
+        deleteTestFile(MUTATION_FILE);
+    });
+
+    it('inserts child under parent', () => {
+        const src = cliList({ file: MUTATION_FILE, outputFields: 'id,content' });
+        expect(src.count).toBe(1);
+        const parentId = src.tasks[0].id as string;
+
+        const r = cliInsertChildTask({ 'parent-id': parentId, content: 'E2E-child-inserted' });
+        expect(r).not.toHaveProperty('error');
+        expect(r.parentId).toBe(parentId);
+
+        // Verify the child line was written to the file
+        // (child checkbox lines become childLines of the parent, not separate tasks)
+        const content = readTestFile(MUTATION_FILE);
+        expect(content).toContain('E2E-child-inserted');
+    });
+
+    it('missing parent-id returns error', () => {
+        const r = obsidianCli('insert-child-task', { content: 'test' }) as Record<string, unknown>;
+        expect(r).toHaveProperty('error');
+    });
+});
+
+// ────────────────────────────────────────────
+// 15. create-frontmatter
+// ────────────────────────────────────────────
+describe('create-frontmatter', () => {
+    const filesToCleanup: string[] = [];
+
+    afterAll(() => {
+        for (const f of filesToCleanup) {
+            deleteTestFile(f);
+        }
+    });
+
+    it('creates frontmatter task file', () => {
+        const r = cliCreateFrontmatter({ content: 'E2E-fm-task' });
+        expect(r).not.toHaveProperty('error');
+        expect(r.newFile).toBeTruthy();
+        filesToCleanup.push(r.newFile);
+    });
+
+    it('creates with dates', () => {
+        const r = cliCreateFrontmatter({
+            content: 'E2E-fm-dated',
+            start: '2026-05-01 10:00',
+            end: '2026-05-01 12:00',
+            due: '2026-05-05',
+        });
+        expect(r).not.toHaveProperty('error');
+        expect(r.newFile).toBeTruthy();
+        filesToCleanup.push(r.newFile);
+    });
+
+    it('missing content returns error', () => {
+        const r = obsidianCli('create-frontmatter', {}) as Record<string, unknown>;
+        expect(r).toHaveProperty('error');
+    });
+});
+
+// ────────────────────────────────────────────
+// 16. get-start-hour
+// ────────────────────────────────────────────
+describe('get-start-hour', () => {
+    it('returns { startHour: number }', () => {
+        const r = cliGetStartHour();
+        expect(r).toHaveProperty('startHour');
+        expect(typeof r.startHour).toBe('number');
+        expect(r.startHour).toBeGreaterThanOrEqual(0);
+        expect(r.startHour).toBeLessThan(24);
+    });
+});
+
+// ────────────────────────────────────────────
+// 17. help
+// ────────────────────────────────────────────
+describe('help', () => {
+    it('returns text containing command list', () => {
+        const r = cliHelp();
+        expect(r.length).toBeGreaterThan(0);
+        expect(r).toContain('list');
+        expect(r).toContain('tasks-for-date');
+        expect(r).toContain('insert-child-task');
+        expect(r).toContain('get-start-hour');
     });
 });

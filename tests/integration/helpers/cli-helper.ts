@@ -71,6 +71,47 @@ export function cliDelete(id: string): DeleteResult {
     return obsidianCli('delete', { id }) as DeleteResult;
 }
 
+/** Duplicate a task. Returns { duplicated }. */
+export function cliDuplicate(flags: Record<string, string>): DuplicateResult {
+    return obsidianCli('duplicate', flags) as DuplicateResult;
+}
+
+/** Convert inline task to frontmatter. Returns { convertedFrom, newFile }. */
+export function cliConvert(id: string): ConvertResult {
+    return obsidianCli('convert', { id }) as ConvertResult;
+}
+
+/** List tasks in a date range. Returns { count, tasks }. */
+export function cliTasksForDateRange(flags: Record<string, string>): ListResult {
+    return obsidianCli('tasks-for-date-range', flags) as ListResult;
+}
+
+/** Get tasks for a date, categorized. Returns { allDay, timed, dueOnly }. */
+export function cliTasksForDate(date: string): CategorizedResult {
+    return obsidianCli('tasks-for-date', { date }) as CategorizedResult;
+}
+
+/** Insert a child task under a parent. Returns { parentId }. */
+export function cliInsertChildTask(flags: Record<string, string>): InsertChildTaskResult {
+    return obsidianCli('insert-child-task', flags) as InsertChildTaskResult;
+}
+
+/** Create a frontmatter task file. Returns { newFile }. */
+export function cliCreateFrontmatter(flags: Record<string, string>): CreateFrontmatterResult {
+    return obsidianCli('create-frontmatter', flags) as CreateFrontmatterResult;
+}
+
+/** Get the current startHour setting. Returns { startHour }. */
+export function cliGetStartHour(): StartHourResult {
+    return obsidianCli('get-start-hour') as StartHourResult;
+}
+
+/** Show CLI help text. Returns raw text string. */
+export function cliHelp(): string {
+    const result = obsidianCli('help');
+    return typeof result === 'string' ? result : JSON.stringify(result);
+}
+
 /** Check if Obsidian CLI is reachable. */
 export function isObsidianRunning(): boolean {
     try {
@@ -139,4 +180,31 @@ export interface MutationResult {
 
 export interface DeleteResult {
     deleted: string;
+}
+
+export interface DuplicateResult {
+    duplicated: string;
+}
+
+export interface ConvertResult {
+    convertedFrom: string;
+    newFile: string;
+}
+
+export interface CategorizedResult {
+    allDay: Record<string, unknown>[];
+    timed: Record<string, unknown>[];
+    dueOnly: Record<string, unknown>[];
+}
+
+export interface InsertChildTaskResult {
+    parentId: string;
+}
+
+export interface CreateFrontmatterResult {
+    newFile: string;
+}
+
+export interface StartHourResult {
+    startHour: number;
 }
