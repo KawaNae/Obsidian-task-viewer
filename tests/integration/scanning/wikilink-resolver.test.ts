@@ -466,3 +466,57 @@ describe('direct children only (indent filtering)', () => {
         expect(childIds).not.toContain(grandchildTask!.id);
     });
 });
+
+// ────────────────────────────────────────────
+// 10. Wikilink resolved without heading (body-wide scan)
+// ────────────────────────────────────────────
+describe('wikilink without heading', () => {
+    const PARENT_FILE = 'test-int-wikilink-noheading-parent.md';
+    const CHILD_FILE = 'test-int-wikilink-noheading-child.md';
+
+    const childFixture = createFixture(CHILD_FILE, [
+        '---',
+        'tv-start: 2026-05-25',
+        'tv-content: NoHeading Child',
+        '---',
+        'Body.',
+    ].join('\n'));
+
+    // Parent has NO ## Tasks heading — wikilink is in plain body
+    const parentFixture = createFixture(PARENT_FILE, [
+        '---',
+        'tv-start: 2026-05-24',
+        'tv-content: NoHeading Parent',
+        '---',
+        '',
+        'Some notes here.',
+        '',
+        '- [[test-int-wikilink-noheading-child]]',
+    ].join('\n'));
+
+    beforeAll(async () => {
+        await childFixture.setup();
+        await parentFixture.setup();
+        await sleep(5000);
+    });
+
+    afterAll(async () => {
+        await parentFixture.teardown();
+        await childFixture.teardown();
+    });
+
+    it('resolves wikilink from body without configured heading', () => {
+        const parentResult = cliList({ file: PARENT_FILE, outputFields: OUTPUT_FIELDS });
+        const parentTask = parentResult.tasks.find(t => t.parserId === 'frontmatter');
+
+        const childResult = cliList({ file: CHILD_FILE, outputFields: OUTPUT_FIELDS });
+        const childTask = childResult.tasks.find(t => t.parserId === 'frontmatter');
+
+        expect(parentTask).toBeDefined();
+        expect(childTask).toBeDefined();
+
+        const childIds = (parentTask!.childIds as string[]) ?? [];
+        expect(childIds).toContain(childTask!.id);
+        expect(childTask!.parentId).toBe(parentTask!.id);
+    });
+});

@@ -477,3 +477,47 @@ describe('frontmatter round-trip', () => {
         expectFileContains(TEST_FILE, 'Notes here.');
     });
 });
+
+// ────────────────────────────────────────────
+// 7. Clear fields via "none" sentinel
+// ────────────────────────────────────────────
+describe('clear fields via none sentinel', () => {
+    beforeAll(async () => {
+        writeTestFile(TEST_FILE, [
+            '---',
+            'tv-start: 2026-05-01',
+            'tv-due: 2026-06-01',
+            'tv-status: x',
+            'tv-content: Clear Test',
+            '---',
+            'Body.',
+        ].join('\n'));
+        await waitForFileIndexed(TEST_FILE);
+    });
+
+    it('clears status via none sentinel', async () => {
+        const task = await waitForFmTask();
+        expect(task).not.toBeNull();
+        expect(task!.status).toBe('x');
+
+        const id = task!.id as string;
+        const r = cliUpdate({ id, status: 'none', outputFields: OUTPUT_FIELDS });
+        expect(r).not.toHaveProperty('error');
+        expect(r.task.status).toBe(' ');
+
+        await sleep(500);
+        // tv-status should be cleared (space or removed)
+        const fm = getFrontmatterRaw(TEST_FILE);
+        const statusVal = fm['tv-status'];
+        expect(!statusVal || statusVal.trim() === '').toBe(true);
+    });
+
+    it('clears due via none sentinel', async () => {
+        const id = fmTaskId();
+        const r = cliUpdate({ id, due: 'none', outputFields: OUTPUT_FIELDS });
+        expect(r).not.toHaveProperty('error');
+
+        await sleep(500);
+        expectFileNotContains(TEST_FILE, 'tv-due');
+    });
+});

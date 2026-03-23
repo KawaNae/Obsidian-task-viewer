@@ -414,3 +414,30 @@ describe('full round-trip', () => {
         expectFileNotContains(TEST_FILE, 'Round-trip updated');
     });
 });
+
+// ────────────────────────────────────────────
+// 6. Clear status via "none" sentinel
+// ────────────────────────────────────────────
+describe('clear status via none sentinel', () => {
+    beforeAll(async () => {
+        writeTestFile(TEST_FILE, [
+            '- [x] Completed task @2026-05-01',
+        ].join('\n'));
+        await waitForFileIndexed(TEST_FILE);
+    });
+
+    it('unchecks task via status=none', async () => {
+        const task = await findTaskWait('Completed task');
+        expect(task).not.toBeNull();
+        expect(task!.status).toBe('x');
+
+        const id = task!.id as string;
+        const r = cliUpdate({ id, status: 'none', outputFields: OUTPUT_FIELDS });
+        expect(r).not.toHaveProperty('error');
+        expect(r.task.status).toBe(' ');
+
+        await sleep(500);
+        expectFileContains(TEST_FILE, '- [ ] Completed task');
+        expectFileNotContains(TEST_FILE, '- [x]');
+    });
+});
