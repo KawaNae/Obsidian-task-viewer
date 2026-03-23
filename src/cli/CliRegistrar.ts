@@ -3,15 +3,15 @@ import type TaskViewerPlugin from '../main';
 import { createListHandler, createTodayHandler, createGetHandler } from './handlers/TaskQueryHandlers';
 
 import { createCreateHandler, createUpdateHandler, createDeleteHandler } from './handlers/TaskCrudHandlers';
-import { createDuplicateHandler, createConvertHandler, createDateRangeHandler, createCategorizeHandler, createInsertChildHandler, createCreateFrontmatterHandler, createStartHourHandler } from './handlers/TaskActionHandlers';
+import { createDuplicateHandler, createConvertHandler, createTasksForDateRangeHandler, createTasksForDateHandler, createInsertChildTaskHandler, createCreateFrontmatterHandler, createGetStartHourHandler } from './handlers/TaskActionHandlers';
 import { createHelpHandler } from './handlers/HelpHandler';
 
 /**
  * Register all CLI handlers for the Task Viewer plugin.
  * Call once from plugin.onload() after TaskIndex is initialized.
  *
- * Commands (14): list, today, get, create, update, delete, duplicate, convert, date-range,
- *                 categorize, insert-child, create-frontmatter, start-hour, help
+ * Commands (14): list, today, get, create, update, delete, duplicate, convert, tasks-for-date-range,
+ *                 tasks-for-date, insert-child-task, create-frontmatter, get-start-hour, help
  */
 export function registerCliHandlers(plugin: TaskViewerPlugin): void {
     // ── Query commands (read-only) ──
@@ -101,10 +101,10 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
         {
             id:      { value: '<taskId>',        description: 'Task ID', required: true },
             content: { value: '<text>',          description: 'New content' },
-            start:   { value: '<date|datetime>', description: 'New start date/datetime' },
-            end:     { value: '<date|datetime>', description: 'New end date/datetime' },
-            due:     { value: '<YYYY-MM-DD>',    description: 'New due date' },
-            status:  { value: '<char>',          description: 'New status character' },
+            start:   { value: '<date|datetime|none>', description: 'New start date/datetime ("none" to clear)' },
+            end:     { value: '<date|datetime|none>', description: 'New end date/datetime ("none" to clear)' },
+            due:     { value: '<YYYY-MM-DD|none>',    description: 'New due date ("none" to clear)' },
+            status:  { value: '<char|none>',          description: 'New status character ("none" to uncheck)' },
             outputFields: { value: '<key,key,...>', description: 'Output fields (default: id only)' },
         },
         createUpdateHandler(plugin),
@@ -140,7 +140,7 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
     );
 
     plugin.registerCliHandler(
-        'obsidian-task-viewer:date-range',
+        'obsidian-task-viewer:tasks-for-date-range',
         'List tasks in a date range. Details: obsidian obsidian-task-viewer:help',
         {
             start:        { value: '<YYYY-MM-DD>',   description: 'Start date (inclusive)', required: true },
@@ -151,28 +151,28 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
             format:       { value: 'json|tsv|jsonl',  description: 'Output format (default: json)' },
             outputFields: { value: '<key,key,...>',   description: 'Output fields (default: id only)' },
         },
-        createDateRangeHandler(plugin),
+        createTasksForDateRangeHandler(plugin),
     );
 
     // ── Additional query/action commands ──
 
     plugin.registerCliHandler(
-        'obsidian-task-viewer:categorize',
+        'obsidian-task-viewer:tasks-for-date',
         'Get tasks for a date, categorized into allDay/timed/dueOnly. Details: obsidian obsidian-task-viewer:help',
         {
-            date: { value: '<YYYY-MM-DD>', description: 'Date to categorize', required: true },
+            date: { value: '<YYYY-MM-DD>', description: 'Date to query', required: true },
         },
-        createCategorizeHandler(plugin),
+        createTasksForDateHandler(plugin),
     );
 
     plugin.registerCliHandler(
-        'obsidian-task-viewer:insert-child',
+        'obsidian-task-viewer:insert-child-task',
         'Insert a child task under a parent. Details: obsidian obsidian-task-viewer:help',
         {
             'parent-id': { value: '<taskId>', description: 'Parent task ID', required: true },
             content:     { value: '<text>',   description: 'Child task content', required: true },
         },
-        createInsertChildHandler(plugin),
+        createInsertChildTaskHandler(plugin),
     );
 
     plugin.registerCliHandler(
@@ -189,10 +189,10 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
     );
 
     plugin.registerCliHandler(
-        'obsidian-task-viewer:start-hour',
+        'obsidian-task-viewer:get-start-hour',
         'Get the current startHour setting (visual day boundary)',
         null,
-        createStartHourHandler(plugin),
+        createGetStartHourHandler(plugin),
     );
 
     // ── Help ──

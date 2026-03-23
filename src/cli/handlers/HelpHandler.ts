@@ -14,11 +14,11 @@ Commands
   delete             Delete a task
   duplicate          Duplicate a task with optional date shifting
   convert            Convert an inline task to a frontmatter file
-  date-range         List tasks overlapping a date range
-  categorize         Get tasks for a date, categorized (allDay/timed/dueOnly)
-  insert-child       Insert a child task under a parent task
-  create-frontmatter Create a new frontmatter task file
-  start-hour         Get the current startHour setting
+  tasks-for-date-range  List tasks overlapping a date range
+  tasks-for-date        Get tasks for a date, categorized (allDay/timed/dueOnly)
+  insert-child-task     Insert a child task under a parent task
+  create-frontmatter    Create a new frontmatter task file
+  get-start-hour        Get the current startHour setting
   help               Show this reference
 
 Run "obsidian help obsidian-task-viewer:<command>" for each command's flags.
@@ -101,13 +101,13 @@ convert: Flags
                        Converts the inline task to a new frontmatter task file.
                        Returns the path of the newly created file.
 
-categorize: Flags
------------------
-  date=<YYYY-MM-DD>  Date to categorize [required]
+tasks-for-date: Flags
+---------------------
+  date=<YYYY-MM-DD>  Date to query [required]
                      Returns { allDay: [...], timed: [...], dueOnly: [...] }
 
-insert-child: Flags
--------------------
+insert-child-task: Flags
+------------------------
   parent-id=<taskId> Parent task ID [required]
   content=<text>     Child task content [required]
                      Inserts a new child task (- [ ] content) under the parent.
@@ -121,12 +121,12 @@ create-frontmatter: Flags
   status=<char>        Status character (default: space)
                        Creates a new frontmatter task file. Returns the new file path.
 
-start-hour: Flags
------------------
+get-start-hour: Flags
+---------------------
   (no flags)           Returns the current startHour setting (visual day boundary).
 
-date-range: Flags
------------------
+tasks-for-date-range: Flags
+---------------------------
   start=<YYYY-MM-DD>   Start date (inclusive) [required]
   end=<YYYY-MM-DD>     End date (inclusive) [required]
   sort=<prop[:dir],..> Sort (e.g. startDate:asc,due:desc)

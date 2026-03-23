@@ -30,11 +30,11 @@ import {
     type DuplicateResult,
     type ConvertParams,
     type ConvertResult,
-    type DateRangeParams,
-    type CategorizeParams,
+    type TasksForDateRangeParams,
+    type TasksForDateParams,
     type CategorizedTasksResult,
-    type InsertChildParams,
-    type InsertChildResult,
+    type InsertChildTaskParams,
+    type InsertChildTaskResult,
     type CreateFrontmatterParams,
     type CreateFrontmatterResult,
     type StartHourResult,
@@ -136,10 +136,10 @@ Methods
     ConvertParams:
       id: string                   Task ID (required)
 
-  dateRange(params: DateRangeParams): Promise<TaskListResult>
+  tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult>
     List tasks in a date range.
 
-    DateRangeParams:
+    TasksForDateRangeParams:
       start: string                Start date YYYY-MM-DD (required)
       end: string                  End date YYYY-MM-DD (required)
       filter?: FilterState         FilterState object
@@ -147,19 +147,19 @@ Methods
       limit?: number               Max results (default: 100)
       offset?: number              Skip first N results
 
-  categorize(params: CategorizeParams): CategorizedTasksResult
+  tasksForDate(params: TasksForDateParams): CategorizedTasksResult
     Get tasks for a date, categorized into allDay/timed/dueOnly.
 
-    CategorizeParams:
+    TasksForDateParams:
       date: string                 Date YYYY-MM-DD (required)
       filter?: FilterState         FilterState object
 
     Returns: { allDay: NormalizedTask[], timed: NormalizedTask[], dueOnly: NormalizedTask[] }
 
-  insertChild(params: InsertChildParams): Promise<InsertChildResult>
+  insertChildTask(params: InsertChildTaskParams): Promise<InsertChildTaskResult>
     Insert a child task under a parent task.
 
-    InsertChildParams:
+    InsertChildTaskParams:
       parentId: string             Parent task ID (required)
       content: string              Child task content (required)
 
@@ -273,20 +273,20 @@ Examples
   await api.convertToFrontmatter({ id: 'at-notation:daily/2026-03-15.md:ln:5' });
 
   // List tasks in a date range
-  await api.dateRange({ start: '2026-03-01', end: '2026-03-31' });
+  await api.tasksForDateRange({ start: '2026-03-01', end: '2026-03-31' });
 
   // List tasks in a date range with sort
-  await api.dateRange({
+  await api.tasksForDateRange({
     start: '2026-03-01',
     end: '2026-03-31',
     sort: [{ property: 'startDate', direction: 'asc' }],
   });
 
   // Get categorized tasks for a date
-  api.categorize({ date: '2026-03-23' });
+  api.tasksForDate({ date: '2026-03-23' });
 
   // Insert a child task
-  await api.insertChild({ parentId: 'at-notation:daily/2026-03-15.md:ln:5', content: 'Sub-task' });
+  await api.insertChildTask({ parentId: 'at-notation:daily/2026-03-15.md:ln:5', content: 'Sub-task' });
 
   // Create a frontmatter task
   await api.createFrontmatterTask({ content: 'Project task', start: '2026-03-20 10:00' });
@@ -494,23 +494,39 @@ export class TaskApi {
         const updates: Partial<Task> = {};
 
         if (params.content !== undefined) updates.content = params.content;
-        if (params.status !== undefined) updates.statusChar = params.status;
+        if (params.status !== undefined) {
+            updates.statusChar = params.status === 'none' ? ' ' : params.status;
+        }
 
         if (params.start !== undefined) {
-            const parsed = parseDateTimeParam(params.start, 'start');
-            if (parsed.date) updates.startDate = parsed.date;
-            if (parsed.time) updates.startTime = parsed.time;
+            if (params.start === 'none') {
+                updates.startDate = undefined;
+                updates.startTime = undefined;
+            } else {
+                const parsed = parseDateTimeParam(params.start, 'start');
+                if (parsed.date) updates.startDate = parsed.date;
+                if (parsed.time) updates.startTime = parsed.time;
+            }
         }
 
         if (params.end !== undefined) {
-            const parsed = parseDateTimeParam(params.end, 'end');
-            if (parsed.date) updates.endDate = parsed.date;
-            if (parsed.time) updates.endTime = parsed.time;
+            if (params.end === 'none') {
+                updates.endDate = undefined;
+                updates.endTime = undefined;
+            } else {
+                const parsed = parseDateTimeParam(params.end, 'end');
+                if (parsed.date) updates.endDate = parsed.date;
+                if (parsed.time) updates.endTime = parsed.time;
+            }
         }
 
         if (params.due !== undefined) {
-            const parsed = parseDateTimeParam(params.due, 'due');
-            updates.due = parsed.date;
+            if (params.due === 'none') {
+                updates.due = undefined;
+            } else {
+                const parsed = parseDateTimeParam(params.due, 'due');
+                updates.due = parsed.date;
+            }
         }
 
         await this.writeService.updateTask(params.id, updates);
@@ -562,7 +578,7 @@ export class TaskApi {
     /**
      * List tasks in a date range with optional filter, sort, and pagination.
      */
-    async dateRange(params: DateRangeParams): Promise<TaskListResult> {
+    async tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult> {
         if (!params.start) throw new TaskApiError('Missing required parameter: start');
         if (!params.end) throw new TaskApiError('Missing required parameter: end');
         let tasks = this.readService.getTasksForDateRange(params.start, params.end, params.filter);
@@ -578,7 +594,7 @@ export class TaskApi {
     /**
      * Get tasks for a date, categorized into allDay/timed/dueOnly.
      */
-    categorize(params: CategorizeParams): CategorizedTasksResult {
+    tasksForDate(params: TasksForDateParams): CategorizedTasksResult {
         if (!params.date) throw new TaskApiError('Missing required parameter: date');
         const result = this.readService.getTasksForDate(params.date, params.filter);
         return {
@@ -591,7 +607,7 @@ export class TaskApi {
     /**
      * Insert a child task under a parent task.
      */
-    async insertChild(params: InsertChildParams): Promise<InsertChildResult> {
+    async insertChildTask(params: InsertChildTaskParams): Promise<InsertChildTaskResult> {
         if (!params.parentId) throw new TaskApiError('Missing required parameter: parentId');
         if (!params.content) throw new TaskApiError('Missing required parameter: content');
         const task = this.readService.getTask(params.parentId);

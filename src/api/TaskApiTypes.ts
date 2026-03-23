@@ -149,16 +149,16 @@ export interface ConvertResult {
     newFile: string;
 }
 
-export interface DateRangeParams extends PaginationParams {
+export interface TasksForDateRangeParams extends PaginationParams {
     start: string;
     end: string;
     filter?: FilterState;
     sort?: ApiSortRule[];
 }
 
-// ── categorize ──
+// ── tasksForDate ──
 
-export interface CategorizeParams {
+export interface TasksForDateParams {
     date: string;
     filter?: FilterState;
 }
@@ -169,14 +169,14 @@ export interface CategorizedTasksResult {
     dueOnly: NormalizedTask[];
 }
 
-// ── insertChild ──
+// ── insertChildTask ──
 
-export interface InsertChildParams {
+export interface InsertChildTaskParams {
     parentId: string;
     content: string;
 }
 
-export interface InsertChildResult {
+export interface InsertChildTaskResult {
     parentId: string;
 }
 

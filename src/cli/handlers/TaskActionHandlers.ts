@@ -55,12 +55,12 @@ export function createConvertHandler(plugin: TaskViewerPlugin) {
     };
 }
 
-export function createCategorizeHandler(plugin: TaskViewerPlugin) {
+export function createTasksForDateHandler(plugin: TaskViewerPlugin) {
     return (params: CliData): string => {
         if (!params.date) return cliError('Missing required flag: --date');
 
         try {
-            const result = plugin.api.categorize({ date: params.date });
+            const result = plugin.api.tasksForDate({ date: params.date });
             return cliOk({ ...result });
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.message : `Failed to categorize tasks: ${e instanceof Error ? e.message : String(e)}`);
@@ -68,13 +68,13 @@ export function createCategorizeHandler(plugin: TaskViewerPlugin) {
     };
 }
 
-export function createInsertChildHandler(plugin: TaskViewerPlugin) {
+export function createInsertChildTaskHandler(plugin: TaskViewerPlugin) {
     return async (params: CliData): Promise<string> => {
         if (!params['parent-id']) return cliError('Missing required flag: --parent-id');
         if (!params.content) return cliError('Missing required flag: --content');
 
         try {
-            const result = await plugin.api.insertChild({
+            const result = await plugin.api.insertChildTask({
                 parentId: params['parent-id'],
                 content: params.content,
             });
@@ -104,14 +104,14 @@ export function createCreateFrontmatterHandler(plugin: TaskViewerPlugin) {
     };
 }
 
-export function createStartHourHandler(plugin: TaskViewerPlugin) {
+export function createGetStartHourHandler(plugin: TaskViewerPlugin) {
     return (): string => {
         const result = plugin.api.getStartHour();
         return cliOk({ ...result });
     };
 }
 
-export function createDateRangeHandler(plugin: TaskViewerPlugin) {
+export function createTasksForDateRangeHandler(plugin: TaskViewerPlugin) {
     return async (params: CliData): Promise<string> => {
         if (!params.start) return cliError('Missing required flag: --start');
         if (!params.end) return cliError('Missing required flag: --end');
@@ -129,7 +129,7 @@ export function createDateRangeHandler(plugin: TaskViewerPlugin) {
                 return cliError('--limit must be a non-negative integer');
             }
 
-            const result = await plugin.api.dateRange({
+            const result = await plugin.api.tasksForDateRange({
                 start: params.start,
                 end: params.end,
                 sort,
