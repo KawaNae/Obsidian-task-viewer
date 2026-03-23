@@ -12,6 +12,9 @@ Commands
   create        Create a new inline task
   update        Update an existing task
   delete        Delete a task
+  duplicate     Duplicate a task with optional date shifting
+  convert       Convert an inline task to a frontmatter file
+  date-range    List tasks overlapping a date range
   help          Show this reference
 
 Run "obsidian help obsidian-task-viewer:<command>" for each command's flags.
@@ -81,6 +84,30 @@ update: Flags
   end=<date|datetime>  New end date/datetime
   due=<YYYY-MM-DD>     New due date
   status=<char>        New status character
+
+duplicate: Flags
+----------------
+  id=<taskId>          Task ID [required]
+  day-offset=<n>       Days to shift all dates (positive=future, negative=past, default: 0)
+  count=<n>            Number of copies to create (default: 1)
+
+convert: Flags
+--------------
+  id=<taskId>          Task ID [required]
+                       Converts the inline task to a new frontmatter task file.
+                       Returns the path of the newly created file.
+
+date-range: Flags
+-----------------
+  start=<YYYY-MM-DD>   Start date (inclusive) [required]
+  end=<YYYY-MM-DD>     End date (inclusive) [required]
+  sort=<prop[:dir],..> Sort (e.g. startDate:asc,due:desc)
+  limit=<number>       Max results
+  offset=<number>      Skip first N results
+  format=json|tsv|jsonl Output format (default: json)
+  outputFields=<key,..> Output fields (default: id only)
+                       Includes tasks whose effective start..end range overlaps [start, end].
+                       Due-only tasks (no start/end) are included if due falls in range.
 
 filter-file: File-based Filtering
 ==================================

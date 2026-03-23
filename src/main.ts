@@ -262,6 +262,7 @@ export default class TaskViewerPlugin extends Plugin {
         const taskMenuResult = createTaskMenuExtension(
             this.app,
             this.taskIndex,
+            this.writeService,
             editorPropertiesBuilder,
             editorTimerBuilder,
             editorActionsBuilder,

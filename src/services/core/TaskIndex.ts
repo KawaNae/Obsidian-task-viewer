@@ -1,5 +1,5 @@
-import { App, TFile, Notice } from 'obsidian';
-import type { Task, TaskViewerSettings } from '../../types';
+import { App, TFile } from 'obsidian';
+import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
 import { isFrontmatterTask } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
@@ -14,6 +14,8 @@ import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { DateUtils as CoreDateUtils } from '../../utils/DateUtils';
 import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { TaskParser } from '../parsing/TaskParser';
+import { HeadingInserter } from '../../utils/HeadingInserter';
+import { FileOperations } from '../persistence/utils/FileOperations';
 
 export interface ValidationError {
     file: string;
@@ -393,7 +395,7 @@ export class TaskIndex {
         await this.scanner.waitForScan(task.file);
     }
 
-    async duplicateTask(taskId: string): Promise<void> {
+    async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<void> {
         const task = this.store.getTask(taskId);
         if (!task) return;
         if (task.isReadOnly) return;
@@ -401,9 +403,9 @@ export class TaskIndex {
         this.syncDetector.markLocalEdit(task.file);
 
         if (isFrontmatterTask(task)) {
-            await this.repository.duplicateFrontmatterTask(task);
+            await this.repository.duplicateFrontmatterTask(task, this.settings.frontmatterTaskKeys, options);
         } else {
-            await this.repository.duplicateTaskInFile(task);
+            await this.repository.duplicateInlineTask(task, options);
         }
 
         await this.scanner.waitForScan(task.file);
@@ -412,63 +414,62 @@ export class TaskIndex {
     /**
      * inline タスクを frontmatter タスクファイルに変換。
      * ソースファイル + 新ファイルの両方を再スキャン。
+     * @returns 新ファイルのパス
      */
-    async convertToFrontmatterTask(taskId: string): Promise<void> {
+    async convertToFrontmatterTask(taskId: string): Promise<string> {
         const task = this.store.getTask(taskId);
-        if (!task) return;
+        if (!task) throw new Error('Task not found');
 
-        // inline タスクのみ変換可能
         if (task.parserId !== 'at-notation') {
-            new Notice('Only inline tasks can be converted to frontmatter tasks');
-            return;
+            throw new Error('Only inline tasks can be converted to frontmatter tasks');
         }
 
         this.syncDetector.markLocalEdit(task.file);
 
-        try {
-            const newPath = await this.inlineToFrontmatterConversionService.convertInlineTaskToFrontmatter(
-                task,
-                this.settings.frontmatterTaskHeader,
-                this.settings.frontmatterTaskHeaderLevel,
-                this.settings.frontmatterTaskKeys
-            );
-
-            // ソースファイル再スキャン (wikilink が追加される)
-            await this.scanner.waitForScan(task.file);
-            await this.scanner.waitForScan(newPath);
-
-            new Notice('Task converted to frontmatter file');
-        } catch (error) {
-            console.error('[TaskIndex] Failed to convert task:', error);
-            new Notice('Failed to convert task: ' + (error as Error).message);
-        }
-    }
-
-    async duplicateTaskForWeek(taskId: string): Promise<void> {
-        const task = this.store.getTask(taskId);
-        if (!task) return;
-
-        this.syncDetector.markLocalEdit(task.file);
-
-        if (isFrontmatterTask(task)) {
-            await this.repository.duplicateFrontmatterTaskForWeek(task, this.settings.frontmatterTaskKeys);
-        } else {
-            await this.repository.duplicateTaskForWeek(task);
-        }
+        const newPath = await this.inlineToFrontmatterConversionService.convertInlineTaskToFrontmatter(
+            task,
+            this.settings.frontmatterTaskHeader,
+            this.settings.frontmatterTaskHeaderLevel,
+            this.settings.frontmatterTaskKeys
+        );
 
         await this.scanner.waitForScan(task.file);
+        await this.scanner.waitForScan(newPath);
+
+        return newPath;
     }
 
-    async duplicateTaskForTomorrow(taskId: string): Promise<void> {
-        const task = this.store.getTask(taskId);
+    async createTask(filePath: string, taskLine: string, heading?: string): Promise<void> {
+        this.syncDetector.markLocalEdit(filePath);
+
+        if (heading) {
+            const file = this.app.vault.getAbstractFileByPath(filePath);
+            if (!(file instanceof TFile)) return;
+            await this.app.vault.process(file, (content) =>
+                HeadingInserter.insertUnderHeading(content, taskLine, heading, 2)
+            );
+        } else {
+            await this.repository.appendTaskToFile(filePath, taskLine);
+        }
+
+        await this.scanner.waitForScan(filePath);
+    }
+
+    async insertChildTask(parentTaskId: string, childLine: string): Promise<void> {
+        const task = this.store.getTask(parentTaskId);
         if (!task) return;
 
         this.syncDetector.markLocalEdit(task.file);
 
         if (isFrontmatterTask(task)) {
-            await this.repository.duplicateFrontmatterTaskForTomorrow(task, this.settings.frontmatterTaskKeys);
+            await this.repository.insertLineAfterFrontmatter(
+                task.file, childLine,
+                this.settings.frontmatterTaskHeader,
+                this.settings.frontmatterTaskHeaderLevel
+            );
         } else {
-            await this.repository.duplicateTaskForTomorrow(task);
+            const childIndent = FileOperations.getChildIndent(task.originalText);
+            await this.repository.insertLineAsFirstChild(task, childIndent + childLine);
         }
 
         await this.scanner.waitForScan(task.file);

@@ -3,13 +3,14 @@ import type TaskViewerPlugin from '../main';
 import { createListHandler, createTodayHandler, createGetHandler } from './handlers/TaskQueryHandlers';
 
 import { createCreateHandler, createUpdateHandler, createDeleteHandler } from './handlers/TaskCrudHandlers';
+import { createDuplicateHandler, createConvertHandler, createDateRangeHandler } from './handlers/TaskActionHandlers';
 import { createHelpHandler } from './handlers/HelpHandler';
 
 /**
  * Register all CLI handlers for the Task Viewer plugin.
  * Call once from plugin.onload() after TaskIndex is initialized.
  *
- * Commands (7): list, today, get, create, update, delete, help
+ * Commands (10): list, today, get, create, update, delete, duplicate, convert, date-range, help
  */
 export function registerCliHandlers(plugin: TaskViewerPlugin): void {
     // ── Query commands (read-only) ──
@@ -113,6 +114,43 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
         'Delete a task. Details: obsidian obsidian-task-viewer:help',
         { id: { value: '<taskId>', description: 'Task ID', required: true } },
         createDeleteHandler(plugin),
+    );
+
+    // ── Action commands ──
+
+    plugin.registerCliHandler(
+        'obsidian-task-viewer:duplicate',
+        'Duplicate a task with optional date shifting. Details: obsidian obsidian-task-viewer:help',
+        {
+            id:           { value: '<taskId>', description: 'Task ID', required: true },
+            'day-offset': { value: '<number>', description: 'Days to shift dates (default: 0)' },
+            count:        { value: '<number>', description: 'Number of copies (default: 1)' },
+        },
+        createDuplicateHandler(plugin),
+    );
+
+    plugin.registerCliHandler(
+        'obsidian-task-viewer:convert',
+        'Convert inline task to frontmatter file. Details: obsidian obsidian-task-viewer:help',
+        {
+            id: { value: '<taskId>', description: 'Task ID', required: true },
+        },
+        createConvertHandler(plugin),
+    );
+
+    plugin.registerCliHandler(
+        'obsidian-task-viewer:date-range',
+        'List tasks in a date range. Details: obsidian obsidian-task-viewer:help',
+        {
+            start:        { value: '<YYYY-MM-DD>',   description: 'Start date (inclusive)', required: true },
+            end:          { value: '<YYYY-MM-DD>',   description: 'End date (inclusive)', required: true },
+            sort:         { value: '<prop[:dir],..>', description: 'Sort (e.g. startDate:asc,due:desc)' },
+            limit:        { value: '<number>',        description: 'Max results' },
+            offset:       { value: '<number>',        description: 'Skip first N' },
+            format:       { value: 'json|tsv|jsonl',  description: 'Output format (default: json)' },
+            outputFields: { value: '<key,key,...>',   description: 'Output fields (default: id only)' },
+        },
+        createDateRangeHandler(plugin),
     );
 
     // ── Help ──

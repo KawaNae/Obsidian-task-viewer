@@ -11,7 +11,6 @@ import type { FilterState } from '../services/filter/FilterTypes';
 import type { SortState, SortProperty } from '../services/sort/SortTypes';
 import { DateUtils } from '../utils/DateUtils';
 import { ViewTemplateLoader } from '../services/template/ViewTemplateLoader';
-import { HeadingInserter } from '../utils/HeadingInserter';
 import { parseDateTimeFlag } from '../cli/CliFilterBuilder';
 import { buildFilterFromParams } from './FilterParamsBuilder';
 import { loadFilterFile } from './FilterFileLoader';
@@ -32,6 +31,13 @@ import {
     type DeleteResult,
     type ApiSortRule,
     type PaginationParams,
+    type DuplicateParams,
+    type DuplicateResult,
+    type ConvertParams,
+    type ConvertResult,
+    type DateRangeParams,
+    type DateParams,
+    type CategorizedTasksResult,
 } from './TaskApiTypes';
 
 const API_HELP_TEXT = `
@@ -124,6 +130,41 @@ Methods
   help(): string
     Show this reference.
 
+  duplicate(params: DuplicateParams): Promise<DuplicateResult>
+    Duplicate a task with optional date shifting.
+
+    DuplicateParams:
+      id: string                   Task ID (required)
+      dayOffset?: number           Days to shift dates (default: 0)
+      count?: number               Number of copies (default: 1)
+
+  convertToFrontmatter(params: ConvertParams): Promise<ConvertResult>
+    Convert an inline task to a frontmatter task file.
+
+    ConvertParams:
+      id: string                   Task ID (required)
+
+  dateRange(params: DateRangeParams): Promise<TaskListResult>
+    List tasks in a date range.
+
+    DateRangeParams:
+      start: string                Start date YYYY-MM-DD (required)
+      end: string                  End date YYYY-MM-DD (required)
+      filter?: FilterState         FilterState object
+      sort?: ApiSortRule[]         Sort rules
+      limit?: number               Max results (default: 100)
+      offset?: number              Skip first N results
+
+  categorize(params: DateParams): CategorizedTasksResult
+    Get tasks for a date, categorized into allDay/timed/dueOnly.
+
+    DateParams:
+      date: string                 Date YYYY-MM-DD (required)
+      filter?: FilterState         FilterState object
+
+  onChange(callback): () => void
+    Subscribe to task changes. Returns unsubscribe function.
+
 Sort
 ----
   ApiSortRule: { property: string, direction?: 'asc' | 'desc' }
@@ -203,6 +244,34 @@ Examples
 
   // Get a specific task
   api.get({ id: 'at-notation:daily/2026-03-15.md:ln:5' });
+
+  // Duplicate a task, shifting dates by 1 day
+  await api.duplicate({ id: 'at-notation:daily/2026-03-15.md:ln:5', dayOffset: 1 });
+
+  // Duplicate a task 3 times (no date shift)
+  await api.duplicate({ id: 'at-notation:daily/2026-03-15.md:ln:5', count: 3 });
+
+  // Convert an inline task to a frontmatter task file
+  await api.convertToFrontmatter({ id: 'at-notation:daily/2026-03-15.md:ln:5' });
+
+  // List tasks in a date range
+  await api.dateRange({ start: '2026-03-01', end: '2026-03-31' });
+
+  // List tasks in a date range with sort
+  await api.dateRange({
+    start: '2026-03-01',
+    end: '2026-03-31',
+    sort: [{ property: 'startDate', direction: 'asc' }],
+  });
+
+  // Categorize tasks for a specific date
+  api.categorize({ date: '2026-03-23' });
+
+  // Subscribe to task changes
+  const unsubscribe = api.onChange((taskId) => {
+    console.log('Task changed:', taskId);
+  });
+  // Later: unsubscribe();
 `.trim();
 
 // ── Internal helpers ──
@@ -427,16 +496,7 @@ export class TaskApi {
             line += ` ${dateBlock}`;
         }
 
-        if (params.heading) {
-            await this.plugin.app.vault.process(file, (fileContent) =>
-                HeadingInserter.insertUnderHeading(fileContent, line, params.heading!, 2),
-            );
-        } else {
-            const repo = this.plugin.getTaskRepository();
-            await repo.appendTaskToFile(params.file, line);
-        }
-
-        await this.writeService.waitForScan(params.file);
+        await this.writeService.createTask(params.file, line, params.heading);
 
         const tasks = this.readService.getTasks().filter(
             t => t.file === params.file && t.content === content,
@@ -500,6 +560,67 @@ export class TaskApi {
 
         await this.writeService.deleteTask(params.id);
         return { deleted: params.id };
+    }
+
+    /**
+     * Duplicate a task with optional date shifting.
+     */
+    async duplicate(params: DuplicateParams): Promise<DuplicateResult> {
+        if (!params.id) throw new TaskApiError('Missing required parameter: id');
+        const task = this.readService.getTask(params.id);
+        if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
+        await this.writeService.duplicateTask(params.id, {
+            dayOffset: params.dayOffset,
+            count: params.count,
+        });
+        return { duplicated: params.id };
+    }
+
+    /**
+     * Convert an inline task to a frontmatter task file.
+     */
+    async convertToFrontmatter(params: ConvertParams): Promise<ConvertResult> {
+        if (!params.id) throw new TaskApiError('Missing required parameter: id');
+        const task = this.readService.getTask(params.id);
+        if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
+        const newPath = await this.writeService.convertToFrontmatterTask(params.id);
+        return { convertedFrom: params.id, newFile: newPath };
+    }
+
+    /**
+     * List tasks in a date range with optional filter, sort, and pagination.
+     */
+    async dateRange(params: DateRangeParams): Promise<TaskListResult> {
+        if (!params.start) throw new TaskApiError('Missing required parameter: start');
+        if (!params.end) throw new TaskApiError('Missing required parameter: end');
+        let tasks = this.readService.getTasksForDateRange(params.start, params.end, params.filter);
+        const sortState = buildSortState(params.sort);
+        if (sortState) {
+            tasks = [...tasks];
+            TaskSorter.sort(tasks, sortState);
+        }
+        const paged = paginate(tasks, params);
+        return { count: paged.length, tasks: paged.map(normalizeTask) };
+    }
+
+    /**
+     * Get tasks for a date, categorized into allDay/timed/dueOnly.
+     */
+    categorize(params: DateParams): CategorizedTasksResult {
+        if (!params.date) throw new TaskApiError('Missing required parameter: date');
+        const result = this.readService.getTasksForDate(params.date, params.filter);
+        return {
+            allDay: result.allDay.map(normalizeTask),
+            timed: result.timed.map(normalizeTask),
+            dueOnly: result.dueOnly.map(normalizeTask),
+        };
+    }
+
+    /**
+     * Subscribe to task changes. Returns an unsubscribe function.
+     */
+    onChange(callback: (taskId?: string) => void): () => void {
+        return this.readService.onChange(callback);
     }
 
     /**

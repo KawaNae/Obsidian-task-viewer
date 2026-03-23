@@ -3,6 +3,7 @@ import { StateEffect, RangeSet, type Extension } from '@codemirror/state';
 import { editorInfoField, Menu, setIcon, MarkdownView } from 'obsidian';
 import type { App } from 'obsidian';
 import type { TaskIndex } from '../services/core/TaskIndex';
+import type { TaskWriteService } from '../services/data/TaskWriteService';
 import type { TaskViewerSettings } from '../types';
 import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 import type { PropertiesMenuBuilder } from '../interaction/menu/builders/PropertiesMenuBuilder';
@@ -63,6 +64,7 @@ export interface TaskMenuExtensionResult {
 export function createTaskMenuExtension(
     app: App,
     taskIndex: TaskIndex,
+    writeService: TaskWriteService,
     propertiesBuilder: PropertiesMenuBuilder,
     timerBuilder: TimerMenuBuilder,
     actionsBuilder: TaskActionsMenuBuilder,
@@ -92,9 +94,9 @@ export function createTaskMenuExtension(
             const lineText = view.state.doc.line(lineNumber + 1).text; // CM6 lines are 1-based
 
             const ops: CheckboxLineOps = {
-                updateLine: (content) => taskIndex.updateLine(filePath, lineNumber, content),
-                insertLineAfter: (content) => taskIndex.insertLineAfterLine(filePath, lineNumber, content),
-                deleteLine: () => taskIndex.deleteLine(filePath, lineNumber),
+                updateLine: (content) => writeService.updateLine(filePath, lineNumber, content),
+                insertLineAfter: (content) => writeService.insertLineAfterLine(filePath, lineNumber, content),
+                deleteLine: () => writeService.deleteLine(filePath, lineNumber),
             };
 
             checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops, filePath);

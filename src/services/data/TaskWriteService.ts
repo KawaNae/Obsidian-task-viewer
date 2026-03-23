@@ -1,10 +1,11 @@
 import type { TFile } from 'obsidian';
-import type { Task } from '../../types';
+import type { DuplicateOptions, Task } from '../../types';
 import type { TaskIndex } from '../core/TaskIndex';
 
 /**
  * Write-side entry point for views and interaction handlers.
  * All task mutations go through this service.
+ * Pure delegation layer — no business logic here.
  */
 export class TaskWriteService {
     constructor(private taskIndex: TaskIndex) {}
@@ -19,20 +20,22 @@ export class TaskWriteService {
         return this.taskIndex.deleteTask(taskId);
     }
 
-    async duplicateTask(taskId: string): Promise<void> {
-        return this.taskIndex.duplicateTask(taskId);
+    async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<void> {
+        return this.taskIndex.duplicateTask(taskId, options);
     }
 
-    async duplicateTaskForWeek(taskId: string): Promise<void> {
-        return this.taskIndex.duplicateTaskForWeek(taskId);
-    }
-
-    async duplicateTaskForTomorrow(taskId: string): Promise<void> {
-        return this.taskIndex.duplicateTaskForTomorrow(taskId);
-    }
-
-    async convertToFrontmatterTask(taskId: string): Promise<void> {
+    async convertToFrontmatterTask(taskId: string): Promise<string> {
         return this.taskIndex.convertToFrontmatterTask(taskId);
+    }
+
+    // ===== Task creation =====
+
+    async createTask(filePath: string, taskLine: string, heading?: string): Promise<void> {
+        return this.taskIndex.createTask(filePath, taskLine, heading);
+    }
+
+    async insertChildTask(parentTaskId: string, childLine: string): Promise<void> {
+        return this.taskIndex.insertChildTask(parentTaskId, childLine);
     }
 
     // ===== Line-level operations =====
@@ -68,5 +71,4 @@ export class TaskWriteService {
     async waitForScan(filePath: string): Promise<void> {
         return this.taskIndex.waitForScan(filePath);
     }
-
 }

@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import type { FrontmatterTaskKeys, Task } from '../../types';
+import type { DuplicateOptions, FrontmatterTaskKeys, Task } from '../../types';
 import { TaskParser } from '../parsing/TaskParser';
 import { DateUtils } from '../../utils/DateUtils';
 import { FileOperations } from './utils/FileOperations';
@@ -17,124 +17,86 @@ export class TaskCloner {
     ) { }
 
     /**
-     * インラインタスクを同一ファイル内に複製する。
-     * 元タスクの前に挿入される。Block ID は除去される。
+     * インラインタスクを複製する。
+     * - dayOffset=0, count=1: 同一ファイル内に複製（Block ID除去、元タスクの前に挿入）
+     * - dayOffset>0, count=1: 指定日数シフトして1件複製（元タスクの前に挿入）
+     * - count>1: dayOffset..dayOffset+count-1 の各日付で複製（future-first 挿入）
      */
-    async duplicateTaskInFile(task: Task): Promise<void> {
+    async duplicateInlineTask(task: Task, options?: DuplicateOptions): Promise<void> {
+        const { dayOffset = 0, count = 1 } = options ?? {};
+
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;
 
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
-            const idx = this.fileOps.findTaskLineNumber(lines, task);
-            if (idx < 0 || idx >= lines.length) return content;
 
-            const cleanParent = this.fileOps.stripBlockIds([lines[idx]])[0];
-            const result = this.duplicateInlineTaskLines(lines, task, cleanParent, 'before');
-            return result ? result.join('\n') : content;
-        });
-    }
+            if (count > 1) {
+                // Multi-copy: future-first insertion (highest offset first)
+                const currentLine = this.fileOps.findTaskLineNumber(lines, task);
+                if (currentLine < 0 || currentLine >= lines.length) return content;
 
-    /**
-     * インラインタスクを翌日分として複製する。
-     * 親行の @start/@end 日付を +1 日シフトする（due は保持、子行はそのまま）。
-     */
-    async duplicateTaskForTomorrow(task: Task): Promise<void> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return;
+                const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
+                const cleanParent = this.fileOps.stripBlockIds([lines[currentLine]])[0];
+                const cleanedChildren = this.fileOps.stripBlockIds(childrenLines);
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-            const idx = this.fileOps.findTaskLineNumber(lines, task);
-            if (idx < 0 || idx >= lines.length) return content;
+                const newLines: string[] = [];
+                // Future-first order: highest offset first so newer dates appear above older ones.
+                for (let offset = dayOffset + count - 1; offset >= dayOffset; offset--) {
+                    newLines.push(this.shiftInlineDates(cleanParent, offset));
+                    newLines.push(...cleanedChildren);
+                }
 
-            const shiftedParent = this.shiftInlineDates(
-                this.fileOps.stripBlockIds([lines[idx]])[0], 1
-            );
-            const result = this.duplicateInlineTaskLines(lines, task, shiftedParent, 'before');
-            return result ? result.join('\n') : content;
-        });
-    }
+                lines.splice(currentLine, 0, ...newLines);
+                return lines.join('\n');
+            } else if (dayOffset === 0) {
+                // In-place copy: clean parent, insert before
+                const idx = this.fileOps.findTaskLineNumber(lines, task);
+                if (idx < 0 || idx >= lines.length) return content;
 
-    /**
-     * インラインタスクを1週間分（7日間）複製する。
-     * 各コピーの親行 @start/@end 日付を1日ずつシフトする（due は保持、子行はそのまま）。
-     */
-    async duplicateTaskForWeek(task: Task): Promise<void> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return;
+                const cleanParent = this.fileOps.stripBlockIds([lines[idx]])[0];
+                const result = this.duplicateInlineTaskLines(lines, task, cleanParent, 'before');
+                return result ? result.join('\n') : content;
+            } else {
+                // Single copy with date shift
+                const idx = this.fileOps.findTaskLineNumber(lines, task);
+                if (idx < 0 || idx >= lines.length) return content;
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-            if (currentLine < 0 || currentLine >= lines.length) return content;
-
-            const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
-            const cleanParent = this.fileOps.stripBlockIds([lines[currentLine]])[0];
-            const cleanedChildren = this.fileOps.stripBlockIds(childrenLines);
-
-            const newLines: string[] = [];
-            // Future-first order: +7 ... +1 so newer dates appear above older ones.
-            for (let dayOffset = 7; dayOffset >= 1; dayOffset--) {
-                newLines.push(this.shiftInlineDates(cleanParent, dayOffset));
-                newLines.push(...cleanedChildren);
+                const shiftedParent = this.shiftInlineDates(
+                    this.fileOps.stripBlockIds([lines[idx]])[0], dayOffset
+                );
+                const result = this.duplicateInlineTaskLines(lines, task, shiftedParent, 'before');
+                return result ? result.join('\n') : content;
             }
-
-            lines.splice(currentLine, 0, ...newLines);
-            return lines.join('\n');
         });
     }
 
     /**
      * Frontmatter タスクを複製する（新規ファイル作成）。
-     * ファイル名: `Name.md` → `Name copy.md` → `Name copy 2.md` → ...
+     * - dayOffset=0: `Name.md` → `Name copy.md` → `Name copy 2.md` → ...
+     * - dayOffset>0: dayOffset..dayOffset+count-1 の各日付でシフトしたファイルを作成
      */
-    async duplicateFrontmatterTask(task: Task): Promise<void> {
+    async duplicateFrontmatterTask(task: Task, frontmatterKeys: FrontmatterTaskKeys, options?: DuplicateOptions): Promise<void> {
+        const { dayOffset = 0, count = 1 } = options ?? {};
+
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;
 
-        const content = await this.app.vault.read(file);
-        const newPath = this.generateCopyPath(file);
-        await this.fileOps.ensureDirectoryExists(newPath);
-        await this.app.vault.create(newPath, content);
-    }
-
-    /**
-     * Frontmatter タスクを翌日分として複製する。
-     * ファイル名: 既存日付あり → 置換、なし → 末尾に追加
-     */
-    async duplicateFrontmatterTaskForTomorrow(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return;
-
-        const content = await this.app.vault.read(file);
-        const dayOffset = 1;
-        const shiftedContent = this.shiftFrontmatterDates(content, dayOffset, frontmatterKeys);
-        const newPath = this.generateDatedPath(file, task, dayOffset);
-
-        if (!this.app.vault.getAbstractFileByPath(newPath)) {
+        if (dayOffset === 0) {
+            const content = await this.app.vault.read(file);
+            const newPath = this.generateCopyPath(file);
             await this.fileOps.ensureDirectoryExists(newPath);
-            await this.app.vault.create(newPath, shiftedContent);
-        }
-    }
+            await this.app.vault.create(newPath, content);
+        } else {
+            const content = await this.app.vault.read(file);
+            for (let offset = dayOffset; offset < dayOffset + count; offset++) {
+                const shiftedContent = this.shiftFrontmatterDates(content, offset, frontmatterKeys);
+                const newPath = this.generateDatedPath(file, task, offset);
 
-    /**
-     * Frontmatter タスクを1週間分（7日間）複製。各コピーの日付を1日ずつシフト。
-     * ファイル名: 既存日付あり → 置換、なし → 末尾に追加
-     */
-    async duplicateFrontmatterTaskForWeek(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return;
-
-        const content = await this.app.vault.read(file);
-
-        for (let dayOffset = 1; dayOffset <= 7; dayOffset++) {
-            const shiftedContent = this.shiftFrontmatterDates(content, dayOffset, frontmatterKeys);
-            const newPath = this.generateDatedPath(file, task, dayOffset);
-
-            if (!this.app.vault.getAbstractFileByPath(newPath)) {
-                await this.fileOps.ensureDirectoryExists(newPath);
-                await this.app.vault.create(newPath, shiftedContent);
+                if (!this.app.vault.getAbstractFileByPath(newPath)) {
+                    await this.fileOps.ensureDirectoryExists(newPath);
+                    await this.app.vault.create(newPath, shiftedContent);
+                }
             }
         }
     }

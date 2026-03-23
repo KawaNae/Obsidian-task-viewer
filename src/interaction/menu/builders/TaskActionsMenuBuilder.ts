@@ -1,12 +1,11 @@
-import { App, MarkdownView, Menu } from 'obsidian';
-import { Task, isFrontmatterTask } from '../../../types';
+import { App, MarkdownView, Menu, Notice } from 'obsidian';
+import { Task } from '../../../types';
 import { TaskWriteService } from '../../../services/data/TaskWriteService';
 import TaskViewerPlugin from '../../../main';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { ConfirmModal } from '../../../modals/ConfirmModal';
 import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
 import { openFileInExistingOrNewTab } from '../../../views/sharedLogic/NavigationUtils';
-import { FileOperations } from '../../../services/persistence/utils/FileOperations';
 import { t } from '../../../i18n';
 
 /**
@@ -94,20 +93,7 @@ export class TaskActionsMenuBuilder {
                     menu.close();
                     new CreateTaskModal(this.app, async (result) => {
                         const taskLine = formatTaskLine(result);
-                        const repository = this.plugin.getTaskRepository();
-
-                        if (isFrontmatterTask(task)) {
-                            await repository.insertLineAfterFrontmatter(
-                                task.file, taskLine,
-                                this.plugin.settings.frontmatterTaskHeader,
-                                this.plugin.settings.frontmatterTaskHeaderLevel
-                            );
-                            return;
-                        }
-
-                        const childIndent = FileOperations.getChildIndent(task.originalText);
-                        const childLine = childIndent + taskLine;
-                        await repository.insertLineAsFirstChild(task, childLine);
+                        await this.writeService.insertChildTask(task.id, taskLine);
                     }, {}, { startHour: this.plugin.settings.startHour }).open();
                 });
         });
@@ -166,7 +152,7 @@ export class TaskActionsMenuBuilder {
                 sub.setTitle(t('menu.forTomorrow'))
                     .setIcon('calendar-plus')
                     .onClick(async () => {
-                        await this.writeService.duplicateTaskForTomorrow(task.id);
+                        await this.writeService.duplicateTask(task.id, { dayOffset: 1 });
                     });
             });
 
@@ -174,7 +160,7 @@ export class TaskActionsMenuBuilder {
                 sub.setTitle(t('menu.forWeek'))
                     .setIcon('calendar-range')
                     .onClick(async () => {
-                        await this.writeService.duplicateTaskForWeek(task.id);
+                        await this.writeService.duplicateTask(task.id, { dayOffset: 1, count: 7 });
                     });
             });
         });
@@ -228,7 +214,12 @@ export class TaskActionsMenuBuilder {
                             t('menu.convertToFrontmatterTask'),
                             t('menu.convertToFrontmatterTaskMessage'),
                             async () => {
-                                await this.writeService.convertToFrontmatterTask(task.id);
+                                try {
+                                    await this.writeService.convertToFrontmatterTask(task.id);
+                                    new Notice(t('notice.taskConverted'));
+                                } catch (e) {
+                                    new Notice(t('notice.taskConvertFailed') + ': ' + (e as Error).message);
+                                }
                             },
                             { confirmLabel: t('modal.convert') }
                         ).open();

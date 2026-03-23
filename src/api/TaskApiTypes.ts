@@ -147,3 +147,40 @@ export interface MutationResult {
 export interface DeleteResult {
     deleted: string;
 }
+
+export interface DuplicateParams {
+    id: string;
+    dayOffset?: number;
+    count?: number;
+}
+
+export interface DuplicateResult {
+    duplicated: string;
+}
+
+export interface ConvertParams {
+    id: string;
+}
+
+export interface ConvertResult {
+    convertedFrom: string;
+    newFile: string;
+}
+
+export interface DateRangeParams extends PaginationParams {
+    start: string;
+    end: string;
+    filter?: FilterState;
+    sort?: ApiSortRule[];
+}
+
+export interface DateParams {
+    date: string;
+    filter?: FilterState;
+}
+
+export interface CategorizedTasksResult {
+    allDay: NormalizedTask[];
+    timed: NormalizedTask[];
+    dueOnly: NormalizedTask[];
+}
