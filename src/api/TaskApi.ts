@@ -31,6 +31,13 @@ import {
     type ConvertParams,
     type ConvertResult,
     type DateRangeParams,
+    type CategorizeParams,
+    type CategorizedTasksResult,
+    type InsertChildParams,
+    type InsertChildResult,
+    type CreateFrontmatterParams,
+    type CreateFrontmatterResult,
+    type StartHourResult,
 } from './TaskApiTypes';
 
 const API_HELP_TEXT = `
@@ -140,6 +147,39 @@ Methods
       limit?: number               Max results (default: 100)
       offset?: number              Skip first N results
 
+  categorize(params: CategorizeParams): CategorizedTasksResult
+    Get tasks for a date, categorized into allDay/timed/dueOnly.
+
+    CategorizeParams:
+      date: string                 Date YYYY-MM-DD (required)
+      filter?: FilterState         FilterState object
+
+    Returns: { allDay: NormalizedTask[], timed: NormalizedTask[], dueOnly: NormalizedTask[] }
+
+  insertChild(params: InsertChildParams): Promise<InsertChildResult>
+    Insert a child task under a parent task.
+
+    InsertChildParams:
+      parentId: string             Parent task ID (required)
+      content: string              Child task content (required)
+
+  createFrontmatterTask(params: CreateFrontmatterParams): Promise<CreateFrontmatterResult>
+    Create a new frontmatter task file from structured data.
+
+    CreateFrontmatterParams:
+      content: string              Task content (required)
+      start?: string               Start date/datetime
+      end?: string                 End date/datetime
+      due?: string                 Due date (YYYY-MM-DD)
+      status?: string              Status character (default: ' ')
+
+    Returns: { newFile: string }
+
+  getStartHour(): StartHourResult
+    Get the current startHour setting (visual day boundary).
+
+    Returns: { startHour: number }
+
   onChange(callback): () => void
     Subscribe to task changes. Returns unsubscribe function.
 
@@ -241,6 +281,18 @@ Examples
     end: '2026-03-31',
     sort: [{ property: 'startDate', direction: 'asc' }],
   });
+
+  // Get categorized tasks for a date
+  api.categorize({ date: '2026-03-23' });
+
+  // Insert a child task
+  await api.insertChild({ parentId: 'at-notation:daily/2026-03-15.md:ln:5', content: 'Sub-task' });
+
+  // Create a frontmatter task
+  await api.createFrontmatterTask({ content: 'Project task', start: '2026-03-20 10:00' });
+
+  // Get visual day boundary setting
+  api.getStartHour();
 
   // Subscribe to task changes
   const unsubscribe = api.onChange((taskId) => {
@@ -521,6 +573,57 @@ export class TaskApi {
         }
         const paged = paginate(tasks, params);
         return { count: paged.length, tasks: paged.map(normalizeTask) };
+    }
+
+    /**
+     * Get tasks for a date, categorized into allDay/timed/dueOnly.
+     */
+    categorize(params: CategorizeParams): CategorizedTasksResult {
+        if (!params.date) throw new TaskApiError('Missing required parameter: date');
+        const result = this.readService.getTasksForDate(params.date, params.filter);
+        return {
+            allDay: result.allDay.map(normalizeTask),
+            timed: result.timed.map(normalizeTask),
+            dueOnly: result.dueOnly.map(normalizeTask),
+        };
+    }
+
+    /**
+     * Insert a child task under a parent task.
+     */
+    async insertChild(params: InsertChildParams): Promise<InsertChildResult> {
+        if (!params.parentId) throw new TaskApiError('Missing required parameter: parentId');
+        if (!params.content) throw new TaskApiError('Missing required parameter: content');
+        const task = this.readService.getTask(params.parentId);
+        if (!task) throw new TaskApiError(`Task not found: ${params.parentId}`);
+        await this.writeService.insertChildTask(params.parentId, `- [ ] ${params.content}`);
+        return { parentId: params.parentId };
+    }
+
+    /**
+     * Create a new frontmatter task file from structured data.
+     */
+    async createFrontmatterTask(params: CreateFrontmatterParams): Promise<CreateFrontmatterResult> {
+        if (!params.content) throw new TaskApiError('Missing required parameter: content');
+        const parsed = params.start ? parseDateTimeFlag(params.start) : null;
+        const parsedEnd = params.end ? parseDateTimeFlag(params.end) : null;
+        const newFile = await this.writeService.createFrontmatterTaskFromData({
+            content: params.content,
+            statusChar: params.status ?? ' ',
+            startDate: parsed?.date,
+            startTime: parsed?.time,
+            endDate: parsedEnd?.date || (parsedEnd?.time && parsed?.date ? parsed.date : undefined),
+            endTime: parsedEnd?.time,
+            due: params.due,
+        });
+        return { newFile };
+    }
+
+    /**
+     * Get the current startHour setting (visual day boundary).
+     */
+    getStartHour(): StartHourResult {
+        return { startHour: this.readService.getStartHour() };
     }
 
     /**

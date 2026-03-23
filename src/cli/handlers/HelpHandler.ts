@@ -6,16 +6,20 @@ Task Viewer CLI Reference
 
 Commands
 --------
-  list          List tasks with filters, sort, and pagination
-  today         List tasks active today (visual-date aware)
-  get           Get a single task by ID
-  create        Create a new inline task
-  update        Update an existing task
-  delete        Delete a task
-  duplicate     Duplicate a task with optional date shifting
-  convert       Convert an inline task to a frontmatter file
-  date-range    List tasks overlapping a date range
-  help          Show this reference
+  list               List tasks with filters, sort, and pagination
+  today              List tasks active today (visual-date aware)
+  get                Get a single task by ID
+  create             Create a new inline task
+  update             Update an existing task
+  delete             Delete a task
+  duplicate          Duplicate a task with optional date shifting
+  convert            Convert an inline task to a frontmatter file
+  date-range         List tasks overlapping a date range
+  categorize         Get tasks for a date, categorized (allDay/timed/dueOnly)
+  insert-child       Insert a child task under a parent task
+  create-frontmatter Create a new frontmatter task file
+  start-hour         Get the current startHour setting
+  help               Show this reference
 
 Run "obsidian help obsidian-task-viewer:<command>" for each command's flags.
 
@@ -96,6 +100,30 @@ convert: Flags
   id=<taskId>          Task ID [required]
                        Converts the inline task to a new frontmatter task file.
                        Returns the path of the newly created file.
+
+categorize: Flags
+-----------------
+  date=<YYYY-MM-DD>  Date to categorize [required]
+                     Returns { allDay: [...], timed: [...], dueOnly: [...] }
+
+insert-child: Flags
+-------------------
+  parent-id=<taskId> Parent task ID [required]
+  content=<text>     Child task content [required]
+                     Inserts a new child task (- [ ] content) under the parent.
+
+create-frontmatter: Flags
+-------------------------
+  content=<text>       Task content [required]
+  start=<date|datetime> Start date/datetime
+  end=<date|datetime>  End date/datetime
+  due=<YYYY-MM-DD>     Due date
+  status=<char>        Status character (default: space)
+                       Creates a new frontmatter task file. Returns the new file path.
+
+start-hour: Flags
+-----------------
+  (no flags)           Returns the current startHour setting (visual day boundary).
 
 date-range: Flags
 -----------------

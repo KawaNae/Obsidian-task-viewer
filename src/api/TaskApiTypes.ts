@@ -156,3 +156,47 @@ export interface DateRangeParams extends PaginationParams {
     sort?: ApiSortRule[];
 }
 
+// ── categorize ──
+
+export interface CategorizeParams {
+    date: string;
+    filter?: FilterState;
+}
+
+export interface CategorizedTasksResult {
+    allDay: NormalizedTask[];
+    timed: NormalizedTask[];
+    dueOnly: NormalizedTask[];
+}
+
+// ── insertChild ──
+
+export interface InsertChildParams {
+    parentId: string;
+    content: string;
+}
+
+export interface InsertChildResult {
+    parentId: string;
+}
+
+// ── createFrontmatterTask ──
+
+export interface CreateFrontmatterParams {
+    content: string;
+    start?: string;
+    end?: string;
+    due?: string;
+    status?: string;
+}
+
+export interface CreateFrontmatterResult {
+    newFile: string;
+}
+
+// ── startHour ──
+
+export interface StartHourResult {
+    startHour: number;
+}
+

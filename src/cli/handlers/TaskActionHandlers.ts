@@ -55,6 +55,62 @@ export function createConvertHandler(plugin: TaskViewerPlugin) {
     };
 }
 
+export function createCategorizeHandler(plugin: TaskViewerPlugin) {
+    return (params: CliData): string => {
+        if (!params.date) return cliError('Missing required flag: --date');
+
+        try {
+            const result = plugin.api.categorize({ date: params.date });
+            return cliOk({ ...result });
+        } catch (e) {
+            return cliError(e instanceof TaskApiError ? e.message : `Failed to categorize tasks: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    };
+}
+
+export function createInsertChildHandler(plugin: TaskViewerPlugin) {
+    return async (params: CliData): Promise<string> => {
+        if (!params['parent-id']) return cliError('Missing required flag: --parent-id');
+        if (!params.content) return cliError('Missing required flag: --content');
+
+        try {
+            const result = await plugin.api.insertChild({
+                parentId: params['parent-id'],
+                content: params.content,
+            });
+            return cliOk({ parentId: result.parentId });
+        } catch (e) {
+            return cliError(e instanceof TaskApiError ? e.message : `Failed to insert child task: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    };
+}
+
+export function createCreateFrontmatterHandler(plugin: TaskViewerPlugin) {
+    return async (params: CliData): Promise<string> => {
+        if (!params.content) return cliError('Missing required flag: --content');
+
+        try {
+            const result = await plugin.api.createFrontmatterTask({
+                content: params.content,
+                start: params.start,
+                end: params.end,
+                due: params.due,
+                status: params.status,
+            });
+            return cliOk({ newFile: result.newFile });
+        } catch (e) {
+            return cliError(e instanceof TaskApiError ? e.message : `Failed to create frontmatter task: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    };
+}
+
+export function createStartHourHandler(plugin: TaskViewerPlugin) {
+    return (): string => {
+        const result = plugin.api.getStartHour();
+        return cliOk({ ...result });
+    };
+}
+
 export function createDateRangeHandler(plugin: TaskViewerPlugin) {
     return async (params: CliData): Promise<string> => {
         if (!params.start) return cliError('Missing required flag: --start');
