@@ -149,7 +149,7 @@
 }
 
 /* --- Split direction (horizontal for calendar) --- */
-.calendar-view .task-card--split-head {
+.calendar-view .task-card--split-continues-after {
     border-bottom: none;
     border-right: 2px dashed var(--file-accent, var(--tv-accent));
     border-top-right-radius: 0 !important;
@@ -157,7 +157,7 @@
     margin-right: 0;
 }
 
-.calendar-view .task-card--split-middle {
+.calendar-view .task-card--split-continues-before.task-card--split-continues-after {
     border-left: 2px dashed var(--file-accent, var(--tv-accent));
     border-right: 2px dashed var(--file-accent, var(--tv-accent));
     border-top-left-radius: 0 !important;
@@ -168,7 +168,7 @@
     margin-right: 0;
 }
 
-.calendar-view .task-card--split-tail {
+.calendar-view .task-card--split-continues-before {
     border-top: none;
     border-left: 2px dashed var(--file-accent, var(--tv-accent));
     border-top-left-radius: 0 !important;
@@ -176,13 +176,13 @@
     margin-left: 0;
 }
 
-.calendar-view .task-card--split-middle::before,
-.calendar-view .task-card--split-tail::before {
+.calendar-view .task-card--split-continues-before.task-card--split-continues-after::before,
+.calendar-view .task-card--split-continues-before::before {
     display: none;
 }
 
 /* Selection border direction for horizontal split */
-.calendar-view .task-card--split-head.selected::after {
+.calendar-view .task-card--split-continues-after.selected::after {
     border-bottom: 2px solid var(--file-accent, var(--tv-accent));
     border-bottom-left-radius: var(--task-card-border-radius);
     border-right: none;
@@ -190,7 +190,7 @@
     border-bottom-right-radius: 0;
 }
 
-.calendar-view .task-card--split-tail.selected::after {
+.calendar-view .task-card--split-continues-before.selected::after {
     border-top: 2px solid var(--file-accent, var(--tv-accent));
     border-top-right-radius: var(--task-card-border-radius);
     border-left: none;

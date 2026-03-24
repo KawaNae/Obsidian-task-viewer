@@ -166,10 +166,11 @@ export interface DisplayTask extends Task {
     startTimeImplicit: boolean;
     endDateImplicit: boolean;
     endTimeImplicit: boolean;
-    /** Split 情報（日跨ぎ分割） */
+    /** Split 情報（境界分割） */
     originalTaskId: string;
     isSplit: boolean;
-    splitSegment?: 'head' | 'tail';
+    splitContinuesBefore?: boolean;
+    splitContinuesAfter?: boolean;
 }
 
 export interface FlowCommand {

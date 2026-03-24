@@ -32,6 +32,7 @@ export class ResizeStrategy extends BaseDragStrategy {
     private initialSpan: number = 0;
     private initialCalendarDate: string = '';
     private initialCalendarEndDate: string = '';
+    private initialCalendarVisualEnd: string = '';
     private initialGridColumn: string = '';
     private container: HTMLElement | null = null;
     private refHeaderCell: HTMLElement | null = null;
@@ -60,12 +61,12 @@ export class ResizeStrategy extends BaseDragStrategy {
             }
 
             // 分割タスクの無効なリサイズをブロック
-            if (this.resizeDirection === 'top' && el.classList.contains('task-card--split-tail')) {
+            if (this.resizeDirection === 'top' && el.classList.contains('task-card--split-continues-before')) {
                 this.dragTask = null;
                 this.dragEl = null;
                 return;
             }
-            if (this.resizeDirection === 'bottom' && el.classList.contains('task-card--split-head')) {
+            if (this.resizeDirection === 'bottom' && el.classList.contains('task-card--split-continues-after')) {
                 this.dragTask = null;
                 this.dragEl = null;
                 return;
@@ -256,6 +257,10 @@ export class ResizeStrategy extends BaseDragStrategy {
         const viewStartDate = context.getViewStartDate();
         this.initialCalendarDate = task.startDate || viewStartDate || DateUtils.getToday();
         this.initialCalendarEndDate = task.endDate || this.initialCalendarDate;
+        // Visual end date (inclusive) for ghost rendering — matches task card renderer
+        const startHour = context.plugin.settings.startHour;
+        const visual = this.getVisualDateRange(task, startHour);
+        this.initialCalendarVisualEnd = visual.end;
 
         // Read position from data attributes
         this.startCol = Number.parseInt(el.dataset.colStart || '1', 10);
@@ -304,13 +309,13 @@ export class ResizeStrategy extends BaseDragStrategy {
             const newSpan = Math.max(1, target.col - this.startCol + 1);
             this.dragEl.style.gridColumn = `${this.startCol + colOffset} / span ${newSpan}`;
         } else if (this.resizeDirection === 'left') {
-            const boundedStart = target.targetDate > this.initialCalendarEndDate ? this.initialCalendarEndDate : target.targetDate;
+            const boundedStart = target.targetDate > this.initialCalendarVisualEnd ? this.initialCalendarVisualEnd : target.targetDate;
             this.calendarPreviewTargetDate = boundedStart;
 
             if (crossWeek) {
                 this.hiddenElements.forEach(el => el.classList.add('drag-hidden'));
                 this.dragEl.classList.add('drag-source-faint');
-                this.updateCalendarSplitPreview(context, boundedStart, this.initialCalendarEndDate);
+                this.updateCalendarSplitPreview(context, boundedStart, this.initialCalendarVisualEnd);
                 return;
             }
 
@@ -348,8 +353,12 @@ export class ResizeStrategy extends BaseDragStrategy {
         if (this.resizeDirection === 'right') {
             const newEnd = targetDate < this.initialCalendarDate ? this.initialCalendarDate : targetDate;
             if (newEnd >= this.initialCalendarDate) {
-                if (newEnd !== this.initialCalendarEndDate) {
-                    updates.endDate = newEnd;
+                // targetDate is inclusive visual date; @notation endDate is exclusive (+1 day)
+                const newEndDate = DateUtils.addDays(newEnd, 1);
+                const originalEndDate = this.dragTask!.endDate
+                    || DateUtils.addDays(this.initialCalendarDate, 1);
+                if (newEndDate !== originalEndDate) {
+                    updates.endDate = newEndDate;
                 }
             }
         } else if (this.resizeDirection === 'left') {
@@ -388,7 +397,11 @@ export class ResizeStrategy extends BaseDragStrategy {
         const viewStartDate = context.getViewStartDate();
         this.initialCalendarDate = task.startDate || viewStartDate || DateUtils.getToday();
         this.initialCalendarEndDate = task.endDate || this.initialCalendarDate;
-        this.initialSpan = DateUtils.getDiffDays(this.initialCalendarDate, this.initialCalendarEndDate) + 1;
+        // Visual end date (inclusive) for ghost rendering — matches task card renderer
+        const startHour = context.plugin.settings.startHour;
+        const visual = this.getVisualDateRange(task, startHour);
+        this.initialCalendarVisualEnd = visual.end;
+        this.initialSpan = DateUtils.getDiffDays(this.initialCalendarDate, visual.end) + 1;
 
         const gridCol = el.style.gridColumn;
         const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);

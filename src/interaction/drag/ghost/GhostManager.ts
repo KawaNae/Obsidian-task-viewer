@@ -67,7 +67,7 @@ export class GhostManager {
 
                 // --- Manage Split Classes and Inline Styles Dynamically ---
                 // Remove relevant classes inherited from sourceEl
-                ghost.classList.remove('task-card--split', 'task-card--split-head', 'task-card--split-tail');
+                ghost.classList.remove('task-card--split', 'task-card--split-continues-before', 'task-card--split-continues-after');
 
                 // Reset split-related inline styles (GhostFactory sets these, which override CSS classes)
                 ghost.style.borderTop = '';
@@ -85,27 +85,22 @@ export class GhostManager {
                         || getComputedStyle(document.documentElement).getPropertyValue('--interactive-accent').trim()
                         || '#7c3aed';
 
-                    if (index === 0) {
-                        // First segment (Earliest time) -> Bottom cut
-                        ghost.classList.add('task-card--split-head');
-                        // Apply inline styles to override GhostFactory defaults
-                        ghost.style.borderBottom = `2px dashed ${accentColor}`;
-                        ghost.style.borderBottomLeftRadius = '0';
-                        ghost.style.borderBottomRightRadius = '0';
-                    } else if (index === segments.length - 1) {
-                        // Last segment (Latest time) -> Top cut
-                        ghost.classList.add('task-card--split-tail');
-                        // Apply inline styles to override GhostFactory defaults
+                    const isFirst = index === 0;
+                    const isLast = index === segments.length - 1;
+
+                    if (!isFirst) {
+                        // Continues before (top cut)
+                        ghost.classList.add('task-card--split-continues-before');
                         ghost.style.borderTop = `2px dashed ${accentColor}`;
                         ghost.style.borderTopLeftRadius = '0';
                         ghost.style.borderTopRightRadius = '0';
-                    } else {
-                        // Middle segment -> Both cut
-                        ghost.classList.add('task-card--split-head');
-                        ghost.classList.add('task-card--split-tail');
-                        ghost.style.borderTop = `2px dashed ${accentColor}`;
+                    }
+                    if (!isLast) {
+                        // Continues after (bottom cut)
+                        ghost.classList.add('task-card--split-continues-after');
                         ghost.style.borderBottom = `2px dashed ${accentColor}`;
-                        ghost.style.borderRadius = '0';
+                        ghost.style.borderBottomLeftRadius = '0';
+                        ghost.style.borderBottomRightRadius = '0';
                     }
                 }
             } else {

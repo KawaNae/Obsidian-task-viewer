@@ -11,6 +11,7 @@ import { DisplayTask } from '../../types';
 import { CreateTaskModal, formatTaskLine } from '../../modals/CreateTaskModal';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from './DueArrowRenderer';
+import { splitTasks } from '../../services/display/TaskSplitter';
 
 export class AllDaySectionRenderer {
     constructor(
@@ -44,15 +45,23 @@ export class AllDaySectionRenderer {
             );
         });
 
+        // Pre-split at view boundaries (allDay tasks only need date-range split)
+        const splitResult = splitTasks(tasks, { type: 'date-range', start: viewStart, end: viewEnd, startHour });
+
         // Use shared layout engine
-        const entries = computeGridLayout(tasks, {
+        const entries = computeGridLayout(splitResult, {
             dates,
             getDateRange: (task) => {
                 const dt = task as DisplayTask;
-                const effectiveStart = DateUtils.getVisualStartDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
-                const rawEnd = dt.effectiveEndDate || effectiveStart;
-                const effectiveEnd = DateUtils.getVisualStartDate(rawEnd, dt.effectiveEndTime, startHour);
-                return { effectiveStart, effectiveEnd };
+                if (!dt.effectiveStartDate) return null;
+                const visualStart = DateUtils.getVisualStartDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
+                const visualEnd = dt.effectiveEndDate
+                    ? DateUtils.getVisualStartDate(dt.effectiveEndDate, dt.effectiveEndTime, startHour)
+                    : visualStart;
+                return {
+                    effectiveStart: visualStart,
+                    effectiveEnd: visualEnd >= visualStart ? visualEnd : visualStart,
+                };
             },
             computeDueArrows: true,
         });
@@ -86,13 +95,8 @@ export class AllDaySectionRenderer {
         if (entry.isMultiDay) {
             el.addClass('task-card--multi-day');
         }
-        if (entry.continuesBefore && entry.continuesAfter) {
-            el.addClass('task-card--split-middle');
-        } else if (entry.continuesAfter) {
-            el.addClass('task-card--split-head');
-        } else if (entry.continuesBefore) {
-            el.addClass('task-card--split-tail');
-        }
+        if (entry.continuesBefore) el.addClass('task-card--split-continues-before');
+        if (entry.continuesAfter) el.addClass('task-card--split-continues-after');
         if (task.id === this.handleManager.getSelectedTaskId()) el.addClass('selected');
         el.dataset.id = task.id;
 

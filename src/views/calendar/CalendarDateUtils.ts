@@ -16,36 +16,21 @@ export function getTaskDateRange(
         return { effectiveStart: null, effectiveEnd: null };  // D type
     }
 
-    if (task.effectiveStartTime) {
-        const visualDate = DateUtils.getVisualStartDate(
-            task.effectiveStartDate,
-            task.effectiveStartTime,
-            startHour
-        );
-        const isAllDay = DateUtils.isAllDayTask(
-            task.effectiveStartDate,
-            task.effectiveStartTime,
-            task.effectiveEndDate,
-            task.effectiveEndTime,
-            startHour
-        );
+    const visualStart = task.effectiveStartTime
+        ? DateUtils.getVisualStartDate(task.effectiveStartDate, task.effectiveStartTime, startHour)
+        : task.effectiveStartDate;
 
-        if (isAllDay && task.effectiveEndDate && task.effectiveEndDate >= task.effectiveStartDate) {
-            const visualEnd = DateUtils.getVisualStartDate(
-                task.effectiveEndDate, task.effectiveEndTime, startHour
-            );
-            return {
-                effectiveStart: task.effectiveStartDate,
-                effectiveEnd: visualEnd >= task.effectiveStartDate ? visualEnd : task.effectiveStartDate,
-            };
-        }
-        return { effectiveStart: visualDate, effectiveEnd: visualDate };
+    if (task.effectiveEndDate && task.effectiveEndDate >= task.effectiveStartDate) {
+        const visualEnd = DateUtils.getVisualStartDate(
+            task.effectiveEndDate, task.effectiveEndTime, startHour
+        );
+        return {
+            effectiveStart: visualStart,
+            effectiveEnd: visualEnd >= visualStart ? visualEnd : visualStart,
+        };
     }
 
-    const effectiveEnd = task.effectiveEndDate && task.effectiveEndDate >= task.effectiveStartDate
-        ? task.effectiveEndDate
-        : task.effectiveStartDate;
-    return { effectiveStart: task.effectiveStartDate, effectiveEnd };
+    return { effectiveStart: visualStart, effectiveEnd: visualStart };
 }
 
 export function isTaskCompleted(

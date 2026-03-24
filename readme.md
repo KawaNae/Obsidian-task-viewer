@@ -105,7 +105,8 @@ tv-content: プロジェクト名
 | `tv-content` | | タスク名（省略時は空。表示時はファイル名がフォールバック） | `プロジェクト名` |
 | `tv-color` | | タスクカードの色 | `red`, `#ff0000` |
 | `tv-linestyle` | | タスクカードの線スタイル | `solid`, `dashed`, `dotted`, `double`, `dashdotted` |
-| `tags` | | タグ（Obsidian標準の`tags`キーと共有、キー名はカスタマイズ可） | `#meeting`, `#work` |
+| `tv-mask` | | エクスポート時のマスキング用フィールド | `true` |
+| `tags` | | タグ（Obsidian標準の`tags`キーと共有、キー名はカスタマイズ不可） | `#meeting`, `#work` |
 | `tv-timer-target-id` | | タイマー連携用ID（自動設定） | |
 | `tv-ignore` | | `true` でスキャン対象から除外 | `true` |
 
@@ -263,20 +264,20 @@ frontmatterタスクでは、子要素の表示範囲を次のように定義し
 
 ## 設定
 
-設定は6つのタブに分かれています: General / Views / Notes / Timer / Frontmatter / Habits
+設定は7つのタブに分かれています: General / Views / View Details / Notes / Frontmatter / Habits / Parsers
 
 ### 主要設定
 
 | 設定項目 | 説明 | デフォルト |
 |---------|------|-----------|
 | Start Hour | 1日の開始時刻（0-23） | 5 |
-| Complete Status Chars | 完了を示すステータス文字 | `['x', 'X', '-', '!']` |
+| Status Definitions | ステータス文字の定義（char/label/isComplete） | `[' ':Todo, '/':Doing, 'x':Done, 'X':Done, '-':Cancelled, '!':Important, '?':Question, '>':Deferred]` |
 | Enable Status Menu | チェックボックス長押しでステータスメニュー表示 | `true` |
 | Task Select Action | タスク選択操作（click / dblclick） | `click` |
 | Long Press Threshold | 長押し判定時間（ms） | 400 |
 | Frontmatter Task Header | 子タスク挿入先の見出しテキスト | `Tasks` |
 | Frontmatter Task Header Level | 見出しレベル（2 = `##`） | 2 |
-| Frontmatter Task Keys | Frontmatterキー名（個別にカスタマイズ可） | `tv-start` / `tv-end` / `tv-due` / `tv-status` / `tv-content` / `tv-timer-target-id` / `tv-color` / `tv-linestyle` / `tags` / `tv-ignore` |
+| Frontmatter Task Keys | Frontmatterキー名（個別にカスタマイズ可） | `tv-start` / `tv-end` / `tv-due` / `tv-status` / `tv-content` / `tv-timer-target-id` / `tv-color` / `tv-linestyle` / `tv-mask` / `tv-ignore` |
 | Default View Positions | ビューごとのデフォルト表示位置 | Timeline: tab, Schedule: right, Calendar: tab, Mini Calendar: left, Timer: right, Kanban: tab |
 | Pomodoro Work/Break Minutes | ポモドーロの作業/休憩時間 | 25 / 5 |
 | Countdown Minutes | カウントダウンのデフォルト時間 | 25 |
@@ -287,12 +288,14 @@ frontmatterタスクでは、子要素の表示範囲を次のように定義し
 | Editor Menu For Checkboxes | エディタメニューでチェックボックス操作を表示 | `true` |
 | Hide View Header | ビューヘッダーを非表示 | `true` |
 | Mobile Top Offset | モバイルでの上部オフセット（px） | 32 |
+| Fix Mobile Gradient Width | モバイルのグラデーション幅を修正 | `true` |
 | Pinned List Page Size | ピン留めリストのページサイズ | 10 |
 | Suggest Color | プロパティパネルで色の候補を表示 | `true` |
 | Suggest Linestyle | プロパティパネルで線スタイルの候補を表示 | `true` |
-| Suggest Sharedtags | プロパティパネルでタグの候補を表示 | `true` |
 | View Template Folder | ビューテンプレートの保存先 | *(空)* |
 | Interval Template Folder | インターバルテンプレートの保存先 | *(空)* |
+| Enable Tasks Plugin | Tasks plugin 互換パーサー（読み取り専用） | `false` |
+| Enable Day Planner | Day Planner 互換パーサー（読み取り専用） | `false` |
 
 ---
 
@@ -407,6 +410,7 @@ obsidian obsidian-task-viewer:create file=DailyNotes/2026-03-15.md content="Meet
 
 ```bash
 obsidian obsidian-task-viewer:update id=abc123 status=x
+obsidian obsidian-task-viewer:update id=abc123 start=none  # フィールドをクリア
 ```
 
 **日時の形式:** `YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`, `YYYY-MM-DD HH:mm`, `HH:mm`
@@ -415,10 +419,10 @@ obsidian obsidian-task-viewer:update id=abc123 status=x
 |-------|------|------|
 | `id` | ○ | タスクID |
 | `content` | | 新しい内容 |
-| `start` | | 新しい開始日時 |
-| `end` | | 新しい終了日時 |
-| `due` | | 新しい締切日 |
-| `status` | | 新しいステータス |
+| `start` | | 新しい開始日時（`none` でクリア） |
+| `end` | | 新しい終了日時（`none` でクリア） |
+| `due` | | 新しい締切日（`none` でクリア） |
+| `status` | | 新しいステータス（`none` で未完了に戻す） |
 
 #### delete — タスク削除
 
@@ -431,6 +435,103 @@ obsidian obsidian-task-viewer:delete id=abc123
 | `id` | ○ | タスクID |
 
 **戻り値:** `{ "deleted": "abc123" }`
+
+#### duplicate — タスク複製
+
+```bash
+obsidian obsidian-task-viewer:duplicate id=abc123
+obsidian obsidian-task-viewer:duplicate id=abc123 day-offset=1 count=3
+```
+
+| フラグ | 必須 | 説明 |
+|-------|------|------|
+| `id` | ○ | タスクID |
+| `day-offset` | | 日付をシフトする日数（デフォルト: 0） |
+| `count` | | コピー数（デフォルト: 1） |
+
+**戻り値:** `{ "duplicated": "abc123" }`
+
+#### convert — インライン→Frontmatter変換
+
+インラインタスクをfrontmatterタスクファイルに変換します。
+
+```bash
+obsidian obsidian-task-viewer:convert id=abc123
+```
+
+| フラグ | 必須 | 説明 |
+|-------|------|------|
+| `id` | ○ | タスクID |
+
+**戻り値:** `{ "convertedFrom": "abc123", "newFile": "path/to/new-file.md" }`
+
+#### tasks-for-date-range — 日付範囲のタスク取得
+
+```bash
+obsidian obsidian-task-viewer:tasks-for-date-range start=2026-03-01 end=2026-03-31 outputFields=content,startDate
+```
+
+| フラグ | 必須 | 説明 |
+|-------|------|------|
+| `start` | ○ | 開始日（YYYY-MM-DD、inclusive） |
+| `end` | ○ | 終了日（YYYY-MM-DD、inclusive） |
+| `sort` | | ソートルール |
+| `limit` / `offset` | | ページネーション |
+
+#### tasks-for-date — 特定日のタスク（分類済み）
+
+指定日のタスクを allDay / timed / dueOnly に分類して返します。
+
+```bash
+obsidian obsidian-task-viewer:tasks-for-date date=2026-03-15
+```
+
+| フラグ | 必須 | 説明 |
+|-------|------|------|
+| `date` | ○ | 日付（YYYY-MM-DD） |
+
+**戻り値:** `{ "allDay": [...], "timed": [...], "dueOnly": [...] }`
+
+#### insert-child-task — 子タスク挿入
+
+親タスクの下に子タスクを挿入します。
+
+```bash
+obsidian obsidian-task-viewer:insert-child-task parent-id=abc123 content="サブタスク"
+```
+
+| フラグ | 必須 | 説明 |
+|-------|------|------|
+| `parent-id` | ○ | 親タスクID |
+| `content` | ○ | 子タスクの内容 |
+
+**戻り値:** `{ "parentId": "abc123" }`
+
+#### create-frontmatter — Frontmatterタスクファイル作成
+
+新しいfrontmatterタスクファイルを作成します。
+
+```bash
+obsidian obsidian-task-viewer:create-frontmatter content="プロジェクト名" start=2026-03-15 due=2026-03-31
+```
+
+| フラグ | 必須 | 説明 |
+|-------|------|------|
+| `content` | ○ | タスクの内容 |
+| `start` | | 開始日時 |
+| `end` | | 終了日時 |
+| `due` | | 締切日 |
+| `status` | | ステータス文字（デフォルト: ` `） |
+
+**戻り値:** `{ "newFile": "path/to/new-file.md" }`
+
+#### get-start-hour — startHour設定値取得
+
+```bash
+obsidian obsidian-task-viewer:get-start-hour
+```
+
+**戻り値:** `{ "startHour": 5 }`
 
 #### help — CLI リファレンス
 
@@ -483,7 +584,7 @@ obsidian obsidian-task-viewer:help
 | `effectiveEndDate` | `string \| null` | 暗黙値解決済み終了日 |
 | `effectiveEndTime` | `string \| null` | 暗黙値解決済み終了時刻 |
 | `durationMinutes` | `number \| null` | 所要時間（分） |
-| `properties` | `Record<string, string>` | カスタムプロパティ |
+| `properties` | `Record<string, unknown>` | カスタムプロパティ |
 
 ### 出力形式の例
 
@@ -527,10 +628,17 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `api.list(params?)` | タスク一覧 | async |
 | `api.today(params?)` | 本日のタスク | sync |
 | `api.get({ id })` | 単一タスク取得 | sync |
-| `api.query({ template })` | テンプレートクエリ | async |
-| `api.create({ file, content, ... })` | タスク作成 | async |
+| `api.create({ file, content, ... })` | インラインタスク作成 | async |
 | `api.update({ id, ... })` | タスク更新 | async |
 | `api.delete({ id })` | タスク削除 | async |
+| `api.duplicate({ id, ... })` | タスク複製 | async |
+| `api.convertToFrontmatter({ id })` | インライン→Frontmatter変換 | async |
+| `api.tasksForDateRange({ start, end, ... })` | 日付範囲のタスク取得 | async |
+| `api.tasksForDate({ date, ... })` | 特定日のタスク（分類済み） | sync |
+| `api.insertChildTask({ parentId, content })` | 子タスク挿入 | async |
+| `api.createFrontmatterTask({ content, ... })` | Frontmatterタスクファイル作成 | async |
+| `api.getStartHour()` | startHour設定値取得 | sync |
+| `api.onChange(callback)` | タスク変更の購読 | sync |
 | `api.help()` | API リファレンス表示 | sync |
 
 ### list / today
@@ -602,16 +710,6 @@ const task = api.get({ id: 'abc123' });
 
 ID が見つからない場合は `TaskApiError` をスローします。
 
-### query
-
-```javascript
-const result = await api.query({ template: 'weekly-review' });
-// => { template: string; viewType: string; lists: QueryListEntry[] }
-// QueryListEntry: { name: string; count: number; tasks: NormalizedTask[] }
-```
-
-`viewTemplateFolder` が設定で未指定の場合は `TaskApiError` をスローします。
-
 ### create
 
 ```javascript
@@ -649,7 +747,7 @@ const result = await api.update({
 // => { task: NormalizedTask }
 ```
 
-**UpdateParams:** `id`（必須）, `content`, `start`, `end`, `due`, `status`（すべてオプション）
+**UpdateParams:** `id`（必須）, `content`, `start`, `end`, `due`, `status`（すべてオプション。`'none'` を指定するとフィールドをクリア）
 
 ### delete
 
@@ -657,6 +755,122 @@ const result = await api.update({
 const result = await api.delete({ id: 'abc123' });
 // => { deleted: 'abc123' }
 ```
+
+### duplicate
+
+```javascript
+// 1つコピー
+const result = await api.duplicate({ id: 'abc123' });
+// => { duplicated: 'abc123' }
+
+// 日付を1日ずらして3つコピー
+const result = await api.duplicate({ id: 'abc123', dayOffset: 1, count: 3 });
+```
+
+**DuplicateParams:**
+
+| パラメータ | 必須 | 型 | 説明 |
+|-----------|------|-----|------|
+| `id` | ○ | `string` | タスクID |
+| `dayOffset` | | `number` | 日付シフト日数（デフォルト: 0） |
+| `count` | | `number` | コピー数（デフォルト: 1） |
+
+### convertToFrontmatter
+
+```javascript
+const result = await api.convertToFrontmatter({ id: 'abc123' });
+// => { convertedFrom: 'abc123', newFile: 'path/to/new-file.md' }
+```
+
+インラインタスクをfrontmatterタスクファイルに変換します。
+
+### tasksForDateRange
+
+```javascript
+const result = await api.tasksForDateRange({
+  start: '2026-03-01',
+  end: '2026-03-31',
+  sort: [{ property: 'startDate', direction: 'asc' }],
+});
+// => { count: number, tasks: NormalizedTask[] }
+```
+
+**TasksForDateRangeParams:**
+
+| パラメータ | 必須 | 型 | 説明 |
+|-----------|------|-----|------|
+| `start` | ○ | `string` | 開始日（YYYY-MM-DD） |
+| `end` | ○ | `string` | 終了日（YYYY-MM-DD） |
+| `filter` | | `FilterState` | フィルタ定義 |
+| `sort` | | `ApiSortRule[]` | ソートルール |
+| `limit` | | `number` | 最大件数（デフォルト: 100） |
+| `offset` | | `number` | スキップ件数 |
+
+### tasksForDate
+
+```javascript
+const result = api.tasksForDate({ date: '2026-03-15' });
+// => { allDay: NormalizedTask[], timed: NormalizedTask[], dueOnly: NormalizedTask[] }
+```
+
+指定日のタスクを allDay（終日）/ timed（時刻あり）/ dueOnly（締切のみ）に分類して返します。
+
+**TasksForDateParams:**
+
+| パラメータ | 必須 | 型 | 説明 |
+|-----------|------|-----|------|
+| `date` | ○ | `string` | 日付（YYYY-MM-DD） |
+| `filter` | | `FilterState` | フィルタ定義 |
+
+### insertChildTask
+
+```javascript
+const result = await api.insertChildTask({
+  parentId: 'abc123',
+  content: 'サブタスク',
+});
+// => { parentId: 'abc123' }
+```
+
+### createFrontmatterTask
+
+```javascript
+const result = await api.createFrontmatterTask({
+  content: 'プロジェクト名',
+  start: '2026-03-15',
+  due: '2026-03-31',
+});
+// => { newFile: 'path/to/new-file.md' }
+```
+
+**CreateFrontmatterParams:**
+
+| パラメータ | 必須 | 型 | 説明 |
+|-----------|------|-----|------|
+| `content` | ○ | `string` | タスクの内容 |
+| `start` | | `string` | 開始日時 |
+| `end` | | `string` | 終了日時 |
+| `due` | | `string` | 締切日 |
+| `status` | | `string` | ステータス文字（デフォルト: ` `） |
+
+### getStartHour
+
+```javascript
+const result = api.getStartHour();
+// => { startHour: 5 }
+```
+
+### onChange
+
+```javascript
+const unsubscribe = api.onChange((taskId) => {
+  console.log('Task changed:', taskId);
+});
+// 購読解除
+unsubscribe();
+```
+
+タスク変更を購読します。戻り値は購読解除関数です。
 
 ### help
 
@@ -702,7 +916,7 @@ API が返すタスクオブジェクトのフィールド一覧です。CLI の
 | `effectiveEndDate` | `string \| null` | 暗黙値解決済み終了日 |
 | `effectiveEndTime` | `string \| null` | 暗黙値解決済み終了時刻 |
 | `durationMinutes` | `number \| null` | 所要時間（分） |
-| `properties` | `Record<string, string>` | カスタムプロパティ |
+| `properties` | `Record<string, unknown>` | カスタムプロパティ |
 
 ### DataviewJS 使用例
 

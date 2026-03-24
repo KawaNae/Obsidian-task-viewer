@@ -113,11 +113,14 @@ export function computeGridLayout(
         if (span < 1) continue;
 
         const isMultiDay = effectiveEnd > effectiveStart;
-        const continuesBefore = isMultiDay && effectiveStart < rangeStart;
-        const continuesAfter = isMultiDay && effectiveEnd > rangeEnd;
-        const isSplit = isMultiDay && (continuesBefore || continuesAfter);
+        const dt = task as DisplayTask;
+        // Combine DisplayTask flags (from pre-split) with internal detection (for non-pre-split)
+        const continuesBefore = (dt.splitContinuesBefore ?? false) || (isMultiDay && effectiveStart < rangeStart);
+        const continuesAfter = (dt.splitContinuesAfter ?? false) || (isMultiDay && effectiveEnd > rangeEnd);
 
-        const segmentId = isSplit
+        // Pre-split tasks already have segment IDs; generate only for non-pre-split clipping
+        const needsInternalSegmentId = !dt.isSplit && isMultiDay && (effectiveStart < rangeStart || effectiveEnd > rangeEnd);
+        const segmentId = needsInternalSegmentId
             ? TaskIdGenerator.makeSegmentId(task.id, clippedStart)
             : task.id;
 

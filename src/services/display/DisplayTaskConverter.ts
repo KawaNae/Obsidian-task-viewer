@@ -136,6 +136,12 @@ export function shouldSplitDisplayTask(dt: DisplayTask, startHour: number): bool
         return false;
     }
 
+    // AllDay tasks (duration >= 23.5h) span multiple visual days by design — never split
+    if (DateUtils.isAllDayTask(dt.effectiveStartDate, dt.effectiveStartTime, dt.effectiveEndDate, dt.effectiveEndTime, startHour)) {
+        return false;
+    }
+
+    // Timed tasks: check if they cross a visual-date boundary
     const visualStartDay = DateUtils.getVisualStartDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
 
     let visualEndDay = dt.effectiveEndDate;
@@ -144,18 +150,7 @@ export function shouldSplitDisplayTask(dt: DisplayTask, startHour: number): bool
         visualEndDay = DateUtils.addDays(dt.effectiveEndDate, -1);
     }
 
-    if (visualStartDay !== visualEndDay) {
-        return true;
-    }
-
-    const startDateTime = new Date(`${dt.effectiveStartDate}T${dt.effectiveStartTime}`);
-    const endDateTime = new Date(`${dt.effectiveEndDate}T${dt.effectiveEndTime}`);
-    if (endDateTime < startDateTime) return false;
-
-    const durationHours = (endDateTime.getTime() - startDateTime.getTime()) / (1000 * 60 * 60);
-    if (durationHours >= 24) return false;
-
-    return false;
+    return visualStartDay !== visualEndDay;
 }
 
 /**
@@ -183,7 +178,8 @@ export function splitDisplayTaskAtBoundary(dt: DisplayTask, startHour: number): 
         ...dt,
         id: TaskIdGenerator.makeSegmentId(dt.originalTaskId, beforeSegmentDate),
         isSplit: true,
-        splitSegment: 'head',
+        splitContinuesBefore: dt.splitContinuesBefore ?? false,
+        splitContinuesAfter: true,
         // Override both raw and effective end to boundary
         endDate: boundaryCalendarDate,
         endTime: boundaryTime,
@@ -195,7 +191,8 @@ export function splitDisplayTaskAtBoundary(dt: DisplayTask, startHour: number): 
         ...dt,
         id: TaskIdGenerator.makeSegmentId(dt.originalTaskId, afterSegmentDate),
         isSplit: true,
-        splitSegment: 'tail',
+        splitContinuesBefore: true,
+        splitContinuesAfter: dt.splitContinuesAfter ?? false,
         // Override both raw and effective start to boundary
         startDate: boundaryCalendarDate,
         startTime: boundaryTime,

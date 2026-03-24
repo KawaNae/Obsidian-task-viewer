@@ -41,6 +41,7 @@ import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 import { CalendarExportStrategy } from '../../services/export/CalendarExportStrategy';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
+import { splitTasks } from '../../services/display/TaskSplitter';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
@@ -77,8 +78,8 @@ export class CalendarView extends ItemView {
     private pinnedListCollapsed: Record<string, boolean> = {};
     private pinnedLists: PinnedListDefinition[] = [];
     private customName: string | undefined;
-    private lastScrollTop = 0;
-    private hasValidScrollPosition = false;
+    private scrollRestorePending = false;
+    private savedScrollTop: number | null = null;
     private sidebarOpenedThisSession = false;
 
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
@@ -159,7 +160,7 @@ export class CalendarView extends ItemView {
             this.customName = undefined;
         }
         await super.setState(state, result);
-        await this.render();
+        await this.performRender();
     }
 
     getState(): Record<string, unknown> {
@@ -227,10 +228,10 @@ export class CalendarView extends ItemView {
             }
         });
 
-        await this.render();
+        await this.performRender();
 
         this.unsubscribe = this.readService.onChange(() => {
-            void this.render();
+            this.render();
         });
     }
 
@@ -250,18 +251,22 @@ export class CalendarView extends ItemView {
     }
 
     public refresh(): void {
-        void this.render();
+        this.render();
     }
 
-    private async render(): Promise<void> {
+    private render(): void {
+        if (!this.scrollRestorePending) {
+            const oldMain = this.container?.querySelector('.calendar-grid__body') as HTMLElement | null;
+            if (oldMain) {
+                this.savedScrollTop = oldMain.scrollTop;
+            }
+        }
+        void this.performRender();
+    }
+
+    private async performRender(): Promise<void> {
         if (!this.container) {
             return;
-        }
-
-        const oldMain = this.container.querySelector('.calendar-grid__body') as HTMLElement | null;
-        if (oldMain) {
-            this.lastScrollTop = oldMain.scrollTop;
-            this.hasValidScrollPosition = true;
         }
 
         const normalizedWindowStart = this.getNormalizedWindowStart(this.windowStart);
@@ -344,12 +349,14 @@ export class CalendarView extends ItemView {
             this.handleManager?.selectTask(selectedTaskId);
         }
 
-        if (this.hasValidScrollPosition) {
-            const savedScrollTop = this.lastScrollTop;
+        if (this.savedScrollTop !== null) {
+            this.scrollRestorePending = true;
+            const scrollTarget = this.savedScrollTop;
             requestAnimationFrame(() => {
+                this.scrollRestorePending = false;
                 const newMain = this.container.querySelector('.calendar-grid__body') as HTMLElement | null;
                 if (newMain) {
-                    newMain.scrollTop = savedScrollTop;
+                    newMain.scrollTop = scrollTarget;
                 }
             });
         }
@@ -367,7 +374,7 @@ export class CalendarView extends ItemView {
                 const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
                 this.windowStart = DateUtils.getLocalDateString(weekStart);
                 void this.app.workspace.requestSaveLayout();
-                void this.render();
+                this.render();
             },
             {
                 vertical: true,
@@ -385,7 +392,7 @@ export class CalendarView extends ItemView {
             this.filterMenu.showMenu(event, {
                 onFilterChange: () => {
                     void this.app.workspace.requestSaveLayout();
-                    void this.render();
+                    this.render();
                     filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
                 },
                 getTasks: () => this.readService.getTasks(),
@@ -437,7 +444,7 @@ export class CalendarView extends ItemView {
                     this.leaf.updateHeader();
                 }
                 this.app.workspace.requestSaveLayout();
-                void this.render();
+                this.render();
             },
             onReset: () => {
                 this.filterMenu.setFilterState(createEmptyFilterState());
@@ -448,7 +455,7 @@ export class CalendarView extends ItemView {
                 this.customName = undefined;
                 this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
-                void this.render();
+                this.render();
             },
         });
 
@@ -482,7 +489,7 @@ export class CalendarView extends ItemView {
             });
             this.app.workspace.requestSaveLayout();
             this.pinnedListRenderer.scheduleRename(newId);
-            void this.render();
+            this.render();
         });
 
         this.pinnedListRenderer.render(body, this, this.pinnedLists,
@@ -503,20 +510,20 @@ export class CalendarView extends ItemView {
                     sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
                 });
                 this.app.workspace.requestSaveLayout();
-                void this.render();
+                this.render();
             },
             onRemove: (listDef) => {
                 const idx = this.pinnedLists.indexOf(listDef);
                 if (idx >= 0) this.pinnedLists.splice(idx, 1);
                 this.app.workspace.requestSaveLayout();
-                void this.render();
+                this.render();
             },
             onMoveUp: (listDef) => {
                 const idx = this.pinnedLists.indexOf(listDef);
                 if (idx > 0) {
                     [this.pinnedLists[idx - 1], this.pinnedLists[idx]] = [this.pinnedLists[idx], this.pinnedLists[idx - 1]];
                     this.app.workspace.requestSaveLayout();
-                    void this.render();
+                    this.render();
                 }
             },
             onMoveDown: (listDef) => {
@@ -524,13 +531,13 @@ export class CalendarView extends ItemView {
                 if (idx >= 0 && idx < this.pinnedLists.length - 1) {
                     [this.pinnedLists[idx], this.pinnedLists[idx + 1]] = [this.pinnedLists[idx + 1], this.pinnedLists[idx]];
                     this.app.workspace.requestSaveLayout();
-                    void this.render();
+                    this.render();
                 }
             },
             onToggleApplyViewFilter: (listDef) => {
                 listDef.applyViewFilter = !listDef.applyViewFilter;
                 this.app.workspace.requestSaveLayout();
-                void this.render();
+                this.render();
             },
             onRename: () => {
                 this.app.workspace.requestSaveLayout();
@@ -546,7 +553,7 @@ export class CalendarView extends ItemView {
             onSortChange: () => {
                 listDef.sortState = this.sidebarSortMenu.getSortState();
                 this.app.workspace.requestSaveLayout();
-                void this.render();
+                this.render();
             },
         });
     }
@@ -557,7 +564,7 @@ export class CalendarView extends ItemView {
             onFilterChange: () => {
                 listDef.filterState = this.sidebarFilterMenu.getFilterState();
                 this.app.workspace.requestSaveLayout();
-                void this.render();
+                this.render();
             },
             getTasks: () => this.readService.getTasks(),
             getStartHour: () => this.plugin.settings.startHour,
@@ -637,15 +644,15 @@ export class CalendarView extends ItemView {
 
     private async renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: DisplayTask[]): Promise<void> {
         const startHour = this.plugin.settings.startHour;
-        const entries = computeGridLayout(allTasks, {
+        // Pre-split: visual-date (startHour boundary) + date-range (week boundary)
+        const visualSplit = splitTasks(allTasks, { type: 'visual-date', startHour });
+        const weekSplit = splitTasks(visualSplit, { type: 'date-range', start: weekDates[0], end: weekDates[weekDates.length - 1], startHour });
+        const entries = computeGridLayout(weekSplit, {
             dates: weekDates,
             getDateRange: (task) => {
                 const range = getTaskDateRange(task as DisplayTask, startHour);
                 if (!range.effectiveStart) return null;
-                return {
-                    effectiveStart: range.effectiveStart,
-                    effectiveEnd: range.effectiveEnd || range.effectiveStart,
-                };
+                return { effectiveStart: range.effectiveStart, effectiveEnd: range.effectiveEnd || range.effectiveStart };
             },
             computeDueArrows: true,
         });
@@ -692,21 +699,16 @@ export class CalendarView extends ItemView {
             el.dataset.trackIndex = `${entry.trackIndex}`;
         };
 
-        if (entry.isMultiDay) {
+        if (entry.isMultiDay || entry.continuesBefore || entry.continuesAfter) {
             const barEl = weekRow.createDiv('task-card task-card--multi-day');
             barEl.dataset.id = entry.segmentId;
             if (entry.continuesBefore || entry.continuesAfter) {
-                barEl.dataset.splitOriginalId = entry.task.id;
+                barEl.dataset.splitOriginalId = (entry.task as DisplayTask).originalTaskId || entry.task.id;
             }
             applyGridPosition(barEl);
 
-            if (entry.continuesBefore && entry.continuesAfter) {
-                barEl.addClass('task-card--split-middle');
-            } else if (entry.continuesAfter) {
-                barEl.addClass('task-card--split-head');
-            } else if (entry.continuesBefore) {
-                barEl.addClass('task-card--split-tail');
-            }
+            if (entry.continuesBefore) barEl.addClass('task-card--split-continues-before');
+            if (entry.continuesAfter) barEl.addClass('task-card--split-continues-after');
 
             TaskStyling.applyTaskColor(barEl, entry.task.color ?? null);
             TaskStyling.applyTaskLinestyle(barEl, entry.task.linestyle ?? null);
@@ -801,7 +803,7 @@ export class CalendarView extends ItemView {
     private navigateWeek(offset: number): void {
         this.windowStart = DateUtils.addDays(this.windowStart, offset * 7);
         void this.app.workspace.requestSaveLayout();
-        void this.render();
+        this.render();
     }
 
     private navigateMonth(offset: number): void {
@@ -810,7 +812,7 @@ export class CalendarView extends ItemView {
         const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
         this.windowStart = DateUtils.getLocalDateString(weekStart);
         void this.app.workspace.requestSaveLayout();
-        void this.render();
+        this.render();
     }
 
     private parseLocalDateString(value: string): Date | null {

@@ -36,9 +36,8 @@ export class TimelineSectionRenderer {
             // Add split segment classes if applicable
             if (task.isSplit) {
                 el.addClass('task-card--split');
-                if (task.splitSegment) {
-                    el.addClass(`task-card--split-${task.splitSegment}`);
-                }
+                if (task.splitContinuesBefore) el.addClass('task-card--split-continues-before');
+                if (task.splitContinuesAfter) el.addClass('task-card--split-continues-after');
                 if (task.originalTaskId) {
                     el.dataset.splitOriginalId = task.originalTaskId;
                 }
