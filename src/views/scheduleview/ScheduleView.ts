@@ -27,7 +27,9 @@ import { ScheduleGridRenderer } from './renderers/ScheduleGridRenderer';
 import { ScheduleTaskRenderer } from './renderers/ScheduleTaskRenderer';
 import { ScheduleSectionRenderer } from './renderers/ScheduleSectionRenderer';
 import { isDisplayTaskOnVisualDate } from '../../services/display/DisplayTaskConverter';
-import { TaskReadService, type CategorizedTasks as BaseCategorizedTasks } from '../../services/data/TaskReadService';
+import { TaskReadService } from '../../services/data/TaskReadService';
+import { splitTasks } from '../../services/display/TaskSplitter';
+import { categorizeTasksForDate, type CategorizedTasks as BaseCategorizedTasks } from '../../services/display/TaskDateCategorizer';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 
@@ -241,7 +243,12 @@ export class ScheduleView extends ItemView {
         this.renderToolbar(toolbarHost);
 
         const filterState = this.filterMenu.getFilterState();
-        const baseCategorized = this.readService.getTasksForDate(this.currentVisualDate, filterState);
+        const startHour = this.plugin.settings.startHour;
+        const rangeTasks = this.readService.getTasksForDateRange(
+            this.currentVisualDate, this.currentVisualDate, filterState
+        );
+        const splitResult = splitTasks(rangeTasks, { type: 'visual-date', startHour });
+        const baseCategorized = categorizeTasksForDate(splitResult, this.currentVisualDate, startHour);
         this.menuHandler.setViewStartDate(this.currentVisualDate);
 
         const allDisplayTasks = this.readService.getAllDisplayTasks();

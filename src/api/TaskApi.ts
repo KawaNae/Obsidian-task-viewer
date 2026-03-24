@@ -4,6 +4,8 @@ import type { Task, DisplayTask } from '../types';
 import type { TaskReadService } from '../services/data/TaskReadService';
 import type { TaskWriteService } from '../services/data/TaskWriteService';
 import { toDisplayTask } from '../services/display/DisplayTaskConverter';
+import { splitTasks } from '../services/display/TaskSplitter';
+import { categorizeTasksForDate } from '../services/display/TaskDateCategorizer';
 import { normalizeTask } from './TaskNormalizer';
 import { TaskSorter } from '../services/sort/TaskSorter';
 import type { FilterState } from '../services/filter/FilterTypes';
@@ -596,7 +598,9 @@ export class TaskApi {
      */
     tasksForDate(params: TasksForDateParams): CategorizedTasksResult {
         if (!params.date) throw new TaskApiError('Missing required parameter: date');
-        const result = this.readService.getTasksForDate(params.date, params.filter);
+        const tasks = this.readService.getTasksForDateRange(params.date, params.date, params.filter);
+        const split = splitTasks(tasks, { type: 'visual-date', startHour: this.plugin.settings.startHour });
+        const result = categorizeTasksForDate(split, params.date, this.plugin.settings.startHour);
         return {
             allDay: result.allDay.map(normalizeTask),
             timed: result.timed.map(normalizeTask),

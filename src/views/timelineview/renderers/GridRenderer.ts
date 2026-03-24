@@ -17,6 +17,8 @@ import type { DisplayTask } from '../../../types';
 import type { FilterState } from '../../../services/filter/FilterTypes';
 import type { TaskReadService } from '../../../services/data/TaskReadService';
 import { HabitTrackerRenderer } from '../../sharedUI/HabitTrackerRenderer';
+import { splitTasks } from '../../../services/display/TaskSplitter';
+import { categorizeTasksByDate } from '../../../services/display/TaskDateCategorizer';
 
 type DateHeaderDisplayEntry = {
     cell: HTMLElement;
@@ -241,10 +243,13 @@ export class GridRenderer {
         this.renderTimeLabels(timeCol);
 
         // Day Columns
+        const splitResult = splitTasks(filteredTasks, { type: 'visual-date', startHour });
+        const categorizedByDate = categorizeTasksByDate(splitResult, dates, startHour);
         dates.forEach(date => {
             const col = timelineGrid.createDiv('day-timeline-column');
             col.dataset.date = date;
-            timelineRenderer.render(col, date, owner, this.readService, filterState);
+            const timedTasks = categorizedByDate.get(date)?.timed ?? [];
+            timelineRenderer.render(col, date, owner, timedTasks);
 
             // Add interaction listeners for creating tasks
             timelineRenderer.addCreateTaskListeners(col, date);
