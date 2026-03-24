@@ -186,13 +186,6 @@ export class TaskScanner {
         // 同一ファイル内の親→子 properties/tags/color/linestyle 継承
         PropertyInheritanceResolver.resolve(newTasks);
 
-        // セクションプロパティのフォールバック（親タスク継承より弱い）
-        for (const task of newTasks) {
-            task.color ??= task.sectionColor;
-            task.linestyle ??= task.sectionLinestyle;
-            task.mask ??= task.sectionMask;
-        }
-
         // 2. 現在の完了カウント
         const currentCounts = new Map<string, number>();
         const doneTasks: Task[] = [];
