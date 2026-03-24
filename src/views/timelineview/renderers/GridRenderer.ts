@@ -14,8 +14,6 @@ import { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './TimelineSectionRenderer';
 import { isDisplayTaskOnVisualDate } from '../../../services/display/DisplayTaskConverter';
 import type { DisplayTask } from '../../../types';
-import type { FilterState } from '../../../services/filter/FilterTypes';
-import type { TaskReadService } from '../../../services/data/TaskReadService';
 import { HabitTrackerRenderer } from '../../sharedUI/HabitTrackerRenderer';
 import { splitTasks } from '../../../services/display/TaskSplitter';
 import { categorizeTasksByDate } from '../../../services/display/TaskDateCategorizer';
@@ -32,7 +30,6 @@ export class GridRenderer {
     private isAllDayCollapsed: boolean = false;
     private headerResizeObserver: ResizeObserver | null = null;
     private dateLinkInteractionManager: TaskLinkInteractionManager;
-    private readService: TaskReadService;
 
     constructor(
         private container: HTMLElement,
@@ -40,7 +37,6 @@ export class GridRenderer {
         private plugin: TaskViewerPlugin,
         private menuHandler: MenuHandler,
     ) {
-        this.readService = this.plugin.getTaskReadService();
         this.dateLinkInteractionManager = new TaskLinkInteractionManager(
             this.plugin.app, () => this.plugin.settings
         );
@@ -52,14 +48,12 @@ export class GridRenderer {
         timelineRenderer: TimelineSectionRenderer,
         habitRenderer: HabitTrackerRenderer,
         handleManager: HandleManager,
-        getDatesToShow: () => string[],
+        dates: string[],
         owner: Component,
-        allDisplayTasks: DisplayTask[],
-        filterState?: FilterState
+        filteredTasks: DisplayTask[],
     ) {
         // Use parentContainer for rendering the grid
         const grid = parentContainer.createDiv('timeline-grid');
-        const dates = getDatesToShow();
         // Simple grid template - overlay scrollbar doesn't take space
         const colTemplate = `30px repeat(${this.viewState.daysToShow}, minmax(0, 1fr))`;
 
@@ -80,9 +74,6 @@ export class GridRenderer {
         // Pre-compute overdue dates set
         const completeChars = this.plugin.settings.statusDefinitions;
         const overdueDates = new Set<string>();
-        const filteredTasks = filterState
-            ? this.readService.getFilteredTasks(filterState)
-            : allDisplayTasks;
         for (const dt of filteredTasks) {
             if (isCompleteStatusChar(dt.statusChar, completeChars)) continue;
             for (const date of dates) {

@@ -44,6 +44,19 @@ export class DateUtils {
     }
 
     /**
+     * Returns an array of YYYY-MM-DD strings from start to end (inclusive).
+     */
+    static getDateRange(start: string, end: string): string[] {
+        const days = this.getDiffDays(start, end);
+        if (days < 0) return [];
+        const result: string[] = [];
+        for (let i = 0; i <= days; i++) {
+            result.push(this.addDays(start, i));
+        }
+        return result;
+    }
+
+    /**
      * Returns ISO-8601 week number (1-53) for the given date.
      */
     static getISOWeekNumber(date: Date): number {

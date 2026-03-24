@@ -566,8 +566,7 @@ export class TimelineView extends ItemView {
             this.render();
         });
 
-        // Get all DisplayTasks (revision-cached by TaskReadService)
-        const allDisplayTasks = this.readService.getAllDisplayTasks();
+        const dates = this.getDatesToShow();
 
         // Render pinned lists into sidebar body
         this.pinnedListRenderer.render(
@@ -669,16 +668,18 @@ export class TimelineView extends ItemView {
         this.toolbar.render();
 
         // Use GridRenderer (render into main column)
+        const filteredTasks = this.readService.getTasksForDateRange(
+            dates[0], dates[dates.length - 1], this.toolbar.getFilterState()
+        );
         this.gridRenderer.render(
             main,
             this.allDayRenderer,
             this.timelineRenderer,
             this.habitRenderer,
             this.handleManager,
-            () => this.getDatesToShow(),
+            dates,
             this,
-            allDisplayTasks,
-            this.toolbar.getFilterState()
+            filteredTasks,
         );
 
         this.renderCurrentTimeIndicator();

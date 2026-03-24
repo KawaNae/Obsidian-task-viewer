@@ -60,7 +60,13 @@ export class TreeTaskExtractor {
             task = null;
         }
 
-        if (!task) return;
+        if (!task) {
+            // 親はプレーンチェックボックスだが、子タスクブロックは再帰処理する
+            for (const childBlock of block.childTaskBlocks) {
+                this.processTaskBlock(childBlock, section, ctx, output);
+            }
+            return;
+        }
 
         // デイリーノートの日付を継承
         if (ctx.dailyNoteDate) {

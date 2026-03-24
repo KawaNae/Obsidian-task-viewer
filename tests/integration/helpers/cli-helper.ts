@@ -86,9 +86,9 @@ export function cliTasksForDateRange(flags: Record<string, string>): ListResult 
     return obsidianCli('tasks-for-date-range', flags) as ListResult;
 }
 
-/** Get tasks for a date, categorized. Returns { allDay, timed, dueOnly }. */
-export function cliTasksForDate(date: string): CategorizedResult {
-    return obsidianCli('tasks-for-date', { date }) as CategorizedResult;
+/** Get tasks in a date range, categorized per date. Returns Record<date, { allDay, timed, dueOnly }>. */
+export function cliCategorizedTasksForDateRange(start: string, end: string): CategorizedForDateRangeResult {
+    return obsidianCli('categorized-tasks-for-date-range', { start, end }) as CategorizedForDateRangeResult;
 }
 
 /** Insert a child task under a parent. Returns { parentId }. */
@@ -196,6 +196,8 @@ export interface CategorizedResult {
     timed: Record<string, unknown>[];
     dueOnly: Record<string, unknown>[];
 }
+
+export type CategorizedForDateRangeResult = Record<string, CategorizedResult>;
 
 export interface InsertChildTaskResult {
     parentId: string;
