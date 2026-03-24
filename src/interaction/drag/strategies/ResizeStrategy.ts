@@ -462,6 +462,9 @@ export class ResizeStrategy extends BaseDragStrategy {
 
         if (this.resizeDirection === 'right') {
             // 右リサイズ: end日付を変更
+            // initialSpan is visual-based, initialCalendarEndDate is raw (exclusive).
+            // This works because allDay tasks have no time-based visual shift on startDate,
+            // so the delta between visual span and raw span is constant.
             const spanDelta = currentSpan - this.initialSpan;
             const newEnd = DateUtils.addDays(this.initialCalendarEndDate, spanDelta);
             if (newEnd >= this.initialCalendarDate) {
