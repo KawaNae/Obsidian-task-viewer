@@ -156,10 +156,11 @@ export interface TasksForDateRangeParams extends PaginationParams {
     sort?: ApiSortRule[];
 }
 
-// ── tasksForDate ──
+// ── categorizedTasksForDateRange ──
 
-export interface TasksForDateParams {
-    date: string;
+export interface CategorizedTasksForDateRangeParams {
+    start: string;
+    end: string;
     filter?: FilterState;
 }
 
@@ -168,6 +169,8 @@ export interface CategorizedTasksResult {
     timed: NormalizedTask[];
     dueOnly: NormalizedTask[];
 }
+
+export type CategorizedTasksForDateRangeResult = Record<string, CategorizedTasksResult>;
 
 // ── insertChildTask ──
 

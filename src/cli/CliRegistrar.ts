@@ -3,7 +3,7 @@ import type TaskViewerPlugin from '../main';
 import { createListHandler, createTodayHandler, createGetHandler } from './handlers/TaskQueryHandlers';
 
 import { createCreateHandler, createUpdateHandler, createDeleteHandler } from './handlers/TaskCrudHandlers';
-import { createDuplicateHandler, createConvertHandler, createTasksForDateRangeHandler, createTasksForDateHandler, createInsertChildTaskHandler, createCreateFrontmatterHandler, createGetStartHourHandler } from './handlers/TaskActionHandlers';
+import { createDuplicateHandler, createConvertHandler, createTasksForDateRangeHandler, createCategorizedTasksForDateRangeHandler, createInsertChildTaskHandler, createCreateFrontmatterHandler, createGetStartHourHandler } from './handlers/TaskActionHandlers';
 import { createHelpHandler } from './handlers/HelpHandler';
 
 /**
@@ -11,7 +11,7 @@ import { createHelpHandler } from './handlers/HelpHandler';
  * Call once from plugin.onload() after TaskIndex is initialized.
  *
  * Commands (14): list, today, get, create, update, delete, duplicate, convert, tasks-for-date-range,
- *                 tasks-for-date, insert-child-task, create-frontmatter, get-start-hour, help
+ *                 categorized-tasks-for-date-range, insert-child-task, create-frontmatter, get-start-hour, help
  */
 export function registerCliHandlers(plugin: TaskViewerPlugin): void {
     // ── Query commands (read-only) ──
@@ -157,12 +157,13 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
     // ── Additional query/action commands ──
 
     plugin.registerCliHandler(
-        'obsidian-task-viewer:tasks-for-date',
-        'Get tasks for a date, categorized into allDay/timed/dueOnly. Details: obsidian obsidian-task-viewer:help',
+        'obsidian-task-viewer:categorized-tasks-for-date-range',
+        'Get tasks in a date range, categorized into allDay/timed/dueOnly per date. Details: obsidian obsidian-task-viewer:help',
         {
-            date: { value: '<YYYY-MM-DD>', description: 'Date to query', required: true },
+            start: { value: '<YYYY-MM-DD>', description: 'Start date (inclusive)', required: true },
+            end:   { value: '<YYYY-MM-DD>', description: 'End date (inclusive)', required: true },
         },
-        createTasksForDateHandler(plugin),
+        createCategorizedTasksForDateRangeHandler(plugin),
     );
 
     plugin.registerCliHandler(

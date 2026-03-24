@@ -14,8 +14,8 @@ Commands
   delete             Delete a task
   duplicate          Duplicate a task with optional date shifting
   convert            Convert an inline task to a frontmatter file
-  tasks-for-date-range  List tasks overlapping a date range
-  tasks-for-date        Get tasks for a date, categorized (allDay/timed/dueOnly)
+  tasks-for-date-range  List tasks overlapping a date range (flat list)
+  categorized-tasks-for-date-range  Get tasks in a date range, categorized per date
   insert-child-task     Insert a child task under a parent task
   create-frontmatter    Create a new frontmatter task file
   get-start-hour        Get the current startHour setting
@@ -101,10 +101,11 @@ convert: Flags
                        Converts the inline task to a new frontmatter task file.
                        Returns the path of the newly created file.
 
-tasks-for-date: Flags
----------------------
-  date=<YYYY-MM-DD>  Date to query [required]
-                     Returns { allDay: [...], timed: [...], dueOnly: [...] }
+categorized-tasks-for-date-range: Flags
+---------------------------------------
+  start=<YYYY-MM-DD>  Start date (inclusive) [required]
+  end=<YYYY-MM-DD>    End date (inclusive) [required]
+                      Returns { "YYYY-MM-DD": { allDay: [...], timed: [...], dueOnly: [...] }, ... }
 
 insert-child-task: Flags
 ------------------------

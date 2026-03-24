@@ -55,13 +55,14 @@ export function createConvertHandler(plugin: TaskViewerPlugin) {
     };
 }
 
-export function createTasksForDateHandler(plugin: TaskViewerPlugin) {
+export function createCategorizedTasksForDateRangeHandler(plugin: TaskViewerPlugin) {
     return (params: CliData): string => {
-        if (!params.date) return cliError('Missing required flag: --date');
+        if (!params.start) return cliError('Missing required flag: --start');
+        if (!params.end) return cliError('Missing required flag: --end');
 
         try {
-            const result = plugin.api.tasksForDate({ date: params.date });
-            return cliOk({ ...result });
+            const result = plugin.api.categorizedTasksForDateRange({ start: params.start, end: params.end });
+            return cliOk(result);
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.message : `Failed to categorize tasks: ${e instanceof Error ? e.message : String(e)}`);
         }

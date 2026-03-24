@@ -198,6 +198,17 @@ describe('TreeTaskExtractor', () => {
             expect(parent.childLines[0].propertyKey).toBe('note');
         });
 
+        it('プレーンチェックボックスの子 @notation タスクはパースされる', () => {
+            const tasks = extractTasks([
+                '- [ ] plainCheckBox',
+                '    - [ ] inlineTask1 @2026-03-24',
+            ]);
+            expect(tasks).toHaveLength(1);
+            expect(tasks[0].content).toBe('inlineTask1');
+            expect(tasks[0].startDate).toBe('2026-03-24');
+            expect(tasks[0].parentId).toBeUndefined();
+        });
+
         it('プレーンチェックボックスは childLines に残る', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',

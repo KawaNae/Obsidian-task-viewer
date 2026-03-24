@@ -5,7 +5,7 @@ import type { TaskReadService } from '../services/data/TaskReadService';
 import type { TaskWriteService } from '../services/data/TaskWriteService';
 import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 import { splitTasks } from '../services/display/TaskSplitter';
-import { categorizeTasksForDate } from '../services/display/TaskDateCategorizer';
+import { categorizeTasksByDate } from '../services/display/TaskDateCategorizer';
 import { normalizeTask } from './TaskNormalizer';
 import { TaskSorter } from '../services/sort/TaskSorter';
 import type { FilterState } from '../services/filter/FilterTypes';
@@ -33,8 +33,9 @@ import {
     type ConvertParams,
     type ConvertResult,
     type TasksForDateRangeParams,
-    type TasksForDateParams,
+    type CategorizedTasksForDateRangeParams,
     type CategorizedTasksResult,
+    type CategorizedTasksForDateRangeResult,
     type InsertChildTaskParams,
     type InsertChildTaskResult,
     type CreateFrontmatterParams,
@@ -149,14 +150,15 @@ Methods
       limit?: number               Max results (default: 100)
       offset?: number              Skip first N results
 
-  tasksForDate(params: TasksForDateParams): CategorizedTasksResult
-    Get tasks for a date, categorized into allDay/timed/dueOnly.
+  categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): CategorizedTasksForDateRangeResult
+    Get tasks in a date range, categorized into allDay/timed/dueOnly per date.
 
-    TasksForDateParams:
-      date: string                 Date YYYY-MM-DD (required)
+    CategorizedTasksForDateRangeParams:
+      start: string                Start date YYYY-MM-DD (required)
+      end: string                  End date YYYY-MM-DD (required)
       filter?: FilterState         FilterState object
 
-    Returns: { allDay: NormalizedTask[], timed: NormalizedTask[], dueOnly: NormalizedTask[] }
+    Returns: Record<date, { allDay: NormalizedTask[], timed: NormalizedTask[], dueOnly: NormalizedTask[] }>
 
   insertChildTask(params: InsertChildTaskParams): Promise<InsertChildTaskResult>
     Insert a child task under a parent task.
@@ -284,8 +286,8 @@ Examples
     sort: [{ property: 'startDate', direction: 'asc' }],
   });
 
-  // Get categorized tasks for a date
-  api.tasksForDate({ date: '2026-03-23' });
+  // Get categorized tasks for a date range (or single date)
+  api.categorizedTasksForDateRange({ start: '2026-03-23', end: '2026-03-29' });
 
   // Insert a child task
   await api.insertChildTask({ parentId: 'at-notation:daily/2026-03-15.md:ln:5', content: 'Sub-task' });
@@ -594,18 +596,25 @@ export class TaskApi {
     }
 
     /**
-     * Get tasks for a date, categorized into allDay/timed/dueOnly.
+     * Get tasks in a date range, categorized into allDay/timed/dueOnly per date.
      */
-    tasksForDate(params: TasksForDateParams): CategorizedTasksResult {
-        if (!params.date) throw new TaskApiError('Missing required parameter: date');
-        const tasks = this.readService.getTasksForDateRange(params.date, params.date, params.filter);
-        const split = splitTasks(tasks, { type: 'visual-date', startHour: this.plugin.settings.startHour });
-        const result = categorizeTasksForDate(split, params.date, this.plugin.settings.startHour);
-        return {
-            allDay: result.allDay.map(normalizeTask),
-            timed: result.timed.map(normalizeTask),
-            dueOnly: result.dueOnly.map(normalizeTask),
-        };
+    categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): CategorizedTasksForDateRangeResult {
+        if (!params.start) throw new TaskApiError('Missing required parameter: start');
+        if (!params.end) throw new TaskApiError('Missing required parameter: end');
+        const startHour = this.plugin.settings.startHour;
+        const tasks = this.readService.getTasksForDateRange(params.start, params.end, params.filter);
+        const split = splitTasks(tasks, { type: 'visual-date', startHour });
+        const dates = DateUtils.getDateRange(params.start, params.end);
+        const map = categorizeTasksByDate(split, dates, startHour);
+        const result: CategorizedTasksForDateRangeResult = {};
+        for (const [date, cats] of map) {
+            result[date] = {
+                allDay: cats.allDay.map(normalizeTask),
+                timed: cats.timed.map(normalizeTask),
+                dueOnly: cats.dueOnly.map(normalizeTask),
+            };
+        }
+        return result;
     }
 
     /**

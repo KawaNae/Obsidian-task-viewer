@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
     cliList, cliToday, cliGet, cliCreate, cliUpdate, cliDelete,
-    cliDuplicate, cliConvert, cliTasksForDateRange, cliTasksForDate,
+    cliDuplicate, cliConvert, cliTasksForDateRange, cliCategorizedTasksForDateRange,
     cliInsertChildTask, cliCreateFrontmatter, cliGetStartHour, cliHelp,
     isObsidianRunning, obsidianCli, waitForTask, waitForTaskGone,
 } from '../helpers/cli-helper';
@@ -429,25 +429,33 @@ describe('tasks-for-date-range', () => {
 });
 
 // ────────────────────────────────────────────
-// 13. tasks-for-date
+// 13. categorized-tasks-for-date-range
 // ────────────────────────────────────────────
-describe('tasks-for-date', () => {
-    it('returns categorized result with allDay/timed/dueOnly keys', () => {
+describe('categorized-tasks-for-date-range', () => {
+    it('returns categorized result keyed by date with allDay/timed/dueOnly', () => {
         // 2026-03-16 has multiple tasks in TEST_FILE
-        const r = cliTasksForDate('2026-03-16');
-        expect(r).toHaveProperty('allDay');
-        expect(r).toHaveProperty('timed');
-        expect(r).toHaveProperty('dueOnly');
-        expect(Array.isArray(r.allDay)).toBe(true);
-        expect(Array.isArray(r.timed)).toBe(true);
-        expect(Array.isArray(r.dueOnly)).toBe(true);
-        // At least some tasks should be returned for this date
-        const total = r.allDay.length + r.timed.length + r.dueOnly.length;
+        const r = cliCategorizedTasksForDateRange('2026-03-16', '2026-03-16');
+        expect(r).toHaveProperty('2026-03-16');
+        const day = r['2026-03-16'];
+        expect(day).toHaveProperty('allDay');
+        expect(day).toHaveProperty('timed');
+        expect(day).toHaveProperty('dueOnly');
+        expect(Array.isArray(day.allDay)).toBe(true);
+        expect(Array.isArray(day.timed)).toBe(true);
+        expect(Array.isArray(day.dueOnly)).toBe(true);
+        const total = day.allDay.length + day.timed.length + day.dueOnly.length;
         expect(total).toBeGreaterThan(0);
     });
 
-    it('missing date returns error', () => {
-        const r = obsidianCli('tasks-for-date', {}) as Record<string, unknown>;
+    it('returns multiple dates for a range', () => {
+        const r = cliCategorizedTasksForDateRange('2026-03-15', '2026-03-17');
+        expect(Object.keys(r)).toContain('2026-03-15');
+        expect(Object.keys(r)).toContain('2026-03-16');
+        expect(Object.keys(r)).toContain('2026-03-17');
+    });
+
+    it('missing start returns error', () => {
+        const r = obsidianCli('categorized-tasks-for-date-range', { end: '2026-03-16' }) as Record<string, unknown>;
         expect(r).toHaveProperty('error');
     });
 });
@@ -546,7 +554,7 @@ describe('help', () => {
         const r = cliHelp();
         expect(r.length).toBeGreaterThan(0);
         expect(r).toContain('list');
-        expect(r).toContain('tasks-for-date');
+        expect(r).toContain('categorized-tasks-for-date-range');
         expect(r).toContain('insert-child-task');
         expect(r).toContain('get-start-hour');
     });
