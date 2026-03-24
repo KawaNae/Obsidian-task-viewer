@@ -915,6 +915,120 @@ In TaskConverter (inline→frontmatter), task comes from parser with parsed star
 - `DateUtils.getToday()`, `DateUtils.addDays()` operate on **calendarDate**
 - `startHour` is the boundary between two visual days (default: 5:00 AM)
 
+### @notation endDate semantics
+
+`task.endDate` is stored as a **calendarDate** and is **exclusive** in visual terms.
+
+```
+@2026-03-24>2026-03-29  →  startDate='2026-03-24', endDate='2026-03-29'
+toDisplayTask() resolves:  effectiveEndTime = '04:59' (startHour−1)
+getVisualStartDate('2026-03-29', '04:59', 5)  →  '2026-03-28'
+Visual span: 03-24 ~ 03-28 = 5 visual days
+```
+
+The mechanism: `toDisplayTask()` sets `effectiveEndTime = (startHour−1):59` for tasks without explicit endTime. Since this time is before `startHour`, `getVisualStartDate` shifts back by 1 day. The resulting visualDate is the **last inclusive visual day** of the task.
+
+**Rule: always use `getVisualStartDate()` to convert both start and end dates to visual dates. There is no separate `getVisualEndDate()` — the same function handles both because the shift direction depends solely on whether the time is before startHour.**
+
+### Visual date pipeline
+
+All visual date calculations MUST flow through the same code path. Two canonical functions exist:
+
+| Function | Location | Purpose |
+|----------|----------|---------|
+| `toDisplayTask()` | `services/display/DisplayTaskConverter.ts` | Resolves implicit effective fields from raw Task |
+| `getTaskDateRange()` | `views/calendar/CalendarDateUtils.ts` | Converts DisplayTask effective fields to inclusive visual start/end dates |
+
+Any code that needs a task's visual date range — renderers, grid layout, drag ghosts, split boundaries — must use this pipeline, never compute visual dates independently from raw task fields.
+
+```
+Raw Task
+  ↓  toDisplayTask(task, startHour)
+DisplayTask (effectiveStartDate/Time, effectiveEndDate/Time)
+  ↓  getTaskDateRange(displayTask, startHour)
+{ effectiveStart: visualDate, effectiveEnd: visualDate }  ← inclusive range
+```
+
+### Pitfall: raw endDate ≠ visual end
+
+`task.endDate` (raw, exclusive) and the inclusive visual end date are different by 1 day for allDay tasks.
+Any code that converts between the two must do so explicitly:
+
+| Direction | Method |
+|-----------|--------|
+| raw → visual (for rendering/ghost) | `getTaskDateRange(toDisplayTask(task, startHour), startHour).effectiveEnd` |
+| visual → raw (for write-back) | `DateUtils.addDays(visualEndDate, 1)` |
+
+**Never mix raw and visual dates in the same calculation** (e.g., comparing `task.endDate` with a grid column date, or computing span from `getDiffDays(startDate, endDate)` using raw values).
+
+---
+
+## Task Split Architecture
+
+### Overview
+
+Calendar and AllDay views display tasks on a date grid. Tasks spanning multiple visual days or crossing view boundaries need splitting into segments. This is handled by `TaskSplitter` (`services/display/TaskSplitter.ts`).
+
+### Split boundary types
+
+```typescript
+type SplitBoundary =
+  | { type: 'visual-date'; startHour: number }     // Splits timed tasks at startHour
+  | { type: 'date-range'; start; end; startHour }   // Clips tasks at view/week boundaries
+```
+
+| Type | Purpose | Applies to |
+|------|---------|-----------|
+| **visual-date** | Splits timed tasks crossing the `startHour` boundary into [head, tail] | Timed tasks only (allDay tasks span by design) |
+| **date-range** | Clips tasks extending beyond a date range (e.g. week boundaries) into segments | All task types |
+
+### Two-step split pipeline (CalendarView)
+
+```
+allTasks (DisplayTask[])
+  ↓  splitTasks(tasks, { type: 'visual-date', startHour })
+     Timed tasks crossing startHour → [head, tail]
+  ↓  splitTasks(tasks, { type: 'date-range', start: weekStart, end: weekEnd, startHour })
+     Tasks extending beyond week → clipped segments
+  ↓  computeGridLayout(tasks, { dates, getDateRange })
+     Position on grid with colStart, span, trackIndex
+```
+
+AllDaySectionRenderer uses only the date-range split (allDay tasks don't need visual-date splitting).
+
+### Split segment fields
+
+Split segments inherit all fields from the original via `...dt` spread. Modified fields:
+
+| Field | Head segment | Tail segment |
+|-------|-------------|--------------|
+| `id` | `makeSegmentId(originalId, startDate)` | `makeSegmentId(originalId, boundaryDate)` |
+| `effectiveEndDate/Time` | Set to boundary | Inherited from original |
+| `effectiveStartDate/Time` | Inherited from original | Set to boundary |
+| `isSplit` | `true` | `true` |
+| `splitContinuesBefore` | From original (or `false`) | `true` |
+| `splitContinuesAfter` | `true` | From original (or `false`) |
+| `originalTaskId` | Original task ID | Original task ID |
+
+### Drag ghost and visual dates
+
+Drag strategies (Move/Resize) must use the same visual date pipeline as the renderer to ensure ghost size matches the displayed task card.
+
+```typescript
+// In BaseDragStrategy:
+protected getVisualDateRange(task: Task, startHour: number): { start: string; end: string }
+  // Internally: toDisplayTask(task, startHour) → getTaskDateRange(dt, startHour)
+```
+
+Each strategy maintains two sets of dates:
+
+| Field | Semantic | Used for |
+|-------|----------|----------|
+| `initialCalendarDate` / `initialCalendarEndDate` | Raw calendarDates (endDate is exclusive) | Write-back to task (preserves @notation format) |
+| `initialCalendarVisualStart` / `initialCalendarVisualEnd` | Inclusive visualDates | Ghost rendering, `updateCalendarSplitPreview`, span calculation |
+
+**Never pass `initialCalendarEndDate` to `updateCalendarSplitPreview()`** — it expects inclusive dates, but `initialCalendarEndDate` is exclusive.
+
 ---
 
 ## Settings Schema
