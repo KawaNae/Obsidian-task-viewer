@@ -2,7 +2,7 @@ import { DragStrategy, DragContext } from '../DragStrategy';
 import { Task } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
 import { toDisplayTask } from '../../../services/display/DisplayTaskConverter';
-import { getTaskDateRange } from '../../../views/calendar/CalendarDateUtils';
+import { getTaskDateRange } from '../../../services/display/VisualDateRange';
 
 export interface CalendarPointerTarget {
     weekRow: HTMLElement;

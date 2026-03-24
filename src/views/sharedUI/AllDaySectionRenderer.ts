@@ -12,6 +12,7 @@ import { CreateTaskModal, formatTaskLine } from '../../modals/CreateTaskModal';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from './DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
+import { getTaskDateRange } from '../../services/display/VisualDateRange';
 
 export class AllDaySectionRenderer {
     constructor(
@@ -32,8 +33,9 @@ export class AllDaySectionRenderer {
             if (!dt.effectiveStartDate) return false;  // D type: excluded
 
             // Use visual start date considering startHour
-            const visualStart = DateUtils.getVisualStartDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
-            const tEnd = dt.effectiveEndDate || visualStart;
+            const range = getTaskDateRange(dt, startHour);
+            const visualStart = range.effectiveStart || dt.effectiveStartDate;
+            const tEnd = range.effectiveEnd || visualStart;
             if (!(visualStart <= viewEnd && tEnd >= viewStart)) return false;
 
             // Filter for allDay tasks:
@@ -54,13 +56,11 @@ export class AllDaySectionRenderer {
             getDateRange: (task) => {
                 const dt = task as DisplayTask;
                 if (!dt.effectiveStartDate) return null;
-                const visualStart = DateUtils.getVisualStartDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
-                const visualEnd = dt.effectiveEndDate
-                    ? DateUtils.getVisualStartDate(dt.effectiveEndDate, dt.effectiveEndTime, startHour)
-                    : visualStart;
+                const range = getTaskDateRange(dt, startHour);
+                if (!range.effectiveStart) return null;
                 return {
-                    effectiveStart: visualStart,
-                    effectiveEnd: visualEnd >= visualStart ? visualEnd : visualStart,
+                    effectiveStart: range.effectiveStart,
+                    effectiveEnd: range.effectiveEnd || range.effectiveStart,
                 };
             },
             computeDueArrows: true,

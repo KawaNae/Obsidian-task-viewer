@@ -8,30 +8,8 @@ import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
  * Shared calendar date utilities used by both CalendarView and MiniCalendarView.
  */
 
-export function getTaskDateRange(
-    task: DisplayTask,
-    startHour: number
-): { effectiveStart: string | null; effectiveEnd: string | null } {
-    if (!task.effectiveStartDate) {
-        return { effectiveStart: null, effectiveEnd: null };  // D type
-    }
-
-    const visualStart = task.effectiveStartTime
-        ? DateUtils.getVisualStartDate(task.effectiveStartDate, task.effectiveStartTime, startHour)
-        : task.effectiveStartDate;
-
-    if (task.effectiveEndDate && task.effectiveEndDate >= task.effectiveStartDate) {
-        const visualEnd = DateUtils.getVisualStartDate(
-            task.effectiveEndDate, task.effectiveEndTime, startHour
-        );
-        return {
-            effectiveStart: visualStart,
-            effectiveEnd: visualEnd >= visualStart ? visualEnd : visualStart,
-        };
-    }
-
-    return { effectiveStart: visualStart, effectiveEnd: visualStart };
-}
+// Canonical implementation lives in services/display/VisualDateRange.ts
+export { getTaskDateRange } from '../../services/display/VisualDateRange';
 
 export function isTaskCompleted(
     task: Task,

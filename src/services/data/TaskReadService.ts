@@ -7,6 +7,7 @@ import { toDisplayTask, toDisplayTasks } from '../display/DisplayTaskConverter';
 import { TaskFilterEngine } from '../filter/TaskFilterEngine';
 import { TaskSorter } from '../sort/TaskSorter';
 import { DateUtils } from '../../utils/DateUtils';
+import { getTaskDateRange } from '../display/VisualDateRange';
 
 /**
  * Read-side entry point for views and interaction handlers.
@@ -115,12 +116,9 @@ export class TaskReadService {
 
             if (dt.effectiveStartTime) {
                 // Timed task: use visual dates for overlap check
-                const visualStart = DateUtils.getVisualStartDate(
-                    dt.effectiveStartDate, dt.effectiveStartTime, startHour
-                );
-                const visualEnd = dt.effectiveEndDate && dt.effectiveEndTime
-                    ? DateUtils.getVisualStartDate(dt.effectiveEndDate, dt.effectiveEndTime, startHour)
-                    : visualStart;
+                const range = getTaskDateRange(dt, startHour);
+                const visualStart = range.effectiveStart || dt.effectiveStartDate;
+                const visualEnd = range.effectiveEnd || visualStart;
                 if (visualStart <= endDate && visualEnd >= startDate) {
                     result.push(dt);
                 }

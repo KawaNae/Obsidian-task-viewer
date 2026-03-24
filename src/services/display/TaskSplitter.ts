@@ -6,6 +6,7 @@ import {
     splitDisplayTaskAtBoundary,
 } from './DisplayTaskConverter';
 import { TaskIdGenerator } from './TaskIdGenerator';
+import { getTaskDateRange } from './VisualDateRange';
 
 export type SplitBoundary =
     | { type: 'visual-date'; startHour: number }
@@ -50,8 +51,9 @@ function splitAtDateRange(
     }
 
     // Use visual dates for comparison (day boundary = startHour)
-    const compareStart = DateUtils.getVisualStartDate(taskStart, dt.effectiveStartTime, startHour);
-    const compareEnd = DateUtils.getVisualStartDate(taskEnd, dt.effectiveEndTime, startHour);
+    const range = getTaskDateRange(dt, startHour);
+    const compareStart = range.effectiveStart || taskStart;
+    const compareEnd = range.effectiveEnd || compareStart;
 
     // Task entirely outside range — pass through without splitting
     if (compareEnd < rangeStart || compareStart > rangeEnd) {

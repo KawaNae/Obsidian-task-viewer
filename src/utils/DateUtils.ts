@@ -57,20 +57,20 @@ export class DateUtils {
      * Get the visual start date for a task considering startHour.
      * If a task's startTime is before startHour, it visually belongs to the previous day.
      * 
-     * @param startDate YYYY-MM-DD - The task's actual start date
-     * @param startTime HH:mm or undefined - The task's start time
+     * @param date YYYY-MM-DD - The calendar date
+     * @param time HH:mm or undefined - The time component
      * @param startHour The configured start hour for visual day (e.g., 5 for 5:00 AM)
      * @returns The visual date YYYY-MM-DD
      */
-    static getVisualStartDate(startDate: string, startTime: string | undefined, startHour: number): string {
-        if (!startTime) return startDate;  // All-day tasks use actual date
+    static toVisualDate(date: string, time: string | undefined, startHour: number): string {
+        if (!time) return date;  // All-day tasks use actual date
 
-        const [h] = startTime.split(':').map(Number);
+        const [h] = time.split(':').map(Number);
         if (h < startHour) {
-            // startTime is before startHour → visually belongs to previous day
-            return this.addDays(startDate, -1);
+            // time is before startHour → visually belongs to previous day
+            return this.addDays(date, -1);
         }
-        return startDate;
+        return date;
     }
 
     /**
@@ -220,7 +220,7 @@ export class DateUtils {
     static isPastDate(dateStr: string, timeStr: string | undefined, startHour: number): boolean {
         const now = new Date();
         const visualToday = this.getVisualDateOfNow(startHour);
-        const taskVisualDate = this.getVisualStartDate(dateStr, timeStr, startHour);
+        const taskVisualDate = this.toVisualDate(dateStr, timeStr, startHour);
 
         if (taskVisualDate < visualToday) return true;
         if (taskVisualDate > visualToday) return false;

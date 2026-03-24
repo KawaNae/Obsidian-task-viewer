@@ -362,10 +362,16 @@ export class ResizeStrategy extends BaseDragStrategy {
                 }
             }
         } else if (this.resizeDirection === 'left') {
-            const newStart = targetDate > this.initialCalendarEndDate ? this.initialCalendarEndDate : targetDate;
-            if (newStart <= this.initialCalendarEndDate) {
+            const newStart = targetDate > this.initialCalendarVisualEnd
+                ? this.initialCalendarVisualEnd : targetDate;
+            if (newStart <= this.initialCalendarVisualEnd) {
                 if (newStart !== this.initialCalendarDate) {
                     updates.startDate = newStart;
+                }
+                // endDate が未設定の場合、元の右端を保持するために明示的に設定
+                // (右リサイズと対称: inclusive visual → exclusive @notation)
+                if (!this.dragTask!.endDate) {
+                    updates.endDate = DateUtils.addDays(this.initialCalendarVisualEnd, 1);
                 }
             }
         }
@@ -474,8 +480,12 @@ export class ResizeStrategy extends BaseDragStrategy {
             // 左リサイズ: start日付を変更
             const startColDelta = currentStartCol - this.startCol;
             const newStart = DateUtils.addDays(this.initialCalendarDate, startColDelta);
-            if (newStart <= this.initialCalendarEndDate) {
+            if (newStart <= this.initialCalendarVisualEnd) {
                 updates.startDate = newStart;
+                // endDate が未設定の場合、元の右端を保持するために明示的に設定
+                if (!this.dragTask!.endDate) {
+                    updates.endDate = DateUtils.addDays(this.initialCalendarVisualEnd, 1);
+                }
             }
         }
 

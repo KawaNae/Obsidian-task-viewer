@@ -1,5 +1,6 @@
 import type { DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
+import { getTaskDateRange } from './VisualDateRange';
 
 export interface CategorizedTasks {
     allDay: DisplayTask[];
@@ -46,11 +47,8 @@ function categorizeForDate(
     // Timed
     if (!dt.effectiveStartTime) return null;
 
-    const visualDate = DateUtils.getVisualStartDate(
-        dt.effectiveStartDate,
-        dt.effectiveStartTime,
-        startHour
-    );
+    const range = getTaskDateRange(dt, startHour);
+    const visualDate = range.effectiveStart || dt.effectiveStartDate;
     return visualDate === date ? 'timed' : null;
 }
 
@@ -112,11 +110,8 @@ export function categorizeTasksByDate(
 
         if (!dt.effectiveStartTime) continue;
 
-        const visualDate = DateUtils.getVisualStartDate(
-            dt.effectiveStartDate,
-            dt.effectiveStartTime,
-            startHour
-        );
+        const range = getTaskDateRange(dt, startHour);
+        const visualDate = range.effectiveStart || dt.effectiveStartDate;
         const bucket = map.get(visualDate);
         if (bucket) bucket.timed.push(dt);
     }

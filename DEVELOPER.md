@@ -294,7 +294,7 @@ falling back to `00:00`/`23:59` when same-day end < start occurs.
 | Subtype | Condition | Rule |
 |---|---|---|
 | E-Timed | endTime present | start = endTime − 1h (may cross to previous calendarDate) |
-| E-AllDay | no endTime | endTime = `(startHour−1):59`, startDate = `getVisualStartDate(endDate, endTime, startHour)`, startTime = `startHour:00` |
+| E-AllDay | no endTime | endTime = `(startHour−1):59`, startDate = `toVisualDate(endDate, endTime, startHour)`, startTime = `startHour:00` |
 
 #### Stage 2: All-day startTime complement
 
@@ -911,7 +911,7 @@ In TaskConverter (inline→frontmatter), task comes from parser with parsed star
 | **calendarDate** | The date as defined by midnight (00:00). `task.startDate`, `task.endDate`, `task.due` are all calendar dates. | Fixed (midnight) |
 | **visualDate** | The date as perceived by the user, shifted by `startHour`. A task at 03:00 with `startHour=5` belongs to the previous visual day. | `startHour` setting |
 
-- `getVisualDateOfNow()`, `getVisualStartDate()` return **visualDate**
+- `getVisualDateOfNow()`, `toVisualDate()` return **visualDate**
 - `DateUtils.getToday()`, `DateUtils.addDays()` operate on **calendarDate**
 - `startHour` is the boundary between two visual days (default: 5:00 AM)
 
@@ -922,13 +922,13 @@ In TaskConverter (inline→frontmatter), task comes from parser with parsed star
 ```
 @2026-03-24>2026-03-29  →  startDate='2026-03-24', endDate='2026-03-29'
 toDisplayTask() resolves:  effectiveEndTime = '04:59' (startHour−1)
-getVisualStartDate('2026-03-29', '04:59', 5)  →  '2026-03-28'
+toVisualDate('2026-03-29', '04:59', 5)  →  '2026-03-28'
 Visual span: 03-24 ~ 03-28 = 5 visual days
 ```
 
-The mechanism: `toDisplayTask()` sets `effectiveEndTime = (startHour−1):59` for tasks without explicit endTime. Since this time is before `startHour`, `getVisualStartDate` shifts back by 1 day. The resulting visualDate is the **last inclusive visual day** of the task.
+The mechanism: `toDisplayTask()` sets `effectiveEndTime = (startHour−1):59` for tasks without explicit endTime. Since this time is before `startHour`, `toVisualDate` shifts back by 1 day. The resulting visualDate is the **last inclusive visual day** of the task.
 
-**Rule: always use `getVisualStartDate()` to convert both start and end dates to visual dates. There is no separate `getVisualEndDate()` — the same function handles both because the shift direction depends solely on whether the time is before startHour.**
+**Rule: always use `toVisualDate()` to convert both start and end dates to visual dates. There is no separate `getVisualEndDate()` — the same function handles both because the shift direction depends solely on whether the time is before startHour.**
 
 ### Visual date pipeline
 

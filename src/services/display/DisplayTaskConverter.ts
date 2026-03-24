@@ -43,7 +43,7 @@ export function toDisplayTask(task: Task, startHour: number): DisplayTask {
             const endHour = startHour === 0 ? 23 : startHour - 1;
             const implicitEndTime = `${endHour.toString().padStart(2, '0')}:59`;
             effectiveEndTime = implicitEndTime;
-            effectiveStartDate = DateUtils.getVisualStartDate(task.endDate, implicitEndTime, startHour);
+            effectiveStartDate = DateUtils.toVisualDate(task.endDate, implicitEndTime, startHour);
             effectiveStartTime = startHour.toString().padStart(2, '0') + ':00';
         }
         // startDateImplicit / startTimeImplicit remain true
@@ -142,7 +142,7 @@ export function shouldSplitDisplayTask(dt: DisplayTask, startHour: number): bool
     }
 
     // Timed tasks: check if they cross a visual-date boundary
-    const visualStartDay = DateUtils.getVisualStartDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
+    const visualStartDay = DateUtils.toVisualDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
 
     let visualEndDay = dt.effectiveEndDate;
     const [endH, endM] = dt.effectiveEndTime.split(':').map(Number);
@@ -171,8 +171,8 @@ export function splitDisplayTaskAtBoundary(dt: DisplayTask, startHour: number): 
         boundaryCalendarDate = DateUtils.addDays(dt.effectiveStartDate, 1);
     }
 
-    const beforeSegmentDate = DateUtils.getVisualStartDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
-    const afterSegmentDate = DateUtils.getVisualStartDate(boundaryCalendarDate, boundaryTime, startHour);
+    const beforeSegmentDate = DateUtils.toVisualDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
+    const afterSegmentDate = DateUtils.toVisualDate(boundaryCalendarDate, boundaryTime, startHour);
 
     const headSegment: DisplayTask = {
         ...dt,
@@ -214,7 +214,7 @@ export function isDisplayTaskOnVisualDate(
     // True all-day: no explicit start or end time in original task
     const isAllDay = !dt.startTime && !dt.endTime;
     if (!isAllDay && dt.effectiveStartTime) {
-        return DateUtils.getVisualStartDate(
+        return DateUtils.toVisualDate(
             dt.effectiveStartDate, dt.effectiveStartTime, startHour
         ) === visualDate;
     }
