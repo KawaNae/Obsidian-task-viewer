@@ -1,6 +1,5 @@
 import { App, TFile } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
-import { ChildLineClassifier } from '../parsing/utils/ChildLineClassifier';
 import { TaskParser } from '../parsing/TaskParser';
 import { FrontmatterTaskBuilder } from '../parsing/file/FrontmatterTaskBuilder';
 import { WikiLinkResolver } from './WikiLinkResolver';
@@ -9,8 +8,10 @@ import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
-import { ImplicitCalendarDateResolver } from '../display/ImplicitCalendarDateResolver';
 import { PropertyInheritanceResolver } from './PropertyInheritanceResolver';
+import { DocumentTreeBuilder } from '../parsing/tree/DocumentTreeBuilder';
+import { SectionPropertyResolver } from '../parsing/tree/SectionPropertyResolver';
+import { TreeTaskExtractor } from '../parsing/tree/TreeTaskExtractor';
 
 /**
  * タスクスキャナー - ファイルのスキャンとパース処理
@@ -100,149 +101,6 @@ export class TaskScanner {
         // 1. 新しいタスクをパース（再帰的に子タスクを抽出）
         const newTasks: Task[] = [];
 
-        /**
-         * 再帰的にラインからタスクを抽出
-         * @param linesToProcess - 処理する行の配列
-         * @param baseLineNumber - ファイル内の最初の行の実際の行番号
-         * @param parentStartDate - 親タスクのstartDate（継承用）
-         * @returns 抽出されたタスクの配列
-         */
-        const extractTasksFromLines = (
-            linesToProcess: string[],
-            baseLineNumber: number,
-            parentStartDate?: string,
-            hasFrontmatterParent?: boolean
-        ): Task[] => {
-            const extractedTasks: Task[] = [];
-
-            for (let i = 0; i < linesToProcess.length; i++) {
-                const line = linesToProcess[i];
-                const actualLineNumber = baseLineNumber + i;
-                let task = TaskParser.parse(line, file.path, actualLineNumber);
-                // 非デイリーノートかつFM/Container親がないファイルで、時刻のみ（日付なし）のタスクはプレーンチェックボックスとして扱う
-                if (task && !parentStartDate && !hasFrontmatterParent
-                    && !task.startDate && !task.endDate && !task.due
-                    && (!task.commands || task.commands.length === 0)) {
-                    task = null;
-                }
-
-                if (task) {
-                    // デイリーノートの日付を継承（startDate/endDate が未指定の場合）
-                    if (parentStartDate) {
-                        Object.assign(task, ImplicitCalendarDateResolver.resolveDailyNoteDates(task, parentStartDate));
-                    }
-
-                    // インデントを設定
-                    const taskIndent = line.search(/\S|$/);
-                    task.indent = taskIndent;
-
-                    // バリデーション警告を収集
-                    if (task.validationWarning) {
-                        this.validator.addError({
-                            file: file.path,
-                            line: actualLineNumber + 1, // 1-indexed表示
-                            taskId: task.id,
-                            error: task.validationWarning
-                        });
-                    }
-
-                    // 子配列を初期化
-                    task.childIds = [];
-
-                    // 子タスクを先読み（空行はスキップ）
-                    const children: string[] = [];
-                    let j = i + 1;
-
-                    while (j < linesToProcess.length) {
-                        const nextLine = linesToProcess[j];
-
-                        // 空行で停止 - 子ではない
-                        if (nextLine.trim() === '') {
-                            break;
-                        }
-
-                        const nextIndent = nextLine.search(/\S|$/);
-                        if (nextIndent > taskIndent) {
-                            children.push(nextLine);
-                            j++;
-                        } else {
-                            break;
-                        }
-                    }
-
-                    // 再帰的に子タスクを抽出（@記法を持つ子）— childLines フィルタより先に実行
-                    let childTasks: Task[] = [];
-                    if (children.length > 0) {
-                        const childLineNumber = actualLineNumber + 1;
-                        childTasks = extractTasksFromLines(children, childLineNumber, parentStartDate);
-
-                        // 親子関係を設定
-                        for (const childTask of childTasks) {
-                            // 直接の子のみparentIdを設定（インデント差が1レベル）
-                            // +1: タブ, +2: 2スペース（レガシー互換）, +4: 4スペース
-                            if (childTask.indent === taskIndent + 1 || childTask.indent === taskIndent + 2 || childTask.indent === taskIndent + 4) {
-                                childTask.parentId = task.id;
-                                task.childIds.push(childTask.id);
-                            }
-                        }
-                    }
-
-                    // 子のインデントを正規化 + childLines 設定
-                    // 子タスクとその配下行（property行等）をすべて除外（plain checkbox は残す）
-                    const childTaskLineSet = new Set<number>();
-                    for (const ct of childTasks) {
-                        childTaskLineSet.add(ct.line);
-                    }
-
-                    const excludeIndices = new Set<number>();
-                    for (let k = 0; k < children.length; k++) {
-                        const absLine = actualLineNumber + 1 + k;
-                        if (!childTaskLineSet.has(absLine)) continue;
-                        excludeIndices.add(k);
-                        // この子タスクより深いインデントの後続行も除外
-                        const ctIndent = children[k].search(/\S|$/);
-                        for (let m = k + 1; m < children.length; m++) {
-                            const nextLine = children[m];
-                            if (nextLine.trim() === '') { excludeIndices.add(m); continue; }
-                            if (nextLine.search(/\S|$/) > ctIndent) {
-                                excludeIndices.add(m);
-                            } else {
-                                break;
-                            }
-                        }
-                    }
-
-                    const nonEmptyChildren = children.filter(c => c.trim() !== '');
-                    if (nonEmptyChildren.length > 0) {
-                        const minIndent = Math.min(...nonEmptyChildren.map(c => c.search(/\S|$/)));
-                        const normalized = children.map(c => {
-                            if (c.trim() === '') return c;
-                            return c.substring(minIndent);
-                        });
-
-                        const ownLines: string[] = [];
-                        for (let k = 0; k < normalized.length; k++) {
-                            if (excludeIndices.has(k)) continue;
-                            ownLines.push(normalized[k]);
-                        }
-
-                        task.childLines = ChildLineClassifier.classifyLines(ownLines);
-                    } else {
-                        task.childLines = ChildLineClassifier.classifyLines(children);
-                    }
-                    task.properties = ChildLineClassifier.collectProperties(task.childLines);
-
-                    extractedTasks.push(task);
-                    extractedTasks.push(...childTasks);
-
-                    // 消費した行をスキップ
-                    i = j - 1;
-                }
-            }
-
-            return extractedTasks;
-        };
-
         // --- Frontmatter境界検出 ---
         let bodyStartIndex = 0;
         let frontmatterObj: Record<string, any> | undefined;
@@ -275,7 +133,28 @@ export class TaskScanner {
         // デイリーノートのファイル名から日付を抽出（親タスクからの継承は廃止）
         const dailyNoteDate = DailyNoteUtils.parseDateFromFilePath(this.app, file.path);
         const hasFmParent = fmResult !== null;
-        const allExtractedTasks = extractTasksFromLines(bodyLines, bodyStartIndex, dailyNoteDate ?? undefined, hasFmParent);
+
+        // --- ツリーパイプライン ---
+        const doc = DocumentTreeBuilder.build(file.path, lines, bodyStartIndex);
+        SectionPropertyResolver.resolve(doc, frontmatterObj, this.settings.frontmatterTaskKeys);
+        const allExtractedTasks = TreeTaskExtractor.extract(doc, {
+            filePath: file.path,
+            dailyNoteDate: dailyNoteDate ?? undefined,
+            hasFrontmatterParent: hasFmParent,
+            frontmatterTaskKeys: this.settings.frontmatterTaskKeys,
+        });
+
+        // バリデーション警告を収集
+        for (const task of allExtractedTasks) {
+            if (task.validationWarning) {
+                this.validator.addError({
+                    file: file.path,
+                    line: task.line + 1, // 1-indexed表示
+                    taskId: task.id,
+                    error: task.validationWarning,
+                });
+            }
+        }
 
         if (fmResult) {
             const fmTask = fmResult.task;
@@ -306,6 +185,13 @@ export class TaskScanner {
 
         // 同一ファイル内の親→子 properties/tags/color/linestyle 継承
         PropertyInheritanceResolver.resolve(newTasks);
+
+        // セクションプロパティのフォールバック（親タスク継承より弱い）
+        for (const task of newTasks) {
+            task.color ??= task.sectionColor;
+            task.linestyle ??= task.sectionLinestyle;
+            task.mask ??= task.sectionMask;
+        }
 
         // 2. 現在の完了カウント
         const currentCounts = new Map<string, number>();
