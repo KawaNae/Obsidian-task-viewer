@@ -104,12 +104,17 @@ export interface Task {
      */
     parserId: string;
 
-    // File-level styling from frontmatter (resolved at scan time).
+    // Resolved styling (from child lines or parent-task inheritance).
     color?: string;
     linestyle?: string;
 
-    // File-level mask for export masking (resolved at scan time).
+    // Resolved mask for export masking.
     mask?: string;
+
+    // Section-level styling (fallback, weaker than parent-task inheritance).
+    sectionColor?: string;
+    sectionLinestyle?: string;
+    sectionMask?: string;
 
     // True when this is a Container task (no dates, groups inline tasks).
     isContainer?: boolean;
@@ -161,10 +166,11 @@ export interface DisplayTask extends Task {
     startTimeImplicit: boolean;
     endDateImplicit: boolean;
     endTimeImplicit: boolean;
-    /** Split 情報（日跨ぎ分割） */
+    /** Split 情報（境界分割） */
     originalTaskId: string;
     isSplit: boolean;
-    splitSegment?: 'head' | 'tail';
+    splitContinuesBefore?: boolean;
+    splitContinuesAfter?: boolean;
 }
 
 export interface FlowCommand {

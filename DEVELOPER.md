@@ -38,17 +38,15 @@ src/views/taskcard/
 ### Shared type policy
 
 1. `src/types.ts` is reserved for cross-layer models/settings only.
-2. Split helpers (`DisplayTask`, `shouldSplitDisplayTask`, `splitDisplayTaskAtBoundary`) are in `src/utils/DisplayTaskConverter.ts`.
+2. Split helpers (`DisplayTask`, `shouldSplitDisplayTask`, `splitDisplayTaskAtBoundary`) are in `src/services/display/DisplayTaskConverter.ts`.
 3. Task-card-local render helper types are defined in `src/views/taskcard/types.ts`.
 
 ### Task content invariant
 
 1. `Task.content` stores raw user-provided content only.
 2. Frontmatter parser keeps `content` as empty string when `tv-content` is absent.
-3. UI fallback labels (file basename / `Untitled`) must be resolved in view helpers (`src/utils/TaskContent.ts`), not in parsers.
-4. AI Index resolves `content` at normalization time: when `Task.content` is empty for `inline`/`frontmatter`, it falls back to file basename for index output only.
-5. AI Index row-level `updatedAt` is removed; index freshness must be read from `ai-task-index.meta.json` (`generatedAt`).
-6. AI Index location is represented by `locator` (`ln:*`, `blk:*`, `tid:*`, `fm-root`); `sourceLine/sourceCol` are no longer exported.
+3. UI fallback labels (file basename / `Untitled`) must be resolved in view helpers (`src/services/parsing/utils/TaskContent.ts`), not in parsers.
+4. API normalizer (`TaskNormalizer`) resolves `content` at normalization time: when `Task.content` is empty for `inline`/`frontmatter`, it falls back to file basename for API output only.
 
 ---
 
@@ -59,26 +57,35 @@ src/views/taskcard/
 ```mermaid
 graph TB
     UI[UI Layer<br/>Views]
+    Read[TaskReadService<br/>Read Facade]
+    Write[TaskWriteService<br/>Write Facade]
     Index[TaskIndex<br/>Orchestration]
     Parser[Parsers<br/>Read]
     Repo[Repository<br/>Write]
 
-    UI -->|updateTask| Index
+    UI -->|read| Read
+    UI -->|write| Write
+    Read --> Index
+    Write --> Index
     Index -->|parse| Parser
     Index -->|write| Repo
 
     style Parser fill:#e1f5e1
     style Repo fill:#e1f5e1
     style Index fill:#fff4e1
+    style Read fill:#e8f0fe
+    style Write fill:#e8f0fe
     style UI fill:#e1e8f5
 ```
 
 | Layer | Responsibility |
 |-------|----------------|
+| **Views** | UI rendering and user interaction |
+| **TaskReadService** | Read facade; cached DisplayTask conversion, filtering, date-range queries |
+| **TaskWriteService** | Write facade; delegates all mutations to TaskIndex |
+| **TaskIndex** | Central orchestration; scanning, indexing, event management |
 | **Parsers** | Convert markdown to Task objects |
 | **Repository** | Write tasks back to files (CRUD) |
-| **TaskIndex** | Central orchestration; route reads and writes |
-| **Views** | UI rendering and user interaction |
 
 ---
 
@@ -87,23 +94,29 @@ graph TB
 ```
 src/
 ├── main.ts                    # Plugin entry point (onload / onunload)
-├── types.ts                   # Cross-layer types and settings (Task, TaskViewerSettings, etc.)
-├── settings.ts                # Settings UI (TaskViewerSettingTab)
+├── types/                     # Cross-layer types and settings (Task, DisplayTask, TaskViewerSettings, etc.)
+├── settings/                  # Settings UI (7 tabs: General, Views, ViewDetails, Notes, Frontmatter, Habits, Parsers)
 ├── constants/                 # Constants and view registry
+├── i18n/                      # Internationalization (locale files)
+├── api/                       # Public API (TaskApi, TaskNormalizer, FilterParamsBuilder, FilterFileLoader, TaskApiTypes)
+├── cli/                       # CLI handlers (CliRegistrar, CliFilterBuilder, CliDatePresetParser, CliOutputFormatter, handlers/)
 ├── services/
-│   ├── core/                  # Core services (TaskIndex, TaskStore, WikiLinkResolver, etc.)
+│   ├── core/                  # Core services (TaskIndex, TaskStore, WikiLinkResolver, PropertyInheritanceResolver, TaskValidator, etc.)
+│   ├── data/                  # Data access facade (TaskReadService, TaskWriteService)
+│   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, TaskDateCategorizer, TaskIdGenerator, ImplicitCalendarDateResolver)
 │   ├── parsing/               # Parser layer
-│   │   ├── inline/            # Line-level parsers (AtNotationParser)
+│   │   ├── inline/            # Line-level parsers (AtNotationParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
 │   │   ├── file/              # File-level parsers (FrontmatterTaskBuilder)
-│   │   └── strategies/        # ParserChain, ParserStrategy
+│   │   ├── strategies/        # ParserChain, ParserStrategy
+│   │   ├── tree/              # Document structure tree (DocumentTree, DocumentTreeBuilder, SectionPropertyResolver, etc.)
+│   │   └── utils/             # Parser utilities (ChildLineClassifier, TagExtractor, TaskContent, TaskLineClassifier)
 │   ├── persistence/           # Write layer (TaskRepository, TaskCloner, TaskConverter)
 │   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter
 │   │   └── utils/             # FrontmatterLineEditor, FileOperations
+│   ├── export/                # View data export (ViewExporter, per-view ExportStrategy)
 │   ├── filter/                # Filter engine, serializer, types, value collector
 │   ├── sort/                  # Task sorting (TaskSorter, SortTypes)
-│   ├── styling/               # Task style resolution (TaskStyleResolver)
-│   ├── template/              # View template load/save (ViewTemplateLoader/Writer)
-│   └── aiindex/               # AI Index generation service
+│   └── template/              # View template load/save (ViewTemplateLoader/Writer)
 ├── editor/                    # Editor extensions (TaskMenuExtension)
 ├── views/
 │   ├── timelineview/          # Timeline view (including renderers/)
@@ -116,14 +129,14 @@ src/
 │   ├── customMenus/           # Filter/Sort popover menus, IntervalTemplateCreator
 │   ├── sidebar/               # SidebarManager, SidebarToggleButton
 │   └── TimerView.ts           # Timer view (Pomodoro / Countdown / Countup / Interval)
-├── timer/                     # Timer widget and all timer services
+├── timer/                     # Timer widget and all timer services (including AudioUtils)
 ├── interaction/
-│   ├── drag/                  # Drag & drop (DragHandler, strategies/, ghost/)
-│   └── menu/                  # Context menus (MenuHandler, builders/)
+│   ├── drag/                  # Drag & drop (DragHandler, DragStrategy, strategies/, ghost/)
+│   └── menu/                  # Context menus (MenuHandler, PropertyCalculator, PropertyFormatter, builders/)
 ├── commands/                  # Flow command execution (next / repeat / move)
 ├── modals/                    # Modal UI (CreateTaskModal, ConfirmModal, etc.)
 ├── suggest/                   # Obsidian property panel autocomplete (color/, line/, tags/)
-├── utils/                     # General utilities (AudioUtils, DateUtils, ViewUriBuilder, etc.)
+├── utils/                     # General utilities (DateUtils, ViewUriBuilder, etc.)
 └── styles/                    # CSS (BEM naming, --tv-* tokens)
 ```
 
@@ -150,21 +163,58 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskFilterEngine** | `services/filter/TaskFilterEngine.ts` | Filter condition evaluation |
 | **FilterSerializer** | `services/filter/FilterSerializer.ts` | Filter state serialization (v4 recursive group format) |
 | **TaskSorter** | `services/sort/TaskSorter.ts` | Task sort processing |
-| **TaskStyleResolver** | `services/styling/TaskStyleResolver.ts` | Resolves per-task visual styles (color, linestyle) |
 | **ViewTemplateLoader/Writer** | `services/template/` | View template read/write |
-| **AiIndexService** | `services/aiindex/AiIndexService.ts` | NDJSON task index output with debounce, retry, and hash-based diff |
+| **TaskReadService** | `services/data/TaskReadService.ts` | Read facade; filter, sort, DisplayTask conversion |
+| **TaskWriteService** | `services/data/TaskWriteService.ts` | Write facade; create, update, delete, duplicate, convert |
+| **DisplayTaskConverter** | `services/display/DisplayTaskConverter.ts` | Task → DisplayTask conversion with effective field resolution |
+| **TaskSplitter** | `services/display/TaskSplitter.ts` | Visual-date / date-range task splitting |
+| **TaskDateCategorizer** | `services/display/TaskDateCategorizer.ts` | Categorizes tasks into allDay / timed / dueOnly |
+| **ViewExporter** | `services/export/ViewExporter.ts` | View data export with per-view ExportStrategy |
+| **PropertyInheritanceResolver** | `services/core/PropertyInheritanceResolver.ts` | Task-level parent→child property inheritance (BFS; separate from section-level cascade) |
+| **TaskValidator** | `services/core/TaskValidator.ts` | Task validation |
+| **DocumentTreeBuilder** | `services/parsing/tree/DocumentTreeBuilder.ts` | Document structure tree for section property inheritance |
+| **DayPlannerParser** | `services/parsing/inline/DayPlannerParser.ts` | Day Planner compatible parser (read-only) |
+| **TasksPluginParser** | `services/parsing/inline/TasksPluginParser.ts` | Tasks plugin compatible parser (read-only) |
+| **TaskApi** | `api/TaskApi.ts` | Public API (15 methods) |
+| **TaskNormalizer** | `api/TaskNormalizer.ts` | Task → NormalizedTask conversion for API output |
+| **FilterFileLoader** | `api/FilterFileLoader.ts` | Filter file (.json/.md) loading |
 | **TaskCommandExecutor** | `commands/TaskCommandExecutor.ts` | Executes `==>` flow commands (next / repeat / move) |
 | **DragHandler** | `interaction/drag/DragHandler.ts` | Dispatches pointer events to Move/Resize strategies |
 | **MenuHandler** | `interaction/menu/MenuHandler.ts` | Context menu facade coordinating multiple Builder classes |
 | **TimerWidget** | `timer/TimerWidget.ts` | Floating timer UI; manages and persists all timer instances |
 | **IntervalTemplateLoader/Writer** | `timer/IntervalTemplateLoader.ts` et al. | Interval template read/write |
+| **AudioUtils** | `timer/AudioUtils.ts` | Web Audio API notifications with serialized context management |
 | **KanbanView** | `views/kanban/KanbanView.ts` | Kanban board view |
 | **TimerView** | `views/TimerView.ts` | Standalone timer view (Pomodoro / Countdown / Countup / Interval) |
 | **TaskCardRenderer** | `views/taskcard/TaskCardRenderer.ts` | Task card rendering orchestrator (see section above) |
 | **TaskLinkInteractionManager** | `views/taskcard/TaskLinkInteractionManager.ts` | Internal link click/hover handling within task cards |
 | **SidebarManager** | `views/sidebar/SidebarManager.ts` | Sidebar visibility and pinned list management |
 | **CreateTaskModal** | `modals/CreateTaskModal.ts` | Task creation modal UI |
-| **AudioUtils** | `utils/AudioUtils.ts` | Web Audio API notifications with serialized context management |
+| **TaskParser** | `services/parsing/TaskParser.ts` | Static facade wrapping active ParserChain; rebuilt on settings change |
+| **InlineToFrontmatterConversionService** | `services/core/InlineToFrontmatterConversionService.ts` | Inline task → frontmatter file conversion (creates file, replaces original with wikilink) |
+
+---
+
+## Document Tree Pipeline
+
+`TaskScanner` processes each file through a multi-stage pipeline:
+
+```
+1. DocumentTreeBuilder.build()         — Parse file into heading-based hierarchy tree
+2. SectionPropertyResolver.resolve()   — Cascade properties through section nesting
+3. TreeTaskExtractor.extract()         — Extract Task[] from tree with section properties attached
+4. PropertyInheritanceResolver.resolve() — BFS parent→child property inheritance across tasks
+```
+
+### Two-tier property inheritance
+
+| Tier | Resolver | Basis | Merge strategy |
+|------|----------|-------|----------------|
+| **Section-level** | `SectionPropertyResolver` | Heading nesting (e.g. `## A` → `### B`) | Child-wins cascade; resolves `color`, `linestyle`, `mask`, custom properties |
+| **Task-level** | `PropertyInheritanceResolver` | `parentId` / `childIds` relationships | BFS child-wins; inherits `color`, `linestyle`, `mask`, `tags`, custom properties |
+
+Section-level resolution happens **during** tree building.
+Task-level resolution happens **after** task extraction, on the flat `Task[]` array.
 
 ---
 
@@ -189,7 +239,7 @@ The plugin recognizes eight task types internally.
 
 Tasks are classified by **display behavior** — where they appear and what values are inferred.
 All times are relative to the configured `startHour` (default 5 → visual day 05:00–04:59).
-Display-layer implicit value resolution is centralised in `DisplayTaskConverter.toDisplayTask()`.
+Display-layer implicit value resolution is centralised in `toDisplayTask()` (in `services/display/DisplayTaskConverter.ts`).
 Storage-layer daily-note date inheritance is in `ImplicitCalendarDateResolver.resolveDailyNoteDates()`.
 
 #### 1. Timed tasks (S-Timed / E-Timed / SD-Timed / ED-Timed)
@@ -235,7 +285,7 @@ Only a due is specified, no start or end.
 
 ### Implicit value resolution rules (`toDisplayTask()`)
 
-All display-layer implicit resolution is centralised in `DisplayTaskConverter.toDisplayTask()`.
+All display-layer implicit resolution is centralised in `toDisplayTask()` (in `services/display/DisplayTaskConverter.ts`).
 Written dates are **calendarDates**. Complement uses `startHour` where possible,
 falling back to `00:00`/`23:59` when same-day end < start occurs.
 
@@ -244,7 +294,7 @@ falling back to `00:00`/`23:59` when same-day end < start occurs.
 | Subtype | Condition | Rule |
 |---|---|---|
 | E-Timed | endTime present | start = endTime − 1h (may cross to previous calendarDate) |
-| E-AllDay | no endTime | endTime = `(startHour−1):59`, startDate = `getVisualStartDate(endDate, endTime, startHour)`, startTime = `startHour:00` |
+| E-AllDay | no endTime | endTime = `(startHour−1):59`, startDate = `toVisualDate(endDate, endTime, startHour)`, startTime = `startHour:00` |
 
 #### Stage 2: All-day startTime complement
 
@@ -467,7 +517,7 @@ npm run build     # Production build
 ### File naming
 
 - **Parsers**: `<Target>Parser.ts` (e.g. `AtNotationParser.ts`)
-- **Services**: `<Feature>Service.ts` (e.g. `AiIndexService.ts`)
+- **Services**: `<Feature>Service.ts` (e.g. `TaskReadService.ts`)
 - **Views**: `<Name>View.ts` (e.g. `TimelineView.ts`, `TimerView.ts`)
 
 ### Type placement rules
@@ -531,11 +581,12 @@ menu.addItem(item => item.setTitle('Delete task'));
 
 | Pattern | Where used |
 |---------|-----------|
-| **Facade** | `TaskIndex`, `MenuHandler`, `TaskRepository` |
+| **Facade** | `TaskIndex`, `TaskReadService`, `TaskWriteService`, `MenuHandler`, `TaskRepository`, `TaskParser` |
 | **Strategy** | `DragStrategy` (Move/Resize), `CommandStrategy` (next/repeat/move), `ParserStrategy` |
 | **Builder** | `PropertiesMenuBuilder`, `TimerMenuBuilder`, and other menu builders |
 | **Observer** | `TaskStore.onChange()` notifies UI of task changes |
 | **Surgical Edit** | `FrontmatterLineEditor` operates on YAML one key range at a time |
+| **Document Tree** | `DocumentTreeBuilder` builds heading-based hierarchy for section property cascade |
 
 ---
 
@@ -718,10 +769,15 @@ Timer phases: `'idle'` | `'work'` | `'break'` | `'prepare'`
 
 - `TimerProgressUI` — circular progress ring + time display
 - `TimerSettingsMenu` — Pomodoro settings context menu
-- `IntervalParser` — parses interval notation
+- `TimerRenderer` — timer UI rendering
+- `TimerContext` — timer context management
+- `TimerCreator` — timer instance creation
+- `TimerLifecycle` — timer lifecycle management
+- `TimerStorageUtils` — timer storage utilities
+- `TimerTargetManager` — timer-task association management
 - `IntervalTemplateLoader` / `IntervalTemplateWriter` — interval template read/write (markdown files with `_tv-*` frontmatter keys)
 
-### Audio notifications (`utils/AudioUtils.ts`)
+### Audio notifications (`timer/AudioUtils.ts`)
 
 State-transition-based sound mapping. All sounds use Web Audio API scheduling (no `setTimeout`).
 
@@ -743,33 +799,13 @@ State-transition-based sound mapping. All sounds use Web Audio API scheduling (n
 
 ---
 
-## AI Index Service
-
-`src/services/aiindex/` — Generates a searchable task index as vault files.
-
-**Output files**:
-- `ai-task-index.ndjson` — one JSON object per line (NDJSON format)
-- `ai-task-index.meta.json` — freshness tracking; read `generatedAt` for the last update time
-
-**Design patterns**:
-- Debounced writes (default 1000 ms)
-- Retry on write failure (exponential backoff, max 30 s)
-- Hash-based diff detection (skips write when content is unchanged)
-- Cooldown notifications (15 s) to prevent spamming the user
-
-**`locator` field format**: `ln:<number>` | `blk:<blockId>` | `tid:<timerTargetId>` | `fm-root`
-
-**`content` fallback**: For `inline`/`frontmatter` tasks where `Task.content` is empty, the file basename is used in index output only. The `Task` object itself keeps `content` as an empty string (parsers must not populate it).
-
----
-
 ## Drag & Drop and Context Menus
 
 ### Drag (`src/interaction/drag/`)
 
 - `DragHandler` receives pointer events and delegates to `MoveStrategy` or `ResizeStrategy` (Strategy pattern).
 - `GhostFactory` + `GhostManager` manage the drag-preview DOM element.
-- Split tasks (`RenderableTask`) carry `splitOriginalId` to track the original `taskId` during drag.
+- Split tasks (`DisplayTask`) carry `originalTaskId` to track the original `taskId` during drag.
 
 ### Context menus (`src/interaction/menu/`)
 
@@ -875,24 +911,137 @@ In TaskConverter (inline→frontmatter), task comes from parser with parsed star
 | **calendarDate** | The date as defined by midnight (00:00). `task.startDate`, `task.endDate`, `task.due` are all calendar dates. | Fixed (midnight) |
 | **visualDate** | The date as perceived by the user, shifted by `startHour`. A task at 03:00 with `startHour=5` belongs to the previous visual day. | `startHour` setting |
 
-- `getVisualDateOfNow()`, `getVisualStartDate()` return **visualDate**
+- `getVisualDateOfNow()`, `toVisualDate()` return **visualDate**
 - `DateUtils.getToday()`, `DateUtils.addDays()` operate on **calendarDate**
 - `startHour` is the boundary between two visual days (default: 5:00 AM)
+
+### @notation endDate semantics
+
+`task.endDate` is stored as a **calendarDate** and is **exclusive** in visual terms.
+
+```
+@2026-03-24>2026-03-29  →  startDate='2026-03-24', endDate='2026-03-29'
+toDisplayTask() resolves:  effectiveEndTime = '04:59' (startHour−1)
+toVisualDate('2026-03-29', '04:59', 5)  →  '2026-03-28'
+Visual span: 03-24 ~ 03-28 = 5 visual days
+```
+
+The mechanism: `toDisplayTask()` sets `effectiveEndTime = (startHour−1):59` for tasks without explicit endTime. Since this time is before `startHour`, `toVisualDate` shifts back by 1 day. The resulting visualDate is the **last inclusive visual day** of the task.
+
+**Rule: always use `toVisualDate()` to convert both start and end dates to visual dates. There is no separate `getVisualEndDate()` — the same function handles both because the shift direction depends solely on whether the time is before startHour.**
+
+### Visual date pipeline
+
+All visual date calculations MUST flow through the same code path. Two canonical functions exist:
+
+| Function | Location | Purpose |
+|----------|----------|---------|
+| `toDisplayTask()` | `services/display/DisplayTaskConverter.ts` | Resolves implicit effective fields from raw Task |
+| `getTaskDateRange()` | `views/calendar/CalendarDateUtils.ts` | Converts DisplayTask effective fields to inclusive visual start/end dates |
+
+Any code that needs a task's visual date range — renderers, grid layout, drag ghosts, split boundaries — must use this pipeline, never compute visual dates independently from raw task fields.
+
+```
+Raw Task
+  ↓  toDisplayTask(task, startHour)
+DisplayTask (effectiveStartDate/Time, effectiveEndDate/Time)
+  ↓  getTaskDateRange(displayTask, startHour)
+{ effectiveStart: visualDate, effectiveEnd: visualDate }  ← inclusive range
+```
+
+### Pitfall: raw endDate ≠ visual end
+
+`task.endDate` (raw, exclusive) and the inclusive visual end date are different by 1 day for allDay tasks.
+Any code that converts between the two must do so explicitly:
+
+| Direction | Method |
+|-----------|--------|
+| raw → visual (for rendering/ghost) | `getTaskDateRange(toDisplayTask(task, startHour), startHour).effectiveEnd` |
+| visual → raw (for write-back) | `DateUtils.addDays(visualEndDate, 1)` |
+
+**Never mix raw and visual dates in the same calculation** (e.g., comparing `task.endDate` with a grid column date, or computing span from `getDiffDays(startDate, endDate)` using raw values).
+
+---
+
+## Task Split Architecture
+
+### Overview
+
+Calendar and AllDay views display tasks on a date grid. Tasks spanning multiple visual days or crossing view boundaries need splitting into segments. This is handled by `TaskSplitter` (`services/display/TaskSplitter.ts`).
+
+### Split boundary types
+
+```typescript
+type SplitBoundary =
+  | { type: 'visual-date'; startHour: number }     // Splits timed tasks at startHour
+  | { type: 'date-range'; start; end; startHour }   // Clips tasks at view/week boundaries
+```
+
+| Type | Purpose | Applies to |
+|------|---------|-----------|
+| **visual-date** | Splits timed tasks crossing the `startHour` boundary into [head, tail] | Timed tasks only (allDay tasks span by design) |
+| **date-range** | Clips tasks extending beyond a date range (e.g. week boundaries) into segments | All task types |
+
+### Two-step split pipeline (CalendarView)
+
+```
+allTasks (DisplayTask[])
+  ↓  splitTasks(tasks, { type: 'visual-date', startHour })
+     Timed tasks crossing startHour → [head, tail]
+  ↓  splitTasks(tasks, { type: 'date-range', start: weekStart, end: weekEnd, startHour })
+     Tasks extending beyond week → clipped segments
+  ↓  computeGridLayout(tasks, { dates, getDateRange })
+     Position on grid with colStart, span, trackIndex
+```
+
+AllDaySectionRenderer uses only the date-range split (allDay tasks don't need visual-date splitting).
+
+### Split segment fields
+
+Split segments inherit all fields from the original via `...dt` spread. Modified fields:
+
+| Field | Head segment | Tail segment |
+|-------|-------------|--------------|
+| `id` | `makeSegmentId(originalId, startDate)` | `makeSegmentId(originalId, boundaryDate)` |
+| `effectiveEndDate/Time` | Set to boundary | Inherited from original |
+| `effectiveStartDate/Time` | Inherited from original | Set to boundary |
+| `isSplit` | `true` | `true` |
+| `splitContinuesBefore` | From original (or `false`) | `true` |
+| `splitContinuesAfter` | `true` | From original (or `false`) |
+| `originalTaskId` | Original task ID | Original task ID |
+
+### Drag ghost and visual dates
+
+Drag strategies (Move/Resize) must use the same visual date pipeline as the renderer to ensure ghost size matches the displayed task card.
+
+```typescript
+// In BaseDragStrategy:
+protected getVisualDateRange(task: Task, startHour: number): { start: string; end: string }
+  // Internally: toDisplayTask(task, startHour) → getTaskDateRange(dt, startHour)
+```
+
+Each strategy maintains two sets of dates:
+
+| Field | Semantic | Used for |
+|-------|----------|----------|
+| `initialCalendarDate` / `initialCalendarEndDate` | Raw calendarDates (endDate is exclusive) | Write-back to task (preserves @notation format) |
+| `initialCalendarVisualStart` / `initialCalendarVisualEnd` | Inclusive visualDates | Ghost rendering, `updateCalendarSplitPreview`, span calculation |
+
+**Never pass `initialCalendarEndDate` to `updateCalendarSplitPreview()`** — it expects inclusive dates, but `initialCalendarEndDate` is exclusive.
 
 ---
 
 ## Settings Schema
 
-Defined in `src/types.ts` as `TaskViewerSettings`. Defaults are in `DEFAULT_SETTINGS` in the same file.
+Defined in `src/types/index.ts` as `TaskViewerSettings`. Defaults are in `DEFAULT_SETTINGS` in the same file.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `startHour` | number | 5 | Visual day boundary hour. Times before this hour belong to the previous visualDate. |
 | `applyGlobalStyles` | boolean | `false` | Apply plugin CSS globally |
 | `enableStatusMenu` | boolean | `true` | Show status menu on checkbox long-press |
-| `statusMenuChars` | string[] | `['-','!','?','>','/']` | Status characters shown in status menu |
+| `statusDefinitions` | StatusDefinition[] | *(see below)* | Status character definitions (char, label, isComplete) |
 | `frontmatterTaskKeys` | FrontmatterTaskKeys | `tv-*` family | Frontmatter key names (all fields are individually customisable) |
-| `completeStatusChars` | string[] | `['x','X','-','!']` | Status characters considered "complete" |
 | `habits` | HabitDefinition[] | `[]` | Habit tracking definitions (boolean / number / string) |
 | `frontmatterTaskHeader` | string | `'Tasks'` | Heading text under which child tasks are inserted |
 | `frontmatterTaskHeaderLevel` | number | 2 | Heading level for the above (2 = `##`) |
@@ -900,14 +1049,12 @@ Defined in `src/types.ts` as `TaskViewerSettings`. Defaults are in `DEFAULT_SETT
 | `taskSelectAction` | `'click'` \| `'dblclick'` | `'click'` | Task card select action to open file |
 | `zoomLevel` | number | 1.0 | Default timeline zoom level |
 | `pastDaysToShow` | number | 0 | Number of past days to show in timeline |
-| ~~`aiIndex`~~ | — | — | Removed in v0.25.0 (replaced by CLI + Public API) |
 | `pomodoroWorkMinutes` | number | 25 | Pomodoro work segment length |
 | `pomodoroBreakMinutes` | number | 5 | Pomodoro break segment length |
 | `countdownMinutes` | number | 25 | Default countdown duration |
 | `dailyNoteHeader` | string | `'Tasks'` | Heading for daily note task insertion |
 | `dailyNoteHeaderLevel` | number | 2 | Heading level for daily note (2 = `##`) |
 | `calendarWeekStartDay` | 0 \| 1 | 0 | Calendar week start day (0=Sun, 1=Mon) |
-| `calendarShowCompleted` | boolean | `true` | Show completed tasks in calendar view |
 | `calendarShowWeekNumbers` | boolean | `false` | Show ISO week numbers in calendar |
 | `weeklyNoteFormat` | string | `'gggg-[W]ww'` | Weekly note filename format |
 | `monthlyNoteFormat` | string | `'YYYY-MM'` | Monthly note filename format |
@@ -926,10 +1073,18 @@ Defined in `src/types.ts` as `TaskViewerSettings`. Defaults are in `DEFAULT_SETT
 | `suggestLinestyle` | boolean | `true` | Show linestyle suggestions in property panel |
 | `hideViewHeader` | boolean | `true` | Hide view header |
 | `mobileTopOffset` | number | 32 | Top offset for mobile (px) |
+| `fixMobileGradientWidth` | boolean | `true` | Fix mobile gradient width |
+| `enableTasksPlugin` | boolean | `false` | Enable Tasks plugin compatible parser (read-only) |
+| `enableDayPlanner` | boolean | `false` | Enable Day Planner compatible parser (read-only) |
+| `tasksPluginMapping` | TasksPluginMapping | *(see below)* | Tasks plugin field mappings |
+
+**`statusDefinitions` defaults**: `[{' ':Todo}, {'/':Doing}, {'x':Done✓}, {'X':Done✓}, {'-':Cancelled✓}, {'!':Important}, {'?':Question}, {'>':Deferred}]` (✓ = isComplete)
 
 **`defaultViewPositions` defaults**: `{ timeline: 'tab', schedule: 'right', calendar: 'tab', miniCalendar: 'left', timer: 'right', kanban: 'tab' }`
 
-All `FrontmatterTaskKeys` fields (`start`, `end`, `due`, `status`, `content`, `timerTargetId`, `color`, `linestyle`, `placeholder`, `ignore`) are independently customisable. Duplicate key values are not allowed.
+**`tasksPluginMapping` defaults**: `{ start: 'startDate', scheduled: 'startDate', due: 'due' }`
+
+All `FrontmatterTaskKeys` fields (`start`, `end`, `due`, `status`, `content`, `timerTargetId`, `color`, `linestyle`, `mask`, `ignore`) are independently customisable. Duplicate key values are not allowed.
 
 ---
 
@@ -994,19 +1149,22 @@ DataviewJS  →                TaskApi method → typed result (used directly)
 
 ```
 src/api/
-  TaskApi.ts            # Public API class (7 methods)
-  TaskApiTypes.ts       # Param/result interfaces + TaskApiError
+  TaskApi.ts             # Public API class (15 methods)
+  TaskApiTypes.ts        # Param/result interfaces + TaskApiError
+  TaskNormalizer.ts      # Task → NormalizedTask conversion
+  FilterParamsBuilder.ts # ListParams → FilterState conversion
+  FilterFileLoader.ts    # Vault filter file (.json/.md) loading
 
 src/cli/
-  CliRegistrar.ts       # Registers 7 CLI handlers with Obsidian
-  CliFilterBuilder.ts   # String flags → FilterState
-  CliSortBuilder.ts     # String flag → SortState
+  CliRegistrar.ts        # Registers 14 CLI handlers with Obsidian
+  CliFilterBuilder.ts    # String flags → FilterState
   CliDatePresetParser.ts # Date preset parsing (today, thisWeek, etc.)
-  CliOutputFormatter.ts # Field selection + JSON/TSV/JSONL formatting
+  CliOutputFormatter.ts  # Field selection + JSON/TSV/JSONL formatting
   handlers/
-    TaskQueryHandlers.ts  # list / today / get (independent implementation)
-    TaskCrudHandlers.ts   # create / update / delete (delegates to TaskApi)
-    TemplateQueryHandler.ts # query (independent implementation)
+    TaskQueryHandlers.ts   # list / today / get
+    TaskCrudHandlers.ts    # create / update / delete
+    TaskActionHandlers.ts  # duplicate / convert / tasks-for-date-range / tasks-for-date / insert-child-task / create-frontmatter / get-start-hour
+    HelpHandler.ts         # help
 ```
 
 ### API entry point
@@ -1027,13 +1185,40 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 
 | Method | Sync/Async | Returns |
 |--------|-----------|---------|
-| `list(params?)` | sync | `TaskListResult { count, tasks: DisplayTask[] }` |
+| `list(params?)` | async | `TaskListResult { count, tasks: NormalizedTask[] }` |
 | `today(params?)` | sync | `TaskListResult` |
-| `get({ id })` | sync | `DisplayTask` |
-| `query({ template })` | async | `QueryResult { template, viewType, lists[] }` |
-| `create({ file, content, ... })` | async | `MutationResult { task: DisplayTask }` |
+| `get({ id })` | sync | `NormalizedTask` |
+| `create({ file, content, ... })` | async | `MutationResult { task: NormalizedTask }` |
 | `update({ id, ... })` | async | `MutationResult` |
 | `delete({ id })` | async | `DeleteResult { deleted: string }` |
+| `duplicate({ id, ... })` | async | `DuplicateResult { duplicated: string }` |
+| `convertToFrontmatter({ id })` | async | `ConvertResult { convertedFrom, newFile }` |
+| `tasksForDateRange({ start, end, ... })` | async | `TaskListResult` |
+| `tasksForDate({ date, ... })` | sync | `CategorizedTasksResult { allDay, timed, dueOnly }` |
+| `insertChildTask({ parentId, content })` | async | `InsertChildTaskResult { parentId }` |
+| `createFrontmatterTask({ content, ... })` | async | `CreateFrontmatterResult { newFile }` |
+| `getStartHour()` | sync | `StartHourResult { startHour }` |
+| `onChange(callback)` | sync | `() => void` (unsubscribe) |
+| `help()` | sync | `string` |
+
+### CLI commands (14)
+
+| Command | Description | Key flags |
+|---------|-------------|-----------|
+| `list` | List tasks with filters | file, status, tag, content, date, from, to, due, leaf, root, property, color, type, filter-file, list, sort, limit, offset |
+| `today` | Today's active tasks | leaf, sort, limit, offset |
+| `get` | Single task by ID | id (required) |
+| `create` | Create inline task | file (req), content (req), start, end, due, status, heading |
+| `update` | Update task fields | id (req), content, start, end, due, status (use `none` to clear) |
+| `delete` | Delete task | id (required) |
+| `duplicate` | Duplicate task | id (req), day-offset, count |
+| `convert` | Inline → frontmatter | id (required) |
+| `tasks-for-date-range` | Tasks in date range | start (req), end (req), sort, limit, offset |
+| `tasks-for-date` | Categorized tasks for date | date (required) |
+| `insert-child-task` | Insert child task | parent-id (req), content (req) |
+| `create-frontmatter` | Create frontmatter file | content (req), start, end, due, status |
+| `get-start-hour` | Get startHour setting | *(none)* |
+| `help` | Show CLI reference | *(none)* |
 
 ### Error handling
 

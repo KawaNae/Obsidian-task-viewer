@@ -1,6 +1,6 @@
 import type { DisplayTask } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
-import type { CategorizedTasks as BaseCategorizedTasks } from '../../../services/data/TaskReadService';
+import type { CategorizedTasks as BaseCategorizedTasks } from '../../../services/display/TaskDateCategorizer';
 import type { CategorizedTasks, TimedDisplayTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from './ScheduleGridCalculator';
 

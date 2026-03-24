@@ -13,6 +13,7 @@ import { InlineToFrontmatterConversionService } from './InlineToFrontmatterConve
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { DateUtils as CoreDateUtils } from '../../utils/DateUtils';
 import { toDisplayTask } from '../display/DisplayTaskConverter';
+import { getTaskDateRange } from '../display/VisualDateRange';
 import { TaskParser } from '../parsing/TaskParser';
 import { HeadingInserter } from '../../utils/HeadingInserter';
 import { FileOperations } from '../persistence/utils/FileOperations';
@@ -291,9 +292,8 @@ export class TaskIndex {
                 return;
             }
 
-            const originalVisualStartDate = dt.effectiveStartTime
-                ? CoreDateUtils.getVisualStartDate(dt.effectiveStartDate, dt.effectiveStartTime, this.settings.startHour)
-                : dt.effectiveStartDate;
+            const range = getTaskDateRange(dt, this.settings.startHour);
+            const originalVisualStartDate = range.effectiveStart || dt.effectiveStartDate;
 
             // Compute afterSegmentDate the same way splitDisplayTaskAtBoundary does
             let afterSegmentDate = originalVisualStartDate;
@@ -305,7 +305,7 @@ export class TaskIndex {
                     boundaryCalendarDate = CoreDateUtils.addDays(dt.effectiveStartDate, 1);
                 }
                 const boundaryTime = `${this.settings.startHour.toString().padStart(2, '0')}:00`;
-                afterSegmentDate = CoreDateUtils.getVisualStartDate(
+                afterSegmentDate = CoreDateUtils.toVisualDate(
                     boundaryCalendarDate, boundaryTime, this.settings.startHour
                 );
             }

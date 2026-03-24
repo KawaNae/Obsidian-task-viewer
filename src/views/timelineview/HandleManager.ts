@@ -115,28 +115,26 @@ export class HandleManager {
             const isCalendar = !!taskEl.closest('.calendar-week-row');
             const isAllDay = taskEl.classList.contains('task-card--allday');
 
-            // Split checks
-            const isSplitHead = taskEl.classList.contains('task-card--split-head');
-            const isSplitTail = taskEl.classList.contains('task-card--split-tail');
+            // Split checks (continuation flags)
+            const isSplitHead = taskEl.classList.contains('task-card--split-continues-after');
+            const isSplitTail = taskEl.classList.contains('task-card--split-continues-before');
 
             // --- Render Handles ---
             if (isCalendar) {
-                const isMiddle = taskEl.classList.contains('task-card--split-middle');
-                if (isMiddle) {
-                    return;
+                const continuesBefore = taskEl.classList.contains('task-card--split-continues-before');
+                const continuesAfter = taskEl.classList.contains('task-card--split-continues-after');
+                if (continuesBefore && continuesAfter) {
+                    return; // middle segment: no handles
                 }
 
-                const isHead = taskEl.classList.contains('task-card--split-head');
-                const isTail = taskEl.classList.contains('task-card--split-tail');
-
                 // Left edge = start
-                if (!isTail) {
+                if (!continuesBefore) {
                     this.createMoveHandle(taskEl, taskId, 'top-left');
                     this.createResizeHandle(taskEl, taskId, 'left', '↔');
                 }
 
                 // Right edge = end
-                if (!isHead) {
+                if (!continuesAfter) {
                     this.createMoveHandle(taskEl, taskId, 'top-right');
                     this.createResizeHandle(taskEl, taskId, 'right', '↔');
                 }
@@ -151,26 +149,19 @@ export class HandleManager {
                 // Timed tasks: Top/Bottom resize + Top-Right/Bottom-Right Move
 
                 // 1. Check if touching Top Boundary (Start Hour)
-                // Logic: If task startTime matches startHour:00 exactly, it touches the top.
-                // However, visually, 'split-tail' ALWAYS touches the top.
-                // But user requirement says: "Boundary touching tasks" -> Hide Top Handles.
-                // For a split-tail task, it effectively starts at StartHour.
-                // So split-tail should HIDE Top Resize & Top Move.
-
-                // Let's rely on time check for generic case, and class for split case if easier.
-                // But time check is more robust for non-split tasks that just happen to start at boundary.
+                // A continues-before segment always starts at StartHour (boundary).
+                // Hide Top Resize & Top Move for boundary-touching tasks.
 
                 const startHour = this.deps.getStartHour();
                 const [startH, startM] = (task.startTime || '00:00').split(':').map(Number);
 
                 // Touching Top Boundary if:
-                // 1. It is a 'split-tail' segment (always starts at boundary)
+                // 1. It continues before (always starts at boundary)
                 // 2. OR it starts exactly at StartHour:00 (for normal tasks)
                 const isTouchingTop = isSplitTail || (startH === startHour && startM === 0);
 
                 // Check if touching Bottom Boundary (Next Start Hour)
-                // Logic: If task ends exactly at next day's StartHour:00
-                // 'split-head' segment always ends at boundary.
+                // A continues-after segment always ends at boundary.
                 let isTouchingBottom = isSplitHead;
 
                 if (!isTouchingBottom && task.endTime) {

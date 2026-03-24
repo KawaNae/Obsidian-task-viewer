@@ -33,6 +33,8 @@ export class MoveStrategy extends BaseDragStrategy {
     private initialSpan: number = 0;
     private initialCalendarDate: string = '';
     private initialCalendarEndDate: string = '';
+    private initialCalendarVisualStart: string = '';
+    private initialCalendarVisualEnd: string = '';
     private initialGridColumn: string = '';
     private container: HTMLElement | null = null;
     private isOutsideSection: boolean = false;
@@ -331,7 +333,12 @@ export class MoveStrategy extends BaseDragStrategy {
         const viewStartDate = context.getViewStartDate();
         this.initialCalendarDate = task.startDate || viewStartDate || DateUtils.getToday();
         this.initialCalendarEndDate = task.endDate || this.initialCalendarDate;
-        this.initialSpan = DateUtils.getDiffDays(this.initialCalendarDate, this.initialCalendarEndDate) + 1;
+        // Visual dates (inclusive) for ghost rendering — matches task card renderer
+        const startHour = context.plugin.settings.startHour;
+        const visual = this.getVisualDateRange(task, startHour);
+        this.initialCalendarVisualStart = visual.start;
+        this.initialCalendarVisualEnd = visual.end;
+        this.initialSpan = DateUtils.getDiffDays(visual.start, visual.end) + 1;
 
         // Read position from data attributes (absolute positioning)
         const colStart = Number.parseInt(el.dataset.colStart || '1', 10);
@@ -377,8 +384,8 @@ export class MoveStrategy extends BaseDragStrategy {
             this.ghostEl.style.left = '-9999px';
         }
 
-        const movedStart = DateUtils.addDays(this.initialCalendarDate, dayDelta);
-        const movedEnd = DateUtils.addDays(this.initialCalendarEndDate, dayDelta);
+        const movedStart = DateUtils.addDays(this.initialCalendarVisualStart, dayDelta);
+        const movedEnd = DateUtils.addDays(this.initialCalendarVisualEnd, dayDelta);
         this.updateCalendarSplitPreview(context, movedStart, movedEnd);
         this.dragEl.style.transform = '';
     }
@@ -436,7 +443,12 @@ export class MoveStrategy extends BaseDragStrategy {
         const viewStartDate = context.getViewStartDate();
         this.initialCalendarDate = task.startDate || viewStartDate || DateUtils.getToday();
         this.initialCalendarEndDate = task.endDate || this.initialCalendarDate;
-        this.initialSpan = DateUtils.getDiffDays(this.initialCalendarDate, this.initialCalendarEndDate) + 1;
+        // Visual dates (inclusive) for ghost rendering — matches task card renderer
+        const startHour = context.plugin.settings.startHour;
+        const visual = this.getVisualDateRange(task, startHour);
+        this.initialCalendarVisualStart = visual.start;
+        this.initialCalendarVisualEnd = visual.end;
+        this.initialSpan = DateUtils.getDiffDays(visual.start, visual.end) + 1;
 
         const gridCol = el.style.gridColumn;
         const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);

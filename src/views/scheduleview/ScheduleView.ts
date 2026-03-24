@@ -27,7 +27,9 @@ import { ScheduleGridRenderer } from './renderers/ScheduleGridRenderer';
 import { ScheduleTaskRenderer } from './renderers/ScheduleTaskRenderer';
 import { ScheduleSectionRenderer } from './renderers/ScheduleSectionRenderer';
 import { isDisplayTaskOnVisualDate } from '../../services/display/DisplayTaskConverter';
-import { TaskReadService, type CategorizedTasks as BaseCategorizedTasks } from '../../services/data/TaskReadService';
+import { TaskReadService } from '../../services/data/TaskReadService';
+import { splitTasks } from '../../services/display/TaskSplitter';
+import { categorizeTasksForDate, type CategorizedTasks as BaseCategorizedTasks } from '../../services/display/TaskDateCategorizer';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 
@@ -64,8 +66,8 @@ export class ScheduleView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private currentVisualDate = '';
     private scrollToNowOnNextRender = false;
-    private lastScrollTop = 0;
-    private hasValidScrollPosition = false;
+    private scrollRestorePending = false;
+    private savedScrollTop: number | null = null;
     private customName: string | undefined;
     private collapsedSections: Record<CollapsibleSectionKey, boolean> = {
         allDay: false,
@@ -155,7 +157,7 @@ export class ScheduleView extends ItemView {
 
         await super.setState(state, result);
         if (this.container) {
-            await this.render();
+            await this.performRender();
         }
     }
 
@@ -184,10 +186,10 @@ export class ScheduleView extends ItemView {
 
         this.registerKeyboardNavigation();
         this.scrollToNowOnNextRender = true;
-        await this.render();
+        await this.performRender();
 
         this.unsubscribe = this.readService.onChange(() => {
-            void this.render();
+            this.render();
         });
     }
 
@@ -202,7 +204,7 @@ export class ScheduleView extends ItemView {
     public refresh(): void {
         this.currentVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
         this.scrollToNowOnNextRender = true;
-        void this.render();
+        this.render();
     }
 
     private registerKeyboardNavigation(): void {
@@ -225,15 +227,19 @@ export class ScheduleView extends ItemView {
         });
     }
 
-    private async render(): Promise<void> {
+    private render(): void {
+        if (!this.scrollRestorePending) {
+            const oldBodyScroll = this.container?.querySelector('.schedule-view__body-scroll') as HTMLElement | null;
+            if (oldBodyScroll) {
+                this.savedScrollTop = oldBodyScroll.scrollTop;
+            }
+        }
+        void this.performRender();
+    }
+
+    private async performRender(): Promise<void> {
         if (!this.container) {
             return;
-        }
-
-        const oldBodyScroll = this.container.querySelector('.schedule-view__body-scroll') as HTMLElement | null;
-        if (oldBodyScroll) {
-            this.lastScrollTop = oldBodyScroll.scrollTop;
-            this.hasValidScrollPosition = true;
         }
 
         this.container.empty();
@@ -241,7 +247,12 @@ export class ScheduleView extends ItemView {
         this.renderToolbar(toolbarHost);
 
         const filterState = this.filterMenu.getFilterState();
-        const baseCategorized = this.readService.getTasksForDate(this.currentVisualDate, filterState);
+        const startHour = this.plugin.settings.startHour;
+        const rangeTasks = this.readService.getTasksForDateRange(
+            this.currentVisualDate, this.currentVisualDate, filterState
+        );
+        const splitResult = splitTasks(rangeTasks, { type: 'visual-date', startHour });
+        const baseCategorized = categorizeTasksForDate(splitResult, this.currentVisualDate, startHour);
         this.menuHandler.setViewStartDate(this.currentVisualDate);
 
         const allDisplayTasks = this.readService.getAllDisplayTasks();
@@ -256,13 +267,19 @@ export class ScheduleView extends ItemView {
 
         if (this.scrollToNowOnNextRender) {
             this.scrollToNowOnNextRender = false;
-            requestAnimationFrame(() => this.scrollToCurrentTime());
-        } else if (this.hasValidScrollPosition) {
-            const savedScrollTop = this.lastScrollTop;
+            this.scrollRestorePending = true;
             requestAnimationFrame(() => {
+                this.scrollRestorePending = false;
+                this.scrollToCurrentTime();
+            });
+        } else if (this.savedScrollTop !== null) {
+            this.scrollRestorePending = true;
+            const scrollTarget = this.savedScrollTop;
+            requestAnimationFrame(() => {
+                this.scrollRestorePending = false;
                 const newBodyScroll = this.container.querySelector('.schedule-view__body-scroll') as HTMLElement | null;
                 if (newBodyScroll) {
-                    newBodyScroll.scrollTop = savedScrollTop;
+                    newBodyScroll.scrollTop = scrollTarget;
                 }
             });
         }
@@ -277,7 +294,7 @@ export class ScheduleView extends ItemView {
                 this.currentVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
                 this.scrollToNowOnNextRender = true;
                 void this.app.workspace.requestSaveLayout();
-                void this.render();
+                this.render();
             },
             { label: t('toolbar.now') }
         );
@@ -292,7 +309,7 @@ export class ScheduleView extends ItemView {
             this.filterMenu.showMenu(event, {
                 onFilterChange: () => {
                     void this.app.workspace.requestSaveLayout();
-                    void this.render();
+                    this.render();
                     filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
                 },
                 getTasks: () => this.readService.getTasks(),
@@ -334,14 +351,14 @@ export class ScheduleView extends ItemView {
                     this.leaf.updateHeader();
                 }
                 this.app.workspace.requestSaveLayout();
-                void this.render();
+                this.render();
             },
             onReset: () => {
                 this.filterMenu.setFilterState(createEmptyFilterState());
                 this.customName = undefined;
                 this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
-                void this.render();
+                this.render();
             },
         });
     }
@@ -461,7 +478,7 @@ export class ScheduleView extends ItemView {
         date.setDate(date.getDate() + offset);
         this.currentVisualDate = DateUtils.getLocalDateString(date);
         void this.app.workspace.requestSaveLayout();
-        void this.render();
+        this.render();
     }
 
     private isCurrentVisualDate(dateStr: string): boolean {

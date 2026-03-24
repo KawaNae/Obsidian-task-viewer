@@ -1,6 +1,8 @@
 import { DragStrategy, DragContext } from '../DragStrategy';
 import { Task } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
+import { toDisplayTask } from '../../../services/display/DisplayTaskConverter';
+import { getTaskDateRange } from '../../../services/display/VisualDateRange';
 
 export interface CalendarPointerTarget {
     weekRow: HTMLElement;
@@ -113,7 +115,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
         if (weekRows.length === 0) return;
 
         // Compute desired segments
-        const segments: { weekRow: HTMLElement; colStart: number; span: number; splitClass: string }[] = [];
+        const segments: { weekRow: HTMLElement; colStart: number; span: number; splitClasses: string[] }[] = [];
         for (const weekRow of weekRows) {
             const weekStart = weekRow.dataset.weekStart;
             if (!weekStart) continue;
@@ -128,12 +130,11 @@ export abstract class BaseDragStrategy implements DragStrategy {
 
             const continuesBefore = start < weekStart;
             const continuesAfter = end > weekEnd;
-            let splitClass = '';
-            if (continuesBefore && continuesAfter) splitClass = 'task-card--split-middle';
-            else if (continuesAfter) splitClass = 'task-card--split-head';
-            else if (continuesBefore) splitClass = 'task-card--split-tail';
+            const splitClasses: string[] = [];
+            if (continuesBefore) splitClasses.push('task-card--split-continues-before');
+            if (continuesAfter) splitClasses.push('task-card--split-continues-after');
 
-            segments.push({ weekRow, colStart, span, splitClass });
+            segments.push({ weekRow, colStart, span, splitClasses });
         }
 
         // Diff-update: reuse existing ghosts to avoid remove→append reflow jitter
@@ -149,8 +150,8 @@ export abstract class BaseDragStrategy implements DragStrategy {
             }
             ghost.style.gridColumn = `${seg.colStart + colOffset} / span ${seg.span}`;
             ghost.style.gridRow = `${trackIndex + 2}`;
-            ghost.removeClass('task-card--split-head', 'task-card--split-middle', 'task-card--split-tail');
-            if (seg.splitClass) ghost.addClass(seg.splitClass);
+            ghost.removeClass('task-card--split-continues-before', 'task-card--split-continues-after');
+            for (const cls of seg.splitClasses) ghost.addClass(cls);
         }
 
         // Remove excess ghosts
@@ -162,7 +163,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
         for (let i = oldCount; i < newCount; i++) {
             const seg = segments[i];
             const colOffset = this.getCalendarColumnOffset(seg.weekRow);
-            const preview = this.createPreviewGhost(seg.colStart, seg.span, trackIndex, colOffset, seg.splitClass);
+            const preview = this.createPreviewGhost(seg.colStart, seg.span, trackIndex, colOffset, seg.splitClasses);
             seg.weekRow.appendChild(preview);
             this.calendarPreviewGhosts.push(preview);
         }
@@ -170,11 +171,11 @@ export abstract class BaseDragStrategy implements DragStrategy {
         this.calendarPreviewGhosts.length = newCount;
     }
 
-    private createPreviewGhost(colStart: number, span: number, trackIndex: number, colOffset: number, splitClass: string): HTMLElement {
+    private createPreviewGhost(colStart: number, span: number, trackIndex: number, colOffset: number, splitClasses: string[]): HTMLElement {
         const preview = this.dragEl!.cloneNode(true) as HTMLElement;
         preview.querySelectorAll('.task-card__handle').forEach(h => h.remove());
         preview.removeClass('selected', 'is-dragging');
-        preview.removeClass('task-card--split-head', 'task-card--split-middle', 'task-card--split-tail');
+        preview.removeClass('task-card--split-continues-before', 'task-card--split-continues-after');
         preview.addClass('task-card--drag-preview');
         preview.style.gridColumn = `${colStart + colOffset} / span ${span}`;
         preview.style.gridRow = `${trackIndex + 2}`;
@@ -182,8 +183,19 @@ export abstract class BaseDragStrategy implements DragStrategy {
         preview.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
         preview.style.zIndex = '1001';
         preview.style.pointerEvents = 'none';
-        if (splitClass) preview.addClass(splitClass);
+        for (const cls of splitClasses) preview.addClass(cls);
         return preview;
+    }
+
+    /**
+     * Compute inclusive visual date range for a task, matching the renderer's logic.
+     */
+    protected getVisualDateRange(task: Task, startHour: number): { start: string; end: string } {
+        const dt = toDisplayTask(task, startHour);
+        const range = getTaskDateRange(dt, startHour);
+        const start = range.effectiveStart || task.startDate || '';
+        const end = range.effectiveEnd || start;
+        return { start, end };
     }
 
     protected clearCalendarPreviewGhosts(): void {

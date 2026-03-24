@@ -33,6 +33,13 @@ import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 
 export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
 
+/** Keys that change task position on the grid → full render */
+const LAYOUT_KEYS = new Set(['startDate', 'startTime', 'endDate', 'endTime', 'due']);
+/** Keys safe for partial DOM update (no position change) */
+const SAFE_KEYS = new Set(['status', 'statusChar', 'content', 'childLines']);
+/** Keys with zero visual effect → skip render entirely */
+const NO_RENDER_KEYS = new Set(['blockId', 'timerTargetId']);
+
 /**
  * Timeline View - Displays tasks on a time-based grid layout.
  * 
@@ -81,11 +88,11 @@ export class TimelineView extends ItemView {
     private viewState: ViewState;
     private unsubscribe: (() => void) | null = null;
     private currentTimeInterval: number | null = null;
-    private lastScrollTop: number = 0;
-    private hasValidScrollPosition = false;
+    private scrollRestorePending = false;
+    private savedScrollTop: number | null = null;
     private scrollToNowOnNextRender = false;
     private hasInitializedStartDate: boolean = false;
-    private lastPartialUpdateTime = 0;
+    private lastRenderTime = 0;
     // ==================== Pinch zoom state ====================
     private pinchInitialDistance: number = 0;
     private pinchInitialZoom: number = 1;
@@ -303,50 +310,21 @@ export class TimelineView extends ItemView {
             }
 
             if (taskId && changes) {
-                // 日付/時刻の変更は完全レンダリングが必要（位置変更）
-                const layoutKeys = ['startDate', 'startTime', 'endDate', 'endTime', 'due'];
-                const hasLayoutChange = changes.some(k => layoutKeys.includes(k));
+                if (changes.every(k => NO_RENDER_KEYS.has(k))) return;
 
-                if (hasLayoutChange) {
-                    // レイアウト変更の場合は完全レンダリング
+                if (changes.some(k => LAYOUT_KEYS.has(k))) {
                     this.render();
                     return;
                 }
 
-                // コンテンツ/ステータスの変更のみが部分更新で安全
-                const safeKeys = ['status', 'statusChar', 'content', 'childLines'];
-                const isSafe = changes.every(k => safeKeys.includes(k));
-
-                if (isSafe) {
-                    const card = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
-                    if (card) {
-                        const dt = this.readService.getDisplayTask(taskId);
-                        if (dt) {
-                            // Partial Update: Re-render content only
-                            const contentContainer = card.querySelector('.task-card__content');
-                            if (contentContainer) contentContainer.remove();
-                            const timeEl = card.querySelector('.task-card__time');
-                            if (timeEl) timeEl.remove();
-                            const expandBar = card.querySelector('.task-card__expand-bar');
-                            if (expandBar) expandBar.remove();
-
-                            const isAllDay = card.classList.contains('task-card--allday');
-                            const opts = isAllDay
-                                ? { topRight: 'none' as const, compact: true }
-                                : undefined;
-                            this.taskRenderer.render(card, dt, this, this.plugin.settings, opts);
-                            this.lastPartialUpdateTime = Date.now();
-                            return;
-                        }
-                    }
+                if (changes.every(k => SAFE_KEYS.has(k))) {
+                    if (this.tryPartialUpdate(taskId)) return;
                 }
             }
 
-            // Skip redundant full render from re-scan after local partial update
-            const timeSinceLastUpdate = Date.now() - this.lastPartialUpdateTime;
-            if (!taskId && !changes && timeSinceLastUpdate < 200) {
-                return;
-            }
+            // Skip redundant re-scan notification shortly after any render
+            if (!taskId && !changes && (Date.now() - this.lastRenderTime) < 200) return;
+
             this.render();
         });
 
@@ -505,21 +483,53 @@ export class TimelineView extends ItemView {
         scrollArea.scrollTop = gridOffset + nowPx - scrollArea.clientHeight / 2;
     }
 
-    private render() {
+    /**
+     * Synchronous render with scroll-save protection.
+     * If a rAF scroll restore is already pending (from a prior render in this frame),
+     * skip re-saving scroll — the previously saved value is still correct.
+     */
+    private render(): void {
+        if (!this.scrollRestorePending) {
+            this.saveScrollPosition();
+        }
+        this.performRender();
+    }
+
+    private saveScrollPosition(): void {
+        const scrollArea = this.container.querySelector('.timeline-scroll-area');
+        const grid = scrollArea?.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
+        if (scrollArea && grid) {
+            // Save relative to grid offset so allday height changes don't cause drift
+            this.savedScrollTop = scrollArea.scrollTop - grid.offsetTop;
+        }
+    }
+
+    private tryPartialUpdate(taskId: string): boolean {
+        const card = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
+        if (!card) return false;
+        const dt = this.readService.getDisplayTask(taskId);
+        if (!dt) return false;
+
+        const contentContainer = card.querySelector('.task-card__content');
+        if (contentContainer) contentContainer.remove();
+        const timeEl = card.querySelector('.task-card__time');
+        if (timeEl) timeEl.remove();
+        const expandBar = card.querySelector('.task-card__expand-bar');
+        if (expandBar) expandBar.remove();
+
+        const isAllDay = card.classList.contains('task-card--allday');
+        const opts = isAllDay ? { topRight: 'none' as const, compact: true } : undefined;
+        this.taskRenderer.render(card, dt, this, this.plugin.settings, opts);
+        this.lastRenderTime = Date.now();
+        return true;
+    }
+
+    private performRender() {
         // On narrow/mobile, force sidebar closed unless user explicitly opened it this session
         if (this.sidebarManager.isNarrow() && !this.sidebarOpenedThisSession) {
             this.viewState.showSidebar = false;
         }
         this.sidebarManager.syncPresentation(this.viewState.showSidebar, { animate: false });
-
-        // Save scroll position relative to timeline grid (not absolute scrollTop)
-        // so allday height changes don't cause scroll drift
-        const scrollArea = this.container.querySelector('.timeline-scroll-area');
-        const timelineGrid = scrollArea?.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
-        if (scrollArea && timelineGrid) {
-            this.lastScrollTop = scrollArea.scrollTop - timelineGrid.offsetTop;
-            this.hasValidScrollPosition = true;
-        }
 
         this.container.empty();
 
@@ -678,25 +688,32 @@ export class TimelineView extends ItemView {
         if (newScrollArea) {
             if (this.scrollToNowOnNextRender) {
                 this.scrollToNowOnNextRender = false;
-                requestAnimationFrame(() => this.scrollToCurrentTime());
-            } else if (this.hasValidScrollPosition) {
-                const savedScrollTop = this.lastScrollTop;
+                this.scrollRestorePending = true;
                 requestAnimationFrame(() => {
+                    this.scrollRestorePending = false;
+                    this.scrollToCurrentTime();
+                });
+            } else if (this.savedScrollTop !== null) {
+                this.scrollRestorePending = true;
+                const scrollTarget = this.savedScrollTop;
+                requestAnimationFrame(() => {
+                    this.scrollRestorePending = false;
                     const newGrid = newScrollArea.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
                     const gridOffset = newGrid?.offsetTop ?? 0;
-                    newScrollArea.scrollTop = gridOffset + savedScrollTop;
+                    newScrollArea.scrollTop = gridOffset + scrollTarget;
                 });
             }
         }
 
         // Restore selected task handles AFTER scroll restoration
-        // Use requestAnimationFrame to ensure layout is complete
         const selectedTaskId = this.handleManager.getSelectedTaskId();
         if (selectedTaskId) {
             requestAnimationFrame(() => {
                 this.handleManager.selectTask(selectedTaskId);
             });
         }
+
+        this.lastRenderTime = Date.now();
     }
 
     /**

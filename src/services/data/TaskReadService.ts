@@ -3,16 +3,11 @@ import type { FilterState, FilterContext } from '../filter/FilterTypes';
 import { hasConditions } from '../filter/FilterTypes';
 import type { SortState } from '../sort/SortTypes';
 import type { TaskIndex } from '../core/TaskIndex';
-import { toDisplayTask, toDisplayTasks, shouldSplitDisplayTask, splitDisplayTaskAtBoundary } from '../display/DisplayTaskConverter';
+import { toDisplayTask, toDisplayTasks } from '../display/DisplayTaskConverter';
 import { TaskFilterEngine } from '../filter/TaskFilterEngine';
 import { TaskSorter } from '../sort/TaskSorter';
 import { DateUtils } from '../../utils/DateUtils';
-
-export interface CategorizedTasks {
-    allDay: DisplayTask[];
-    timed: DisplayTask[];
-    dueOnly: DisplayTask[];
-}
+import { getTaskDateRange } from '../display/VisualDateRange';
 
 /**
  * Read-side entry point for views and interaction handlers.
@@ -96,8 +91,8 @@ export class TaskReadService {
     // ===== Date-based queries =====
 
     /**
-     * Tasks in a date range (for Timeline allday, Calendar).
-     * Returns tasks where effectiveStart..effectiveEnd overlaps [startDate, endDate].
+     * Tasks in a date range, using visual dates (startHour-aware) for timed tasks.
+     * Returns flat DisplayTask[] (no split, no categorization).
      */
     getTasksForDateRange(
         startDate: string,
@@ -106,6 +101,7 @@ export class TaskReadService {
     ): DisplayTask[] {
         const all = this.getAllDisplayTasks();
         const context = filter ? this.createFilterContext() : undefined;
+        const startHour = this.startHour;
 
         const result: DisplayTask[] = [];
         for (const dt of all) {
@@ -117,70 +113,24 @@ export class TaskReadService {
                 }
                 continue;
             }
-            const taskEnd = dt.effectiveEndDate || dt.effectiveStartDate;
-            if (dt.effectiveStartDate <= endDate && taskEnd >= startDate) {
-                result.push(dt);
+
+            if (dt.effectiveStartTime) {
+                // Timed task: use visual dates for overlap check
+                const range = getTaskDateRange(dt, startHour);
+                const visualStart = range.effectiveStart || dt.effectiveStartDate;
+                const visualEnd = range.effectiveEnd || visualStart;
+                if (visualStart <= endDate && visualEnd >= startDate) {
+                    result.push(dt);
+                }
+            } else {
+                // allDay task: use effectiveStartDate/effectiveEndDate overlap
+                const taskEnd = dt.effectiveEndDate || dt.effectiveStartDate;
+                if (dt.effectiveStartDate <= endDate && taskEnd >= startDate) {
+                    result.push(dt);
+                }
             }
         }
         return result;
-    }
-
-    /**
-     * Categorized tasks for a single date (for Schedule, Timeline columns).
-     * Handles split at day boundary. Returns allDay/timed/dueOnly.
-     */
-    getTasksForDate(
-        date: string,
-        filter?: FilterState
-    ): CategorizedTasks {
-        const all = this.getAllDisplayTasks();
-        const context = filter ? this.createFilterContext() : undefined;
-        const startHour = this.startHour;
-
-        const allDay: DisplayTask[] = [];
-        const timed: DisplayTask[] = [];
-        const dueOnly: DisplayTask[] = [];
-
-        for (const dt of all) {
-            if (filter && !TaskFilterEngine.evaluate(dt, filter, context)) continue;
-
-            // D type: due-only
-            if (!dt.effectiveStartDate && !dt.startDate && !dt.endDate) {
-                if (dt.due) {
-                    const dueDate = dt.due.split('T')[0];
-                    if (dueDate === date) dueOnly.push(dt);
-                }
-                continue;
-            }
-
-            if (!dt.effectiveStartDate) continue;
-
-            // All-day check
-            const isAllDay = DateUtils.isAllDayTask(
-                dt.effectiveStartDate,
-                dt.effectiveStartTime,
-                dt.effectiveEndDate,
-                dt.effectiveEndTime,
-                startHour
-            );
-
-            if (isAllDay) {
-                // Date range check for all-day
-                const taskEnd = dt.effectiveEndDate || dt.effectiveStartDate;
-                if (dt.effectiveStartDate <= date && taskEnd >= date) {
-                    allDay.push(dt);
-                }
-                continue;
-            }
-
-            // Timed: handle split
-            if (!dt.effectiveStartTime) continue;
-
-            const segments = this.getTimedSegmentsForDate(dt, date, startHour);
-            timed.push(...segments);
-        }
-
-        return { allDay, timed, dueOnly };
     }
 
     // ===== Filter + Sort =====
@@ -212,37 +162,4 @@ export class TaskReadService {
         };
     }
 
-    // ===== Internal helpers =====
-
-    /**
-     * Get timed task segments for a specific date, handling day-boundary split.
-     * Shared logic extracted from TimelineSectionRenderer and ScheduleTaskCategorizer.
-     */
-    private getTimedSegmentsForDate(
-        dt: DisplayTask,
-        dateStr: string,
-        startHour: number
-    ): DisplayTask[] {
-        if (shouldSplitDisplayTask(dt, startHour)) {
-            const [before, after] = splitDisplayTaskAtBoundary(dt, startHour);
-            const segments: DisplayTask[] = [];
-
-            const beforeVisualDate = DateUtils.getVisualStartDate(
-                before.effectiveStartDate, before.effectiveStartTime!, startHour
-            );
-            if (beforeVisualDate === dateStr) segments.push(before);
-
-            const afterVisualDate = DateUtils.getVisualStartDate(
-                after.effectiveStartDate, after.effectiveStartTime!, startHour
-            );
-            if (afterVisualDate === dateStr) segments.push(after);
-
-            return segments;
-        }
-
-        const visualDate = DateUtils.getVisualStartDate(
-            dt.effectiveStartDate, dt.effectiveStartTime, startHour
-        );
-        return visualDate === dateStr ? [dt] : [];
-    }
 }

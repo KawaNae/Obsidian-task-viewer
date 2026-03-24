@@ -123,17 +123,17 @@ describe('DateUtils', () => {
         });
     });
 
-    describe('getVisualStartDate', () => {
-        it('returns startDate when no time', () => {
-            expect(DateUtils.getVisualStartDate('2026-03-11', undefined, 5)).toBe('2026-03-11');
+    describe('toVisualDate', () => {
+        it('returns date when no time', () => {
+            expect(DateUtils.toVisualDate('2026-03-11', undefined, 5)).toBe('2026-03-11');
         });
 
-        it('returns startDate when time >= startHour', () => {
-            expect(DateUtils.getVisualStartDate('2026-03-11', '09:00', 5)).toBe('2026-03-11');
+        it('returns date when time >= startHour', () => {
+            expect(DateUtils.toVisualDate('2026-03-11', '09:00', 5)).toBe('2026-03-11');
         });
 
         it('returns previous day when time < startHour', () => {
-            expect(DateUtils.getVisualStartDate('2026-03-11', '03:00', 5)).toBe('2026-03-10');
+            expect(DateUtils.toVisualDate('2026-03-11', '03:00', 5)).toBe('2026-03-10');
         });
     });
 

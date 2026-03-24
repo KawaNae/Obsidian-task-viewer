@@ -119,7 +119,7 @@
 }
 
 /* --- Split direction override (allday cards span horizontally) --- */
-.timeline-view .allday-section .task-card--split-head {
+.timeline-view .allday-section .task-card--split-continues-after {
     border-bottom: none;
     border-right: 2px dashed var(--file-accent, var(--tv-accent));
     border-bottom-left-radius: var(--task-card-border-radius);
@@ -127,11 +127,11 @@
     border-bottom-right-radius: 0;
 }
 
-.timeline-view .allday-section .task-card--split-head::before {
+.timeline-view .allday-section .task-card--split-continues-after::before {
     border-bottom-left-radius: inherit;
 }
 
-.timeline-view .allday-section .task-card--split-tail {
+.timeline-view .allday-section .task-card--split-continues-before {
     border-top: none;
     border-left: 2px dashed var(--file-accent, var(--tv-accent));
     border-top-right-radius: var(--task-card-border-radius);
@@ -139,22 +139,22 @@
     border-bottom-left-radius: 0;
 }
 
-.timeline-view .allday-section .task-card--split-tail::before {
+.timeline-view .allday-section .task-card--split-continues-before::before {
     display: none;
 }
 
-.timeline-view .allday-section .task-card--split-middle {
+.timeline-view .allday-section .task-card--split-continues-before.task-card--split-continues-after {
     border-left: 2px dashed var(--file-accent, var(--tv-accent));
     border-right: 2px dashed var(--file-accent, var(--tv-accent));
     border-radius: 0;
 }
 
-.timeline-view .allday-section .task-card--split-middle::before {
+.timeline-view .allday-section .task-card--split-continues-before.task-card--split-continues-after::before {
     display: none;
 }
 
 /* Selection border direction for horizontal split */
-.timeline-view .allday-section .task-card--split-head.selected::after {
+.timeline-view .allday-section .task-card--split-continues-after.selected::after {
     border-bottom: 2px solid var(--file-accent, var(--tv-accent));
     border-bottom-left-radius: var(--task-card-border-radius);
     border-right: none;
@@ -162,7 +162,7 @@
     border-bottom-right-radius: 0;
 }
 
-.timeline-view .allday-section .task-card--split-tail.selected::after {
+.timeline-view .allday-section .task-card--split-continues-before.selected::after {
     border-top: 2px solid var(--file-accent, var(--tv-accent));
     border-top-right-radius: var(--task-card-border-radius);
     border-left: none;

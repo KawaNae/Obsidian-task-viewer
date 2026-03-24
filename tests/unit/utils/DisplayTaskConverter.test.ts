@@ -183,7 +183,9 @@ describe('toDisplayTaskWithSplit', () => {
         });
         const result = toDisplayTaskWithSplit(task, startHour);
         expect(result).toHaveLength(2);
-        expect(result[0].splitSegment).toBe('head');
-        expect(result[1].splitSegment).toBe('tail');
+        expect(result[0].splitContinuesAfter).toBe(true);
+        expect(result[0].splitContinuesBefore).toBe(false);
+        expect(result[1].splitContinuesBefore).toBe(true);
+        expect(result[1].splitContinuesAfter).toBe(false);
     });
 });

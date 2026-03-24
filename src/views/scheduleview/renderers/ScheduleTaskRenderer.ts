@@ -106,9 +106,8 @@ export class ScheduleTaskRenderer {
 
         if (task.isSplit) {
             card.addClass('task-card--split');
-            if (task.splitSegment) {
-                card.addClass(`task-card--split-${task.splitSegment}`);
-            }
+            if (task.splitContinuesBefore) card.addClass('task-card--split-continues-before');
+            if (task.splitContinuesAfter) card.addClass('task-card--split-continues-after');
         }
 
         TaskStyling.applyTaskColor(card, task.color ?? null);

@@ -32,6 +32,7 @@ export class ResizeStrategy extends BaseDragStrategy {
     private initialSpan: number = 0;
     private initialCalendarDate: string = '';
     private initialCalendarEndDate: string = '';
+    private initialCalendarVisualEnd: string = '';
     private initialGridColumn: string = '';
     private container: HTMLElement | null = null;
     private refHeaderCell: HTMLElement | null = null;
@@ -60,12 +61,12 @@ export class ResizeStrategy extends BaseDragStrategy {
             }
 
             // 分割タスクの無効なリサイズをブロック
-            if (this.resizeDirection === 'top' && el.classList.contains('task-card--split-tail')) {
+            if (this.resizeDirection === 'top' && el.classList.contains('task-card--split-continues-before')) {
                 this.dragTask = null;
                 this.dragEl = null;
                 return;
             }
-            if (this.resizeDirection === 'bottom' && el.classList.contains('task-card--split-head')) {
+            if (this.resizeDirection === 'bottom' && el.classList.contains('task-card--split-continues-after')) {
                 this.dragTask = null;
                 this.dragEl = null;
                 return;
@@ -256,6 +257,10 @@ export class ResizeStrategy extends BaseDragStrategy {
         const viewStartDate = context.getViewStartDate();
         this.initialCalendarDate = task.startDate || viewStartDate || DateUtils.getToday();
         this.initialCalendarEndDate = task.endDate || this.initialCalendarDate;
+        // Visual end date (inclusive) for ghost rendering — matches task card renderer
+        const startHour = context.plugin.settings.startHour;
+        const visual = this.getVisualDateRange(task, startHour);
+        this.initialCalendarVisualEnd = visual.end;
 
         // Read position from data attributes
         this.startCol = Number.parseInt(el.dataset.colStart || '1', 10);
@@ -304,13 +309,13 @@ export class ResizeStrategy extends BaseDragStrategy {
             const newSpan = Math.max(1, target.col - this.startCol + 1);
             this.dragEl.style.gridColumn = `${this.startCol + colOffset} / span ${newSpan}`;
         } else if (this.resizeDirection === 'left') {
-            const boundedStart = target.targetDate > this.initialCalendarEndDate ? this.initialCalendarEndDate : target.targetDate;
+            const boundedStart = target.targetDate > this.initialCalendarVisualEnd ? this.initialCalendarVisualEnd : target.targetDate;
             this.calendarPreviewTargetDate = boundedStart;
 
             if (crossWeek) {
                 this.hiddenElements.forEach(el => el.classList.add('drag-hidden'));
                 this.dragEl.classList.add('drag-source-faint');
-                this.updateCalendarSplitPreview(context, boundedStart, this.initialCalendarEndDate);
+                this.updateCalendarSplitPreview(context, boundedStart, this.initialCalendarVisualEnd);
                 return;
             }
 
@@ -348,15 +353,25 @@ export class ResizeStrategy extends BaseDragStrategy {
         if (this.resizeDirection === 'right') {
             const newEnd = targetDate < this.initialCalendarDate ? this.initialCalendarDate : targetDate;
             if (newEnd >= this.initialCalendarDate) {
-                if (newEnd !== this.initialCalendarEndDate) {
-                    updates.endDate = newEnd;
+                // targetDate is inclusive visual date; @notation endDate is exclusive (+1 day)
+                const newEndDate = DateUtils.addDays(newEnd, 1);
+                const originalEndDate = this.dragTask!.endDate
+                    || DateUtils.addDays(this.initialCalendarDate, 1);
+                if (newEndDate !== originalEndDate) {
+                    updates.endDate = newEndDate;
                 }
             }
         } else if (this.resizeDirection === 'left') {
-            const newStart = targetDate > this.initialCalendarEndDate ? this.initialCalendarEndDate : targetDate;
-            if (newStart <= this.initialCalendarEndDate) {
+            const newStart = targetDate > this.initialCalendarVisualEnd
+                ? this.initialCalendarVisualEnd : targetDate;
+            if (newStart <= this.initialCalendarVisualEnd) {
                 if (newStart !== this.initialCalendarDate) {
                     updates.startDate = newStart;
+                }
+                // endDate が未設定の場合、元の右端を保持するために明示的に設定
+                // (右リサイズと対称: inclusive visual → exclusive @notation)
+                if (!this.dragTask!.endDate) {
+                    updates.endDate = DateUtils.addDays(this.initialCalendarVisualEnd, 1);
                 }
             }
         }
@@ -388,7 +403,11 @@ export class ResizeStrategy extends BaseDragStrategy {
         const viewStartDate = context.getViewStartDate();
         this.initialCalendarDate = task.startDate || viewStartDate || DateUtils.getToday();
         this.initialCalendarEndDate = task.endDate || this.initialCalendarDate;
-        this.initialSpan = DateUtils.getDiffDays(this.initialCalendarDate, this.initialCalendarEndDate) + 1;
+        // Visual end date (inclusive) for ghost rendering — matches task card renderer
+        const startHour = context.plugin.settings.startHour;
+        const visual = this.getVisualDateRange(task, startHour);
+        this.initialCalendarVisualEnd = visual.end;
+        this.initialSpan = DateUtils.getDiffDays(this.initialCalendarDate, visual.end) + 1;
 
         const gridCol = el.style.gridColumn;
         const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
@@ -449,6 +468,9 @@ export class ResizeStrategy extends BaseDragStrategy {
 
         if (this.resizeDirection === 'right') {
             // 右リサイズ: end日付を変更
+            // initialSpan is visual-based, initialCalendarEndDate is raw (exclusive).
+            // This works because allDay tasks have no time-based visual shift on startDate,
+            // so the delta between visual span and raw span is constant.
             const spanDelta = currentSpan - this.initialSpan;
             const newEnd = DateUtils.addDays(this.initialCalendarEndDate, spanDelta);
             if (newEnd >= this.initialCalendarDate) {
@@ -458,8 +480,12 @@ export class ResizeStrategy extends BaseDragStrategy {
             // 左リサイズ: start日付を変更
             const startColDelta = currentStartCol - this.startCol;
             const newStart = DateUtils.addDays(this.initialCalendarDate, startColDelta);
-            if (newStart <= this.initialCalendarEndDate) {
+            if (newStart <= this.initialCalendarVisualEnd) {
                 updates.startDate = newStart;
+                // endDate が未設定の場合、元の右端を保持するために明示的に設定
+                if (!this.dragTask!.endDate) {
+                    updates.endDate = DateUtils.addDays(this.initialCalendarVisualEnd, 1);
+                }
             }
         }
 

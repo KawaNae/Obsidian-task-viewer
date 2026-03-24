@@ -43,7 +43,7 @@ export function toDisplayTask(task: Task, startHour: number): DisplayTask {
             const endHour = startHour === 0 ? 23 : startHour - 1;
             const implicitEndTime = `${endHour.toString().padStart(2, '0')}:59`;
             effectiveEndTime = implicitEndTime;
-            effectiveStartDate = DateUtils.getVisualStartDate(task.endDate, implicitEndTime, startHour);
+            effectiveStartDate = DateUtils.toVisualDate(task.endDate, implicitEndTime, startHour);
             effectiveStartTime = startHour.toString().padStart(2, '0') + ':00';
         }
         // startDateImplicit / startTimeImplicit remain true
@@ -136,7 +136,13 @@ export function shouldSplitDisplayTask(dt: DisplayTask, startHour: number): bool
         return false;
     }
 
-    const visualStartDay = DateUtils.getVisualStartDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
+    // AllDay tasks (duration >= 23.5h) span multiple visual days by design — never split
+    if (DateUtils.isAllDayTask(dt.effectiveStartDate, dt.effectiveStartTime, dt.effectiveEndDate, dt.effectiveEndTime, startHour)) {
+        return false;
+    }
+
+    // Timed tasks: check if they cross a visual-date boundary
+    const visualStartDay = DateUtils.toVisualDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
 
     let visualEndDay = dt.effectiveEndDate;
     const [endH, endM] = dt.effectiveEndTime.split(':').map(Number);
@@ -144,18 +150,7 @@ export function shouldSplitDisplayTask(dt: DisplayTask, startHour: number): bool
         visualEndDay = DateUtils.addDays(dt.effectiveEndDate, -1);
     }
 
-    if (visualStartDay !== visualEndDay) {
-        return true;
-    }
-
-    const startDateTime = new Date(`${dt.effectiveStartDate}T${dt.effectiveStartTime}`);
-    const endDateTime = new Date(`${dt.effectiveEndDate}T${dt.effectiveEndTime}`);
-    if (endDateTime < startDateTime) return false;
-
-    const durationHours = (endDateTime.getTime() - startDateTime.getTime()) / (1000 * 60 * 60);
-    if (durationHours >= 24) return false;
-
-    return false;
+    return visualStartDay !== visualEndDay;
 }
 
 /**
@@ -176,14 +171,15 @@ export function splitDisplayTaskAtBoundary(dt: DisplayTask, startHour: number): 
         boundaryCalendarDate = DateUtils.addDays(dt.effectiveStartDate, 1);
     }
 
-    const beforeSegmentDate = DateUtils.getVisualStartDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
-    const afterSegmentDate = DateUtils.getVisualStartDate(boundaryCalendarDate, boundaryTime, startHour);
+    const beforeSegmentDate = DateUtils.toVisualDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
+    const afterSegmentDate = DateUtils.toVisualDate(boundaryCalendarDate, boundaryTime, startHour);
 
     const headSegment: DisplayTask = {
         ...dt,
         id: TaskIdGenerator.makeSegmentId(dt.originalTaskId, beforeSegmentDate),
         isSplit: true,
-        splitSegment: 'head',
+        splitContinuesBefore: dt.splitContinuesBefore ?? false,
+        splitContinuesAfter: true,
         // Override both raw and effective end to boundary
         endDate: boundaryCalendarDate,
         endTime: boundaryTime,
@@ -195,7 +191,8 @@ export function splitDisplayTaskAtBoundary(dt: DisplayTask, startHour: number): 
         ...dt,
         id: TaskIdGenerator.makeSegmentId(dt.originalTaskId, afterSegmentDate),
         isSplit: true,
-        splitSegment: 'tail',
+        splitContinuesBefore: true,
+        splitContinuesAfter: dt.splitContinuesAfter ?? false,
         // Override both raw and effective start to boundary
         startDate: boundaryCalendarDate,
         startTime: boundaryTime,
@@ -217,7 +214,7 @@ export function isDisplayTaskOnVisualDate(
     // True all-day: no explicit start or end time in original task
     const isAllDay = !dt.startTime && !dt.endTime;
     if (!isAllDay && dt.effectiveStartTime) {
-        return DateUtils.getVisualStartDate(
+        return DateUtils.toVisualDate(
             dt.effectiveStartDate, dt.effectiveStartTime, startHour
         ) === visualDate;
     }
