@@ -1,5 +1,6 @@
 import type { FrontmatterTaskKeys, PropertyValue } from '../../../types';
 import { VALID_LINE_STYLES } from '../../../constants/style';
+import { normalizeColor } from '../../../utils/ColorUtils';
 
 export interface ExtractedProperties {
     color?: string;
@@ -23,8 +24,7 @@ export class BuiltinPropertyExtractor {
 
         for (const [key, pv] of Object.entries(rawProperties)) {
             if (key === keys.color) {
-                const trimmed = pv.value.trim();
-                if (trimmed) result.color = trimmed;
+                if (pv.value.trim()) result.color = normalizeColor(pv.value);
             } else if (key === keys.linestyle) {
                 const val = pv.value.trim().toLowerCase();
                 if (VALID_LINE_STYLES.has(val)) result.linestyle = val;

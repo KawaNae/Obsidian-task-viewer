@@ -88,6 +88,12 @@ describe('BuiltinPropertyExtractor', () => {
         expect(result.color).toBeUndefined();
     });
 
+    it('strips # prefix from hex color', () => {
+        const raw = { 'tv-color': pv('#ff0000') };
+        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        expect(result.color).toBe('ff0000');
+    });
+
     it('works with custom key names', () => {
         const customKeys = {
             ...keys,
