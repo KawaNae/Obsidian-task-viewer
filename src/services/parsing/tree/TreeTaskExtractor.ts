@@ -48,7 +48,8 @@ export class TreeTaskExtractor {
         block: TaskBlock,
         section: SectionNode,
         ctx: TaskExtractionContext,
-        output: Task[]
+        output: Task[],
+        parentStyle?: { color?: string; linestyle?: string; mask?: string }
     ): void {
         let task = TaskParser.parse(block.rawLine, ctx.filePath, block.line);
 
@@ -63,7 +64,7 @@ export class TreeTaskExtractor {
         if (!task) {
             // 親はプレーンチェックボックスだが、子タスクブロックは再帰処理する
             for (const childBlock of block.childTaskBlocks) {
-                this.processTaskBlock(childBlock, section, ctx, output);
+                this.processTaskBlock(childBlock, section, ctx, output, parentStyle);
             }
             return;
         }
@@ -77,34 +78,23 @@ export class TreeTaskExtractor {
         task.indent = block.indent;
         task.childIds = [];
 
-        // 子タスクブロックを再帰的に処理
-        const childTasks: Task[] = [];
-        for (const childBlock of block.childTaskBlocks) {
-            this.processTaskBlock(childBlock, section, ctx, childTasks);
-        }
-
-        // 親子関係を設定（直接の子のみ: インデント差 +1/+2/+4）
-        const taskIndent = block.indent;
-        for (const childTask of childTasks) {
-            if (childTask.indent === taskIndent + 1
-                || childTask.indent === taskIndent + 2
-                || childTask.indent === taskIndent + 4) {
-                childTask.parentId = task.id;
-                task.childIds.push(childTask.id);
-            }
-        }
-
-        // childLines 設定: 子タスクとその配下行を除外
+        // childLines 設定: まず子タスク行を特定するため childRawLines を処理
         const children = block.childRawLines;
-        const childTaskLineSet = new Set<number>();
-        for (const ct of childTasks) {
-            childTaskLineSet.add(ct.line);
+
+        // 子行プロパティを先に収集（子タスク行除外前の全行から）
+        // ただし子タスクブロックの行は除外が必要なので、まず childLines を構築
+
+        // 子行プロパティを収集（子タスクブロック行を除外するため、
+        // まず childTaskBlocks の行番号を集める）
+        const childBlockLineSet = new Set<number>();
+        for (const cb of block.childTaskBlocks) {
+            childBlockLineSet.add(cb.line);
         }
 
         const excludeIndices = new Set<number>();
         for (let k = 0; k < children.length; k++) {
             const absLine = block.childLineNumbers[k];
-            if (!childTaskLineSet.has(absLine)) continue;
+            if (!childBlockLineSet.has(absLine)) continue;
             excludeIndices.add(k);
             // この子タスクより深いインデントの後続行も除外
             const ctIndent = children[k].search(/\S|$/);
@@ -148,13 +138,28 @@ export class TreeTaskExtractor {
         // セクションプロパティ → 子行プロパティの順でマージ（child-wins）
         task.properties = { ...section.resolvedProperties, ...extracted.properties };
 
-        // 組み込みプロパティ: 子行のみ直接セット、セクション由来は退避（親タスク継承より弱い）
-        task.color = extracted.color;
-        task.linestyle = extracted.linestyle;
-        task.mask = extracted.mask;
-        task.sectionColor = section.resolvedColor;
-        task.sectionLinestyle = section.resolvedLinestyle;
-        task.sectionMask = section.resolvedMask;
+        // カスケード: 子行 > 親タスクブロック > セクション（FM含む）
+        task.color = extracted.color ?? parentStyle?.color ?? section.resolvedColor;
+        task.linestyle = extracted.linestyle ?? parentStyle?.linestyle ?? section.resolvedLinestyle;
+        task.mask = extracted.mask ?? parentStyle?.mask ?? section.resolvedMask;
+
+        // 子タスクブロックを再帰的に処理（effective style を伝播）
+        const style = { color: task.color, linestyle: task.linestyle, mask: task.mask };
+        const childTasks: Task[] = [];
+        for (const childBlock of block.childTaskBlocks) {
+            this.processTaskBlock(childBlock, section, ctx, childTasks, style);
+        }
+
+        // 親子関係を設定（直接の子のみ: インデント差 +1/+2/+4）
+        const taskIndent = block.indent;
+        for (const childTask of childTasks) {
+            if (childTask.indent === taskIndent + 1
+                || childTask.indent === taskIndent + 2
+                || childTask.indent === taskIndent + 4) {
+                childTask.parentId = task.id;
+                task.childIds.push(childTask.id);
+            }
+        }
 
         output.push(task);
         output.push(...childTasks);

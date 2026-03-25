@@ -29,18 +29,7 @@ export class PropertyInheritanceResolver {
                 if (parent.tags.length > 0) {
                     child.tags = TagExtractor.merge(parent.tags, child.tags);
                 }
-                // color 継承（child-wins）
-                if (parent.color && !child.color) {
-                    child.color = parent.color;
-                }
-                // linestyle 継承（child-wins）
-                if (parent.linestyle && !child.linestyle) {
-                    child.linestyle = parent.linestyle;
-                }
-                // mask 継承（child-wins）
-                if (parent.mask && !child.mask) {
-                    child.mask = parent.mask;
-                }
+                // color/linestyle/mask はツリー走査時に解決済み（TreeTaskExtractor）
                 queue.push(child);
             }
         }

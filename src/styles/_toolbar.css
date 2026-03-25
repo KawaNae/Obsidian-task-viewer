@@ -9,7 +9,13 @@
     align-items: center;
     gap: var(--toolbar-gap, 8px);
     overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
     border-bottom: 1px solid var(--tv-border);
+}
+
+.view-toolbar::-webkit-scrollbar {
+    display: none;
 }
 
 .view-toolbar button {

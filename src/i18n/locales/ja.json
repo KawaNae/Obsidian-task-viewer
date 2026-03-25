@@ -412,6 +412,7 @@
     "tagsLabel": "タグ: {{value}}",
     "colorLabel": "カラー: {{value}}",
     "linestyleLabel": "線種: {{value}}",
+    "maskLabel": "マスク: {{value}}",
     "openInEditor": "エディターで開く",
     "duplicate": "複製",
     "inPlace": "その場で",

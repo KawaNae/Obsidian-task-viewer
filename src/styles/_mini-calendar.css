@@ -6,15 +6,14 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    min-height: 0;
+    min-height: 280px;
     overflow: hidden;
     padding: 12px !important;
 }
 
-.mini-calendar-toolbar {
+.mini-calendar-view .mini-calendar-toolbar {
     justify-content: space-between;
-    padding: 0;
-    padding-bottom: 4px;
+    padding: 0 0 7px;
     border-bottom: none;
 }
 
@@ -26,7 +25,7 @@
 
 .mini-calendar-toolbar__month,
 .mini-calendar-toolbar__year {
-    font-size: 1.1em;
+    font-size: 1.4em;
     font-weight: 700;
     color: var(--tv-text);
 }
@@ -38,7 +37,7 @@
 }
 
 .mini-calendar-toolbar__separator {
-    font-size: 1.1em;
+    font-size: 1.4em;
     font-weight: 700;
     color: var(--tv-text-muted);
 }

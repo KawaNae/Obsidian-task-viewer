@@ -110,14 +110,13 @@ describe('TreeTaskExtractor', () => {
     });
 
     describe('セクションプロパティの継承', () => {
-        it('セクションの color が sectionColor に退避される', () => {
+        it('セクションの color が直接 color に設定される', () => {
             const tasks = extractTasks([
                 '## Section',
                 '- tv-color:: ff0000',
                 '- [ ] task @2026-03-24',
             ], undefined, { dailyNoteDate: '2026-03-24' });
-            expect(tasks[0].color).toBeUndefined();
-            expect(tasks[0].sectionColor).toBe('ff0000');
+            expect(tasks[0].color).toBe('ff0000');
         });
 
         it('タスクの子行 color がセクション color をオーバーライド', () => {
@@ -151,7 +150,7 @@ describe('TreeTaskExtractor', () => {
     });
 
     describe('フルカスケード: frontmatter → section → task', () => {
-        it('frontmatter → section → task のカスケード', () => {
+        it('frontmatter → section → task のカスケード（child-wins）', () => {
             const tasks = extractTasks([
                 '## Section',
                 '- tv-linestyle:: dashed',
@@ -160,14 +159,10 @@ describe('TreeTaskExtractor', () => {
             ], { 'tv-color': 'red', 'tv-mask': '***' }, { dailyNoteDate: '2026-03-24' });
 
             const task = tasks[0];
-            // task の own color → 子行から直接セット
-            expect(task.color).toBe('333333');
-            // section の linestyle → sectionLinestyle に退避
-            expect(task.linestyle).toBeUndefined();
-            expect(task.sectionLinestyle).toBe('dashed');
-            // frontmatter の mask → sectionMask に退避（SectionPropertyResolver経由）
-            expect(task.mask).toBeUndefined();
-            expect(task.sectionMask).toBe('***');
+            // 子行 > セクション > frontmatter
+            expect(task.color).toBe('333333');      // 子行（最強）
+            expect(task.linestyle).toBe('dashed');   // セクション
+            expect(task.mask).toBe('***');           // frontmatter（SectionPropertyResolver 経由）
         });
 
         it('ネストセクションからのカスケード', () => {
@@ -180,8 +175,8 @@ describe('TreeTaskExtractor', () => {
             ], undefined, { dailyNoteDate: '2026-03-24' });
 
             const task = tasks[0];
-            expect(task.sectionColor).toBe('red');       // 親セクションから（退避）
-            expect(task.sectionLinestyle).toBe('dotted'); // 子セクションから（退避）
+            expect(task.color).toBe('red');          // 親セクションから継承
+            expect(task.linestyle).toBe('dotted');   // 子セクション
         });
     });
 
@@ -207,6 +202,38 @@ describe('TreeTaskExtractor', () => {
             expect(tasks[0].content).toBe('inlineTask1');
             expect(tasks[0].startDate).toBe('2026-03-24');
             expect(tasks[0].parentId).toBeUndefined();
+        });
+
+        it('セクション色 + 子行オーバーライド + 子タスクの完全シナリオ', () => {
+            const tasks = extractTasks([
+                '## B: セクションで色を上書き',
+                '- tv-color:: ff6b6b',
+                '- customProp:: section-B',
+                '- [ ] B1 セクション色 @T12:00>13:00',
+                '- [ ] B2 同じく @T13:30>14:30',
+                '- [ ] B3 子行で色を上書き @T15:00>16:00',
+                '\t- tv-color:: 4ecdc4',
+                '\t- [ ] B4 @T15:00>16:00',
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+
+            const b1 = tasks.find(t => t.content.includes('B1'))!;
+            const b2 = tasks.find(t => t.content.includes('B2'))!;
+            const b3 = tasks.find(t => t.content.includes('B3'))!;
+            const b4 = tasks.find(t => t.content.includes('B4'))!;
+
+            // B1, B2: セクション色が直接 color に設定
+            expect(b1.color).toBe('ff6b6b');
+            expect(b2.color).toBe('ff6b6b');
+
+            // B3: 子行 tv-color がセクション色をオーバーライド
+            expect(b3.color).toBe('4ecdc4');
+
+            // B4: 親ブロック B3 の effective color を継承
+            expect(b4.color).toBe('4ecdc4');
+
+            // customProp が全タスクに継承
+            expect(b1.properties['customProp']).toEqual({ value: 'section-B', type: 'string' });
+            expect(b3.properties['customProp']).toEqual({ value: 'section-B', type: 'string' });
         });
 
         it('プレーンチェックボックスは childLines に残る', () => {

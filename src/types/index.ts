@@ -111,11 +111,6 @@ export interface Task {
     // Resolved mask for export masking.
     mask?: string;
 
-    // Section-level styling (fallback, weaker than parent-task inheritance).
-    sectionColor?: string;
-    sectionLinestyle?: string;
-    sectionMask?: string;
-
     // True when this is a Container task (no dates, groups inline tasks).
     isContainer?: boolean;
 
