@@ -134,6 +134,7 @@ export class PropertiesMenuBuilder {
         this.addTagsItem(menu, task);
         this.addColorItem(menu, task);
         this.addLinestyleItem(menu, task);
+        this.addMaskItem(menu, task);
         this.addCustomPropertiesItems(menu, task);
     }
 
@@ -269,6 +270,14 @@ export class PropertiesMenuBuilder {
         menu.addItem((item) => {
             item.setTitle(t('menu.linestyleLabel', { value: task.linestyle || '-' }))
                 .setIcon('minus')
+                .setDisabled(true);
+        });
+    }
+
+    private addMaskItem(menu: Menu, task: Task): void {
+        menu.addItem((item) => {
+            item.setTitle(t('menu.maskLabel', { value: task.mask || '-' }))
+                .setIcon('eye-off')
                 .setDisabled(true);
         });
     }

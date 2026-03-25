@@ -412,6 +412,7 @@
     "tagsLabel": "Tags: {{value}}",
     "colorLabel": "Color: {{value}}",
     "linestyleLabel": "Linestyle: {{value}}",
+    "maskLabel": "Mask: {{value}}",
     "openInEditor": "Open in Editor",
     "duplicate": "Duplicate",
     "inPlace": "In Place",
