@@ -26,7 +26,6 @@ import { ScheduleOverlapLayout } from './utils/ScheduleOverlapLayout';
 import { ScheduleGridRenderer } from './renderers/ScheduleGridRenderer';
 import { ScheduleTaskRenderer } from './renderers/ScheduleTaskRenderer';
 import { ScheduleSectionRenderer } from './renderers/ScheduleSectionRenderer';
-import { isDisplayTaskOnVisualDate } from '../../services/display/DisplayTaskConverter';
 import { TaskReadService } from '../../services/data/TaskReadService';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { categorizeTasksForDate, type CategorizedTasks as BaseCategorizedTasks } from '../../services/display/TaskDateCategorizer';
@@ -255,15 +254,13 @@ export class ScheduleView extends ItemView {
         const baseCategorized = categorizeTasksForDate(splitResult, this.currentVisualDate, startHour);
         this.menuHandler.setViewStartDate(this.currentVisualDate);
 
-        const allDisplayTasks = this.readService.getAllDisplayTasks();
-
         const fixedHost = this.container.createDiv('schedule-view__fixed-host');
         const fixedContainer = fixedHost.createDiv('schedule-view__container schedule-view__fixed-rows');
 
         const bodyScroll = this.container.createDiv('schedule-view__body-scroll schedule-body-scroll');
         const bodyContainer = bodyScroll.createDiv('schedule-view__container schedule-view__scroll-content');
 
-        await this.renderDayTimeline(fixedContainer, bodyContainer, this.currentVisualDate, baseCategorized, allDisplayTasks);
+        await this.renderDayTimeline(fixedContainer, bodyContainer, this.currentVisualDate, baseCategorized);
 
         if (this.scrollToNowOnNextRender) {
             this.scrollToNowOnNextRender = false;
@@ -368,11 +365,10 @@ export class ScheduleView extends ItemView {
         bodyContainer: HTMLElement,
         date: string,
         baseCategorized: BaseCategorizedTasks,
-        allDisplayTasks: DisplayTask[]
     ): Promise<void> {
         const categorized = this.taskCategorizer.toScheduleFormat(baseCategorized);
 
-        this.renderDateHeader(fixedContainer, date, allDisplayTasks);
+        this.renderDateHeader(fixedContainer, date);
 
         // Habits in fixed area (always visible), allday in scroll body (sticky on PC)
         this.renderHabitsSection(fixedContainer, date);
@@ -406,7 +402,7 @@ export class ScheduleView extends ItemView {
         }
     }
 
-    private renderDateHeader(container: HTMLElement, date: string, allDisplayTasks: DisplayTask[]): void {
+    private renderDateHeader(container: HTMLElement, date: string): void {
         const row = container.createDiv('timeline-row date-header');
         row.style.gridTemplateColumns = this.getScheduleRowColumns();
         row.createDiv('date-header__cell').setText(' ');
@@ -433,11 +429,9 @@ export class ScheduleView extends ItemView {
             dateCell.addClass('is-today');
         }
         if (date < todayVisualDate) {
-            const startHour = this.plugin.settings.startHour;
             const filterState = this.filterMenu.getFilterState();
-            const filteredTasks = this.readService.getFilteredTasks(filterState);
-            const hasOverdueTasks = filteredTasks.some(dt =>
-                isDisplayTaskOnVisualDate(dt, date, startHour) &&
+            const tasksOnDate = this.readService.getTasksForDateRange(date, date, filterState);
+            const hasOverdueTasks = tasksOnDate.some(dt =>
                 !isCompleteStatusChar(dt.statusChar, this.plugin.settings.statusDefinitions)
             );
             if (hasOverdueTasks) {
