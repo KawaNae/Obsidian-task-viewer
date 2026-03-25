@@ -1,12 +1,11 @@
-import { ItemView, WorkspaceLeaf, TFile, setIcon, type ViewStateResult } from 'obsidian';
+import { ItemView, WorkspaceLeaf, TFile, Menu, Notice, setIcon, type ViewStateResult } from 'obsidian';
+import type { MenuItem, HoverParent } from 'obsidian';
 import { t } from '../../i18n';
-import type { HoverParent } from 'obsidian';
-import { Task, DisplayTask } from '../../types';
+import { Task } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import {
-    getTaskDateRange,
     isTaskCompleted as isTaskCompletedUtil,
     parseLocalDateString,
     getCalendarDateRange,
@@ -21,6 +20,13 @@ import TaskViewerPlugin from '../../main';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { VIEW_META_MINI_CALENDAR } from '../../constants/viewRegistry';
+import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
+import { FilterSerializer } from '../../services/filter/FilterSerializer';
+import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
+import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../sharedLogic/ViewUriBuilder';
+import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
+import { ViewTemplateWriter } from '../../services/template/ViewTemplateWriter';
+import { InputModal } from '../../modals/InputModal';
 
 export const VIEW_TYPE_MINI_CALENDAR = VIEW_META_MINI_CALENDAR.type;
 
@@ -32,16 +38,20 @@ interface IndicatorState {
 interface MiniCalendarViewState {
     windowStart?: string;
     monthKey?: string;
+    filterState?: unknown;
+    customName?: string;
 }
 
 export class MiniCalendarView extends ItemView {
     private readonly plugin: TaskViewerPlugin;
     private readonly readService: TaskReadService;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
+    private readonly filterMenu = new FilterMenuComponent();
 
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private windowStart: string;
+    private customName: string | undefined;
     private isAnimating: boolean = false;
     private navigateWeekDebounceTimer: number | null = null;
     private pendingWeekOffset: number = 0;
@@ -51,6 +61,10 @@ export class MiniCalendarView extends ItemView {
         this.plugin = plugin;
         this.readService = this.plugin.getTaskReadService();
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
+
+        this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
+        this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
+        this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -63,7 +77,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     getDisplayText(): string {
-        return VIEW_META_MINI_CALENDAR.displayText;
+        return this.customName || VIEW_META_MINI_CALENDAR.displayText;
     }
 
     getIcon(): string {
@@ -79,14 +93,31 @@ export class MiniCalendarView extends ItemView {
             }
         }
 
+        if (state?.filterState) {
+            this.filterMenu.setFilterState(FilterSerializer.fromJSON(state.filterState));
+        } else {
+            this.filterMenu.setFilterState(createEmptyFilterState());
+        }
+        if (typeof state?.customName === 'string' && state.customName.trim()) {
+            this.customName = state.customName;
+        }
+
         await super.setState(state, result);
         await this.render();
     }
 
     getState(): Record<string, unknown> {
-        return {
+        const result: Record<string, unknown> = {
             windowStart: this.windowStart,
         };
+        const filterState = this.filterMenu.getFilterState();
+        if (hasConditions(filterState)) {
+            result.filterState = FilterSerializer.toJSON(filterState);
+        }
+        if (this.customName) {
+            result.customName = this.customName;
+        }
+        return result;
     }
 
     async onOpen(): Promise<void> {
@@ -102,6 +133,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        this.filterMenu.close();
         if (this.navigateWeekDebounceTimer !== null) {
             window.clearTimeout(this.navigateWeekDebounceTimer);
             this.navigateWeekDebounceTimer = null;
@@ -261,6 +293,14 @@ export class MiniCalendarView extends ItemView {
         setIcon(nextBtn, 'chevron-down');
         nextBtn.setAttribute('aria-label', 'Next week');
         nextBtn.addEventListener('click', () => this.navigateWeek(1));
+
+        const moreBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(moreBtn, 'more-vertical');
+        moreBtn.setAttribute('aria-label', t('toolbar.viewSettings'));
+        if (this.filterMenu.hasActiveFilters()) {
+            moreBtn.classList.add('is-filtered');
+        }
+        moreBtn.addEventListener('click', (e) => this.showSettingsMenu(e, moreBtn));
     }
     private renderWeekdayHeader(grid: HTMLElement): void {
         const header = grid.createDiv('mini-calendar-weekday-header');
@@ -333,33 +373,26 @@ export class MiniCalendarView extends ItemView {
 
     private computeIndicators(rangeStart: string, rangeEnd: string): Map<string, IndicatorState> {
         const indicatorMap = new Map<string, IndicatorState>();
-        const startHour = this.plugin.settings.startHour;
-        const allDisplayTasks = this.readService.getAllDisplayTasks();
+        const filterState = this.filterMenu.getFilterState();
+        const filter = hasConditions(filterState) ? filterState : undefined;
 
-        for (const dt of allDisplayTasks) {
-            const { effectiveStart, effectiveEnd } = getTaskDateRange(dt, startHour);
-            if (!effectiveStart) {
-                continue;
+        let dateCursor = rangeStart;
+        while (dateCursor <= rangeEnd) {
+            const tasks = this.readService.getTasksForDateRange(dateCursor, dateCursor, filter);
+            if (tasks.length > 0) {
+                let hasIncomplete = false;
+                let hasComplete = false;
+                for (const dt of tasks) {
+                    if (this.isTaskCompleted(dt)) {
+                        hasComplete = true;
+                    } else {
+                        hasIncomplete = true;
+                    }
+                    if (hasIncomplete && hasComplete) break;
+                }
+                indicatorMap.set(dateCursor, { hasIncomplete, hasComplete });
             }
-
-            const taskEnd = effectiveEnd || effectiveStart;
-            if (effectiveStart > rangeEnd || taskEnd < rangeStart) {
-                continue;
-            }
-
-            const clippedStart = effectiveStart < rangeStart ? rangeStart : effectiveStart;
-            const clippedEnd = taskEnd > rangeEnd ? rangeEnd : taskEnd;
-            const isCompleted = this.isTaskCompleted(dt);
-
-            let dateCursor = clippedStart;
-            while (dateCursor <= clippedEnd) {
-                const currentState = indicatorMap.get(dateCursor) ?? { hasIncomplete: false, hasComplete: false };
-                indicatorMap.set(dateCursor, {
-                    hasIncomplete: currentState.hasIncomplete || !isCompleted,
-                    hasComplete: currentState.hasComplete || isCompleted,
-                });
-                dateCursor = DateUtils.addDays(dateCursor, 1);
-            }
+            dateCursor = DateUtils.addDays(dateCursor, 1);
         }
 
         return indicatorMap;
@@ -623,6 +656,187 @@ export class MiniCalendarView extends ItemView {
         }
 
         return weekEl;
+    }
+
+    private showSettingsMenu(e: MouseEvent, moreBtn: HTMLElement): void {
+        const menu = new Menu();
+
+        // Filter
+        menu.addItem((item: MenuItem) => {
+            const title = this.filterMenu.hasActiveFilters()
+                ? t('toolbar.filter') + ' \u2713'
+                : t('toolbar.filter');
+            item.setTitle(title)
+                .setIcon('filter')
+                .onClick(() => {
+                    this.filterMenu.showMenuAtElement(moreBtn, {
+                        onFilterChange: () => {
+                            void this.app.workspace.requestSaveLayout();
+                            void this.render();
+                        },
+                        getTasks: () => this.readService.getTasks(),
+                        getStartHour: () => this.plugin.settings.startHour,
+                    });
+                });
+        });
+
+        menu.addSeparator();
+
+        // Save view
+        const folder = this.plugin.settings.viewTemplateFolder;
+        menu.addItem((item: MenuItem) => {
+            item.setTitle(t('toolbar.saveView'))
+                .setIcon('save')
+                .onClick(() => {
+                    if (!folder) {
+                        new Notice(t('notice.setViewTemplateFolder'));
+                        return;
+                    }
+                    const defaultName = this.customName || VIEW_META_MINI_CALENDAR.displayText;
+                    new InputModal(
+                        this.app,
+                        t('toolbar.saveViewTitle'),
+                        t('toolbar.saveViewLabel'),
+                        defaultName,
+                        async (value) => {
+                            const name = value.trim();
+                            if (!name) return;
+                            const writer = new ViewTemplateWriter(this.app);
+                            await writer.saveTemplate(folder, {
+                                filePath: '',
+                                name,
+                                viewType: 'calendar',
+                                filterState: this.filterMenu.getFilterState(),
+                            });
+                            this.customName = name;
+                            this.leaf.updateHeader();
+                            this.app.workspace.requestSaveLayout();
+                            new Notice(t('notice.viewSaved', { name }));
+                        },
+                    ).open();
+                });
+        });
+
+        // Load view
+        menu.addItem((item: MenuItem) => {
+            item.setTitle(t('toolbar.loadView'))
+                .setIcon('folder-open');
+
+            if (!folder) {
+                item.setSubmenu().addItem((sub: MenuItem) =>
+                    sub.setTitle(t('toolbar.noFolderConfigured')).setDisabled(true));
+            } else {
+                const loader = new ViewTemplateLoader(this.app);
+                const summaries = loader.loadTemplates(folder)
+                    .filter(s => s.viewType === 'calendar');
+
+                const submenu = item.setSubmenu();
+                if (summaries.length === 0) {
+                    submenu.addItem((sub: MenuItem) =>
+                        sub.setTitle(t('toolbar.noTemplatesFound')).setDisabled(true));
+                } else {
+                    for (const summary of summaries) {
+                        submenu.addItem((sub: MenuItem) => {
+                            sub.setTitle(summary.name)
+                                .onClick(async () => {
+                                    const full = await loader.loadFullTemplate(summary.filePath);
+                                    if (!full) {
+                                        new Notice(t('notice.failedToLoadTemplate'));
+                                        return;
+                                    }
+                                    if (full.filterState) {
+                                        this.filterMenu.setFilterState(full.filterState);
+                                    } else {
+                                        this.filterMenu.setFilterState(createEmptyFilterState());
+                                    }
+                                    if (full.name) {
+                                        this.customName = full.name;
+                                        this.leaf.updateHeader();
+                                    }
+                                    void this.app.workspace.requestSaveLayout();
+                                    void this.render();
+                                });
+                        });
+                    }
+                }
+            }
+        });
+
+        // Reset view
+        menu.addItem((item: MenuItem) => {
+            item.setTitle(t('toolbar.resetView'))
+                .setIcon('rotate-ccw')
+                .onClick(() => {
+                    this.filterMenu.setFilterState(createEmptyFilterState());
+                    this.customName = undefined;
+                    this.leaf.updateHeader();
+                    void this.app.workspace.requestSaveLayout();
+                    void this.render();
+                });
+        });
+
+        menu.addSeparator();
+
+        // Copy URI
+        menu.addItem((item: MenuItem) => {
+            item.setTitle(t('toolbar.copyUri'))
+                .setIcon('link')
+                .onClick(async () => {
+                    const uri = ViewUriBuilder.build(VIEW_META_MINI_CALENDAR.type, this.buildUriOptions(folder));
+                    await navigator.clipboard.writeText(uri);
+                    new Notice(t('notice.uriCopied'));
+                });
+        });
+
+        // Copy as link
+        menu.addItem((item: MenuItem) => {
+            item.setTitle(t('toolbar.copyAsLink'))
+                .setIcon('external-link')
+                .onClick(async () => {
+                    const uri = ViewUriBuilder.build(VIEW_META_MINI_CALENDAR.type, this.buildUriOptions(folder));
+                    const displayName = this.customName || VIEW_META_MINI_CALENDAR.displayText;
+                    const link = `[${displayName}](${uri})`;
+                    await navigator.clipboard.writeText(link);
+                    new Notice(t('notice.linkCopied'));
+                });
+        });
+
+        menu.addSeparator();
+
+        // Position (read-only)
+        menu.addItem((item: MenuItem) => {
+            item.setTitle(t('toolbar.position')).setDisabled(true);
+        });
+        const pos = ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace);
+        const posLabels: Record<LeafPosition, string> = {
+            left: t('position.leftSidebar'),
+            right: t('position.rightSidebar'),
+            tab: t('position.tab'),
+            window: t('position.window'),
+            override: t('position.override'),
+        };
+        menu.addItem((item: MenuItem) => {
+            item.setTitle(`  ${posLabels[pos]}`)
+                .setChecked(true)
+                .setDisabled(true);
+        });
+
+        menu.showAtMouseEvent(e);
+    }
+
+    private buildUriOptions(folder: string): ViewUriOptions {
+        const opts: ViewUriOptions = {
+            position: ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace),
+            name: this.customName,
+        };
+        const filterState = this.filterMenu.getFilterState();
+        if (hasConditions(filterState)) {
+            opts.filterState = filterState;
+        }
+        if (folder) {
+            opts.template = this.customName || VIEW_META_MINI_CALENDAR.displayText;
+        }
+        return opts;
     }
 
     private async openOrCreateDailyNote(date: Date): Promise<void> {
