@@ -3,6 +3,7 @@ import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { VALID_LINE_STYLES } from '../../../constants/style';
+import { normalizeColor } from '../../../utils/ColorUtils';
 
 export interface FrontmatterParseResult {
     task: Task;
@@ -135,7 +136,7 @@ export class FrontmatterTaskBuilder {
 
         // Resolve color/linestyle/mask directly on the task
         const rawColor = frontmatter[frontmatterKeys.color];
-        const color = (typeof rawColor === 'string' && rawColor.trim()) ? rawColor.trim() : undefined;
+        const color = (typeof rawColor === 'string' && rawColor.trim()) ? normalizeColor(rawColor) : undefined;
         const linestyle = this.resolveLinestyle(frontmatter[frontmatterKeys.linestyle]);
         const rawMask = frontmatter[frontmatterKeys.mask];
         const mask = (typeof rawMask === 'string' && rawMask.trim()) ? rawMask.trim() : undefined;

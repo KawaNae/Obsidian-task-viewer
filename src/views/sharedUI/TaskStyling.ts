@@ -7,17 +7,18 @@ import { VALID_LINE_STYLES } from '../../constants/style';
 export class TaskStyling {
 
     private static hexToHSL(hex: string): { h: number, s: number, l: number } | null {
-        if (!hex.startsWith('#')) return null;
+        // Accept both 'ff0000' and '#ff0000'
+        const normalized = hex.startsWith('#') ? hex : '#' + hex;
 
         let r = 0, g = 0, b = 0;
-        if (hex.length === 4) {
-            r = parseInt('0x' + hex[1] + hex[1]);
-            g = parseInt('0x' + hex[2] + hex[2]);
-            b = parseInt('0x' + hex[3] + hex[3]);
-        } else if (hex.length === 7) {
-            r = parseInt('0x' + hex[1] + hex[2]);
-            g = parseInt('0x' + hex[3] + hex[4]);
-            b = parseInt('0x' + hex[5] + hex[6]);
+        if (normalized.length === 4) {
+            r = parseInt('0x' + normalized[1] + normalized[1]);
+            g = parseInt('0x' + normalized[2] + normalized[2]);
+            b = parseInt('0x' + normalized[3] + normalized[3]);
+        } else if (normalized.length === 7) {
+            r = parseInt('0x' + normalized[1] + normalized[2]);
+            g = parseInt('0x' + normalized[3] + normalized[4]);
+            b = parseInt('0x' + normalized[5] + normalized[6]);
         } else {
             return null;
         }

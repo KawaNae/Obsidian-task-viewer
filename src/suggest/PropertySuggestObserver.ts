@@ -3,6 +3,7 @@ import type { TaskViewerSettings } from '../types';
 import TaskViewerPlugin from '../main';
 import { PropertyColorSuggest } from './color/PropertyColorSuggest';
 import { PropertyLineStyleSuggest } from './line/PropertyLineStyleSuggest';
+import { normalizeColor } from '../utils/ColorUtils';
 
 /**
  * Observes the Properties View in the editor and attaches
@@ -147,10 +148,10 @@ export class PropertySuggestObserver {
             const settings = this.getSettings();
             const colorKey = settings.frontmatterTaskKeys.color;
             await this.app.fileManager.processFrontMatter(activeFile, (frontmatter: Record<string, unknown>) => {
-                frontmatter[colorKey] = colorInput.value;
+                frontmatter[colorKey] = normalizeColor(colorInput.value);
             });
 
-            valueDiv.textContent = colorInput.value;
+            valueDiv.textContent = normalizeColor(colorInput.value);
         });
 
         iconBtn.addEventListener('click', (e) => {
@@ -170,11 +171,11 @@ export class PropertySuggestObserver {
                     const r = parseInt(rgbMatch[1]).toString(16).padStart(2, '0');
                     const g = parseInt(rgbMatch[2]).toString(16).padStart(2, '0');
                     const b = parseInt(rgbMatch[3]).toString(16).padStart(2, '0');
-                    hexValue = `#${r}${g}${b}`;
+                    hexValue = `${r}${g}${b}`;
                 }
             }
 
-            colorInput.value = hexValue || '#000000';
+            colorInput.value = (hexValue && !hexValue.startsWith('#') ? '#' + hexValue : hexValue) || '#000000';
         });
     }
 }

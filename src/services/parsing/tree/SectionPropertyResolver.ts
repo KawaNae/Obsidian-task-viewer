@@ -2,6 +2,7 @@ import type { DocumentNode, SectionNode } from './DocumentTree';
 import type { FrontmatterTaskKeys, PropertyValue } from '../../../types';
 import { BuiltinPropertyExtractor, type ExtractedProperties } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
+import { normalizeColor } from '../../../utils/ColorUtils';
 
 /**
  * ドキュメントツリーのセクションプロパティをカスケード解決する。
@@ -72,7 +73,8 @@ export class SectionPropertyResolver {
         if (!frontmatter) return { properties: {} };
 
         // frontmatter の組み込みキーを直接抽出
-        const color = this.extractStringValue(frontmatter, keys.color);
+        const rawColor = this.extractStringValue(frontmatter, keys.color);
+        const color = rawColor ? normalizeColor(rawColor) : undefined;
         const linestyle = this.extractStringValue(frontmatter, keys.linestyle);
         const mask = this.extractStringValue(frontmatter, keys.mask);
 

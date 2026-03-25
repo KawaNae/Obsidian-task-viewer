@@ -289,6 +289,6 @@ describe('file-level styling', () => {
         expect(r.count).toBeGreaterThan(0);
         const task = r.tasks.find(t => t.parserId === 'at-notation');
         expect(task).toBeDefined();
-        expect(task!.color).toBe('#ff0000');
+        expect(task!.color).toBe('ff0000');
     });
 });
