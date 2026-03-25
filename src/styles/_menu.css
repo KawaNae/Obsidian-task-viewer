@@ -1,0 +1,15 @@
+/* =============================================================================
+   Context Menu
+   ============================================================================= */
+
+/* Color swatch in context menu */
+.menu-color-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    border: 1px solid var(--tv-border);
+    vertical-align: -1px;
+    margin-right: 1px;
+    flex-shrink: 0;
+}

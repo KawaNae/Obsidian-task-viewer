@@ -411,6 +411,7 @@
     "lengthLabel": "長さ: {{value}}",
     "tagsLabel": "タグ: {{value}}",
     "colorLabel": "カラー: {{value}}",
+    "colorPrefix": "カラー: ",
     "linestyleLabel": "線種: {{value}}",
     "maskLabel": "マスク: {{value}}",
     "openInEditor": "エディターで開く",

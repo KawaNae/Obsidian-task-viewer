@@ -263,6 +263,19 @@ export class PropertiesMenuBuilder {
             item.setTitle(t('menu.colorLabel', { value: task.color || '-' }))
                 .setIcon('palette')
                 .setDisabled(true);
+
+            if (task.color && item.dom) {
+                const titleEl = item.dom.querySelector('.menu-item-title');
+                if (titleEl) {
+                    titleEl.empty();
+                    titleEl.appendText(t('menu.colorPrefix'));
+                    const swatch = titleEl.createSpan('menu-color-swatch');
+                    swatch.style.backgroundColor = /^[0-9a-fA-F]{3,6}$/.test(task.color)
+                        ? '#' + task.color
+                        : task.color;
+                    titleEl.appendText(task.color);
+                }
+            }
         });
     }
 
