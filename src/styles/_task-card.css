@@ -568,3 +568,8 @@
     pointer-events: none;
     cursor: default;
 }
+
+/* Tag accent override */
+.task-card a.tag {
+    background-color: color-mix(in srgb, var(--file-accent, var(--interactive-accent)) 15%, transparent);
+}

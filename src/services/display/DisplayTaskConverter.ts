@@ -57,9 +57,13 @@ export function toDisplayTask(task: Task, startHour: number): DisplayTask {
     // Resolve implicit end for S/SD types (have startDate, no endDate)
     if (effectiveStartDate && !task.endDate) {
         if (task.endTime) {
-            // endTime is explicit, only endDate needs resolution (same-day inheritance)
-            effectiveEndDate = effectiveStartDate;
-            // effectiveEndTime already set from task.endTime (line 14)
+            // endTime is explicit, only endDate needs resolution
+            // Cross-midnight fallback: if endTime < startTime, resolve to next calendar day
+            if (effectiveStartTime && task.endTime < effectiveStartTime) {
+                effectiveEndDate = DateUtils.addDays(effectiveStartDate, 1);
+            } else {
+                effectiveEndDate = effectiveStartDate;
+            }
         } else if (task.startTime) {
             // S-Timed: startTime + DEFAULT_TIMED_DURATION_MINUTES
             const startMinutes = DateUtils.timeToMinutes(effectiveStartTime!);

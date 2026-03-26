@@ -1,4 +1,6 @@
 import { DateUtils } from '../utils/DateUtils';
+import { t } from '../i18n';
+import { validateDateTimeRules } from '../services/parsing/utils/DateTimeRuleValidator';
 
 export interface DateTimeFields {
     startDate: string;
@@ -11,18 +13,14 @@ export interface DateTimeFields {
 
 export interface ValidationContext {
     hasImplicitStartDate?: boolean;
-}
-
-export interface EffectiveDateFields {
-    effectiveStartDate?: string;
-    effectiveStartTime?: string;
-    effectiveEndDate?: string;
-    effectiveEndTime?: string;
+    /** 暗黙の startDate（daily note 継承等） */
+    implicitStartDate?: string;
 }
 
 export interface DateValidationError {
     field: 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'dueDate' | 'dueTime';
     message: string;
+    hint?: string;
 }
 
 /**
@@ -42,7 +40,9 @@ export function validateDateTimeFormats(fields: DateTimeFields): DateValidationE
         if (!c.value) continue;
         const valid = c.type === 'date' ? DateUtils.isValidDateString(c.value) : DateUtils.isValidTimeString(c.value);
         if (!valid) {
-            return { field: c.field, message: `${c.label}: invalid ${c.type} format (${c.type === 'date' ? 'YYYY-MM-DD' : 'HH:mm'}).` };
+            const label = t(`modal.${c.label.toLowerCase()}`);
+            const expected = c.type === 'date' ? 'YYYY-MM-DD' : 'HH:mm';
+            return { field: c.field, message: t('validation.invalidFormat', { label, type: c.type, expected }) };
         }
     }
     return null;
@@ -54,29 +54,40 @@ export function validateDateTimeFormats(fields: DateTimeFields): DateValidationE
 export function validateDateRequirements(fields: DateTimeFields, ctx: ValidationContext = {}): DateValidationError | null {
     const { startDate: sd, startTime: st, endDate: ed, endTime: et, dueDate: dd, dueTime: dt } = fields;
     if (!sd && st && !ctx.hasImplicitStartDate) {
-        return { field: 'startTime', message: 'Start: date is required when time is specified.' };
+        return { field: 'startTime', message: t('validation.startRequiresDate') };
     }
     if (!ed && et && !sd && !ctx.hasImplicitStartDate) {
-        return { field: 'endTime', message: 'End: date is required when there is no start date.' };
+        return { field: 'endTime', message: t('validation.endRequiresDate') };
     }
     if (!dd && dt) {
-        return { field: 'dueTime', message: 'Due: date is required when time is specified.' };
+        return { field: 'dueTime', message: t('validation.dueRequiresDate') };
     }
     return null;
 }
 
 /**
- * Range check: end must not be before start (using DisplayTask resolved values).
+ * Range check using shared validation rules (raw values, not effective values).
+ * Cross-midnight, same-day inversion, end-before-start are all handled by the shared rules.
  */
-export function validateDateRange(effective: EffectiveDateFields): DateValidationError | null {
-    const { effectiveStartDate: esd, effectiveStartTime: est, effectiveEndDate: eed, effectiveEndTime: eet } = effective;
-    if (esd && eed) {
-        if (eed < esd) {
-            return { field: 'endDate', message: 'End date must not be before start date.' };
-        }
-        if (eed === esd && est && eet && eet <= est) {
-            return { field: 'endTime', message: 'End time must be after start time on the same day.' };
-        }
-    }
-    return null;
+export function validateDateRange(fields: DateTimeFields, ctx: ValidationContext = {}): DateValidationError | null {
+    const due = fields.dueDate
+        ? (fields.dueTime ? `${fields.dueDate}T${fields.dueTime}` : fields.dueDate)
+        : undefined;
+
+    const result = validateDateTimeRules({
+        startDate: fields.startDate || undefined,
+        startTime: fields.startTime || undefined,
+        endDate: fields.endDate || undefined,
+        endTime: fields.endTime || undefined,
+        due,
+        endDateImplicit: !fields.endDate,
+        implicitStartDate: ctx.implicitStartDate,
+    });
+    if (!result) return null;
+
+    const field: DateValidationError['field'] =
+        result.rule === 'end-time-without-start' ? 'endTime'
+        : result.rule === 'due-without-date' ? 'dueDate'
+        : 'endDate';
+    return { field, message: result.message, hint: result.hint };
 }

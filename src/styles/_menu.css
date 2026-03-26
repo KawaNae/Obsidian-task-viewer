@@ -13,3 +13,11 @@
     margin-right: 1px;
     flex-shrink: 0;
 }
+
+/* Validation warning in context menu */
+.tv-menu-validation-warning .menu-item-title {
+    white-space: normal;
+}
+body:not(.is-phone) .tv-menu-validation-warning .menu-item-title {
+    max-width: 170px;
+}

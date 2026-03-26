@@ -81,20 +81,19 @@ export class TreeTaskExtractor {
         // childLines 設定: まず子タスク行を特定するため childRawLines を処理
         const children = block.childRawLines;
 
-        // 子行プロパティを先に収集（子タスク行除外前の全行から）
-        // ただし子タスクブロックの行は除外が必要なので、まず childLines を構築
-
-        // 子行プロパティを収集（子タスクブロック行を除外するため、
-        // まず childTaskBlocks の行番号を集める）
-        const childBlockLineSet = new Set<number>();
+        // 実際にタスクを生成する childTaskBlocks のみ childLines から除外する
+        // （@notation なしの - [x] 行はタスクにならないため childLines に残す）
+        const taskProducingLines = new Set<number>();
         for (const cb of block.childTaskBlocks) {
-            childBlockLineSet.add(cb.line);
+            if (this.isTaskProducing(cb.rawLine, ctx.filePath, cb.line, ctx)) {
+                taskProducingLines.add(cb.line);
+            }
         }
 
         const excludeIndices = new Set<number>();
         for (let k = 0; k < children.length; k++) {
             const absLine = block.childLineNumbers[k];
-            if (!childBlockLineSet.has(absLine)) continue;
+            if (!taskProducingLines.has(absLine)) continue;
             excludeIndices.add(k);
             // この子タスクより深いインデントの後続行も除外
             const ctIndent = children[k].search(/\S|$/);
@@ -109,7 +108,7 @@ export class TreeTaskExtractor {
             }
         }
 
-        // インデント正規化 + 子タスク行除外
+        // インデント正規化 + タスク生成行除外 + childLineBodyOffsets 構築
         const nonEmptyChildren = children.filter(c => c.trim() !== '');
         if (nonEmptyChildren.length > 0) {
             const minIndent = Math.min(...nonEmptyChildren.map(c => c.search(/\S|$/)));
@@ -119,14 +118,18 @@ export class TreeTaskExtractor {
             });
 
             const ownLines: string[] = [];
+            const ownLineNumbers: number[] = [];
             for (let k = 0; k < normalized.length; k++) {
                 if (excludeIndices.has(k)) continue;
                 ownLines.push(normalized[k]);
+                ownLineNumbers.push(block.childLineNumbers[k]);
             }
 
             task.childLines = ChildLineClassifier.classifyLines(ownLines);
+            task.childLineBodyOffsets = ownLineNumbers;
         } else {
             task.childLines = ChildLineClassifier.classifyLines(children);
+            task.childLineBodyOffsets = [...block.childLineNumbers];
         }
 
         // 子行プロパティを収集
@@ -163,6 +166,19 @@ export class TreeTaskExtractor {
 
         output.push(task);
         output.push(...childTasks);
+    }
+
+    /** childTaskBlock がタスクを生成するかを判定する */
+    private static isTaskProducing(
+        rawLine: string, filePath: string, lineNumber: number, ctx: TaskExtractionContext
+    ): boolean {
+        let task = TaskParser.parse(rawLine, filePath, lineNumber);
+        if (task && !ctx.dailyNoteDate && !ctx.hasFrontmatterParent
+            && !task.startDate && !task.endDate && !task.due
+            && (!task.commands || task.commands.length === 0)) {
+            task = null;
+        }
+        return task !== null;
     }
 
     /** セクションツリーを深さ優先でフラットに展開 */

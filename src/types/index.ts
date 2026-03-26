@@ -97,6 +97,7 @@ export interface Task {
 
     // Parse-time warning shown to users.
     validationWarning?: string;
+    validationHint?: string;
 
     /**
      * Parser identifier that produced this task (e.g. at-notation/frontmatter).

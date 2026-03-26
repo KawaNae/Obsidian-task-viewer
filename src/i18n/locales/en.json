@@ -400,6 +400,24 @@
     "openDatePicker": "Open date picker",
     "openTimePicker": "Open time picker"
   },
+  "validation": {
+    "crossMidnight": "End time ({{endTime}}) is before start time ({{startTime}}).",
+    "sameDayInversion": "End time ({{endTime}}) is before start time ({{startTime}}) on the same day.",
+    "endBeforeStart": "End date ({{endDate}}) is before start date ({{startDate}}).",
+    "endTimeWithoutStart": "End time specified without start time.",
+    "dueWithoutDate": "Due must include a date (YYYY-MM-DD).",
+    "invalidFormat": "{{label}}: invalid {{type}} format ({{expected}}).",
+    "startRequiresDate": "Start: date is required when time is specified.",
+    "endRequiresDate": "End: date is required when there is no start date.",
+    "dueRequiresDate": "Due: date is required when time is specified."
+  },
+  "validationHint": {
+    "crossMidnight": "Specify an explicit end date, or correct the time.",
+    "sameDayInversion": "Correct the end time or change the end date.",
+    "endBeforeStart": "Correct the end date.",
+    "endTimeWithoutStart": "Add a start time.",
+    "dueWithoutDate": "Add a date to the due field."
+  },
   "menu": {
     "properties": "Properties",
     "name": "Name: {{name}}",

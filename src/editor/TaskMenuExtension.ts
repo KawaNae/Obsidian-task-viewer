@@ -10,6 +10,7 @@ import type { PropertiesMenuBuilder } from '../interaction/menu/builders/Propert
 import type { TimerMenuBuilder } from '../interaction/menu/builders/TimerMenuBuilder';
 import type { TaskActionsMenuBuilder } from '../interaction/menu/builders/TaskActionsMenuBuilder';
 import type { CheckboxMenuBuilder, CheckboxLineOps } from '../interaction/menu/builders/CheckboxMenuBuilder';
+import type { ValidationMenuBuilder } from '../interaction/menu/builders/ValidationMenuBuilder';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 
 const taskIndexChanged = StateEffect.define<void>();
@@ -69,6 +70,7 @@ export function createTaskMenuExtension(
     timerBuilder: TimerMenuBuilder,
     actionsBuilder: TaskActionsMenuBuilder,
     checkboxBuilder: CheckboxMenuBuilder,
+    validationBuilder: ValidationMenuBuilder,
     getSettings: () => TaskViewerSettings
 ): TaskMenuExtensionResult {
 
@@ -82,6 +84,7 @@ export function createTaskMenuExtension(
 
         if (task) {
             // Recognized task: full menu
+            validationBuilder.addValidationWarning(menu, task);
             const dt = toDisplayTask(task, getSettings().startHour);
             propertiesBuilder.addStatusSubmenu(menu, task);
             propertiesBuilder.buildPropertiesSubmenu(menu, dt, null);

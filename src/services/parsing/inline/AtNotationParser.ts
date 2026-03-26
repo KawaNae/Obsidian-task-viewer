@@ -5,6 +5,7 @@ import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';
 import { DateUtils } from '../../../utils/DateUtils';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
+import { validateDateTimeRules } from '../utils/DateTimeRuleValidator';
 
 interface DateBlockResult {
     date: string;
@@ -69,6 +70,7 @@ export class AtNotationParser implements ParserStrategy {
         let endTime: string | undefined;
         let due: string | undefined;
         let validationWarning: string | undefined;
+        let validationHint: string | undefined;
 
         const dateBlock = this.parseDateBlock(rawContent);
         if (dateBlock) {
@@ -86,7 +88,8 @@ export class AtNotationParser implements ParserStrategy {
         // 4. Validate date/time constraints
         const fieldWarning = this.validateDateBlock(date, startTime, endDate, endTime, due);
         if (fieldWarning) {
-            validationWarning = fieldWarning;
+            validationWarning = fieldWarning.message;
+            validationHint = fieldWarning.hint;
         }
 
         return {
@@ -120,6 +123,7 @@ export class AtNotationParser implements ParserStrategy {
             blockId,
             timerTargetId,
             validationWarning,
+            validationHint,
             properties: {},     // Will be populated by TaskScanner from childLines
         };
     }
@@ -201,7 +205,7 @@ export class AtNotationParser implements ParserStrategy {
     }
 
     /**
-     * Validate parsed date/time fields.
+     * Validate parsed date/time fields using shared rules.
      * Returns a warning string if any rule is violated, undefined otherwise.
      */
     private validateDateBlock(
@@ -210,27 +214,14 @@ export class AtNotationParser implements ParserStrategy {
         endDate: string | undefined,
         endTime: string | undefined,
         due: string | undefined,
-    ): string | undefined {
-        // Same-day time range: end before start
-        if (date && startTime && endTime && endDate && date === endDate) {
-            const [startH, startM] = startTime.split(':').map(Number);
-            const [endH, endM] = endTime.split(':').map(Number);
-            if (endH * 60 + endM < startH * 60 + startM) {
-                return `Invalid time range: end time (${endTime}) is before start time (${startTime}) on the same day.`;
-            }
-        }
-
-        // End time without start time
-        if (endTime && !startTime) {
-            return `End time specified without start time.`;
-        }
-
-        // Due must include a date
-        if (due && !due.match(/\d{4}-\d{2}-\d{2}/)) {
-            return `Due must include a date (YYYY-MM-DD).`;
-        }
-
-        return undefined;
+    ): { message: string; hint: string } | undefined {
+        const result = validateDateTimeRules({
+            startDate: date || undefined,
+            startTime, endDate, endTime, due,
+            endDateImplicit: !endDate,
+        });
+        if (!result) return undefined;
+        return { message: result.message, hint: result.hint };
     }
 
     private parseDateTime(str: string): { date?: string, time?: string } {
