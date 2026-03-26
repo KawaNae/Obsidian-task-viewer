@@ -216,6 +216,26 @@ Quick reference for locating the right layer when implementing a feature.
 Section-level resolution happens **during** tree building.
 Task-level resolution happens **after** task extraction, on the flat `Task[]` array.
 
+### Inline child line extraction
+
+TreeTaskExtractor がインラインタスクの `childLines` を構築するルール:
+
+1. `DocumentTreeBuilder` がタスク行配下のインデント行を全て収集（`childRawLines`）
+2. `- [x]` パターンの行は `childTaskBlocks` として構造的にグループ化される
+3. `TreeTaskExtractor` は各 childTaskBlock に対して `isTaskProducing()` で判定:
+   - @notation/日付/コマンドがある → タスクとして抽出、`childLines` から除外
+   - ない → `childLines` に残す（プレーンチェックボックスとして表示）
+4. `childLineBodyOffsets` に各 childLine の絶対行番号を格納
+
+原則: **ブロック内の全行がタスクカードに表示される。**
+
+#### childLineBodyOffsets のセマンティクス
+
+| タスク種別 | 格納値 | 利用側 |
+|-----------|--------|--------|
+| frontmatter | body 相対オフセット（FM末尾からの距離） | `ChildLineUtils`: `fmEndLine + 1 + offset` |
+| inline | 絶対行番号 | `ChildLineResolver` / `ChildLineUtils`: そのまま返す |
+
 ---
 
 ## Task Type Specifications

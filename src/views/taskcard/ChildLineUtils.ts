@@ -15,6 +15,12 @@ export function resolveChildLineNumber(app: App, task: Task, childLineIndex: num
         return fmEndLine + 1 + bodyOffset;
     }
 
+    // インラインタスクでも childLineBodyOffsets を優先使用（絶対行番号）
+    const bodyOffset = task.childLineBodyOffsets?.[childLineIndex];
+    if (typeof bodyOffset === 'number' && bodyOffset >= 0) {
+        return bodyOffset;
+    }
+
     return task.line + 1 + childLineIndex;
 }
 

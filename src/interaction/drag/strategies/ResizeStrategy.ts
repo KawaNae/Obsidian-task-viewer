@@ -226,7 +226,7 @@ export class ResizeStrategy extends BaseDragStrategy {
         if (this.resizeDirection === 'top') {
             updates.startDate = newStartDate;
             updates.startTime = newStartTime;
-            updates.endDate = originalTask.endDate;
+            updates.endDate = newEndDate;
             updates.endTime = originalTask.endTime;
         } else if (this.resizeDirection === 'bottom') {
             updates.startDate = originalTask.startDate;

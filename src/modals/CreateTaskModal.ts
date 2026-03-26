@@ -73,7 +73,7 @@ export class CreateTaskModal extends Modal {
     private nameInput: HTMLInputElement;
     private errorEl: HTMLElement;
     private warningEl: HTMLElement;
-    private lastDisplayTask: DisplayTask | undefined;
+
 
     constructor(app: App, onSubmit: (result: CreateTaskResult) => void, initialValues: Partial<CreateTaskResult> = {}, options: CreateTaskModalOptions = {}) {
         super(app);
@@ -331,10 +331,11 @@ export class CreateTaskModal extends Modal {
         const reqErr = validateDateRequirements(fields, { hasImplicitStartDate: !!this.options.dailyNoteDate });
         if (reqErr) return this.applyValidationError(reqErr);
 
-        if (this.lastDisplayTask) {
-            const rangeErr = validateDateRange(this.lastDisplayTask);
-            if (rangeErr) return this.applyValidationError(rangeErr);
-        }
+        const rangeErr = validateDateRange(fields, {
+            hasImplicitStartDate: !!this.options.dailyNoteDate,
+            implicitStartDate: this.options.dailyNoteDate,
+        });
+        if (rangeErr) return this.applyValidationError(rangeErr);
 
         // Warning: empty task won't appear in viewer
         const { startDate: sd, startTime: st, endDate: ed, endTime: et, dueDate: dd, dueTime: dt } = fields;
@@ -355,12 +356,17 @@ export class CreateTaskModal extends Modal {
             dueDate: this.dueDateInput, dueTime: this.dueTimeInput,
         };
         inputMap[err.field]?.classList.add('create-task-modal__input--invalid');
-        this.showError(err.message);
+        this.showError(err.message, err.hint);
         return false;
     }
 
-    private showError(message: string) {
+    private showError(message: string, hint?: string) {
+        this.errorEl.empty();
         this.errorEl.setText(message);
+        if (hint) {
+            this.errorEl.createEl('br');
+            this.errorEl.appendText(hint);
+        }
         this.errorEl.style.display = 'block';
     }
 
@@ -395,7 +401,6 @@ export class CreateTaskModal extends Modal {
         };
 
         const dt = toDisplayTask(formTask, startHour);
-        this.lastDisplayTask = dt;
 
         // --- Start Date placeholder ---
         if (this.startDateInput) {

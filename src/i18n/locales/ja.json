@@ -400,6 +400,24 @@
     "openDatePicker": "日付ピッカーを開く",
     "openTimePicker": "時刻ピッカーを開く"
   },
+  "validation": {
+    "crossMidnight": "終了時刻（{{endTime}}）が開始時刻（{{startTime}}）より前です。",
+    "sameDayInversion": "同日内で終了時刻（{{endTime}}）が開始時刻（{{startTime}}）より前です。",
+    "endBeforeStart": "終了日（{{endDate}}）が開始日（{{startDate}}）より前です。",
+    "endTimeWithoutStart": "開始時刻なしで終了時刻が指定されています。",
+    "dueWithoutDate": "期限には日付（YYYY-MM-DD）が必要です。",
+    "invalidFormat": "{{label}}: {{type}}の形式が不正です（{{expected}}）。",
+    "startRequiresDate": "開始: 時刻を指定する場合は日付が必要です。",
+    "endRequiresDate": "終了: 開始日がない場合は終了日が必要です。",
+    "dueRequiresDate": "期限: 時刻を指定する場合は日付が必要です。"
+  },
+  "validationHint": {
+    "crossMidnight": "終了日を明示するか、時刻を修正してください。",
+    "sameDayInversion": "終了時刻を修正するか、終了日を変更してください。",
+    "endBeforeStart": "終了日を修正してください。",
+    "endTimeWithoutStart": "開始時刻を追加してください。",
+    "dueWithoutDate": "期限に日付を追加してください。"
+  },
   "menu": {
     "properties": "プロパティ",
     "name": "名前: {{name}}",

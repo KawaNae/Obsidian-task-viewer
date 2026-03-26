@@ -243,8 +243,208 @@ describe('TreeTaskExtractor', () => {
                 '    - note:: something',
             ], undefined, { dailyNoteDate: '2026-03-24' });
             const parent = tasks[0];
-            // plain checkbox（日付なし）は childLines に残る
-            expect(parent.childLines.length).toBeGreaterThanOrEqual(1);
+            expect(parent.childLines).toHaveLength(2);
+            expect(parent.childLines[0].checkboxChar).toBe(' ');
+            expect(parent.childLines[0].text).toContain('plain checkbox');
+            expect(parent.childLines[1].propertyKey).toBe('note');
+        });
+    });
+
+    describe('ブロック内の子行処理（@notation なし - [x] の保持）', () => {
+        it('@notation なしの複数 - [x] が全て childLines に残る', () => {
+            const tasks = extractTasks([
+                '- [x] 更新 @2026-03-25T12:34>15:20',
+                '    - [x] mini-calendarの調整',
+                '    - [x] スタイル修正',
+                '    - [x] tv-colorの変更',
+            ], undefined, { dailyNoteDate: '2026-03-25' });
+            expect(tasks).toHaveLength(1);
+            const parent = tasks[0];
+            expect(parent.childLines).toHaveLength(3);
+            expect(parent.childLines[0].checkboxChar).toBe('x');
+            expect(parent.childLines[1].checkboxChar).toBe('x');
+            expect(parent.childLines[2].checkboxChar).toBe('x');
+        });
+
+        it('@notation あり/なし混在: タスクと childLines が正しく分離される', () => {
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24',
+                '    - [x] plain checkbox',
+                '    - [ ] child task @2026-03-25',
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            expect(tasks).toHaveLength(2);
+            const parent = tasks.find(t => t.content === 'parent')!;
+            const child = tasks.find(t => t.content === 'child task')!;
+            // plain checkbox は childLines に残る
+            expect(parent.childLines).toHaveLength(1);
+            expect(parent.childLines[0].checkboxChar).toBe('x');
+            // child task は childIds に入る
+            expect(parent.childIds).toContain(child.id);
+        });
+
+        it('説明行とチェックボックスとプロパティの混在', () => {
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24',
+                '    説明テキスト',
+                '    - [x] done item',
+                '    - priority:: high',
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            const parent = tasks[0];
+            expect(parent.childLines).toHaveLength(3);
+            // 順序が保持される
+            expect(parent.childLines[0].checkboxChar).toBeNull();
+            expect(parent.childLines[0].text).toContain('説明テキスト');
+            expect(parent.childLines[1].checkboxChar).toBe('x');
+            expect(parent.childLines[2].propertyKey).toBe('priority');
+        });
+
+        it('非タスクラッパー内の孫タスクが抽出される', () => {
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24',
+                '    - [x] wrapper without notation',
+                '        - [ ] grandchild @2026-03-26',
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            // parent + grandchild（wrapper はタスクにならない）
+            expect(tasks).toHaveLength(2);
+            const parent = tasks.find(t => t.content === 'parent')!;
+            const grandchild = tasks.find(t => t.content === 'grandchild')!;
+            expect(grandchild).toBeDefined();
+            // wrapper は parent の childLines に残る
+            expect(parent.childLines.some(cl => cl.text.includes('wrapper'))).toBe(true);
+        });
+    });
+
+    describe('childLineBodyOffsets', () => {
+        it('連続する childLines の絶対行番号が正しい', () => {
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24',    // line 0
+                '    child line 1',             // line 1
+                '    child line 2',             // line 2
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            const parent = tasks[0];
+            expect(parent.childLineBodyOffsets).toEqual([1, 2]);
+        });
+
+        it('子タスクを挟む場合に正しいオフセットが設定される', () => {
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24',    // line 0
+                '    desc line 1',              // line 1
+                '    - [ ] child @2026-03-25',  // line 2 (excluded)
+                '        child desc',           // line 3 (excluded)
+                '    desc line 2',              // line 4
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            const parent = tasks.find(t => t.content === 'parent')!;
+            expect(parent.childLines).toHaveLength(2);
+            expect(parent.childLineBodyOffsets).toEqual([1, 4]);
+        });
+
+        it('@notation なしチェックボックスのオフセットが正しい', () => {
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24',    // line 0
+                '    - [x] item A',             // line 1
+                '    - [x] item B',             // line 2
+                '    - [x] item C',             // line 3
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            const parent = tasks[0];
+            expect(parent.childLineBodyOffsets).toEqual([1, 2, 3]);
+        });
+    });
+
+    describe('リストマーカーバリエーション', () => {
+        it('* マーカーのチェックボックスが childLines に残る', () => {
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24',
+                '    * [x] asterisk item',
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            expect(tasks).toHaveLength(1);
+            expect(tasks[0].childLines).toHaveLength(1);
+            expect(tasks[0].childLines[0].checkboxChar).toBe('x');
+        });
+
+        it('+ マーカーのチェックボックスが childLines に残る', () => {
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24',
+                '    + [x] plus item',
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            expect(tasks).toHaveLength(1);
+            expect(tasks[0].childLines).toHaveLength(1);
+            expect(tasks[0].childLines[0].checkboxChar).toBe('x');
+        });
+
+        it('1. 番号付きチェックボックスが childLines に残る', () => {
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24',
+                '    1. [x] ordered dot item',
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            expect(tasks).toHaveLength(1);
+            expect(tasks[0].childLines).toHaveLength(1);
+            expect(tasks[0].childLines[0].checkboxChar).toBe('x');
+        });
+
+        it('1) 番号付きチェックボックスが childLines に残る', () => {
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24',
+                '    1) [x] ordered paren item',
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            expect(tasks).toHaveLength(1);
+            expect(tasks[0].childLines).toHaveLength(1);
+            expect(tasks[0].childLines[0].checkboxChar).toBe('x');
+        });
+
+        it('異なるマーカーが混在しても全て childLines に残る', () => {
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24',
+                '    - [x] dash item',
+                '    * [x] asterisk item',
+                '    + [ ] plus item',
+                '    1. [x] ordered item',
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            expect(tasks).toHaveLength(1);
+            const parent = tasks[0];
+            expect(parent.childLines).toHaveLength(4);
+            expect(parent.childLines[0].checkboxChar).toBe('x');
+            expect(parent.childLines[1].checkboxChar).toBe('x');
+            expect(parent.childLines[2].checkboxChar).toBe(' ');
+            expect(parent.childLines[3].checkboxChar).toBe('x');
+        });
+
+        it('各種ステータス文字が正しく取得される', () => {
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24',
+                '    - [ ] open',
+                '    - [x] done',
+                '    - [/] in-progress',
+                '    - [-] cancelled',
+                '    - [>] forwarded',
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            const cl = tasks[0].childLines;
+            expect(cl).toHaveLength(5);
+            expect(cl.map(c => c.checkboxChar)).toEqual([' ', 'x', '/', '-', '>']);
+        });
+
+        it('* マーカー + @notation はタスクとして抽出される', () => {
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24',
+                '    * [ ] child task @2026-03-25',
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            expect(tasks).toHaveLength(2);
+            const parent = tasks.find(t => t.content === 'parent')!;
+            expect(parent.childLines).toHaveLength(0);
+            expect(parent.childIds).toHaveLength(1);
+        });
+
+        it('プレーンテキストとチェックボックスなし箇条書き', () => {
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24',
+                '    plain text without marker',
+                '    - plain bullet no checkbox',
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            const cl = tasks[0].childLines;
+            expect(cl).toHaveLength(2);
+            expect(cl[0].checkboxChar).toBeNull();
+            expect(cl[0].text).toContain('plain text');
+            expect(cl[1].checkboxChar).toBeNull();
+            expect(cl[1].text).toContain('plain bullet');
         });
     });
 });
