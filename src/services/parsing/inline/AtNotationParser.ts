@@ -70,6 +70,7 @@ export class AtNotationParser implements ParserStrategy {
         let endTime: string | undefined;
         let due: string | undefined;
         let validationWarning: string | undefined;
+        let validationHint: string | undefined;
 
         const dateBlock = this.parseDateBlock(rawContent);
         if (dateBlock) {
@@ -87,7 +88,8 @@ export class AtNotationParser implements ParserStrategy {
         // 4. Validate date/time constraints
         const fieldWarning = this.validateDateBlock(date, startTime, endDate, endTime, due);
         if (fieldWarning) {
-            validationWarning = fieldWarning;
+            validationWarning = fieldWarning.message;
+            validationHint = fieldWarning.hint;
         }
 
         return {
@@ -121,6 +123,7 @@ export class AtNotationParser implements ParserStrategy {
             blockId,
             timerTargetId,
             validationWarning,
+            validationHint,
             properties: {},     // Will be populated by TaskScanner from childLines
         };
     }
@@ -211,13 +214,14 @@ export class AtNotationParser implements ParserStrategy {
         endDate: string | undefined,
         endTime: string | undefined,
         due: string | undefined,
-    ): string | undefined {
+    ): { message: string; hint: string } | undefined {
         const result = validateDateTimeRules({
             startDate: date || undefined,
             startTime, endDate, endTime, due,
             endDateImplicit: !endDate,
         });
-        return result?.message;
+        if (!result) return undefined;
+        return { message: result.message, hint: result.hint };
     }
 
     private parseDateTime(str: string): { date?: string, time?: string } {

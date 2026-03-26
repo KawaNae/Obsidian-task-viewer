@@ -33,6 +33,7 @@ import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
 import { TimerMenuBuilder } from './interaction/menu/builders/TimerMenuBuilder';
 import { TaskActionsMenuBuilder } from './interaction/menu/builders/TaskActionsMenuBuilder';
 import { CheckboxMenuBuilder } from './interaction/menu/builders/CheckboxMenuBuilder';
+import { ValidationMenuBuilder } from './interaction/menu/builders/ValidationMenuBuilder';
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 import { registerCliHandlers } from './cli/CliRegistrar';
 import { TaskApi } from './api/TaskApi';
@@ -220,6 +221,7 @@ export default class TaskViewerPlugin extends Plugin {
         );
         const editorTimerBuilder = new TimerMenuBuilder(this);
         const editorActionsBuilder = new TaskActionsMenuBuilder(this.app, this.writeService, this);
+        const editorValidationBuilder = new ValidationMenuBuilder();
         const editorCheckboxBuilder = new CheckboxMenuBuilder(
             this.app,
             () => this.settings.startHour,
@@ -267,6 +269,7 @@ export default class TaskViewerPlugin extends Plugin {
             editorTimerBuilder,
             editorActionsBuilder,
             editorCheckboxBuilder,
+            editorValidationBuilder,
             () => this.settings
         );
         this.registerEditorExtension(taskMenuResult.extension);

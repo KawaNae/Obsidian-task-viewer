@@ -9,6 +9,7 @@ import { PropertyFormatter } from './PropertyFormatter';
 import { PropertiesMenuBuilder } from './builders/PropertiesMenuBuilder';
 import { TimerMenuBuilder } from './builders/TimerMenuBuilder';
 import { TaskActionsMenuBuilder } from './builders/TaskActionsMenuBuilder';
+import { ValidationMenuBuilder } from './builders/ValidationMenuBuilder';
 import { toDisplayTask, getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 
 /**
@@ -22,6 +23,7 @@ export class MenuHandler {
     private propertiesMenuBuilder: PropertiesMenuBuilder;
     private timerMenuBuilder: TimerMenuBuilder;
     private taskActionsMenuBuilder: TaskActionsMenuBuilder;
+    private validationMenuBuilder: ValidationMenuBuilder;
 
     private viewStartDate: string | null = null;
 
@@ -46,6 +48,7 @@ export class MenuHandler {
         );
         this.timerMenuBuilder = new TimerMenuBuilder(plugin);
         this.taskActionsMenuBuilder = new TaskActionsMenuBuilder(app, writeService, plugin);
+        this.validationMenuBuilder = new ValidationMenuBuilder();
     }
 
     /**
@@ -91,6 +94,9 @@ export class MenuHandler {
         const displayTask = toDisplayTask(task, this.plugin.settings.startHour);
 
         const menu = new Menu();
+
+        // 0. Validation warning (if any)
+        this.validationMenuBuilder.addValidationWarning(menu, task);
 
         // 1. Status (root level)
         this.propertiesMenuBuilder.addStatusSubmenu(menu, task);
