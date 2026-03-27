@@ -36,6 +36,7 @@ export class GridRenderer {
         private viewState: ViewState,
         private plugin: TaskViewerPlugin,
         private menuHandler: MenuHandler,
+        private hoverParent: HoverParent,
     ) {
         this.dateLinkInteractionManager = new TaskLinkInteractionManager(
             this.plugin.app, () => this.plugin.settings
@@ -109,7 +110,7 @@ export class GridRenderer {
             this.dateLinkInteractionManager.bind(cell, {
                 sourcePath: '',
                 hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-                hoverParent: owner as unknown as HoverParent,
+                hoverParent: this.hoverParent,
             }, { bindClick: false });
 
             headerCells.push({

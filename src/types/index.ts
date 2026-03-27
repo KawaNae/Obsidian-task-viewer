@@ -95,9 +95,13 @@ export interface Task {
     // Parsed flow commands.
     commands?: FlowCommand[];
 
-    // Parse-time warning shown to users.
-    validationWarning?: string;
-    validationHint?: string;
+    // Parse-time validation result (error or warning).
+    validation?: {
+        severity: 'error' | 'warning';
+        rule: string;
+        message: string;
+        hint: string;
+    };
 
     /**
      * Parser identifier that produced this task (e.g. at-notation/frontmatter).

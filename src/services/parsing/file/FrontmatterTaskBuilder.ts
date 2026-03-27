@@ -4,6 +4,7 @@ import { TagExtractor } from '../utils/TagExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { VALID_LINE_STYLES } from '../../../constants/style';
 import { normalizeColor } from '../../../utils/ColorUtils';
+import { validateDateTimeRules } from '../utils/DateTimeRuleValidator';
 
 export interface FrontmatterParseResult {
     task: Task;
@@ -143,6 +144,19 @@ export class FrontmatterTaskBuilder {
 
         const isContainer = !hasDateFields;
 
+        // Validate date/time constraints
+        const validation = hasDateFields
+            ? validateDateTimeRules({
+                startDate: start.date || undefined,
+                startTime: start.time,
+                endDate: end.date || undefined,
+                endTime: end.time,
+                due,
+                endDateImplicit: !end.date,
+                isFrontmatter: true,
+            }) ?? undefined
+            : undefined;
+
         return {
             task: {
                 id: TaskIdGenerator.generate('frontmatter', filePath, 'fm-root'),
@@ -169,6 +183,7 @@ export class FrontmatterTaskBuilder {
                 linestyle,
                 mask,
                 isContainer,
+                validation,
             },
             wikilinkRefs,
         };

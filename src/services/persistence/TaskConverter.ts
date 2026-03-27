@@ -113,9 +113,20 @@ export class TaskConverter {
             lines.push(`${frontmatterKeys.status}: ${task.statusChar}`);
         }
 
-        // color (ソースファイルから継承、存在する場合のみ)
-        if (color) {
-            lines.push(`${frontmatterKeys.color}: "${this.escapeForDoubleQuotedYaml(color)}"`);
+        // color (タスクの解決済み値を優先、ソースファイルをフォールバック)
+        const effectiveColor = task.color || color;
+        if (effectiveColor) {
+            lines.push(`${frontmatterKeys.color}: "${this.escapeForDoubleQuotedYaml(effectiveColor)}"`);
+        }
+
+        // linestyle
+        if (task.linestyle) {
+            lines.push(`${frontmatterKeys.linestyle}: "${this.escapeForDoubleQuotedYaml(task.linestyle)}"`);
+        }
+
+        // mask
+        if (task.mask) {
+            lines.push(`${frontmatterKeys.mask}: "${this.escapeForDoubleQuotedYaml(task.mask)}"`);
         }
 
         // tags
@@ -169,7 +180,8 @@ export class TaskConverter {
 
         const headerPrefix = '#'.repeat(headerLevel) + ' ';
         const lines = ['', headerPrefix + header]; // 空行 + 見出し
-        lines.push(...task.childLines.map(cl => cl.text));
+        // プロパティ行は frontmatter に昇格済みなので body から除外
+        lines.push(...task.childLines.filter(cl => cl.propertyKey === null).map(cl => cl.text));
 
         return lines.join('\n');
     }

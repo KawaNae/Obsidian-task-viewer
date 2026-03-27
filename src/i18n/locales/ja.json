@@ -409,14 +409,16 @@
     "invalidFormat": "{{label}}: {{type}}の形式が不正です（{{expected}}）。",
     "startRequiresDate": "開始: 時刻を指定する場合は日付が必要です。",
     "endRequiresDate": "終了: 開始日がない場合は終了日が必要です。",
-    "dueRequiresDate": "期限: 時刻を指定する場合は日付が必要です。"
+    "dueRequiresDate": "期限: 時刻を指定する場合は日付が必要です。",
+    "frontmatterTimeOnly": "frontmatterに時刻のみの値があると、YAMLの六十進法解釈の問題が起きる可能性があります。"
   },
   "validationHint": {
     "crossMidnight": "終了日を明示するか、時刻を修正してください。",
     "sameDayInversion": "終了時刻を修正するか、終了日を変更してください。",
     "endBeforeStart": "終了日を修正してください。",
     "endTimeWithoutStart": "開始時刻を追加してください。",
-    "dueWithoutDate": "期限に日付を追加してください。"
+    "dueWithoutDate": "期限に日付を追加してください。",
+    "frontmatterTimeOnly": "日付を追加してください（例: 2026-01-15T09:00）。YAMLの六十進法解釈を避けられます。"
   },
   "menu": {
     "properties": "プロパティ",
