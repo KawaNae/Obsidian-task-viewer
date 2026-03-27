@@ -1,5 +1,5 @@
 import { ItemView, WorkspaceLeaf, TFile, Menu, Notice, setIcon, type ViewStateResult } from 'obsidian';
-import type { MenuItem, HoverParent } from 'obsidian';
+import type { MenuItem } from 'obsidian';
 import { t } from '../../i18n';
 import { Task } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
@@ -19,6 +19,7 @@ import {
 import TaskViewerPlugin from '../../main';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
+import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { VIEW_META_MINI_CALENDAR } from '../../constants/viewRegistry';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
@@ -55,6 +56,7 @@ export class MiniCalendarView extends ItemView {
     private isAnimating: boolean = false;
     private navigateWeekDebounceTimer: number | null = null;
     private pendingWeekOffset: number = 0;
+    private readonly hoverParent = new TaskViewHoverParent();
 
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
@@ -133,6 +135,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        this.hoverParent.dispose();
         this.filterMenu.close();
         if (this.navigateWeekDebounceTimer !== null) {
             window.clearTimeout(this.navigateWeekDebounceTimer);
@@ -237,7 +240,7 @@ export class MiniCalendarView extends ItemView {
         this.linkInteractionManager.bind(yearWrapper, {
             sourcePath: '',
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            hoverParent: this.leaf as HoverParent,
+            hoverParent: this.hoverParent,
         }, { bindClick: false });
         yearWrapper.addEventListener('click', () => {
             void this.openOrCreatePeriodicNote('yearly', yearDate);
@@ -261,7 +264,7 @@ export class MiniCalendarView extends ItemView {
         this.linkInteractionManager.bind(monthWrapper, {
             sourcePath: '',
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            hoverParent: this.leaf as HoverParent,
+            hoverParent: this.hoverParent,
         }, { bindClick: false });
         monthWrapper.addEventListener('click', () => {
             void this.openOrCreatePeriodicNote('monthly', monthDate);
@@ -363,7 +366,7 @@ export class MiniCalendarView extends ItemView {
         this.linkInteractionManager.bind(cell, {
             sourcePath: '',
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            hoverParent: this.leaf as HoverParent,
+            hoverParent: this.hoverParent,
         }, { bindClick: false });
 
         cell.addEventListener('click', () => {
@@ -452,7 +455,7 @@ export class MiniCalendarView extends ItemView {
         this.linkInteractionManager.bind(weekNumberEl, {
             sourcePath: '',
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            hoverParent: this.leaf as HoverParent,
+            hoverParent: this.hoverParent,
         }, { bindClick: false });
         weekNumberEl.addEventListener('click', () => {
             void this.openOrCreatePeriodicNote('weekly', weekStartDate);

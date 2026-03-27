@@ -14,6 +14,7 @@ import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState, hasSortRules } from '../../services/sort/SortTypes';
 import { TaskStyling } from '../sharedUI/TaskStyling';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
+import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
@@ -47,6 +48,7 @@ export class KanbanView extends ItemView {
     private viewFilterState: FilterState | undefined;
     private grid: PinnedListDefinition[][] = [];
     private gridCollapsed: Record<string, boolean> = {};
+    private readonly hoverParent = new TaskViewHoverParent();
 
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
@@ -55,7 +57,7 @@ export class KanbanView extends ItemView {
         this.writeService = this.plugin.getTaskWriteService();
         this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            getHoverParent: () => this.leaf,
+            getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
@@ -153,6 +155,7 @@ export class KanbanView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        this.hoverParent.dispose();
         this.filterMenu.close();
         this.sortMenu.close();
         this.viewFilterMenu.close();

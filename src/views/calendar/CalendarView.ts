@@ -1,6 +1,5 @@
 import { ItemView, TFile, WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
-import type { HoverParent } from 'obsidian';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { Task, DisplayTask, PinnedListDefinition } from '../../types';
@@ -32,6 +31,7 @@ import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
+import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
 import { HandleManager } from '../timelineview/HandleManager';
@@ -81,6 +81,7 @@ export class CalendarView extends ItemView {
     private scrollRestorePending = false;
     private savedScrollTop: number | null = null;
     private sidebarOpenedThisSession = false;
+    private readonly hoverParent = new TaskViewHoverParent();
 
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
@@ -89,7 +90,7 @@ export class CalendarView extends ItemView {
         this.writeService = plugin.getTaskWriteService();
         this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            getHoverParent: () => this.leaf,
+            getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings);
         this.taskRenderer.setDetailCallback((task) => {
             new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
@@ -236,6 +237,7 @@ export class CalendarView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        this.hoverParent.dispose();
         this.filterMenu.close();
         this.sidebarFilterMenu.close();
         this.sidebarManager.detach();
@@ -638,7 +640,7 @@ export class CalendarView extends ItemView {
         this.linkInteractionManager.bind(header, {
             sourcePath: '',
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            hoverParent: this.leaf as HoverParent,
+            hoverParent: this.hoverParent,
         }, { bindClick: false });
     }
 
@@ -789,7 +791,7 @@ export class CalendarView extends ItemView {
         this.linkInteractionManager.bind(weekNumberEl, {
             sourcePath: '',
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            hoverParent: this.leaf as HoverParent,
+            hoverParent: this.hoverParent,
         }, { bindClick: false });
         weekNumberEl.addEventListener('click', () => {
             void this.openOrCreatePeriodicNote(weekStartDate);

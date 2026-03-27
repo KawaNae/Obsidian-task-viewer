@@ -29,6 +29,7 @@ import { createEmptySortState } from '../../services/sort/SortTypes';
 import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
+import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 
 export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
@@ -100,6 +101,7 @@ export class TimelineView extends ItemView {
     private pinchInitialScrollTop: number = 0;
     private isPinching: boolean = false;
     private sidebarOpenedThisSession = false;
+    private readonly hoverParent = new TaskViewHoverParent();
 
     // ==================== Lifecycle ====================
 
@@ -126,7 +128,7 @@ export class TimelineView extends ItemView {
         });
         this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            getHoverParent: () => this.leaf,
+            getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings);
     }
 
@@ -266,7 +268,7 @@ export class TimelineView extends ItemView {
         // Initialize Renderers
         this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow);
         this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel());
-        this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler);
+        this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler, this.hoverParent);
         this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.menuHandler, this.readService);
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
         this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
@@ -428,6 +430,7 @@ export class TimelineView extends ItemView {
     }
 
     async onClose() {
+        this.hoverParent.dispose();
         this.toolbar.closeFilterPopover();
         this.sidebarFilterMenu.close();
         this.sidebarSortMenu.close();

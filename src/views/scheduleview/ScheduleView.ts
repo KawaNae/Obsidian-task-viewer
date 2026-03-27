@@ -1,6 +1,5 @@
 import { ItemView, WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
-import type { HoverParent } from 'obsidian';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { isCompleteStatusChar } from '../../types';
 import type { DisplayTask } from '../../types';
@@ -17,6 +16,7 @@ import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
+import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
 import type { CollapsibleSectionKey, TimedDisplayTask } from './ScheduleTypes';
@@ -73,6 +73,8 @@ export class ScheduleView extends ItemView {
         dueOnly: false,
     };
 
+    private readonly hoverParent = new TaskViewHoverParent();
+
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
         this.plugin = plugin;
@@ -80,7 +82,7 @@ export class ScheduleView extends ItemView {
         this.writeService = plugin.getTaskWriteService();
         this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            getHoverParent: () => this.leaf,
+            getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
@@ -193,6 +195,7 @@ export class ScheduleView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        this.hoverParent.dispose();
         this.filterMenu.close();
         if (this.unsubscribe) {
             this.unsubscribe();
@@ -444,7 +447,7 @@ export class ScheduleView extends ItemView {
             {
                 sourcePath: '',
                 hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-                hoverParent: this.leaf as HoverParent,
+                hoverParent: this.hoverParent,
             },
             { bindClick: false }
         );
