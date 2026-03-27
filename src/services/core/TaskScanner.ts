@@ -146,12 +146,12 @@ export class TaskScanner {
 
         // バリデーション警告を収集
         for (const task of allExtractedTasks) {
-            if (task.validationWarning) {
+            if (task.validation) {
                 this.validator.addError({
                     file: file.path,
                     line: task.line + 1, // 1-indexed表示
                     taskId: task.id,
-                    error: task.validationWarning,
+                    error: task.validation.message,
                 });
             }
         }

@@ -5,7 +5,7 @@ import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';
 import { DateUtils } from '../../../utils/DateUtils';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
-import { validateDateTimeRules } from '../utils/DateTimeRuleValidator';
+import { validateDateTimeRules, DateTimeValidationResult } from '../utils/DateTimeRuleValidator';
 
 interface DateBlockResult {
     date: string;
@@ -13,7 +13,7 @@ interface DateBlockResult {
     endDate?: string;
     endTime?: string;
     due?: string;
-    validationWarning?: string;
+    validationWarning?: string; // parseDateBlock internal warning (excess separators)
 }
 
 /**
@@ -69,13 +69,12 @@ export class AtNotationParser implements ParserStrategy {
         let endDate: string | undefined;
         let endTime: string | undefined;
         let due: string | undefined;
-        let validationWarning: string | undefined;
-        let validationHint: string | undefined;
+        let parseWarning: string | undefined;
 
         const dateBlock = this.parseDateBlock(rawContent);
         if (dateBlock) {
             ({ date, startTime, endDate, endTime, due,
-               validationWarning } = dateBlock.fields);
+               validationWarning: parseWarning } = dateBlock.fields);
             content = dateBlock.content;
         }
 
@@ -86,10 +85,17 @@ export class AtNotationParser implements ParserStrategy {
         }
 
         // 4. Validate date/time constraints
-        const fieldWarning = this.validateDateBlock(date, startTime, endDate, endTime, due);
-        if (fieldWarning) {
-            validationWarning = fieldWarning.message;
-            validationHint = fieldWarning.hint;
+        let validation: Task['validation'];
+        const ruleResult = this.validateDateBlock(date, startTime, endDate, endTime, due);
+        if (ruleResult) {
+            validation = ruleResult;
+        } else if (parseWarning) {
+            validation = {
+                severity: 'error',
+                rule: 'parse-error',
+                message: parseWarning,
+                hint: '',
+            };
         }
 
         return {
@@ -122,8 +128,7 @@ export class AtNotationParser implements ParserStrategy {
             parserId: this.id,
             blockId,
             timerTargetId,
-            validationWarning,
-            validationHint,
+            validation,
             properties: {},     // Will be populated by TaskScanner from childLines
         };
     }
@@ -206,7 +211,6 @@ export class AtNotationParser implements ParserStrategy {
 
     /**
      * Validate parsed date/time fields using shared rules.
-     * Returns a warning string if any rule is violated, undefined otherwise.
      */
     private validateDateBlock(
         date: string,
@@ -214,14 +218,12 @@ export class AtNotationParser implements ParserStrategy {
         endDate: string | undefined,
         endTime: string | undefined,
         due: string | undefined,
-    ): { message: string; hint: string } | undefined {
-        const result = validateDateTimeRules({
+    ): DateTimeValidationResult | undefined {
+        return validateDateTimeRules({
             startDate: date || undefined,
             startTime, endDate, endTime, due,
             endDateImplicit: !endDate,
         });
-        if (!result) return undefined;
-        return { message: result.message, hint: result.hint };
     }
 
     private parseDateTime(str: string): { date?: string, time?: string } {
