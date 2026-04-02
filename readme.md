@@ -956,6 +956,18 @@ dv.list(result.tasks.map(t => `${t.content} (${t.due ?? 'no due'})`));
 
 ---
 
+## 既知の問題
+
+### Page Preview と datepicker プラグインの干渉
+
+[datepicker](https://github.com/joycode-hub/datepicker-plugin) プラグインが有効な環境で、本プラグインのビュー上のリンクをホバーして Page Preview ポップオーバーを表示し、編集モードにした後に日付テキストをクリックすると、ビューのタブが意図せず別のファイルにナビゲーションされることがあります。
+
+**原因:** datepicker は `registerEditorExtension` でグローバルに CodeMirror プラグインを登録するため、Page Preview ポップオーバー内の CM エディタでも動作します。datepicker がポップオーバー内の日付を検出・操作する際に、アクティブな leaf（本プラグインのビュー）に副作用が発生します。この問題は datepicker 側の実装に起因しており、本プラグイン側での防御は困難です。
+
+**回避策:** datepicker プラグインを無効化するか、ポップオーバー内で日付テキストをクリックしないようにしてください。
+
+---
+
 ## 開発者向け情報
 
 実装の詳細、タスク型の仕様、CSS命名規則などは[DEVELOPER.md](./DEVELOPER.md)をご覧ください。
