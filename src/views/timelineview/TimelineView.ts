@@ -28,6 +28,7 @@ import { createEmptyFilterState, type FilterState } from '../../services/filter/
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
+import { TaskStyling } from '../sharedUI/TaskStyling';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
@@ -93,7 +94,7 @@ export class TimelineView extends ItemView {
     private savedScrollTop: number | null = null;
     private scrollToNowOnNextRender = false;
     private hasInitializedStartDate: boolean = false;
-    private lastRenderTime = 0;
+
     // ==================== Pinch zoom state ====================
     private pinchInitialDistance: number = 0;
     private pinchInitialZoom: number = 1;
@@ -324,9 +325,6 @@ export class TimelineView extends ItemView {
                 }
             }
 
-            // Skip redundant re-scan notification shortly after any render
-            if (!taskId && !changes && (Date.now() - this.lastRenderTime) < 200) return;
-
             this.render();
         });
 
@@ -523,7 +521,8 @@ export class TimelineView extends ItemView {
         const isAllDay = card.classList.contains('task-card--allday');
         const opts = isAllDay ? { topRight: 'none' as const, compact: true } : undefined;
         this.taskRenderer.render(card, dt, this, this.plugin.settings, opts);
-        this.lastRenderTime = Date.now();
+        TaskStyling.applyTaskColor(card, dt.color ?? null);
+        TaskStyling.applyTaskLinestyle(card, dt.linestyle ?? null);
         return true;
     }
 
@@ -717,7 +716,6 @@ export class TimelineView extends ItemView {
             });
         }
 
-        this.lastRenderTime = Date.now();
     }
 
     /**
