@@ -56,6 +56,7 @@ export class TaskCommandExecutor {
     private async processQueue() {
         if (this.isProcessing) return;
         this.isProcessing = true;
+        let didExecute = false;
 
         try {
             while (this.taskQueue.length > 0) {
@@ -87,6 +88,7 @@ export class TaskCommandExecutor {
 
                 try {
                     await this.executeTaskCommands(currentTask);
+                    didExecute = true;
                 } catch (err) {
                     console.error(`[TaskCommandExecutor] Error processing task ${currentTask.id}:`, err);
                 }
@@ -112,6 +114,9 @@ export class TaskCommandExecutor {
             }
         } finally {
             this.isProcessing = false;
+            if (didExecute) {
+                this.taskIndex.notifyImmediate();
+            }
         }
     }
 

@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import { App, TFile, parseYaml } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
 import { TaskParser } from '../parsing/TaskParser';
 import { FrontmatterTaskBuilder } from '../parsing/file/FrontmatterTaskBuilder';
@@ -110,6 +110,17 @@ export class TaskScanner {
             }
             if (bodyStartIndex > 0) {
                 frontmatterObj = this.app.metadataCache.getCache(file.path)?.frontmatter;
+
+                // metadataCache が未更新の場合（vault.modify → metadataCache.changed の間）、
+                // raw コンテンツから直接パースしてフォールバック
+                if (!frontmatterObj) {
+                    try {
+                        const yamlContent = lines.slice(1, bodyStartIndex - 1).join('\n');
+                        frontmatterObj = parseYaml(yamlContent);
+                    } catch {
+                        // YAML パースエラー時は無視（metadataCache.changed で再スキャンされる）
+                    }
+                }
             }
         }
 
