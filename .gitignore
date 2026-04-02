@@ -13,3 +13,4 @@ build/
 tmp_legacy
 debug_tasks.md
 agents.md
+.vscode

@@ -27,6 +27,8 @@ import { hasConditions } from './services/filter/FilterTypes';
 import { FilterSerializer } from './services/filter/FilterSerializer';
 import { unicodeAtob } from './utils/base64';
 import { ViewTemplateLoader } from './services/template/ViewTemplateLoader';
+import { HabitDefinitionLoader } from './services/template/HabitDefinitionLoader';
+import { HabitDefinitionWriter } from './services/template/HabitDefinitionWriter';
 import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
 import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
 import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
@@ -50,6 +52,9 @@ export default class TaskViewerPlugin extends Plugin {
     public settings: TaskViewerSettings;
     public api: TaskApi;
 
+    // Habit save flag to avoid redundant reload from vault modify listener
+    _habitSavePending = false;
+
     // Day boundary check
     private lastVisualDate: string = '';
     private dateCheckInterval: ReturnType<typeof setInterval> | null = null;
@@ -68,6 +73,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Load Settings
         await this.loadSettings();
+        await this.loadAndMigrateHabits();
         TaskParser.rebuildChain(this.settings);
 
         // Initialize Services
@@ -88,6 +94,17 @@ export default class TaskViewerPlugin extends Plugin {
         this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
             if (!(file instanceof TFile) || file.extension !== 'md') return;
             this.timerWidget?.handleFileRename(oldPath, file.path);
+        }));
+
+        // Reload habit definitions when the vault file is modified externally (e.g. sync)
+        this.registerEvent(this.app.vault.on('modify', async (file) => {
+            if (!(file instanceof TFile)) return;
+            if (file.path !== this.settings.habitDefinitionFile) return;
+            if (this._habitSavePending) return;
+
+            const loader = new HabitDefinitionLoader(this.app);
+            this.settings.habits = await loader.load(file.path);
+            this.refreshAllViews();
         }));
 
         // Register View
@@ -413,6 +430,23 @@ export default class TaskViewerPlugin extends Plugin {
                 ? { ...DEFAULT_FRONTMATTER_TASK_KEYS }
                 : normalizedFrontmatterKeys,
         };
+    }
+
+    private async loadAndMigrateHabits(): Promise<void> {
+        const filePath = this.settings.habitDefinitionFile;
+        const file = this.app.vault.getAbstractFileByPath(filePath);
+
+        if (file instanceof TFile) {
+            const loader = new HabitDefinitionLoader(this.app);
+            this.settings.habits = await loader.load(filePath);
+        } else if (this.settings.habits.length > 0) {
+            // Migration: data.json has habits but no vault file yet
+            const writer = new HabitDefinitionWriter(this.app);
+            await writer.save(filePath, this.settings.habits);
+            // Remove habits from data.json (keep in-memory)
+            const dataToSave = { ...this.settings, habits: [] };
+            await this.saveData(dataToSave);
+        }
     }
 
     async saveSettings() {

@@ -140,6 +140,8 @@
     },
     "habits": {
       "description": "Define habits to track in your daily notes' frontmatter.",
+      "habitFile": "Habit definition file",
+      "habitFileDesc": "Path to the vault file storing habit definitions.",
       "addHabit": "Add Habit",
       "addHabitDesc": "Create a new habit to track.",
       "addButton": "+ Add",
