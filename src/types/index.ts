@@ -341,6 +341,7 @@ export interface TaskViewerSettings {
     yearlyNoteFolder: string;
     intervalTemplateFolder: string;
     viewTemplateFolder: string;
+    habitDefinitionFile: string;
     pinnedListPageSize: number;
     defaultViewPositions: {
         timeline: DefaultLeafPosition;
@@ -404,6 +405,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     yearlyNoteFolder: '',
     intervalTemplateFolder: '',
     viewTemplateFolder: '',
+    habitDefinitionFile: 'Templates/Habits/habits.md',
     pinnedListPageSize: 10,
     defaultViewPositions: {
         timeline: 'tab',

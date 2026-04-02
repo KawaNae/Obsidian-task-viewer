@@ -140,6 +140,8 @@
     },
     "habits": {
       "description": "デイリーノートのフロントマターで追跡する習慣を定義します。",
+      "habitFile": "習慣定義ファイル",
+      "habitFileDesc": "習慣定義を保存する Vault 内ファイルのパス。",
       "addHabit": "習慣を追加",
       "addHabitDesc": "追跡する新しい習慣を作成します。",
       "addButton": "+ 追加",
