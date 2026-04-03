@@ -57,8 +57,8 @@ export class ChildLineClassifier {
     /** 文字列から型を推定 */
     static inferType(raw: string): PropertyType {
         if (/^\d+(\.\d+)?$/.test(raw)) return 'number';
-        if (raw === 'true' || raw === 'false') return 'boolean';
-        if (/^\[.*\]$/.test(raw)) return 'array';
+        if (raw === 'True' || raw === 'False') return 'boolean';
+        if (/^\[.*\]$/.test(raw) || raw.includes(',')) return 'array';
         return 'string';
     }
 }

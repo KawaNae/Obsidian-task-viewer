@@ -3,6 +3,7 @@ import type { FrontmatterTaskKeys, PropertyValue } from '../../../types';
 import { BuiltinPropertyExtractor, type ExtractedProperties } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { normalizeColor } from '../../../utils/ColorUtils';
+import { TagExtractor } from '../utils/TagExtractor';
 
 /**
  * ドキュメントツリーのセクションプロパティをカスケード解決する。
@@ -37,12 +38,16 @@ export class SectionPropertyResolver {
         section.resolvedColor = ownExtracted.color ?? parentProps.color;
         section.resolvedLinestyle = ownExtracted.linestyle ?? parentProps.linestyle;
         section.resolvedMask = ownExtracted.mask ?? parentProps.mask;
+        section.resolvedTags = ownExtracted.tags
+            ? TagExtractor.merge(parentProps.tags ?? [], ownExtracted.tags)
+            : parentProps.tags;
 
         // 子セクションへ再帰
         const resolved: ExtractedProperties = {
             color: section.resolvedColor,
             linestyle: section.resolvedLinestyle,
             mask: section.resolvedMask,
+            tags: section.resolvedTags,
             properties: section.resolvedProperties,
         };
         for (const child of section.children) {
@@ -97,7 +102,9 @@ export class SectionPropertyResolver {
             };
         }
 
-        return { color: color ?? undefined, linestyle: linestyle ?? undefined, mask: mask ?? undefined, properties };
+        const tags = TagExtractor.fromFrontmatter(frontmatter?.['tags']);
+
+        return { color: color ?? undefined, linestyle: linestyle ?? undefined, mask: mask ?? undefined, tags: tags.length > 0 ? tags : undefined, properties };
     }
 
     private static extractStringValue(

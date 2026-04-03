@@ -24,7 +24,7 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `api.duplicate({ id, ... })` | タスク複製 | async |
 | `api.convertToFrontmatter({ id })` | インライン→Frontmatter変換 | async |
 | `api.tasksForDateRange({ start, end, ... })` | 日付範囲のタスク取得 | async |
-| `api.tasksForDate({ date, ... })` | 特定日のタスク（分類済み） | sync |
+| `api.categorizedTasksForDateRange({ start, end, ... })` | 日付範囲のタスク（分類済み） | sync |
 | `api.insertChildTask({ parentId, content })` | 子タスク挿入 | async |
 | `api.createFrontmatterTask({ content, ... })` | Frontmatterタスクファイル作成 | async |
 | `api.getStartHour()` | startHour設定値取得 | sync |
@@ -196,20 +196,24 @@ const result = await api.tasksForDateRange({
 | `limit` | | `number` | 最大件数（デフォルト: 100） |
 | `offset` | | `number` | スキップ件数 |
 
-## tasksForDate
+## categorizedTasksForDateRange
 
 ```javascript
-const result = api.tasksForDate({ date: '2026-03-15' });
-// => { allDay: NormalizedTask[], timed: NormalizedTask[], dueOnly: NormalizedTask[] }
+const result = api.categorizedTasksForDateRange({
+  start: '2026-03-01',
+  end: '2026-03-31',
+});
+// => { "2026-03-01": { allDay: [...], timed: [...], dueOnly: [...] }, ... }
 ```
 
-指定日のタスクを allDay（終日）/ timed（時刻あり）/ dueOnly（締切のみ）に分類して返します。
+日付範囲のタスクを日付ごとに allDay（終日）/ timed（時刻あり）/ dueOnly（締切のみ）に分類して返します。
 
-**TasksForDateParams:**
+**CategorizedTasksForDateRangeParams:**
 
 | パラメータ | 必須 | 型 | 説明 |
 |-----------|------|-----|------|
-| `date` | ○ | `string` | 日付（YYYY-MM-DD） |
+| `start` | ○ | `string` | 開始日（YYYY-MM-DD） |
+| `end` | ○ | `string` | 終了日（YYYY-MM-DD） |
 | `filter` | | `FilterState` | フィルタ定義 |
 
 ## insertChildTask

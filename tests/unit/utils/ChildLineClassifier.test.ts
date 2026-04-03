@@ -125,11 +125,17 @@ describe('ChildLineClassifier', () => {
         it('number: decimal', () => {
             expect(ChildLineClassifier.inferType('3.14')).toBe('number');
         });
-        it('boolean: true', () => {
-            expect(ChildLineClassifier.inferType('true')).toBe('boolean');
+        it('boolean: True', () => {
+            expect(ChildLineClassifier.inferType('True')).toBe('boolean');
         });
-        it('boolean: false', () => {
-            expect(ChildLineClassifier.inferType('false')).toBe('boolean');
+        it('boolean: False', () => {
+            expect(ChildLineClassifier.inferType('False')).toBe('boolean');
+        });
+        it('lowercase true is string', () => {
+            expect(ChildLineClassifier.inferType('true')).toBe('string');
+        });
+        it('lowercase false is string', () => {
+            expect(ChildLineClassifier.inferType('false')).toBe('string');
         });
         it('array: [a, b]', () => {
             expect(ChildLineClassifier.inferType('[a, b]')).toBe('array');
@@ -137,8 +143,8 @@ describe('ChildLineClassifier', () => {
         it('array: [single]', () => {
             expect(ChildLineClassifier.inferType('[single]')).toBe('array');
         });
-        it('string: comma without brackets', () => {
-            expect(ChildLineClassifier.inferType('apple, banana')).toBe('string');
+        it('array: comma without brackets', () => {
+            expect(ChildLineClassifier.inferType('apple, banana')).toBe('array');
         });
         it('string: plain text', () => {
             expect(ChildLineClassifier.inferType('高')).toBe('string');

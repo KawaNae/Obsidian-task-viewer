@@ -55,6 +55,28 @@ describe('TagExtractor', () => {
         });
     });
 
+    describe('fromPropertyValue', () => {
+        it('extracts #hashtag format', () => {
+            expect(TagExtractor.fromPropertyValue('#tag1 #tag2')).toEqual(['tag1', 'tag2']);
+        });
+
+        it('extracts single #hashtag', () => {
+            expect(TagExtractor.fromPropertyValue('#work')).toEqual(['work']);
+        });
+
+        it('extracts nested #hashtag', () => {
+            expect(TagExtractor.fromPropertyValue('#project/sub')).toEqual(['project/sub']);
+        });
+
+        it('falls back to comma-separated format', () => {
+            expect(TagExtractor.fromPropertyValue('tag1, tag2')).toEqual(['tag1', 'tag2']);
+        });
+
+        it('returns empty for empty string', () => {
+            expect(TagExtractor.fromPropertyValue('')).toEqual([]);
+        });
+    });
+
     describe('merge', () => {
         it('merges and deduplicates', () => {
             expect(TagExtractor.merge(['a', 'b'], ['b', 'c'])).toEqual(['a', 'b', 'c']);

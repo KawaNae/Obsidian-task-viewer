@@ -447,4 +447,74 @@ describe('TreeTaskExtractor', () => {
             expect(cl[1].text).toContain('plain bullet');
         });
     });
+
+    describe('タグのカスケードマージ', () => {
+        it('content タグのみ（従来動作）', () => {
+            const tasks = extractTasks([
+                '- [ ] task #inline @2026-03-24',
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            expect(tasks[0].tags).toEqual(['inline']);
+        });
+
+        it('プロパティ行タグが task.tags にマージされる', () => {
+            const tasks = extractTasks([
+                '- [ ] task #inline @2026-03-24',
+                '    - tags:: #propTag',
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            expect(tasks[0].tags).toEqual(['inline', 'propTag']);
+        });
+
+        it('frontmatter tags がインラインタスクにカスケード', () => {
+            const tasks = extractTasks([
+                '- [ ] task @2026-03-24',
+            ], { tags: ['project'] }, { dailyNoteDate: '2026-03-24' });
+            expect(tasks[0].tags).toEqual(['project']);
+        });
+
+        it('セクション property block tags がタスクにカスケード', () => {
+            const tasks = extractTasks([
+                '## Section',
+                '- tags:: #sectionTag',
+                '- [ ] task @2026-03-24',
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            expect(tasks[0].tags).toEqual(['sectionTag']);
+        });
+
+        it('3段マージ: frontmatter + section + content tags', () => {
+            const tasks = extractTasks([
+                '## Section',
+                '- tags:: #sectionTag',
+                '- [ ] task #inline @2026-03-24',
+            ], { tags: ['project'] }, { dailyNoteDate: '2026-03-24' });
+            expect(tasks[0].tags).toEqual(['inline', 'project', 'sectionTag']);
+        });
+
+        it('全レベルマージ: frontmatter + section + property line + content', () => {
+            const tasks = extractTasks([
+                '## Section',
+                '- tags:: #sectionTag',
+                '- [ ] task #inline @2026-03-24',
+                '    - tags:: #propTag',
+            ], { tags: ['project'] }, { dailyNoteDate: '2026-03-24' });
+            expect(tasks[0].tags).toEqual(['inline', 'project', 'propTag', 'sectionTag']);
+        });
+
+        it('重複タグは dedup される', () => {
+            const tasks = extractTasks([
+                '## Section',
+                '- tags:: #shared',
+                '- [ ] task #shared @2026-03-24',
+            ], { tags: ['shared'] }, { dailyNoteDate: '2026-03-24' });
+            expect(tasks[0].tags).toEqual(['shared']);
+        });
+
+        it('プロパティ行 tags は task.properties に漏れない', () => {
+            const tasks = extractTasks([
+                '- [ ] task @2026-03-24',
+                '    - tags:: #propTag',
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            expect(tasks[0].tags).toContain('propTag');
+            expect(tasks[0].properties['tags']).toBeUndefined();
+        });
+    });
 });
