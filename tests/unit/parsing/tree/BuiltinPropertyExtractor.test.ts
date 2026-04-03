@@ -117,6 +117,40 @@ describe('BuiltinPropertyExtractor', () => {
         expect(result.color).toBeUndefined();
         expect(result.linestyle).toBeUndefined();
         expect(result.mask).toBeUndefined();
+        expect(result.tags).toBeUndefined();
         expect(result.properties).toEqual({});
+    });
+
+    it('extracts tags from #hashtag format', () => {
+        const raw = { 'tags': pv('#work #urgent') };
+        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        expect(result.tags).toEqual(['urgent', 'work']);
+        expect(result.properties['tags']).toBeUndefined();
+    });
+
+    it('extracts tags from comma-separated format', () => {
+        const raw = { 'tags': pv('work, urgent') };
+        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        expect(result.tags).toEqual(['urgent', 'work']);
+        expect(result.properties['tags']).toBeUndefined();
+    });
+
+    it('does not extract tags from empty value', () => {
+        const raw = { 'tags': pv('') };
+        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        expect(result.tags).toBeUndefined();
+        expect(result.properties['tags']).toBeUndefined();
+    });
+
+    it('separates tags alongside other builtin properties', () => {
+        const raw = {
+            'tv-color': pv('red'),
+            'tags': pv('#project #review'),
+            'note': pv('something'),
+        };
+        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        expect(result.color).toBe('red');
+        expect(result.tags).toEqual(['project', 'review']);
+        expect(result.properties).toEqual({ 'note': pv('something') });
     });
 });

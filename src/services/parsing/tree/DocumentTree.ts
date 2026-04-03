@@ -23,6 +23,7 @@ export interface SectionNode {
     resolvedColor?: string;
     resolvedLinestyle?: string;
     resolvedMask?: string;
+    resolvedTags?: string[];
     blocks: BlockNode[];             // セクション内のブロック群（プロパティブロック除く）
     children: SectionNode[];         // ネストした子セクション
     /** セクションの行範囲 [startLine, endLine)（子セクション含む） */

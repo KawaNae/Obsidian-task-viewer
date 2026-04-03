@@ -41,7 +41,7 @@ export const ALL_FIELD_NAMES: string[] = Object.keys(FIELD_EXTRACTORS);
 function toNativeValue(pv: PropertyValue): unknown {
     switch (pv.type) {
         case 'number': return Number(pv.value);
-        case 'boolean': return pv.value === 'true';
+        case 'boolean': return pv.value === 'True';
         case 'array': {
             const inner = pv.value.startsWith('[') ? pv.value.slice(1, -1) : pv.value;
             return inner.split(',').map(s => s.trim()).filter(s => s !== '');

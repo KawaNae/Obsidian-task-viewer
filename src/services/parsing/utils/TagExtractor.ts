@@ -43,6 +43,16 @@ export class TagExtractor {
     }
 
     /**
+     * Extract tags from a property line value (e.g. "- tags:: #tag1 #tag2" or "- tags:: tag1, tag2").
+     * Supports both #hashtag format and comma-separated format (frontmatter-compatible).
+     */
+    static fromPropertyValue(value: string): string[] {
+        const hashTags = TagExtractor.fromContent(value);
+        if (hashTags.length > 0) return hashTags;
+        return TagExtractor.fromFrontmatter(value);
+    }
+
+    /**
      * Merge tags from multiple sources, deduplicate and sort.
      */
     static merge(...tagArrays: string[][]): string[] {

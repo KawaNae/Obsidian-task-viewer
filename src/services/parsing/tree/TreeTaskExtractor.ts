@@ -2,6 +2,7 @@ import type { Task, FrontmatterTaskKeys, PropertyValue } from '../../../types';
 import type { DocumentNode, SectionNode, TaskBlock } from './DocumentTree';
 import { BuiltinPropertyExtractor } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
+import { TagExtractor } from '../utils/TagExtractor';
 import { TaskParser } from '../TaskParser';
 import { ImplicitCalendarDateResolver } from '../../display/ImplicitCalendarDateResolver';
 
@@ -145,6 +146,13 @@ export class TreeTaskExtractor {
         task.color = extracted.color ?? parentStyle?.color ?? section.resolvedColor;
         task.linestyle = extracted.linestyle ?? parentStyle?.linestyle ?? section.resolvedLinestyle;
         task.mask = extracted.mask ?? parentStyle?.mask ?? section.resolvedMask;
+
+        // タグのマージ: section resolved + childLine property + content tags（union）
+        const sectionTags = section.resolvedTags ?? [];
+        const propertyTags = extracted.tags ?? [];
+        if (sectionTags.length > 0 || propertyTags.length > 0) {
+            task.tags = TagExtractor.merge(sectionTags, propertyTags, task.tags);
+        }
 
         // 子タスクブロックを再帰的に処理（effective style を伝播）
         const style = { color: task.color, linestyle: task.linestyle, mask: task.mask };

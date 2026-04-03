@@ -351,6 +351,7 @@ export interface TaskViewerSettings {
         timer: DefaultLeafPosition;
         kanban: DefaultLeafPosition;
     };
+    enableCardFileLink: boolean;
     suggestColor: boolean;
     suggestLinestyle: boolean;
     hideViewHeader: boolean;
@@ -415,6 +416,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
         timer: 'right',
         kanban: 'tab',
     },
+    enableCardFileLink: true,
     suggestColor: true,
     suggestLinestyle: true,
     hideViewHeader: true,

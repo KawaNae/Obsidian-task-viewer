@@ -177,19 +177,20 @@ obsidian obsidian-task-viewer:tasks-for-date-range start=2026-03-01 end=2026-03-
 | `sort` | | ソートルール |
 | `limit` / `offset` | | ページネーション |
 
-### tasks-for-date — 特定日のタスク（分類済み）
+### categorized-tasks-for-date-range — 日付範囲のタスク（分類済み）
 
-指定日のタスクを allDay / timed / dueOnly に分類して返します。
+日付範囲のタスクを日付ごとに allDay / timed / dueOnly に分類して返します。
 
 ```bash
-obsidian obsidian-task-viewer:tasks-for-date date=2026-03-15
+obsidian obsidian-task-viewer:categorized-tasks-for-date-range start=2026-03-01 end=2026-03-31
 ```
 
 | フラグ | 必須 | 説明 |
 |-------|------|------|
-| `date` | ○ | 日付（YYYY-MM-DD） |
+| `start` | ○ | 開始日（YYYY-MM-DD、inclusive） |
+| `end` | ○ | 終了日（YYYY-MM-DD、inclusive） |
 
-**戻り値:** `{ "allDay": [...], "timed": [...], "dueOnly": [...] }`
+**戻り値:** `{ "2026-03-01": { "allDay": [...], "timed": [...], "dueOnly": [...] }, ... }`
 
 ### insert-child-task — 子タスク挿入
 

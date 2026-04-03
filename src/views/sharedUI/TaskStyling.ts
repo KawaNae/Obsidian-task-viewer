@@ -6,7 +6,7 @@ import { VALID_LINE_STYLES } from '../../constants/style';
  */
 export class TaskStyling {
 
-    private static hexToHSL(hex: string): { h: number, s: number, l: number } | null {
+    static hexToHSL(hex: string): { h: number, s: number, l: number } | null {
         // Accept both 'ff0000' and '#ff0000'
         const normalized = hex.startsWith('#') ? hex : '#' + hex;
 

@@ -1,11 +1,13 @@
 import type { FrontmatterTaskKeys, PropertyValue } from '../../../types';
 import { VALID_LINE_STYLES } from '../../../constants/style';
 import { normalizeColor } from '../../../utils/ColorUtils';
+import { TagExtractor } from '../utils/TagExtractor';
 
 export interface ExtractedProperties {
     color?: string;
     linestyle?: string;
     mask?: string;
+    tags?: string[];
     properties: Record<string, PropertyValue>;
 }
 
@@ -31,6 +33,9 @@ export class BuiltinPropertyExtractor {
             } else if (key === keys.mask) {
                 const trimmed = pv.value.trim();
                 if (trimmed) result.mask = trimmed;
+            } else if (key === 'tags') {
+                const tags = TagExtractor.fromPropertyValue(pv.value);
+                if (tags.length > 0) result.tags = tags;
             } else {
                 result.properties[key] = pv;
             }

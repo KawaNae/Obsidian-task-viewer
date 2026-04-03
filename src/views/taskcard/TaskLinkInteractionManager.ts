@@ -33,6 +33,11 @@ export class TaskLinkInteractionManager {
             linkEl.addEventListener('pointerdown', (event: PointerEvent) => {
                 event.stopPropagation();
             });
+        } else {
+            linkEl.addEventListener('click', (event: MouseEvent) => {
+                event.preventDefault();
+                event.stopPropagation();
+            });
         }
         linkEl.addEventListener('mouseover', (event: MouseEvent) => {
             this.emitHoverLink(event, linkEl, context);

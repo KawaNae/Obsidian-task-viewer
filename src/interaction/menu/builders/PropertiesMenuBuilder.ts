@@ -11,6 +11,7 @@ import { buildStatusOptions, createStatusTitle } from '../../../constants/status
 import { openFileInExistingOrNewTab } from '../../../views/sharedLogic/NavigationUtils';
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { t } from '../../../i18n';
+import { TaskStyling } from '../../../views/sharedUI/TaskStyling';
 
 type ChangePropertiesFocusField = 'name' | 'start' | 'end' | 'due';
 
@@ -46,7 +47,7 @@ export class PropertiesMenuBuilder {
             // Requested order:
             // file / --- / name / start / end / due / --- / length
             // (Status is now added at root level by the caller)
-            this.addFileItem(subMenu, task);
+            this.addFileItem(subMenu, task, menu);
             subMenu.addSeparator();
             this.addNameItem(subMenu, task, openModal);
             this.addPropertyItems(subMenu, task, viewStartDate, openModal);
@@ -86,6 +87,7 @@ export class PropertiesMenuBuilder {
                     item.setTitle(createStatusTitle(s))
                         .setChecked(task.statusChar === s.char)
                         .onClick(async () => {
+                            menu.close();
                             await this.writeService.updateTask(task.id, {
                                 statusChar: s.char
                             });
@@ -98,17 +100,37 @@ export class PropertiesMenuBuilder {
     /**
      * Add File item.
      */
-    private addFileItem(menu: Menu, task: Task): void {
+    private addFileItem(menu: Menu, task: Task, rootMenu?: Menu): void {
         menu.addItem((sub) => {
             sub.setTitle(t('menu.file', { name: task.file.split('/').pop() || '' }))
                 .setIcon('file-text')
                 .onClick(() => {
+                    (rootMenu ?? menu).close();
                     if (this.plugin.settings.reuseExistingTab) {
                         openFileInExistingOrNewTab(this.app, task.file);
                     } else {
                         void this.app.workspace.openLinkText(task.file, '', true);
                     }
                 });
+
+            if (sub.dom) {
+                const titleEl = sub.dom.querySelector('.menu-item-title');
+                if (titleEl instanceof HTMLElement) {
+                    const fileName = task.file.split('/').pop() || '';
+                    titleEl.empty();
+                    titleEl.appendText(t('menu.filePrefix'));
+                    const nameSpan = titleEl.createSpan();
+                    nameSpan.setText(fileName);
+                    if (task.color) {
+                        const hsl = TaskStyling.hexToHSL(task.color);
+                        if (hsl) {
+                            nameSpan.style.color = `hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`;
+                        }
+                    } else {
+                        nameSpan.style.color = 'var(--interactive-accent)';
+                    }
+                }
+            }
         });
     }
 

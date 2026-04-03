@@ -173,4 +173,84 @@ describe('SectionPropertyResolver', () => {
             value: '1', type: 'number',
         });
     });
+
+    // --- tags カスケード ---
+
+    it('frontmatter tags がセクションに伝播', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- [ ] task @2026-03-24',
+        ], { tags: ['project', 'important'] });
+
+        expect(doc.sections[0].resolvedTags).toEqual(['important', 'project']);
+    });
+
+    it('セクション property block の tags が解決される', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- tags:: #sectionTag',
+            '- [ ] task @2026-03-24',
+        ]);
+
+        expect(doc.sections[0].resolvedTags).toEqual(['sectionTag']);
+    });
+
+    it('frontmatter tags + セクション tags がマージされる', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- tags:: #sectionTag',
+            '- [ ] task @2026-03-24',
+        ], { tags: ['project'] });
+
+        expect(doc.sections[0].resolvedTags).toEqual(['project', 'sectionTag']);
+    });
+
+    it('ネストセクションでタグがカスケード＋マージ', () => {
+        const doc = buildAndResolve([
+            '## Parent',
+            '- tags:: #parentTag',
+            '### Child',
+            '- tags:: #childTag',
+            '- [ ] task @2026-03-24',
+        ]);
+
+        const parent = doc.sections[0];
+        const child = parent.children[0];
+
+        expect(parent.resolvedTags).toEqual(['parentTag']);
+        expect(child.resolvedTags).toEqual(['childTag', 'parentTag']);
+    });
+
+    it('兄弟セクションのタグは独立', () => {
+        const doc = buildAndResolve([
+            '## A',
+            '- tags:: #tagA',
+            '## B',
+            '- tags:: #tagB',
+        ]);
+
+        expect(doc.sections[0].resolvedTags).toEqual(['tagA']);
+        expect(doc.sections[1].resolvedTags).toEqual(['tagB']);
+    });
+
+    it('タグなしセクションは親タグを継承', () => {
+        const doc = buildAndResolve([
+            '## Parent',
+            '- tags:: #parentTag',
+            '### Child',
+            '- [ ] task @2026-03-24',
+        ]);
+
+        const child = doc.sections[0].children[0];
+        expect(child.resolvedTags).toEqual(['parentTag']);
+    });
+
+    it('frontmatter tags なし + セクション tags なし → undefined', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- [ ] task @2026-03-24',
+        ]);
+
+        expect(doc.sections[0].resolvedTags).toBeUndefined();
+    });
 });
