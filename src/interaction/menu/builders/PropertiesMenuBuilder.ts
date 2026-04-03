@@ -11,6 +11,7 @@ import { buildStatusOptions, createStatusTitle } from '../../../constants/status
 import { openFileInExistingOrNewTab } from '../../../views/sharedLogic/NavigationUtils';
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { t } from '../../../i18n';
+import { TaskStyling } from '../../../views/sharedUI/TaskStyling';
 
 type ChangePropertiesFocusField = 'name' | 'start' | 'end' | 'due';
 
@@ -111,6 +112,25 @@ export class PropertiesMenuBuilder {
                         void this.app.workspace.openLinkText(task.file, '', true);
                     }
                 });
+
+            if (sub.dom) {
+                const titleEl = sub.dom.querySelector('.menu-item-title');
+                if (titleEl instanceof HTMLElement) {
+                    const fileName = task.file.split('/').pop() || '';
+                    titleEl.empty();
+                    titleEl.appendText(t('menu.filePrefix'));
+                    const nameSpan = titleEl.createSpan();
+                    nameSpan.setText(fileName);
+                    if (task.color) {
+                        const hsl = TaskStyling.hexToHSL(task.color);
+                        if (hsl) {
+                            nameSpan.style.color = `hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`;
+                        }
+                    } else {
+                        nameSpan.style.color = 'var(--interactive-accent)';
+                    }
+                }
+            }
         });
     }
 

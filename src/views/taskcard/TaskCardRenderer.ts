@@ -80,7 +80,7 @@ export class TaskCardRenderer {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
         }
 
-        this.bindInternalLinks(contentContainer, task.file);
+        this.bindInternalLinks(contentContainer, task.file, settings.enableCardFileLink);
         this.bindParentCheckbox(contentContainer, task.originalTaskId ?? task.id, settings, task.isReadOnly);
     }
 
@@ -239,12 +239,12 @@ export class TaskCardRenderer {
         );
     }
 
-    private bindInternalLinks(contentContainer: HTMLElement, sourcePath: string): void {
+    private bindInternalLinks(contentContainer: HTMLElement, sourcePath: string, enableClick: boolean): void {
         this.linkInteractionManager.bind(contentContainer, {
             sourcePath,
             hoverSource: this.linkRuntime.hoverSource,
             hoverParent: this.linkRuntime.getHoverParent(),
-        });
+        }, { bindClick: enableClick });
     }
 
     private bindParentCheckbox(

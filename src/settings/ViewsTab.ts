@@ -87,6 +87,16 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
                 await plugin.saveSettings();
             }));
 
+    new Setting(el)
+        .setName(t('settings.views.enableCardFileLink'))
+        .setDesc(t('settings.views.enableCardFileLinkDesc'))
+        .addToggle(toggle => toggle
+            .setValue(plugin.settings.enableCardFileLink)
+            .onChange(async (value) => {
+                plugin.settings.enableCardFileLink = value;
+                await plugin.saveSettings();
+            }));
+
     // Default Open Position
     el.createEl('h3', { text: t('settings.views.defaultOpenPosition'), cls: 'setting-section-header' });
 
