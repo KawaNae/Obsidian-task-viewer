@@ -76,6 +76,7 @@ export class CheckboxMenuBuilder {
                     sub.setTitle(createStatusTitle(s))
                         .setChecked(currentChar === s.char)
                         .onClick(async () => {
+                            menu.close();
                             const newLine = prefix + s.char + suffix;
                             await ops.updateLine(newLine);
                         });
@@ -89,6 +90,7 @@ export class CheckboxMenuBuilder {
             item.setTitle(t('menu.duplicate'))
                 .setIcon('copy')
                 .onClick(async () => {
+                    menu.close();
                     await ops.insertLineAfter(lineText);
                 });
         });
@@ -163,6 +165,7 @@ export class CheckboxMenuBuilder {
                 .setIcon('trash')
                 .setWarning(true)
                 .onClick(async () => {
+                    menu.close();
                     await ops.deleteLine();
                 });
         });

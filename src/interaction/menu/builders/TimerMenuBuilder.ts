@@ -44,6 +44,7 @@ export class TimerMenuBuilder {
                 sub.setTitle(t('menu.startCountup'))
                     .setIcon('play')
                     .onClick(() => {
+                        menu.close();
                         const widget = this.plugin.getTimerWidget();
                         widget.startTimer({ ...baseParams, timerType: 'countup' });
                     });
@@ -54,6 +55,7 @@ export class TimerMenuBuilder {
                 sub.setTitle(t('menu.startPomodoro'))
                     .setIcon('timer')
                     .onClick(() => {
+                        menu.close();
                         const widget = this.plugin.getTimerWidget();
                         widget.startTimer({ ...baseParams, timerType: 'pomodoro' });
                     });
@@ -66,6 +68,7 @@ export class TimerMenuBuilder {
                     sub.setTitle(t('menu.startCountdown'))
                         .setIcon('timer')
                         .onClick(() => {
+                            menu.close();
                             const widget = this.plugin.getTimerWidget();
                             widget.startTimer({ ...baseParams, timerType: 'countdown', countdownSeconds });
                         });

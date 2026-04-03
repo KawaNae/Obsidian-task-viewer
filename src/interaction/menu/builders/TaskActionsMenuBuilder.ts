@@ -65,6 +65,7 @@ export class TaskActionsMenuBuilder {
                 sub.setTitle(t('menu.openCountup'))
                     .setIcon('play')
                     .onClick(() => {
+                        menu.close();
                         const widget = this.plugin.getTimerWidget();
                         widget.startTimer({ ...baseParams, timerType: 'countup' });
                     });
@@ -75,6 +76,7 @@ export class TaskActionsMenuBuilder {
                 sub.setTitle(t('menu.openPomodoro'))
                     .setIcon('timer')
                     .onClick(() => {
+                        menu.close();
                         const widget = this.plugin.getTimerWidget();
                         widget.startTimer({ ...baseParams, timerType: 'pomodoro' });
                     });
@@ -107,6 +109,7 @@ export class TaskActionsMenuBuilder {
             item.setTitle(t('menu.openInEditor'))
                 .setIcon('document')
                 .onClick(async () => {
+                    menu.close();
                     if (this.plugin.settings.reuseExistingTab) {
                         openFileInExistingOrNewTab(this.app, task.file);
                     } else {
@@ -144,6 +147,7 @@ export class TaskActionsMenuBuilder {
                 sub.setTitle(t('menu.inPlace'))
                     .setIcon('copy')
                     .onClick(async () => {
+                        menu.close();
                         await this.writeService.duplicateTask(task.id);
                     });
             });
@@ -152,6 +156,7 @@ export class TaskActionsMenuBuilder {
                 sub.setTitle(t('menu.forTomorrow'))
                     .setIcon('calendar-plus')
                     .onClick(async () => {
+                        menu.close();
                         await this.writeService.duplicateTask(task.id, { dayOffset: 1 });
                     });
             });
@@ -160,6 +165,7 @@ export class TaskActionsMenuBuilder {
                 sub.setTitle(t('menu.forWeek'))
                     .setIcon('calendar-range')
                     .onClick(async () => {
+                        menu.close();
                         await this.writeService.duplicateTask(task.id, { dayOffset: 1, count: 7 });
                     });
             });
@@ -245,6 +251,7 @@ export class TaskActionsMenuBuilder {
                     sub.setTitle(t('menu.allDay'))
                         .setIcon('calendar-with-checkmark')
                         .onClick(async () => {
+                            menu.close();
                             await this.writeService.updateTask(task.id, {
                                 startTime: undefined,
                                 endTime: undefined,
@@ -256,6 +263,7 @@ export class TaskActionsMenuBuilder {
                     sub.setTitle(t('menu.timelineMode'))
                         .setIcon('clock')
                         .onClick(async () => {
+                            menu.close();
                             const startHour = this.plugin.settings.startHour;
                             const h = startHour.toString().padStart(2, '0');
                             await this.writeService.updateTask(task.id, {
