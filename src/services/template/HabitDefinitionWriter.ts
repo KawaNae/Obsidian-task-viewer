@@ -52,7 +52,13 @@ export class HabitDefinitionWriter {
             current = current ? `${current}/${part}` : part;
             const folder = this.app.vault.getAbstractFileByPath(current);
             if (!folder) {
-                await this.app.vault.createFolder(current);
+                try {
+                    await this.app.vault.createFolder(current);
+                } catch (e) {
+                    if (!(e instanceof Error) || !e.message?.includes('Folder already exists')) {
+                        throw e;
+                    }
+                }
             }
         }
     }

@@ -28,7 +28,6 @@ import { FilterSerializer } from './services/filter/FilterSerializer';
 import { unicodeAtob } from './utils/base64';
 import { ViewTemplateLoader } from './services/template/ViewTemplateLoader';
 import { HabitDefinitionLoader } from './services/template/HabitDefinitionLoader';
-import { HabitDefinitionWriter } from './services/template/HabitDefinitionWriter';
 import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
 import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
 import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
@@ -439,13 +438,6 @@ export default class TaskViewerPlugin extends Plugin {
         if (file instanceof TFile) {
             const loader = new HabitDefinitionLoader(this.app);
             this.settings.habits = await loader.load(filePath);
-        } else if (this.settings.habits.length > 0) {
-            // Migration: data.json has habits but no vault file yet
-            const writer = new HabitDefinitionWriter(this.app);
-            await writer.save(filePath, this.settings.habits);
-            // Remove habits from data.json (keep in-memory)
-            const dataToSave = { ...this.settings, habits: [] };
-            await this.saveData(dataToSave);
         }
     }
 
