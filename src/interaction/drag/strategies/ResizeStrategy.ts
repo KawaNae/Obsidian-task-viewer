@@ -8,7 +8,7 @@ import {
     toLogicalHeightPx,
     toLogicalTopPx
 } from '../../../views/sharedLogic/TimelineCardPosition';
-import { getOriginalTaskId } from '../../../services/display/DisplayTaskConverter';
+import { getOriginalTaskId, toDisplayTask } from '../../../services/display/DisplayTaskConverter';
 
 /**
  * リサイズ操作を処理するドラッグストラテジー。
@@ -193,6 +193,7 @@ export class ResizeStrategy extends BaseDragStrategy {
 
         const zoomLevel = context.getZoomLevel();
         const startHour = context.plugin.settings.startHour;
+        const displayTask = toDisplayTask(originalTask, startHour);
         const startHourMinutes = startHour * 60;
 
         const hasInlineTop = this.dragEl.style.top.length > 0;
@@ -226,11 +227,11 @@ export class ResizeStrategy extends BaseDragStrategy {
         if (this.resizeDirection === 'top') {
             updates.startDate = newStartDate;
             updates.startTime = newStartTime;
-            updates.endDate = newEndDate;
-            updates.endTime = originalTask.endTime;
+            updates.endDate = displayTask.effectiveEndDate;
+            updates.endTime = displayTask.effectiveEndTime;
         } else if (this.resizeDirection === 'bottom') {
-            updates.startDate = originalTask.startDate;
-            updates.startTime = originalTask.startTime;
+            updates.startDate = displayTask.effectiveStartDate;
+            updates.startTime = displayTask.effectiveStartTime;
             updates.endDate = newEndDate;
             updates.endTime = newEndTime;
         }
