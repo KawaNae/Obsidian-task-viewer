@@ -53,6 +53,7 @@ export default class TaskViewerPlugin extends Plugin {
 
     // Habit save flag to avoid redundant reload from vault modify listener
     _habitSavePending = false;
+    _habitsTabRefresh: (() => void) | null = null;
 
     // Day boundary check
     private lastVisualDate: string = '';
@@ -72,7 +73,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Load Settings
         await this.loadSettings();
-        await this.loadAndMigrateHabits();
+        await this.loadHabitsFromVaultFile();
         TaskParser.rebuildChain(this.settings);
 
         // Initialize Services
@@ -102,7 +103,10 @@ export default class TaskViewerPlugin extends Plugin {
             if (this._habitSavePending) return;
 
             const loader = new HabitDefinitionLoader(this.app);
-            this.settings.habits = await loader.load(file.path);
+            const loaded = await loader.load(file.path);
+            if (loaded === null) return;
+            this.settings.habits = loaded;
+            this._habitsTabRefresh?.();
             this.refreshAllViews();
         }));
 
@@ -425,24 +429,25 @@ export default class TaskViewerPlugin extends Plugin {
 
         this.settings = {
             ...merged,
+            habits: [],  // habits.md is the single source of truth
             frontmatterTaskKeys: keysValidationError
                 ? { ...DEFAULT_FRONTMATTER_TASK_KEYS }
                 : normalizedFrontmatterKeys,
         };
     }
 
-    private async loadAndMigrateHabits(): Promise<void> {
+    private async loadHabitsFromVaultFile(): Promise<void> {
         const filePath = this.settings.habitDefinitionFile;
-        const file = this.app.vault.getAbstractFileByPath(filePath);
-
-        if (file instanceof TFile) {
-            const loader = new HabitDefinitionLoader(this.app);
-            this.settings.habits = await loader.load(filePath);
+        const loader = new HabitDefinitionLoader(this.app);
+        const loaded = await loader.load(filePath);
+        if (loaded !== null) {
+            this.settings.habits = loaded;
         }
     }
 
     async saveSettings() {
-        await this.saveData(this.settings);
+        const { habits: _habits, ...settingsWithoutHabits } = this.settings;
+        await this.saveData(settingsWithoutHabits);
         this.taskIndex.updateSettings(this.settings);
         this.readService.updateStartHour(this.settings.startHour);
         this.updateViewHeaderStyles();

@@ -13,16 +13,25 @@ const VALID_HABIT_TYPES = new Set<HabitType>(['boolean', 'number', 'string']);
 export class HabitDefinitionLoader {
     constructor(private app: App) {}
 
-    async load(filePath: string): Promise<HabitDefinition[]> {
+    /** Returns habit definitions, or null if the file could not be read/parsed. */
+    async load(filePath: string): Promise<HabitDefinition[] | null> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (!(file instanceof TFile)) return [];
+        if (!(file instanceof TFile)) {
+            console.warn(`[TaskViewer] Habit definition file not found: ${filePath}`);
+            return null;
+        }
 
         try {
-            const content = await this.app.vault.cachedRead(file);
+            const content = await this.app.vault.read(file);
             const raw = this.extractJsonBlock(content);
+            if (raw === null) {
+                console.warn(`[TaskViewer] No valid JSON code block in: ${filePath}`);
+                return null;
+            }
             return this.validateHabits(raw);
-        } catch {
-            return [];
+        } catch (e) {
+            console.warn(`[TaskViewer] Failed to read habit definition file: ${filePath}`, e);
+            return null;
         }
     }
 
@@ -31,13 +40,17 @@ export class HabitDefinitionLoader {
         if (!match) return null;
         try {
             return JSON.parse(match[1]);
-        } catch {
+        } catch (e) {
+            console.warn('[TaskViewer] Failed to parse habit JSON block', e);
             return null;
         }
     }
 
     private validateHabits(raw: unknown): HabitDefinition[] {
-        if (!Array.isArray(raw)) return [];
+        if (!Array.isArray(raw)) {
+            console.warn('[TaskViewer] Habit definition is not an array');
+            return [];
+        }
         const habits: HabitDefinition[] = [];
         for (const entry of raw) {
             if (!entry || typeof entry !== 'object') continue;

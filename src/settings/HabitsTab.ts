@@ -34,6 +34,9 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
     const habitsListContainer = el.createDiv('habits-list-container');
     renderHabitsList(habitsListContainer, plugin);
 
+    // Allow external refresh (e.g. when habits.md is modified outside settings)
+    plugin._habitsTabRefresh = () => renderHabitsList(habitsListContainer, plugin);
+
     new Setting(el)
         .setName(t('settings.habits.addHabit'))
         .setDesc(t('settings.habits.addHabitDesc'))
