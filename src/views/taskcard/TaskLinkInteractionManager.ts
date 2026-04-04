@@ -36,7 +36,6 @@ export class TaskLinkInteractionManager {
         } else {
             linkEl.addEventListener('click', (event: MouseEvent) => {
                 event.preventDefault();
-                event.stopPropagation();
             });
         }
         linkEl.addEventListener('mouseover', (event: MouseEvent) => {
