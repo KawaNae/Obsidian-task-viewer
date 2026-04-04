@@ -73,8 +73,13 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Load Settings
         await this.loadSettings();
-        await this.loadHabitsFromVaultFile();
         TaskParser.rebuildChain(this.settings);
+
+        // Load habits after vault file index is ready (getAbstractFileByPath requires it)
+        this.app.workspace.onLayoutReady(async () => {
+            await this.loadHabitsFromVaultFile();
+            this.refreshAllViews();
+        });
 
         // Initialize Services
         this.taskIndex = new TaskIndex(this.app, this.settings);
