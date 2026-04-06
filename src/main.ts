@@ -27,7 +27,6 @@ import { hasConditions } from './services/filter/FilterTypes';
 import { FilterSerializer } from './services/filter/FilterSerializer';
 import { unicodeAtob } from './utils/base64';
 import { ViewTemplateLoader } from './services/template/ViewTemplateLoader';
-import { HabitDefinitionLoader } from './services/template/HabitDefinitionLoader';
 import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
 import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
 import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
@@ -51,10 +50,6 @@ export default class TaskViewerPlugin extends Plugin {
     public settings: TaskViewerSettings;
     public api: TaskApi;
 
-    // Habit save flag to avoid redundant reload from vault modify listener
-    _habitSavePending = false;
-    _habitsTabRefresh: (() => void) | null = null;
-
     // Day boundary check
     private lastVisualDate: string = '';
     private dateCheckInterval: ReturnType<typeof setInterval> | null = null;
@@ -75,12 +70,6 @@ export default class TaskViewerPlugin extends Plugin {
         await this.loadSettings();
         TaskParser.rebuildChain(this.settings);
 
-        // Load habits after vault file index is ready (getAbstractFileByPath requires it)
-        this.app.workspace.onLayoutReady(async () => {
-            await this.loadHabitsFromVaultFile();
-            this.refreshAllViews();
-        });
-
         // Initialize Services
         this.taskIndex = new TaskIndex(this.app, this.settings);
         await this.taskIndex.initialize();
@@ -99,20 +88,6 @@ export default class TaskViewerPlugin extends Plugin {
         this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
             if (!(file instanceof TFile) || file.extension !== 'md') return;
             this.timerWidget?.handleFileRename(oldPath, file.path);
-        }));
-
-        // Reload habit definitions when the vault file is modified externally (e.g. sync)
-        this.registerEvent(this.app.vault.on('modify', async (file) => {
-            if (!(file instanceof TFile)) return;
-            if (file.path !== this.settings.habitDefinitionFile) return;
-            if (this._habitSavePending) return;
-
-            const loader = new HabitDefinitionLoader(this.app);
-            const loaded = await loader.load(file.path);
-            if (loaded === null) return;
-            this.settings.habits = loaded;
-            this._habitsTabRefresh?.();
-            this.refreshAllViews();
         }));
 
         // Register View
@@ -434,25 +409,14 @@ export default class TaskViewerPlugin extends Plugin {
 
         this.settings = {
             ...merged,
-            habits: [],  // habits.md is the single source of truth
             frontmatterTaskKeys: keysValidationError
                 ? { ...DEFAULT_FRONTMATTER_TASK_KEYS }
                 : normalizedFrontmatterKeys,
         };
     }
 
-    private async loadHabitsFromVaultFile(): Promise<void> {
-        const filePath = this.settings.habitDefinitionFile;
-        const loader = new HabitDefinitionLoader(this.app);
-        const loaded = await loader.load(filePath);
-        if (loaded !== null) {
-            this.settings.habits = loaded;
-        }
-    }
-
     async saveSettings() {
-        const { habits: _habits, ...settingsWithoutHabits } = this.settings;
-        await this.saveData(settingsWithoutHabits);
+        await this.saveData(this.settings);
         this.taskIndex.updateSettings(this.settings);
         this.readService.updateStartHour(this.settings.startHour);
         this.updateViewHeaderStyles();

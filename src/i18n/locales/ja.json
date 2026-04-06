@@ -6,7 +6,6 @@
       "viewDetails": "ビュー固有",
       "notes": "ノート",
       "frontmatter": "フロントマター",
-      "habits": "習慣",
       "parsers": "パーサー"
     },
     "general": {
@@ -141,19 +140,8 @@
       "lineStyleSuggestDesc": "線種プロパティのカスタムサジェストを有効にします。"
     },
     "habits": {
-      "description": "デイリーノートのフロントマターで追跡する習慣を定義します。",
-      "habitFile": "習慣定義ファイル",
-      "habitFileDesc": "習慣定義を保存する Vault 内ファイルのパス。",
-      "addHabit": "習慣を追加",
-      "addHabitDesc": "追跡する新しい習慣を作成します。",
-      "addButton": "+ 追加",
-      "habitN": "習慣 {{n}}",
-      "habitNamePlaceholder": "習慣名",
-      "booleanType": "ブール値（オン/オフ）",
-      "numberType": "数値",
-      "textType": "テキスト",
-      "unitPlaceholder": "単位（例：kg）",
-      "removeHabit": "習慣を削除"
+      "excludeKeys": "除外キー",
+      "excludeKeysDesc": "習慣欄から除外するフロントマターキー（カンマ区切り）。_ で始まるキーとタスク関連キーは常に除外されます。"
     },
     "parsers": {
       "heading": "外部パーサー対応",

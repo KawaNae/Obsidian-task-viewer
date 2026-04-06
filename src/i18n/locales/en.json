@@ -6,7 +6,6 @@
       "viewDetails": "View Details",
       "notes": "Notes",
       "frontmatter": "Frontmatter",
-      "habits": "Habits",
       "parsers": "Parsers"
     },
     "general": {
@@ -141,19 +140,8 @@
       "lineStyleSuggestDesc": "Enable custom line style suggestions for the linestyle property."
     },
     "habits": {
-      "description": "Define habits to track in your daily notes' frontmatter.",
-      "habitFile": "Habit definition file",
-      "habitFileDesc": "Path to the vault file storing habit definitions.",
-      "addHabit": "Add Habit",
-      "addHabitDesc": "Create a new habit to track.",
-      "addButton": "+ Add",
-      "habitN": "Habit {{n}}",
-      "habitNamePlaceholder": "Habit name",
-      "booleanType": "Boolean (on/off)",
-      "numberType": "Number",
-      "textType": "Text",
-      "unitPlaceholder": "Unit (e.g. kg)",
-      "removeHabit": "Remove habit"
+      "excludeKeys": "Exclude keys",
+      "excludeKeysDesc": "Frontmatter keys to exclude from the habits section (comma-separated). Keys starting with _ and task-related keys are always excluded."
     },
     "parsers": {
       "heading": "External Parser Support",

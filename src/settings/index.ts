@@ -6,7 +6,6 @@ import * as ViewsTab from './ViewsTab';
 import * as ViewDetailsTab from './ViewDetailsTab';
 import * as NotesTab from './NotesTab';
 import * as FrontmatterTab from './FrontmatterTab';
-import * as HabitsTab from './HabitsTab';
 import * as ParsersTab from './ParsersTab';
 
 export class TaskViewerSettingTab extends PluginSettingTab {
@@ -44,7 +43,6 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             { id: 'viewDetails',  label: t('settings.tabs.viewDetails'),  render: (el: HTMLElement) => ViewDetailsTab.render(el, this.plugin) },
             { id: 'notes',        label: t('settings.tabs.notes'),        render: (el: HTMLElement) => NotesTab.render(el, this.plugin) },
             { id: 'frontmatter',  label: t('settings.tabs.frontmatter'),  render: (el: HTMLElement) => FrontmatterTab.render(el, this.plugin) },
-            { id: 'habits',       label: t('settings.tabs.habits'),       render: (el: HTMLElement) => HabitsTab.render(el, this.plugin) },
             { id: 'parsers',      label: t('settings.tabs.parsers'),      render: (el: HTMLElement) => ParsersTab.render(el, this.plugin, () => this.display()) },
         ];
 

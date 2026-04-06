@@ -4,6 +4,7 @@ import TaskViewerPlugin from '../../main';
 import { HabitDefinition } from '../../types';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { FrontmatterLineEditor } from '../../services/persistence/utils/FrontmatterLineEditor';
+import { parseHabitKey, inferHabitType } from '../../utils/HabitUtils';
 
 export class HabitTrackerRenderer {
     // Persists collapsed state across re-renders (same pattern as PinnedListRenderer)
@@ -20,8 +21,12 @@ export class HabitTrackerRenderer {
      * @param dates Visible date columns (YYYY-MM-DD[]).
      */
     public render(container: HTMLElement, dates: string[]): void {
-        const habits = this.plugin.settings.habits;
-        if (habits.length === 0) return;
+        // Check if any date has habits
+        const perDateHabits = dates.map(date => this.getHabitsForDate(date));
+        if (perDateHabits.every(h => h.length === 0)) {
+            container.style.display = 'none';
+            return;
+        }
 
         // Axis cell (column 1): toggle button + vertical "Habits" label
         const axisCell = container.createDiv('habits-section__cell habits-section__axis');
@@ -60,7 +65,7 @@ export class HabitTrackerRenderer {
         // Apply initial collapsed state
         applyCollapsedState();
 
-        // Per-date cells
+        // Per-date cells — each date independently shows its own frontmatter keys
         dates.forEach((date, i) => {
             const cell = container.createDiv('habits-section__cell');
             if (i === 0) {
@@ -70,12 +75,68 @@ export class HabitTrackerRenderer {
             if (i === dates.length - 1) cell.addClass('is-last-cell');
             cell.dataset.date = date;
 
-            // Render each habit item in this cell
-            habits.forEach(habit => {
+            perDateHabits[i].forEach(habit => {
                 const currentValue = this.getHabitValue(date, habit.name);
                 this.renderHabitItem(cell, date, habit, currentValue);
             });
         });
+    }
+
+    // ==================== Habit Collection ====================
+
+    /**
+     * Get habits for a single date.
+     * If a daily note exists → use its frontmatter keys (in order).
+     * If no daily note → fall back to the template's frontmatter keys.
+     */
+    private getHabitsForDate(date: string): HabitDefinition[] {
+        const [y, m, d] = date.split('-').map(Number);
+        const file = DailyNoteUtils.getDailyNote(this.app, new Date(y, m - 1, d));
+
+        let fm: Record<string, unknown> | null = null;
+        if (file) {
+            fm = this.app.metadataCache.getCache(file.path)?.frontmatter ?? null;
+        }
+        if (!fm) {
+            fm = this.getTemplateFrontmatter();
+        }
+        if (!fm) return [];
+
+        return this.extractHabits(fm);
+    }
+
+    private getTemplateFrontmatter(): Record<string, unknown> | null {
+        const settings = DailyNoteUtils.getDailyNoteSettings(this.app);
+        if (!settings.template) return null;
+        let file: TFile | null = this.app.vault.getAbstractFileByPath(settings.template) as TFile | null;
+        if (!file) file = this.app.vault.getAbstractFileByPath(settings.template + '.md') as TFile | null;
+        if (!(file instanceof TFile)) return null;
+        return this.app.metadataCache.getFileCache(file)?.frontmatter ?? null;
+    }
+
+    /** Extract HabitDefinition[] from frontmatter, filtering excluded keys. */
+    private extractHabits(fm: Record<string, unknown>): HabitDefinition[] {
+        const excludeKeys = this.buildExcludeKeys();
+        const habits: HabitDefinition[] = [];
+        for (const [key, value] of Object.entries(fm)) {
+            if (key.startsWith('_') || key === 'position') continue;
+            if (excludeKeys.has(key)) continue;
+            const { unit } = parseHabitKey(key);
+            habits.push({ name: key, type: inferHabitType(value), unit });
+        }
+        return habits;
+    }
+
+    private buildExcludeKeys(): Set<string> {
+        const excludeKeys = new Set(this.plugin.settings.habitExcludeKeys);
+        for (const value of Object.values(this.plugin.settings.frontmatterTaskKeys)) {
+            if (typeof value === 'string') {
+                excludeKeys.add(value);
+            } else if (value && typeof value === 'object' && 'key' in value) {
+                excludeKeys.add((value as { key: string }).key);
+            }
+        }
+        return excludeKeys;
     }
 
     // ==================== Data Access ====================
@@ -135,7 +196,8 @@ export class HabitTrackerRenderer {
      */
     private renderHabitItem(cell: HTMLElement, date: string, habit: HabitDefinition, currentValue: boolean | string | number | undefined): void {
         const row = cell.createDiv('habits-section__habit-row');
-        row.createEl('span', { cls: 'habits-section__habit-label', text: habit.name });
+        const { displayName } = parseHabitKey(habit.name);
+        row.createEl('span', { cls: 'habits-section__habit-label', text: displayName });
 
         if (habit.type === 'boolean') {
             this.renderBooleanToggle(row, date, habit, currentValue);
