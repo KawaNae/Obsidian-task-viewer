@@ -458,9 +458,6 @@ export class ScheduleView extends ItemView {
     }
 
     private renderHabitsSection(container: HTMLElement, date: string): void {
-        if (this.plugin.settings.habits.length === 0) {
-            return;
-        }
         const row = container.createDiv('timeline-row habits-section');
         row.style.gridTemplateColumns = this.getScheduleRowColumns();
         this.habitRenderer.render(row, [date]);

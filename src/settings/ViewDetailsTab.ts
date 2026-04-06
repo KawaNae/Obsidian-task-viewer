@@ -3,6 +3,24 @@ import TaskViewerPlugin from '../main';
 import { t } from '../i18n';
 
 export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
+    // Habits (shared by Timeline and Schedule)
+    el.createEl('h3', { text: t('habits.habits'), cls: 'setting-section-header' });
+
+    new Setting(el)
+        .setName(t('settings.habits.excludeKeys'))
+        .setDesc(t('settings.habits.excludeKeysDesc'))
+        .addText(text => text
+            .setPlaceholder('tags, cssclasses, aliases')
+            .setValue(plugin.settings.habitExcludeKeys.join(', '))
+            .onChange(async (value) => {
+                plugin.settings.habitExcludeKeys = value
+                    .split(',')
+                    .map(s => s.trim())
+                    .filter(s => s.length > 0);
+                await plugin.saveSettings();
+            })
+        );
+
     // Timeline
     el.createEl('h3', { text: t('settings.views.timeline'), cls: 'setting-section-header' });
 

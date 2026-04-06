@@ -147,11 +147,9 @@ export class GridRenderer {
         this.applyDateHeaderCompactBehavior(headerCells);
 
         // 2. Habits Row (fixed, outside scroll area — always visible)
-        if (this.plugin.settings.habits.length > 0) {
-            const habitsRow = grid.createDiv('timeline-row habits-section');
-            habitsRow.style.gridTemplateColumns = colTemplate;
-            habitRenderer.render(habitsRow, dates);
-        }
+        const habitsRow = grid.createDiv('timeline-row habits-section');
+        habitsRow.style.gridTemplateColumns = colTemplate;
+        habitRenderer.render(habitsRow, dates);
 
         // 3. Scroll Area (allday + timeline grid)
         const scrollArea = grid.createDiv('timeline-scroll-area');

@@ -323,7 +323,7 @@ export interface TaskViewerSettings {
     pomodoroBreakMinutes: number;
     countdownMinutes: number;
     pastDaysToShow: number;
-    habits: HabitDefinition[];
+    habitExcludeKeys: string[];
     frontmatterTaskHeader: string;
     frontmatterTaskHeaderLevel: number;
     longPressThreshold: number;
@@ -341,7 +341,6 @@ export interface TaskViewerSettings {
     yearlyNoteFolder: string;
     intervalTemplateFolder: string;
     viewTemplateFolder: string;
-    habitDefinitionFile: string;
     pinnedListPageSize: number;
     defaultViewPositions: {
         timeline: DefaultLeafPosition;
@@ -388,7 +387,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     pomodoroBreakMinutes: 5,
     countdownMinutes: 25,
     pastDaysToShow: 0,
-    habits: [],
+    habitExcludeKeys: ['tags', 'cssclasses', 'aliases'],
     frontmatterTaskHeader: 'Tasks',
     frontmatterTaskHeaderLevel: 2,
     longPressThreshold: 400,
@@ -406,7 +405,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     yearlyNoteFolder: '',
     intervalTemplateFolder: '',
     viewTemplateFolder: '',
-    habitDefinitionFile: 'Templates/Habits/habits.md',
     pinnedListPageSize: 10,
     defaultViewPositions: {
         timeline: 'tab',
