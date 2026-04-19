@@ -36,9 +36,11 @@ const VAULT_PATHS = {
   dev: "C:\\Obsidian\\Dev",
   main: "C:\\Obsidian\\Main",
 };
-const targetVault = process.env.OBSIDIAN_VAULT ?? "main";
+// デフォルトは dev vault。main に書き出したい場合は OBSIDIAN_VAULT=main を指定。
+// 任意のパスに書き出したい場合は OBSIDIAN_VAULT_PATH=<path> を指定。
+const targetVault = process.env.OBSIDIAN_VAULT ?? "dev";
 const vaultPath =
-  process.env.OBSIDIAN_VAULT_PATH ?? VAULT_PATHS[targetVault] ?? VAULT_PATHS.main;
+  process.env.OBSIDIAN_VAULT_PATH ?? VAULT_PATHS[targetVault] ?? VAULT_PATHS.dev;
 const outDir = path.join(
   vaultPath,
   ".obsidian",
@@ -49,6 +51,12 @@ const outDir = path.join(
 if (!fs.existsSync(outDir)) {
   fs.mkdirSync(outDir, { recursive: true });
 }
+
+const vaultLabel = process.env.OBSIDIAN_VAULT_PATH
+  ? "custom"
+  : targetVault;
+console.log(`[build] Target vault: ${vaultLabel} (${vaultPath})`);
+console.log(`[build] Output dir : ${outDir}`);
 
 const copyStaticFiles = {
   name: 'copy-static-files',
