@@ -12,6 +12,7 @@ import { combineFilterStates, hasConditions, type FilterState } from '../../serv
 import { hasSortRules } from '../../services/sort/SortTypes';
 import TaskViewerPlugin from '../../main';
 import { TaskStyling } from './TaskStyling';
+import { TaskPagingController } from './TaskPagingController';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 
 export interface PinnedListCallbacks {
@@ -31,15 +32,19 @@ export class PinnedListRenderer {
     private collapsedGroups = new Set<string>();
     // ID of list to start renaming immediately after render
     private pendingRenameId: string | null = null;
-    // Tracks how many tasks are currently visible per list (for "Show more")
-    private visibleCounts = new Map<string, number>();
+    private readonly paging: TaskPagingController;
 
     constructor(
         private taskRenderer: TaskCardRenderer,
         private plugin: TaskViewerPlugin,
         private menuHandler: MenuHandler,
         private readService: TaskReadService,
-    ) {}
+    ) {
+        this.paging = new TaskPagingController(
+            () => this.plugin.settings.pinnedListPageSize,
+            (container, tasks) => this.renderTaskCards(container, tasks),
+        );
+    }
 
     /** Schedule inline rename for a list on the next render. */
     scheduleRename(listId: string): void {
@@ -56,7 +61,7 @@ export class PinnedListRenderer {
         this.taskRenderer.disposeInside(container);
         container.empty();
         container.addClass('pinned-lists-container');
-        this.visibleCounts.clear();
+        this.paging.clear();
         if (lists.length === 0) {
             container.createDiv('pinned-lists-container__empty')
                 .setText(t('pinnedList.noPinnedLists'));
@@ -132,7 +137,7 @@ export class PinnedListRenderer {
         // Task list body
         const body = listEl.createDiv('pinned-list__body');
         if (!isCollapsed) {
-            this.renderPagedTasks(body, tasks, listDef.id);
+            this.paging.render(body, tasks, listDef.id);
         }
 
         // Collapse toggle
@@ -150,8 +155,8 @@ export class PinnedListRenderer {
                 toggle.textContent = '▼';
                 // Lazy render on expand (reset to first page)
                 if (body.childElementCount === 0 && tasks.length > 0) {
-                    this.visibleCounts.delete(listDef.id);
-                    this.renderPagedTasks(body, tasks, listDef.id);
+                    this.paging.resetOne(listDef.id);
+                    this.paging.render(body, tasks, listDef.id);
                 }
             }
 
@@ -272,45 +277,6 @@ export class PinnedListRenderer {
         input.addEventListener('click', (e) => e.stopPropagation());
         input.addEventListener('mousedown', (e) => e.stopPropagation());
         input.addEventListener('pointerdown', (e) => e.stopPropagation());
-    }
-
-    private renderPagedTasks(
-        body: HTMLElement,
-        allTasks: DisplayTask[],
-        listId: string,
-    ): void {
-        const pageSize = this.plugin.settings.pinnedListPageSize;
-        const visibleCount = this.visibleCounts.get(listId) ?? pageSize;
-        const tasksToShow = allTasks.slice(0, visibleCount);
-
-        this.renderTaskCards(body, tasksToShow);
-
-        if (visibleCount < allTasks.length) {
-            this.appendShowMoreButton(body, allTasks, visibleCount, listId);
-        }
-    }
-
-    private appendShowMoreButton(
-        body: HTMLElement,
-        allTasks: DisplayTask[],
-        shownCount: number,
-        listId: string,
-    ): void {
-        const pageSize = this.plugin.settings.pinnedListPageSize;
-        const remaining = allTasks.length - shownCount;
-        const btn = body.createDiv('pinned-list__show-more');
-        btn.setText(t('pinnedList.showMore', { remaining }));
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            btn.remove();
-            const newCount = Math.min(shownCount + pageSize, allTasks.length);
-            this.visibleCounts.set(listId, newCount);
-            const nextBatch = allTasks.slice(shownCount, newCount);
-            this.renderTaskCards(body, nextBatch);
-            if (newCount < allTasks.length) {
-                this.appendShowMoreButton(body, allTasks, newCount, listId);
-            }
-        });
     }
 
     private renderTaskCards(body: HTMLElement, tasks: DisplayTask[]): void {
