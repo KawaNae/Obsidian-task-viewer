@@ -92,6 +92,7 @@ export class CalendarView extends ItemView {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings);
+        this.addChild(this.taskRenderer);
         this.taskRenderer.setDetailCallback((task) => {
             new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
         });
@@ -212,7 +213,8 @@ export class CalendarView extends ItemView {
             this.writeService,
             this.plugin,
             (taskId: string) => {
-                this.handleManager?.selectTask(taskId);
+                const task = this.readService.getTask(taskId);
+                this.handleManager?.selectTask(task ?? null);
             },
             () => { /* no-op: handles are inside task cards */ },
             () => this.getViewStartDateString(),
@@ -231,7 +233,13 @@ export class CalendarView extends ItemView {
 
         await this.performRender();
 
-        this.unsubscribe = this.readService.onChange(() => {
+        this.unsubscribe = this.readService.onChange((taskId) => {
+            // Keep selection snapshot in sync with controlled edits on the
+            // selected task so edits don't trip the identity check on restore.
+            if (taskId && taskId === this.handleManager?.getSelectedTaskId()) {
+                const t = this.readService.getTask(taskId);
+                if (t) this.handleManager.refreshSnapshot(t);
+            }
             this.render();
         });
     }
@@ -263,6 +271,11 @@ export class CalendarView extends ItemView {
                 this.savedScrollTop = oldMain.scrollTop;
             }
         }
+        // Validate selection snapshot BEFORE rendering — task card renderers
+        // read getSelectedTaskId() while building the DOM, so a stale snapshot
+        // would tag the wrong card (e.g. after the selected task is deleted
+        // and its line-number id is taken over by the shifted-up next task).
+        this.handleManager?.resolveSelection(id => this.readService.getTask(id));
         void this.performRender();
     }
 
@@ -281,6 +294,7 @@ export class CalendarView extends ItemView {
             this.showSidebar = false;
         }
         this.sidebarManager.syncPresentation(this.showSidebar, { animate: false });
+        this.taskRenderer.disposeInside(this.container);
         this.container.empty();
 
         const toolbar = this.renderToolbar();
@@ -346,9 +360,11 @@ export class CalendarView extends ItemView {
 
         toolbar.dataset.range = `${rangeStartStr}:${rangeEndStr}`;
 
-        const selectedTaskId = this.handleManager?.getSelectedTaskId();
-        if (selectedTaskId) {
-            this.handleManager?.selectTask(selectedTaskId);
+        // Render handles on the selected card. Identity validation already
+        // happened in render() before DOM construction, so here we just need
+        // to attach handles to the card that the section renderers tagged.
+        if (this.handleManager?.getSelectedTaskId()) {
+            this.handleManager.reapplySelectionClass();
         }
 
         if (this.savedScrollTop !== null) {
@@ -494,7 +510,7 @@ export class CalendarView extends ItemView {
             this.render();
         });
 
-        this.pinnedListRenderer.render(body, this, this.pinnedLists,
+        this.pinnedListRenderer.render(body, this.pinnedLists,
             this.pinnedListCollapsed, {
             onCollapsedChange: (id, collapsed) => {
                 this.pinnedListCollapsed[id] = collapsed;
@@ -717,7 +733,7 @@ export class CalendarView extends ItemView {
             TaskStyling.applyReadOnly(barEl, entry.task);
 
             this.menuHandler.addTaskContextMenu(barEl, entry.task);
-            await this.taskRenderer.render(barEl, entry.task, this, this.plugin.settings, { topRight: 'none', compact: true });
+            await this.taskRenderer.render(barEl, entry.task, this.plugin.settings, { topRight: 'none', compact: true });
             return;
         }
 
@@ -729,7 +745,7 @@ export class CalendarView extends ItemView {
         TaskStyling.applyTaskLinestyle(card, entry.task.linestyle ?? null);
         TaskStyling.applyReadOnly(card, entry.task);
         this.menuHandler.addTaskContextMenu(card, entry.task);
-        await this.taskRenderer.render(card, entry.task, this, this.plugin.settings, { compact: true });
+        await this.taskRenderer.render(card, entry.task, this.plugin.settings, { compact: true });
     }
 
     private isTaskCompleted(task: Task): boolean {

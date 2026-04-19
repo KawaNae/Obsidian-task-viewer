@@ -3,7 +3,7 @@
  * and appears as a collapsible group with task cards.
  */
 
-import { Component, Menu, setIcon } from 'obsidian';
+import { Menu, setIcon } from 'obsidian';
 import { t } from '../../i18n';
 import type { DisplayTask, PinnedListDefinition } from '../../types';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -48,12 +48,12 @@ export class PinnedListRenderer {
 
     render(
         container: HTMLElement,
-        owner: Component,
         lists: PinnedListDefinition[],
         collapsedState: Record<string, boolean>,
         callbacks: PinnedListCallbacks,
         viewFilterState?: FilterState,
     ): void {
+        this.taskRenderer.disposeInside(container);
         container.empty();
         container.addClass('pinned-lists-container');
         this.visibleCounts.clear();
@@ -70,7 +70,7 @@ export class PinnedListRenderer {
                 : listDef.filterState;
             const tasks = this.readService.getFilteredTasks(combinedFilter, listDef.sortState);
 
-            this.renderList(container, listDef, tasks, owner, collapsedState, callbacks, i, lists.length);
+            this.renderList(container, listDef, tasks, collapsedState, callbacks, i, lists.length);
         }
     }
 
@@ -78,7 +78,6 @@ export class PinnedListRenderer {
         container: HTMLElement,
         listDef: PinnedListDefinition,
         tasks: DisplayTask[],
-        owner: Component,
         collapsedState: Record<string, boolean>,
         callbacks: PinnedListCallbacks,
         index: number,
@@ -133,7 +132,7 @@ export class PinnedListRenderer {
         // Task list body
         const body = listEl.createDiv('pinned-list__body');
         if (!isCollapsed) {
-            this.renderPagedTasks(body, tasks, listDef.id, owner);
+            this.renderPagedTasks(body, tasks, listDef.id);
         }
 
         // Collapse toggle
@@ -152,7 +151,7 @@ export class PinnedListRenderer {
                 // Lazy render on expand (reset to first page)
                 if (body.childElementCount === 0 && tasks.length > 0) {
                     this.visibleCounts.delete(listDef.id);
-                    this.renderPagedTasks(body, tasks, listDef.id, owner);
+                    this.renderPagedTasks(body, tasks, listDef.id);
                 }
             }
 
@@ -279,16 +278,15 @@ export class PinnedListRenderer {
         body: HTMLElement,
         allTasks: DisplayTask[],
         listId: string,
-        owner: Component,
     ): void {
         const pageSize = this.plugin.settings.pinnedListPageSize;
         const visibleCount = this.visibleCounts.get(listId) ?? pageSize;
         const tasksToShow = allTasks.slice(0, visibleCount);
 
-        this.renderTaskCards(body, tasksToShow, owner);
+        this.renderTaskCards(body, tasksToShow);
 
         if (visibleCount < allTasks.length) {
-            this.appendShowMoreButton(body, allTasks, visibleCount, listId, owner);
+            this.appendShowMoreButton(body, allTasks, visibleCount, listId);
         }
     }
 
@@ -297,7 +295,6 @@ export class PinnedListRenderer {
         allTasks: DisplayTask[],
         shownCount: number,
         listId: string,
-        owner: Component,
     ): void {
         const pageSize = this.plugin.settings.pinnedListPageSize;
         const remaining = allTasks.length - shownCount;
@@ -309,14 +306,14 @@ export class PinnedListRenderer {
             const newCount = Math.min(shownCount + pageSize, allTasks.length);
             this.visibleCounts.set(listId, newCount);
             const nextBatch = allTasks.slice(shownCount, newCount);
-            this.renderTaskCards(body, nextBatch, owner);
+            this.renderTaskCards(body, nextBatch);
             if (newCount < allTasks.length) {
-                this.appendShowMoreButton(body, allTasks, newCount, listId, owner);
+                this.appendShowMoreButton(body, allTasks, newCount, listId);
             }
         });
     }
 
-    private renderTaskCards(body: HTMLElement, tasks: DisplayTask[], owner: Component): void {
+    private renderTaskCards(body: HTMLElement, tasks: DisplayTask[]): void {
         const settings = this.plugin.settings;
         tasks.forEach(task => {
             const card = body.createDiv('task-card');
@@ -326,7 +323,7 @@ export class PinnedListRenderer {
             TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
             TaskStyling.applyReadOnly(card, task);
 
-            this.taskRenderer.render(card, task, owner, settings);
+            this.taskRenderer.render(card, task, settings);
             this.menuHandler.addTaskContextMenu(card, task);
         });
     }

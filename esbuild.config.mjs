@@ -32,7 +32,13 @@ const buildTime = formatBuildTime(new Date());
 
 const prod = process.argv[2] === "production";
 
-const vaultPath = process.env.OBSIDIAN_VAULT_PATH ?? "C:\\Obsidian\\Dev";
+const VAULT_PATHS = {
+  dev: "C:\\Obsidian\\Dev",
+  main: "C:\\Obsidian\\Main",
+};
+const targetVault = process.env.OBSIDIAN_VAULT ?? "main";
+const vaultPath =
+  process.env.OBSIDIAN_VAULT_PATH ?? VAULT_PATHS[targetVault] ?? VAULT_PATHS.main;
 const outDir = path.join(
   vaultPath,
   ".obsidian",

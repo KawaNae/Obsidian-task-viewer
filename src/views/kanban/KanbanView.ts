@@ -59,6 +59,7 @@ export class KanbanView extends ItemView {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings);
+        this.addChild(this.taskRenderer);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
@@ -170,6 +171,7 @@ export class KanbanView extends ItemView {
     // ─── Render ───────────────────────────────────────────────
 
     private render(): void {
+        this.taskRenderer.disposeInside(this.container);
         this.container.empty();
 
         // Toolbar
@@ -363,7 +365,7 @@ export class KanbanView extends ItemView {
             TaskStyling.applyTaskColor(card, task.color ?? null);
             TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
             TaskStyling.applyReadOnly(card, task);
-            this.taskRenderer.render(card, task, this, settings);
+            this.taskRenderer.render(card, task, settings);
             this.menuHandler.addTaskContextMenu(card, task);
         }
     }

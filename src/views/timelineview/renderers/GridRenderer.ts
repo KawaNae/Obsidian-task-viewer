@@ -50,7 +50,6 @@ export class GridRenderer {
         habitRenderer: HabitTrackerRenderer,
         handleManager: HandleManager,
         dates: string[],
-        owner: Component,
         filteredTasks: DisplayTask[],
     ) {
         // Use parentContainer for rendering the grid
@@ -222,7 +221,7 @@ export class GridRenderer {
         });
 
         // Render Tasks (Overlaid)
-        allDayRenderer.render(allDayRow, dates, owner, filteredTasks);
+        allDayRenderer.render(allDayRow, dates, filteredTasks);
 
         // 3.2. Timeline Grid (time axis + day columns)
         const timelineGrid = scrollArea.createDiv('timeline-row timeline-scroll-area__grid');
@@ -239,7 +238,7 @@ export class GridRenderer {
             const col = timelineGrid.createDiv('day-timeline-column');
             col.dataset.date = date;
             const timedTasks = categorizedByDate.get(date)?.timed ?? [];
-            timelineRenderer.render(col, date, owner, timedTasks);
+            timelineRenderer.render(col, date, timedTasks);
 
             // Add interaction listeners for creating tasks
             timelineRenderer.addCreateTaskListeners(col, date);

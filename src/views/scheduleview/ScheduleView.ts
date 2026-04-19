@@ -84,6 +84,7 @@ export class ScheduleView extends ItemView {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings);
+        this.addChild(this.taskRenderer);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
         this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
@@ -109,7 +110,6 @@ export class ScheduleView extends ItemView {
         this.gridRenderer = new ScheduleGridRenderer(this.gridCalculator, ScheduleView.TIMELINE_TOP_PADDING_PX);
         this.scheduleTaskRenderer = new ScheduleTaskRenderer({
             app: this.app,
-            component: this,
             taskRenderer: this.taskRenderer,
             menuHandler: this.menuHandler,
             getSettings: () => this.plugin.settings,
@@ -244,6 +244,7 @@ export class ScheduleView extends ItemView {
             return;
         }
 
+        this.taskRenderer.disposeInside(this.container);
         this.container.empty();
         const toolbarHost = this.container.createDiv('schedule-view__toolbar-host');
         this.renderToolbar(toolbarHost);

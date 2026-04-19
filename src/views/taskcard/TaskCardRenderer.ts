@@ -10,7 +10,7 @@ import { CheckboxWiring } from './CheckboxWiring';
 import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
 import type { TaskCardLinkRuntime } from './types';
 
-export class TaskCardRenderer {
+export class TaskCardRenderer extends Component {
     private static readonly COLLAPSE_THRESHOLD = 3;
 
     private expandedTaskIds: Set<string> = new Set();
@@ -19,8 +19,10 @@ export class TaskCardRenderer {
     private checkboxWiring: CheckboxWiring;
     private linkInteractionManager: TaskLinkInteractionManager;
     private onDetailClick: ((task: Task) => void) | null = null;
+    private cardComponents: WeakMap<HTMLElement, Component> = new WeakMap();
 
     constructor(private app: App, readService: TaskReadService, writeService: TaskWriteService, private linkRuntime: TaskCardLinkRuntime, getSettings: () => TaskViewerSettings) {
+        super();
         this.checkboxWiring = new CheckboxWiring(app, writeService);
         this.childItemBuilder = new ChildItemBuilder(readService);
         this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, readService);
@@ -42,13 +44,18 @@ export class TaskCardRenderer {
     async render(
         container: HTMLElement,
         task: DisplayTask,
-        component: Component,
         settings: TaskViewerSettings,
         options?: { topRight?: 'time' | 'due' | 'none'; compact?: boolean; forceExpand?: boolean }
     ): Promise<void> {
         const topRight = options?.topRight ?? 'time';
         const compact = options?.compact ?? false;
         const forceExpand = options?.forceExpand ?? false;
+
+        const prev = this.cardComponents.get(container);
+        if (prev) this.removeChild(prev);
+        const cardComp = new Component();
+        this.addChild(cardComp);
+        this.cardComponents.set(container, cardComp);
 
         this.renderTopRightMeta(container, task, settings, topRight);
 
@@ -59,7 +66,7 @@ export class TaskCardRenderer {
             const strippedMarkdown = parentMarkdown
                 .replace(/!\[\[([^\]]*)\]\]/g, '')
                 .replace(/!\[([^\]]*)\]\([^)]*\)/g, '');
-            await MarkdownRenderer.render(this.app, strippedMarkdown, contentContainer, task.file, component);
+            await MarkdownRenderer.render(this.app, strippedMarkdown, contentContainer, task.file, cardComp);
 
             const { completed, total } = this.getChildCompletion(task, settings);
             const expandBar = container.createDiv('task-card__expand-bar');
@@ -72,16 +79,29 @@ export class TaskCardRenderer {
                 this.onDetailClick?.(task);
             });
         } else if (isFrontmatterTask(task)) {
-            await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
-            await this.renderFrontmatterChildren(contentContainer, task, component, settings, forceExpand);
+            await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
+            await this.renderFrontmatterChildren(contentContainer, task, cardComp, settings, forceExpand);
         } else if (task.childLines.length > 0) {
-            await this.renderInlineChildren(contentContainer, task, component, settings, parentMarkdown, forceExpand);
+            await this.renderInlineChildren(contentContainer, task, cardComp, settings, parentMarkdown, forceExpand);
         } else {
-            await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
+            await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
         }
 
         this.bindInternalLinks(contentContainer, task.file, settings.enableCardFileLink);
         this.bindParentCheckbox(contentContainer, task.originalTaskId ?? task.id, settings, task.isReadOnly);
+    }
+
+    dispose(container: HTMLElement): void {
+        const comp = this.cardComponents.get(container);
+        if (comp) {
+            this.removeChild(comp);
+            this.cardComponents.delete(container);
+        }
+    }
+
+    disposeInside(root: HTMLElement): void {
+        const cards = root.querySelectorAll<HTMLElement>('.task-card');
+        cards.forEach(card => this.dispose(card));
     }
 
     private getChildCompletion(task: Task, settings: TaskViewerSettings): { completed: number; total: number } {

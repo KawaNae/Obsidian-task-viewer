@@ -1,4 +1,4 @@
-import type { App, Component } from 'obsidian';
+import type { App } from 'obsidian';
 import type { TaskViewerSettings } from '../../../types';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
@@ -11,7 +11,6 @@ import type { DisplayTask } from '../../../types';
 
 export interface ScheduleTaskRendererOptions {
     app: App;
-    component: Component;
     taskRenderer: TaskCardRenderer;
     menuHandler: MenuHandler;
     getSettings: () => TaskViewerSettings;
@@ -22,7 +21,6 @@ export interface ScheduleTaskRendererOptions {
 
 export class ScheduleTaskRenderer {
     private readonly app: App;
-    private readonly component: Component;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly menuHandler: MenuHandler;
     private readonly getSettings: () => TaskViewerSettings;
@@ -32,7 +30,6 @@ export class ScheduleTaskRenderer {
 
     constructor(options: ScheduleTaskRendererOptions) {
         this.app = options.app;
-        this.component = options.component;
         this.taskRenderer = options.taskRenderer;
         this.menuHandler = options.menuHandler;
         this.getSettings = options.getSettings;
@@ -114,7 +111,7 @@ export class ScheduleTaskRenderer {
         TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
         TaskStyling.applyReadOnly(card, task);
         const options = flowCard ? {} : { compact: true };
-        await this.taskRenderer.render(card, task, this.component, this.getSettings(), options);
+        await this.taskRenderer.render(card, task, this.getSettings(), options);
         this.menuHandler.addTaskContextMenu(card, task);
     }
 }
