@@ -103,8 +103,8 @@
     outline: none;
 }
 
-/* "Show more" pagination button */
-.pinned-list__show-more {
+/* "Show more" pagination button (shared across views via TaskPagingController) */
+.task-paging__show-more {
     padding: 6px 8px;
     text-align: center;
     font-size: 0.8em;
@@ -114,7 +114,7 @@
     transition: background-color 120ms ease, color 120ms ease;
 }
 
-.pinned-list__show-more:hover {
+.task-paging__show-more:hover {
     background-color: var(--tv-bg-hover);
     color: var(--tv-text-accent);
 }

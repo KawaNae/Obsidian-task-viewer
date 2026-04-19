@@ -3,7 +3,7 @@
  * and appears as a collapsible group with task cards.
  */
 
-import { Component, Menu, setIcon } from 'obsidian';
+import { Menu, setIcon } from 'obsidian';
 import { t } from '../../i18n';
 import type { DisplayTask, PinnedListDefinition } from '../../types';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -12,6 +12,7 @@ import { combineFilterStates, hasConditions, type FilterState } from '../../serv
 import { hasSortRules } from '../../services/sort/SortTypes';
 import TaskViewerPlugin from '../../main';
 import { TaskStyling } from './TaskStyling';
+import { TaskPagingController } from './TaskPagingController';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 
 export interface PinnedListCallbacks {
@@ -31,15 +32,19 @@ export class PinnedListRenderer {
     private collapsedGroups = new Set<string>();
     // ID of list to start renaming immediately after render
     private pendingRenameId: string | null = null;
-    // Tracks how many tasks are currently visible per list (for "Show more")
-    private visibleCounts = new Map<string, number>();
+    private readonly paging: TaskPagingController;
 
     constructor(
         private taskRenderer: TaskCardRenderer,
         private plugin: TaskViewerPlugin,
         private menuHandler: MenuHandler,
         private readService: TaskReadService,
-    ) {}
+    ) {
+        this.paging = new TaskPagingController(
+            () => this.plugin.settings.pinnedListPageSize,
+            (container, tasks) => this.renderTaskCards(container, tasks),
+        );
+    }
 
     /** Schedule inline rename for a list on the next render. */
     scheduleRename(listId: string): void {
@@ -48,15 +53,15 @@ export class PinnedListRenderer {
 
     render(
         container: HTMLElement,
-        owner: Component,
         lists: PinnedListDefinition[],
         collapsedState: Record<string, boolean>,
         callbacks: PinnedListCallbacks,
         viewFilterState?: FilterState,
     ): void {
+        this.taskRenderer.disposeInside(container);
         container.empty();
         container.addClass('pinned-lists-container');
-        this.visibleCounts.clear();
+        this.paging.clear();
         if (lists.length === 0) {
             container.createDiv('pinned-lists-container__empty')
                 .setText(t('pinnedList.noPinnedLists'));
@@ -70,7 +75,7 @@ export class PinnedListRenderer {
                 : listDef.filterState;
             const tasks = this.readService.getFilteredTasks(combinedFilter, listDef.sortState);
 
-            this.renderList(container, listDef, tasks, owner, collapsedState, callbacks, i, lists.length);
+            this.renderList(container, listDef, tasks, collapsedState, callbacks, i, lists.length);
         }
     }
 
@@ -78,7 +83,6 @@ export class PinnedListRenderer {
         container: HTMLElement,
         listDef: PinnedListDefinition,
         tasks: DisplayTask[],
-        owner: Component,
         collapsedState: Record<string, boolean>,
         callbacks: PinnedListCallbacks,
         index: number,
@@ -133,7 +137,7 @@ export class PinnedListRenderer {
         // Task list body
         const body = listEl.createDiv('pinned-list__body');
         if (!isCollapsed) {
-            this.renderPagedTasks(body, tasks, listDef.id, owner);
+            this.paging.render(body, tasks, listDef.id);
         }
 
         // Collapse toggle
@@ -151,8 +155,8 @@ export class PinnedListRenderer {
                 toggle.textContent = '▼';
                 // Lazy render on expand (reset to first page)
                 if (body.childElementCount === 0 && tasks.length > 0) {
-                    this.visibleCounts.delete(listDef.id);
-                    this.renderPagedTasks(body, tasks, listDef.id, owner);
+                    this.paging.resetOne(listDef.id);
+                    this.paging.render(body, tasks, listDef.id);
                 }
             }
 
@@ -275,48 +279,7 @@ export class PinnedListRenderer {
         input.addEventListener('pointerdown', (e) => e.stopPropagation());
     }
 
-    private renderPagedTasks(
-        body: HTMLElement,
-        allTasks: DisplayTask[],
-        listId: string,
-        owner: Component,
-    ): void {
-        const pageSize = this.plugin.settings.pinnedListPageSize;
-        const visibleCount = this.visibleCounts.get(listId) ?? pageSize;
-        const tasksToShow = allTasks.slice(0, visibleCount);
-
-        this.renderTaskCards(body, tasksToShow, owner);
-
-        if (visibleCount < allTasks.length) {
-            this.appendShowMoreButton(body, allTasks, visibleCount, listId, owner);
-        }
-    }
-
-    private appendShowMoreButton(
-        body: HTMLElement,
-        allTasks: DisplayTask[],
-        shownCount: number,
-        listId: string,
-        owner: Component,
-    ): void {
-        const pageSize = this.plugin.settings.pinnedListPageSize;
-        const remaining = allTasks.length - shownCount;
-        const btn = body.createDiv('pinned-list__show-more');
-        btn.setText(t('pinnedList.showMore', { remaining }));
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            btn.remove();
-            const newCount = Math.min(shownCount + pageSize, allTasks.length);
-            this.visibleCounts.set(listId, newCount);
-            const nextBatch = allTasks.slice(shownCount, newCount);
-            this.renderTaskCards(body, nextBatch, owner);
-            if (newCount < allTasks.length) {
-                this.appendShowMoreButton(body, allTasks, newCount, listId, owner);
-            }
-        });
-    }
-
-    private renderTaskCards(body: HTMLElement, tasks: DisplayTask[], owner: Component): void {
+    private renderTaskCards(body: HTMLElement, tasks: DisplayTask[]): void {
         const settings = this.plugin.settings;
         tasks.forEach(task => {
             const card = body.createDiv('task-card');
@@ -326,7 +289,7 @@ export class PinnedListRenderer {
             TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
             TaskStyling.applyReadOnly(card, task);
 
-            this.taskRenderer.render(card, task, owner, settings);
+            this.taskRenderer.render(card, task, settings);
             this.menuHandler.addTaskContextMenu(card, task);
         });
     }

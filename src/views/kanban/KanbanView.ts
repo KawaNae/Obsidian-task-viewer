@@ -13,6 +13,7 @@ import { combineFilterStates, createEmptyFilterState, hasConditions } from '../.
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState, hasSortRules } from '../../services/sort/SortTypes';
 import { TaskStyling } from '../sharedUI/TaskStyling';
+import { TaskPagingController } from '../sharedUI/TaskPagingController';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
@@ -49,6 +50,7 @@ export class KanbanView extends ItemView {
     private grid: PinnedListDefinition[][] = [];
     private gridCollapsed: Record<string, boolean> = {};
     private readonly hoverParent = new TaskViewHoverParent();
+    private readonly paging: TaskPagingController;
 
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
@@ -59,6 +61,7 @@ export class KanbanView extends ItemView {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings);
+        this.addChild(this.taskRenderer);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
@@ -75,6 +78,10 @@ export class KanbanView extends ItemView {
         this.viewFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.viewFilterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
+        this.paging = new TaskPagingController(
+            () => this.plugin.settings.pinnedListPageSize,
+            (container, tasks) => this.renderTaskCards(container, tasks),
+        );
     }
 
     getViewType(): string {
@@ -170,7 +177,9 @@ export class KanbanView extends ItemView {
     // ─── Render ───────────────────────────────────────────────
 
     private render(): void {
+        this.taskRenderer.disposeInside(this.container);
         this.container.empty();
+        this.paging.clear();
 
         // Toolbar
         const toolbarHost = this.container.createDiv('kanban-view__toolbar-host');
@@ -341,7 +350,8 @@ export class KanbanView extends ItemView {
                 // Lazy render on expand
                 const body = cell.querySelector('.kanban-view__cell-body') as HTMLElement | null;
                 if (body && body.childElementCount === 0 && tasks.length > 0) {
-                    this.renderTaskCards(body, tasks);
+                    this.paging.resetOne(listDef.id);
+                    this.paging.render(body, tasks, listDef.id);
                 }
             }
 
@@ -351,7 +361,7 @@ export class KanbanView extends ItemView {
         // ─── Body ───────────────────────────
         const body = cell.createDiv('kanban-view__cell-body');
         if (!isCollapsed) {
-            this.renderTaskCards(body, tasks);
+            this.paging.render(body, tasks, listDef.id);
         }
     }
 
@@ -363,7 +373,7 @@ export class KanbanView extends ItemView {
             TaskStyling.applyTaskColor(card, task.color ?? null);
             TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
             TaskStyling.applyReadOnly(card, task);
-            this.taskRenderer.render(card, task, this, settings);
+            this.taskRenderer.render(card, task, settings);
             this.menuHandler.addTaskContextMenu(card, task);
         }
     }

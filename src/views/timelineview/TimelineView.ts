@@ -131,6 +131,7 @@ export class TimelineView extends ItemView {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings);
+        this.addChild(this.taskRenderer);
     }
 
     getViewType() {
@@ -279,7 +280,8 @@ export class TimelineView extends ItemView {
         // Initialize DragHandler with selection callback, move callback, and view start date provider
         this.dragHandler = new DragHandler(this.container, this.readService, this.writeService, this.plugin,
             (taskId: string) => {
-                this.handleManager.selectTask(taskId);
+                const task = this.readService.getTask(taskId);
+                this.handleManager.selectTask(task ?? null);
             },
             () => { /* no-op: handles are inside task cards */ },
             () => this.viewState.startDate,
@@ -302,6 +304,14 @@ export class TimelineView extends ItemView {
 
         // Subscribe to data changes
         this.unsubscribe = this.readService.onChange((taskId, changes) => {
+            // Keep selection snapshot in sync with controlled edits on the selected task.
+            // Without this, legitimate edits (status flip, text change) would mutate
+            // task.originalText and fail the identity check in resolveSelection.
+            if (taskId && taskId === this.handleManager.getSelectedTaskId()) {
+                const t = this.readService.getTask(taskId);
+                if (t) this.handleManager.refreshSnapshot(t);
+            }
+
             // On first data load, re-evaluate startDate and scroll to now
             if (!this.hasInitializedStartDate && this.readService.getTasks().length > 0) {
                 this.hasInitializedStartDate = true;
@@ -493,6 +503,11 @@ export class TimelineView extends ItemView {
         if (!this.scrollRestorePending) {
             this.saveScrollPosition();
         }
+        // Validate selection snapshot BEFORE rendering — task card renderers
+        // read getSelectedTaskId() while building the DOM, so a stale snapshot
+        // would tag the wrong card (after line-number id collision from a
+        // delete). resolveSelection clears the snapshot on identity mismatch.
+        this.handleManager.resolveSelection(id => this.readService.getTask(id));
         this.performRender();
     }
 
@@ -520,7 +535,7 @@ export class TimelineView extends ItemView {
 
         const isAllDay = card.classList.contains('task-card--allday');
         const opts = isAllDay ? { topRight: 'none' as const, compact: true } : undefined;
-        this.taskRenderer.render(card, dt, this, this.plugin.settings, opts);
+        this.taskRenderer.render(card, dt, this.plugin.settings, opts);
         TaskStyling.applyTaskColor(card, dt.color ?? null);
         TaskStyling.applyTaskLinestyle(card, dt.linestyle ?? null);
         return true;
@@ -533,6 +548,7 @@ export class TimelineView extends ItemView {
         }
         this.sidebarManager.syncPresentation(this.viewState.showSidebar, { animate: false });
 
+        this.taskRenderer.disposeInside(this.container);
         this.container.empty();
 
         // Apply Zoom Level
@@ -573,7 +589,6 @@ export class TimelineView extends ItemView {
         // Render pinned lists into sidebar body
         this.pinnedListRenderer.render(
             sidebarBody,
-            this,
             this.viewState.pinnedLists ?? [],
             this.viewState.pinnedListCollapsed ?? {},
             {
@@ -680,7 +695,6 @@ export class TimelineView extends ItemView {
             this.habitRenderer,
             this.handleManager,
             dates,
-            this,
             filteredTasks,
         );
 
@@ -708,11 +722,13 @@ export class TimelineView extends ItemView {
             }
         }
 
-        // Restore selected task handles AFTER scroll restoration
-        const selectedTaskId = this.handleManager.getSelectedTaskId();
-        if (selectedTaskId) {
+        // Render handles on the selected card after scroll restoration.
+        // Identity validation happens in render() before DOM construction —
+        // here we just need to attach handles to the card that section
+        // renderers already tagged with `.selected`.
+        if (this.handleManager.getSelectedTaskId()) {
             requestAnimationFrame(() => {
-                this.handleManager.selectTask(selectedTaskId);
+                this.handleManager.reapplySelectionClass();
             });
         }
 

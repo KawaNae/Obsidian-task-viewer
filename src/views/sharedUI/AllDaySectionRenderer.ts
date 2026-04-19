@@ -1,4 +1,4 @@
-import { Component, Menu } from 'obsidian';
+import { Menu } from 'obsidian';
 
 import TaskViewerPlugin from '../../main';
 import { t } from '../../i18n';
@@ -23,7 +23,7 @@ export class AllDaySectionRenderer {
         private getDaysToShow: () => number
     ) { }
 
-    public render(container: HTMLElement, dates: string[], owner: Component, displayTasks: DisplayTask[]) {
+    public render(container: HTMLElement, dates: string[], displayTasks: DisplayTask[]) {
         const viewStart = dates[0];
         const viewEnd = dates[dates.length - 1];
         const startHour = this.plugin.settings.startHour;
@@ -71,7 +71,7 @@ export class AllDaySectionRenderer {
         const gridRowOffset = 2;
 
         for (const entry of entries) {
-            this.renderTaskCard(container, entry, owner, gridColOffset, gridRowOffset);
+            this.renderTaskCard(container, entry, gridColOffset, gridRowOffset);
 
             if (entry.dueArrow) {
                 renderDueArrow(container, entry, {
@@ -85,7 +85,6 @@ export class AllDaySectionRenderer {
     private renderTaskCard(
         container: HTMLElement,
         entry: GridTaskEntry,
-        owner: Component,
         gridColOffset: number,
         gridRowOffset: number
     ): void {
@@ -104,7 +103,7 @@ export class AllDaySectionRenderer {
         TaskStyling.applyTaskLinestyle(el, task.linestyle ?? null);
         TaskStyling.applyReadOnly(el, task);
 
-        this.taskRenderer.render(el, task, owner, this.plugin.settings, { topRight: 'none', compact: true });
+        this.taskRenderer.render(el, task, this.plugin.settings, { topRight: 'none', compact: true });
         this.menuHandler.addTaskContextMenu(el, task);
 
         el.style.gridColumn = `${entry.colStart + gridColOffset} / span ${entry.span}`;

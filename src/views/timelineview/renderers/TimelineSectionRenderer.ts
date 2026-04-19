@@ -1,4 +1,4 @@
-import { Component, Menu } from 'obsidian';
+import { Menu } from 'obsidian';
 import { t } from '../../../i18n';
 import type { DisplayTask } from '../../../types';
 import TaskViewerPlugin from '../../../main';
@@ -20,7 +20,7 @@ export class TimelineSectionRenderer {
         private getZoomLevel: () => number
     ) { }
 
-    public render(container: HTMLElement, date: string, owner: Component, timedTasks: DisplayTask[]) {
+    public render(container: HTMLElement, date: string, timedTasks: DisplayTask[]) {
         const startHour = this.plugin.settings.startHour;
         const renderableTasks = timedTasks;
 
@@ -101,7 +101,7 @@ export class TimelineSectionRenderer {
             el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
             el.style.zIndex = String(taskLayout.zIndex);
 
-            this.taskRenderer.render(el, task, owner, this.plugin.settings);
+            this.taskRenderer.render(el, task, this.plugin.settings);
             this.menuHandler.addTaskContextMenu(el, task);
         });
     }

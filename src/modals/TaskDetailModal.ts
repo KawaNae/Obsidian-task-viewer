@@ -1,4 +1,4 @@
-import { App, Component, Modal } from 'obsidian';
+import { App, Modal } from 'obsidian';
 import { Task, TaskViewerSettings } from '../types';
 import { TaskCardRenderer } from '../views/taskcard/TaskCardRenderer';
 import { TaskStyling } from '../views/sharedUI/TaskStyling';
@@ -7,7 +7,6 @@ import type { TaskReadService } from '../services/data/TaskReadService';
 import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 
 export class TaskDetailModal extends Modal {
-    private renderComponent: Component;
     private unsubscribe: (() => void) | null = null;
 
     constructor(
@@ -35,12 +34,9 @@ export class TaskDetailModal extends Modal {
 
     private async renderCard(): Promise<void> {
         const { contentEl } = this;
+        this.taskRenderer.disposeInside(contentEl);
         contentEl.empty();
         contentEl.addClass('task-detail-modal');
-
-        this.renderComponent?.unload();
-        this.renderComponent = new Component();
-        this.renderComponent.load();
 
         const card = contentEl.createDiv('task-card');
         TaskStyling.applyTaskColor(card, this.task.color ?? null);
@@ -49,12 +45,12 @@ export class TaskDetailModal extends Modal {
         this.menuHandler.addTaskContextMenu(card, this.task);
 
         const dt = toDisplayTask(this.task, this.settings.startHour);
-        await this.taskRenderer.render(card, dt, this.renderComponent, this.settings, { forceExpand: true });
+        await this.taskRenderer.render(card, dt, this.settings, { forceExpand: true });
     }
 
     onClose(): void {
         this.unsubscribe?.();
-        this.renderComponent?.unload();
+        this.taskRenderer.disposeInside(this.contentEl);
         this.contentEl.empty();
     }
 }

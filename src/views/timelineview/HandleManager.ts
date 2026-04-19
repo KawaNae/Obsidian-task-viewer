@@ -6,11 +6,25 @@ interface HandleManagerDeps {
 }
 
 /**
+ * Snapshot of the currently selected task. Identity is captured by
+ * (file, originalText) in addition to the task id, because inline task ids
+ * use line-number anchors (`ln:<N+1>`) and are re-assigned after deletions or
+ * insertions. Without the snapshot, selecting task A and then deleting it
+ * would cause task B — which shifted into A's line and took over A's id — to
+ * be re-selected on the post-delete re-render.
+ */
+interface TaskSelectionSnapshot {
+    taskId: string;
+    file: string;
+    originalText: string;
+}
+
+/**
  * Manages drag handles for selected tasks in TimelineView.
  * Handles are rendered directly inside task card elements for native scroll sync.
  */
 export class HandleManager {
-    private selectedTaskId: string | null = null;
+    private selection: TaskSelectionSnapshot | null = null;
 
     constructor(
         private container: HTMLElement,
@@ -23,26 +37,36 @@ export class HandleManager {
         return (main ?? this.container).querySelectorAll('.task-card');
     }
 
+    private buildSnapshot(task: Task): TaskSelectionSnapshot {
+        return {
+            taskId: task.id,
+            file: task.file,
+            originalText: task.originalText,
+        };
+    }
+
     /**
      * Gets the currently selected task ID.
      */
     getSelectedTaskId(): string | null {
-        return this.selectedTaskId;
+        return this.selection?.taskId ?? null;
     }
 
     /**
-     * Selects a task and renders its handles.
+     * Selects a task (or clears selection when passed null) and renders its handles.
+     * Accepts the full Task so the selection snapshot can capture identity fields
+     * beyond the id.
      */
-    selectTask(taskId: string | null): void {
-        // Remove handles from previously selected task and restore z-index
-        if (this.selectedTaskId) {
-            this.removeHandles(this.selectedTaskId);
-            // Need to find ALL previous cards (including split ones) within main content
+    selectTask(task: Task | null): void {
+        // Remove handles and restore z-index on the previously selected card(s)
+        // while the old DOM is still present.
+        if (this.selection) {
+            const prevId = this.selection.taskId;
+            this.removeHandles(prevId);
             const prevEls = this.getMainTaskCards();
             prevEls.forEach(el => {
                 const htmlEl = el as HTMLElement;
-                // Check direct ID or split original ID
-                if (htmlEl.dataset.id === this.selectedTaskId || htmlEl.dataset.splitOriginalId === this.selectedTaskId) {
+                if (htmlEl.dataset.id === prevId || htmlEl.dataset.splitOriginalId === prevId) {
                     if (htmlEl.dataset.originalZIndex) {
                         htmlEl.style.zIndex = htmlEl.dataset.originalZIndex;
                     }
@@ -50,16 +74,50 @@ export class HandleManager {
             });
         }
 
-        this.selectedTaskId = taskId;
+        this.selection = task ? this.buildSnapshot(task) : null;
+        this.reapplySelectionClass();
+    }
 
-        // Update .selected class on main content task cards only (not pinned lists)
+    /**
+     * Refreshes the snapshot when the selected task itself is edited.
+     * View.onChange calls this for notifications whose taskId matches the
+     * selection, so controlled edits (status flip, text change) keep the
+     * snapshot in sync and the selection survives re-renders.
+     */
+    refreshSnapshot(task: Task): void {
+        if (this.selection && this.selection.taskId === task.id) {
+            this.selection = this.buildSnapshot(task);
+        }
+    }
+
+    /**
+     * Verifies the current snapshot still points at the same task in the store.
+     * Returns the resolved Task when identity matches, or null if the task is
+     * gone or another task has taken over the id (line-number shift case).
+     * On mismatch, the selection is cleared.
+     */
+    resolveSelection(getTask: (id: string) => Task | undefined): Task | null {
+        if (!this.selection) return null;
+        const task = getTask(this.selection.taskId);
+        if (task && task.file === this.selection.file && task.originalText === this.selection.originalText) {
+            return task;
+        }
+        this.selection = null;
+        return null;
+    }
+
+    /**
+     * Applies `.selected` class and handles to the DOM based on the current
+     * snapshot. Idempotent — safe to call after any re-render to reflect
+     * selection state on fresh DOM.
+     */
+    reapplySelectionClass(): void {
+        const taskId = this.selection?.taskId ?? null;
         const taskCards = this.getMainTaskCards();
         taskCards.forEach(el => {
             const htmlEl = el as HTMLElement;
-            // Match ID or Split ID
             if (taskId && (htmlEl.dataset.id === taskId || htmlEl.dataset.splitOriginalId === taskId)) {
                 el.addClass('selected');
-                // Store original z-index and set high z-index for selected
                 htmlEl.dataset.originalZIndex = htmlEl.style.zIndex || '1';
                 htmlEl.style.zIndex = '200';
             } else {
@@ -67,7 +125,6 @@ export class HandleManager {
             }
         });
 
-        // Add handles to newly selected task
         if (taskId) {
             this.renderHandles(taskId);
         }

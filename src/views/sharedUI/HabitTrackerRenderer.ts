@@ -114,15 +114,21 @@ export class HabitTrackerRenderer {
         return this.app.metadataCache.getFileCache(file)?.frontmatter ?? null;
     }
 
-    /** Extract HabitDefinition[] from frontmatter, filtering excluded keys. */
+    /**
+     * Extract HabitDefinition[] from frontmatter, filtering excluded keys.
+     * 型は daily fm 値から推論。値が null/undefined（空値キー）の場合はテンプレ fm から型を拾う。
+     * これにより値クリア時も boolean/number 習慣の型が保持される。
+     */
     private extractHabits(fm: Record<string, unknown>): HabitDefinition[] {
         const excludeKeys = this.buildExcludeKeys();
+        const templateFm = this.getTemplateFrontmatter();
         const habits: HabitDefinition[] = [];
         for (const [key, value] of Object.entries(fm)) {
             if (key.startsWith('_') || key === 'position') continue;
             if (excludeKeys.has(key)) continue;
+            const typeSource = (value !== null && value !== undefined) ? value : templateFm?.[key];
             const { unit } = parseHabitKey(key);
-            habits.push({ name: key, type: inferHabitType(value), unit });
+            habits.push({ name: key, type: inferHabitType(typeSource), unit });
         }
         return habits;
     }
@@ -157,11 +163,16 @@ export class HabitTrackerRenderer {
     /**
      * Write a habit value to the daily note's frontmatter.
      * Auto-creates the daily note if it doesn't exist.
-     * value === undefined/null/'' → delete the key.
+     *
+     * - value === '' → 空値キー `habitName:` として書き込み（「今日は値なし」）
+     * - それ以外 → String(value) で書き込み
+     *
+     * キー削除（「その日から習慣を外す」）は UI からは提供しない。
+     * ユーザーが frontmatter を直接編集する運用。
      *
      * Uses vault.process() directly (NOT processFrontMatter) to avoid race conditions.
      */
-    private async setHabitValue(date: string, habitName: string, value: boolean | string | number | undefined | null): Promise<void> {
+    private async setHabitValue(date: string, habitName: string, value: boolean | string | number): Promise<void> {
         const [y, m, d] = date.split('-').map(Number);
         const dateObj = new Date(y, m - 1, d);
 
@@ -172,18 +183,13 @@ export class HabitTrackerRenderer {
         if (!file) return;
 
         await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
+            // frontmatter が無ければ空 frontmatter を先頭に付加して一本化
+            const hasFm = FrontmatterLineEditor.findEnd(content.split('\n')) >= 0;
+            const normalized = hasFm ? content : `---\n---\n${content}`;
+
+            const lines = normalized.split('\n');
             const fmEnd = FrontmatterLineEditor.findEnd(lines);
-
-            if (fmEnd < 0) {
-                // No frontmatter: create one with habit key
-                if (value === undefined || value === null || value === '') return content;
-                return `---\n${habitName}: ${value}\n---\n${content}`;
-            }
-
-            const fmValue = (value === undefined || value === null || value === '')
-                ? null
-                : String(value);
+            const fmValue = value === '' ? '' : String(value);
 
             return FrontmatterLineEditor.applyUpdates(lines, fmEnd, { [habitName]: fmValue });
         });
@@ -207,7 +213,8 @@ export class HabitTrackerRenderer {
     }
 
     /**
-     * Boolean: native checkbox, toggling persists true / deletes the key.
+     * Boolean: native checkbox, toggling persists true/false.
+     * false も明示書き込みして行を残し、inferHabitType での型保持を確実にする。
      */
     private renderBooleanToggle(container: HTMLElement, date: string, habit: HabitDefinition, currentValue: boolean | string | number | undefined): void {
         const checkbox = container.createEl('input', { cls: 'habits-section__checkbox' });
@@ -215,7 +222,7 @@ export class HabitTrackerRenderer {
         checkbox.checked = currentValue === true;
 
         checkbox.addEventListener('change', async () => {
-            await this.setHabitValue(date, habit.name, checkbox.checked ? true : undefined);
+            await this.setHabitValue(date, habit.name, checkbox.checked);
         });
     }
 
@@ -266,19 +273,19 @@ export class HabitTrackerRenderer {
             const commit = async () => {
                 if (escaped) return;
                 const raw = input.value.trim();
-                let newValue: string | number | undefined;
+                let newValue: string | number;
 
                 if (raw === '') {
-                    newValue = undefined; // delete key
+                    newValue = ''; // 空値キー（「今日は値なし」）
                 } else if (habit.type === 'number') {
                     const num = Number(raw);
-                    newValue = isNaN(num) ? undefined : num;
+                    newValue = isNaN(num) ? '' : num; // パース失敗もクリア扱い
                 } else {
                     newValue = raw;
                 }
 
                 // Update display
-                const newHasValue = newValue !== undefined;
+                const newHasValue = newValue !== '';
                 display.textContent = newHasValue ? String(newValue) : '—';
                 display.toggleClass('is-set', newHasValue);
                 if (unitSpan) unitSpan.toggleClass('is-set', newHasValue);
