@@ -17,6 +17,7 @@ import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
 
 import { HandleManager } from './HandleManager';
 import { TimelineToolbar } from './TimelineToolbar';
+import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 
 import { GridRenderer } from './renderers/GridRenderer';
 import { AllDaySectionRenderer } from '../sharedUI/AllDaySectionRenderer';
@@ -89,6 +90,7 @@ export class TimelineView extends ItemView {
     private container: HTMLElement;
     private viewState: ViewState;
     private unsubscribe: (() => void) | null = null;
+    private unsubscribeDelete: (() => void) | null = null;
     private currentTimeInterval: number | null = null;
     private scrollRestorePending = false;
     private savedScrollTop: number | null = null;
@@ -280,8 +282,10 @@ export class TimelineView extends ItemView {
         // Initialize DragHandler with selection callback, move callback, and view start date provider
         this.dragHandler = new DragHandler(this.container, this.readService, this.writeService, this.plugin,
             (taskId: string) => {
-                const task = this.readService.getTask(taskId);
-                this.handleManager.selectTask(task ?? null);
+                // Store base task id so split segments all share one selection and
+                // the selection survives a drag-move that regenerates segment ids.
+                const baseId = TaskIdGenerator.parseSegmentId(taskId)?.baseId ?? taskId;
+                this.handleManager.selectTask(baseId);
             },
             () => { /* no-op: handles are inside task cards */ },
             () => this.viewState.startDate,
@@ -302,16 +306,18 @@ export class TimelineView extends ItemView {
             }
         });
 
+        // Clear selection when the selected task is deleted via the UI.
+        // External-editor deletions are not tracked here by design — if that
+        // case causes a visual glitch (line-shifted task inherits `.selected`),
+        // user can click to re-select.
+        this.unsubscribeDelete = this.writeService.onTaskDeleted((deletedId) => {
+            if (this.handleManager.getSelectedTaskId() === deletedId) {
+                this.handleManager.selectTask(null);
+            }
+        });
+
         // Subscribe to data changes
         this.unsubscribe = this.readService.onChange((taskId, changes) => {
-            // Keep selection snapshot in sync with controlled edits on the selected task.
-            // Without this, legitimate edits (status flip, text change) would mutate
-            // task.originalText and fail the identity check in resolveSelection.
-            if (taskId && taskId === this.handleManager.getSelectedTaskId()) {
-                const t = this.readService.getTask(taskId);
-                if (t) this.handleManager.refreshSnapshot(t);
-            }
-
             // On first data load, re-evaluate startDate and scroll to now
             if (!this.hasInitializedStartDate && this.readService.getTasks().length > 0) {
                 this.hasInitializedStartDate = true;
@@ -446,6 +452,9 @@ export class TimelineView extends ItemView {
         if (this.unsubscribe) {
             this.unsubscribe();
         }
+        if (this.unsubscribeDelete) {
+            this.unsubscribeDelete();
+        }
         this.sidebarManager.detach();
         if (this.currentTimeInterval) {
             window.clearInterval(this.currentTimeInterval);
@@ -503,11 +512,6 @@ export class TimelineView extends ItemView {
         if (!this.scrollRestorePending) {
             this.saveScrollPosition();
         }
-        // Validate selection snapshot BEFORE rendering — task card renderers
-        // read getSelectedTaskId() while building the DOM, so a stale snapshot
-        // would tag the wrong card (after line-number id collision from a
-        // delete). resolveSelection clears the snapshot on identity mismatch.
-        this.handleManager.resolveSelection(id => this.readService.getTask(id));
         this.performRender();
     }
 
@@ -722,10 +726,10 @@ export class TimelineView extends ItemView {
             }
         }
 
-        // Render handles on the selected card after scroll restoration.
-        // Identity validation happens in render() before DOM construction —
-        // here we just need to attach handles to the card that section
-        // renderers already tagged with `.selected`.
+        // Attach handles to the selected card after scroll restoration.
+        // Section renderers already tagged cards with `.selected` during render;
+        // reapplySelectionClass is idempotent and ensures handles are attached
+        // and z-index is raised on the fresh DOM.
         if (this.handleManager.getSelectedTaskId()) {
             requestAnimationFrame(() => {
                 this.handleManager.reapplySelectionClass();

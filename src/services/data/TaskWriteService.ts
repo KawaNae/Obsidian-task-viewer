@@ -8,6 +8,8 @@ import type { TaskIndex } from '../core/TaskIndex';
  * Pure delegation layer — no business logic here.
  */
 export class TaskWriteService {
+    private deleteListeners: Array<(taskId: string) => void> = [];
+
     constructor(private taskIndex: TaskIndex) {}
 
     // ===== Task CRUD =====
@@ -17,7 +19,23 @@ export class TaskWriteService {
     }
 
     async deleteTask(taskId: string): Promise<void> {
-        return this.taskIndex.deleteTask(taskId);
+        await this.taskIndex.deleteTask(taskId);
+        for (const cb of this.deleteListeners) cb(taskId);
+    }
+
+    /**
+     * Subscribe to UI-initiated task deletions. Fired after deleteTask resolves.
+     * Views use this to clear selection when the selected task is deleted via
+     * the UI (context menu, command palette, API), preventing a stale id from
+     * being re-applied to a different task that shifted into the same line
+     * number.
+     */
+    onTaskDeleted(cb: (taskId: string) => void): () => void {
+        this.deleteListeners.push(cb);
+        return () => {
+            const i = this.deleteListeners.indexOf(cb);
+            if (i >= 0) this.deleteListeners.splice(i, 1);
+        };
     }
 
     async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<void> {
