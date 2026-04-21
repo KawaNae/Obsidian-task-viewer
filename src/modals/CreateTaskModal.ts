@@ -74,6 +74,10 @@ export class CreateTaskModal extends Modal {
     private errorEl: HTMLElement;
     private warningEl: HTMLElement;
 
+    private isComposingName = false;
+    private lastValueBeforeInput = '';
+    private lastSelectionBeforeInput = 0;
+
 
     constructor(app: App, onSubmit: (result: CreateTaskResult) => void, initialValues: Partial<CreateTaskResult> = {}, options: CreateTaskModalOptions = {}) {
         super(app);
@@ -97,13 +101,33 @@ export class CreateTaskModal extends Modal {
         });
         this.nameInput.value = this.result.content ?? '';
         new TaskNameSuggest(this.app, this.nameInput);
-        this.nameInput.addEventListener('input', () => {
+        this.nameInput.addEventListener('compositionstart', () => {
+            this.isComposingName = true;
+        });
+        this.nameInput.addEventListener('compositionend', () => {
+            this.isComposingName = false;
+            // The composition-commit 'input' event has already fired (with
+            // isComposing=true, so the listener below skipped pairing). Run
+            // pairing reactively against the snapshot taken in 'beforeinput'.
+            this.applyBracketPairingReactive();
+            this.result.content = this.nameInput.value;
+            this.validateInputs();
+        });
+        this.nameInput.addEventListener('beforeinput', () => {
+            // Snapshot so the following 'input' event (or 'compositionend') can diff.
+            this.lastValueBeforeInput = this.nameInput.value;
+            this.lastSelectionBeforeInput = this.nameInput.selectionStart ?? 0;
+        });
+        this.nameInput.addEventListener('input', (e: Event) => {
+            const ie = e as InputEvent;
+            if (!this.isComposingName && !ie.isComposing) {
+                this.applyBracketPairingReactive();
+            }
             this.result.content = this.nameInput.value;
             this.validateInputs();
         });
         this.nameInput.addEventListener('keydown', (e: KeyboardEvent) => {
             if (e.key === 'Enter') this.submit();
-            this.handleBracketPairing(e);
         });
 
         // --- Start ---
@@ -439,43 +463,61 @@ export class CreateTaskModal extends Modal {
         return { date: due, time: undefined };
     }
 
-    private static readonly BRACKET_PAIRS: Record<string, string> = { '[': ']', '(': ')' };
+    private static readonly BRACKET_PAIRS: Record<string, string> = {
+        '(': ')', '[': ']',
+        '（': '）', '［': '］',
+        '「': '」', '『': '』', '【': '】',
+        '｛': '｝', '〈': '〉', '《': '》',
+    };
 
-    private handleBracketPairing(e: KeyboardEvent): void {
+    private static readonly BRACKET_CLOSERS: Set<string> = new Set(
+        Object.values(CreateTaskModal.BRACKET_PAIRS)
+    );
+
+    // Post-insertion reactive pairing. Runs after the browser (or IME) has
+    // already applied the user's edit; diffs against the snapshot taken in
+    // 'beforeinput'. This avoids 'beforeinput.preventDefault()' which is
+    // unreliable for IME input on iOS WebKit.
+    private applyBracketPairingReactive(): void {
         const input = this.nameInput;
-        const start = input.selectionStart!;
-        const end = input.selectionEnd!;
-        const val = input.value;
+        const newVal = input.value;
+        const newPos = input.selectionStart ?? 0;
+        const oldVal = this.lastValueBeforeInput;
+        const oldPos = this.lastSelectionBeforeInput;
 
-        // Opening bracket: insert pair
-        const closing = CreateTaskModal.BRACKET_PAIRS[e.key];
-        if (closing) {
-            e.preventDefault();
-            const newVal = val.slice(0, start) + e.key + val.slice(start, end) + closing + val.slice(end);
-            input.value = newVal;
-            input.setSelectionRange(start + 1, end + 1);
-            input.dispatchEvent(new Event('input', { bubbles: true }));
+        // Case 1: exactly one character was inserted at the caret.
+        if (newVal.length === oldVal.length + 1 && newPos === oldPos + 1) {
+            const ch = newVal[oldPos];
+
+            // Opening bracket: insert closing partner unless it's already there.
+            const closing = CreateTaskModal.BRACKET_PAIRS[ch];
+            if (closing) {
+                if (newVal[newPos] === closing) return;
+                input.value = newVal.slice(0, newPos) + closing + newVal.slice(newPos);
+                input.setSelectionRange(newPos, newPos);
+                return;
+            }
+
+            // Closing bracket skip-over: if a matching closer was already at
+            // this position before the user typed, drop the duplicate and
+            // leave the caret past the pre-existing closer.
+            if (CreateTaskModal.BRACKET_CLOSERS.has(ch) && oldVal[oldPos] === ch) {
+                input.value = newVal.slice(0, newPos) + newVal.slice(newPos + 1);
+                input.setSelectionRange(newPos, newPos);
+                return;
+            }
             return;
         }
 
-        // Closing bracket: skip over if next char matches
-        if (e.key === ']' || e.key === ')') {
-            if (val[start] === e.key && start === end) {
-                e.preventDefault();
-                input.setSelectionRange(start + 1, start + 1);
-                return;
-            }
-        }
-
-        // Backspace: delete pair if cursor is between empty brackets
-        if (e.key === 'Backspace' && start === end && start > 0) {
-            const before = val[start - 1];
-            const after = val[start];
-            if ((before === '[' && after === ']') || (before === '(' && after === ')')) {
-                e.preventDefault();
-                input.value = val.slice(0, start - 1) + val.slice(start + 1);
-                input.setSelectionRange(start - 1, start - 1);
-                input.dispatchEvent(new Event('input', { bubbles: true }));
+        // Case 2: exactly one character was deleted at the caret (backspace).
+        // If we deleted the opener of an empty pair, also remove the closer.
+        if (newVal.length === oldVal.length - 1 && newPos === oldPos - 1) {
+            const deletedChar = oldVal[oldPos - 1];
+            const nextChar = oldVal[oldPos];
+            const closing = deletedChar ? CreateTaskModal.BRACKET_PAIRS[deletedChar] : undefined;
+            if (closing && nextChar === closing) {
+                input.value = newVal.slice(0, newPos) + newVal.slice(newPos + 1);
+                input.setSelectionRange(newPos, newPos);
             }
         }
     }

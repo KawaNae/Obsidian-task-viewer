@@ -35,6 +35,7 @@ import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
 import { HandleManager } from '../timelineview/HandleManager';
+import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
@@ -73,6 +74,7 @@ export class CalendarView extends ItemView {
     private syncSidebarToggleBtn: (() => void) | null = null;
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
+    private unsubscribeDelete: (() => void) | null = null;
     private windowStart: string;
     private showSidebar = true;
     private pinnedListCollapsed: Record<string, boolean> = {};
@@ -213,8 +215,10 @@ export class CalendarView extends ItemView {
             this.writeService,
             this.plugin,
             (taskId: string) => {
-                const task = this.readService.getTask(taskId);
-                this.handleManager?.selectTask(task ?? null);
+                // Store base task id so split segments all share one selection and
+                // the selection survives a drag-move that regenerates segment ids.
+                const baseId = TaskIdGenerator.parseSegmentId(taskId)?.baseId ?? taskId;
+                this.handleManager?.selectTask(baseId);
             },
             () => { /* no-op: handles are inside task cards */ },
             () => this.getViewStartDateString(),
@@ -233,13 +237,14 @@ export class CalendarView extends ItemView {
 
         await this.performRender();
 
-        this.unsubscribe = this.readService.onChange((taskId) => {
-            // Keep selection snapshot in sync with controlled edits on the
-            // selected task so edits don't trip the identity check on restore.
-            if (taskId && taskId === this.handleManager?.getSelectedTaskId()) {
-                const t = this.readService.getTask(taskId);
-                if (t) this.handleManager.refreshSnapshot(t);
+        // Clear selection when the selected task is deleted via the UI.
+        this.unsubscribeDelete = this.writeService.onTaskDeleted((deletedId) => {
+            if (this.handleManager?.getSelectedTaskId() === deletedId) {
+                this.handleManager.selectTask(null);
             }
+        });
+
+        this.unsubscribe = this.readService.onChange(() => {
             this.render();
         });
     }
@@ -258,6 +263,10 @@ export class CalendarView extends ItemView {
             this.unsubscribe();
             this.unsubscribe = null;
         }
+        if (this.unsubscribeDelete) {
+            this.unsubscribeDelete();
+            this.unsubscribeDelete = null;
+        }
     }
 
     public refresh(): void {
@@ -271,11 +280,6 @@ export class CalendarView extends ItemView {
                 this.savedScrollTop = oldMain.scrollTop;
             }
         }
-        // Validate selection snapshot BEFORE rendering — task card renderers
-        // read getSelectedTaskId() while building the DOM, so a stale snapshot
-        // would tag the wrong card (e.g. after the selected task is deleted
-        // and its line-number id is taken over by the shifted-up next task).
-        this.handleManager?.resolveSelection(id => this.readService.getTask(id));
         void this.performRender();
     }
 
@@ -360,9 +364,9 @@ export class CalendarView extends ItemView {
 
         toolbar.dataset.range = `${rangeStartStr}:${rangeEndStr}`;
 
-        // Render handles on the selected card. Identity validation already
-        // happened in render() before DOM construction, so here we just need
-        // to attach handles to the card that the section renderers tagged.
+        // Attach handles to the selected card. Section renderers already
+        // tagged cards with `.selected` during render; reapplySelectionClass is
+        // idempotent and ensures handles are attached on the fresh DOM.
         if (this.handleManager?.getSelectedTaskId()) {
             this.handleManager.reapplySelectionClass();
         }

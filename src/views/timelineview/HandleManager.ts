@@ -6,25 +6,11 @@ interface HandleManagerDeps {
 }
 
 /**
- * Snapshot of the currently selected task. Identity is captured by
- * (file, originalText) in addition to the task id, because inline task ids
- * use line-number anchors (`ln:<N+1>`) and are re-assigned after deletions or
- * insertions. Without the snapshot, selecting task A and then deleting it
- * would cause task B — which shifted into A's line and took over A's id — to
- * be re-selected on the post-delete re-render.
- */
-interface TaskSelectionSnapshot {
-    taskId: string;
-    file: string;
-    originalText: string;
-}
-
-/**
  * Manages drag handles for selected tasks in TimelineView.
  * Handles are rendered directly inside task card elements for native scroll sync.
  */
 export class HandleManager {
-    private selection: TaskSelectionSnapshot | null = null;
+    private selectedTaskId: string | null = null;
 
     constructor(
         private container: HTMLElement,
@@ -37,36 +23,26 @@ export class HandleManager {
         return (main ?? this.container).querySelectorAll('.task-card');
     }
 
-    private buildSnapshot(task: Task): TaskSelectionSnapshot {
-        return {
-            taskId: task.id,
-            file: task.file,
-            originalText: task.originalText,
-        };
-    }
-
     /**
      * Gets the currently selected task ID.
      */
     getSelectedTaskId(): string | null {
-        return this.selection?.taskId ?? null;
+        return this.selectedTaskId;
     }
 
     /**
      * Selects a task (or clears selection when passed null) and renders its handles.
-     * Accepts the full Task so the selection snapshot can capture identity fields
-     * beyond the id.
+     * The taskId should be a base task id (not a split segment id) so that all
+     * segments of the same task get `.selected` via `dataset.splitOriginalId`.
      */
-    selectTask(task: Task | null): void {
-        // Remove handles and restore z-index on the previously selected card(s)
-        // while the old DOM is still present.
-        if (this.selection) {
-            const prevId = this.selection.taskId;
-            this.removeHandles(prevId);
+    selectTask(taskId: string | null): void {
+        // Remove handles from previously selected task and restore z-index.
+        if (this.selectedTaskId) {
+            this.removeHandles(this.selectedTaskId);
             const prevEls = this.getMainTaskCards();
             prevEls.forEach(el => {
                 const htmlEl = el as HTMLElement;
-                if (htmlEl.dataset.id === prevId || htmlEl.dataset.splitOriginalId === prevId) {
+                if (htmlEl.dataset.id === this.selectedTaskId || htmlEl.dataset.splitOriginalId === this.selectedTaskId) {
                     if (htmlEl.dataset.originalZIndex) {
                         htmlEl.style.zIndex = htmlEl.dataset.originalZIndex;
                     }
@@ -74,45 +50,17 @@ export class HandleManager {
             });
         }
 
-        this.selection = task ? this.buildSnapshot(task) : null;
+        this.selectedTaskId = taskId;
         this.reapplySelectionClass();
     }
 
     /**
-     * Refreshes the snapshot when the selected task itself is edited.
-     * View.onChange calls this for notifications whose taskId matches the
-     * selection, so controlled edits (status flip, text change) keep the
-     * snapshot in sync and the selection survives re-renders.
-     */
-    refreshSnapshot(task: Task): void {
-        if (this.selection && this.selection.taskId === task.id) {
-            this.selection = this.buildSnapshot(task);
-        }
-    }
-
-    /**
-     * Verifies the current snapshot still points at the same task in the store.
-     * Returns the resolved Task when identity matches, or null if the task is
-     * gone or another task has taken over the id (line-number shift case).
-     * On mismatch, the selection is cleared.
-     */
-    resolveSelection(getTask: (id: string) => Task | undefined): Task | null {
-        if (!this.selection) return null;
-        const task = getTask(this.selection.taskId);
-        if (task && task.file === this.selection.file && task.originalText === this.selection.originalText) {
-            return task;
-        }
-        this.selection = null;
-        return null;
-    }
-
-    /**
      * Applies `.selected` class and handles to the DOM based on the current
-     * snapshot. Idempotent — safe to call after any re-render to reflect
+     * selectedTaskId. Idempotent — safe to call after any re-render to reflect
      * selection state on fresh DOM.
      */
     reapplySelectionClass(): void {
-        const taskId = this.selection?.taskId ?? null;
+        const taskId = this.selectedTaskId;
         const taskCards = this.getMainTaskCards();
         taskCards.forEach(el => {
             const htmlEl = el as HTMLElement;
@@ -134,7 +82,6 @@ export class HandleManager {
      * Removes handles from a task card.
      */
     private removeHandles(taskId: string): void {
-        // Find ALL matching cards in main content area
         const taskCards = this.getMainTaskCards();
         taskCards.forEach(el => {
             const htmlEl = el as HTMLElement;
@@ -149,7 +96,6 @@ export class HandleManager {
      * Renders handles directly inside the task card element.
      */
     private renderHandles(taskId: string): void {
-        // Find ALL matching cards in main content area
         const taskCards = Array.from(this.getMainTaskCards()).filter(el => {
             const htmlEl = el as HTMLElement;
             return htmlEl.dataset.id === taskId || htmlEl.dataset.splitOriginalId === taskId;
@@ -164,7 +110,6 @@ export class HandleManager {
         taskCards.forEach(el => {
             const taskEl = el as HTMLElement;
 
-            // Remove existing handles first (safety check)
             const existingHandles = taskEl.querySelectorAll('.task-card__handle');
             existingHandles.forEach(h => h.remove());
 
@@ -205,10 +150,6 @@ export class HandleManager {
             } else {
                 // Timed tasks: Top/Bottom resize + Top-Right/Bottom-Right Move
 
-                // 1. Check if touching Top Boundary (Start Hour)
-                // A continues-before segment always starts at StartHour (boundary).
-                // Hide Top Resize & Top Move for boundary-touching tasks.
-
                 const startHour = this.deps.getStartHour();
                 const [startH, startM] = (task.startTime || '00:00').split(':').map(Number);
 
@@ -223,7 +164,6 @@ export class HandleManager {
 
                 if (!isTouchingBottom && task.endTime) {
                     const [endH, endM] = task.endTime.split(':').map(Number);
-                    // If end time is StartHour:00, it touches the bottom boundary of the visual day
                     if (endH === startHour && endM === 0) {
                         isTouchingBottom = true;
                     }
@@ -256,6 +196,6 @@ export class HandleManager {
         const handle = container.createDiv('task-card__handle-btn');
         handle.setText('::');
         handle.dataset.taskId = taskId;
-        handle.style.cursor = 'move'; // Ensure cursor is set explicitly if not covered by CSS
+        handle.style.cursor = 'move';
     }
 }
