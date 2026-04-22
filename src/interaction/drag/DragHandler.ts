@@ -110,7 +110,6 @@ export class DragHandler implements DragContext {
         } else {
             taskEl = target.closest('.task-card') as HTMLElement;
             if (taskEl) {
-                // Prioritize splitOriginalId if available
                 taskId = taskEl.dataset.splitOriginalId || taskEl.dataset.id || null;
             }
         }
