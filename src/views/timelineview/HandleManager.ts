@@ -1,5 +1,7 @@
 import { Task } from '../../types';
 
+const SELECTED_Z_INDEX = 200;
+
 interface HandleManagerDeps {
     getTask(id: string): Task | undefined;
     getStartHour(): number;
@@ -45,6 +47,7 @@ export class HandleManager {
                 if (htmlEl.dataset.id === this.selectedTaskId || htmlEl.dataset.splitOriginalId === this.selectedTaskId) {
                     if (htmlEl.dataset.originalZIndex) {
                         htmlEl.style.zIndex = htmlEl.dataset.originalZIndex;
+                        delete htmlEl.dataset.originalZIndex;
                     }
                 }
             });
@@ -65,11 +68,17 @@ export class HandleManager {
         taskCards.forEach(el => {
             const htmlEl = el as HTMLElement;
             if (taskId && (htmlEl.dataset.id === taskId || htmlEl.dataset.splitOriginalId === taskId)) {
+                if (!htmlEl.dataset.originalZIndex) {
+                    htmlEl.dataset.originalZIndex = htmlEl.style.zIndex || '1';
+                }
                 el.addClass('selected');
-                htmlEl.dataset.originalZIndex = htmlEl.style.zIndex || '1';
-                htmlEl.style.zIndex = '200';
+                htmlEl.style.zIndex = String(SELECTED_Z_INDEX);
             } else {
                 el.removeClass('selected');
+                if (htmlEl.dataset.originalZIndex) {
+                    htmlEl.style.zIndex = htmlEl.dataset.originalZIndex;
+                    delete htmlEl.dataset.originalZIndex;
+                }
             }
         });
 

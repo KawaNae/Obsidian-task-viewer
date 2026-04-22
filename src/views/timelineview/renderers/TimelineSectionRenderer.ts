@@ -11,6 +11,10 @@ import { HandleManager } from '../HandleManager';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 
 
+const Z_GAP = 10;
+const SELECTED_Z_INDEX = 200;
+const Z_MAX = SELECTED_Z_INDEX - Z_GAP;
+
 export class TimelineSectionRenderer {
     constructor(
         private plugin: TaskViewerPlugin,
@@ -22,12 +26,11 @@ export class TimelineSectionRenderer {
 
     public render(container: HTMLElement, date: string, timedTasks: DisplayTask[]) {
         const startHour = this.plugin.settings.startHour;
-        const renderableTasks = timedTasks;
 
         // Calculate layout for overlapping tasks
-        const layout = TaskLayout.calculateTaskLayout(renderableTasks, date, startHour);
+        const layout = TaskLayout.calculateTaskLayout(timedTasks, date, startHour);
 
-        renderableTasks.forEach(task => {
+        timedTasks.forEach((task, index) => {
             if (!task.effectiveStartTime) return;
 
             const el = container.createDiv('task-card');
@@ -99,7 +102,7 @@ export class TimelineSectionRenderer {
             el.style.setProperty('--duration-minutes', String(duration));
             el.style.width = `calc((100% - 8px) * ${widthFraction})`;
             el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
-            el.style.zIndex = String(taskLayout.zIndex);
+            el.style.zIndex = String(Math.min(index * Z_GAP + taskLayout.zIndex, Z_MAX));
 
             this.taskRenderer.render(el, task, this.plugin.settings);
             this.menuHandler.addTaskContextMenu(el, task);

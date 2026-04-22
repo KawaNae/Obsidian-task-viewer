@@ -1,11 +1,32 @@
 import type { DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { getTaskDateRange } from './VisualDateRange';
+import {
+    compareAllDayForRender,
+    compareTimedForRender,
+    compareDueOnlyForRender,
+} from './TaskRenderOrder';
 
+/**
+ * 日付ごとのタスクバケツ。
+ * 各バケツ (allDay / timed / dueOnly) は canonical render order でソート済みで返る:
+ *   - allDay:  effectiveStartDate ASC, id ASC
+ *   - timed:   effectiveStartTime ASC, id ASC
+ *   - dueOnly: due ASC, id ASC
+ * 消費者はこの順序を前提にしてよく、再ソートは不要。
+ * この不変条件により、同一列内の `.task-card` DOM 兄弟順が決定論となり、
+ * `position: absolute` 下の paint 順（document 順）も安定する。
+ */
 export interface CategorizedTasks {
     allDay: DisplayTask[];
     timed: DisplayTask[];
     dueOnly: DisplayTask[];
+}
+
+function sortBuckets(buckets: CategorizedTasks, startHour: number): void {
+    buckets.allDay.sort(compareAllDayForRender);
+    buckets.timed.sort((a, b) => compareTimedForRender(a, b, startHour));
+    buckets.dueOnly.sort(compareDueOnlyForRender);
 }
 
 function emptyBuckets(): CategorizedTasks {
@@ -63,6 +84,7 @@ export function categorizeTasksForDate(
         const category = categorizeForDate(dt, date, startHour);
         if (category) buckets[category].push(dt);
     }
+    sortBuckets(buckets, startHour);
     return buckets;
 }
 
@@ -114,6 +136,10 @@ export function categorizeTasksByDate(
         const visualDate = range.effectiveStart || dt.effectiveStartDate;
         const bucket = map.get(visualDate);
         if (bucket) bucket.timed.push(dt);
+    }
+
+    for (const buckets of map.values()) {
+        sortBuckets(buckets, startHour);
     }
 
     return map;
