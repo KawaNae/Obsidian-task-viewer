@@ -219,7 +219,7 @@ Properties & Operators
   length      : lessThan, lessThanOrEqual, greaterThan, greaterThanOrEqual, equals, isSet, isNotSet
   anyDate     : isSet, isNotSet             (any of start/end/due set)
   kind        : includes, excludes          (value: ["inline", "file"])
-  notation    : includes, excludes          (value: ["taskviewer", "tasks", "dayplanner", "plain"])
+  notation    : includes, excludes          (value: ["taskviewer", "tasks", "dayplanner"])
   parent      : isSet, isNotSet             (no value)
   children    : isSet, isNotSet             (no value)
   property    : isSet, isNotSet, equals, contains, notContains

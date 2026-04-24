@@ -8,10 +8,10 @@
  */
 
 export type TaskKind = 'inline' | 'file';
-export type TaskNotation = 'taskviewer' | 'tasks' | 'dayplanner' | 'plain';
+export type TaskNotation = 'taskviewer' | 'tasks' | 'dayplanner';
 
 export const TASK_KIND_VALUES: readonly TaskKind[] = ['inline', 'file'];
-export const TASK_NOTATION_VALUES: readonly TaskNotation[] = ['taskviewer', 'tasks', 'dayplanner', 'plain'];
+export const TASK_NOTATION_VALUES: readonly TaskNotation[] = ['taskviewer', 'tasks', 'dayplanner'];
 
 export function getTaskKind(parserId: string): TaskKind {
     return parserId === 'frontmatter' ? 'file' : 'inline';
@@ -19,16 +19,13 @@ export function getTaskKind(parserId: string): TaskKind {
 
 export function getTaskNotation(parserId: string): TaskNotation {
     switch (parserId) {
-        case 'at-notation':
-        case 'frontmatter':
-            return 'taskviewer';
         case 'tasks-plugin':
             return 'tasks';
         case 'day-planner':
             return 'dayplanner';
-        case 'plain':
-            return 'plain';
         default:
-            return 'plain';
+            // at-notation, frontmatter, plain, and anything unknown are treated
+            // as TaskViewer-owned (this plugin's parsers surface them).
+            return 'taskviewer';
     }
 }

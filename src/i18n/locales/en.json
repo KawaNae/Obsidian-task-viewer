@@ -319,8 +319,7 @@
     "notation": {
       "taskviewer": "TaskViewer",
       "tasks": "Tasks",
-      "dayplanner": "DayPlanner",
-      "plain": "Plain"
+      "dayplanner": "DayPlanner"
     },
     "glue": {
       "afterTarget": { "self": "", "parent": "" },

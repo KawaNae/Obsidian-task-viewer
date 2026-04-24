@@ -167,9 +167,9 @@ describe('buildFilterFromParams', () => {
     });
 
     it('type with multiple values', () => {
-        const conditions = getConditions({ type: 'taskviewer,plain' });
+        const conditions = getConditions({ type: 'taskviewer,tasks' });
         const c = findCondition(conditions, 'notation');
-        expect(c!.value).toEqual(['taskviewer', 'plain']);
+        expect(c!.value).toEqual(['taskviewer', 'tasks']);
     });
 
     // ── root ──

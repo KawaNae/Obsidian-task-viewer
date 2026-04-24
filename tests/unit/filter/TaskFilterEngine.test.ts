@@ -177,9 +177,9 @@ describe('TaskFilterEngine', () => {
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
 
-        it('plain: plain parserId matches', () => {
+        it('taskviewer: plain parserId also matches (merged into TaskViewer)', () => {
             const task = makeTask({ parserId: 'plain' });
-            const state = stateFromCondition(cond('notation', 'includes', ['plain']));
+            const state = stateFromCondition(cond('notation', 'includes', ['taskviewer']));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
 
@@ -195,10 +195,10 @@ describe('TaskFilterEngine', () => {
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
 
-        it('excludes plain: at-notation passes', () => {
-            const task = makeTask({ parserId: 'at-notation' });
-            const state = stateFromCondition(cond('notation', 'excludes', ['plain']));
-            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
+        it('excludes taskviewer: plain parserId is excluded (merged)', () => {
+            const task = makeTask({ parserId: 'plain' });
+            const state = stateFromCondition(cond('notation', 'excludes', ['taskviewer']));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
         });
     });
 

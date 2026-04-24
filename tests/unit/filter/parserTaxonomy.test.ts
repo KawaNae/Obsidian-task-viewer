@@ -45,12 +45,12 @@ describe('parserTaxonomy', () => {
             expect(getTaskNotation('day-planner')).toBe('dayplanner');
         });
 
-        it('plain → plain', () => {
-            expect(getTaskNotation('plain')).toBe('plain');
+        it('plain → taskviewer (merged: PlainTaskParser is part of TaskViewer)', () => {
+            expect(getTaskNotation('plain')).toBe('taskviewer');
         });
 
-        it('unknown parserId → plain (fallback)', () => {
-            expect(getTaskNotation('xyz-unknown')).toBe('plain');
+        it('unknown parserId → taskviewer (fallback)', () => {
+            expect(getTaskNotation('xyz-unknown')).toBe('taskviewer');
         });
     });
 });

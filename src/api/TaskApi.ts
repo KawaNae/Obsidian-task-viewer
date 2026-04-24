@@ -227,7 +227,7 @@ FilterState (JSON format)
                                              (value: number, unit?: 'hours'|'minutes')
     anyDate    : isSet, isNotSet             (no value needed; isSet = any of start/end/due set)
     kind       : includes, excludes          (value: string[] of 'inline' | 'file')
-    notation   : includes, excludes          (value: string[] of 'taskviewer' | 'tasks' | 'dayplanner' | 'plain')
+    notation   : includes, excludes          (value: string[] of 'taskviewer' | 'tasks' | 'dayplanner')
     parent     : isSet, isNotSet             (no value needed)
     children   : isSet, isNotSet             (no value needed)
     property   : isSet, isNotSet, equals, contains, notContains
