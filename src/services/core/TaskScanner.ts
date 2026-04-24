@@ -1,5 +1,6 @@
 import { App, TFile, parseYaml } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
+import { isFrontmatterContainer } from '../../types';
 import { TaskParser } from '../parsing/TaskParser';
 import { FrontmatterTaskBuilder } from '../parsing/file/FrontmatterTaskBuilder';
 import { WikiLinkResolver } from './WikiLinkResolver';
@@ -171,7 +172,7 @@ export class TaskScanner {
             const fmTask = fmResult.task;
 
             // Container の content フォールバック: ファイル名のbasenameを使用
-            if (fmTask.isContainer && !fmTask.content) {
+            if (isFrontmatterContainer(fmTask) && !fmTask.content) {
                 fmTask.content = file.basename;
             }
 
@@ -187,7 +188,7 @@ export class TaskScanner {
             }
 
             // Container は子がなければ作成しない
-            const isEmptyContainer = fmTask.isContainer && fmTask.childIds.length === 0 && fmTask.childLines.length === 0;
+            const isEmptyContainer = isFrontmatterContainer(fmTask) && fmTask.childIds.length === 0 && fmTask.childLines.length === 0;
             if (!isEmptyContainer) {
                 newTasks.push(fmTask);
             }

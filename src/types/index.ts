@@ -116,9 +116,6 @@ export interface Task {
     // Resolved mask for export masking.
     mask?: string;
 
-    // True when this is a Container task (no dates, groups inline tasks).
-    isContainer?: boolean;
-
     /** True when parsed by a read-only parser (no writeback support). */
     isReadOnly?: boolean;
 
@@ -129,6 +126,31 @@ export interface Task {
 /** Check whether a task was produced by the frontmatter parser. */
 export function isFrontmatterTask(task: Pick<Task, 'parserId'>): boolean {
     return task.parserId === 'frontmatter';
+}
+
+/** True when the task has any date/time scheduling field. */
+export function hasScheduling(
+    task: Pick<Task, 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'due'>
+): boolean {
+    return !!(task.startDate || task.startTime || task.endDate || task.endTime || task.due);
+}
+
+/** True when the task has any calendar-date field (ignores time-only values). */
+export function hasDates(
+    task: Pick<Task, 'startDate' | 'endDate' | 'due'>
+): boolean {
+    return !!(task.startDate || task.endDate || task.due);
+}
+
+/**
+ * Derived: a frontmatter task with no scheduling is a "container" — it groups
+ * inline tasks from the same file without carrying dates itself. Replaces the
+ * former Task.isContainer flag.
+ */
+export function isFrontmatterContainer(
+    task: Pick<Task, 'parserId' | 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'due'>
+): boolean {
+    return isFrontmatterTask(task) && !hasScheduling(task);
 }
 
 /**
