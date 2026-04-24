@@ -229,7 +229,7 @@
       "startDate": "開始",
       "endDate": "終了",
       "due": "期限",
-      "anyDate": "開始/終了/期限",
+      "anyDate": "日付",
       "color": "カラー",
       "linestyle": "線種",
       "length": "長さ",

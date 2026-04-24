@@ -229,7 +229,7 @@
       "startDate": "Start",
       "endDate": "End",
       "due": "Due",
-      "anyDate": "start/end/due",
+      "anyDate": "Date",
       "color": "Color",
       "linestyle": "Line style",
       "length": "Length",
