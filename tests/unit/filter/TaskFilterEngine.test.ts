@@ -380,6 +380,51 @@ describe('TaskFilterEngine', () => {
         });
     });
 
+    // ── Undated filter (derived: no startDate, endDate, or due) ──
+    describe('undated filter', () => {
+        it('isSet — plain task with no dates matches', () => {
+            const task = makeTask();
+            const state = stateFromCondition(cond('undated', 'isSet'));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
+        });
+
+        it('isSet — task with startDate does not match', () => {
+            const task = makeTask({ startDate: '2026-03-10' });
+            const state = stateFromCondition(cond('undated', 'isSet'));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
+        });
+
+        it('isSet — task with only due does not match (due is a calendar date)', () => {
+            const task = makeTask({ due: '2026-03-10' });
+            const state = stateFromCondition(cond('undated', 'isSet'));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
+        });
+
+        it('isSet — task with only endDate does not match', () => {
+            const task = makeTask({ endDate: '2026-03-10' });
+            const state = stateFromCondition(cond('undated', 'isSet'));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
+        });
+
+        it('isNotSet — dated task matches', () => {
+            const task = makeTask({ startDate: '2026-03-10' });
+            const state = stateFromCondition(cond('undated', 'isNotSet'));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
+        });
+
+        it('isNotSet — undated task does not match', () => {
+            const task = makeTask();
+            const state = stateFromCondition(cond('undated', 'isNotSet'));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
+        });
+
+        it('uses effective date fields when provided (DisplayTask)', () => {
+            const dt = { ...makeTask(), effectiveStartDate: '2026-03-10' } as any;
+            const state = stateFromCondition(cond('undated', 'isSet'));
+            expect(TaskFilterEngine.evaluate(dt, state)).toBe(false);
+        });
+    });
+
     // ── Length filter ──
     describe('length filter', () => {
         // Task with 2-hour duration: 09:00 - 11:00 same day

@@ -71,6 +71,17 @@ export class TaskFilterEngine {
                 return this.evalDate(dt.effectiveEndDate ?? task.endDate, condition, context?.startHour ?? 0);
             case 'due':
                 return this.evalDate(task.due?.split('T')[0], condition, context?.startHour ?? 0);
+            case 'undated': {
+                // "undated" is a derived view: task has no calendar-date field.
+                // Uses effective* when available (DisplayTask) to respect resolved
+                // end-date / implicit start-date.
+                const effStart = dt.effectiveStartDate ?? task.startDate;
+                const effEnd = dt.effectiveEndDate ?? task.endDate;
+                const isUndated = !effStart && !effEnd && !task.due;
+                if (condition.operator === 'isSet') return isUndated;
+                if (condition.operator === 'isNotSet') return !isUndated;
+                return true;
+            }
             case 'color':
                 return this.evalStringSet(task.color ?? '', condition);
             case 'linestyle':
