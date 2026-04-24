@@ -258,7 +258,7 @@
     },
     "operators": {
       "file":      { "includes": "含まれる", "excludes": "含まれない" },
-      "tag":       { "includes": "含む", "excludes": "含まない", "equals": "含む", "only": "含む" },
+      "tag":       { "includes": "含む", "excludes": "含まない", "equals": "完全一致", "only": "のみ含む" },
       "status":    { "includes": "含む", "excludes": "含まない" },
       "content":   { "contains": "含む", "notContains": "含まない" },
       "startDate": { "isSet": "設定あり", "isNotSet": "設定なし", "equals": "一致", "before": "より前", "after": "より後", "onOrBefore": "以前", "onOrAfter": "以降" },
@@ -339,7 +339,7 @@
       },
       "afterProperty": {
         "file":      { "includes": "に", "excludes": "に" },
-        "tag":       { "includes": "を", "excludes": "を", "equals": "を", "only": "のみを" },
+        "tag":       { "includes": "を", "excludes": "を", "equals": "と", "only": "" },
         "status":    { "includes": "を", "excludes": "を" },
         "content":   { "contains": "を", "notContains": "を" },
         "startDate": { "isSet": "が", "isNotSet": "が", "equals": "が下の値と", "before": "が下の値", "after": "が下の値", "onOrBefore": "が下の値", "onOrAfter": "が下の値" },
