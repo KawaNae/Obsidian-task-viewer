@@ -43,29 +43,37 @@ export class TreeTaskExtractor {
 
     /**
      * TaskBlock を再帰的に処理してタスクを抽出する。
-     * 現 extractTasksFromLines のロジックを忠実に移植。
+     * hasAncestorTask: 祖先のどこかに既に Task 化したブロックがあるか。
+     *   - true のとき、このブロックが plain checkbox ならカードの ChildLine として
+     *     親に残すため Task 化せず null にする。
      */
     private static processTaskBlock(
         block: TaskBlock,
         section: SectionNode,
         ctx: TaskExtractionContext,
         output: Task[],
-        parentStyle?: { color?: string; linestyle?: string; mask?: string }
+        parentStyle?: { color?: string; linestyle?: string; mask?: string },
+        hasAncestorTask: boolean = false
     ): void {
         let task = TaskParser.parse(block.rawLine, ctx.filePath, block.line);
 
-        // 非デイリーノートかつFM/Container親がないファイルで、
-        // 時刻のみ（日付なし）のタスクはプレーンチェックボックスとして扱う
+        // 非デイリーノートかつ task-bearing でないファイルで、
+        // 日付を持たない（plain 含む）タスクは表出させない。
         if (task && !ctx.dailyNoteDate && !ctx.hasFrontmatterParent
             && !task.startDate && !task.endDate && !task.due
             && (!task.commands || task.commands.length === 0)) {
             task = null;
         }
 
+        // 祖先に Task がある plain は ChildLine として親カードに残すため Task 化しない。
+        if (task && task.parserId === 'plain' && hasAncestorTask) {
+            task = null;
+        }
+
         if (!task) {
             // 親はプレーンチェックボックスだが、子タスクブロックは再帰処理する
             for (const childBlock of block.childTaskBlocks) {
-                this.processTaskBlock(childBlock, section, ctx, output, parentStyle);
+                this.processTaskBlock(childBlock, section, ctx, output, parentStyle, hasAncestorTask);
             }
             return;
         }
@@ -83,10 +91,10 @@ export class TreeTaskExtractor {
         const children = block.childRawLines;
 
         // 実際にタスクを生成する childTaskBlocks のみ childLines から除外する
-        // （@notation なしの - [x] 行はタスクにならないため childLines に残す）
+        // （plain `- [ ]` は祖先に Task（＝自分）がいるため Task 化されず childLines に残す）
         const taskProducingLines = new Set<number>();
         for (const cb of block.childTaskBlocks) {
-            if (this.isTaskProducing(cb.rawLine, ctx.filePath, cb.line, ctx)) {
+            if (this.isTaskProducing(cb.rawLine, ctx.filePath, cb.line, ctx, /*hasAncestorTask=*/true)) {
                 taskProducingLines.add(cb.line);
             }
         }
@@ -155,10 +163,11 @@ export class TreeTaskExtractor {
         }
 
         // 子タスクブロックを再帰的に処理（effective style を伝播）
+        // 自分が Task 化したので、子から見ると祖先 Task が存在する。
         const style = { color: task.color, linestyle: task.linestyle, mask: task.mask };
         const childTasks: Task[] = [];
         for (const childBlock of block.childTaskBlocks) {
-            this.processTaskBlock(childBlock, section, ctx, childTasks, style);
+            this.processTaskBlock(childBlock, section, ctx, childTasks, style, /*hasAncestorTask=*/true);
         }
 
         // 親子関係を設定（直接の子のみ: インデント差 +1/+2/+4）
@@ -178,12 +187,19 @@ export class TreeTaskExtractor {
 
     /** childTaskBlock がタスクを生成するかを判定する */
     private static isTaskProducing(
-        rawLine: string, filePath: string, lineNumber: number, ctx: TaskExtractionContext
+        rawLine: string,
+        filePath: string,
+        lineNumber: number,
+        ctx: TaskExtractionContext,
+        hasAncestorTask: boolean = false
     ): boolean {
         let task = TaskParser.parse(rawLine, filePath, lineNumber);
         if (task && !ctx.dailyNoteDate && !ctx.hasFrontmatterParent
             && !task.startDate && !task.endDate && !task.due
             && (!task.commands || task.commands.length === 0)) {
+            task = null;
+        }
+        if (task && task.parserId === 'plain' && hasAncestorTask) {
             task = null;
         }
         return task !== null;

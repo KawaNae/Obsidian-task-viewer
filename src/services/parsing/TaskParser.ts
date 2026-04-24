@@ -4,6 +4,7 @@ import { ParserChain } from './strategies/ParserChain';
 import { AtNotationParser } from './inline/AtNotationParser';
 import { DayPlannerParser } from './inline/DayPlannerParser';
 import { TasksPluginParser } from './inline/TasksPluginParser';
+import { PlainTaskParser } from './inline/PlainTaskParser';
 
 /**
  * TaskParser facade - delegates to the active parser strategy.
@@ -11,12 +12,15 @@ import { TasksPluginParser } from './inline/TasksPluginParser';
  */
 export class TaskParser {
     private static strategy: ParserStrategy = new ParserChain([
-        new AtNotationParser()
+        new AtNotationParser(),
+        new PlainTaskParser(),
     ]);
 
     /**
      * Rebuild the parser chain based on current settings.
      * AtNotationParser is always first (native format, highest priority).
+     * PlainTaskParser is always last — it accepts any checkbox line, so it
+     * must run after every scheduling-aware parser.
      */
     static rebuildChain(settings: TaskViewerSettings): void {
         const parsers: ParserStrategy[] = [new AtNotationParser()];
@@ -26,6 +30,7 @@ export class TaskParser {
         if (settings.enableTasksPlugin) {
             parsers.push(new TasksPluginParser(settings.tasksPluginMapping));
         }
+        parsers.push(new PlainTaskParser());
         this.strategy = new ParserChain(parsers);
     }
 
