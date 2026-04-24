@@ -86,14 +86,17 @@ describe('FilterValueCollector', () => {
         });
     });
 
-    describe('collectParserIds', () => {
-        it('collects unique sorted parser IDs', () => {
+    describe('collectNotations', () => {
+        it('collects unique sorted notations derived from parserId', () => {
             const tasks = [
                 makeTask({ parserId: 'frontmatter' }),
                 makeTask({ parserId: 'at-notation' }),
                 makeTask({ parserId: 'at-notation' }),
+                makeTask({ parserId: 'plain' }),
+                makeTask({ parserId: 'tasks-plugin' }),
             ];
-            expect(FilterValueCollector.collectParserIds(tasks)).toEqual(['at-notation', 'frontmatter']);
+            // frontmatter + at-notation both collapse into 'taskviewer'
+            expect(FilterValueCollector.collectNotations(tasks)).toEqual(['plain', 'tasks', 'taskviewer']);
         });
     });
 });

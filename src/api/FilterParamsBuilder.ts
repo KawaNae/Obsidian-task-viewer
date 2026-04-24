@@ -103,7 +103,7 @@ export function buildFilterFromParams(params: ListParams): FilterState | null {
 
     const typeArr = normalizeStringArray(params.type);
     if (typeArr.length > 0) {
-        conditions.push(condition('taskType', 'includes', typeArr));
+        conditions.push(condition('notation', 'includes', typeArr));
     }
 
     if (params.root) {

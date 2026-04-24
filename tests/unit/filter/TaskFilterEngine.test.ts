@@ -136,17 +136,68 @@ describe('TaskFilterEngine', () => {
         });
     });
 
-    // ── StringSet: taskType ──
-    describe('taskType filter', () => {
-        it('includes at-notation', () => {
+    // ── StringSet: kind (derived from parserId) ──
+    describe('kind filter', () => {
+        it('inline: at-notation matches', () => {
             const task = makeTask({ parserId: 'at-notation' });
-            const state = stateFromCondition(cond('taskType', 'includes', ['at-notation']));
+            const state = stateFromCondition(cond('kind', 'includes', ['inline']));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
 
-        it('excludes frontmatter', () => {
+        it('inline: frontmatter does not match', () => {
+            const task = makeTask({ parserId: 'frontmatter' });
+            const state = stateFromCondition(cond('kind', 'includes', ['inline']));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
+        });
+
+        it('file: frontmatter matches', () => {
+            const task = makeTask({ parserId: 'frontmatter' });
+            const state = stateFromCondition(cond('kind', 'includes', ['file']));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
+        });
+
+        it('excludes file: at-notation matches', () => {
             const task = makeTask({ parserId: 'at-notation' });
-            const state = stateFromCondition(cond('taskType', 'excludes', ['frontmatter']));
+            const state = stateFromCondition(cond('kind', 'excludes', ['file']));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
+        });
+    });
+
+    // ── StringSet: notation (derived from parserId) ──
+    describe('notation filter', () => {
+        it('taskviewer: at-notation matches', () => {
+            const task = makeTask({ parserId: 'at-notation' });
+            const state = stateFromCondition(cond('notation', 'includes', ['taskviewer']));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
+        });
+
+        it('taskviewer: frontmatter matches (same notation family)', () => {
+            const task = makeTask({ parserId: 'frontmatter' });
+            const state = stateFromCondition(cond('notation', 'includes', ['taskviewer']));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
+        });
+
+        it('plain: plain parserId matches', () => {
+            const task = makeTask({ parserId: 'plain' });
+            const state = stateFromCondition(cond('notation', 'includes', ['plain']));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
+        });
+
+        it('tasks: tasks-plugin matches', () => {
+            const task = makeTask({ parserId: 'tasks-plugin' });
+            const state = stateFromCondition(cond('notation', 'includes', ['tasks']));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
+        });
+
+        it('dayplanner: day-planner matches', () => {
+            const task = makeTask({ parserId: 'day-planner' });
+            const state = stateFromCondition(cond('notation', 'includes', ['dayplanner']));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
+        });
+
+        it('excludes plain: at-notation passes', () => {
+            const task = makeTask({ parserId: 'at-notation' });
+            const state = stateFromCondition(cond('notation', 'excludes', ['plain']));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
     });
@@ -380,48 +431,50 @@ describe('TaskFilterEngine', () => {
         });
     });
 
-    // ── Undated filter (derived: no startDate, endDate, or due) ──
-    describe('undated filter', () => {
-        it('isSet — plain task with no dates matches', () => {
-            const task = makeTask();
-            const state = stateFromCondition(cond('undated', 'isSet'));
+    // ── anyDate filter (aggregate over start/end/due) ──
+    // isSet   = any of the three is set (scheduled)
+    // isNotSet = all three unset (inbox)
+    describe('anyDate filter', () => {
+        it('isSet — task with startDate matches', () => {
+            const task = makeTask({ startDate: '2026-03-10' });
+            const state = stateFromCondition(cond('anyDate', 'isSet'));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
 
-        it('isSet — task with startDate does not match', () => {
-            const task = makeTask({ startDate: '2026-03-10' });
-            const state = stateFromCondition(cond('undated', 'isSet'));
-            expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
-        });
-
-        it('isSet — task with only due does not match (due is a calendar date)', () => {
+        it('isSet — task with only due matches', () => {
             const task = makeTask({ due: '2026-03-10' });
-            const state = stateFromCondition(cond('undated', 'isSet'));
-            expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
-        });
-
-        it('isSet — task with only endDate does not match', () => {
-            const task = makeTask({ endDate: '2026-03-10' });
-            const state = stateFromCondition(cond('undated', 'isSet'));
-            expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
-        });
-
-        it('isNotSet — dated task matches', () => {
-            const task = makeTask({ startDate: '2026-03-10' });
-            const state = stateFromCondition(cond('undated', 'isNotSet'));
+            const state = stateFromCondition(cond('anyDate', 'isSet'));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
 
-        it('isNotSet — undated task does not match', () => {
+        it('isSet — task with only endDate matches', () => {
+            const task = makeTask({ endDate: '2026-03-10' });
+            const state = stateFromCondition(cond('anyDate', 'isSet'));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
+        });
+
+        it('isSet — task with no dates does not match', () => {
             const task = makeTask();
-            const state = stateFromCondition(cond('undated', 'isNotSet'));
+            const state = stateFromCondition(cond('anyDate', 'isSet'));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
+        });
+
+        it('isNotSet — task with no dates matches (inbox)', () => {
+            const task = makeTask();
+            const state = stateFromCondition(cond('anyDate', 'isNotSet'));
+            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
+        });
+
+        it('isNotSet — dated task does not match', () => {
+            const task = makeTask({ startDate: '2026-03-10' });
+            const state = stateFromCondition(cond('anyDate', 'isNotSet'));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
         });
 
         it('uses effective date fields when provided (DisplayTask)', () => {
             const dt = { ...makeTask(), effectiveStartDate: '2026-03-10' } as any;
-            const state = stateFromCondition(cond('undated', 'isSet'));
-            expect(TaskFilterEngine.evaluate(dt, state)).toBe(false);
+            const state = stateFromCondition(cond('anyDate', 'isSet'));
+            expect(TaskFilterEngine.evaluate(dt, state)).toBe(true);
         });
     });
 
