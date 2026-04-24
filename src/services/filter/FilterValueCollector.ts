@@ -1,4 +1,5 @@
 import type { Task } from '../../types';
+import { getTaskNotation } from './parserTaxonomy';
 
 /**
  * Collects available filter values from a set of tasks (for populating filter menus).
@@ -46,10 +47,10 @@ export class FilterValueCollector {
         return Array.from(set).sort();
     }
 
-    static collectParserIds(tasks: Task[]): string[] {
+    static collectNotations(tasks: Task[]): string[] {
         const set = new Set<string>();
         for (const task of tasks) {
-            set.add(task.parserId);
+            set.add(getTaskNotation(task.parserId));
         }
         return Array.from(set).sort();
     }

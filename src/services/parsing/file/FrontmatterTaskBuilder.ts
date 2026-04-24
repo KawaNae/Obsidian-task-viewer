@@ -5,6 +5,7 @@ import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { VALID_LINE_STYLES } from '../../../constants/style';
 import { normalizeColor } from '../../../utils/ColorUtils';
 import { validateDateTimeRules } from '../utils/DateTimeRuleValidator';
+import { isTaskBearingFile } from '../utils/FrontmatterPolicy';
 
 export interface FrontmatterParseResult {
     task: Task;
@@ -13,13 +14,13 @@ export interface FrontmatterParseResult {
 
 /**
  * Builds a frontmatter-backed Task from metadata cache data.
- * Also builds Container tasks (no dates, groups inline tasks).
+ * Also builds container-style tasks (no dates, groups inline tasks) —
+ * identified via the derived isFrontmatterContainer() helper.
  */
 export class FrontmatterTaskBuilder {
     /**
      * Parse frontmatter object and body lines into a Task.
-     * Returns null when no task-relevant fields are present.
-     * Sets task.isContainer=true when no date fields but container signals exist.
+     * Returns null when the file is not task-bearing (see isTaskBearingFile).
      */
     static parse(
         filePath: string,
@@ -30,48 +31,35 @@ export class FrontmatterTaskBuilder {
         frontmatterTaskHeader: string,
         frontmatterTaskHeaderLevel: number
     ): FrontmatterParseResult | null {
-        if (!frontmatter) return null;
+        if (!isTaskBearingFile(frontmatter, frontmatterKeys)) return null;
+        const fm = frontmatter as Record<string, any>;
 
         // Extract custom properties from frontmatter (non-plugin keys)
         const excludedKeys = new Set<string>(Object.values(frontmatterKeys));
         excludedKeys.add('tags'); // Always exclude standard Obsidian tags key
 
-        const startNorm = this.normalizeYamlDate(frontmatter[frontmatterKeys.start]);
+        const startNorm = this.normalizeYamlDate(fm[frontmatterKeys.start]);
         const start = this.parseDateTimeField(startNorm);
 
-        const endNorm = this.normalizeYamlDate(frontmatter[frontmatterKeys.end]);
+        const endNorm = this.normalizeYamlDate(fm[frontmatterKeys.end]);
         const end = this.parseDateTimeField(endNorm);
 
-        const dueNorm = this.normalizeYamlDate(frontmatter[frontmatterKeys.due]);
+        const dueNorm = this.normalizeYamlDate(fm[frontmatterKeys.due]);
         const dueParsed = this.parseDateTimeField(dueNorm);
 
         const hasDateFields = !!(start.date || start.time || end.date || end.time || dueParsed.date);
 
-        if (!hasDateFields) {
-            // Container candidate: requires at least one plugin-relevant key
-            // (tv-content, tv-color, tv-linestyle, tv-status, or tags)
-            const hasContainerSignals =
-                (frontmatterKeys.content in frontmatter) ||
-                (frontmatterKeys.color in frontmatter) ||
-                (frontmatterKeys.linestyle in frontmatter) ||
-                (frontmatterKeys.status in frontmatter) ||
-                ('tags' in frontmatter) ||
-                (frontmatterKeys.mask in frontmatter);
-
-            if (!hasContainerSignals) return null;
-        }
-
-        const rawStatus = frontmatter[frontmatterKeys.status];
+        const rawStatus = fm[frontmatterKeys.status];
         const statusChar = (rawStatus === null || rawStatus === undefined || String(rawStatus).trim() === '')
             ? ' '
             : String(rawStatus).trim()[0];
 
-        const rawContent = frontmatter[frontmatterKeys.content];
+        const rawContent = fm[frontmatterKeys.content];
         const content = (rawContent != null && String(rawContent).trim() !== '')
             ? String(rawContent).trim()
             : '';
 
-        const rawTimerTargetId = frontmatter[frontmatterKeys.timerTargetId];
+        const rawTimerTargetId = fm[frontmatterKeys.timerTargetId];
         const timerTargetId = (rawTimerTargetId == null || String(rawTimerTargetId).trim() === '')
             ? undefined
             : String(rawTimerTargetId).trim();
@@ -118,10 +106,10 @@ export class FrontmatterTaskBuilder {
         }
 
         const contentTags = TagExtractor.fromContent(content);
-        const taskTags = TagExtractor.fromFrontmatter(frontmatter['tags']);
+        const taskTags = TagExtractor.fromFrontmatter(fm['tags']);
 
         const fmProperties: Record<string, PropertyValue> = {};
-        for (const [key, value] of Object.entries(frontmatter)) {
+        for (const [key, value] of Object.entries(fm)) {
             if (excludedKeys.has(key)) continue;
             if (value === null || value === undefined) continue;
             const type: PropertyType =
@@ -136,13 +124,11 @@ export class FrontmatterTaskBuilder {
         }
 
         // Resolve color/linestyle/mask directly on the task
-        const rawColor = frontmatter[frontmatterKeys.color];
+        const rawColor = fm[frontmatterKeys.color];
         const color = (typeof rawColor === 'string' && rawColor.trim()) ? normalizeColor(rawColor) : undefined;
-        const linestyle = this.resolveLinestyle(frontmatter[frontmatterKeys.linestyle]);
-        const rawMask = frontmatter[frontmatterKeys.mask];
+        const linestyle = this.resolveLinestyle(fm[frontmatterKeys.linestyle]);
+        const rawMask = fm[frontmatterKeys.mask];
         const mask = (typeof rawMask === 'string' && rawMask.trim()) ? rawMask.trim() : undefined;
-
-        const isContainer = !hasDateFields;
 
         // Validate date/time constraints
         const validation = hasDateFields
@@ -182,7 +168,6 @@ export class FrontmatterTaskBuilder {
                 color,
                 linestyle,
                 mask,
-                isContainer,
                 validation,
             },
             wikilinkRefs,

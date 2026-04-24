@@ -133,8 +133,8 @@ export class FilterDropdownMenus {
     showPropertyMenu(anchorEl: HTMLElement, condition: FilterCondition): void {
         const properties: FilterProperty[] = [
             'file', 'tag', 'status', 'content',
-            'startDate', 'endDate', 'due',
-            'length', 'color', 'linestyle', 'taskType',
+            'startDate', 'endDate', 'due', 'anyDate',
+            'length', 'color', 'linestyle', 'kind', 'notation',
             'parent', 'children',
         ];
         const items: SelectItem[] = properties.map(p => ({

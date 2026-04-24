@@ -217,7 +217,9 @@ Properties & Operators
   color       : includes, excludes          (value: ["red"])
   linestyle   : includes, excludes          (value: ["dashed"])
   length      : lessThan, lessThanOrEqual, greaterThan, greaterThanOrEqual, equals, isSet, isNotSet
-  taskType    : includes, excludes          (value: ["at-notation"])
+  anyDate     : isSet, isNotSet             (any of start/end/due set)
+  kind        : includes, excludes          (value: ["inline", "file"])
+  notation    : includes, excludes          (value: ["taskviewer", "tasks", "dayplanner"])
   parent      : isSet, isNotSet             (no value)
   children    : isSet, isNotSet             (no value)
   property    : isSet, isNotSet, equals, contains, notContains
@@ -225,7 +227,7 @@ Properties & Operators
 Value Types
 -----------
   string[]  : ["a", "b"]
-              Used by: file, tag, status, color, linestyle, taskType
+              Used by: file, tag, status, color, linestyle, kind, notation
 
   string    : "search text"
               Used by: content

@@ -157,19 +157,19 @@ describe('buildFilterFromParams', () => {
         expect(c!.value).toEqual(['green']);
     });
 
-    // ── type ──
-    it('type → taskType includes', () => {
-        const conditions = getConditions({ type: 'frontmatter' });
-        const c = findCondition(conditions, 'taskType');
+    // ── type (maps to notation filter) ──
+    it('type → notation includes', () => {
+        const conditions = getConditions({ type: 'taskviewer' });
+        const c = findCondition(conditions, 'notation');
         expect(c).toBeDefined();
         expect(c!.operator).toBe('includes');
-        expect(c!.value).toEqual(['frontmatter']);
+        expect(c!.value).toEqual(['taskviewer']);
     });
 
     it('type with multiple values', () => {
-        const conditions = getConditions({ type: 'at-notation,frontmatter' });
-        const c = findCondition(conditions, 'taskType');
-        expect(c!.value).toEqual(['at-notation', 'frontmatter']);
+        const conditions = getConditions({ type: 'taskviewer,tasks' });
+        const c = findCondition(conditions, 'notation');
+        expect(c!.value).toEqual(['taskviewer', 'tasks']);
     });
 
     // ── root ──

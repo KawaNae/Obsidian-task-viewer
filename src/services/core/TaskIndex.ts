@@ -375,6 +375,10 @@ export class TaskIndex {
         if (isFrontmatterTask(task)) {
             await this.repository.updateFrontmatterTask(task, updates, this.settings.frontmatterTaskKeys);
         } else {
+            // at-notation / plain / other inline parsers all route through
+            // InlineTaskWriter; TaskParser.format dispatches by parserId.
+            // Promotion (plain → at-notation when @date is added) and demotion
+            // (reverse) happen automatically on the next scan after write.
             await this.repository.updateTaskInFile(task, { ...task, ...updates });
         }
     }

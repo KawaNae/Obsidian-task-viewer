@@ -5,9 +5,9 @@ import { t } from '../../i18n';
 
 export type FilterProperty =
     | 'file' | 'tag' | 'status' | 'content'
-    | 'startDate' | 'endDate' | 'due'
+    | 'startDate' | 'endDate' | 'due' | 'anyDate'
     | 'color' | 'linestyle'
-    | 'length' | 'taskType'
+    | 'length' | 'kind' | 'notation'
     | 'parent' | 'children'
     | 'property';
 
@@ -159,10 +159,12 @@ export const PROPERTY_OPERATORS: Record<FilterProperty, FilterOperator[]> = {
     startDate: ['isSet', 'isNotSet', 'equals', 'before', 'after', 'onOrBefore', 'onOrAfter'],
     endDate: ['isSet', 'isNotSet', 'equals', 'before', 'after', 'onOrBefore', 'onOrAfter'],
     due: ['isSet', 'isNotSet', 'equals', 'before', 'after', 'onOrBefore', 'onOrAfter'],
+    anyDate: ['isSet', 'isNotSet'],
     color: ['includes', 'excludes'],
     linestyle: ['includes', 'excludes'],
     length: ['lessThan', 'lessThanOrEqual', 'greaterThan', 'greaterThanOrEqual', 'equals', 'isSet', 'isNotSet'],
-    taskType: ['includes', 'excludes'],
+    kind: ['includes', 'excludes'],
+    notation: ['includes', 'excludes'],
     parent: ['isSet', 'isNotSet'],
     children: ['isSet', 'isNotSet'],
     property: ['isSet', 'isNotSet', 'equals', 'contains', 'notContains'],
@@ -192,10 +194,12 @@ export const PROPERTY_ICONS: Record<FilterProperty, string> = {
     startDate: 'calendar',
     endDate: 'calendar-check',
     due: 'alarm-clock',
+    anyDate: 'calendar-range',
     color: 'palette',
     linestyle: 'minus',
     length: 'timer',
-    taskType: 'file-type',
+    kind: 'map-pin',
+    notation: 'file-type',
     parent: 'arrow-up',
     children: 'arrow-down',
     property: 'list',

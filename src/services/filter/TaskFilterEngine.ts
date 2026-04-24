@@ -3,6 +3,7 @@ import type { FilterState, FilterCondition, FilterGroup, FilterItem, FilterConte
 import { isFilterCondition } from './FilterTypes';
 import { DateResolver } from './DateResolver';
 import { DateUtils } from '../../utils/DateUtils';
+import { getTaskKind, getTaskNotation } from './parserTaxonomy';
 
 /**
  * Evaluates whether a task passes a recursive filter tree.
@@ -71,14 +72,29 @@ export class TaskFilterEngine {
                 return this.evalDate(dt.effectiveEndDate ?? task.endDate, condition, context?.startHour ?? 0);
             case 'due':
                 return this.evalDate(task.due?.split('T')[0], condition, context?.startHour ?? 0);
+            case 'anyDate': {
+                // Aggregate over startDate / endDate / due.
+                // isSet = any of the three set (scheduled)
+                // isNotSet = all three unset (inbox)
+                // Uses effective* when available (DisplayTask) to respect
+                // resolved end-date / implicit start-date.
+                const hasAny = !!(dt.effectiveStartDate ?? task.startDate)
+                            || !!(dt.effectiveEndDate   ?? task.endDate)
+                            || !!task.due;
+                if (condition.operator === 'isSet') return hasAny;
+                if (condition.operator === 'isNotSet') return !hasAny;
+                return true;
+            }
             case 'color':
                 return this.evalStringSet(task.color ?? '', condition);
             case 'linestyle':
                 return this.evalStringSet(task.linestyle ?? '', condition);
             case 'length':
                 return this.evalLength(task, condition, context?.startHour ?? 0);
-            case 'taskType':
-                return this.evalStringSet(task.parserId, condition);
+            case 'kind':
+                return this.evalStringSet(getTaskKind(task.parserId), condition);
+            case 'notation':
+                return this.evalStringSet(getTaskNotation(task.parserId), condition);
             case 'parent':
                 if (condition.operator === 'isSet') return !!task.parentId;
                 if (condition.operator === 'isNotSet') return !task.parentId;

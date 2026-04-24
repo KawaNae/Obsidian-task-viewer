@@ -229,10 +229,12 @@
       "startDate": "Start",
       "endDate": "End",
       "due": "Due",
+      "anyDate": "Date",
       "color": "Color",
       "linestyle": "Line style",
       "length": "Length",
-      "taskType": "Task type",
+      "kind": "Kind",
+      "notation": "Notation",
       "parent": "Parent",
       "children": "Children",
       "property": "Property"
@@ -263,10 +265,12 @@
       "startDate": { "isSet": "is set", "isNotSet": "is not set", "equals": "is", "before": "is before", "after": "is after", "onOrBefore": "is on or before", "onOrAfter": "is on or after" },
       "endDate":   { "isSet": "is set", "isNotSet": "is not set", "equals": "is", "before": "is before", "after": "is after", "onOrBefore": "is on or before", "onOrAfter": "is on or after" },
       "due":       { "isSet": "is set", "isNotSet": "is not set", "equals": "is", "before": "is before", "after": "is after", "onOrBefore": "is on or before", "onOrAfter": "is on or after" },
+      "anyDate":   { "isSet": "has any", "isNotSet": "has none" },
       "color":     { "includes": "includes", "excludes": "excludes" },
       "linestyle": { "includes": "includes", "excludes": "excludes" },
       "length":    { "lessThan": "is less than", "lessThanOrEqual": "is at most", "greaterThan": "is greater than", "greaterThanOrEqual": "is at least", "equals": "is", "isSet": "is set", "isNotSet": "is not set" },
-      "taskType":  { "includes": "includes", "excludes": "excludes" },
+      "kind":      { "includes": "includes", "excludes": "excludes" },
+      "notation":  { "includes": "includes", "excludes": "excludes" },
       "parent":    { "isSet": "is set", "isNotSet": "is not set" },
       "children":  { "isSet": "is set", "isNotSet": "is not set" },
       "property":  { "isSet": "is set", "isNotSet": "is not set", "equals": "is", "contains": "contains", "notContains": "does not contain" }
@@ -308,13 +312,14 @@
     "statusDone": "Done",
     "statusCancelled": "Cancelled",
     "statusException": "Exception",
-    "taskTypeAtNotation": "@notation",
-    "taskTypeFrontmatter": "Frontmatter",
-    "taskType": {
-      "at-notation": "@notation",
-      "frontmatter": "Frontmatter",
-      "tasks-plugin": "Tasks plugin",
-      "day-planner": "Day Planner"
+    "kind": {
+      "inline": "Inline",
+      "file": "File"
+    },
+    "notation": {
+      "taskviewer": "TaskViewer",
+      "tasks": "Tasks",
+      "dayplanner": "DayPlanner"
     },
     "glue": {
       "afterTarget": { "self": "", "parent": "" },
@@ -326,10 +331,12 @@
         "startDate": { "isSet": "", "isNotSet": "", "equals": "", "before": "", "after": "", "onOrBefore": "", "onOrAfter": "" },
         "endDate":   { "isSet": "", "isNotSet": "", "equals": "", "before": "", "after": "", "onOrBefore": "", "onOrAfter": "" },
         "due":       { "isSet": "", "isNotSet": "", "equals": "", "before": "", "after": "", "onOrBefore": "", "onOrAfter": "" },
+        "anyDate":   { "isSet": "", "isNotSet": "" },
         "color":     { "includes": "", "excludes": "" },
         "linestyle": { "includes": "", "excludes": "" },
         "length":    { "lessThan": "", "lessThanOrEqual": "", "greaterThan": "", "greaterThanOrEqual": "", "equals": "", "isSet": "", "isNotSet": "" },
-        "taskType":  { "includes": "", "excludes": "" },
+        "kind":      { "includes": "", "excludes": "" },
+        "notation":  { "includes": "", "excludes": "" },
         "parent":    { "isSet": "", "isNotSet": "" },
         "children":  { "isSet": "", "isNotSet": "" },
         "property":  { "isSet": "", "isNotSet": "", "equals": "", "contains": "", "notContains": "" }
@@ -342,10 +349,12 @@
         "startDate": { "isSet": "", "isNotSet": "", "equals": "", "before": "", "after": "", "onOrBefore": "", "onOrAfter": "" },
         "endDate":   { "isSet": "", "isNotSet": "", "equals": "", "before": "", "after": "", "onOrBefore": "", "onOrAfter": "" },
         "due":       { "isSet": "", "isNotSet": "", "equals": "", "before": "", "after": "", "onOrBefore": "", "onOrAfter": "" },
+        "anyDate":   { "isSet": "", "isNotSet": "" },
         "color":     { "includes": "", "excludes": "" },
         "linestyle": { "includes": "", "excludes": "" },
         "length":    { "lessThan": "", "lessThanOrEqual": "", "greaterThan": "", "greaterThanOrEqual": "", "equals": "", "isSet": "", "isNotSet": "" },
-        "taskType":  { "includes": "", "excludes": "" },
+        "kind":      { "includes": "", "excludes": "" },
+        "notation":  { "includes": "", "excludes": "" },
         "parent":    { "isSet": "", "isNotSet": "" },
         "children":  { "isSet": "", "isNotSet": "" },
         "property":  { "isSet": "", "isNotSet": "", "equals": "", "contains": "", "notContains": "" }

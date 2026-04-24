@@ -517,4 +517,83 @@ describe('TreeTaskExtractor', () => {
             expect(tasks[0].properties['tags']).toBeUndefined();
         });
     });
+
+    describe('plain inbox tasks (task-bearing files)', () => {
+        it('task-bearing file の top-level plain は inbox Task として抽出される', () => {
+            const tasks = extractTasks([
+                '- [ ] やりたいこと',
+            ], undefined, { hasFrontmatterParent: true });
+            expect(tasks).toHaveLength(1);
+            expect(tasks[0].parserId).toBe('plain');
+            expect(tasks[0].content).toBe('やりたいこと');
+            expect(tasks[0].startDate).toBeUndefined();
+            expect(tasks[0].endDate).toBeUndefined();
+            expect(tasks[0].due).toBeUndefined();
+        });
+
+        it('非 task-bearing file の plain は従来どおり無視される', () => {
+            const tasks = extractTasks([
+                '- [ ] 議事メモ',
+            ]);
+            expect(tasks).toHaveLength(0);
+        });
+
+        it('@ タスク配下の plain は Task 化されず親の childLines に残る', () => {
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24',
+                '    - [ ] 子手順',
+            ], undefined, { dailyNoteDate: '2026-03-24', hasFrontmatterParent: true });
+            const parents = tasks.filter(t => t.parserId !== 'plain');
+            const plainTasks = tasks.filter(t => t.parserId === 'plain');
+            expect(parents).toHaveLength(1);
+            expect(plainTasks).toHaveLength(0);
+            const parent = parents[0];
+            expect(parent.childLines.some(c => c.text.includes('子手順'))).toBe(true);
+        });
+
+        it('plain の配下に置かれた @ タスクは plain の子になる', () => {
+            const tasks = extractTasks([
+                '- [ ] inbox 親',
+                '    - [ ] scheduled @2026-03-24',
+            ], undefined, { hasFrontmatterParent: true });
+            const inbox = tasks.find(t => t.parserId === 'plain')!;
+            const scheduled = tasks.find(t => t.parserId === 'at-notation')!;
+            expect(inbox).toBeDefined();
+            expect(scheduled).toBeDefined();
+            expect(scheduled.parentId).toBe(inbox.id);
+            expect(inbox.childIds).toContain(scheduled.id);
+        });
+
+        it('plain の孫になる plain は childLine として保持される（祖先ルール）', () => {
+            const tasks = extractTasks([
+                '- [ ] inbox 親',
+                '    - [ ] nested plain',
+            ], undefined, { hasFrontmatterParent: true });
+            const plainTasks = tasks.filter(t => t.parserId === 'plain');
+            expect(plainTasks).toHaveLength(1);
+            expect(plainTasks[0].content).toBe('inbox 親');
+            expect(plainTasks[0].childLines.some(c => c.text.includes('nested plain'))).toBe(true);
+        });
+
+        it('デイリーノート内の plain は日付継承により dated task になる（inbox ではない）', () => {
+            const tasks = extractTasks([
+                '- [ ] メモ',
+            ], undefined, { dailyNoteDate: '2026-03-24' });
+            expect(tasks).toHaveLength(1);
+            expect(tasks[0].parserId).toBe('plain');
+            expect(tasks[0].startDate).toBe('2026-03-24');
+        });
+
+        it('同一ファイル内で @ task と inbox task が共存できる', () => {
+            const tasks = extractTasks([
+                '- [ ] scheduled @2026-03-24',
+                '- [ ] inbox item',
+            ], undefined, { hasFrontmatterParent: true });
+            expect(tasks).toHaveLength(2);
+            const scheduled = tasks.find(t => t.parserId === 'at-notation')!;
+            const inbox = tasks.find(t => t.parserId === 'plain')!;
+            expect(scheduled.startDate).toBe('2026-03-24');
+            expect(inbox.startDate).toBeUndefined();
+        });
+    });
 });
