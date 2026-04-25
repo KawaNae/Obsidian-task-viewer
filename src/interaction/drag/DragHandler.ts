@@ -114,6 +114,16 @@ export class DragHandler implements DragContext {
             }
         }
 
+        console.log('[task-select] DragHandler.onPointerDown', {
+            targetTag: target.tagName,
+            targetCls: target.className,
+            isFromHandle,
+            taskId,
+            taskElDatasetId: taskEl?.dataset.id,
+            taskElDatasetSplitId: taskEl?.dataset.splitOriginalId,
+            taskElText: (taskEl?.textContent || '').slice(0, 40),
+        });
+
         if (!taskEl || !taskId) return;
 
         const task = this.readService.getTask(taskId);

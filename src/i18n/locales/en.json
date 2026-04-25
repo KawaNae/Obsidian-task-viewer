@@ -14,6 +14,8 @@
       "showEditorMenuForTasksDesc": "Show a ··· menu button on recognized inline task lines in the editor.",
       "showEditorMenuForCheckboxes": "Show Editor Menu for Checkboxes",
       "showEditorMenuForCheckboxesDesc": "Show a ··· menu button on plain checkbox lines in the editor.",
+      "showFileMenuForFrontmatterTasks": "Show File Menu for Frontmatter Tasks",
+      "showFileMenuForFrontmatterTasksDesc": "Add task action items to the context menu of frontmatter task files (file explorer right-click / tab ··· / pane more options).",
       "checkboxes": "Checkboxes",
       "applyCustomCheckboxStyles": "Apply Custom Checkboxes Styles",
       "applyCustomCheckboxStylesDesc": "If enabled, the plugin will apply its checkbox styles to the entire Obsidian editor, replacing the need for a separate CSS snippet.",

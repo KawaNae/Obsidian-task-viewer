@@ -38,6 +38,16 @@ export class HandleManager {
      * segments of the same task get `.selected` via `dataset.splitOriginalId`.
      */
     selectTask(taskId: string | null): void {
+        const prev = this.selectedTaskId;
+        const taskInfo = taskId ? this.deps.getTask(taskId) : undefined;
+        console.log('[task-select] selectTask', {
+            arg: taskId,
+            prev,
+            taskFile: taskInfo?.file,
+            taskLine: taskInfo?.line,
+            taskContent: taskInfo?.content?.slice(0, 40),
+            stack: new Error().stack?.split('\n').slice(2, 8).join('\n'),
+        });
         // Remove handles from previously selected task and restore z-index.
         if (this.selectedTaskId) {
             this.removeHandles(this.selectedTaskId);
@@ -65,22 +75,46 @@ export class HandleManager {
     reapplySelectionClass(): void {
         const taskId = this.selectedTaskId;
         const taskCards = this.getMainTaskCards();
+        const added: Array<{ id?: string; splitId?: string; text?: string }> = [];
+        const removed: Array<{ id?: string; splitId?: string; text?: string }> = [];
+        console.log('[task-select] reapplySelectionClass start', {
+            selectedTaskId: taskId,
+            cardCount: taskCards.length,
+        });
         taskCards.forEach(el => {
             const htmlEl = el as HTMLElement;
+            const wasSelected = el.classList.contains('selected');
             if (taskId && (htmlEl.dataset.id === taskId || htmlEl.dataset.splitOriginalId === taskId)) {
                 if (!htmlEl.dataset.originalZIndex) {
                     htmlEl.dataset.originalZIndex = htmlEl.style.zIndex || '1';
                 }
                 el.addClass('selected');
                 htmlEl.style.zIndex = String(SELECTED_Z_INDEX);
+                if (!wasSelected) {
+                    added.push({
+                        id: htmlEl.dataset.id,
+                        splitId: htmlEl.dataset.splitOriginalId,
+                        text: (htmlEl.textContent || '').slice(0, 40),
+                    });
+                }
             } else {
                 el.removeClass('selected');
                 if (htmlEl.dataset.originalZIndex) {
                     htmlEl.style.zIndex = htmlEl.dataset.originalZIndex;
                     delete htmlEl.dataset.originalZIndex;
                 }
+                if (wasSelected) {
+                    removed.push({
+                        id: htmlEl.dataset.id,
+                        splitId: htmlEl.dataset.splitOriginalId,
+                        text: (htmlEl.textContent || '').slice(0, 40),
+                    });
+                }
             }
         });
+        if (added.length || removed.length) {
+            console.log('[task-select] reapplySelectionClass diff', { added, removed });
+        }
 
         if (taskId) {
             this.renderHandles(taskId);

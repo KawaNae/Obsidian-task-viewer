@@ -284,7 +284,9 @@ export class TimelineView extends ItemView {
             (taskId: string) => {
                 // Store base task id so split segments all share one selection and
                 // the selection survives a drag-move that regenerates segment ids.
-                const baseId = TaskIdGenerator.parseSegmentId(taskId)?.baseId ?? taskId;
+                const segInfo = TaskIdGenerator.parseSegmentId(taskId);
+                const baseId = segInfo?.baseId ?? taskId;
+                console.log('[task-select] onTaskClick callback', { incomingTaskId: taskId, parsedSegment: segInfo, baseId });
                 this.handleManager.selectTask(baseId);
             },
             () => { /* no-op: handles are inside task cards */ },
@@ -299,7 +301,16 @@ export class TimelineView extends ItemView {
             // If clicking handle, do nothing (handled by DragHandler or button click)
             if (target.closest('.task-card__handle-btn')) return;
 
-            if (!target.closest('.task-card')) {
+            const cardEl = target.closest('.task-card') as HTMLElement | null;
+            console.log('[task-select] bg-click', {
+                targetTag: target.tagName,
+                targetCls: target.className,
+                cardHit: !!cardEl,
+                cardId: cardEl?.dataset.id,
+                cardSplitId: cardEl?.dataset.splitOriginalId,
+                currentSelected: this.handleManager.getSelectedTaskId(),
+            });
+            if (!cardEl) {
                 if (this.handleManager.getSelectedTaskId()) {
                     this.handleManager.selectTask(null);
                 }
@@ -318,6 +329,17 @@ export class TimelineView extends ItemView {
 
         // Subscribe to data changes
         this.unsubscribe = this.readService.onChange((taskId, changes) => {
+            const sel = this.handleManager.getSelectedTaskId();
+            const selTask = sel ? this.readService.getTask(sel) : undefined;
+            console.log('[task-select] onChange', {
+                taskId,
+                changes,
+                currentSelected: sel,
+                selectedExists: !!selTask,
+                selectedFile: selTask?.file,
+                selectedLine: selTask?.line,
+                selectedContent: selTask?.content?.slice(0, 40),
+            });
             // On first data load, re-evaluate startDate and scroll to now
             if (!this.hasInitializedStartDate && this.readService.getTasks().length > 0) {
                 this.hasInitializedStartDate = true;
@@ -526,8 +548,16 @@ export class TimelineView extends ItemView {
 
     private tryPartialUpdate(taskId: string): boolean {
         const card = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
-        if (!card) return false;
         const dt = this.readService.getDisplayTask(taskId);
+        console.log('[task-select] tryPartialUpdate', {
+            taskId,
+            cardFound: !!card,
+            cardSplitId: card?.dataset.splitOriginalId,
+            dtExists: !!dt,
+            dtFile: dt?.file,
+            dtLine: dt?.line,
+        });
+        if (!card) return false;
         if (!dt) return false;
 
         const contentContainer = card.querySelector('.task-card__content');
@@ -730,8 +760,14 @@ export class TimelineView extends ItemView {
         // Section renderers already tagged cards with `.selected` during render;
         // reapplySelectionClass is idempotent and ensures handles are attached
         // and z-index is raised on the fresh DOM.
-        if (this.handleManager.getSelectedTaskId()) {
+        const selectedAtScheduleTime = this.handleManager.getSelectedTaskId();
+        if (selectedAtScheduleTime) {
+            console.log('[task-select] performRender end - schedule rAF reapply', { selectedTaskId: selectedAtScheduleTime });
             requestAnimationFrame(() => {
+                console.log('[task-select] performRender end - rAF fired reapply', {
+                    selectedAtScheduleTime,
+                    selectedNow: this.handleManager.getSelectedTaskId(),
+                });
                 this.handleManager.reapplySelectionClass();
             });
         }

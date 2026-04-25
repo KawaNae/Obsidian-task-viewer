@@ -29,6 +29,16 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
                 plugin.notifyEditorMenuSettingsChanged();
             }));
 
+    new Setting(el)
+        .setName(t('settings.general.showFileMenuForFrontmatterTasks'))
+        .setDesc(t('settings.general.showFileMenuForFrontmatterTasksDesc'))
+        .addToggle(toggle => toggle
+            .setValue(plugin.settings.fileMenuForFrontmatterTasks)
+            .onChange(async (value) => {
+                plugin.settings.fileMenuForFrontmatterTasks = value;
+                await plugin.saveSettings();
+            }));
+
     // Checkboxes
     el.createEl('h3', { text: t('settings.general.checkboxes'), cls: 'setting-section-header' });
 
