@@ -96,7 +96,16 @@ export class AllDaySectionRenderer {
         }
         if (entry.continuesBefore) el.addClass('task-card--split-continues-before');
         if (entry.continuesAfter) el.addClass('task-card--split-continues-after');
-        if (task.id === this.handleManager.getSelectedTaskId()) el.addClass('selected');
+        if (task.id === this.handleManager.getSelectedTaskId()) {
+            console.log('[task-select] AllDaySectionRenderer initial .selected match', {
+                taskId: task.id,
+                originalTaskId: task.originalTaskId,
+                file: task.file,
+                line: task.line,
+                content: task.content?.slice(0, 40),
+            });
+            el.addClass('selected');
+        }
         el.dataset.id = task.id;
 
         TaskStyling.applyTaskColor(el, task.color ?? null);
