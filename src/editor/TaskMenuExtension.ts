@@ -12,6 +12,7 @@ import type { TaskActionsMenuBuilder } from '../interaction/menu/builders/TaskAc
 import type { CheckboxMenuBuilder, CheckboxLineOps } from '../interaction/menu/builders/CheckboxMenuBuilder';
 import type { ValidationMenuBuilder } from '../interaction/menu/builders/ValidationMenuBuilder';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
+import { getTaskNotation } from '../services/filter/parserTaxonomy';
 
 const taskIndexChanged = StateEffect.define<void>();
 const settingsChanged = StateEffect.define<void>();
@@ -80,10 +81,11 @@ export function createTaskMenuExtension(
         if (!filePath) return;
 
         const task = readService.getTaskByFileLine(filePath, lineNumber);
+        const isTaskviewerTask = !!task && getTaskNotation(task.parserId) === 'taskviewer';
         const menu = new Menu();
 
-        if (task) {
-            // Recognized task: full menu
+        if (isTaskviewerTask && task) {
+            // Recognized taskviewer-notation task: full menu
             validationBuilder.addValidationWarning(menu, task);
             const dt = toDisplayTask(task, getSettings().startHour);
             propertiesBuilder.addStatusSubmenu(menu, task);
@@ -93,7 +95,8 @@ export function createTaskMenuExtension(
             menu.addSeparator();
             actionsBuilder.addTaskActions(menu, task);
         } else {
-            // Plain checkbox: status + basic actions
+            // Plain checkbox or external-notation task (tasks-plugin / day-planner):
+            // status + basic actions, writing through CheckboxLineOps preserves the original notation.
             const lineText = view.state.doc.line(lineNumber + 1).text; // CM6 lines are 1-based
 
             const ops: CheckboxLineOps = {
@@ -136,8 +139,9 @@ export function createTaskMenuExtension(
                     seen.add(line.number);
                     let show = true;
                     if (needsFilter && filePath) {
-                        const isTask = !!readService.getTaskByFileLine(filePath, lineNumber);
-                        show = isTask ? settings.editorMenuForTasks : settings.editorMenuForCheckboxes;
+                        const found = readService.getTaskByFileLine(filePath, lineNumber);
+                        const isTaskviewerTask = !!found && getTaskNotation(found.parserId) === 'taskviewer';
+                        show = isTaskviewerTask ? settings.editorMenuForTasks : settings.editorMenuForCheckboxes;
                     }
                     if (show) {
                         widgets.push({

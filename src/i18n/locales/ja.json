@@ -14,6 +14,8 @@
       "showEditorMenuForTasksDesc": "エディター内のインラインタスク行に ··· メニューボタンを表示します。",
       "showEditorMenuForCheckboxes": "チェックボックスにエディターメニューを表示",
       "showEditorMenuForCheckboxesDesc": "エディター内のプレーンチェックボックス行に ··· メニューボタンを表示します。",
+      "showFileMenuForFrontmatterTasks": "フロントマタータスクにファイルメニューを表示",
+      "showFileMenuForFrontmatterTasksDesc": "フロントマタータスクファイルのコンテキストメニュー（ファイルエクスプローラ右クリック / タブ ··· / ペインの more options）にタスク操作項目を追加します。",
       "checkboxes": "チェックボックス",
       "applyCustomCheckboxStyles": "カスタムチェックボックススタイルを適用",
       "applyCustomCheckboxStylesDesc": "有効にすると、プラグインのチェックボックススタイルがObsidianエディター全体に適用されます。別途CSSスニペットは不要になります。",

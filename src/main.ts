@@ -35,6 +35,7 @@ import { TaskActionsMenuBuilder } from './interaction/menu/builders/TaskActionsM
 import { CheckboxMenuBuilder } from './interaction/menu/builders/CheckboxMenuBuilder';
 import { ValidationMenuBuilder } from './interaction/menu/builders/ValidationMenuBuilder';
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
+import { toDisplayTask } from './services/display/DisplayTaskConverter';
 import { registerCliHandlers } from './cli/CliRegistrar';
 import { TaskApi } from './api/TaskApi';
 import { TaskReadService } from './services/data/TaskReadService';
@@ -275,6 +276,31 @@ export default class TaskViewerPlugin extends Plugin {
         this.registerEditorExtension(taskMenuResult.extension);
         this.taskMenuCleanup = taskMenuResult.cleanup;
         this.taskMenuNotifySettingsChanged = taskMenuResult.notifySettingsChanged;
+
+        // File context menu integration for frontmatter tasks.
+        // Frontmatter tasks have line === -1 and no inline anchor in the editor body,
+        // so we surface the full task menu via Obsidian's file-menu (file explorer / tab / pane).
+        this.registerEvent(
+            this.app.workspace.on('file-menu', (menu, file) => {
+                if (!this.settings.fileMenuForFrontmatterTasks) return;
+                if (!(file instanceof TFile)) return;
+
+                const task = this.taskIndex.getTasks().find(t =>
+                    t.file === file.path && t.parserId === 'frontmatter'
+                );
+                if (!task) return;
+
+                menu.addSeparator();
+                editorValidationBuilder.addValidationWarning(menu, task);
+                editorPropertiesBuilder.addStatusSubmenu(menu, task);
+                const dt = toDisplayTask(task, this.settings.startHour);
+                editorPropertiesBuilder.buildPropertiesSubmenu(menu, dt, null);
+                menu.addSeparator();
+                editorTimerBuilder.addTimerSubmenu(menu, task);
+                menu.addSeparator();
+                editorActionsBuilder.addTaskActions(menu, task);
+            })
+        );
 
         // Apply global styles if enabled
         this.updateGlobalStyles();

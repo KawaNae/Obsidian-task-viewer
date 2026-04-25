@@ -353,6 +353,7 @@ export interface TaskViewerSettings {
     reuseExistingTab: boolean;
     editorMenuForTasks: boolean;
     editorMenuForCheckboxes: boolean;
+    fileMenuForFrontmatterTasks: boolean;
     calendarWeekStartDay: 0 | 1;
     calendarShowWeekNumbers: boolean;
     weeklyNoteFormat: string;
@@ -417,6 +418,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     reuseExistingTab: true,
     editorMenuForTasks: true,
     editorMenuForCheckboxes: true,
+    fileMenuForFrontmatterTasks: true,
     calendarWeekStartDay: 0,
     calendarShowWeekNumbers: false,
     weeklyNoteFormat: 'gggg-[W]ww',

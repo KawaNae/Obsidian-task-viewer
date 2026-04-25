@@ -236,7 +236,7 @@ export class TaskIndex {
 
     getTaskByFileLine(filePath: string, line: number): Task | undefined {
         return this.getTasks().find(t =>
-            t.file === filePath && t.line === line && t.parserId === 'at-notation'
+            t.file === filePath && t.line === line
         );
     }
 
