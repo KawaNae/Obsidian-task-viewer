@@ -2,7 +2,8 @@ import { ItemView, WorkspaceLeaf, setIcon, type Workspace, type ViewStateResult 
 import { t } from '../../i18n';
 import { ViewUriBuilder } from '../sharedLogic/ViewUriBuilder';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import { ViewState, PinnedListDefinition, isCompleteStatusChar } from '../../types';
+import { ViewState, PinnedListDefinition } from '../../types';
+import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
@@ -881,19 +882,6 @@ export class TimelineView extends ItemView {
         const filterState = this.toolbar.getFilterState();
         const displayTasks = this.readService.getFilteredTasks(filterState);
 
-        // Find the oldest past date among incomplete, visible tasks
-        let oldestDate: string | null = null;
-
-        for (const dt of displayTasks) {
-            if (!dt.effectiveStartDate) continue;
-            if (isCompleteStatusChar(dt.statusChar, this.plugin.settings.statusDefinitions)) continue;
-            if (dt.effectiveStartDate >= visualToday) continue;
-
-            if (!oldestDate || dt.effectiveStartDate < oldestDate) {
-                oldestDate = dt.effectiveStartDate;
-            }
-        }
-
-        return oldestDate;
+        return findOldestOverdueDate(displayTasks, visualToday, this.plugin.settings.statusDefinitions);
     }
 }

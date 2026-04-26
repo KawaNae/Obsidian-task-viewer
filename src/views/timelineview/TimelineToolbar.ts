@@ -1,6 +1,7 @@
 import { App, setIcon, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
-import { ViewState, isCompleteStatusChar } from '../../types';
+import { ViewState } from '../../types';
+import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
 import { TaskReadService } from '../../services/data/TaskReadService';
 import { DateUtils } from '../../utils/DateUtils';
 import type { LeafPosition } from '../sharedLogic/ViewUriBuilder';
@@ -195,21 +196,7 @@ export class TimelineToolbar {
         const filterState = this.getFilterState();
         const displayTasks = readService.getFilteredTasks(filterState);
 
-        // Find the oldest past date among incomplete tasks
-        let oldestDate: string | null = null;
-
-        for (const dt of displayTasks) {
-            if (!dt.effectiveStartDate) continue;
-            if (isCompleteStatusChar(dt.statusChar, this.plugin.settings.statusDefinitions)) continue;
-
-            if (dt.effectiveStartDate < visualToday) {
-                if (!oldestDate || dt.effectiveStartDate < oldestDate) {
-                    oldestDate = dt.effectiveStartDate;
-                }
-            }
-        }
-
-        return oldestDate;
+        return findOldestOverdueDate(displayTasks, visualToday, this.plugin.settings.statusDefinitions);
     }
 
     private renderViewModeSwitch(toolbar: HTMLElement): void {

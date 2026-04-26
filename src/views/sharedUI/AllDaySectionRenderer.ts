@@ -3,7 +3,6 @@ import { Menu } from 'obsidian';
 import TaskViewerPlugin from '../../main';
 import { t } from '../../i18n';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { DateUtils } from '../../utils/DateUtils';
 import { TaskStyling } from './TaskStyling';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { HandleManager } from '../timelineview/HandleManager';
@@ -12,7 +11,7 @@ import { CreateTaskModal, formatTaskLine } from '../../modals/CreateTaskModal';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from './DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
-import { getTaskDateRange } from '../../services/display/VisualDateRange';
+import { getTaskDateRange, isTaskAllDay } from '../../services/display/VisualDateRange';
 
 export class AllDaySectionRenderer {
     constructor(
@@ -42,9 +41,7 @@ export class AllDaySectionRenderer {
             // - Tasks without startTime (S-All, SD, ED, E types)
             // - Tasks with startTime but duration >= 24 hours
             // Exclude: SE/SED tasks with duration < 24 hours (those go to timeline)
-            return DateUtils.isAllDayTask(
-                dt.effectiveStartDate, dt.effectiveStartTime, dt.effectiveEndDate, dt.effectiveEndTime, startHour
-            );
+            return isTaskAllDay(dt, startHour);
         });
 
         // Pre-split at view boundaries (allDay tasks only need date-range split)
