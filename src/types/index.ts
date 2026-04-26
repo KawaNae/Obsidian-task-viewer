@@ -56,6 +56,12 @@ export interface Task {
     // Identity and source location.
     id: string;
     file: string;
+    /**
+     * 0-indexed line number in the source file.
+     * `-1` is a generic sentinel meaning "no body line" (e.g., frontmatter root tasks).
+     * Use `hasBodyLine(task)` to test validity. `-1` is NOT a frontmatter discriminator
+     * — use `isFrontmatterTask(task)` for type identification.
+     */
     line: number;
 
     // Core task text/status.
@@ -123,9 +129,27 @@ export interface Task {
     properties: Record<string, PropertyValue>;
 }
 
-/** Check whether a task was produced by the frontmatter parser. */
+/** Check whether a task was produced by the file-level (frontmatter) parser. */
 export function isFrontmatterTask(task: Pick<Task, 'parserId'>): boolean {
-    return task.parserId === 'frontmatter';
+    return task.parserId === 'tv-file';
+}
+
+/** Check whether a task was produced by the TaskViewer inline parser. */
+export function isTaskViewerInlineTask(task: Pick<Task, 'parserId'>): boolean {
+    return task.parserId === 'tv-inline';
+}
+
+/**
+ * task.line が body 行アクセスに使える有効値かを判定する。
+ * `false` の場合: frontmatter task (line === -1) など、ファイル本体に
+ * 紐付く行を持たないタスク。
+ *
+ * 注意: 種別判定（frontmatter かどうか）には使わないこと。
+ * `-1` は「body 行なし」の汎用 sentinel であり、frontmatter discriminator
+ * ではない。種別判定は `isFrontmatterTask()` を使用する。
+ */
+export function hasBodyLine(task: Pick<Task, 'line'>): boolean {
+    return task.line >= 0;
 }
 
 /** True when the task has any date/time scheduling field. */
@@ -345,6 +369,7 @@ export interface TaskViewerSettings {
     pomodoroBreakMinutes: number;
     countdownMinutes: number;
     pastDaysToShow: number;
+    startFromOldestOverdue: boolean;
     habitExcludeKeys: string[];
     frontmatterTaskHeader: string;
     frontmatterTaskHeaderLevel: number;
@@ -410,6 +435,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     pomodoroBreakMinutes: 5,
     countdownMinutes: 25,
     pastDaysToShow: 0,
+    startFromOldestOverdue: true,
     habitExcludeKeys: ['tags', 'cssclasses', 'aliases'],
     frontmatterTaskHeader: 'Tasks',
     frontmatterTaskHeaderLevel: 2,

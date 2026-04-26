@@ -68,7 +68,7 @@ Methods
       root?: boolean               Only root tasks (no parent)
       property?: string            Custom property ("key:value")
       color?: string | string[]    Card color(s)
-      type?: string | string[]     Task type (at-notation, frontmatter)
+      type?: string | string[]     Task notation (taskviewer, tasks, dayplanner)
       filter?: FilterState         FilterState object (overrides simple fields)
       filterFile?: string          Vault file path (.json or .md template)
       list?: string                Pinned list name (for .md templates)
@@ -267,16 +267,16 @@ Examples
   api.today({ sort: [{ property: 'startDate', direction: 'asc' }] });
 
   // Get a specific task
-  api.get({ id: 'at-notation:daily/2026-03-15.md:ln:5' });
+  api.get({ id: 'tv-inline:daily/2026-03-15.md:ln:5' });
 
   // Duplicate a task, shifting dates by 1 day
-  await api.duplicate({ id: 'at-notation:daily/2026-03-15.md:ln:5', dayOffset: 1 });
+  await api.duplicate({ id: 'tv-inline:daily/2026-03-15.md:ln:5', dayOffset: 1 });
 
   // Duplicate a task 3 times (no date shift)
-  await api.duplicate({ id: 'at-notation:daily/2026-03-15.md:ln:5', count: 3 });
+  await api.duplicate({ id: 'tv-inline:daily/2026-03-15.md:ln:5', count: 3 });
 
   // Convert an inline task to a frontmatter task file
-  await api.convertToFrontmatter({ id: 'at-notation:daily/2026-03-15.md:ln:5' });
+  await api.convertToFrontmatter({ id: 'tv-inline:daily/2026-03-15.md:ln:5' });
 
   // List tasks in a date range
   await api.tasksForDateRange({ start: '2026-03-01', end: '2026-03-31' });
@@ -292,7 +292,7 @@ Examples
   api.categorizedTasksForDateRange({ start: '2026-03-23', end: '2026-03-29' });
 
   // Insert a child task
-  await api.insertChildTask({ parentId: 'at-notation:daily/2026-03-15.md:ln:5', content: 'Sub-task' });
+  await api.insertChildTask({ parentId: 'tv-inline:daily/2026-03-15.md:ln:5', content: 'Sub-task' });
 
   // Create a frontmatter task
   await api.createFrontmatterTask({ content: 'Project task', start: '2026-03-20 10:00' });

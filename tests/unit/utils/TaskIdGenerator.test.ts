@@ -4,46 +4,46 @@ import { TaskIdGenerator } from '../../../src/services/display/TaskIdGenerator';
 describe('TaskIdGenerator', () => {
     describe('generate', () => {
         it('creates parserId:filePath:anchor format', () => {
-            expect(TaskIdGenerator.generate('at-notation', 'notes/daily.md', 'blk:abc123')).toBe('at-notation:notes/daily.md:blk:abc123');
+            expect(TaskIdGenerator.generate('tv-inline', 'notes/daily.md', 'blk:abc123')).toBe('tv-inline:notes/daily.md:blk:abc123');
         });
     });
 
     describe('resolveAnchor', () => {
         it('prioritizes blockId', () => {
-            expect(TaskIdGenerator.resolveAnchor({ blockId: 'abc', timerTargetId: 'tid1', line: 5, parserId: 'at-notation' })).toBe('blk:abc');
+            expect(TaskIdGenerator.resolveAnchor({ blockId: 'abc', timerTargetId: 'tid1', line: 5, parserId: 'tv-inline' })).toBe('blk:abc');
         });
 
         it('uses timerTargetId when no blockId', () => {
-            expect(TaskIdGenerator.resolveAnchor({ timerTargetId: 'tid1', line: 5, parserId: 'at-notation' })).toBe('tid:tid1');
+            expect(TaskIdGenerator.resolveAnchor({ timerTargetId: 'tid1', line: 5, parserId: 'tv-inline' })).toBe('tid:tid1');
         });
 
-        it('uses fm-root for frontmatter parser', () => {
-            expect(TaskIdGenerator.resolveAnchor({ parserId: 'frontmatter' })).toBe('fm-root');
+        it('uses fm-root for the tv-file parser', () => {
+            expect(TaskIdGenerator.resolveAnchor({ parserId: 'tv-file' })).toBe('fm-root');
         });
 
         it('uses line number (1-based) when no other anchor', () => {
-            expect(TaskIdGenerator.resolveAnchor({ line: 5, parserId: 'at-notation' })).toBe('ln:6');
+            expect(TaskIdGenerator.resolveAnchor({ line: 5, parserId: 'tv-inline' })).toBe('ln:6');
         });
 
         it('falls back to ln:0', () => {
-            expect(TaskIdGenerator.resolveAnchor({ parserId: 'at-notation' })).toBe('ln:0');
+            expect(TaskIdGenerator.resolveAnchor({ parserId: 'tv-inline' })).toBe('ln:0');
         });
     });
 
     describe('parse', () => {
         it('parses valid ID', () => {
-            const result = TaskIdGenerator.parse('at-notation:notes/daily.md:blk:abc123');
-            expect(result).toEqual({ parserId: 'at-notation', filePath: 'notes/daily.md', anchor: 'blk:abc123' });
+            const result = TaskIdGenerator.parse('tv-inline:notes/daily.md:blk:abc123');
+            expect(result).toEqual({ parserId: 'tv-inline', filePath: 'notes/daily.md', anchor: 'blk:abc123' });
         });
 
         it('parses fm-root anchor', () => {
-            const result = TaskIdGenerator.parse('frontmatter:project.md:fm-root');
-            expect(result).toEqual({ parserId: 'frontmatter', filePath: 'project.md', anchor: 'fm-root' });
+            const result = TaskIdGenerator.parse('tv-file:project.md:fm-root');
+            expect(result).toEqual({ parserId: 'tv-file', filePath: 'project.md', anchor: 'fm-root' });
         });
 
         it('parses ln: anchor', () => {
-            const result = TaskIdGenerator.parse('at-notation:file.md:ln:5');
-            expect(result).toEqual({ parserId: 'at-notation', filePath: 'file.md', anchor: 'ln:5' });
+            const result = TaskIdGenerator.parse('tv-inline:file.md:ln:5');
+            expect(result).toEqual({ parserId: 'tv-inline', filePath: 'file.md', anchor: 'ln:5' });
         });
 
         it('returns null for invalid format', () => {
@@ -53,9 +53,9 @@ describe('TaskIdGenerator', () => {
 
     describe('generate → parse round-trip', () => {
         it('round-trips correctly', () => {
-            const id = TaskIdGenerator.generate('at-notation', 'path/to/file.md', 'blk:xyz');
+            const id = TaskIdGenerator.generate('tv-inline', 'path/to/file.md', 'blk:xyz');
             const parsed = TaskIdGenerator.parse(id);
-            expect(parsed).toEqual({ parserId: 'at-notation', filePath: 'path/to/file.md', anchor: 'blk:xyz' });
+            expect(parsed).toEqual({ parserId: 'tv-inline', filePath: 'path/to/file.md', anchor: 'blk:xyz' });
         });
     });
 
@@ -83,21 +83,21 @@ describe('TaskIdGenerator', () => {
 
     describe('renameFile', () => {
         it('renames matching file path in ID', () => {
-            const id = 'at-notation:old/path.md:blk:abc';
+            const id = 'tv-inline:old/path.md:blk:abc';
             const result = TaskIdGenerator.renameFile(id, 'old/path.md', 'new/path.md');
-            expect(result).toBe('at-notation:new/path.md:blk:abc');
+            expect(result).toBe('tv-inline:new/path.md:blk:abc');
         });
 
         it('preserves non-matching ID', () => {
-            const id = 'at-notation:other.md:blk:abc';
+            const id = 'tv-inline:other.md:blk:abc';
             const result = TaskIdGenerator.renameFile(id, 'old/path.md', 'new/path.md');
             expect(result).toBe(id);
         });
 
         it('renames segment ID base', () => {
-            const id = 'at-notation:old.md:blk:abc##seg:2026-03-11';
+            const id = 'tv-inline:old.md:blk:abc##seg:2026-03-11';
             const result = TaskIdGenerator.renameFile(id, 'old.md', 'new.md');
-            expect(result).toBe('at-notation:new.md:blk:abc##seg:2026-03-11');
+            expect(result).toBe('tv-inline:new.md:blk:abc##seg:2026-03-11');
         });
     });
 });

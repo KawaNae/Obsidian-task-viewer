@@ -390,7 +390,7 @@ export class TimerRecorder {
             childLines: [],
             childLineBodyOffsets: [],
             tags: [],
-            parserId: 'at-notation',
+            parserId: 'tv-inline',
             properties: {},
         };
     }

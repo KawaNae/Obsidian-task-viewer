@@ -170,10 +170,14 @@ export class TimelineToolbar {
             toolbar,
             (days) => this.navigateDate(days),
             () => {
-                const oldestOverdueDate = this.findOldestOverdueDate();
                 const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
                 const visualPastDate = DateUtils.addDays(visualToday, -this.plugin.settings.pastDaysToShow);
-                this.viewState.startDate = (oldestOverdueDate && oldestOverdueDate < visualPastDate) ? oldestOverdueDate : visualPastDate;
+                if (this.plugin.settings.startFromOldestOverdue) {
+                    const oldestOverdueDate = this.findOldestOverdueDate();
+                    this.viewState.startDate = (oldestOverdueDate && oldestOverdueDate < visualPastDate) ? oldestOverdueDate : visualPastDate;
+                } else {
+                    this.viewState.startDate = visualPastDate;
+                }
                 this.callbacks.onScrollToNow();
             },
             { label: t('toolbar.now') }

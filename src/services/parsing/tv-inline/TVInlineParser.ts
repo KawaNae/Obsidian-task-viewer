@@ -17,11 +17,19 @@ interface DateBlockResult {
 }
 
 /**
- * Task Viewer native notation parser.
- * Supports: @start>end>due format with time support.
+ * Task Viewer native inline parser.
+ *
+ * Handles all checkbox lines that this plugin owns:
+ * - With scheduling block: `- [ ] foo @start>end>due`
+ * - Without scheduling block: `- [ ] foo` (catch-all for non-external checkboxes)
+ *
+ * Acts as the single inline format authority — `format()` correctly emits
+ * either the bare line (no dates) or the @notation block (with dates),
+ * so a task gaining or losing dates is handled by the same parser without
+ * promotion/demotion bookkeeping.
  */
-export class AtNotationParser implements ParserStrategy {
-    readonly id = 'at-notation';
+export class TVInlineParser implements ParserStrategy {
+    readonly id = 'tv-inline';
     readonly isReadOnly = false;
 
     // Regex for locating the Date block: @start>end>due
@@ -78,11 +86,10 @@ export class AtNotationParser implements ParserStrategy {
             content = dateBlock.content;
         }
 
-        // A task must have at least one scheduling field or a flow command
-        const hasSchedulingData = !!(date || startTime || endDate || endTime || due);
-        if (!hasSchedulingData && commands.length === 0) {
-            return null;
-        }
+        // No early return: TVInline accepts any classified checkbox line, with
+        // or without a scheduling block. ParserChain order ensures external
+        // notation parsers (tasks-plugin, day-planner) get first crack on lines
+        // that match their syntax; everything else falls through to here.
 
         // 4. Validate date/time constraints
         let validation: Task['validation'];
@@ -138,7 +145,7 @@ export class AtNotationParser implements ParserStrategy {
      * Returns null if no date block was found in the content.
      */
     private parseDateBlock(content: string): { fields: DateBlockResult; content: string } | null {
-        const dateBlockMatch = content.match(AtNotationParser.DATE_BLOCK_REGEX);
+        const dateBlockMatch = content.match(TVInlineParser.DATE_BLOCK_REGEX);
         if (!dateBlockMatch) {
             return null;
         }
@@ -252,9 +259,9 @@ export class AtNotationParser implements ParserStrategy {
         let match;
 
         // Reset lastIndex because regex is global
-        AtNotationParser.COMMAND_REGEX.lastIndex = 0;
+        TVInlineParser.COMMAND_REGEX.lastIndex = 0;
 
-        while ((match = AtNotationParser.COMMAND_REGEX.exec(flowStr)) !== null) {
+        while ((match = TVInlineParser.COMMAND_REGEX.exec(flowStr)) !== null) {
             const name = match[1];
             const argsStr = match[2];
             const modifiersStr = match[3];
@@ -265,8 +272,8 @@ export class AtNotationParser implements ParserStrategy {
             if (modifiersStr) {
                 let modMatch;
                 // Reset modifier regex
-                AtNotationParser.MODIFIER_REGEX.lastIndex = 0;
-                while ((modMatch = AtNotationParser.MODIFIER_REGEX.exec(modifiersStr)) !== null) {
+                TVInlineParser.MODIFIER_REGEX.lastIndex = 0;
+                while ((modMatch = TVInlineParser.MODIFIER_REGEX.exec(modifiersStr)) !== null) {
                     modifiers.push({
                         name: modMatch[1],
                         args: modMatch[2].split(',').map(s => s.trim()).filter(s => s !== '')

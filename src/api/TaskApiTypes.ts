@@ -15,6 +15,12 @@ export interface NormalizedTask {
     endTime: string | null;
     due: string | null;
     tags: string[];
+    /**
+     * Parser identity. Current values: 'tv-inline', 'tv-file', 'tasks-plugin', 'day-planner'.
+     *
+     * Renamed from legacy values: 'at-notation' → 'tv-inline', 'frontmatter' → 'tv-file',
+     * 'plain' → folded into 'tv-inline'. Update external scripts accordingly.
+     */
     parserId: string;
     parentId: string | null;
     childIds: string[];
@@ -65,7 +71,7 @@ export interface ListParams extends PaginationParams {
     leaf?: boolean;
     property?: string;        // "key:value" — filter by custom property
     color?: string | string[];   // card color filter
-    type?: string | string[];    // task type (at-notation, frontmatter)
+    type?: string | string[];    // task notation (taskviewer, tasks, dayplanner)
     root?: boolean;              // root tasks only (no parent)
     filter?: FilterState;     // overrides simple filter fields above
     filterFile?: string;      // vault file path (.json FilterState or .md view template)

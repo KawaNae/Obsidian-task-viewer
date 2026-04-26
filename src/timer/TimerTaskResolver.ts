@@ -1,5 +1,5 @@
 import TaskViewerPlugin from '../main';
-import { Task, isFrontmatterTask } from '../types';
+import { Task, isFrontmatterTask, isTaskViewerInlineTask } from '../types';
 import { TimerInstance } from './TimerInstance';
 
 /**
@@ -15,7 +15,7 @@ export class TimerTaskResolver {
         if (timer.timerTargetId) {
             const byTargetInFile = timer.taskFile
                 ? allTasks.find((task) =>
-                    task.parserId === 'at-notation'
+                    isTaskViewerInlineTask(task)
                     && task.file === timer.taskFile
                     && (task.timerTargetId === timer.timerTargetId || task.blockId === timer.timerTargetId)
                 )
@@ -25,7 +25,7 @@ export class TimerTaskResolver {
             }
 
             const byTarget = allTasks.find((task) =>
-                task.parserId === 'at-notation'
+                isTaskViewerInlineTask(task)
                 && (task.timerTargetId === timer.timerTargetId || task.blockId === timer.timerTargetId)
             );
             if (byTarget) {
@@ -34,7 +34,7 @@ export class TimerTaskResolver {
         }
 
         const byId = taskIndex.getTask(timer.taskId);
-        if (byId && byId.parserId === 'at-notation') {
+        if (byId && isTaskViewerInlineTask(byId)) {
             if (!timer.taskFile || byId.file === timer.taskFile) {
                 return byId;
             }
@@ -42,7 +42,7 @@ export class TimerTaskResolver {
 
         if (timer.taskOriginalText && timer.taskFile) {
             const byOriginalText = allTasks.find((task) =>
-                task.parserId === 'at-notation'
+                isTaskViewerInlineTask(task)
                 && task.file === timer.taskFile
                 && task.originalText === timer.taskOriginalText
             );

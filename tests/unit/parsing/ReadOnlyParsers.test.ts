@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { DayPlannerParser } from '../../../src/services/parsing/inline/DayPlannerParser';
-import { TasksPluginParser } from '../../../src/services/parsing/inline/TasksPluginParser';
+import { DayPlannerParser } from '../../../src/services/parsing/tv-inline/DayPlannerParser';
+import { TasksPluginParser } from '../../../src/services/parsing/tv-inline/TasksPluginParser';
 import type { TasksPluginMapping } from '../../../src/types';
 
 const defaultMapping: TasksPluginMapping = {

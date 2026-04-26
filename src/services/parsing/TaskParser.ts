@@ -1,10 +1,9 @@
 import type { Task, TaskViewerSettings } from '../../types';
 import { ParserStrategy } from './strategies/ParserStrategy';
 import { ParserChain } from './strategies/ParserChain';
-import { AtNotationParser } from './inline/AtNotationParser';
-import { DayPlannerParser } from './inline/DayPlannerParser';
-import { TasksPluginParser } from './inline/TasksPluginParser';
-import { PlainTaskParser } from './inline/PlainTaskParser';
+import { TVInlineParser } from './tv-inline/TVInlineParser';
+import { DayPlannerParser } from './tv-inline/DayPlannerParser';
+import { TasksPluginParser } from './tv-inline/TasksPluginParser';
 
 /**
  * TaskParser facade - delegates to the active parser strategy.
@@ -12,25 +11,26 @@ import { PlainTaskParser } from './inline/PlainTaskParser';
  */
 export class TaskParser {
     private static strategy: ParserStrategy = new ParserChain([
-        new AtNotationParser(),
-        new PlainTaskParser(),
+        new TVInlineParser(),
     ]);
 
     /**
      * Rebuild the parser chain based on current settings.
-     * AtNotationParser is always first (native format, highest priority).
-     * PlainTaskParser is always last — it accepts any checkbox line, so it
-     * must run after every scheduling-aware parser.
+     *
+     * External notation parsers (tasks-plugin, day-planner) come first when
+     * enabled — they're strict about their own syntax and only match lines
+     * they own. TVInlineParser is always last and acts as the catch-all for
+     * every remaining checkbox line (with or without @notation).
      */
     static rebuildChain(settings: TaskViewerSettings): void {
-        const parsers: ParserStrategy[] = [new AtNotationParser()];
+        const parsers: ParserStrategy[] = [];
         if (settings.enableDayPlanner) {
             parsers.push(new DayPlannerParser());
         }
         if (settings.enableTasksPlugin) {
             parsers.push(new TasksPluginParser(settings.tasksPluginMapping));
         }
-        parsers.push(new PlainTaskParser());
+        parsers.push(new TVInlineParser());
         this.strategy = new ParserChain(parsers);
     }
 

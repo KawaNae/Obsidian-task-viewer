@@ -1,6 +1,6 @@
 import { App, TFile } from 'obsidian';
 import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
-import { isFrontmatterTask } from '../../types';
+import { isFrontmatterTask, isTaskViewerInlineTask, hasBodyLine } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
 import { WikiLinkResolver } from './WikiLinkResolver';
@@ -243,7 +243,7 @@ export class TaskIndex {
     getTaskLineNumbersForFile(filePath: string): Set<number> {
         const lines = new Set<number>();
         for (const task of this.getTasks()) {
-            if (task.file === filePath && task.line >= 0) {
+            if (task.file === filePath && hasBodyLine(task)) {
                 lines.add(task.line);
             }
         }
@@ -375,10 +375,11 @@ export class TaskIndex {
         if (isFrontmatterTask(task)) {
             await this.repository.updateFrontmatterTask(task, updates, this.settings.frontmatterTaskKeys);
         } else {
-            // at-notation / plain / other inline parsers all route through
-            // InlineTaskWriter; TaskParser.format dispatches by parserId.
-            // Promotion (plain → at-notation when @date is added) and demotion
-            // (reverse) happen automatically on the next scan after write.
+            // All inline tasks route through InlineTaskWriter; TaskParser.format
+            // dispatches by parserId. TVInlineParser.format() handles both
+            // bare-checkbox and @notation-bearing output, so a task gaining or
+            // losing date fields just produces the right line — no parserId
+            // promotion/demotion needed.
             await this.repository.updateTaskInFile(task, { ...task, ...updates });
         }
     }
@@ -424,7 +425,7 @@ export class TaskIndex {
         const task = this.store.getTask(taskId);
         if (!task) throw new Error('Task not found');
 
-        if (task.parserId !== 'at-notation') {
+        if (!isTaskViewerInlineTask(task)) {
             throw new Error('Only inline tasks can be converted to frontmatter tasks');
         }
 
@@ -483,7 +484,7 @@ export class TaskIndex {
         const tempTask: Task = {
             id: 'convert-temp',
             file: '',
-            line: -1,
+            line: 0,
             indent: 0,
             content: taskData.content ?? '',
             statusChar: taskData.statusChar ?? ' ',
@@ -498,7 +499,7 @@ export class TaskIndex {
             originalText: '',
             childLineBodyOffsets: [],
             tags: [],
-            parserId: 'at-notation',
+            parserId: 'tv-inline',
             properties: {},
         };
         return await this.repository.createFrontmatterTaskFile(

@@ -54,6 +54,8 @@
       "timeline": "タイムライン",
       "pastDaysToShow": "過去の表示日数",
       "pastDaysToShowDesc": "未完了タスクがない日でもタイムラインに表示する過去の日数。",
+      "startFromOldestOverdue": "最も古い未完了タスクから表示",
+      "startFromOldestOverdueDesc": "有効にすると、過去に未完了タスクがある場合、その日付を起点にタイムラインを構築します。無効にすると、過去の未完了タスクを無視して当日（と過去の表示日数）を起点にします。",
       "defaultZoomLevel": "デフォルトズーム倍率",
       "defaultZoomLevelDesc": "新しいタイムラインビューのデフォルトズームレベル。各ビューで個別に変更できます。",
       "calendarMiniCalendar": "カレンダー / ミニカレンダー",

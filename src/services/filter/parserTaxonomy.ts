@@ -14,7 +14,7 @@ export const TASK_KIND_VALUES: readonly TaskKind[] = ['inline', 'file'];
 export const TASK_NOTATION_VALUES: readonly TaskNotation[] = ['taskviewer', 'tasks', 'dayplanner'];
 
 export function getTaskKind(parserId: string): TaskKind {
-    return parserId === 'frontmatter' ? 'file' : 'inline';
+    return parserId === 'tv-file' ? 'file' : 'inline';
 }
 
 export function getTaskNotation(parserId: string): TaskNotation {
@@ -24,8 +24,8 @@ export function getTaskNotation(parserId: string): TaskNotation {
         case 'day-planner':
             return 'dayplanner';
         default:
-            // at-notation, frontmatter, plain, and anything unknown are treated
-            // as TaskViewer-owned (this plugin's parsers surface them).
+            // tv-inline, tv-file, and anything unknown are treated as
+            // TaskViewer-owned (this plugin's parsers surface them).
             return 'taskviewer';
     }
 }

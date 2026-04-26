@@ -7,7 +7,7 @@ import { Task } from '../../../types';
 export interface ParserStrategy {
     /**
      * Unique identifier for this parser.
-     * Examples: 'at-notation', 'frontmatter', 'tasks-plugin', 'day-planner'
+     * Examples: 'tv-inline', 'tv-file', 'tasks-plugin', 'day-planner'
      */
     readonly id: string;
 

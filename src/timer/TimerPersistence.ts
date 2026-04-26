@@ -17,6 +17,25 @@ import { TimerStorageUtils } from './TimerStorageUtils';
 import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
 import TaskViewerPlugin from '../main';
 
+/**
+ * Map legacy parserId values (pre-rename) to current ones. Persisted timer
+ * state may contain old strings from earlier plugin versions; normalize on
+ * read so downstream code can rely on the current vocabulary.
+ *
+ * Migration is one-way and idempotent — once read and re-saved, persisted
+ * data uses the new values. Safe to remove this table after a few releases.
+ */
+const PARSER_ID_MIGRATION: Record<string, string> = {
+    'at-notation': 'tv-inline',
+    'frontmatter': 'tv-file',
+    'plain': 'tv-inline',
+};
+
+function normalizeParserId(value: string | undefined): string {
+    if (!value) return 'tv-inline';
+    return PARSER_ID_MIGRATION[value] ?? value;
+}
+
 export interface PersistedTimer {
     id: string;
     taskId: string;
@@ -241,7 +260,7 @@ export class TimerPersistence {
             intervalId: null,
             customLabel: persisted.customLabel || '',
             recordMode: persisted.recordMode || 'child',
-            parserId: persisted.parserId || 'at-notation',
+            parserId: normalizeParserId(persisted.parserId),
             taskColor: persisted.taskColor || ''
         };
 

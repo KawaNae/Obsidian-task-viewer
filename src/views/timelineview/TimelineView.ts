@@ -340,15 +340,9 @@ export class TimelineView extends ItemView {
                 selectedLine: selTask?.line,
                 selectedContent: selTask?.content?.slice(0, 40),
             });
-            // On first data load, re-evaluate startDate and scroll to now
-            if (!this.hasInitializedStartDate && this.readService.getTasks().length > 0) {
-                this.hasInitializedStartDate = true;
-                const oldestOverdue = this.findOldestOverdueDate();
-                const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-                const visualPastDate = DateUtils.addDays(visualToday, -this.plugin.settings.pastDaysToShow);
-                this.viewState.startDate = (oldestOverdue && oldestOverdue < visualPastDate) ? oldestOverdue : visualPastDate;
-                this.scrollToNowOnNextRender = true;
-            }
+            // On first data load, re-evaluate startDate to include past overdue tasks
+            // (no auto-scroll: user-driven scroll only via Now button / refresh / onOpen)
+            this.maybeInitializeStartDate();
 
             if (taskId && changes) {
                 if (changes.every(k => NO_RENDER_KEYS.has(k))) return;
@@ -460,9 +454,30 @@ export class TimelineView extends ItemView {
             this.renderCurrentTimeIndicator();
         }, 60000); // Every minute
 
+        // If task data is already loaded (cached from another view), initialize
+        // startDate now — onChange may not fire since there's no new event to deliver.
+        this.maybeInitializeStartDate();
+
         // Initial render — scroll to current time
         this.scrollToNowOnNextRender = true;
         this.render();
+    }
+
+    /**
+     * On first data load, re-evaluate startDate to include past overdue tasks.
+     * Idempotent — safe to call multiple times; only the first call with non-empty
+     * tasks takes effect. Called from both onOpen (covers cached-data case) and
+     * onChange (covers async-load case).
+     */
+    private maybeInitializeStartDate(): void {
+        if (this.hasInitializedStartDate) return;
+        if (this.readService.getTasks().length === 0) return;
+        this.hasInitializedStartDate = true;
+        if (!this.plugin.settings.startFromOldestOverdue) return;
+        const oldestOverdue = this.findOldestOverdueDate();
+        const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        const visualPastDate = DateUtils.addDays(visualToday, -this.plugin.settings.pastDaysToShow);
+        this.viewState.startDate = (oldestOverdue && oldestOverdue < visualPastDate) ? oldestOverdue : visualPastDate;
     }
 
     async onClose() {
@@ -490,10 +505,14 @@ export class TimelineView extends ItemView {
 
     public refresh() {
         // Re-evaluate startDate (Today button logic) for day boundary crossing or settings change
-        const oldestOverdue = this.findOldestOverdueDate();
         const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
         const visualPastDate = DateUtils.addDays(visualToday, -this.plugin.settings.pastDaysToShow);
-        this.viewState.startDate = (oldestOverdue && oldestOverdue < visualPastDate) ? oldestOverdue : visualPastDate;
+        if (this.plugin.settings.startFromOldestOverdue) {
+            const oldestOverdue = this.findOldestOverdueDate();
+            this.viewState.startDate = (oldestOverdue && oldestOverdue < visualPastDate) ? oldestOverdue : visualPastDate;
+        } else {
+            this.viewState.startDate = visualPastDate;
+        }
 
         this.scrollToNowOnNextRender = true;
         this.render();

@@ -1,4 +1,4 @@
-import { Task, isFrontmatterTask } from '../../types';
+import { Task, isFrontmatterTask, hasBodyLine } from '../../types';
 import { TaskReadService } from '../../services/data/TaskReadService';
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 
@@ -24,7 +24,7 @@ export class ChildLineResolver {
         const map = new Map<number, Task>();
         for (const childId of task.childIds) {
             const child = this.readService.getTask(childId);
-            if (child && child.line >= 0) map.set(child.line, child);
+            if (child && hasBodyLine(child)) map.set(child.line, child);
         }
         return map;
     }
@@ -47,7 +47,7 @@ export class ChildLineResolver {
      * Look up an orphan task by its expected ID at the given absolute line.
      */
     findOrphanTask(file: string, absLine: number): Task | undefined {
-        const orphanTaskId = TaskIdGenerator.generate('at-notation', file, `ln:${absLine + 1}`);
+        const orphanTaskId = TaskIdGenerator.generate('tv-inline', file, `ln:${absLine + 1}`);
         return this.readService.getTask(orphanTaskId);
     }
 
@@ -99,7 +99,7 @@ export class ChildLineResolver {
     markTaskSubtreeLines(task: Task, consumedLineKeys: Set<string>, depth: number = 0): void {
         if (depth >= ChildLineResolver.MAX_RENDER_DEPTH) return;
 
-        if (task.line >= 0) {
+        if (hasBodyLine(task)) {
             consumedLineKeys.add(this.toLineKey(task.file, task.line));
         }
 
