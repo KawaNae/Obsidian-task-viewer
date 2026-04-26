@@ -2,7 +2,7 @@ import { App, TFile, parseYaml } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
 import { isFrontmatterContainer } from '../../types';
 import { TaskParser } from '../parsing/TaskParser';
-import { FrontmatterTaskBuilder } from '../parsing/file/FrontmatterTaskBuilder';
+import { TVFileBuilder } from '../parsing/tv-file/TVFileBuilder';
 import { WikiLinkResolver } from './WikiLinkResolver';
 import { TaskStore } from './TaskStore';
 import { TaskValidator } from './TaskValidator';
@@ -132,7 +132,7 @@ export class TaskScanner {
         }
 
         const bodyLines = lines.slice(bodyStartIndex);
-        const fmResult = FrontmatterTaskBuilder.parse(
+        const fmResult = TVFileBuilder.parse(
             file.path,
             frontmatterObj,
             bodyLines,

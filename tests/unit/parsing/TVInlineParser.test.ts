@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { AtNotationParser } from '../../../src/services/parsing/inline/AtNotationParser';
+import { TVInlineParser } from '../../../src/services/parsing/tv-inline/TVInlineParser';
 import type { Task } from '../../../src/types';
 
-const parser = new AtNotationParser();
+const parser = new TVInlineParser();
 
 /** Helper to build a minimal Task for format() testing. */
 function makeTask(overrides: Partial<Task>): Task {
@@ -18,12 +18,12 @@ function makeTask(overrides: Partial<Task>): Task {
         childLineBodyOffsets: [],
         tags: [],
         originalText: '- [ ] task @2026-01-01',
-        parserId: 'at-notation',
+        parserId: 'tv-inline',
         ...overrides,
     };
 }
 
-describe('AtNotationParser', () => {
+describe('TVInlineParser', () => {
     describe('parse', () => {
         it('parses basic date-only task', () => {
             const result = parser.parse('- [ ] hello @2026-01-15', 'test.md', 0);
@@ -116,8 +116,16 @@ describe('AtNotationParser', () => {
             expect(parser.parse('', 'test.md', 0)).toBeNull();
         });
 
-        it('returns null for checkbox without date/command', () => {
-            expect(parser.parse('- [ ] no date here', 'test.md', 0)).toBeNull();
+        it('parses bare checkbox (no date/command) as a no-scheduling task', () => {
+            const result = parser.parse('- [ ] no date here', 'test.md', 0);
+            expect(result).not.toBeNull();
+            expect(result!.content).toBe('no date here');
+            expect(result!.startDate).toBe('');
+            expect(result!.startTime).toBeUndefined();
+            expect(result!.endDate).toBeUndefined();
+            expect(result!.endTime).toBeUndefined();
+            expect(result!.due).toBeUndefined();
+            expect(result!.commands).toHaveLength(0);
         });
 
         it('parses with asterisk marker', () => {
@@ -254,6 +262,38 @@ describe('AtNotationParser', () => {
                 startDate: '2026-01-15',
             });
             expect(parser.format(task)).toBe('- [x] done @2026-01-15');
+        });
+
+        // Regression: a parsed bare checkbox that later gains a startDate via
+        // an in-place update (e.g. context-menu "set date") must emit the
+        // @notation block when re-formatted. Before parser unification this
+        // lost the date because PlainTaskParser.format ignored date fields.
+        it('emits @notation when a bare-checkbox task is updated with a startDate', () => {
+            const parsed = parser.parse('- [ ] test', 'inbox.md', 0);
+            expect(parsed).not.toBeNull();
+            expect(parsed!.startDate).toBe('');
+
+            const updated: Task = { ...parsed!, startDate: '2026-05-01' };
+            expect(parser.format(updated)).toBe('- [ ] test @2026-05-01');
+        });
+
+        it('emits @notation with start time when bare checkbox gains startTime', () => {
+            const parsed = parser.parse('- [ ] focus', 'inbox.md', 0)!;
+            const updated: Task = { ...parsed, startDate: '2026-05-01', startTime: '09:00' };
+            expect(parser.format(updated)).toBe('- [ ] focus @2026-05-01T09:00');
+        });
+
+        it('returns to bare line when all date fields are cleared', () => {
+            const parsed = parser.parse('- [ ] foo @2026-05-01', 'inbox.md', 0)!;
+            const cleared: Task = {
+                ...parsed,
+                startDate: '',
+                startTime: undefined,
+                endDate: undefined,
+                endTime: undefined,
+                due: undefined,
+            };
+            expect(parser.format(cleared)).toBe('- [ ] foo');
         });
     });
 

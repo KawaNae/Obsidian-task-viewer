@@ -44,8 +44,8 @@ export class TreeTaskExtractor {
     /**
      * TaskBlock を再帰的に処理してタスクを抽出する。
      * hasAncestorTask: 祖先のどこかに既に Task 化したブロックがあるか。
-     *   - true のとき、このブロックが plain checkbox ならカードの ChildLine として
-     *     親に残すため Task 化せず null にする。
+     *   - true のとき、このブロックが日付・コマンド共に持たない bare checkbox なら
+     *     カードの ChildLine として親に残すため Task 化せず null にする。
      */
     private static processTaskBlock(
         block: TaskBlock,
@@ -58,15 +58,16 @@ export class TreeTaskExtractor {
         let task = TaskParser.parse(block.rawLine, ctx.filePath, block.line);
 
         // 非デイリーノートかつ task-bearing でないファイルで、
-        // 日付を持たない（plain 含む）タスクは表出させない。
+        // 日付・コマンドを持たない bare checkbox は表出させない。
         if (task && !ctx.dailyNoteDate && !ctx.hasFrontmatterParent
             && !task.startDate && !task.endDate && !task.due
             && (!task.commands || task.commands.length === 0)) {
             task = null;
         }
 
-        // 祖先に Task がある plain は ChildLine として親カードに残すため Task 化しない。
-        if (task && task.parserId === 'plain' && hasAncestorTask) {
+        // 祖先に Task がある bare checkbox（日付・コマンドなし）は
+        // ChildLine として親カードに残すため Task 化しない。
+        if (task && hasAncestorTask && this.isBareCheckbox(task)) {
             task = null;
         }
 
@@ -199,10 +200,22 @@ export class TreeTaskExtractor {
             && (!task.commands || task.commands.length === 0)) {
             task = null;
         }
-        if (task && task.parserId === 'plain' && hasAncestorTask) {
+        if (task && hasAncestorTask && this.isBareCheckbox(task)) {
             task = null;
         }
         return task !== null;
+    }
+
+    /**
+     * `- [ ]` のみで日付・時刻・コマンドを一切持たないチェックボックスか。
+     * Task Viewer の inline parser 統一後、parserId は不変なため
+     * フィールド有無で「bare」を判定する。
+     */
+    private static isBareCheckbox(task: Task): boolean {
+        return !task.startDate && !task.startTime
+            && !task.endDate && !task.endTime
+            && !task.due
+            && (!task.commands || task.commands.length === 0);
     }
 
     /** セクションツリーを深さ優先でフラットに展開 */

@@ -15,7 +15,7 @@ export class TimerTaskResolver {
         if (timer.timerTargetId) {
             const byTargetInFile = timer.taskFile
                 ? allTasks.find((task) =>
-                    task.parserId === 'at-notation'
+                    task.parserId === 'tv-inline'
                     && task.file === timer.taskFile
                     && (task.timerTargetId === timer.timerTargetId || task.blockId === timer.timerTargetId)
                 )
@@ -25,7 +25,7 @@ export class TimerTaskResolver {
             }
 
             const byTarget = allTasks.find((task) =>
-                task.parserId === 'at-notation'
+                task.parserId === 'tv-inline'
                 && (task.timerTargetId === timer.timerTargetId || task.blockId === timer.timerTargetId)
             );
             if (byTarget) {
@@ -34,7 +34,7 @@ export class TimerTaskResolver {
         }
 
         const byId = taskIndex.getTask(timer.taskId);
-        if (byId && byId.parserId === 'at-notation') {
+        if (byId && byId.parserId === 'tv-inline') {
             if (!timer.taskFile || byId.file === timer.taskFile) {
                 return byId;
             }
@@ -42,7 +42,7 @@ export class TimerTaskResolver {
 
         if (timer.taskOriginalText && timer.taskFile) {
             const byOriginalText = allTasks.find((task) =>
-                task.parserId === 'at-notation'
+                task.parserId === 'tv-inline'
                 && task.file === timer.taskFile
                 && task.originalText === timer.taskOriginalText
             );

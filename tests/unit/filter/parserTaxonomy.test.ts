@@ -3,16 +3,12 @@ import { getTaskKind, getTaskNotation } from '../../../src/services/filter/parse
 
 describe('parserTaxonomy', () => {
     describe('getTaskKind', () => {
-        it('frontmatter → file', () => {
-            expect(getTaskKind('frontmatter')).toBe('file');
+        it('tv-file → file', () => {
+            expect(getTaskKind('tv-file')).toBe('file');
         });
 
-        it('at-notation → inline', () => {
-            expect(getTaskKind('at-notation')).toBe('inline');
-        });
-
-        it('plain → inline', () => {
-            expect(getTaskKind('plain')).toBe('inline');
+        it('tv-inline → inline', () => {
+            expect(getTaskKind('tv-inline')).toBe('inline');
         });
 
         it('tasks-plugin → inline', () => {
@@ -29,12 +25,12 @@ describe('parserTaxonomy', () => {
     });
 
     describe('getTaskNotation', () => {
-        it('at-notation → taskviewer', () => {
-            expect(getTaskNotation('at-notation')).toBe('taskviewer');
+        it('tv-inline → taskviewer', () => {
+            expect(getTaskNotation('tv-inline')).toBe('taskviewer');
         });
 
-        it('frontmatter → taskviewer (same family)', () => {
-            expect(getTaskNotation('frontmatter')).toBe('taskviewer');
+        it('tv-file → taskviewer (same family)', () => {
+            expect(getTaskNotation('tv-file')).toBe('taskviewer');
         });
 
         it('tasks-plugin → tasks', () => {
@@ -43,10 +39,6 @@ describe('parserTaxonomy', () => {
 
         it('day-planner → dayplanner', () => {
             expect(getTaskNotation('day-planner')).toBe('dayplanner');
-        });
-
-        it('plain → taskviewer (merged: PlainTaskParser is part of TaskViewer)', () => {
-            expect(getTaskNotation('plain')).toBe('taskviewer');
         });
 
         it('unknown parserId → taskviewer (fallback)', () => {

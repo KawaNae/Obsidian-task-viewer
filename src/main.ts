@@ -247,7 +247,7 @@ export default class TaskViewerPlugin extends Plugin {
                     originalText: '',
                     childLineBodyOffsets: [],
                     tags: [],
-                    parserId: 'at-notation',
+                    parserId: 'tv-inline',
                     properties: {},
                 };
                 return await repository.createFrontmatterTaskFile(
@@ -286,7 +286,7 @@ export default class TaskViewerPlugin extends Plugin {
                 if (!(file instanceof TFile)) return;
 
                 const task = this.taskIndex.getTasks().find(t =>
-                    t.file === file.path && t.parserId === 'frontmatter'
+                    t.file === file.path && t.parserId === 'tv-file'
                 );
                 if (!task) return;
 

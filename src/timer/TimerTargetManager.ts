@@ -32,7 +32,7 @@ export class TimerTargetManager {
             return;
         }
 
-        if (timer.parserId === 'at-notation') {
+        if (timer.parserId === 'tv-inline') {
             await this.ensureInlineTimerTargetId(timer);
             return;
         }
@@ -136,7 +136,7 @@ export class TimerTargetManager {
         if (!this.storageUtils.isAutoManagedTimerTargetId(timer.timerTargetId)) return;
         if (this.hasAnotherActiveTimerWithTarget(timer.timerTargetId)) return;
 
-        if (timer.parserId === 'at-notation') {
+        if (timer.parserId === 'tv-inline') {
             await this.removeInlineTimerTargetId(timer);
             return;
         }
@@ -165,7 +165,7 @@ export class TimerTargetManager {
         if (!targetTask) {
             targetTask = taskIndex
                 .getTasks()
-                .find((task) => task.parserId === 'at-notation' && task.timerTargetId === timer.timerTargetId);
+                .find((task) => task.parserId === 'tv-inline' && task.timerTargetId === timer.timerTargetId);
         }
         if (!targetTask) return;
 
@@ -208,7 +208,7 @@ export class TimerTargetManager {
     // ─── Task Resolution ─────────────────────────────────────
 
     private resolveInlineTaskForTimer(timer: TimerInstance): Task | undefined {
-        if (timer.parserId !== 'at-notation') return undefined;
+        if (timer.parserId !== 'tv-inline') return undefined;
         return this.resolver.resolveInlineTask(timer);
     }
 
@@ -222,7 +222,7 @@ export class TimerTargetManager {
             .getTaskIndex()
             .getTasks()
             .find((task) =>
-                task.parserId === 'at-notation'
+                task.parserId === 'tv-inline'
                 && task.file === filePath
                 && (task.timerTargetId === timerTargetId || task.blockId === timerTargetId)
             );

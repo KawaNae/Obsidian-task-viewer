@@ -518,69 +518,78 @@ describe('TreeTaskExtractor', () => {
         });
     });
 
-    describe('plain inbox tasks (task-bearing files)', () => {
-        it('task-bearing file の top-level plain は inbox Task として抽出される', () => {
+    describe('bare-checkbox inbox tasks (task-bearing files)', () => {
+        // After parser unification, "bare checkbox" is a tv-inline task with
+        // no scheduling fields — distinguished by absence of dates rather than
+        // by parserId. TVInlineParser uses '' (empty string) as the no-date
+        // sentinel for startDate; other date fields stay undefined when absent.
+        const isBare = (t: { startDate?: string; startTime?: string; endDate?: string; endTime?: string; due?: string }) =>
+            !t.startDate && !t.startTime && !t.endDate && !t.endTime && !t.due;
+        const isScheduled = (t: { startDate?: string; startTime?: string; endDate?: string; endTime?: string; due?: string }) =>
+            !!(t.startDate || t.startTime || t.endDate || t.endTime || t.due);
+
+        it('task-bearing file の top-level bare checkbox は inbox Task として抽出される', () => {
             const tasks = extractTasks([
                 '- [ ] やりたいこと',
             ], undefined, { hasFrontmatterParent: true });
             expect(tasks).toHaveLength(1);
-            expect(tasks[0].parserId).toBe('plain');
+            expect(tasks[0].parserId).toBe('tv-inline');
             expect(tasks[0].content).toBe('やりたいこと');
-            expect(tasks[0].startDate).toBeUndefined();
+            expect(tasks[0].startDate).toBe('');
             expect(tasks[0].endDate).toBeUndefined();
             expect(tasks[0].due).toBeUndefined();
         });
 
-        it('非 task-bearing file の plain は従来どおり無視される', () => {
+        it('非 task-bearing file の bare checkbox は従来どおり無視される', () => {
             const tasks = extractTasks([
                 '- [ ] 議事メモ',
             ]);
             expect(tasks).toHaveLength(0);
         });
 
-        it('@ タスク配下の plain は Task 化されず親の childLines に残る', () => {
+        it('@ タスク配下の bare checkbox は Task 化されず親の childLines に残る', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    - [ ] 子手順',
             ], undefined, { dailyNoteDate: '2026-03-24', hasFrontmatterParent: true });
-            const parents = tasks.filter(t => t.parserId !== 'plain');
-            const plainTasks = tasks.filter(t => t.parserId === 'plain');
-            expect(parents).toHaveLength(1);
-            expect(plainTasks).toHaveLength(0);
-            const parent = parents[0];
+            const scheduledTasks = tasks.filter(isScheduled);
+            const bareTasks = tasks.filter(isBare);
+            expect(scheduledTasks).toHaveLength(1);
+            expect(bareTasks).toHaveLength(0);
+            const parent = scheduledTasks[0];
             expect(parent.childLines.some(c => c.text.includes('子手順'))).toBe(true);
         });
 
-        it('plain の配下に置かれた @ タスクは plain の子になる', () => {
+        it('bare checkbox の配下に置かれた @ タスクは bare checkbox の子になる', () => {
             const tasks = extractTasks([
                 '- [ ] inbox 親',
                 '    - [ ] scheduled @2026-03-24',
             ], undefined, { hasFrontmatterParent: true });
-            const inbox = tasks.find(t => t.parserId === 'plain')!;
-            const scheduled = tasks.find(t => t.parserId === 'at-notation')!;
+            const inbox = tasks.find(isBare)!;
+            const scheduled = tasks.find(isScheduled)!;
             expect(inbox).toBeDefined();
             expect(scheduled).toBeDefined();
             expect(scheduled.parentId).toBe(inbox.id);
             expect(inbox.childIds).toContain(scheduled.id);
         });
 
-        it('plain の孫になる plain は childLine として保持される（祖先ルール）', () => {
+        it('bare checkbox の孫になる bare checkbox は childLine として保持される（祖先ルール）', () => {
             const tasks = extractTasks([
                 '- [ ] inbox 親',
                 '    - [ ] nested plain',
             ], undefined, { hasFrontmatterParent: true });
-            const plainTasks = tasks.filter(t => t.parserId === 'plain');
-            expect(plainTasks).toHaveLength(1);
-            expect(plainTasks[0].content).toBe('inbox 親');
-            expect(plainTasks[0].childLines.some(c => c.text.includes('nested plain'))).toBe(true);
+            const bareTasks = tasks.filter(isBare);
+            expect(bareTasks).toHaveLength(1);
+            expect(bareTasks[0].content).toBe('inbox 親');
+            expect(bareTasks[0].childLines.some(c => c.text.includes('nested plain'))).toBe(true);
         });
 
-        it('デイリーノート内の plain は日付継承により dated task になる（inbox ではない）', () => {
+        it('デイリーノート内の bare checkbox は日付継承により dated task になる（inbox ではない）', () => {
             const tasks = extractTasks([
                 '- [ ] メモ',
             ], undefined, { dailyNoteDate: '2026-03-24' });
             expect(tasks).toHaveLength(1);
-            expect(tasks[0].parserId).toBe('plain');
+            expect(tasks[0].parserId).toBe('tv-inline');
             expect(tasks[0].startDate).toBe('2026-03-24');
         });
 
@@ -590,10 +599,10 @@ describe('TreeTaskExtractor', () => {
                 '- [ ] inbox item',
             ], undefined, { hasFrontmatterParent: true });
             expect(tasks).toHaveLength(2);
-            const scheduled = tasks.find(t => t.parserId === 'at-notation')!;
-            const inbox = tasks.find(t => t.parserId === 'plain')!;
+            const scheduled = tasks.find(isScheduled)!;
+            const inbox = tasks.find(isBare)!;
             expect(scheduled.startDate).toBe('2026-03-24');
-            expect(inbox.startDate).toBeUndefined();
+            expect(inbox.startDate).toBe('');
         });
     });
 });

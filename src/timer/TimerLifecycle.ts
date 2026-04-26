@@ -322,7 +322,7 @@ export class TimerLifecycle {
             timerType: 'idle',
             elapsedTime: 0,
             recordMode: 'child',
-            parserId: 'at-notation',
+            parserId: 'tv-inline',
             taskColor: '',
         };
 

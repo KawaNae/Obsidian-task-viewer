@@ -26,11 +26,13 @@ describe('ImplicitCalendarDateResolver.resolveDailyNoteDates', () => {
         expect(result.startDateInherited).toBeUndefined();
     });
 
-    it('does not inherit when task has no startTime', () => {
+    it('inherits for bare checkbox (no scheduling fields at all)', () => {
+        // After parser unification, a bare `- [ ]` is a tv-inline task with
+        // no scheduling fields; in a daily note it inherits the note's date.
         const task = {};
         const result = ImplicitCalendarDateResolver.resolveDailyNoteDates(task, '2026-03-11');
-        expect(result.startDate).toBeUndefined();
-        expect(result.startDateInherited).toBeUndefined();
+        expect(result.startDate).toBe('2026-03-11');
+        expect(result.startDateInherited).toBe(true);
     });
 
     it('does not inherit when task has startDate but no startTime', () => {
@@ -39,8 +41,10 @@ describe('ImplicitCalendarDateResolver.resolveDailyNoteDates', () => {
         expect(result.startDate).toBeUndefined();
     });
 
-    it('returns empty object for task with neither date nor time', () => {
-        const task = {};
+    it('does not inherit when task has endDate but no startDate or startTime', () => {
+        // endDate as the only anchor — the task already points at a specific
+        // date, so don't override with the daily note date.
+        const task = { endDate: '2026-04-01' };
         const result = ImplicitCalendarDateResolver.resolveDailyNoteDates(task, '2026-03-11');
         expect(result).toEqual({});
     });

@@ -47,7 +47,7 @@ export class ChildLineResolver {
      * Look up an orphan task by its expected ID at the given absolute line.
      */
     findOrphanTask(file: string, absLine: number): Task | undefined {
-        const orphanTaskId = TaskIdGenerator.generate('at-notation', file, `ln:${absLine + 1}`);
+        const orphanTaskId = TaskIdGenerator.generate('tv-inline', file, `ln:${absLine + 1}`);
         return this.readService.getTask(orphanTaskId);
     }
 

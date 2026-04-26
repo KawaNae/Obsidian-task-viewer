@@ -46,7 +46,7 @@ export class TimerCreator {
             intervalId: null,
             customLabel: '',
             recordMode: config.recordMode ?? 'child',
-            parserId: config.parserId ?? 'at-notation',
+            parserId: config.parserId ?? 'tv-inline',
             taskColor: config.taskColor ?? ''
         };
 

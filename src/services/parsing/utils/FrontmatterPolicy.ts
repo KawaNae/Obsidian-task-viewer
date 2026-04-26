@@ -7,7 +7,7 @@ import type { FrontmatterTaskKeys } from '../../../types';
  * configured fm-key (except `ignore`, which is the opt-out signal).
  * The presence of the key is what matters — values are not inspected.
  *
- * Used both to gate container creation in FrontmatterTaskBuilder and, via
+ * Used both to gate container creation in TVFileBuilder and, via
  * the fmResult-presence proxy, to gate plain-checkbox task extraction in
  * TreeTaskExtractor.
  */

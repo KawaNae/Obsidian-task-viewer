@@ -93,7 +93,7 @@ export class WikiLinkResolver {
         parentTask: Task, parentId: string,
         tasks: Map<string, Task>, resolvedPath: string
     ): string | null {
-        const childTaskId = TaskIdGenerator.generate('frontmatter', resolvedPath, 'fm-root');
+        const childTaskId = TaskIdGenerator.generate('tv-file', resolvedPath, 'fm-root');
         const childTask = tasks.get(childTaskId);
         if (!childTask) return null;
 

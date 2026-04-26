@@ -38,7 +38,7 @@ export function formatTaskLine(result: CreateTaskResult): string {
         originalText: '',
         childLineBodyOffsets: [],
         tags: [],
-        parserId: 'at-notation',
+        parserId: 'tv-inline',
         properties: {},
     };
     return TaskParser.format(task);
@@ -420,7 +420,7 @@ export class CreateTaskModal extends Modal {
             originalText: '',
             childLineBodyOffsets: [],
             tags: [],
-            parserId: 'at-notation',
+            parserId: 'tv-inline',
             properties: {},
         };
 

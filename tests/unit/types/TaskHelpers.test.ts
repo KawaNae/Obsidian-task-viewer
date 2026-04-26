@@ -6,14 +6,14 @@ import {
     hasDates,
 } from '../../../src/types';
 
-const baseFm = { parserId: 'frontmatter' as const };
-const baseInline = { parserId: 'at-notation' as const };
+const baseFm = { parserId: 'tv-file' as const };
+const baseInline = { parserId: 'tv-inline' as const };
 
 describe('isFrontmatterTask', () => {
-    it('matches only parserId==="frontmatter"', () => {
-        expect(isFrontmatterTask({ parserId: 'frontmatter' })).toBe(true);
-        expect(isFrontmatterTask({ parserId: 'at-notation' })).toBe(false);
-        expect(isFrontmatterTask({ parserId: 'plain' })).toBe(false);
+    it('matches only parserId==="tv-file"', () => {
+        expect(isFrontmatterTask({ parserId: 'tv-file' })).toBe(true);
+        expect(isFrontmatterTask({ parserId: 'tv-inline' })).toBe(false);
+        expect(isFrontmatterTask({ parserId: 'tasks-plugin' })).toBe(false);
     });
 });
 
@@ -56,6 +56,6 @@ describe('isFrontmatterContainer', () => {
 
     it('is false for non-frontmatter tasks regardless of scheduling', () => {
         expect(isFrontmatterContainer(baseInline)).toBe(false);
-        expect(isFrontmatterContainer({ parserId: 'plain' })).toBe(false);
+        expect(isFrontmatterContainer({ parserId: 'tasks-plugin' })).toBe(false);
     });
 });

@@ -123,9 +123,9 @@ export interface Task {
     properties: Record<string, PropertyValue>;
 }
 
-/** Check whether a task was produced by the frontmatter parser. */
+/** Check whether a task was produced by the file-level (frontmatter) parser. */
 export function isFrontmatterTask(task: Pick<Task, 'parserId'>): boolean {
-    return task.parserId === 'frontmatter';
+    return task.parserId === 'tv-file';
 }
 
 /** True when the task has any date/time scheduling field. */

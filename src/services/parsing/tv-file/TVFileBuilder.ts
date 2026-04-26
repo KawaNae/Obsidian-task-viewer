@@ -13,11 +13,13 @@ export interface FrontmatterParseResult {
 }
 
 /**
- * Builds a frontmatter-backed Task from metadata cache data.
+ * Task Viewer file-level Task builder.
+ *
+ * Builds a Task from a file's frontmatter (TaskViewer's file-level format).
  * Also builds container-style tasks (no dates, groups inline tasks) —
  * identified via the derived isFrontmatterContainer() helper.
  */
-export class FrontmatterTaskBuilder {
+export class TVFileBuilder {
     /**
      * Parse frontmatter object and body lines into a Task.
      * Returns null when the file is not task-bearing (see isTaskBearingFile).
@@ -145,7 +147,7 @@ export class FrontmatterTaskBuilder {
 
         return {
             task: {
-                id: TaskIdGenerator.generate('frontmatter', filePath, 'fm-root'),
+                id: TaskIdGenerator.generate('tv-file', filePath, 'fm-root'),
                 file: filePath,
                 line: -1,
                 content,
@@ -163,7 +165,7 @@ export class FrontmatterTaskBuilder {
                 originalText: '',
                 commands: [],
                 timerTargetId,
-                parserId: 'frontmatter',
+                parserId: 'tv-file',
                 properties: fmProperties,
                 color,
                 linestyle,

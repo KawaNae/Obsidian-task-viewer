@@ -177,7 +177,7 @@ export class TaskActionsMenuBuilder {
      */
     private addConvertSubmenu(menu: Menu, task: Task): void {
         // Frontmatter tasks have no convert options (reverse conversion is too complex)
-        if (task.parserId !== 'at-notation') return;
+        if (task.parserId !== 'tv-inline') return;
 
         menu.addItem((item) => {
             const subMenu = item
