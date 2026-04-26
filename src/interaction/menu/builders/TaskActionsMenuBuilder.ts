@@ -1,5 +1,5 @@
 import { App, MarkdownView, Menu, Notice } from 'obsidian';
-import { Task } from '../../../types';
+import { Task, isTaskViewerInlineTask } from '../../../types';
 import { TaskWriteService } from '../../../services/data/TaskWriteService';
 import TaskViewerPlugin from '../../../main';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
@@ -177,7 +177,7 @@ export class TaskActionsMenuBuilder {
      */
     private addConvertSubmenu(menu: Menu, task: Task): void {
         // Frontmatter tasks have no convert options (reverse conversion is too complex)
-        if (task.parserId !== 'tv-inline') return;
+        if (!isTaskViewerInlineTask(task)) return;
 
         menu.addItem((item) => {
             const subMenu = item

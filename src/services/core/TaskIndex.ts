@@ -1,6 +1,6 @@
 import { App, TFile } from 'obsidian';
 import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
-import { isFrontmatterTask } from '../../types';
+import { isFrontmatterTask, isTaskViewerInlineTask } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
 import { WikiLinkResolver } from './WikiLinkResolver';
@@ -425,7 +425,7 @@ export class TaskIndex {
         const task = this.store.getTask(taskId);
         if (!task) throw new Error('Task not found');
 
-        if (task.parserId !== 'tv-inline') {
+        if (!isTaskViewerInlineTask(task)) {
             throw new Error('Only inline tasks can be converted to frontmatter tasks');
         }
 

@@ -7,7 +7,7 @@ import { TimerInstance } from './TimerInstance';
 import { TimerContext } from './TimerContext';
 import { TimerStorageUtils } from './TimerStorageUtils';
 import { TimerTaskResolver } from './TimerTaskResolver';
-import { Task, isFrontmatterTask } from '../types';
+import { Task, isFrontmatterTask, isTaskViewerInlineTask } from '../types';
 
 export class TimerTargetManager {
     private resolver: TimerTaskResolver;
@@ -32,7 +32,7 @@ export class TimerTargetManager {
             return;
         }
 
-        if (timer.parserId === 'tv-inline') {
+        if (isTaskViewerInlineTask(timer)) {
             await this.ensureInlineTimerTargetId(timer);
             return;
         }
@@ -136,7 +136,7 @@ export class TimerTargetManager {
         if (!this.storageUtils.isAutoManagedTimerTargetId(timer.timerTargetId)) return;
         if (this.hasAnotherActiveTimerWithTarget(timer.timerTargetId)) return;
 
-        if (timer.parserId === 'tv-inline') {
+        if (isTaskViewerInlineTask(timer)) {
             await this.removeInlineTimerTargetId(timer);
             return;
         }
@@ -165,7 +165,7 @@ export class TimerTargetManager {
         if (!targetTask) {
             targetTask = taskIndex
                 .getTasks()
-                .find((task) => task.parserId === 'tv-inline' && task.timerTargetId === timer.timerTargetId);
+                .find((task) => isTaskViewerInlineTask(task) && task.timerTargetId === timer.timerTargetId);
         }
         if (!targetTask) return;
 
@@ -208,7 +208,7 @@ export class TimerTargetManager {
     // ─── Task Resolution ─────────────────────────────────────
 
     private resolveInlineTaskForTimer(timer: TimerInstance): Task | undefined {
-        if (timer.parserId !== 'tv-inline') return undefined;
+        if (!isTaskViewerInlineTask(timer)) return undefined;
         return this.resolver.resolveInlineTask(timer);
     }
 
@@ -222,7 +222,7 @@ export class TimerTargetManager {
             .getTaskIndex()
             .getTasks()
             .find((task) =>
-                task.parserId === 'tv-inline'
+                isTaskViewerInlineTask(task)
                 && task.file === filePath
                 && (task.timerTargetId === timerTargetId || task.blockId === timerTargetId)
             );
