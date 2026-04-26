@@ -232,7 +232,7 @@ export default class TaskViewerPlugin extends Plugin {
                 const tempTask: Task = {
                     id: 'convert-temp',
                     file: '',
-                    line: -1,
+                    line: 0,
                     indent: 0,
                     content: result.content,
                     statusChar,
@@ -279,7 +279,7 @@ export default class TaskViewerPlugin extends Plugin {
         this.taskMenuNotifySettingsChanged = taskMenuResult.notifySettingsChanged;
 
         // File context menu integration for frontmatter tasks.
-        // Frontmatter tasks have line === -1 and no inline anchor in the editor body,
+        // Frontmatter tasks have no inline anchor in the editor body (file menu is the only entry point),
         // so we surface the full task menu via Obsidian's file-menu (file explorer / tab / pane).
         this.registerEvent(
             this.app.workspace.on('file-menu', (menu, file) => {

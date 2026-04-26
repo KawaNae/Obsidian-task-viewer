@@ -1,6 +1,6 @@
 import { App, TFile } from 'obsidian';
 import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
-import { isFrontmatterTask, isTaskViewerInlineTask } from '../../types';
+import { isFrontmatterTask, isTaskViewerInlineTask, hasBodyLine } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
 import { WikiLinkResolver } from './WikiLinkResolver';
@@ -243,7 +243,7 @@ export class TaskIndex {
     getTaskLineNumbersForFile(filePath: string): Set<number> {
         const lines = new Set<number>();
         for (const task of this.getTasks()) {
-            if (task.file === filePath && task.line >= 0) {
+            if (task.file === filePath && hasBodyLine(task)) {
                 lines.add(task.line);
             }
         }
@@ -484,7 +484,7 @@ export class TaskIndex {
         const tempTask: Task = {
             id: 'convert-temp',
             file: '',
-            line: -1,
+            line: 0,
             indent: 0,
             content: taskData.content ?? '',
             statusChar: taskData.statusChar ?? ' ',

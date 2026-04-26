@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import { Task, WikilinkRef, isFrontmatterTask } from '../../types';
+import { Task, WikilinkRef, isFrontmatterTask, hasBodyLine } from '../../types';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 
 /**
@@ -81,7 +81,7 @@ export class WikiLinkResolver {
         const wikiLine = wikiLineMap?.get(childId);
         if (wikiLine !== undefined) return wikiLine;
         const child = tasks.get(childId);
-        if (child && child.line >= 0) return child.line;
+        if (child && hasBodyLine(child)) return child.line;
         return Infinity;
     }
 

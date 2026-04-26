@@ -1,5 +1,5 @@
 import { App, MarkdownView, Menu, Notice } from 'obsidian';
-import { Task, isTaskViewerInlineTask } from '../../../types';
+import { Task, isTaskViewerInlineTask, hasBodyLine } from '../../../types';
 import { TaskWriteService } from '../../../services/data/TaskWriteService';
 import TaskViewerPlugin from '../../../main';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
@@ -115,7 +115,7 @@ export class TaskActionsMenuBuilder {
                     } else {
                         await this.app.workspace.openLinkText(task.file, '', true);
                     }
-                    if (task.line >= 0) {
+                    if (hasBodyLine(task)) {
                         setTimeout(() => {
                             const view = this.app.workspace.getActiveViewOfType(MarkdownView);
                             if (view) {

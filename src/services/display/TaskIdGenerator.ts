@@ -41,6 +41,7 @@ export class TaskIdGenerator {
             return 'fm-root';
         }
 
+        // Has explicit body line — use it as anchor. Otherwise fall through to ln:0.
         if (typeof input.line === 'number' && input.line >= 0) {
             return `ln:${input.line + 1}`;
         }
