@@ -128,6 +128,11 @@ export function isFrontmatterTask(task: Pick<Task, 'parserId'>): boolean {
     return task.parserId === 'tv-file';
 }
 
+/** Check whether a task was produced by the TaskViewer inline parser. */
+export function isTaskViewerInlineTask(task: Pick<Task, 'parserId'>): boolean {
+    return task.parserId === 'tv-inline';
+}
+
 /** True when the task has any date/time scheduling field. */
 export function hasScheduling(
     task: Pick<Task, 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'due'>
@@ -345,6 +350,7 @@ export interface TaskViewerSettings {
     pomodoroBreakMinutes: number;
     countdownMinutes: number;
     pastDaysToShow: number;
+    startFromOldestOverdue: boolean;
     habitExcludeKeys: string[];
     frontmatterTaskHeader: string;
     frontmatterTaskHeaderLevel: number;
@@ -410,6 +416,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     pomodoroBreakMinutes: 5,
     countdownMinutes: 25,
     pastDaysToShow: 0,
+    startFromOldestOverdue: true,
     habitExcludeKeys: ['tags', 'cssclasses', 'aliases'],
     frontmatterTaskHeader: 'Tasks',
     frontmatterTaskHeaderLevel: 2,

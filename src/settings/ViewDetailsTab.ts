@@ -42,6 +42,16 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
         });
 
     new Setting(el)
+        .setName(t('settings.views.startFromOldestOverdue'))
+        .setDesc(t('settings.views.startFromOldestOverdueDesc'))
+        .addToggle(toggle => toggle
+            .setValue(plugin.settings.startFromOldestOverdue)
+            .onChange(async (value) => {
+                plugin.settings.startFromOldestOverdue = value;
+                await plugin.saveSettings();
+            }));
+
+    new Setting(el)
         .setName(t('settings.views.defaultZoomLevel'))
         .setDesc(t('settings.views.defaultZoomLevelDesc'))
         .addSlider(slider => slider

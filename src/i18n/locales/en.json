@@ -54,6 +54,8 @@
       "timeline": "Timeline",
       "pastDaysToShow": "Past Days to Show",
       "pastDaysToShowDesc": "Number of past days to always display in the timeline, even when there are no incomplete tasks on those days.",
+      "startFromOldestOverdue": "Start from oldest overdue task",
+      "startFromOldestOverdueDesc": "When enabled, the timeline starts at the date of the oldest overdue task if any exist. When disabled, overdue tasks are ignored and the timeline starts from today (with the configured Past Days to Show).",
       "defaultZoomLevel": "Default Zoom Level",
       "defaultZoomLevelDesc": "Default zoom level for new Timeline views. Each view can override this independently.",
       "calendarMiniCalendar": "Calendar / Mini Calendar",
