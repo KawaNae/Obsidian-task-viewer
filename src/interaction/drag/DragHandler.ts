@@ -91,6 +91,14 @@ export class DragHandler implements DragContext {
         }
 
         const target = e.target as HTMLElement;
+
+        // pinnedLists 内のカードクリックは selection/drag の対象外。
+        // pinnedLists は selection 状態を持たない閲覧専用 UI であり、
+        // ここで早期 return しないと main grid の同 id カードに .selected が漏れる。
+        if (target.closest('.pinned-lists-container')) {
+            return;
+        }
+
         const handle = target.closest('.task-card__handle-btn') as HTMLElement;
         let taskEl: HTMLElement | null = null;
         let taskId: string | null = null;

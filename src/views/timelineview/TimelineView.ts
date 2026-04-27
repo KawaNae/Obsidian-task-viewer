@@ -23,7 +23,7 @@ import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 import { GridRenderer } from './renderers/GridRenderer';
 import { AllDaySectionRenderer } from '../sharedUI/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
-import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
+import { PinnedListRenderer, type PinnedListCallbacks } from '../sharedUI/PinnedListRenderer';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { createEmptyFilterState, type FilterState } from '../../services/filter/FilterTypes';
@@ -337,7 +337,13 @@ export class TimelineView extends ItemView {
                 }
 
                 if (changes.every(k => SAFE_KEYS.has(k))) {
-                    if (this.tryPartialUpdate(taskId)) return;
+                    if (this.tryPartialUpdate(taskId)) {
+                        // partial update は main grid のカードのみ書き換えるので、
+                        // pinnedLists の件数 / フィルタ膜割り / ソート位置 / カード内容を
+                        // 反映するため pinnedLists だけフル再描画する。
+                        this.refreshPinnedLists();
+                        return;
+                    }
                 }
             }
 
@@ -576,6 +582,82 @@ export class TimelineView extends ItemView {
         }
     }
 
+    private getPinnedListCallbacks(): PinnedListCallbacks {
+        return {
+            onCollapsedChange: (listId, collapsed) => {
+                if (!this.viewState.pinnedListCollapsed) this.viewState.pinnedListCollapsed = {};
+                this.viewState.pinnedListCollapsed[listId] = collapsed;
+                this.app.workspace.requestSaveLayout();
+            },
+            onSortEdit: (listDef, anchorEl) => this.openPinnedListSort(listDef, anchorEl),
+            onFilterEdit: (listDef, anchorEl) => this.openPinnedListFilter(listDef, anchorEl),
+            onDuplicate: (listDef) => {
+                const lists = this.viewState.pinnedLists!;
+                const idx = lists.indexOf(listDef);
+                const dup = {
+                    ...listDef,
+                    id: 'pl-' + Date.now(),
+                    name: listDef.name + ' (copy)',
+                    filterState: structuredClone(listDef.filterState),
+                    sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
+                };
+                lists.splice(idx + 1, 0, dup);
+                this.app.workspace.requestSaveLayout();
+                this.render();
+            },
+            onRemove: (listDef) => {
+                const lists = this.viewState.pinnedLists!;
+                const idx = lists.indexOf(listDef);
+                if (idx >= 0) lists.splice(idx, 1);
+                this.app.workspace.requestSaveLayout();
+                this.render();
+            },
+            onMoveUp: (listDef) => {
+                const lists = this.viewState.pinnedLists!;
+                const idx = lists.indexOf(listDef);
+                if (idx > 0) {
+                    [lists[idx - 1], lists[idx]] = [lists[idx], lists[idx - 1]];
+                    this.app.workspace.requestSaveLayout();
+                    this.render();
+                }
+            },
+            onMoveDown: (listDef) => {
+                const lists = this.viewState.pinnedLists!;
+                const idx = lists.indexOf(listDef);
+                if (idx >= 0 && idx < lists.length - 1) {
+                    [lists[idx], lists[idx + 1]] = [lists[idx + 1], lists[idx]];
+                    this.app.workspace.requestSaveLayout();
+                    this.render();
+                }
+            },
+            onToggleApplyViewFilter: (listDef) => {
+                listDef.applyViewFilter = !listDef.applyViewFilter;
+                this.app.workspace.requestSaveLayout();
+                this.render();
+            },
+            onRename: () => {
+                this.app.workspace.requestSaveLayout();
+            },
+        };
+    }
+
+    /**
+     * Re-render only the pinned lists section.
+     * Called from the partial update path so that pinnedLists reflect changes
+     * to status/content/childLines (count, filter membership, sort, card body).
+     */
+    private refreshPinnedLists(): void {
+        const sidebarBody = this.container.querySelector('.view-sidebar__body') as HTMLElement | null;
+        if (!sidebarBody) return;
+        this.pinnedListRenderer.render(
+            sidebarBody,
+            this.viewState.pinnedLists ?? [],
+            this.viewState.pinnedListCollapsed ?? {},
+            this.getPinnedListCallbacks(),
+            this.toolbar?.getFilterState(),
+        );
+    }
+
     private tryPartialUpdate(taskId: string): boolean {
         const card = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
         const dt = this.readService.getDisplayTask(taskId);
@@ -647,62 +729,7 @@ export class TimelineView extends ItemView {
             sidebarBody,
             this.viewState.pinnedLists ?? [],
             this.viewState.pinnedListCollapsed ?? {},
-            {
-                onCollapsedChange: (listId, collapsed) => {
-                    if (!this.viewState.pinnedListCollapsed) this.viewState.pinnedListCollapsed = {};
-                    this.viewState.pinnedListCollapsed[listId] = collapsed;
-                    this.app.workspace.requestSaveLayout();
-                },
-                onSortEdit: (listDef, anchorEl) => this.openPinnedListSort(listDef, anchorEl),
-                onFilterEdit: (listDef, anchorEl) => this.openPinnedListFilter(listDef, anchorEl),
-                onDuplicate: (listDef) => {
-                    const lists = this.viewState.pinnedLists!;
-                    const idx = lists.indexOf(listDef);
-                    const dup = {
-                        ...listDef,
-                        id: 'pl-' + Date.now(),
-                        name: listDef.name + ' (copy)',
-                        filterState: structuredClone(listDef.filterState),
-                        sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
-                    };
-                    lists.splice(idx + 1, 0, dup);
-                    this.app.workspace.requestSaveLayout();
-                    this.render();
-                },
-                onRemove: (listDef) => {
-                    const lists = this.viewState.pinnedLists!;
-                    const idx = lists.indexOf(listDef);
-                    if (idx >= 0) lists.splice(idx, 1);
-                    this.app.workspace.requestSaveLayout();
-                    this.render();
-                },
-                onMoveUp: (listDef) => {
-                    const lists = this.viewState.pinnedLists!;
-                    const idx = lists.indexOf(listDef);
-                    if (idx > 0) {
-                        [lists[idx - 1], lists[idx]] = [lists[idx], lists[idx - 1]];
-                        this.app.workspace.requestSaveLayout();
-                        this.render();
-                    }
-                },
-                onMoveDown: (listDef) => {
-                    const lists = this.viewState.pinnedLists!;
-                    const idx = lists.indexOf(listDef);
-                    if (idx >= 0 && idx < lists.length - 1) {
-                        [lists[idx], lists[idx + 1]] = [lists[idx + 1], lists[idx]];
-                        this.app.workspace.requestSaveLayout();
-                        this.render();
-                    }
-                },
-                onToggleApplyViewFilter: (listDef) => {
-                    listDef.applyViewFilter = !listDef.applyViewFilter;
-                    this.app.workspace.requestSaveLayout();
-                    this.render();
-                },
-                onRename: () => {
-                    this.app.workspace.requestSaveLayout();
-                },
-            },
+            this.getPinnedListCallbacks(),
             this.toolbar?.getFilterState(),
         );
 
