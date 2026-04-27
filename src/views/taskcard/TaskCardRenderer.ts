@@ -81,7 +81,7 @@ export class TaskCardRenderer extends Component {
         } else if (isFrontmatterTask(task)) {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
             await this.renderFrontmatterChildren(contentContainer, task, cardComp, settings, forceExpand);
-        } else if (task.childLines.length > 0) {
+        } else if (task.childLines.length > 0 || task.childIds.length > 0) {
             await this.renderInlineChildren(contentContainer, task, cardComp, settings, parentMarkdown, forceExpand);
         } else {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
@@ -190,7 +190,7 @@ export class TaskCardRenderer extends Component {
         parentMarkdown: string,
         forceExpand = false
     ): Promise<void> {
-        const items = this.childItemBuilder.buildInlineChildItems(task, '');
+        const items = this.childItemBuilder.buildChildItems(task, '');
         if (!forceExpand && items.length >= TaskCardRenderer.COLLAPSE_THRESHOLD) {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
             await this.childSectionRenderer.renderCollapsed(
@@ -206,7 +206,7 @@ export class TaskCardRenderer extends Component {
             return;
         }
 
-        const indentedItems = this.childItemBuilder.buildInlineChildItems(task, '    ');
+        const indentedItems = this.childItemBuilder.buildChildItems(task, '    ');
         await this.childSectionRenderer.renderParentWithChildren(
             contentContainer,
             parentMarkdown,
@@ -229,7 +229,7 @@ export class TaskCardRenderer extends Component {
             return;
         }
 
-        const items = this.childItemBuilder.buildFrontmatterChildItems(task);
+        const items = this.childItemBuilder.buildChildItems(task);
         if (items.length === 0) {
             return;
         }

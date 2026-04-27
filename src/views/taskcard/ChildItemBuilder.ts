@@ -26,68 +26,15 @@ export class ChildItemBuilder {
     }
 
     /**
-     * Inline task childLines -> ChildRenderItem[]
-     * @param indent Prefix added to every generated markdown line.
+     * 親 Task の descendants を ChildRenderItem[] に変換する統一エントリーポイント。
+     * inline / frontmatter どちらの親でも同じロジックで処理する。
+     *
+     * @param indent Prefix added to every generated markdown line (default '').
      */
-    buildInlineChildItems(task: Task, indent: string): ChildRenderItem[] {
-        const childIdByLine = this.resolver.buildChildIdByLine(task);
-
-        const wikiTaskByIdx = new Map<number, Task>();
-        for (let i = 0; i < task.childLines.length; i++) {
-            const cl = task.childLines[i];
-            if (cl.wikilinkTarget === null) continue;
-            const wikiTask = this.resolver.findWikiLinkChild(task, childIdByLine, cl.wikilinkTarget);
-            if (wikiTask) wikiTaskByIdx.set(i, wikiTask);
-        }
-
+    buildChildItems(task: Task, indent: string = ''): ChildRenderItem[] {
         const items: ChildRenderItem[] = [];
         const visitedIds = new Set<string>();
-
-        for (let idx = 0; idx < task.childLines.length; idx++) {
-            const cl = task.childLines[idx];
-            const effectiveIndent = indent + cl.indent;
-
-            // 1. childIdByLine でタスク解決（@notation 子タスク）
-            const absLine = this.resolver.resolveChildAbsoluteLine(task, idx);
-            const childIdTask = childIdByLine.get(absLine);
-            if (childIdTask && !visitedIds.has(childIdTask.id)) {
-                visitedIds.add(childIdTask.id);
-                items.push(this.mapper.createTaskItem(childIdTask, effectiveIndent, task.file));
-                this.appendDescendants(childIdTask, effectiveIndent + '    ', task.id, items, visitedIds, 0);
-                continue;
-            }
-
-            // 2. orphan タスク検索（childIds に未登録だが行番号でマッチするタスク）
-            const orphanTask = this.resolver.findOrphanTask(task.file, absLine);
-            if (orphanTask && !visitedIds.has(orphanTask.id)) {
-                visitedIds.add(orphanTask.id);
-                items.push(this.mapper.createTaskItem(orphanTask, effectiveIndent, task.file));
-                this.appendDescendants(orphanTask, effectiveIndent + '    ', task.id, items, visitedIds, 0);
-                continue;
-            }
-
-            // 3. wikilink 解決
-            const wikiTask = wikiTaskByIdx.get(idx);
-            if (wikiTask) {
-                items.push(this.mapper.createWikiLinkItem(wikiTask, effectiveIndent));
-                this.appendDescendants(wikiTask, effectiveIndent + '    ', task.id, items, visitedIds, 0);
-                continue;
-            }
-
-            // 4. plainCheckbox / 通常行
-            items.push(this.mapper.processChildLine(cl, idx, task, indent));
-        }
-
-        return items;
-    }
-
-    /**
-     * Frontmatter task descendants -> ChildRenderItem[]
-     */
-    buildFrontmatterChildItems(parentTask: Task): ChildRenderItem[] {
-        const items: ChildRenderItem[] = [];
-        const visitedIds = new Set<string>();
-        this.appendDescendants(parentTask, '', parentTask.id, items, visitedIds, 0);
+        this.appendDescendants(task, indent, task.id, items, visitedIds, 0);
         return items;
     }
 
