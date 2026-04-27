@@ -17,6 +17,7 @@ import type { DisplayTask } from '../../../types';
 import { HabitTrackerRenderer } from '../../sharedUI/HabitTrackerRenderer';
 import { splitTasks } from '../../../services/display/TaskSplitter';
 import { categorizeTasksByDate } from '../../../services/display/TaskDateCategorizer';
+import { bucketBySection } from '../../../services/display/SectionClassifier';
 
 type DateHeaderDisplayEntry = {
     cell: HTMLElement;
@@ -220,8 +221,12 @@ export class GridRenderer {
             allDayRenderer.addEmptySpaceContextMenu(cell, date);
         });
 
-        // Render Tasks (Overlaid)
-        allDayRenderer.render(allDayRow, dates, filteredTasks);
+        // セクション間で同じ task.id が両方に流れ込まないよう、ここで一度だけ
+        // 振り分ける。AllDay と Timeline の両方に同一カードが描画されるバグの根治。
+        const buckets = bucketBySection(filteredTasks, startHour);
+
+        // Render Tasks (Overlaid) — allday バケツのみ渡す
+        allDayRenderer.render(allDayRow, dates, buckets.allday);
 
         // 3.2. Timeline Grid (time axis + day columns)
         const timelineGrid = scrollArea.createDiv('timeline-row timeline-scroll-area__grid');
@@ -231,8 +236,9 @@ export class GridRenderer {
         const timeCol = timelineGrid.createDiv('time-axis-column');
         this.renderTimeLabels(timeCol);
 
-        // Day Columns
-        const splitResult = splitTasks(filteredTasks, { type: 'visual-date', startHour });
+        // Day Columns — timed + dueOnly のみ。split で segment を生成してから日付分類。
+        const timelineInput = [...buckets.timed, ...buckets.dueOnly];
+        const splitResult = splitTasks(timelineInput, { type: 'visual-date', startHour });
         const categorizedByDate = categorizeTasksByDate(splitResult, dates, startHour);
         dates.forEach(date => {
             const col = timelineGrid.createDiv('day-timeline-column');

@@ -43,6 +43,18 @@ export class TaskIndex {
     private notifyDebounceTimer: NodeJS.Timeout | null = null;
     private readonly NOTIFY_DEBOUNCE_MS = 16; // 約1フレーム
 
+    // 通知の coalesce バッファ。
+    // - null: 保留中なし
+    // - 'full': taskId 不明 or 複数 taskId の混在 → 全体無効化
+    // - { taskId, changes }: 単一 taskId への変更スパン（changes はマージされる）
+    private pendingNotify: { taskId: string; changes: Set<string> } | 'full' | null = null;
+
+    // 自己発信書き込みを覚えておくための TTL マップ（path → 解除 timer）。
+    // vault.modify 後にメタデータキャッシュが遅延発火しても、自己書き込み由来であれば
+    // 重ねて notify を発火しないようにするためのウィンドウ。
+    private recentSelfWriteTimers: Map<string, NodeJS.Timeout> = new Map();
+    private readonly SELF_WRITE_SUPPRESSION_MS = 1000;
+
     constructor(private app: App, settings: TaskViewerSettings) {
         this.settings = settings;
 
@@ -79,6 +91,12 @@ export class TaskIndex {
                 const isLocal = this.syncDetector.isLocalEdit(file.path);
                 this.syncDetector.clearLocalEditFlag(file.path);
 
+                // 自己書き込み: 後続の metadataCache.changed が遅延着弾しても
+                // 二重 notify にならないよう短時間だけマーク
+                if (isLocal) {
+                    this.markRecentSelfWrite(file.path);
+                }
+
                 // ドラッグ中のファイルはスキャンをスキップ（古い値でストアが上書きされるのを防止）
                 if (this.draggingFilePath === file.path) {
                     return;
@@ -86,7 +104,11 @@ export class TaskIndex {
 
                 await this.scanner.queueScan(file, isLocal);
                 WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
-                this.debouncedNotify();
+                // 自己書き込みは updateTask が既に notify しているため、ここでは notify しない。
+                // 外部書き込みのときだけ debounced notify を発火する。
+                if (!isLocal) {
+                    this.debouncedNotify();
+                }
             }
         });
 
@@ -110,6 +132,12 @@ export class TaskIndex {
             if (file instanceof TFile && file.extension === 'md') {
                 // ドラッグ中のファイルはスキャンをスキップ
                 if (this.draggingFilePath === file.path) {
+                    return;
+                }
+                // 自己書き込み直後のメタデータキャッシュ更新は完全に無視する。
+                // ドラッグ完了後 setDraggingFile(null) と相前後して着弾する遅延イベントが
+                // 余分な scan + notify を引き起こすのを防ぐ。
+                if (this.isRecentSelfWrite(file.path)) {
                     return;
                 }
                 this.scanner.queueScan(file).then(() => {
@@ -154,30 +182,82 @@ export class TaskIndex {
     // ===== 通知制御 =====
 
     /**
+     * 保留中の通知バッファに新しい通知を取り込む。
+     * 同一 taskId への通知は changes をマージし、taskId 不明 / 複数 taskId が混ざる場合は
+     * 全体無効化（'full'）に降格する。
+     */
+    private mergeNotify(taskId?: string, changes?: string[]): void {
+        if (!taskId || !changes) {
+            this.pendingNotify = 'full';
+            return;
+        }
+        if (this.pendingNotify === null) {
+            this.pendingNotify = { taskId, changes: new Set(changes) };
+            return;
+        }
+        if (this.pendingNotify === 'full') return;
+        if (this.pendingNotify.taskId === taskId) {
+            for (const k of changes) this.pendingNotify.changes.add(k);
+        } else {
+            this.pendingNotify = 'full';
+        }
+    }
+
+    /** 保留中の通知を即時にリスナーへ流し、バッファをクリアする */
+    private flushPending(): void {
+        const pending = this.pendingNotify;
+        this.pendingNotify = null;
+        if (pending === null) return;
+        if (pending === 'full') {
+            this.store.notifyListeners();
+        } else {
+            this.store.notifyListeners(pending.taskId, [...pending.changes]);
+        }
+    }
+
+    /**
      * notifyListenersをdebounceで呼び出す。
      * 短時間（16ms）の連続呼び出しを統合して不要な再レンダリングを削減。
+     * 引数を渡すと changes スパンをマージしてリスナーに伝搬する。
      */
-    private debouncedNotify(): void {
+    private debouncedNotify(taskId?: string, changes?: string[]): void {
+        this.mergeNotify(taskId, changes);
         if (this.notifyDebounceTimer) {
             clearTimeout(this.notifyDebounceTimer);
         }
         this.notifyDebounceTimer = setTimeout(() => {
-            this.store.notifyListeners();
             this.notifyDebounceTimer = null;
+            this.flushPending();
         }, this.NOTIFY_DEBOUNCE_MS);
     }
 
     /**
      * 即時通知（debounceなし）。
      * ドラッグ完了後にDOMを即座に更新する必要がある場合に使用。
+     * 引数あり: taskId / changes をリスナーに伝える。なし: 全体無効化。
      * 既存のdebounceタイマーはキャンセルして即座に実行する。
      */
-    notifyImmediate(): void {
+    notifyImmediate(taskId?: string, changes?: string[]): void {
+        this.mergeNotify(taskId, changes);
         if (this.notifyDebounceTimer) {
             clearTimeout(this.notifyDebounceTimer);
             this.notifyDebounceTimer = null;
         }
-        this.store.notifyListeners();
+        this.flushPending();
+    }
+
+    /** 自己書き込みを短時間記憶する（metadataCache.changed の遅延着弾を抑止するため） */
+    private markRecentSelfWrite(filePath: string): void {
+        const existing = this.recentSelfWriteTimers.get(filePath);
+        if (existing) clearTimeout(existing);
+        const timer = setTimeout(() => {
+            this.recentSelfWriteTimers.delete(filePath);
+        }, this.SELF_WRITE_SUPPRESSION_MS);
+        this.recentSelfWriteTimers.set(filePath, timer);
+    }
+
+    private isRecentSelfWrite(filePath: string): boolean {
+        return this.recentSelfWriteTimers.has(filePath);
     }
 
     // ===== ドラッグ制御 =====
@@ -185,14 +265,10 @@ export class TaskIndex {
     /**
      * ドラッグ中のファイルパスを設定する。
      * 指定されたファイルのスキャンをスキップし、ストアの上書きを防止。
-     * null設定時に最終的なレンダリングをトリガーする。
+     * 通知は呼び出し元（DragHandler）が notifyImmediate で明示的に行う。
      */
     setDraggingFile(filePath: string | null): void {
         this.draggingFilePath = filePath;
-        if (filePath === null) {
-            // ドラッグ終了時に最終レンダリングをトリガー
-            this.debouncedNotify();
-        }
     }
 
     // ===== 設定 =====
@@ -217,6 +293,11 @@ export class TaskIndex {
             clearTimeout(this.notifyDebounceTimer);
             this.notifyDebounceTimer = null;
         }
+        for (const timer of this.recentSelfWriteTimers.values()) {
+            clearTimeout(timer);
+        }
+        this.recentSelfWriteTimers.clear();
+        this.pendingNotify = null;
     }
 
     // ===== データアクセス (TaskStoreへ委譲) =====

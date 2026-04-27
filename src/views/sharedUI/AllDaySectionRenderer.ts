@@ -11,7 +11,7 @@ import { CreateTaskModal, formatTaskLine } from '../../modals/CreateTaskModal';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from './DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
-import { getTaskDateRange, isTaskAllDay } from '../../services/display/VisualDateRange';
+import { getTaskDateRange } from '../../services/display/VisualDateRange';
 
 export class AllDaySectionRenderer {
     constructor(
@@ -27,21 +27,14 @@ export class AllDaySectionRenderer {
         const viewEnd = dates[dates.length - 1];
         const startHour = this.plugin.settings.startHour;
 
-        // Filter for allDay tasks
+        // セクション分類は GridRenderer 側で `bucketBySection` 済み (SectionClassifier)。
+        // ここでは visual date range が view 範囲と重なるかだけを確認する。
         const tasks = displayTasks.filter(dt => {
-            if (!dt.effectiveStartDate) return false;  // D type: excluded
-
-            // Use visual start date considering startHour
+            if (!dt.effectiveStartDate) return false;
             const range = getTaskDateRange(dt, startHour);
             const visualStart = range.effectiveStart || dt.effectiveStartDate;
             const tEnd = range.effectiveEnd || visualStart;
-            if (!(visualStart <= viewEnd && tEnd >= viewStart)) return false;
-
-            // Filter for allDay tasks:
-            // - Tasks without startTime (S-All, SD, ED, E types)
-            // - Tasks with startTime but duration >= 24 hours
-            // Exclude: SE/SED tasks with duration < 24 hours (those go to timeline)
-            return isTaskAllDay(dt, startHour);
+            return visualStart <= viewEnd && tEnd >= viewStart;
         });
 
         // Pre-split at view boundaries (allDay tasks only need date-range split)
@@ -94,13 +87,6 @@ export class AllDaySectionRenderer {
         if (entry.continuesBefore) el.addClass('task-card--split-continues-before');
         if (entry.continuesAfter) el.addClass('task-card--split-continues-after');
         if (task.id === this.handleManager.getSelectedTaskId()) {
-            console.log('[task-select] AllDaySectionRenderer initial .selected match', {
-                taskId: task.id,
-                originalTaskId: task.originalTaskId,
-                file: task.file,
-                line: task.line,
-                content: task.content?.slice(0, 40),
-            });
             el.addClass('selected');
         }
         el.dataset.id = task.id;

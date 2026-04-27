@@ -134,6 +134,7 @@ const context = await esbuild.context({
   },
   define: {
     __BUILD_TIME__: JSON.stringify(buildTime),
+    __DEV__: JSON.stringify(!prod),
   },
   entryPoints: ["src/main.ts"],
   bundle: true,
