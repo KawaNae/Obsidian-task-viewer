@@ -7,7 +7,11 @@ import {
 } from '../../services/filter/FilterTypes';
 import type { StatusDefinition, Task } from '../../types';
 import type { FilterDropdownMenus } from './FilterDropdownMenus';
-import { getToday, getAvailableValues, getValueDisplay, formatValueLabel } from './FilterValueHelpers';
+import {
+    getToday, getAvailableValues, getValueDisplay,
+    getPropertyValuesForKey,
+} from './FilterValueHelpers';
+import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 import { t } from '../../i18n';
 
 export class FilterConditionRenderer {
@@ -24,7 +28,7 @@ export class FilterConditionRenderer {
         if (condition.property === 'content') {
             this.renderTextInput(row, condition);
         } else if (condition.property === 'property') {
-            this.renderValueDropdown(row, condition);
+            this.renderPropertyValueInput(row, condition);
         } else {
             this.renderPillValueSelector(row, condition);
         }
@@ -52,17 +56,201 @@ export class FilterConditionRenderer {
         });
     }
 
-    renderValueDropdown(row: HTMLElement, condition: FilterCondition): void {
-        const currentValues = Array.isArray(condition.value) ? condition.value as string[] : [];
-        const label = formatValueLabel(condition.property, currentValues, this.getStatusDefs());
+    /**
+     * Render the labeled grid for property filter (always 2 sub-rows):
+     *   キー：[keyinput]
+     *   値：[valueinput]
+     * Labels share a grid column so colons align across rows. Value row is shown
+     * even for isSet/isNotSet (engine ignores it) so layout stays stable.
+     */
+    renderPropertyRows(row: HTMLElement, condition: FilterCondition): void {
+        const grid = row.createDiv('filter-popover__row-value filter-popover__property-grid');
 
-        const btn = row.createEl('button', {
-            cls: `filter-popover__dropdown${currentValues.length === 0 ? ' filter-popover__dropdown--placeholder' : ''}`,
-            text: label,
+        grid.createEl('span', {
+            cls: 'filter-popover__property-label',
+            text: t('filter.propertyKeyLabel'),
         });
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.dropdowns.showValueMenu(btn, condition);
+        this.renderPropertyKeyInput(grid, condition);
+
+        grid.createEl('span', {
+            cls: 'filter-popover__property-label',
+            text: t('filter.propertyValueLabel'),
+        });
+        this.renderPropertyValueInput(grid, condition);
+    }
+
+    renderPropertyKeyInput(row: HTMLElement, condition: FilterCondition): void {
+        const tasks = this.getLastTasks();
+        this.renderSuggestInput(row, {
+            initialValue: condition.key ?? '',
+            placeholder: t('filter.typePropertyKey'),
+            wrapClass: 'filter-popover__property-key-wrap',
+            inputClass: 'filter-popover__property-key-input',
+            suggestClass: 'filter-popover__property-key-suggest',
+            getCandidates: () => FilterValueCollector.collectPropertyKeys(tasks),
+            onCommit: (val) => {
+                if ((condition.key ?? '') === val) return;
+                condition.key = val;
+                condition.value = '';
+                this.getOnFilterChange()?.();
+                this.renderContent();
+            },
+        });
+    }
+
+    renderPropertyValueInput(row: HTMLElement, condition: FilterCondition): void {
+        const tasks = this.getLastTasks();
+        const key = condition.key ?? '';
+        this.renderSuggestInput(row, {
+            initialValue: typeof condition.value === 'string' ? condition.value : '',
+            placeholder: t('filter.typePropertyValue'),
+            wrapClass: 'filter-popover__property-value-wrap',
+            inputClass: 'filter-popover__text-input',
+            suggestClass: 'filter-popover__property-value-suggest',
+            getCandidates: () => key ? getPropertyValuesForKey(tasks, key) : [],
+            onCommit: (val) => {
+                condition.value = val;
+                this.getOnFilterChange()?.();
+            },
+        });
+    }
+
+    private renderSuggestInput(
+        container: HTMLElement,
+        opts: {
+            initialValue: string;
+            placeholder: string;
+            wrapClass: string;
+            inputClass: string;
+            suggestClass: string;
+            getCandidates: () => string[];
+            onCommit: (value: string) => void;
+        },
+    ): void {
+        const inputWrap = container.createDiv(opts.wrapClass);
+        const input = inputWrap.createEl('input', {
+            cls: opts.inputClass,
+            type: 'text',
+            attr: { placeholder: opts.placeholder },
+        });
+        input.value = opts.initialValue;
+
+        let suggestEl: HTMLElement | null = null;
+        let selectedIdx = -1;
+        let suggestItems: { el: HTMLElement; value: string }[] = [];
+        let outsideHandler: ((e: MouseEvent) => void) | null = null;
+
+        const closeSuggest = () => {
+            if (suggestEl) {
+                suggestEl.remove();
+                suggestEl = null;
+            }
+            suggestItems = [];
+            selectedIdx = -1;
+            if (outsideHandler) {
+                document.removeEventListener('pointerdown', outsideHandler, true);
+                outsideHandler = null;
+            }
+        };
+
+        const updateHighlight = () => {
+            for (let i = 0; i < suggestItems.length; i++) {
+                suggestItems[i].el.classList.toggle('filter-popover__tag-suggest-item--active', i === selectedIdx);
+            }
+            if (selectedIdx >= 0 && suggestItems[selectedIdx]) {
+                suggestItems[selectedIdx].el.scrollIntoView({ block: 'nearest' });
+            }
+        };
+
+        const showSuggest = (query: string, showAll: boolean) => {
+            closeSuggest();
+            const all = opts.getCandidates();
+            const q = query.toLowerCase();
+            const filtered = all.filter(v => {
+                if (showAll || !q) return true;
+                return v.toLowerCase().includes(q);
+            });
+            if (filtered.length === 0) return;
+
+            suggestEl = document.createElement('div');
+            suggestEl.className = `filter-popover__tag-suggest ${opts.suggestClass}`;
+            suggestItems = [];
+            selectedIdx = -1;
+
+            for (const val of filtered) {
+                const item = suggestEl.createDiv('filter-popover__tag-suggest-item');
+                item.createSpan().setText(val);
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    input.value = val;
+                    closeSuggest();
+                    opts.onCommit(val);
+                });
+                suggestItems.push({ el: item, value: val });
+            }
+
+            document.body.appendChild(suggestEl);
+
+            const rect = inputWrap.getBoundingClientRect();
+            let x = rect.left;
+            let y = rect.bottom + 2;
+            const suggestRect = suggestEl.getBoundingClientRect();
+            if (x + suggestRect.width > window.innerWidth) {
+                x = window.innerWidth - suggestRect.width - 8;
+            }
+            if (y + suggestRect.height > window.innerHeight) {
+                y = rect.top - suggestRect.height - 2;
+            }
+            suggestEl.style.left = `${Math.max(8, x)}px`;
+            suggestEl.style.top = `${Math.max(8, y)}px`;
+            suggestEl.style.minWidth = `${rect.width}px`;
+
+            outsideHandler = (e: MouseEvent) => {
+                const target = e.target as Node;
+                if (suggestEl?.contains(target) || inputWrap.contains(target)) return;
+                closeSuggest();
+            };
+            setTimeout(() => {
+                document.addEventListener('pointerdown', outsideHandler!, true);
+            }, 0);
+        };
+
+        input.addEventListener('input', () => {
+            showSuggest(input.value, false);
+        });
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (!suggestEl) {
+                    showSuggest(input.value, !input.value);
+                } else if (suggestItems.length > 0) {
+                    selectedIdx = (selectedIdx + 1) % suggestItems.length;
+                    updateHighlight();
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (suggestItems.length > 0) {
+                    selectedIdx = selectedIdx <= 0 ? suggestItems.length - 1 : selectedIdx - 1;
+                    updateHighlight();
+                }
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                const picked = selectedIdx >= 0 && suggestItems[selectedIdx]
+                    ? suggestItems[selectedIdx].value
+                    : input.value;
+                input.value = picked;
+                closeSuggest();
+                opts.onCommit(picked);
+                input.blur();
+            } else if (e.key === 'Escape') {
+                closeSuggest();
+            }
+        });
+        input.addEventListener('focus', () => {
+            showSuggest(input.value, !input.value);
+        });
+        input.addEventListener('change', () => {
+            opts.onCommit(input.value);
         });
     }
 

@@ -54,4 +54,25 @@ export class FilterValueCollector {
         }
         return Array.from(set).sort();
     }
+
+    static collectPropertyKeys(tasks: Task[]): string[] {
+        const set = new Set<string>();
+        for (const task of tasks) {
+            if (!task.properties) continue;
+            for (const key of Object.keys(task.properties)) {
+                set.add(key);
+            }
+        }
+        return Array.from(set).sort();
+    }
+
+    static collectPropertyValuesForKey(tasks: Task[], key: string): string[] {
+        if (!key) return [];
+        const set = new Set<string>();
+        for (const task of tasks) {
+            const v = task.properties?.[key]?.value;
+            if (v != null && v !== '') set.add(v);
+        }
+        return Array.from(set).sort();
+    }
 }

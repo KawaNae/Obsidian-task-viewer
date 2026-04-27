@@ -61,6 +61,11 @@ export function getAvailableValues(property: FilterProperty, tasks: Task[]): str
         case 'linestyle': return FilterValueCollector.collectLineStyles(tasks);
         case 'kind': return [...TASK_KIND_VALUES];
         case 'notation': return FilterValueCollector.collectNotations(tasks);
+        case 'property': return FilterValueCollector.collectPropertyKeys(tasks);
         default: return [];
     }
+}
+
+export function getPropertyValuesForKey(tasks: Task[], key: string): string[] {
+    return FilterValueCollector.collectPropertyValuesForKey(tasks, key);
 }

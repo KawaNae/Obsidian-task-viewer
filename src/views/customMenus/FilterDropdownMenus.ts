@@ -135,7 +135,7 @@ export class FilterDropdownMenus {
             'file', 'tag', 'status', 'content',
             'startDate', 'endDate', 'due', 'anyDate',
             'length', 'color', 'linestyle', 'kind', 'notation',
-            'parent', 'children',
+            'parent', 'children', 'property',
         ];
         const items: SelectItem[] = properties.map(p => ({
             label: getPropertyLabel(p),
@@ -158,10 +158,13 @@ export class FilterDropdownMenus {
             } else if (NUMBER_PROPERTIES.has(prop)) {
                 condition.value = 1;
                 condition.unit = 'hours';
-            } else if (prop === 'content') {
+            } else if (prop === 'content' || prop === 'property') {
                 condition.value = '';
             } else {
                 condition.value = [];
+            }
+            if (prop === 'property') {
+                condition.key = '';
             }
             this.refreshPopover();
         });
