@@ -106,15 +106,18 @@ export class FileOperations {
     }
 
     /**
-     * Re-indent child lines relative to a new context.
-     * Strips the old parent's indentation width and converts to tab-based relative indent.
+     * Strip the parent's indent prefix from each child line, preserving deeper
+     * indentation (tabs / spaces / mixed) exactly as written in the source.
      */
-    static adjustChildIndentation(childLines: string[], oldParentIndent: number): string[] {
+    static adjustChildIndentation(childLines: string[], oldParentIndent: string): string[] {
         return childLines.map(line => {
             if (line.trim() === '') return line;
-            const currentIndent = line.search(/\S|$/);
-            const relativeIndent = Math.max(0, currentIndent - oldParentIndent);
-            return '\t'.repeat(relativeIndent / (line.includes('\t') ? 1 : 4)) + line.trimStart();
+            if (line.startsWith(oldParentIndent)) {
+                return line.substring(oldParentIndent.length);
+            }
+            // Defensive: line indent is shorter than declared parent prefix.
+            const currentIndent = line.match(/^\s*/)?.[0] ?? '';
+            return line.substring(Math.min(oldParentIndent.length, currentIndent.length));
         });
     }
 

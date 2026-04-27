@@ -34,3 +34,17 @@ export function getTaskDateRange(
 
     return { effectiveStart: visualStart, effectiveEnd: visualStart };
 }
+
+/**
+ * True when a DisplayTask is rendered as an all-day card
+ * (no startTime, or duration ≥ 23h30m).
+ */
+export function isTaskAllDay(task: DisplayTask, startHour: number): boolean {
+    return DateUtils.isAllDayTask(
+        task.effectiveStartDate,
+        task.effectiveStartTime,
+        task.effectiveEndDate,
+        task.effectiveEndTime,
+        startHour
+    );
+}

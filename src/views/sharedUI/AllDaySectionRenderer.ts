@@ -3,7 +3,6 @@ import { Menu } from 'obsidian';
 import TaskViewerPlugin from '../../main';
 import { t } from '../../i18n';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { DateUtils } from '../../utils/DateUtils';
 import { TaskStyling } from './TaskStyling';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { HandleManager } from '../timelineview/HandleManager';
@@ -28,23 +27,14 @@ export class AllDaySectionRenderer {
         const viewEnd = dates[dates.length - 1];
         const startHour = this.plugin.settings.startHour;
 
-        // Filter for allDay tasks
+        // セクション分類は GridRenderer 側で `bucketBySection` 済み (SectionClassifier)。
+        // ここでは visual date range が view 範囲と重なるかだけを確認する。
         const tasks = displayTasks.filter(dt => {
-            if (!dt.effectiveStartDate) return false;  // D type: excluded
-
-            // Use visual start date considering startHour
+            if (!dt.effectiveStartDate) return false;
             const range = getTaskDateRange(dt, startHour);
             const visualStart = range.effectiveStart || dt.effectiveStartDate;
             const tEnd = range.effectiveEnd || visualStart;
-            if (!(visualStart <= viewEnd && tEnd >= viewStart)) return false;
-
-            // Filter for allDay tasks:
-            // - Tasks without startTime (S-All, SD, ED, E types)
-            // - Tasks with startTime but duration >= 24 hours
-            // Exclude: SE/SED tasks with duration < 24 hours (those go to timeline)
-            return DateUtils.isAllDayTask(
-                dt.effectiveStartDate, dt.effectiveStartTime, dt.effectiveEndDate, dt.effectiveEndTime, startHour
-            );
+            return visualStart <= viewEnd && tEnd >= viewStart;
         });
 
         // Pre-split at view boundaries (allDay tasks only need date-range split)
@@ -97,13 +87,6 @@ export class AllDaySectionRenderer {
         if (entry.continuesBefore) el.addClass('task-card--split-continues-before');
         if (entry.continuesAfter) el.addClass('task-card--split-continues-after');
         if (task.id === this.handleManager.getSelectedTaskId()) {
-            console.log('[task-select] AllDaySectionRenderer initial .selected match', {
-                taskId: task.id,
-                originalTaskId: task.originalTaskId,
-                file: task.file,
-                line: task.line,
-                content: task.content?.slice(0, 40),
-            });
             el.addClass('selected');
         }
         el.dataset.id = task.id;

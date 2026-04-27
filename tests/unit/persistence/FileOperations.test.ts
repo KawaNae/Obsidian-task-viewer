@@ -48,19 +48,18 @@ describe('FileOperations', () => {
     // ── adjustChildIndentation (static) ──
     describe('adjustChildIndentation', () => {
         it('preserves empty lines', () => {
-            const result = FileOperations.adjustChildIndentation(['', '  text'], 0);
+            const result = FileOperations.adjustChildIndentation(['', '  text'], '');
             expect(result[0]).toBe('');
         });
 
-        it('strips old indent and converts to tabs', () => {
-            const result = FileOperations.adjustChildIndentation(['        child'], 4);
-            // relative indent = 8 - 4 = 4, tab divisor = 4 → 1 tab
-            expect(result[0]).toBe('\tchild');
+        it('strips parent indent prefix and preserves deeper indent verbatim', () => {
+            const result = FileOperations.adjustChildIndentation(['        child'], '    ');
+            expect(result[0]).toBe('    child');
         });
 
-        it('handles zero old indent', () => {
-            const result = FileOperations.adjustChildIndentation(['    child'], 0);
-            expect(result[0]).toBe('\tchild');
+        it('handles empty parent indent', () => {
+            const result = FileOperations.adjustChildIndentation(['    child'], '');
+            expect(result[0]).toBe('    child');
         });
     });
 

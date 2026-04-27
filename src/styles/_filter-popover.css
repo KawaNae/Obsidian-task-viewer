@@ -26,6 +26,62 @@
     gap: 6px;
 }
 
+/* Property filter labeled grid: 2 rows × 2 cols (label / input) */
+.filter-popover__property-grid {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    column-gap: 4px;
+    row-gap: 4px;
+    align-items: center;
+    padding-left: 2px;
+}
+
+/* Label cell — right-aligned so the colons line up across rows */
+.filter-popover__property-label {
+    text-align: right;
+    font-size: var(--font-ui-small);
+    color: var(--tv-text-muted);
+    white-space: nowrap;
+}
+
+/* Property key input wrap */
+.filter-popover__property-key-wrap {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--tv-border);
+    border-radius: var(--tv-radius-s);
+    background: var(--tv-bg-primary);
+    min-width: 0;
+}
+.filter-popover__property-key-wrap:focus-within {
+    border-color: var(--tv-accent);
+    outline: none;
+}
+
+.filter-popover .filter-popover__property-key-input {
+    font-size: var(--font-ui-small);
+    padding: 4px 8px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--tv-text);
+    outline: none;
+    box-shadow: none;
+    width: 100%;
+    min-width: 0;
+}
+.filter-popover .filter-popover__property-key-input:hover {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+/* Property value input wrap */
+.filter-popover__property-value-wrap {
+    display: block;
+    min-width: 0;
+}
+
 .filter-popover__glue {
     font-size: var(--font-ui-small);
     color: var(--tv-text-muted);

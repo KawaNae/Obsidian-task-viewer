@@ -2,7 +2,8 @@ import { ItemView, WorkspaceLeaf, setIcon, type Workspace, type ViewStateResult 
 import { t } from '../../i18n';
 import { ViewUriBuilder } from '../sharedLogic/ViewUriBuilder';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import { ViewState, PinnedListDefinition, isCompleteStatusChar } from '../../types';
+import { ViewState, PinnedListDefinition } from '../../types';
+import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
@@ -22,7 +23,7 @@ import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 import { GridRenderer } from './renderers/GridRenderer';
 import { AllDaySectionRenderer } from '../sharedUI/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
-import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
+import { PinnedListRenderer, type PinnedListCallbacks } from '../sharedUI/PinnedListRenderer';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { createEmptyFilterState, type FilterState } from '../../services/filter/FilterTypes';
@@ -92,10 +93,13 @@ export class TimelineView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private unsubscribeDelete: (() => void) | null = null;
     private currentTimeInterval: number | null = null;
-    private scrollRestorePending = false;
     private savedScrollTop: number | null = null;
     private scrollToNowOnNextRender = false;
     private hasInitializedStartDate: boolean = false;
+
+    // Render coalescing (frame-level): 同一 frame 内に複数の onChange が来ても render は 1 回
+    private renderRafId: number | null = null;
+    private renderDirty = false;
 
     // ==================== Pinch zoom state ====================
     private pinchInitialDistance: number = 0;
@@ -286,7 +290,6 @@ export class TimelineView extends ItemView {
                 // the selection survives a drag-move that regenerates segment ids.
                 const segInfo = TaskIdGenerator.parseSegmentId(taskId);
                 const baseId = segInfo?.baseId ?? taskId;
-                console.log('[task-select] onTaskClick callback', { incomingTaskId: taskId, parsedSegment: segInfo, baseId });
                 this.handleManager.selectTask(baseId);
             },
             () => { /* no-op: handles are inside task cards */ },
@@ -302,14 +305,6 @@ export class TimelineView extends ItemView {
             if (target.closest('.task-card__handle-btn')) return;
 
             const cardEl = target.closest('.task-card') as HTMLElement | null;
-            console.log('[task-select] bg-click', {
-                targetTag: target.tagName,
-                targetCls: target.className,
-                cardHit: !!cardEl,
-                cardId: cardEl?.dataset.id,
-                cardSplitId: cardEl?.dataset.splitOriginalId,
-                currentSelected: this.handleManager.getSelectedTaskId(),
-            });
             if (!cardEl) {
                 if (this.handleManager.getSelectedTaskId()) {
                     this.handleManager.selectTask(null);
@@ -329,17 +324,6 @@ export class TimelineView extends ItemView {
 
         // Subscribe to data changes
         this.unsubscribe = this.readService.onChange((taskId, changes) => {
-            const sel = this.handleManager.getSelectedTaskId();
-            const selTask = sel ? this.readService.getTask(sel) : undefined;
-            console.log('[task-select] onChange', {
-                taskId,
-                changes,
-                currentSelected: sel,
-                selectedExists: !!selTask,
-                selectedFile: selTask?.file,
-                selectedLine: selTask?.line,
-                selectedContent: selTask?.content?.slice(0, 40),
-            });
             // On first data load, re-evaluate startDate to include past overdue tasks
             // (no auto-scroll: user-driven scroll only via Now button / refresh / onOpen)
             this.maybeInitializeStartDate();
@@ -348,16 +332,22 @@ export class TimelineView extends ItemView {
                 if (changes.every(k => NO_RENDER_KEYS.has(k))) return;
 
                 if (changes.some(k => LAYOUT_KEYS.has(k))) {
-                    this.render();
+                    this.scheduleRender();
                     return;
                 }
 
                 if (changes.every(k => SAFE_KEYS.has(k))) {
-                    if (this.tryPartialUpdate(taskId)) return;
+                    if (this.tryPartialUpdate(taskId)) {
+                        // partial update は main grid のカードのみ書き換えるので、
+                        // pinnedLists の件数 / フィルタ膜割り / ソート位置 / カード内容を
+                        // 反映するため pinnedLists だけフル再描画する。
+                        this.refreshPinnedLists();
+                        return;
+                    }
                 }
             }
 
-            this.render();
+            this.scheduleRender();
         });
 
         // Ctrl+wheel zoom
@@ -497,6 +487,11 @@ export class TimelineView extends ItemView {
             window.clearInterval(this.currentTimeInterval);
             this.currentTimeInterval = null;
         }
+        if (this.renderRafId !== null) {
+            cancelAnimationFrame(this.renderRafId);
+            this.renderRafId = null;
+            this.renderDirty = false;
+        }
     }
 
     getEffectiveZoomLevel(): number {
@@ -550,10 +545,32 @@ export class TimelineView extends ItemView {
      * skip re-saving scroll — the previously saved value is still correct.
      */
     private render(): void {
-        if (!this.scrollRestorePending) {
-            this.saveScrollPosition();
+        // 保留中の coalesce 済み render をキャンセル（同 frame 内で同期 render が呼ばれたら
+        // 二重描画しない）
+        if (this.renderRafId !== null) {
+            cancelAnimationFrame(this.renderRafId);
+            this.renderRafId = null;
+            this.renderDirty = false;
         }
+        this.saveScrollPosition();
         this.performRender();
+    }
+
+    /**
+     * 同一 frame 内に複数回呼ばれても 1 回の render に集約する。
+     * データ変更通知 (onChange) からの render はこの経路を使う。
+     * トールバー / sidebar / pinch zoom 等の即時反映が必要な経路は render() を直呼び。
+     */
+    private scheduleRender(): void {
+        this.renderDirty = true;
+        if (this.renderRafId !== null) return;
+        this.renderRafId = requestAnimationFrame(() => {
+            this.renderRafId = null;
+            if (!this.renderDirty) return;
+            this.renderDirty = false;
+            this.saveScrollPosition();
+            this.performRender();
+        });
     }
 
     private saveScrollPosition(): void {
@@ -565,17 +582,85 @@ export class TimelineView extends ItemView {
         }
     }
 
+    private getPinnedListCallbacks(): PinnedListCallbacks {
+        return {
+            onCollapsedChange: (listId, collapsed) => {
+                if (!this.viewState.pinnedListCollapsed) this.viewState.pinnedListCollapsed = {};
+                this.viewState.pinnedListCollapsed[listId] = collapsed;
+                this.app.workspace.requestSaveLayout();
+            },
+            onSortEdit: (listDef, anchorEl) => this.openPinnedListSort(listDef, anchorEl),
+            onFilterEdit: (listDef, anchorEl) => this.openPinnedListFilter(listDef, anchorEl),
+            onDuplicate: (listDef) => {
+                const lists = this.viewState.pinnedLists!;
+                const idx = lists.indexOf(listDef);
+                const dup = {
+                    ...listDef,
+                    id: 'pl-' + Date.now(),
+                    name: listDef.name + ' (copy)',
+                    filterState: structuredClone(listDef.filterState),
+                    sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
+                };
+                lists.splice(idx + 1, 0, dup);
+                this.app.workspace.requestSaveLayout();
+                this.render();
+            },
+            onRemove: (listDef) => {
+                const lists = this.viewState.pinnedLists!;
+                const idx = lists.indexOf(listDef);
+                if (idx >= 0) lists.splice(idx, 1);
+                this.app.workspace.requestSaveLayout();
+                this.render();
+            },
+            onMoveUp: (listDef) => {
+                const lists = this.viewState.pinnedLists!;
+                const idx = lists.indexOf(listDef);
+                if (idx > 0) {
+                    [lists[idx - 1], lists[idx]] = [lists[idx], lists[idx - 1]];
+                    this.app.workspace.requestSaveLayout();
+                    this.render();
+                }
+            },
+            onMoveDown: (listDef) => {
+                const lists = this.viewState.pinnedLists!;
+                const idx = lists.indexOf(listDef);
+                if (idx >= 0 && idx < lists.length - 1) {
+                    [lists[idx], lists[idx + 1]] = [lists[idx + 1], lists[idx]];
+                    this.app.workspace.requestSaveLayout();
+                    this.render();
+                }
+            },
+            onToggleApplyViewFilter: (listDef) => {
+                listDef.applyViewFilter = !listDef.applyViewFilter;
+                this.app.workspace.requestSaveLayout();
+                this.render();
+            },
+            onRename: () => {
+                this.app.workspace.requestSaveLayout();
+            },
+        };
+    }
+
+    /**
+     * Re-render only the pinned lists section.
+     * Called from the partial update path so that pinnedLists reflect changes
+     * to status/content/childLines (count, filter membership, sort, card body).
+     */
+    private refreshPinnedLists(): void {
+        const sidebarBody = this.container.querySelector('.view-sidebar__body') as HTMLElement | null;
+        if (!sidebarBody) return;
+        this.pinnedListRenderer.render(
+            sidebarBody,
+            this.viewState.pinnedLists ?? [],
+            this.viewState.pinnedListCollapsed ?? {},
+            this.getPinnedListCallbacks(),
+            this.toolbar?.getFilterState(),
+        );
+    }
+
     private tryPartialUpdate(taskId: string): boolean {
         const card = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
         const dt = this.readService.getDisplayTask(taskId);
-        console.log('[task-select] tryPartialUpdate', {
-            taskId,
-            cardFound: !!card,
-            cardSplitId: card?.dataset.splitOriginalId,
-            dtExists: !!dt,
-            dtFile: dt?.file,
-            dtLine: dt?.line,
-        });
         if (!card) return false;
         if (!dt) return false;
 
@@ -644,62 +729,7 @@ export class TimelineView extends ItemView {
             sidebarBody,
             this.viewState.pinnedLists ?? [],
             this.viewState.pinnedListCollapsed ?? {},
-            {
-                onCollapsedChange: (listId, collapsed) => {
-                    if (!this.viewState.pinnedListCollapsed) this.viewState.pinnedListCollapsed = {};
-                    this.viewState.pinnedListCollapsed[listId] = collapsed;
-                    this.app.workspace.requestSaveLayout();
-                },
-                onSortEdit: (listDef, anchorEl) => this.openPinnedListSort(listDef, anchorEl),
-                onFilterEdit: (listDef, anchorEl) => this.openPinnedListFilter(listDef, anchorEl),
-                onDuplicate: (listDef) => {
-                    const lists = this.viewState.pinnedLists!;
-                    const idx = lists.indexOf(listDef);
-                    const dup = {
-                        ...listDef,
-                        id: 'pl-' + Date.now(),
-                        name: listDef.name + ' (copy)',
-                        filterState: structuredClone(listDef.filterState),
-                        sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
-                    };
-                    lists.splice(idx + 1, 0, dup);
-                    this.app.workspace.requestSaveLayout();
-                    this.render();
-                },
-                onRemove: (listDef) => {
-                    const lists = this.viewState.pinnedLists!;
-                    const idx = lists.indexOf(listDef);
-                    if (idx >= 0) lists.splice(idx, 1);
-                    this.app.workspace.requestSaveLayout();
-                    this.render();
-                },
-                onMoveUp: (listDef) => {
-                    const lists = this.viewState.pinnedLists!;
-                    const idx = lists.indexOf(listDef);
-                    if (idx > 0) {
-                        [lists[idx - 1], lists[idx]] = [lists[idx], lists[idx - 1]];
-                        this.app.workspace.requestSaveLayout();
-                        this.render();
-                    }
-                },
-                onMoveDown: (listDef) => {
-                    const lists = this.viewState.pinnedLists!;
-                    const idx = lists.indexOf(listDef);
-                    if (idx >= 0 && idx < lists.length - 1) {
-                        [lists[idx], lists[idx + 1]] = [lists[idx + 1], lists[idx]];
-                        this.app.workspace.requestSaveLayout();
-                        this.render();
-                    }
-                },
-                onToggleApplyViewFilter: (listDef) => {
-                    listDef.applyViewFilter = !listDef.applyViewFilter;
-                    this.app.workspace.requestSaveLayout();
-                    this.render();
-                },
-                onRename: () => {
-                    this.app.workspace.requestSaveLayout();
-                },
-            },
+            this.getPinnedListCallbacks(),
             this.toolbar?.getFilterState(),
         );
 
@@ -753,25 +783,18 @@ export class TimelineView extends ItemView {
 
         this.renderCurrentTimeIndicator();
 
-        // Restore scroll position or scroll to now
-        const newScrollArea = this.container.querySelector('.timeline-scroll-area');
+        // Restore scroll position synchronously to avoid 1-frame "scroll-to-top" flicker.
+        // offsetTop の読み取り自体が forced reflow を誘発し layout が確定するので
+        // rAF 経由は不要。
+        const newScrollArea = this.container.querySelector('.timeline-scroll-area') as HTMLElement | null;
         if (newScrollArea) {
             if (this.scrollToNowOnNextRender) {
                 this.scrollToNowOnNextRender = false;
-                this.scrollRestorePending = true;
-                requestAnimationFrame(() => {
-                    this.scrollRestorePending = false;
-                    this.scrollToCurrentTime();
-                });
+                this.scrollToCurrentTime();
             } else if (this.savedScrollTop !== null) {
-                this.scrollRestorePending = true;
-                const scrollTarget = this.savedScrollTop;
-                requestAnimationFrame(() => {
-                    this.scrollRestorePending = false;
-                    const newGrid = newScrollArea.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
-                    const gridOffset = newGrid?.offsetTop ?? 0;
-                    newScrollArea.scrollTop = gridOffset + scrollTarget;
-                });
+                const newGrid = newScrollArea.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
+                const gridOffset = newGrid?.offsetTop ?? 0;
+                newScrollArea.scrollTop = gridOffset + this.savedScrollTop;
             }
         }
 
@@ -779,18 +802,34 @@ export class TimelineView extends ItemView {
         // Section renderers already tagged cards with `.selected` during render;
         // reapplySelectionClass is idempotent and ensures handles are attached
         // and z-index is raised on the fresh DOM.
-        const selectedAtScheduleTime = this.handleManager.getSelectedTaskId();
-        if (selectedAtScheduleTime) {
-            console.log('[task-select] performRender end - schedule rAF reapply', { selectedTaskId: selectedAtScheduleTime });
-            requestAnimationFrame(() => {
-                console.log('[task-select] performRender end - rAF fired reapply', {
-                    selectedAtScheduleTime,
-                    selectedNow: this.handleManager.getSelectedTaskId(),
-                });
-                this.handleManager.reapplySelectionClass();
-            });
+        // 同期実行することで、最初の paint からハンドル + SELECTED_Z_INDEX が
+        // 揃った状態で表示され、cascade z-index に一瞬戻る/ハンドルが 1 frame 消える
+        // ちらつきを防ぐ。
+        if (this.handleManager.getSelectedTaskId()) {
+            this.handleManager.reapplySelectionClass();
         }
 
+        // Dev invariant: timeline 主域内に同一 data-id のカードが複数存在しないこと。
+        // 同 id 重複は section dispatch のドリフトを示す致命的不整合のサイン。
+        // production ビルドでは esbuild の define で __DEV__=false が dead-code 化される。
+        if (__DEV__) {
+            this.assertNoDuplicateCardIds();
+        }
+    }
+
+    private assertNoDuplicateCardIds(): void {
+        const main = this.container.querySelector('.view-sidebar-main') ?? this.container;
+        const counts = new Map<string, number>();
+        main.querySelectorAll<HTMLElement>('.task-card[data-id]').forEach(el => {
+            const id = el.dataset.id;
+            if (!id) return;
+            counts.set(id, (counts.get(id) ?? 0) + 1);
+        });
+        for (const [id, n] of counts) {
+            if (n > 1) {
+                console.error('[render-invariant] duplicate task-card data-id', { id, count: n });
+            }
+        }
     }
 
     /**
@@ -881,19 +920,6 @@ export class TimelineView extends ItemView {
         const filterState = this.toolbar.getFilterState();
         const displayTasks = this.readService.getFilteredTasks(filterState);
 
-        // Find the oldest past date among incomplete, visible tasks
-        let oldestDate: string | null = null;
-
-        for (const dt of displayTasks) {
-            if (!dt.effectiveStartDate) continue;
-            if (isCompleteStatusChar(dt.statusChar, this.plugin.settings.statusDefinitions)) continue;
-            if (dt.effectiveStartDate >= visualToday) continue;
-
-            if (!oldestDate || dt.effectiveStartDate < oldestDate) {
-                oldestDate = dt.effectiveStartDate;
-            }
-        }
-
-        return oldestDate;
+        return findOldestOverdueDate(displayTasks, visualToday, this.plugin.settings.statusDefinitions);
     }
 }

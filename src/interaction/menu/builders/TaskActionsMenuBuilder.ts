@@ -6,6 +6,7 @@ import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal
 import { ConfirmModal } from '../../../modals/ConfirmModal';
 import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
 import { openFileInExistingOrNewTab } from '../../../views/sharedLogic/NavigationUtils';
+import { DateUtils } from '../../../utils/DateUtils';
 import { t } from '../../../i18n';
 
 /**
@@ -236,9 +237,17 @@ export class TaskActionsMenuBuilder {
 
     /**
      * "Switch to" サブメニュー — 時刻属性の切替（確認なし）
+     *
+     * 出し分け:
+     *  - dated かつ startDate≠今日: 「(日付維持)」「(今日)」の 2 項目
+     *  - dated かつ startDate==今日: 1 項目（維持と今日が同じため）
+     *  - undated: 「(今日)」相当の 1 項目（日付なしから移動）
      */
     private addSwitchToSubmenu(menu: Menu, task: Task): void {
         const isTimed = !!task.startTime;
+        const today = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        const hasDate = !!task.startDate;
+        const showBothVariants = hasDate && task.startDate !== today;
 
         menu.addItem((item) => {
             const subMenu = item
@@ -247,31 +256,96 @@ export class TaskActionsMenuBuilder {
                 .setSubmenu();
 
             if (isTimed) {
-                subMenu.addItem((sub) => {
-                    sub.setTitle(t('menu.allDay'))
-                        .setIcon('calendar-with-checkmark')
-                        .onClick(async () => {
-                            menu.close();
-                            await this.writeService.updateTask(task.id, {
-                                startTime: undefined,
-                                endTime: undefined,
+                // → All-day
+                if (showBothVariants) {
+                    subMenu.addItem((sub) => {
+                        sub.setTitle(t('menu.allDayKeepDate'))
+                            .setIcon('calendar-with-checkmark')
+                            .onClick(async () => {
+                                menu.close();
+                                await this.writeService.updateTask(task.id, {
+                                    startTime: undefined,
+                                    endDate: undefined,
+                                    endTime: undefined,
+                                });
                             });
-                        });
-                });
+                    });
+                    subMenu.addItem((sub) => {
+                        sub.setTitle(t('menu.allDayToday'))
+                            .setIcon('calendar-with-checkmark')
+                            .onClick(async () => {
+                                menu.close();
+                                await this.writeService.updateTask(task.id, {
+                                    startDate: today,
+                                    startTime: undefined,
+                                    endDate: undefined,
+                                    endTime: undefined,
+                                });
+                            });
+                    });
+                } else {
+                    subMenu.addItem((sub) => {
+                        sub.setTitle(t('menu.allDay'))
+                            .setIcon('calendar-with-checkmark')
+                            .onClick(async () => {
+                                menu.close();
+                                await this.writeService.updateTask(task.id, {
+                                    startDate: hasDate ? task.startDate : today,
+                                    startTime: undefined,
+                                    endDate: undefined,
+                                    endTime: undefined,
+                                });
+                            });
+                    });
+                }
             } else {
-                subMenu.addItem((sub) => {
-                    sub.setTitle(t('menu.timelineMode'))
-                        .setIcon('clock')
-                        .onClick(async () => {
-                            menu.close();
-                            const startHour = this.plugin.settings.startHour;
-                            const h = startHour.toString().padStart(2, '0');
-                            await this.writeService.updateTask(task.id, {
-                                startTime: `${h}:00`,
-                                endTime: undefined,
+                // → Timeline
+                const now = new Date();
+                const hh = now.getHours().toString().padStart(2, '0');
+                const mm = now.getMinutes().toString().padStart(2, '0');
+                const nowTime = `${hh}:${mm}`;
+
+                if (showBothVariants) {
+                    subMenu.addItem((sub) => {
+                        sub.setTitle(t('menu.timelineModeKeepDate'))
+                            .setIcon('clock')
+                            .onClick(async () => {
+                                menu.close();
+                                await this.writeService.updateTask(task.id, {
+                                    startTime: nowTime,
+                                    endDate: undefined,
+                                    endTime: undefined,
+                                });
                             });
-                        });
-                });
+                    });
+                    subMenu.addItem((sub) => {
+                        sub.setTitle(t('menu.timelineModeToday'))
+                            .setIcon('clock')
+                            .onClick(async () => {
+                                menu.close();
+                                await this.writeService.updateTask(task.id, {
+                                    startDate: today,
+                                    startTime: nowTime,
+                                    endDate: undefined,
+                                    endTime: undefined,
+                                });
+                            });
+                    });
+                } else {
+                    subMenu.addItem((sub) => {
+                        sub.setTitle(t('menu.timelineMode'))
+                            .setIcon('clock')
+                            .onClick(async () => {
+                                menu.close();
+                                await this.writeService.updateTask(task.id, {
+                                    startDate: hasDate ? task.startDate : today,
+                                    startTime: nowTime,
+                                    endDate: undefined,
+                                    endTime: undefined,
+                                });
+                            });
+                    });
+                }
             }
         });
     }

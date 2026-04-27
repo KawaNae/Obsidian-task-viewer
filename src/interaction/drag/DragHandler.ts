@@ -16,6 +16,7 @@ export class DragHandler implements DragContext {
     public onTaskClick: (taskId: string) => void;
 
     private currentStrategy: DragStrategy | null = null;
+    private currentDragTaskId: string | null = null;
     private currentDoc: Document;
     private getViewStartDateProvider: () => string;
     private getZoomLevelProvider: () => number;
@@ -90,6 +91,14 @@ export class DragHandler implements DragContext {
         }
 
         const target = e.target as HTMLElement;
+
+        // pinnedLists 内のカードクリックは selection/drag の対象外。
+        // pinnedLists は selection 状態を持たない閲覧専用 UI であり、
+        // ここで早期 return しないと main grid の同 id カードに .selected が漏れる。
+        if (target.closest('.pinned-lists-container')) {
+            return;
+        }
+
         const handle = target.closest('.task-card__handle-btn') as HTMLElement;
         let taskEl: HTMLElement | null = null;
         let taskId: string | null = null;
@@ -114,15 +123,41 @@ export class DragHandler implements DragContext {
             }
         }
 
-        console.log('[task-select] DragHandler.onPointerDown', {
-            targetTag: target.tagName,
-            targetCls: target.className,
-            isFromHandle,
-            taskId,
-            taskElDatasetId: taskEl?.dataset.id,
-            taskElDatasetSplitId: taskEl?.dataset.splitOriginalId,
-            taskElText: (taskEl?.textContent || '').slice(0, 40),
-        });
+        // 「クリック位置にないはずのカードが選択される」低頻度バグ調査用。
+        // 通常クリック（ハンドルなし）で taskEl が解決されたとき、本当にその taskEl が
+        // クリック位置にあるか検証する:
+        //   1. e.target.closest('.task-card') = taskEl （DOM 親子関係）
+        //   2. elementFromPoint(X, Y).closest('.task-card') = taskEl （ピクセル位置）
+        //   3. clickInResolvedRect: クリック点が taskEl の bounding rect 内にあるか
+        // どれかが false なら mismatch=true で warn を出す。バグ条件と完全一致。
+        if (taskEl && !isFromHandle) {
+            const elFromPoint = this.currentDoc.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+            const cardAtPoint = elFromPoint?.closest('.task-card') as HTMLElement | null;
+            const rect = taskEl.getBoundingClientRect();
+            const clickInResolvedRect =
+                e.clientX >= rect.left && e.clientX <= rect.right &&
+                e.clientY >= rect.top && e.clientY <= rect.bottom;
+            const mismatch = !clickInResolvedRect || (cardAtPoint !== null && cardAtPoint !== taskEl);
+            const payload = {
+                t: Math.round(performance.now()),
+                clickX: Math.round(e.clientX),
+                clickY: Math.round(e.clientY),
+                pointerType: e.pointerType,
+                resolvedId: taskEl.dataset.id,
+                resolvedSplitId: taskEl.dataset.splitOriginalId,
+                resolvedRect: { x: Math.round(rect.left), y: Math.round(rect.top), w: Math.round(rect.width), h: Math.round(rect.height) },
+                clickInResolvedRect,
+                cardAtPointId: cardAtPoint?.dataset.id,
+                cardAtPointSplitId: cardAtPoint?.dataset.splitOriginalId,
+                eTargetTag: target.tagName,
+                eTargetCls: target.className,
+            };
+            if (mismatch) {
+                console.warn('[task-select] click MISMATCH', JSON.stringify(payload));
+            } else {
+                console.log('[task-select] click', JSON.stringify(payload));
+            }
+        }
 
         if (!taskEl || !taskId) return;
 
@@ -157,6 +192,7 @@ export class DragHandler implements DragContext {
         this.currentStrategy = isResizeHandle
             ? new ResizeStrategy()
             : new MoveStrategy();
+        this.currentDragTaskId = task.id;
 
         this.writeService.setDraggingFile(task.file);
         this.currentStrategy.onDown(e, task, taskEl, this);
@@ -175,19 +211,26 @@ export class DragHandler implements DragContext {
     private async onPointerUp(e: PointerEvent) {
         if (this.currentStrategy) {
             e.preventDefault();
+            const taskId = this.currentDragTaskId;
             await this.currentStrategy.onUp(e, this);
 
+            // ドラッグで触り得るのは start/end の date/time のみ。
+            // 変更スパンを明示することで onChange の coalesce / partial-update に乗せる。
             // 即座にDOMを再構築。cleanup()と同一JSフレーム内で実行されるため
             // ブラウザがペイントする前に旧カードが新カードで置き換わる。
-            this.writeService.notifyImmediate();
+            this.writeService.notifyImmediate(
+                taskId ?? undefined,
+                taskId ? ['startDate', 'startTime', 'endDate', 'endTime'] : undefined,
+            );
 
-            // draggingFilePathは遅延イベント(metadataCache.changed)を
-            // ブロックするためRAF内でクリア
+            // draggingFilePath は遅延イベント (metadataCache.changed) のフィルタに使うため
+            // 1 frame 後に解除。setDraggingFile(null) は通知を発火しない仕様。
             requestAnimationFrame(() => {
                 this.writeService.setDraggingFile(null);
             });
         }
         this.currentStrategy = null;
+        this.currentDragTaskId = null;
         this.container.style.touchAction = ''; // Restore normal touch behavior
     }
 

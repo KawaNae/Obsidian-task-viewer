@@ -58,9 +58,14 @@ export class GhostManager {
 
                 // Position relative to timeline-scroll-area.
                 // seg.top/seg.height are logical values and converted to display values here.
-                ghost.style.left = `${dayCol.offsetLeft + 4}px`; // +4px for padding/margin adjustment
+                // left/width はソースカードの cascade レイアウト (TimelineSectionRenderer の
+                // calc((100% - 8px) * widthFraction) / calc(4px + (100% - 8px) * leftFraction))
+                // に揃える。dayCol 全幅で出すと level≥2 の重なりカードと右端が合わず、
+                // drag 開始時に「右に伸びる」見た目になる。
+                // sourceEl.offsetLeft/Width は drag-hidden (opacity:0) でも layout 値を返す。
+                ghost.style.left = `${dayCol.offsetLeft + sourceEl.offsetLeft}px`;
                 ghost.style.top = `${dayCol.offsetTop + borderTop + toDisplayTopPx(seg.top)}px`;
-                ghost.style.width = `${dayCol.offsetWidth - 8}px`; // -8px for padding
+                ghost.style.width = `${sourceEl.offsetWidth}px`;
                 ghost.style.height = `${toDisplayHeightPx(seg.height)}px`;
                 ghost.classList.remove('drag-hidden');
                 ghost.style.display = 'block';

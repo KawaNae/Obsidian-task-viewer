@@ -200,7 +200,7 @@ export class InlineTaskWriter {
         // 1. Read children from original file
         const sourceFile = this.app.vault.getAbstractFileByPath(task.file);
         let childrenLines: string[] = [];
-        let parentIndent = 0;
+        let parentIndent = '';
 
         if (sourceFile instanceof TFile) {
             const sourceContent = await this.app.vault.read(sourceFile);
@@ -210,9 +210,9 @@ export class InlineTaskWriter {
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
 
             if (currentLine >= 0 && currentLine < lines.length) {
-                // Get parent's original indentation
+                // Get parent's original indentation prefix (preserves tabs/spaces)
                 const parentLine = lines[currentLine];
-                parentIndent = parentLine.search(/\S|$/);
+                parentIndent = parentLine.match(/^\s*/)?.[0] ?? '';
 
                 const result = this.fileOps.collectChildrenFromLines(lines, currentLine);
                 childrenLines = result.childrenLines;

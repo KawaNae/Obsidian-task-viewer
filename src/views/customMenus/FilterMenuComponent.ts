@@ -369,8 +369,11 @@ export class FilterMenuComponent {
             });
         });
 
-        // ── Lower row: Value (only when operator requires a value) ──
-        if (!NO_VALUE_OPERATORS.has(condition.operator)) {
+        // ── Lower row(s): Value selector ──
+        // Property filter: 2 sub-rows ([key:pill] / [value-input]). Other types: single row.
+        if (condition.property === 'property') {
+            this.conditionRenderer.renderPropertyRows(row, condition);
+        } else if (!NO_VALUE_OPERATORS.has(condition.operator)) {
             const valueLine = row.createDiv('filter-popover__row-value');
             if (DATE_PROPERTIES.has(condition.property)) {
                 this.conditionRenderer.renderDateValueSelector(valueLine, condition);

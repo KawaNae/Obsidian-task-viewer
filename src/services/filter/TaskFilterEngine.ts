@@ -168,7 +168,7 @@ export class TaskFilterEngine {
     }
 
     private static evalProperty(task: Task, c: FilterCondition): boolean {
-        if (c.key == null) return true;
+        if (c.key == null || c.key === '') return true;
         const actual = task.properties?.[c.key]?.value;
         const filterValue = typeof c.value === 'string' ? c.value : '';
         switch (c.operator) {

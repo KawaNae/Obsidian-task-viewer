@@ -35,13 +35,6 @@ export class TimelineSectionRenderer {
 
             const el = container.createDiv('task-card');
             if (task.id === this.handleManager.getSelectedTaskId()) {
-                console.log('[task-select] TimelineSectionRenderer initial .selected match', {
-                    taskId: task.id,
-                    originalTaskId: task.originalTaskId,
-                    file: task.file,
-                    line: task.line,
-                    content: task.content?.slice(0, 40),
-                });
                 el.addClass('selected');
             }
 
