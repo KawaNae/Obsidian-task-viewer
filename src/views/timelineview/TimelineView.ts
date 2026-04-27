@@ -775,11 +775,11 @@ export class TimelineView extends ItemView {
         // Section renderers already tagged cards with `.selected` during render;
         // reapplySelectionClass is idempotent and ensures handles are attached
         // and z-index is raised on the fresh DOM.
-        const selectedAtScheduleTime = this.handleManager.getSelectedTaskId();
-        if (selectedAtScheduleTime) {
-            requestAnimationFrame(() => {
-                this.handleManager.reapplySelectionClass();
-            });
+        // 同期実行することで、最初の paint からハンドル + SELECTED_Z_INDEX が
+        // 揃った状態で表示され、cascade z-index に一瞬戻る/ハンドルが 1 frame 消える
+        // ちらつきを防ぐ。
+        if (this.handleManager.getSelectedTaskId()) {
+            this.handleManager.reapplySelectionClass();
         }
 
         // Dev invariant: timeline 主域内に同一 data-id のカードが複数存在しないこと。
