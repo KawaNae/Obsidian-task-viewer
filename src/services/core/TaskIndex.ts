@@ -104,13 +104,14 @@ export class TaskIndex {
 
                 await this.scanner.queueScan(file, isLocal);
                 WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
-                // External edits go through debouncedNotify here.
-                // Local writes (isLocal=true) skip notify because the write methods themselves
-                // are now responsible for notifying via withNotify().
-                // This handler's role for local writes is scan synchronization only.
-                if (!isLocal) {
-                    this.debouncedNotify();
-                }
+                // Always emit notify here. UI write methods (via withNotify) emit their own
+                // notifyImmediate after waitForScan, but editor user edits (typing, checkbox
+                // click via mousedown) are also flagged isLocal=true by EditorObserver and
+                // would otherwise have no notify path at all. Duplicate notifies between
+                // withNotify and this handler are coalesced by pendingNotify + the 16ms
+                // debounce. metadataCache.changed remains skipped via recentSelfWrite to
+                // avoid a third redundant scan+notify.
+                this.debouncedNotify();
             }
         });
 
