@@ -27,10 +27,37 @@ export interface PinnedListCallbacks {
     onMoveDown?: (listDef: PinnedListDefinition) => void;
 }
 
+/**
+ * Parameters provided once by the view at attach() time.
+ *
+ * `host` is a stable DOM node owned by the view that survives view-level
+ * full re-renders (i.e. is NOT inside the area that gets `container.empty()`'d).
+ * The renderer rebuilds children of `host` on every refresh().
+ *
+ * Getters (getLists / getCollapsed / getViewFilterState) are pulled lazily
+ * on each refresh so the view can mutate its underlying state without
+ * having to re-call attach.
+ */
+export interface PinnedListAttachParams {
+    host: HTMLElement;
+    getLists: () => PinnedListDefinition[];
+    getCollapsed: () => Record<string, boolean>;
+    getViewFilterState: () => FilterState | undefined;
+    callbacks: PinnedListCallbacks;
+}
+
 export class PinnedListRenderer {
     // ID of list to start renaming immediately after render
     private pendingRenameId: string | null = null;
     private readonly paging: TaskPagingController;
+
+    // attach state — set by attach(), cleared by detach()
+    private host: HTMLElement | null = null;
+    private getLists: (() => PinnedListDefinition[]) | null = null;
+    private getCollapsed: (() => Record<string, boolean>) | null = null;
+    private getViewFilterState: (() => FilterState | undefined) | null = null;
+    private callbacks: PinnedListCallbacks | null = null;
+    private unsubscribe: (() => void) | null = null;
 
     constructor(
         private taskRenderer: TaskCardRenderer,
@@ -49,7 +76,62 @@ export class PinnedListRenderer {
         this.pendingRenameId = listId;
     }
 
-    render(
+    /**
+     * Wire the renderer to a stable host element and start auto-refreshing
+     * on data changes. Idempotent against double-attach (calls detach() first).
+     *
+     * The host must NOT live inside the view's render-empty target — otherwise
+     * its DOM (and PinnedList paging/expanded state) is lost on every full render.
+     */
+    attach(params: PinnedListAttachParams): void {
+        if (this.host) this.detach();
+
+        this.host = params.host;
+        this.getLists = params.getLists;
+        this.getCollapsed = params.getCollapsed;
+        this.getViewFilterState = params.getViewFilterState;
+        this.callbacks = params.callbacks;
+
+        // Subscribe to data changes — refresh self-contained without view involvement.
+        this.unsubscribe = this.readService.onChange(() => {
+            this.refresh();
+        });
+
+        // Initial paint
+        this.refresh();
+    }
+
+    /** Tear down subscription and clear host references. Safe to call multiple times. */
+    detach(): void {
+        if (this.unsubscribe) {
+            this.unsubscribe();
+            this.unsubscribe = null;
+        }
+        this.host = null;
+        this.getLists = null;
+        this.getCollapsed = null;
+        this.getViewFilterState = null;
+        this.callbacks = null;
+    }
+
+    /**
+     * Re-render into the attached host. Called by the onChange subscription
+     * automatically; views may call it manually after mutating list arrays
+     * (rename / duplicate / reorder / remove / filter / sort changes).
+     */
+    refresh(): void {
+        if (!this.host || !this.getLists || !this.getCollapsed || !this.callbacks) return;
+
+        this.render(
+            this.host,
+            this.getLists(),
+            this.getCollapsed(),
+            this.callbacks,
+            this.getViewFilterState?.(),
+        );
+    }
+
+    private render(
         container: HTMLElement,
         lists: PinnedListDefinition[],
         collapsedState: Record<string, boolean>,

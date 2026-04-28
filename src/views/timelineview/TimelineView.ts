@@ -91,6 +91,14 @@ export class TimelineView extends ItemView {
 
     // ==================== State ====================
     private container: HTMLElement;
+    /**
+     * Stable host for PinnedListRenderer that survives container.empty() —
+     * detached before each empty() and re-appended into sidebarBody after the
+     * sidebar layout is rebuilt. This preserves PinnedList's DOM (paging
+     * pages, expanded body content) and its onChange subscription across
+     * full view renders.
+     */
+    private pinnedHost: HTMLElement;
     private viewState: ViewState;
     private unsubscribe: (() => void) | null = null;
     private unsubscribeDelete: (() => void) | null = null;
@@ -191,6 +199,11 @@ export class TimelineView extends ItemView {
         }
         await super.setState(state, result);
         this.render();
+        // setState may have changed filterState / pinnedLists / collapse — none
+        // of these go through readService.onChange, so PinnedList wouldn't
+        // otherwise refresh. (Safe to call even before attach: refresh() no-ops
+        // when not attached.)
+        this.pinnedListRenderer?.refresh();
     }
 
     getState() {
@@ -246,14 +259,63 @@ export class TimelineView extends ItemView {
             getStartHour: () => this.plugin.settings.startHour,
         });
 
-        // Toolbar is initialized in performRender() — onOpen does not pre-construct it.
-        // Until performRender runs, this.toolbar is undefined; consumers must null-check.
+        // Construct the toolbar once for the lifetime of this view. performRender()
+        // calls toolbar.detach() before container.empty() and toolbar.mount(host)
+        // after, so the underlying DOM + filterMenu instance survive renders. This
+        // is what lets the filter popover stay open across data-driven re-renders.
+        this.toolbar = new TimelineToolbar(
+            this.app,
+            this.viewState,
+            this.plugin,
+            this.readService,
+            {
+                onRender: () => {
+                    this.render();
+                    // Toolbar filter changes can affect pinned lists with
+                    // applyViewFilter:true; PinnedList does not see view filter
+                    // state via onChange, so refresh explicitly here.
+                    this.pinnedListRenderer?.refresh();
+                },
+                onScrollToNow: () => {
+                    this.scrollToNowOnNextRender = true;
+                    this.render();
+                },
+                onStateChange: () => {
+                    this.app.workspace.requestSaveLayout();
+                },
+                getDatesToShow: () => this.getDatesToShow(),
+                onRequestSidebarToggle: (nextOpen) => {
+                    if (nextOpen) this.sidebarOpenedThisSession = true;
+                    this.viewState.showSidebar = nextOpen;
+                    this.sidebarManager.applyOpen(nextOpen, { animate: true, persist: true });
+                },
+                getLeafPosition: () => ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace),
+                getCustomName: () => this.viewState.customName,
+                onRename: (newName) => {
+                    this.viewState.customName = newName;
+                    this.leaf.updateHeader();
+                    this.app.workspace.requestSaveLayout();
+                },
+                getLeaf: () => this.leaf,
+            }
+        );
 
         // Initialize Renderers
         this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow);
         this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel());
         this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler, this.hoverParent);
         this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.menuHandler, this.readService);
+        // Persistent host for pinned lists. Lives outside the empty() target
+        // (we explicitly detach it before container.empty() in performRender,
+        // then reparent into the freshly-built sidebarBody).
+        this.pinnedHost = document.createElement('div');
+        this.pinnedListRenderer.attach({
+            host: this.pinnedHost,
+            getLists: () => this.viewState.pinnedLists ?? [],
+            getCollapsed: () => this.buildCollapsedStateForRenderer(),
+            getViewFilterState: () => this.toolbar?.getFilterState(),
+            callbacks: this.getPinnedListCallbacks(),
+        });
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
         this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.sidebarFilterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
@@ -305,10 +367,10 @@ export class TimelineView extends ItemView {
                 this.saveScrollPosition();
                 this.performRender();
             },
-            // partial update は main grid のカードのみ書き換えるので、
-            // pinnedLists の件数 / フィルタ膜割り / ソート位置 / カード内容を
-            // 反映するため pinnedLists だけフル再描画する。
-            refreshPinned: () => this.refreshPinnedLists(),
+            // PinnedListRenderer subscribes to readService.onChange itself
+            // (Phase 7), so the controller no longer needs to nudge it after
+            // a partial update. Kept as a no-op to preserve the handler shape.
+            refreshPinned: () => { /* no-op: PinnedList self-subscribes */ },
         });
 
         // Subscribe to data changes
@@ -445,6 +507,7 @@ export class TimelineView extends ItemView {
         this.sidebarFilterMenu.close();
         this.sidebarSortMenu.close();
         this.dragHandler.destroy();
+        this.pinnedListRenderer?.detach();
         if (this.unsubscribe) {
             this.unsubscribe();
         }
@@ -556,14 +619,14 @@ export class TimelineView extends ItemView {
                 };
                 lists.splice(idx + 1, 0, dup);
                 this.app.workspace.requestSaveLayout();
-                this.render();
+                this.pinnedListRenderer.refresh();
             },
             onRemove: (listDef) => {
                 const lists = this.viewState.pinnedLists!;
                 const idx = lists.indexOf(listDef);
                 if (idx >= 0) lists.splice(idx, 1);
                 this.app.workspace.requestSaveLayout();
-                this.render();
+                this.pinnedListRenderer.refresh();
             },
             onMoveUp: (listDef) => {
                 const lists = this.viewState.pinnedLists!;
@@ -571,7 +634,7 @@ export class TimelineView extends ItemView {
                 if (idx > 0) {
                     [lists[idx - 1], lists[idx]] = [lists[idx], lists[idx - 1]];
                     this.app.workspace.requestSaveLayout();
-                    this.render();
+                    this.pinnedListRenderer.refresh();
                 }
             },
             onMoveDown: (listDef) => {
@@ -580,35 +643,18 @@ export class TimelineView extends ItemView {
                 if (idx >= 0 && idx < lists.length - 1) {
                     [lists[idx], lists[idx + 1]] = [lists[idx + 1], lists[idx]];
                     this.app.workspace.requestSaveLayout();
-                    this.render();
+                    this.pinnedListRenderer.refresh();
                 }
             },
             onToggleApplyViewFilter: (listDef) => {
                 listDef.applyViewFilter = !listDef.applyViewFilter;
                 this.app.workspace.requestSaveLayout();
-                this.render();
+                this.pinnedListRenderer.refresh();
             },
             onRename: () => {
                 this.app.workspace.requestSaveLayout();
             },
         };
-    }
-
-    /**
-     * Re-render only the pinned lists section.
-     * Called from the partial update path so that pinnedLists reflect changes
-     * to status/content/childLines (count, filter membership, sort, card body).
-     */
-    private refreshPinnedLists(): void {
-        const sidebarBody = this.container.querySelector('.view-sidebar__body') as HTMLElement | null;
-        if (!sidebarBody) return;
-        this.pinnedListRenderer.render(
-            sidebarBody,
-            this.viewState.pinnedLists ?? [],
-            this.buildCollapsedStateForRenderer(),
-            this.getPinnedListCallbacks(),
-            this.toolbar?.getFilterState(),
-        );
     }
 
     /**
@@ -674,6 +720,15 @@ export class TimelineView extends ItemView {
         this.sidebarManager.syncPresentation(this.viewState.showSidebar, { animate: false });
 
         this.taskRenderer.disposeInside(this.container);
+        // Detach the toolbar before empty() so its DOM (and the FilterMenuComponent
+        // bound to it) survives. We re-attach it via mount() below.
+        this.toolbar?.detach();
+        // Detach the persistent pinnedHost so its DOM (and PinnedListRenderer's
+        // internal subscription / paging / collapse state) survives the empty().
+        // Re-appended into the freshly-built sidebarBody below.
+        if (this.pinnedHost?.parentElement) {
+            this.pinnedHost.parentElement.removeChild(this.pinnedHost);
+        }
         this.container.empty();
 
         // Apply Zoom Level
@@ -706,57 +761,26 @@ export class TimelineView extends ItemView {
             });
             this.app.workspace.requestSaveLayout();
             this.pinnedListRenderer.scheduleRename(newId);
-            this.render();
+            this.pinnedListRenderer.refresh();
         });
 
         const dates = this.getDatesToShow();
 
-        // Render pinned lists into sidebar body
-        this.pinnedListRenderer.render(
-            sidebarBody,
-            this.viewState.pinnedLists ?? [],
-            this.buildCollapsedStateForRenderer(),
-            this.getPinnedListCallbacks(),
-            this.toolbar?.getFilterState(),
-        );
+        // Re-attach the persistent pinned host into the freshly-built sidebar body.
+        // PinnedListRenderer manages its own contents via its onChange subscription
+        // and explicit refresh() calls (toolbar filter changes, list mutations) —
+        // we only relocate the host here. Avoid an unconditional refresh so a
+        // single onChange does not rebuild pinned DOM twice (PinnedList's own
+        // subscription already handled it before this performRender ran).
+        sidebarBody.appendChild(this.pinnedHost);
 
-        // Render Toolbar (above both columns)
-        this.toolbar = new TimelineToolbar(
-            toolbarHost,
-            this.app,
-            this.viewState,
-            this.plugin,
-            this.readService,
-            {
-                onRender: () => this.render(),
-                onScrollToNow: () => {
-                    this.scrollToNowOnNextRender = true;
-                    this.render();
-                },
-                onStateChange: () => {
-                    this.app.workspace.requestSaveLayout();
-                },
-                getDatesToShow: () => this.getDatesToShow(),
-                onRequestSidebarToggle: (nextOpen) => {
-                    if (nextOpen) this.sidebarOpenedThisSession = true;
-                    this.viewState.showSidebar = nextOpen;
-                    this.sidebarManager.applyOpen(nextOpen, { animate: true, persist: true });
-                },
-                getLeafPosition: () => ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace),
-                getCustomName: () => this.viewState.customName,
-                onRename: (newName) => {
-                    this.viewState.customName = newName;
-                    this.leaf.updateHeader();
-                    this.app.workspace.requestSaveLayout();
-                },
-                getLeaf: () => this.leaf,
-            }
-        );
-        this.toolbar.render();
+        // Mount the persistent toolbar instance into this render's toolbarHost.
+        // First call builds DOM; subsequent calls re-attach the existing rootEl.
+        this.toolbar!.mount(toolbarHost);
 
         // Use GridRenderer (render into main column)
         const filteredTasks = this.readService.getTasksForDateRange(
-            dates[0], dates[dates.length - 1], this.toolbar.getFilterState()
+            dates[0], dates[dates.length - 1], this.toolbar!.getFilterState()
         );
         this.gridRenderer.render(
             main,
@@ -855,7 +879,7 @@ export class TimelineView extends ItemView {
             onSortChange: () => {
                 listDef.sortState = this.sidebarSortMenu.getSortState();
                 this.app.workspace.requestSaveLayout();
-                this.render();
+                this.pinnedListRenderer.refresh();
             },
         });
     }
@@ -866,7 +890,7 @@ export class TimelineView extends ItemView {
             onFilterChange: () => {
                 listDef.filterState = this.sidebarFilterMenu.getFilterState();
                 this.app.workspace.requestSaveLayout();
-                this.render();
+                this.pinnedListRenderer.refresh();
             },
             getTasks: () => this.readService.getTasks(),
             getStartHour: () => this.plugin.settings.startHour,
