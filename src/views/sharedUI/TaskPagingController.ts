@@ -17,6 +17,19 @@ export class TaskPagingController {
         this.visibleCounts.clear();
     }
 
+    /**
+     * Drop paging state for lists that no longer exist, preserving state for
+     * lists that survived the re-render. This avoids "Show more" expansions
+     * being silently reset on every render of an unchanged list.
+     */
+    pruneRemovedLists(currentListIds: Set<string>): void {
+        for (const listId of [...this.visibleCounts.keys()]) {
+            if (!currentListIds.has(listId)) {
+                this.visibleCounts.delete(listId);
+            }
+        }
+    }
+
     resetOne(listId: string): void {
         this.visibleCounts.delete(listId);
     }

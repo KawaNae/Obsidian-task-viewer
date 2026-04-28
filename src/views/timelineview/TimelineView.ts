@@ -37,6 +37,14 @@ import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 
 export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
 
+/**
+ * View id used as a namespace prefix for shared viewState fields whose keys
+ * collide between views (e.g. pinnedListCollapsed). Lets timeline and calendar
+ * own independent collapse state for the same listId.
+ */
+const VIEW_ID = 'timeline';
+const COLLAPSE_KEY_PREFIX = `${VIEW_ID}::`;
+
 /** Keys that change task position on the grid → full render */
 const LAYOUT_KEYS = new Set(['startDate', 'startTime', 'endDate', 'endTime', 'due']);
 /** Keys safe for partial DOM update (no position change) */
@@ -75,7 +83,7 @@ export class TimelineView extends ItemView {
     private dragHandler: DragHandler;
     private menuHandler: MenuHandler;
     private handleManager: HandleManager;
-    private toolbar: TimelineToolbar;
+    private toolbar: TimelineToolbar | undefined;
     private sidebarManager: SidebarManager;
 
     // ==================== Renderers ====================
@@ -173,7 +181,9 @@ export class TimelineView extends ItemView {
                 this.sidebarManager.applyOpen(state.showSidebar, { animate: false });
             }
             if (state.pinnedListCollapsed) {
-                this.viewState.pinnedListCollapsed = state.pinnedListCollapsed;
+                // Migrate legacy un-prefixed keys (pre-viewId-namespacing) to the
+                // current `${viewId}::${listId}` form. One-shot at deserialize.
+                this.viewState.pinnedListCollapsed = this.migrateCollapsedKeys(state.pinnedListCollapsed);
             }
             if (Array.isArray(state.pinnedLists)) {
                 this.viewState.pinnedLists = state.pinnedLists;
@@ -242,36 +252,8 @@ export class TimelineView extends ItemView {
             getStartHour: () => this.plugin.settings.startHour,
         });
 
-        // Initialize Toolbar
-        this.toolbar = new TimelineToolbar(
-            this.container,
-            this.app,
-            this.viewState,
-            this.plugin,
-            this.readService,
-            {
-                onRender: () => this.render(),
-                onScrollToNow: () => {
-                    this.scrollToNowOnNextRender = true;
-                    this.render();
-                },
-                onStateChange: () => { },
-                getDatesToShow: () => this.getDatesToShow(),
-                onRequestSidebarToggle: (nextOpen) => {
-                    if (nextOpen) this.sidebarOpenedThisSession = true;
-                    this.viewState.showSidebar = nextOpen;
-                    this.sidebarManager.applyOpen(nextOpen, { animate: true, persist: true });
-                },
-                getLeafPosition: () => ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace),
-                getCustomName: () => this.viewState.customName,
-                onRename: (newName) => {
-                    this.viewState.customName = newName;
-                    this.leaf.updateHeader();
-                    this.app.workspace.requestSaveLayout();
-                },
-                getLeaf: () => this.leaf,
-            }
-        );
+        // Toolbar is initialized in performRender() — onOpen does not pre-construct it.
+        // Until performRender runs, this.toolbar is undefined; consumers must null-check.
 
         // Initialize Renderers
         this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow);
@@ -472,7 +454,7 @@ export class TimelineView extends ItemView {
 
     async onClose() {
         this.hoverParent.dispose();
-        this.toolbar.closeFilterPopover();
+        this.toolbar?.closeFilterPopover();
         this.sidebarFilterMenu.close();
         this.sidebarSortMenu.close();
         this.dragHandler.destroy();
@@ -586,7 +568,7 @@ export class TimelineView extends ItemView {
         return {
             onCollapsedChange: (listId, collapsed) => {
                 if (!this.viewState.pinnedListCollapsed) this.viewState.pinnedListCollapsed = {};
-                this.viewState.pinnedListCollapsed[listId] = collapsed;
+                this.viewState.pinnedListCollapsed[`${COLLAPSE_KEY_PREFIX}${listId}`] = collapsed;
                 this.app.workspace.requestSaveLayout();
             },
             onSortEdit: (listDef, anchorEl) => this.openPinnedListSort(listDef, anchorEl),
@@ -652,10 +634,44 @@ export class TimelineView extends ItemView {
         this.pinnedListRenderer.render(
             sidebarBody,
             this.viewState.pinnedLists ?? [],
-            this.viewState.pinnedListCollapsed ?? {},
+            this.buildCollapsedStateForRenderer(),
             this.getPinnedListCallbacks(),
             this.toolbar?.getFilterState(),
         );
+    }
+
+    /**
+     * Strip the `${viewId}::` prefix so PinnedListRenderer receives a plain
+     * Record<listId, boolean>. The viewState side keeps the prefix to avoid
+     * timeline/calendar collapse-state collisions.
+     */
+    private buildCollapsedStateForRenderer(): Record<string, boolean> {
+        const out: Record<string, boolean> = {};
+        const stored = this.viewState.pinnedListCollapsed;
+        if (!stored) return out;
+        for (const [key, val] of Object.entries(stored)) {
+            if (key.startsWith(COLLAPSE_KEY_PREFIX)) {
+                out[key.slice(COLLAPSE_KEY_PREFIX.length)] = val;
+            }
+        }
+        return out;
+    }
+
+    /**
+     * One-shot migration: any key without `::` is assumed to be a legacy
+     * listId-only entry from before viewId-namespacing was introduced.
+     * Prefix it with `${viewId}::` so timeline owns it.
+     */
+    private migrateCollapsedKeys(stored: Record<string, boolean>): Record<string, boolean> {
+        const migrated: Record<string, boolean> = {};
+        for (const [key, val] of Object.entries(stored)) {
+            if (key.includes('::')) {
+                migrated[key] = val;
+            } else {
+                migrated[`${COLLAPSE_KEY_PREFIX}${key}`] = val;
+            }
+        }
+        return migrated;
     }
 
     private tryPartialUpdate(taskId: string): boolean {
@@ -728,7 +744,7 @@ export class TimelineView extends ItemView {
         this.pinnedListRenderer.render(
             sidebarBody,
             this.viewState.pinnedLists ?? [],
-            this.viewState.pinnedListCollapsed ?? {},
+            this.buildCollapsedStateForRenderer(),
             this.getPinnedListCallbacks(),
             this.toolbar?.getFilterState(),
         );
@@ -917,7 +933,7 @@ export class TimelineView extends ItemView {
     private findOldestOverdueDate(): string | null {
         const startHour = this.plugin.settings.startHour;
         const visualToday = DateUtils.getVisualDateOfNow(startHour);
-        const filterState = this.toolbar.getFilterState();
+        const filterState = this.viewState.filterState ?? createEmptyFilterState();
         const displayTasks = this.readService.getFilteredTasks(filterState);
 
         return findOldestOverdueDate(displayTasks, visualToday, this.plugin.settings.statusDefinitions);

@@ -28,8 +28,6 @@ export interface PinnedListCallbacks {
 }
 
 export class PinnedListRenderer {
-    // Preserve collapse state across re-renders (instance lifetime only)
-    private collapsedGroups = new Set<string>();
     // ID of list to start renaming immediately after render
     private pendingRenameId: string | null = null;
     private readonly paging: TaskPagingController;
@@ -61,7 +59,10 @@ export class PinnedListRenderer {
         this.taskRenderer.disposeInside(container);
         container.empty();
         container.addClass('pinned-lists-container');
-        this.paging.clear();
+        // Preserve paging state across renders for lists that still exist
+        // (collapsedState keys are caller-prefixed, so use list.id directly here).
+        const currentListIds = new Set(lists.map(l => l.id));
+        this.paging.pruneRemovedLists(currentListIds);
         if (lists.length === 0) {
             container.createDiv('pinned-lists-container__empty')
                 .setText(t('pinnedList.noPinnedLists'));
@@ -88,8 +89,8 @@ export class PinnedListRenderer {
         index: number,
         totalCount: number,
     ): void {
-        // Determine collapsed state: ViewState > instance memory > default expanded
-        const isCollapsed = collapsedState[listDef.id] ?? this.collapsedGroups.has(listDef.id);
+        // Collapsed state is owned by the caller (view). Default = expanded.
+        const isCollapsed = collapsedState[listDef.id] ?? false;
 
         const listEl = container.createDiv('pinned-list');
         listEl.dataset.listId = listDef.id;
@@ -146,11 +147,9 @@ export class PinnedListRenderer {
             const nextCollapsed = !currentlyCollapsed;
 
             if (nextCollapsed) {
-                this.collapsedGroups.add(listDef.id);
                 listEl.addClass('pinned-list--collapsed');
                 toggle.textContent = '▶';
             } else {
-                this.collapsedGroups.delete(listDef.id);
                 listEl.removeClass('pinned-list--collapsed');
                 toggle.textContent = '▼';
                 // Lazy render on expand (reset to first page)

@@ -47,6 +47,14 @@ import { TaskDetailModal } from '../../modals/TaskDetailModal';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
 
+/**
+ * View id used as a namespace prefix for shared viewState fields whose keys
+ * collide between views (e.g. pinnedListCollapsed). Lets timeline and calendar
+ * own independent collapse state for the same listId.
+ */
+const VIEW_ID = 'calendar';
+const COLLAPSE_KEY_PREFIX = `${VIEW_ID}::`;
+
 interface CalendarViewState {
     windowStart?: string;
     filterState?: FilterState;
@@ -153,7 +161,9 @@ export class CalendarView extends ItemView {
             this.sidebarManager.applyOpen(state.showSidebar, { animate: false });
         }
         if (state?.pinnedListCollapsed) {
-            this.pinnedListCollapsed = state.pinnedListCollapsed;
+            // Migrate legacy un-prefixed keys (pre-viewId-namespacing) to the
+            // current `${viewId}::${listId}` form. One-shot at deserialize.
+            this.pinnedListCollapsed = this.migrateCollapsedKeys(state.pinnedListCollapsed);
         }
         if (Array.isArray(state?.pinnedLists)) {
             this.pinnedLists = state.pinnedLists;
@@ -515,9 +525,9 @@ export class CalendarView extends ItemView {
         });
 
         this.pinnedListRenderer.render(body, this.pinnedLists,
-            this.pinnedListCollapsed, {
+            this.buildCollapsedStateForRenderer(), {
             onCollapsedChange: (id, collapsed) => {
-                this.pinnedListCollapsed[id] = collapsed;
+                this.pinnedListCollapsed[`${COLLAPSE_KEY_PREFIX}${id}`] = collapsed;
                 this.app.workspace.requestSaveLayout();
             },
             onSortEdit: (listDef, anchorEl) => this.openPinnedListSort(listDef, anchorEl),
@@ -567,6 +577,39 @@ export class CalendarView extends ItemView {
         },
             this.filterMenu.getFilterState(),
         );
+    }
+
+    /**
+     * Strip the `${viewId}::` prefix so PinnedListRenderer receives a plain
+     * Record<listId, boolean>. The view-side store keeps the prefix to avoid
+     * timeline/calendar collapse-state collisions when both views persist into
+     * the same workspace layout.
+     */
+    private buildCollapsedStateForRenderer(): Record<string, boolean> {
+        const out: Record<string, boolean> = {};
+        for (const [key, val] of Object.entries(this.pinnedListCollapsed)) {
+            if (key.startsWith(COLLAPSE_KEY_PREFIX)) {
+                out[key.slice(COLLAPSE_KEY_PREFIX.length)] = val;
+            }
+        }
+        return out;
+    }
+
+    /**
+     * One-shot migration: any key without `::` is assumed to be a legacy
+     * listId-only entry from before viewId-namespacing was introduced.
+     * Prefix it with `${viewId}::` so calendar owns it.
+     */
+    private migrateCollapsedKeys(stored: Record<string, boolean>): Record<string, boolean> {
+        const migrated: Record<string, boolean> = {};
+        for (const [key, val] of Object.entries(stored)) {
+            if (key.includes('::')) {
+                migrated[key] = val;
+            } else {
+                migrated[`${COLLAPSE_KEY_PREFIX}${key}`] = val;
+            }
+        }
+        return migrated;
     }
 
     private openPinnedListSort(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
