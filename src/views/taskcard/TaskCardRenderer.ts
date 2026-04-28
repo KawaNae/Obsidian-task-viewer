@@ -20,6 +20,7 @@ export class TaskCardRenderer extends Component {
     private linkInteractionManager: TaskLinkInteractionManager;
     private onDetailClick: ((task: Task) => void) | null = null;
     private cardComponents: WeakMap<HTMLElement, Component> = new WeakMap();
+    private unsubscribeTaskDeleted: (() => void) | null = null;
 
     constructor(private app: App, readService: TaskReadService, writeService: TaskWriteService, private linkRuntime: TaskCardLinkRuntime, getSettings: () => TaskViewerSettings) {
         super();
@@ -27,6 +28,29 @@ export class TaskCardRenderer extends Component {
         this.childItemBuilder = new ChildItemBuilder(readService);
         this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, readService);
         this.linkInteractionManager = new TaskLinkInteractionManager(app, getSettings);
+        // Clean up expandedTaskIds entries for tasks deleted via the UI so the
+        // set does not grow unbounded over the renderer's lifetime. Keys are
+        // `${viewId}::${scope}::${task.id}` (cardInstanceId), with frontmatter
+        // children adding a `::fm-children` suffix. Match by suffix so all
+        // card instances of the deleted task are dropped regardless of view /
+        // scope (main grid, pinned list, etc.).
+        this.unsubscribeTaskDeleted = writeService.onTaskDeleted((taskId) => {
+            const suffix = `::${taskId}`;
+            const fmSuffix = `::${taskId}::fm-children`;
+            for (const key of [...this.expandedTaskIds]) {
+                if (key.endsWith(fmSuffix) || key.endsWith(suffix)) {
+                    this.expandedTaskIds.delete(key);
+                }
+            }
+        });
+    }
+
+    onunload(): void {
+        if (this.unsubscribeTaskDeleted) {
+            this.unsubscribeTaskDeleted();
+            this.unsubscribeTaskDeleted = null;
+        }
+        super.onunload();
     }
 
     setChildMenuCallback(cb: ChildMenuCallback): void {
@@ -45,11 +69,16 @@ export class TaskCardRenderer extends Component {
         container: HTMLElement,
         task: DisplayTask,
         settings: TaskViewerSettings,
-        options?: { topRight?: 'time' | 'due' | 'none'; compact?: boolean; forceExpand?: boolean }
+        options: { cardInstanceId: string; topRight?: 'time' | 'due' | 'none'; compact?: boolean; forceExpand?: boolean }
     ): Promise<void> {
-        const topRight = options?.topRight ?? 'time';
-        const compact = options?.compact ?? false;
-        const forceExpand = options?.forceExpand ?? false;
+        const cardInstanceId = options.cardInstanceId;
+        const topRight = options.topRight ?? 'time';
+        const compact = options.compact ?? false;
+        const forceExpand = options.forceExpand ?? false;
+
+        // Tag the card with its instance id so partial-update paths
+        // (e.g. TimelineView.tryPartialUpdate) can reuse the same key.
+        container.dataset.cardInstanceId = cardInstanceId;
 
         const prev = this.cardComponents.get(container);
         if (prev) this.removeChild(prev);
@@ -80,9 +109,9 @@ export class TaskCardRenderer extends Component {
             });
         } else if (isFrontmatterTask(task)) {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
-            await this.renderFrontmatterChildren(contentContainer, task, cardComp, settings, forceExpand);
+            await this.renderFrontmatterChildren(contentContainer, task, cardComp, settings, cardInstanceId, forceExpand);
         } else if (task.childLines.length > 0 || task.childIds.length > 0) {
-            await this.renderInlineChildren(contentContainer, task, cardComp, settings, parentMarkdown, forceExpand);
+            await this.renderInlineChildren(contentContainer, task, cardComp, settings, parentMarkdown, cardInstanceId, forceExpand);
         } else {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
         }
@@ -188,6 +217,7 @@ export class TaskCardRenderer extends Component {
         component: Component,
         settings: TaskViewerSettings,
         parentMarkdown: string,
+        cardInstanceId: string,
         forceExpand = false
     ): Promise<void> {
         const items = this.childItemBuilder.buildChildItems(task, '');
@@ -197,7 +227,7 @@ export class TaskCardRenderer extends Component {
                 contentContainer,
                 items,
                 this.expandedTaskIds,
-                task.id,
+                cardInstanceId,
                 task.file,
                 component,
                 settings,
@@ -223,6 +253,7 @@ export class TaskCardRenderer extends Component {
         task: Task,
         component: Component,
         settings: TaskViewerSettings,
+        cardInstanceId: string,
         forceExpand = false
     ): Promise<void> {
         if (task.childIds.length === 0 && task.childLines.length === 0) {
@@ -240,7 +271,7 @@ export class TaskCardRenderer extends Component {
                 contentContainer,
                 items,
                 this.expandedTaskIds,
-                `${task.id}:fm-children`,
+                `${cardInstanceId}::fm-children`,
                 task.file,
                 component,
                 settings,

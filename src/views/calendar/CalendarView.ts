@@ -38,6 +38,7 @@ import { HandleManager } from '../timelineview/HandleManager';
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
+import { RenderController } from '../sharedUI/RenderController';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 import { CalendarExportStrategy } from '../../services/export/CalendarExportStrategy';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
@@ -46,6 +47,14 @@ import { splitTasks } from '../../services/display/TaskSplitter';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
+
+/**
+ * View id used as a namespace prefix for shared viewState fields whose keys
+ * collide between views (e.g. pinnedListCollapsed). Lets timeline and calendar
+ * own independent collapse state for the same listId.
+ */
+const VIEW_ID = 'calendar';
+const COLLAPSE_KEY_PREFIX = `${VIEW_ID}::`;
 
 interface CalendarViewState {
     windowStart?: string;
@@ -70,6 +79,14 @@ export class CalendarView extends ItemView {
     private handleManager: HandleManager | null = null;
     private sidebarManager: SidebarManager;
     private pinnedListRenderer: PinnedListRenderer;
+    /**
+     * Stable host for PinnedListRenderer that survives container.empty() —
+     * detached before each empty() and re-appended into sidebarBody after the
+     * sidebar layout is rebuilt. This preserves PinnedList's DOM (paging
+     * pages, expanded body content) and its onChange subscription across
+     * full view renders.
+     */
+    private pinnedHost: HTMLElement;
     private sidebarFilterMenu = new FilterMenuComponent();
     private syncSidebarToggleBtn: (() => void) | null = null;
     private container: HTMLElement;
@@ -84,6 +101,7 @@ export class CalendarView extends ItemView {
     private savedScrollTop: number | null = null;
     private sidebarOpenedThisSession = false;
     private readonly hoverParent = new TaskViewHoverParent();
+    private renderController: RenderController;
 
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
@@ -153,7 +171,9 @@ export class CalendarView extends ItemView {
             this.sidebarManager.applyOpen(state.showSidebar, { animate: false });
         }
         if (state?.pinnedListCollapsed) {
-            this.pinnedListCollapsed = state.pinnedListCollapsed;
+            // Migrate legacy un-prefixed keys (pre-viewId-namespacing) to the
+            // current `${viewId}::${listId}` form. One-shot at deserialize.
+            this.pinnedListCollapsed = this.migrateCollapsedKeys(state.pinnedListCollapsed);
         }
         if (Array.isArray(state?.pinnedLists)) {
             this.pinnedLists = state.pinnedLists;
@@ -165,6 +185,11 @@ export class CalendarView extends ItemView {
         }
         await super.setState(state, result);
         await this.performRender();
+        // setState may have changed filterState / pinnedLists / collapse — none
+        // of these go through readService.onChange, so PinnedList wouldn't
+        // otherwise refresh. (Safe to call even before attach: refresh() no-ops
+        // when not attached.)
+        this.pinnedListRenderer?.refresh();
     }
 
     getState(): Record<string, unknown> {
@@ -205,6 +230,18 @@ export class CalendarView extends ItemView {
         this.pinnedListRenderer = new PinnedListRenderer(
             this.taskRenderer, this.plugin, this.menuHandler, this.readService,
         );
+        // Persistent host for pinned lists. Lives outside the empty() target —
+        // detached before container.empty() in performRender and reparented
+        // into the freshly-built sidebarBody after.
+        this.pinnedHost = document.createElement('div');
+        this.pinnedListRenderer.attach({
+            host: this.pinnedHost,
+            getLists: () => this.pinnedLists,
+            getCollapsed: () => this.buildCollapsedStateForRenderer(),
+            getViewFilterState: () => this.filterMenu.getFilterState(),
+            callbacks: this.getPinnedListCallbacks(),
+            viewId: VIEW_ID,
+        });
         this.handleManager = new HandleManager(this.container, {
             getTask: (id) => this.readService.getTask(id),
             getStartHour: () => this.plugin.settings.startHour,
@@ -244,8 +281,16 @@ export class CalendarView extends ItemView {
             }
         });
 
-        this.unsubscribe = this.readService.onChange(() => {
-            this.render();
+        // Initialize render dispatch controller. CalendarView は partial 未対応のため
+        // tryPartial は常に false（→ 必ず full render に降格）。
+        this.renderController = new RenderController({
+            tryPartial: () => false,
+            performFull: () => this.render(),
+            refreshPinned: () => { /* partial 未対応なので呼ばれない */ },
+        });
+
+        this.unsubscribe = this.readService.onChange((taskId, changes) => {
+            this.renderController.handleChange(taskId, changes);
         });
     }
 
@@ -254,6 +299,7 @@ export class CalendarView extends ItemView {
         this.filterMenu.close();
         this.sidebarFilterMenu.close();
         this.sidebarManager.detach();
+        this.pinnedListRenderer?.detach();
 
         this.dragHandler?.destroy();
         this.dragHandler = null;
@@ -267,6 +313,7 @@ export class CalendarView extends ItemView {
             this.unsubscribeDelete();
             this.unsubscribeDelete = null;
         }
+        this.renderController?.dispose();
     }
 
     public refresh(): void {
@@ -299,6 +346,12 @@ export class CalendarView extends ItemView {
         }
         this.sidebarManager.syncPresentation(this.showSidebar, { animate: false });
         this.taskRenderer.disposeInside(this.container);
+        // Detach the persistent pinnedHost so its DOM (and PinnedListRenderer's
+        // internal subscription / paging / collapse state) survives the empty().
+        // Re-appended into the freshly-built sidebarBody by renderSidebarContent.
+        if (this.pinnedHost?.parentElement) {
+            this.pinnedHost.parentElement.removeChild(this.pinnedHost);
+        }
         this.container.empty();
 
         const toolbar = this.renderToolbar();
@@ -415,6 +468,10 @@ export class CalendarView extends ItemView {
                 onFilterChange: () => {
                     void this.app.workspace.requestSaveLayout();
                     this.render();
+                    // View filter affects pinned lists with applyViewFilter:true;
+                    // PinnedList does not see view filter state via onChange, so
+                    // refresh explicitly here.
+                    this.pinnedListRenderer?.refresh();
                     filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
                 },
                 getTasks: () => this.readService.getTasks(),
@@ -467,6 +524,7 @@ export class CalendarView extends ItemView {
                 }
                 this.app.workspace.requestSaveLayout();
                 this.render();
+                this.pinnedListRenderer?.refresh();
             },
             onReset: () => {
                 this.filterMenu.setFilterState(createEmptyFilterState());
@@ -478,6 +536,7 @@ export class CalendarView extends ItemView {
                 this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
                 this.render();
+                this.pinnedListRenderer?.refresh();
             },
         });
 
@@ -511,18 +570,24 @@ export class CalendarView extends ItemView {
             });
             this.app.workspace.requestSaveLayout();
             this.pinnedListRenderer.scheduleRename(newId);
-            this.render();
+            this.pinnedListRenderer.refresh();
         });
 
-        this.pinnedListRenderer.render(body, this.pinnedLists,
-            this.pinnedListCollapsed, {
-            onCollapsedChange: (id, collapsed) => {
-                this.pinnedListCollapsed[id] = collapsed;
+        // Re-attach the persistent pinned host into the freshly-built sidebar body.
+        // PinnedListRenderer manages its own contents via its onChange subscription
+        // and explicit refresh() calls — we only relocate the host here.
+        body.appendChild(this.pinnedHost);
+    }
+
+    private getPinnedListCallbacks() {
+        return {
+            onCollapsedChange: (id: string, collapsed: boolean) => {
+                this.pinnedListCollapsed[`${COLLAPSE_KEY_PREFIX}${id}`] = collapsed;
                 this.app.workspace.requestSaveLayout();
             },
-            onSortEdit: (listDef, anchorEl) => this.openPinnedListSort(listDef, anchorEl),
-            onFilterEdit: (listDef, anchorEl) => this.openPinnedListFilter(listDef, anchorEl),
-            onDuplicate: (listDef) => {
+            onSortEdit: (listDef: PinnedListDefinition, anchorEl: HTMLElement) => this.openPinnedListSort(listDef, anchorEl),
+            onFilterEdit: (listDef: PinnedListDefinition, anchorEl: HTMLElement) => this.openPinnedListFilter(listDef, anchorEl),
+            onDuplicate: (listDef: PinnedListDefinition) => {
                 const idx = this.pinnedLists.indexOf(listDef);
                 this.pinnedLists.splice(idx + 1, 0, {
                     ...listDef,
@@ -532,41 +597,72 @@ export class CalendarView extends ItemView {
                     sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
                 });
                 this.app.workspace.requestSaveLayout();
-                this.render();
+                this.pinnedListRenderer.refresh();
             },
-            onRemove: (listDef) => {
+            onRemove: (listDef: PinnedListDefinition) => {
                 const idx = this.pinnedLists.indexOf(listDef);
                 if (idx >= 0) this.pinnedLists.splice(idx, 1);
                 this.app.workspace.requestSaveLayout();
-                this.render();
+                this.pinnedListRenderer.refresh();
             },
-            onMoveUp: (listDef) => {
+            onMoveUp: (listDef: PinnedListDefinition) => {
                 const idx = this.pinnedLists.indexOf(listDef);
                 if (idx > 0) {
                     [this.pinnedLists[idx - 1], this.pinnedLists[idx]] = [this.pinnedLists[idx], this.pinnedLists[idx - 1]];
                     this.app.workspace.requestSaveLayout();
-                    this.render();
+                    this.pinnedListRenderer.refresh();
                 }
             },
-            onMoveDown: (listDef) => {
+            onMoveDown: (listDef: PinnedListDefinition) => {
                 const idx = this.pinnedLists.indexOf(listDef);
                 if (idx >= 0 && idx < this.pinnedLists.length - 1) {
                     [this.pinnedLists[idx], this.pinnedLists[idx + 1]] = [this.pinnedLists[idx + 1], this.pinnedLists[idx]];
                     this.app.workspace.requestSaveLayout();
-                    this.render();
+                    this.pinnedListRenderer.refresh();
                 }
             },
-            onToggleApplyViewFilter: (listDef) => {
+            onToggleApplyViewFilter: (listDef: PinnedListDefinition) => {
                 listDef.applyViewFilter = !listDef.applyViewFilter;
                 this.app.workspace.requestSaveLayout();
-                this.render();
+                this.pinnedListRenderer.refresh();
             },
             onRename: () => {
                 this.app.workspace.requestSaveLayout();
             },
-        },
-            this.filterMenu.getFilterState(),
-        );
+        };
+    }
+
+    /**
+     * Strip the `${viewId}::` prefix so PinnedListRenderer receives a plain
+     * Record<listId, boolean>. The view-side store keeps the prefix to avoid
+     * timeline/calendar collapse-state collisions when both views persist into
+     * the same workspace layout.
+     */
+    private buildCollapsedStateForRenderer(): Record<string, boolean> {
+        const out: Record<string, boolean> = {};
+        for (const [key, val] of Object.entries(this.pinnedListCollapsed)) {
+            if (key.startsWith(COLLAPSE_KEY_PREFIX)) {
+                out[key.slice(COLLAPSE_KEY_PREFIX.length)] = val;
+            }
+        }
+        return out;
+    }
+
+    /**
+     * One-shot migration: any key without `::` is assumed to be a legacy
+     * listId-only entry from before viewId-namespacing was introduced.
+     * Prefix it with `${viewId}::` so calendar owns it.
+     */
+    private migrateCollapsedKeys(stored: Record<string, boolean>): Record<string, boolean> {
+        const migrated: Record<string, boolean> = {};
+        for (const [key, val] of Object.entries(stored)) {
+            if (key.includes('::')) {
+                migrated[key] = val;
+            } else {
+                migrated[`${COLLAPSE_KEY_PREFIX}${key}`] = val;
+            }
+        }
+        return migrated;
     }
 
     private openPinnedListSort(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
@@ -575,7 +671,7 @@ export class CalendarView extends ItemView {
             onSortChange: () => {
                 listDef.sortState = this.sidebarSortMenu.getSortState();
                 this.app.workspace.requestSaveLayout();
-                this.render();
+                this.pinnedListRenderer.refresh();
             },
         });
     }
@@ -586,7 +682,7 @@ export class CalendarView extends ItemView {
             onFilterChange: () => {
                 listDef.filterState = this.sidebarFilterMenu.getFilterState();
                 this.app.workspace.requestSaveLayout();
-                this.render();
+                this.pinnedListRenderer.refresh();
             },
             getTasks: () => this.readService.getTasks(),
             getStartHour: () => this.plugin.settings.startHour,
@@ -737,7 +833,11 @@ export class CalendarView extends ItemView {
             TaskStyling.applyReadOnly(barEl, entry.task);
 
             this.menuHandler.addTaskContextMenu(barEl, entry.task);
-            await this.taskRenderer.render(barEl, entry.task, this.plugin.settings, { topRight: 'none', compact: true });
+            await this.taskRenderer.render(barEl, entry.task, this.plugin.settings, {
+                cardInstanceId: `${VIEW_ID}::lane-multi::${entry.segmentId}`,
+                topRight: 'none',
+                compact: true,
+            });
             return;
         }
 
@@ -749,7 +849,10 @@ export class CalendarView extends ItemView {
         TaskStyling.applyTaskLinestyle(card, entry.task.linestyle ?? null);
         TaskStyling.applyReadOnly(card, entry.task);
         this.menuHandler.addTaskContextMenu(card, entry.task);
-        await this.taskRenderer.render(card, entry.task, this.plugin.settings, { compact: true });
+        await this.taskRenderer.render(card, entry.task, this.plugin.settings, {
+            cardInstanceId: `${VIEW_ID}::lane::${entry.task.id}`,
+            compact: true,
+        });
     }
 
     private isTaskCompleted(task: Task): boolean {

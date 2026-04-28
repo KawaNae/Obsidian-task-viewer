@@ -45,7 +45,10 @@ export class TaskDetailModal extends Modal {
         this.menuHandler.addTaskContextMenu(card, this.task);
 
         const dt = toDisplayTask(this.task, this.settings.startHour);
-        await this.taskRenderer.render(card, dt, this.settings, { forceExpand: true });
+        await this.taskRenderer.render(card, dt, this.settings, {
+            cardInstanceId: `modal::detail::${dt.id}`,
+            forceExpand: true,
+        });
     }
 
     onClose(): void {

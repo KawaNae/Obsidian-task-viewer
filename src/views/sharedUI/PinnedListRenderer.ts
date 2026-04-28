@@ -27,12 +27,44 @@ export interface PinnedListCallbacks {
     onMoveDown?: (listDef: PinnedListDefinition) => void;
 }
 
+/**
+ * Parameters provided once by the view at attach() time.
+ *
+ * `host` is a stable DOM node owned by the view that survives view-level
+ * full re-renders (i.e. is NOT inside the area that gets `container.empty()`'d).
+ * The renderer rebuilds children of `host` on every refresh().
+ *
+ * Getters (getLists / getCollapsed / getViewFilterState) are pulled lazily
+ * on each refresh so the view can mutate its underlying state without
+ * having to re-call attach.
+ */
+export interface PinnedListAttachParams {
+    host: HTMLElement;
+    getLists: () => PinnedListDefinition[];
+    getCollapsed: () => Record<string, boolean>;
+    getViewFilterState: () => FilterState | undefined;
+    callbacks: PinnedListCallbacks;
+    /**
+     * Owning view's id (e.g. 'timeline', 'calendar'). Used to namespace the
+     * cardInstanceId fed to TaskCardRenderer so a task pinned in multiple
+     * places (or pinned + on the main grid) can be expanded independently.
+     */
+    viewId: string;
+}
+
 export class PinnedListRenderer {
-    // Preserve collapse state across re-renders (instance lifetime only)
-    private collapsedGroups = new Set<string>();
     // ID of list to start renaming immediately after render
     private pendingRenameId: string | null = null;
     private readonly paging: TaskPagingController;
+
+    // attach state — set by attach(), cleared by detach()
+    private host: HTMLElement | null = null;
+    private getLists: (() => PinnedListDefinition[]) | null = null;
+    private getCollapsed: (() => Record<string, boolean>) | null = null;
+    private getViewFilterState: (() => FilterState | undefined) | null = null;
+    private callbacks: PinnedListCallbacks | null = null;
+    private viewId: string | null = null;
+    private unsubscribe: (() => void) | null = null;
 
     constructor(
         private taskRenderer: TaskCardRenderer,
@@ -42,7 +74,7 @@ export class PinnedListRenderer {
     ) {
         this.paging = new TaskPagingController(
             () => this.plugin.settings.pinnedListPageSize,
-            (container, tasks) => this.renderTaskCards(container, tasks),
+            (container, tasks, listId) => this.renderTaskCards(container, tasks, listId),
         );
     }
 
@@ -51,7 +83,64 @@ export class PinnedListRenderer {
         this.pendingRenameId = listId;
     }
 
-    render(
+    /**
+     * Wire the renderer to a stable host element and start auto-refreshing
+     * on data changes. Idempotent against double-attach (calls detach() first).
+     *
+     * The host must NOT live inside the view's render-empty target — otherwise
+     * its DOM (and PinnedList paging/expanded state) is lost on every full render.
+     */
+    attach(params: PinnedListAttachParams): void {
+        if (this.host) this.detach();
+
+        this.host = params.host;
+        this.getLists = params.getLists;
+        this.getCollapsed = params.getCollapsed;
+        this.getViewFilterState = params.getViewFilterState;
+        this.callbacks = params.callbacks;
+        this.viewId = params.viewId;
+
+        // Subscribe to data changes — refresh self-contained without view involvement.
+        this.unsubscribe = this.readService.onChange(() => {
+            this.refresh();
+        });
+
+        // Initial paint
+        this.refresh();
+    }
+
+    /** Tear down subscription and clear host references. Safe to call multiple times. */
+    detach(): void {
+        if (this.unsubscribe) {
+            this.unsubscribe();
+            this.unsubscribe = null;
+        }
+        this.host = null;
+        this.getLists = null;
+        this.getCollapsed = null;
+        this.getViewFilterState = null;
+        this.callbacks = null;
+        this.viewId = null;
+    }
+
+    /**
+     * Re-render into the attached host. Called by the onChange subscription
+     * automatically; views may call it manually after mutating list arrays
+     * (rename / duplicate / reorder / remove / filter / sort changes).
+     */
+    refresh(): void {
+        if (!this.host || !this.getLists || !this.getCollapsed || !this.callbacks) return;
+
+        this.render(
+            this.host,
+            this.getLists(),
+            this.getCollapsed(),
+            this.callbacks,
+            this.getViewFilterState?.(),
+        );
+    }
+
+    private render(
         container: HTMLElement,
         lists: PinnedListDefinition[],
         collapsedState: Record<string, boolean>,
@@ -61,7 +150,10 @@ export class PinnedListRenderer {
         this.taskRenderer.disposeInside(container);
         container.empty();
         container.addClass('pinned-lists-container');
-        this.paging.clear();
+        // Preserve paging state across renders for lists that still exist
+        // (collapsedState keys are caller-prefixed, so use list.id directly here).
+        const currentListIds = new Set(lists.map(l => l.id));
+        this.paging.pruneRemovedLists(currentListIds);
         if (lists.length === 0) {
             container.createDiv('pinned-lists-container__empty')
                 .setText(t('pinnedList.noPinnedLists'));
@@ -88,8 +180,8 @@ export class PinnedListRenderer {
         index: number,
         totalCount: number,
     ): void {
-        // Determine collapsed state: ViewState > instance memory > default expanded
-        const isCollapsed = collapsedState[listDef.id] ?? this.collapsedGroups.has(listDef.id);
+        // Collapsed state is owned by the caller (view). Default = expanded.
+        const isCollapsed = collapsedState[listDef.id] ?? false;
 
         const listEl = container.createDiv('pinned-list');
         listEl.dataset.listId = listDef.id;
@@ -146,11 +238,9 @@ export class PinnedListRenderer {
             const nextCollapsed = !currentlyCollapsed;
 
             if (nextCollapsed) {
-                this.collapsedGroups.add(listDef.id);
                 listEl.addClass('pinned-list--collapsed');
                 toggle.textContent = '▶';
             } else {
-                this.collapsedGroups.delete(listDef.id);
                 listEl.removeClass('pinned-list--collapsed');
                 toggle.textContent = '▼';
                 // Lazy render on expand (reset to first page)
@@ -279,8 +369,9 @@ export class PinnedListRenderer {
         input.addEventListener('pointerdown', (e) => e.stopPropagation());
     }
 
-    private renderTaskCards(body: HTMLElement, tasks: DisplayTask[]): void {
+    private renderTaskCards(body: HTMLElement, tasks: DisplayTask[], listId: string): void {
         const settings = this.plugin.settings;
+        const viewId = this.viewId ?? 'unknown';
         tasks.forEach(task => {
             const card = body.createDiv('task-card');
             card.dataset.id = task.id;
@@ -289,7 +380,9 @@ export class PinnedListRenderer {
             TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
             TaskStyling.applyReadOnly(card, task);
 
-            this.taskRenderer.render(card, task, settings);
+            this.taskRenderer.render(card, task, settings, {
+                cardInstanceId: `${viewId}::pl-${listId}::${task.id}`,
+            });
             this.menuHandler.addTaskContextMenu(card, task);
         });
     }

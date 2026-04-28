@@ -19,7 +19,8 @@ export class AllDaySectionRenderer {
         private menuHandler: MenuHandler,
         private handleManager: HandleManager,
         private taskRenderer: TaskCardRenderer,
-        private getDaysToShow: () => number
+        private getDaysToShow: () => number,
+        private viewId: string
     ) { }
 
     public render(container: HTMLElement, dates: string[], displayTasks: DisplayTask[]) {
@@ -95,7 +96,13 @@ export class AllDaySectionRenderer {
         TaskStyling.applyTaskLinestyle(el, task.linestyle ?? null);
         TaskStyling.applyReadOnly(el, task);
 
-        this.taskRenderer.render(el, task, this.plugin.settings, { topRight: 'none', compact: true });
+        // Each split segment gets its own cardInstanceId via segmentId so a
+        // task spanning multiple days can be expanded independently per row.
+        this.taskRenderer.render(el, task, this.plugin.settings, {
+            cardInstanceId: `${this.viewId}::allday::${entry.segmentId}`,
+            topRight: 'none',
+            compact: true,
+        });
         this.menuHandler.addTaskContextMenu(el, task);
 
         el.style.gridColumn = `${entry.colStart + gridColOffset} / span ${entry.span}`;
