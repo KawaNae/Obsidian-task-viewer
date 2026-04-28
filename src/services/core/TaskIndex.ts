@@ -104,8 +104,10 @@ export class TaskIndex {
 
                 await this.scanner.queueScan(file, isLocal);
                 WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
-                // 自己書き込みは updateTask が既に notify しているため、ここでは notify しない。
-                // 外部書き込みのときだけ debounced notify を発火する。
+                // External edits go through debouncedNotify here.
+                // Local writes (isLocal=true) skip notify because the write methods themselves
+                // are now responsible for notifying via withNotify().
+                // This handler's role for local writes is scan synchronization only.
                 if (!isLocal) {
                     this.debouncedNotify();
                 }
@@ -353,6 +355,21 @@ export class TaskIndex {
 
     // ===== CRUD操作 =====
 
+    /**
+     * Wrap a write operation so that any successful completion is followed by
+     * an immediate full notify. This guarantees that every TaskIndex write
+     * triggers a UI refresh, regardless of whether the underlying file event
+     * pipeline fires a debouncedNotify (e.g. local writes are intentionally
+     * skipped in the vault.modify handler).
+     *
+     * Note: notifyImmediate() is called with no args → full invalidation.
+     */
+    private async withNotify<T>(op: () => Promise<T>): Promise<T> {
+        const result = await op();
+        this.notifyImmediate();
+        return result;
+    }
+
     async updateTask(taskId: string, updates: Partial<Task>): Promise<void> {
 
         // スプリットタスク処理（##seg:YYYY-MM-DD）
@@ -466,35 +483,39 @@ export class TaskIndex {
     }
 
     async deleteTask(taskId: string): Promise<void> {
-        const task = this.store.getTask(taskId);
-        if (!task) return;
-        if (task.isReadOnly) return;
+        return this.withNotify(async () => {
+            const task = this.store.getTask(taskId);
+            if (!task) return;
+            if (task.isReadOnly) return;
 
-        this.syncDetector.markLocalEdit(task.file);
+            this.syncDetector.markLocalEdit(task.file);
 
-        if (isFrontmatterTask(task)) {
-            await this.repository.deleteFrontmatterTask(task, this.settings.frontmatterTaskKeys);
-        } else {
-            await this.repository.deleteTaskFromFile(task);
-        }
+            if (isFrontmatterTask(task)) {
+                await this.repository.deleteFrontmatterTask(task, this.settings.frontmatterTaskKeys);
+            } else {
+                await this.repository.deleteTaskFromFile(task);
+            }
 
-        await this.scanner.waitForScan(task.file);
+            await this.scanner.waitForScan(task.file);
+        });
     }
 
     async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<void> {
-        const task = this.store.getTask(taskId);
-        if (!task) return;
-        if (task.isReadOnly) return;
+        return this.withNotify(async () => {
+            const task = this.store.getTask(taskId);
+            if (!task) return;
+            if (task.isReadOnly) return;
 
-        this.syncDetector.markLocalEdit(task.file);
+            this.syncDetector.markLocalEdit(task.file);
 
-        if (isFrontmatterTask(task)) {
-            await this.repository.duplicateFrontmatterTask(task, this.settings.frontmatterTaskKeys, options);
-        } else {
-            await this.repository.duplicateInlineTask(task, options);
-        }
+            if (isFrontmatterTask(task)) {
+                await this.repository.duplicateFrontmatterTask(task, this.settings.frontmatterTaskKeys, options);
+            } else {
+                await this.repository.duplicateInlineTask(task, options);
+            }
 
-        await this.scanner.waitForScan(task.file);
+            await this.scanner.waitForScan(task.file);
+        });
     }
 
     /**
@@ -503,124 +524,138 @@ export class TaskIndex {
      * @returns 新ファイルのパス
      */
     async convertToFrontmatterTask(taskId: string): Promise<string> {
-        const task = this.store.getTask(taskId);
-        if (!task) throw new Error('Task not found');
+        return this.withNotify(async () => {
+            const task = this.store.getTask(taskId);
+            if (!task) throw new Error('Task not found');
 
-        if (!isTaskViewerInlineTask(task)) {
-            throw new Error('Only inline tasks can be converted to frontmatter tasks');
-        }
+            if (!isTaskViewerInlineTask(task)) {
+                throw new Error('Only inline tasks can be converted to frontmatter tasks');
+            }
 
-        this.syncDetector.markLocalEdit(task.file);
+            this.syncDetector.markLocalEdit(task.file);
 
-        const newPath = await this.inlineToFrontmatterConversionService.convertInlineTaskToFrontmatter(
-            task,
-            this.settings.frontmatterTaskHeader,
-            this.settings.frontmatterTaskHeaderLevel,
-            this.settings.frontmatterTaskKeys
-        );
+            const newPath = await this.inlineToFrontmatterConversionService.convertInlineTaskToFrontmatter(
+                task,
+                this.settings.frontmatterTaskHeader,
+                this.settings.frontmatterTaskHeaderLevel,
+                this.settings.frontmatterTaskKeys
+            );
 
-        await this.scanner.waitForScan(task.file);
-        await this.scanner.waitForScan(newPath);
+            await this.scanner.waitForScan(task.file);
+            await this.scanner.waitForScan(newPath);
 
-        return newPath;
+            return newPath;
+        });
     }
 
     async createTask(filePath: string, taskLine: string, heading?: string): Promise<void> {
-        this.syncDetector.markLocalEdit(filePath);
+        return this.withNotify(async () => {
+            this.syncDetector.markLocalEdit(filePath);
 
-        if (heading) {
-            const file = this.app.vault.getAbstractFileByPath(filePath);
-            if (!(file instanceof TFile)) return;
-            await this.app.vault.process(file, (content) =>
-                HeadingInserter.insertUnderHeading(content, taskLine, heading, 2)
-            );
-        } else {
-            await this.repository.appendTaskToFile(filePath, taskLine);
-        }
+            if (heading) {
+                const file = this.app.vault.getAbstractFileByPath(filePath);
+                if (!(file instanceof TFile)) return;
+                await this.app.vault.process(file, (content) =>
+                    HeadingInserter.insertUnderHeading(content, taskLine, heading, 2)
+                );
+            } else {
+                await this.repository.appendTaskToFile(filePath, taskLine);
+            }
 
-        await this.scanner.waitForScan(filePath);
+            await this.scanner.waitForScan(filePath);
+        });
     }
 
     async insertChildTask(parentTaskId: string, childLine: string): Promise<void> {
-        const task = this.store.getTask(parentTaskId);
-        if (!task) return;
+        return this.withNotify(async () => {
+            const task = this.store.getTask(parentTaskId);
+            if (!task) return;
 
-        this.syncDetector.markLocalEdit(task.file);
+            this.syncDetector.markLocalEdit(task.file);
 
-        if (isFrontmatterTask(task)) {
-            await this.repository.insertLineAfterFrontmatter(
-                task.file, childLine,
-                this.settings.frontmatterTaskHeader,
-                this.settings.frontmatterTaskHeaderLevel
-            );
-        } else {
-            const childIndent = FileOperations.getChildIndent(task.originalText);
-            await this.repository.insertLineAsFirstChild(task, childIndent + childLine);
-        }
+            if (isFrontmatterTask(task)) {
+                await this.repository.insertLineAfterFrontmatter(
+                    task.file, childLine,
+                    this.settings.frontmatterTaskHeader,
+                    this.settings.frontmatterTaskHeaderLevel
+                );
+            } else {
+                const childIndent = FileOperations.getChildIndent(task.originalText);
+                await this.repository.insertLineAsFirstChild(task, childIndent + childLine);
+            }
 
-        await this.scanner.waitForScan(task.file);
+            await this.scanner.waitForScan(task.file);
+        });
     }
 
     async createFrontmatterTaskFromData(taskData: Partial<Task>): Promise<string> {
-        const tempTask: Task = {
-            id: 'convert-temp',
-            file: '',
-            line: 0,
-            indent: 0,
-            content: taskData.content ?? '',
-            statusChar: taskData.statusChar ?? ' ',
-            childIds: [],
-            childLines: [],
-            startDate: taskData.startDate,
-            startTime: taskData.startTime,
-            endDate: taskData.endDate,
-            endTime: taskData.endTime,
-            due: taskData.due,
-            commands: [],
-            originalText: '',
-            childLineBodyOffsets: [],
-            tags: [],
-            parserId: 'tv-inline',
-            properties: {},
-        };
-        return await this.repository.createFrontmatterTaskFile(
-            tempTask,
-            this.settings.frontmatterTaskHeader,
-            this.settings.frontmatterTaskHeaderLevel,
-            undefined,
-            undefined,
-            this.settings.frontmatterTaskKeys
-        );
+        return this.withNotify(async () => {
+            const tempTask: Task = {
+                id: 'convert-temp',
+                file: '',
+                line: 0,
+                indent: 0,
+                content: taskData.content ?? '',
+                statusChar: taskData.statusChar ?? ' ',
+                childIds: [],
+                childLines: [],
+                startDate: taskData.startDate,
+                startTime: taskData.startTime,
+                endDate: taskData.endDate,
+                endTime: taskData.endTime,
+                due: taskData.due,
+                commands: [],
+                originalText: '',
+                childLineBodyOffsets: [],
+                tags: [],
+                parserId: 'tv-inline',
+                properties: {},
+            };
+            return await this.repository.createFrontmatterTaskFile(
+                tempTask,
+                this.settings.frontmatterTaskHeader,
+                this.settings.frontmatterTaskHeaderLevel,
+                undefined,
+                undefined,
+                this.settings.frontmatterTaskKeys
+            );
+        });
     }
 
     async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
-        this.syncDetector.markLocalEdit(filePath);
-        await this.repository.updateLine(filePath, lineNumber, newContent);
+        return this.withNotify(async () => {
+            this.syncDetector.markLocalEdit(filePath);
+            await this.repository.updateLine(filePath, lineNumber, newContent);
 
-        const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (file instanceof TFile) {
-            await this.scanner.waitForScan(filePath);
-        }
+            const file = this.app.vault.getAbstractFileByPath(filePath);
+            if (file instanceof TFile) {
+                await this.scanner.waitForScan(filePath);
+            }
+        });
     }
 
     async insertLineAfterLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
-        this.syncDetector.markLocalEdit(filePath);
-        await this.repository.insertLineAfterLine(filePath, lineNumber, newContent);
+        return this.withNotify(async () => {
+            this.syncDetector.markLocalEdit(filePath);
+            await this.repository.insertLineAfterLine(filePath, lineNumber, newContent);
 
-        const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (file instanceof TFile) {
-            await this.scanner.waitForScan(filePath);
-        }
+            const file = this.app.vault.getAbstractFileByPath(filePath);
+            if (file instanceof TFile) {
+                await this.scanner.waitForScan(filePath);
+            }
+        });
     }
 
     async deleteLine(filePath: string, lineNumber: number): Promise<void> {
-        this.syncDetector.markLocalEdit(filePath);
-        await this.repository.deleteLine(filePath, lineNumber);
+        return this.withNotify(async () => {
+            this.syncDetector.markLocalEdit(filePath);
+            await this.repository.deleteLine(filePath, lineNumber);
 
-        const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (file instanceof TFile) {
-            await this.scanner.waitForScan(filePath);
-        }
+            const file = this.app.vault.getAbstractFileByPath(filePath);
+            if (file instanceof TFile) {
+                await this.scanner.waitForScan(filePath);
+            }
+        });
     }
 
     // ===== ヘルパー =====
