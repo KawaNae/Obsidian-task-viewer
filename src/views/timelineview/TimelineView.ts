@@ -105,7 +105,31 @@ export class TimelineView extends ItemView {
     private currentTimeInterval: number | null = null;
     private savedScrollTop: number | null = null;
     private scrollToNowOnNextRender = false;
-    private hasInitializedStartDate: boolean = false;
+
+    /**
+     * Init barrier: viewState-dependent initialization (e.g. computing the
+     * initial startDate from filterState) must wait for **all** of:
+     *   - DOM ready (onOpen completed)
+     *   - state applied (setState completed — even when no state was passed,
+     *     Obsidian still calls setState once with empty state)
+     *   - tasks loaded (readService has data — either cached at open time or
+     *     delivered later via onChange)
+     *
+     * Without this barrier, onOpen running before setState would compute the
+     * initial date with an empty filter (URI-restored filterState arrives in
+     * setState which fires after onOpen for fresh views), pinning the view to
+     * a filtered-out overdue task. The classic "init once" latch pattern was
+     * the bug.
+     *
+     * Add new viewState-dependent init to runInitialStateLogic() — never to
+     * onOpen directly — to stay race-free regardless of Obsidian's lifecycle
+     * order.
+     */
+    private initBarrier = {
+        domReady: false,
+        stateApplied: false,
+    };
+    private hasRunInitialLogic = false;
 
     // Render coalescing (frame-level): 同一 frame 内に複数の onChange が来ても render は 1 回
     // 実装は RenderController に委譲。
@@ -198,6 +222,12 @@ export class TimelineView extends ItemView {
             // Note: startDate is not restored - always use "Today" logic on reload
         }
         await super.setState(state, result);
+        // State-side of the init barrier is now satisfied. If onOpen has
+        // already run and tasks are loaded, this fires initial state-
+        // dependent logic (e.g. computing startDate from the restored
+        // filterState); otherwise it waits.
+        this.initBarrier.stateApplied = true;
+        this.tryRunInitialStateLogic();
         this.render();
         // setState may have changed filterState / pinnedLists / collapse — none
         // of these go through readService.onChange, so PinnedList wouldn't
@@ -376,9 +406,10 @@ export class TimelineView extends ItemView {
 
         // Subscribe to data changes
         this.unsubscribe = this.readService.onChange((taskId, changes) => {
-            // On first data load, re-evaluate startDate to include past overdue tasks
-            // (no auto-scroll: user-driven scroll only via Now button / refresh / onOpen)
-            this.maybeInitializeStartDate();
+            // First task delivery is one of the gates for initial state setup
+            // (DOM + state + tasks). No auto-scroll here: user-driven scroll
+            // only via Now button / refresh / onOpen.
+            this.tryRunInitialStateLogic();
             this.renderController.handleChange(taskId, changes);
         });
 
@@ -476,9 +507,11 @@ export class TimelineView extends ItemView {
             this.renderCurrentTimeIndicator();
         }, 60000); // Every minute
 
-        // If task data is already loaded (cached from another view), initialize
-        // startDate now — onChange may not fire since there's no new event to deliver.
-        this.maybeInitializeStartDate();
+        // DOM-side of the init barrier is now satisfied. If state has already
+        // been applied and tasks are cached, this fires the initial logic
+        // immediately; otherwise it waits for the missing gate.
+        this.initBarrier.domReady = true;
+        this.tryRunInitialStateLogic();
 
         // Initial render — scroll to current time
         this.scrollToNowOnNextRender = true;
@@ -486,15 +519,28 @@ export class TimelineView extends ItemView {
     }
 
     /**
-     * On first data load, re-evaluate startDate to include past overdue tasks.
-     * Idempotent — safe to call multiple times; only the first call with non-empty
-     * tasks takes effect. Called from both onOpen (covers cached-data case) and
-     * onChange (covers async-load case).
+     * Init-barrier coordinator. Runs viewState-dependent initialization exactly
+     * once, after DOM ready + state applied + tasks loaded — in whatever order
+     * those gates fire. See `initBarrier` field comment for rationale.
+     *
+     * Add new viewState-dependent init steps inside this method.
      */
-    private maybeInitializeStartDate(): void {
-        if (this.hasInitializedStartDate) return;
+    private tryRunInitialStateLogic(): void {
+        if (this.hasRunInitialLogic) return;
+        if (!this.initBarrier.domReady) return;
+        if (!this.initBarrier.stateApplied) return;
         if (this.readService.getTasks().length === 0) return;
-        this.hasInitializedStartDate = true;
+        this.hasRunInitialLogic = true;
+
+        this.initializeStartDate();
+        // Future viewState-dependent init goes here.
+    }
+
+    /**
+     * Compute the initial startDate from the restored filterState + tasks +
+     * settings. Called once via the init barrier.
+     */
+    private initializeStartDate(): void {
         if (!this.plugin.settings.startFromOldestOverdue) return;
         const oldestOverdue = this.findOldestOverdueDate();
         const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
