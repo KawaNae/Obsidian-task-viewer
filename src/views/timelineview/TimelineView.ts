@@ -301,8 +301,8 @@ export class TimelineView extends ItemView {
         );
 
         // Initialize Renderers
-        this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow);
-        this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel());
+        this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow, VIEW_ID);
+        this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel(), VIEW_ID);
         this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler, this.hoverParent);
         this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.menuHandler, this.readService);
         // Persistent host for pinned lists. Lives outside the empty() target
@@ -315,6 +315,7 @@ export class TimelineView extends ItemView {
             getCollapsed: () => this.buildCollapsedStateForRenderer(),
             getViewFilterState: () => this.toolbar?.getFilterState(),
             callbacks: this.getPinnedListCallbacks(),
+            viewId: VIEW_ID,
         });
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
         this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
@@ -705,7 +706,15 @@ export class TimelineView extends ItemView {
         if (expandBar) expandBar.remove();
 
         const isAllDay = card.classList.contains('task-card--allday');
-        const opts = isAllDay ? { topRight: 'none' as const, compact: true } : undefined;
+        // Reuse the cardInstanceId stamped on the element by the original
+        // render so collapse state survives the partial update. Fall back to
+        // a deterministic id for older DOM that may have been built before
+        // this code path was introduced.
+        const reusedCardInstanceId = card.dataset.cardInstanceId
+            ?? `${VIEW_ID}::${isAllDay ? 'allday' : 'lane'}::${dt.id}`;
+        const opts = isAllDay
+            ? { cardInstanceId: reusedCardInstanceId, topRight: 'none' as const, compact: true }
+            : { cardInstanceId: reusedCardInstanceId };
         this.taskRenderer.render(card, dt, this.plugin.settings, opts);
         TaskStyling.applyTaskColor(card, dt.color ?? null);
         TaskStyling.applyTaskLinestyle(card, dt.linestyle ?? null);

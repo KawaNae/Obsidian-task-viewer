@@ -44,6 +44,12 @@ export interface PinnedListAttachParams {
     getCollapsed: () => Record<string, boolean>;
     getViewFilterState: () => FilterState | undefined;
     callbacks: PinnedListCallbacks;
+    /**
+     * Owning view's id (e.g. 'timeline', 'calendar'). Used to namespace the
+     * cardInstanceId fed to TaskCardRenderer so a task pinned in multiple
+     * places (or pinned + on the main grid) can be expanded independently.
+     */
+    viewId: string;
 }
 
 export class PinnedListRenderer {
@@ -57,6 +63,7 @@ export class PinnedListRenderer {
     private getCollapsed: (() => Record<string, boolean>) | null = null;
     private getViewFilterState: (() => FilterState | undefined) | null = null;
     private callbacks: PinnedListCallbacks | null = null;
+    private viewId: string | null = null;
     private unsubscribe: (() => void) | null = null;
 
     constructor(
@@ -67,7 +74,7 @@ export class PinnedListRenderer {
     ) {
         this.paging = new TaskPagingController(
             () => this.plugin.settings.pinnedListPageSize,
-            (container, tasks) => this.renderTaskCards(container, tasks),
+            (container, tasks, listId) => this.renderTaskCards(container, tasks, listId),
         );
     }
 
@@ -91,6 +98,7 @@ export class PinnedListRenderer {
         this.getCollapsed = params.getCollapsed;
         this.getViewFilterState = params.getViewFilterState;
         this.callbacks = params.callbacks;
+        this.viewId = params.viewId;
 
         // Subscribe to data changes — refresh self-contained without view involvement.
         this.unsubscribe = this.readService.onChange(() => {
@@ -112,6 +120,7 @@ export class PinnedListRenderer {
         this.getCollapsed = null;
         this.getViewFilterState = null;
         this.callbacks = null;
+        this.viewId = null;
     }
 
     /**
@@ -360,8 +369,9 @@ export class PinnedListRenderer {
         input.addEventListener('pointerdown', (e) => e.stopPropagation());
     }
 
-    private renderTaskCards(body: HTMLElement, tasks: DisplayTask[]): void {
+    private renderTaskCards(body: HTMLElement, tasks: DisplayTask[], listId: string): void {
         const settings = this.plugin.settings;
+        const viewId = this.viewId ?? 'unknown';
         tasks.forEach(task => {
             const card = body.createDiv('task-card');
             card.dataset.id = task.id;
@@ -370,7 +380,9 @@ export class PinnedListRenderer {
             TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
             TaskStyling.applyReadOnly(card, task);
 
-            this.taskRenderer.render(card, task, settings);
+            this.taskRenderer.render(card, task, settings, {
+                cardInstanceId: `${viewId}::pl-${listId}::${task.id}`,
+            });
             this.menuHandler.addTaskContextMenu(card, task);
         });
     }

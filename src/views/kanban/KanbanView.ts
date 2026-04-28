@@ -80,7 +80,7 @@ export class KanbanView extends ItemView {
         this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
         this.paging = new TaskPagingController(
             () => this.plugin.settings.pinnedListPageSize,
-            (container, tasks) => this.renderTaskCards(container, tasks),
+            (container, tasks, listId) => this.renderTaskCards(container, tasks, listId),
         );
     }
 
@@ -365,7 +365,7 @@ export class KanbanView extends ItemView {
         }
     }
 
-    private renderTaskCards(body: HTMLElement, tasks: import('../../types').DisplayTask[]): void {
+    private renderTaskCards(body: HTMLElement, tasks: import('../../types').DisplayTask[], listId: string): void {
         const settings = this.plugin.settings;
         for (const task of tasks) {
             const card = body.createDiv('task-card');
@@ -373,7 +373,9 @@ export class KanbanView extends ItemView {
             TaskStyling.applyTaskColor(card, task.color ?? null);
             TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
             TaskStyling.applyReadOnly(card, task);
-            this.taskRenderer.render(card, task, settings);
+            this.taskRenderer.render(card, task, settings, {
+                cardInstanceId: `kanban::cell-${listId}::${task.id}`,
+            });
             this.menuHandler.addTaskContextMenu(card, task);
         }
     }

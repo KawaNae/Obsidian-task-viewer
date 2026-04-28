@@ -10,7 +10,7 @@ export class TaskPagingController {
 
     constructor(
         private readonly getPageSize: () => number,
-        private readonly renderCards: (container: HTMLElement, tasks: DisplayTask[]) => void,
+        private readonly renderCards: (container: HTMLElement, tasks: DisplayTask[], listId: string) => void,
     ) {}
 
     clear(): void {
@@ -38,7 +38,7 @@ export class TaskPagingController {
         const pageSize = this.getPageSize();
         const visibleCount = this.visibleCounts.get(listId) ?? pageSize;
         const tasksToShow = allTasks.slice(0, visibleCount);
-        this.renderCards(container, tasksToShow);
+        this.renderCards(container, tasksToShow, listId);
         if (visibleCount < allTasks.length) {
             this.appendShowMoreButton(container, allTasks, visibleCount, listId);
         }
@@ -60,7 +60,7 @@ export class TaskPagingController {
             const newCount = Math.min(shownCount + pageSize, allTasks.length);
             this.visibleCounts.set(listId, newCount);
             const nextBatch = allTasks.slice(shownCount, newCount);
-            this.renderCards(container, nextBatch);
+            this.renderCards(container, nextBatch, listId);
             if (newCount < allTasks.length) {
                 this.appendShowMoreButton(container, allTasks, newCount, listId);
             }

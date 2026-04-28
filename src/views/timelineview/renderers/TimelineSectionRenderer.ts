@@ -21,7 +21,8 @@ export class TimelineSectionRenderer {
         private menuHandler: MenuHandler,
         private handleManager: HandleManager,
         private taskRenderer: TaskCardRenderer,
-        private getZoomLevel: () => number
+        private getZoomLevel: () => number,
+        private viewId: string
     ) { }
 
     public render(container: HTMLElement, date: string, timedTasks: DisplayTask[]) {
@@ -106,7 +107,9 @@ export class TimelineSectionRenderer {
             el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
             el.style.zIndex = String(Math.min(index * Z_GAP + taskLayout.zIndex, Z_MAX));
 
-            this.taskRenderer.render(el, task, this.plugin.settings);
+            this.taskRenderer.render(el, task, this.plugin.settings, {
+                cardInstanceId: `${this.viewId}::lane-${date}::${task.id}`,
+            });
             this.menuHandler.addTaskContextMenu(el, task);
         });
     }

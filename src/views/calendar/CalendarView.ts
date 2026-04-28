@@ -240,6 +240,7 @@ export class CalendarView extends ItemView {
             getCollapsed: () => this.buildCollapsedStateForRenderer(),
             getViewFilterState: () => this.filterMenu.getFilterState(),
             callbacks: this.getPinnedListCallbacks(),
+            viewId: VIEW_ID,
         });
         this.handleManager = new HandleManager(this.container, {
             getTask: (id) => this.readService.getTask(id),
@@ -832,7 +833,11 @@ export class CalendarView extends ItemView {
             TaskStyling.applyReadOnly(barEl, entry.task);
 
             this.menuHandler.addTaskContextMenu(barEl, entry.task);
-            await this.taskRenderer.render(barEl, entry.task, this.plugin.settings, { topRight: 'none', compact: true });
+            await this.taskRenderer.render(barEl, entry.task, this.plugin.settings, {
+                cardInstanceId: `${VIEW_ID}::lane-multi::${entry.segmentId}`,
+                topRight: 'none',
+                compact: true,
+            });
             return;
         }
 
@@ -844,7 +849,10 @@ export class CalendarView extends ItemView {
         TaskStyling.applyTaskLinestyle(card, entry.task.linestyle ?? null);
         TaskStyling.applyReadOnly(card, entry.task);
         this.menuHandler.addTaskContextMenu(card, entry.task);
-        await this.taskRenderer.render(card, entry.task, this.plugin.settings, { compact: true });
+        await this.taskRenderer.render(card, entry.task, this.plugin.settings, {
+            cardInstanceId: `${VIEW_ID}::lane::${entry.task.id}`,
+            compact: true,
+        });
     }
 
     private isTaskCompleted(task: Task): boolean {
