@@ -34,6 +34,7 @@ import { TaskStyling } from '../sharedUI/TaskStyling';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
+import { RenderController } from '../sharedUI/RenderController';
 
 export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
 
@@ -44,13 +45,6 @@ export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
  */
 const VIEW_ID = 'timeline';
 const COLLAPSE_KEY_PREFIX = `${VIEW_ID}::`;
-
-/** Keys that change task position on the grid → full render */
-const LAYOUT_KEYS = new Set(['startDate', 'startTime', 'endDate', 'endTime', 'due']);
-/** Keys safe for partial DOM update (no position change) */
-const SAFE_KEYS = new Set(['status', 'statusChar', 'content', 'childLines']);
-/** Keys with zero visual effect → skip render entirely */
-const NO_RENDER_KEYS = new Set(['blockId', 'timerTargetId']);
 
 /**
  * Timeline View - Displays tasks on a time-based grid layout.
@@ -106,8 +100,8 @@ export class TimelineView extends ItemView {
     private hasInitializedStartDate: boolean = false;
 
     // Render coalescing (frame-level): 同一 frame 内に複数の onChange が来ても render は 1 回
-    private renderRafId: number | null = null;
-    private renderDirty = false;
+    // 実装は RenderController に委譲。
+    private renderController: RenderController;
 
     // ==================== Pinch zoom state ====================
     private pinchInitialDistance: number = 0;
@@ -304,32 +298,25 @@ export class TimelineView extends ItemView {
             }
         });
 
+        // Initialize render dispatch controller (rAF coalesce + partial/full 判定)
+        this.renderController = new RenderController({
+            tryPartial: (taskId) => this.tryPartialUpdate(taskId),
+            performFull: () => {
+                this.saveScrollPosition();
+                this.performRender();
+            },
+            // partial update は main grid のカードのみ書き換えるので、
+            // pinnedLists の件数 / フィルタ膜割り / ソート位置 / カード内容を
+            // 反映するため pinnedLists だけフル再描画する。
+            refreshPinned: () => this.refreshPinnedLists(),
+        });
+
         // Subscribe to data changes
         this.unsubscribe = this.readService.onChange((taskId, changes) => {
             // On first data load, re-evaluate startDate to include past overdue tasks
             // (no auto-scroll: user-driven scroll only via Now button / refresh / onOpen)
             this.maybeInitializeStartDate();
-
-            if (taskId && changes) {
-                if (changes.every(k => NO_RENDER_KEYS.has(k))) return;
-
-                if (changes.some(k => LAYOUT_KEYS.has(k))) {
-                    this.scheduleRender();
-                    return;
-                }
-
-                if (changes.every(k => SAFE_KEYS.has(k))) {
-                    if (this.tryPartialUpdate(taskId)) {
-                        // partial update は main grid のカードのみ書き換えるので、
-                        // pinnedLists の件数 / フィルタ膜割り / ソート位置 / カード内容を
-                        // 反映するため pinnedLists だけフル再描画する。
-                        this.refreshPinnedLists();
-                        return;
-                    }
-                }
-            }
-
-            this.scheduleRender();
+            this.renderController.handleChange(taskId, changes);
         });
 
         // Ctrl+wheel zoom
@@ -469,11 +456,7 @@ export class TimelineView extends ItemView {
             window.clearInterval(this.currentTimeInterval);
             this.currentTimeInterval = null;
         }
-        if (this.renderRafId !== null) {
-            cancelAnimationFrame(this.renderRafId);
-            this.renderRafId = null;
-            this.renderDirty = false;
-        }
+        this.renderController?.dispose();
     }
 
     getEffectiveZoomLevel(): number {
@@ -529,11 +512,7 @@ export class TimelineView extends ItemView {
     private render(): void {
         // 保留中の coalesce 済み render をキャンセル（同 frame 内で同期 render が呼ばれたら
         // 二重描画しない）
-        if (this.renderRafId !== null) {
-            cancelAnimationFrame(this.renderRafId);
-            this.renderRafId = null;
-            this.renderDirty = false;
-        }
+        this.renderController?.cancelPending();
         this.saveScrollPosition();
         this.performRender();
     }
@@ -544,15 +523,7 @@ export class TimelineView extends ItemView {
      * トールバー / sidebar / pinch zoom 等の即時反映が必要な経路は render() を直呼び。
      */
     private scheduleRender(): void {
-        this.renderDirty = true;
-        if (this.renderRafId !== null) return;
-        this.renderRafId = requestAnimationFrame(() => {
-            this.renderRafId = null;
-            if (!this.renderDirty) return;
-            this.renderDirty = false;
-            this.saveScrollPosition();
-            this.performRender();
-        });
+        this.renderController.scheduleRender();
     }
 
     private saveScrollPosition(): void {

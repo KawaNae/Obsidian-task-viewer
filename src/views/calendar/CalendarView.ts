@@ -38,6 +38,7 @@ import { HandleManager } from '../timelineview/HandleManager';
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
+import { RenderController } from '../sharedUI/RenderController';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 import { CalendarExportStrategy } from '../../services/export/CalendarExportStrategy';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
@@ -92,6 +93,7 @@ export class CalendarView extends ItemView {
     private savedScrollTop: number | null = null;
     private sidebarOpenedThisSession = false;
     private readonly hoverParent = new TaskViewHoverParent();
+    private renderController: RenderController;
 
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
@@ -254,8 +256,16 @@ export class CalendarView extends ItemView {
             }
         });
 
-        this.unsubscribe = this.readService.onChange(() => {
-            this.render();
+        // Initialize render dispatch controller. CalendarView は partial 未対応のため
+        // tryPartial は常に false（→ 必ず full render に降格）。
+        this.renderController = new RenderController({
+            tryPartial: () => false,
+            performFull: () => this.render(),
+            refreshPinned: () => { /* partial 未対応なので呼ばれない */ },
+        });
+
+        this.unsubscribe = this.readService.onChange((taskId, changes) => {
+            this.renderController.handleChange(taskId, changes);
         });
     }
 
@@ -277,6 +287,7 @@ export class CalendarView extends ItemView {
             this.unsubscribeDelete();
             this.unsubscribeDelete = null;
         }
+        this.renderController?.dispose();
     }
 
     public refresh(): void {
