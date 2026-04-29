@@ -849,14 +849,19 @@ export class TimelineView extends ItemView {
 
         this.renderCurrentTimeIndicator();
 
-        // [DIAGNOSTIC] Scroll restoration temporarily disabled to isolate
-        // the iPad 7-day post-drag scroll bug. If the symptom disappears,
-        // the saveScrollPosition/restore path is the source. Expect a
-        // 1-frame scrollTop=0 flicker during edits while scrolled.
+        // Restore scroll position synchronously to avoid 1-frame "scroll-to-top" flicker.
+        // offsetTop の読み取り自体が forced reflow を誘発し layout が確定するので
+        // rAF 経由は不要。
         const newScrollArea = this.container.querySelector('.timeline-scroll-area') as HTMLElement | null;
-        if (newScrollArea && this.scrollToNowOnNextRender) {
-            this.scrollToNowOnNextRender = false;
-            this.scrollToCurrentTime();
+        if (newScrollArea) {
+            if (this.scrollToNowOnNextRender) {
+                this.scrollToNowOnNextRender = false;
+                this.scrollToCurrentTime();
+            } else if (this.savedScrollTop !== null) {
+                const newGrid = newScrollArea.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
+                const gridOffset = newGrid?.offsetTop ?? 0;
+                newScrollArea.scrollTop = gridOffset + this.savedScrollTop;
+            }
         }
 
         // Attach handles to the selected card after scroll restoration.
