@@ -32,6 +32,10 @@
     flex: 1;
     overflow-x: hidden;
     overflow-y: scroll;
+    /* We manage scroll restoration ourselves; disable Chromium's scroll
+       anchoring so it does not bump scrollTop when allday cards finish
+       laying out post-render (visible as per-render downward drift). */
+    overflow-anchor: none;
     position: relative;
     scrollbar-width: none;
     -ms-overflow-style: none;
