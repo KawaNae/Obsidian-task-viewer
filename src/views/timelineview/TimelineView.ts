@@ -103,7 +103,17 @@ export class TimelineView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private unsubscribeDelete: (() => void) | null = null;
     private currentTimeInterval: number | null = null;
+    // Scroll-restore: 3 値を保存し、復元時に allday 高さの一致で経路を選ぶ。
+    //   - savedAbsScrollTop: scrollArea.scrollTop の絶対値。allday 高さ不変なら誤差ゼロで復元できる。
+    //   - savedScrollTop:    grid 相対値 (scrollTop - grid.offsetTop)。allday 高さが変わったときに
+    //                        grid 内の表示位置を保つフォールバック (元の d97e38b 設計)。
+    //   - savedAlldayHeight: 復元時に「allday 高さが変わったか」を判定する基準。
+    // 動機: モバイル WebKit/Blink で grid.offsetTop の値が保存時/復元時で微妙にずれ、ドラッグ完了後
+    // のスクロール位置が下に流れる症状があった。allday 高さが変わらない経路 (= ドラッグ完了等) では
+    // offsetTop に頼らず絶対値で復元することで、計算誤差を回避する。
+    private savedAbsScrollTop: number | null = null;
     private savedScrollTop: number | null = null;
+    private savedAlldayHeight: number | null = null;
     private scrollToNowOnNextRender = false;
 
     /**
@@ -637,11 +647,13 @@ export class TimelineView extends ItemView {
     }
 
     private saveScrollPosition(): void {
-        const scrollArea = this.container.querySelector('.timeline-scroll-area');
+        const scrollArea = this.container.querySelector('.timeline-scroll-area') as HTMLElement | null;
         const grid = scrollArea?.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
+        const allday = scrollArea?.querySelector('.allday-section') as HTMLElement | null;
         if (scrollArea && grid) {
-            // Save relative to grid offset so allday height changes don't cause drift
+            this.savedAbsScrollTop = scrollArea.scrollTop;
             this.savedScrollTop = scrollArea.scrollTop - grid.offsetTop;
+            this.savedAlldayHeight = allday?.offsetHeight ?? 0;
         }
     }
 
@@ -850,17 +862,25 @@ export class TimelineView extends ItemView {
         this.renderCurrentTimeIndicator();
 
         // Restore scroll position synchronously to avoid 1-frame "scroll-to-top" flicker.
-        // offsetTop の読み取り自体が forced reflow を誘発し layout が確定するので
-        // rAF 経由は不要。
+        // allday 高さが保存時と一致する経路 (ドラッグ完了等) では絶対値で復元 — モバイル
+        // WebKit/Blink で grid.offsetTop が保存時/復元時に微妙にずれて下方ドリフトする問題を回避。
+        // allday 高さが変わった経路 (タスク追加削除等) は grid 相対値でフォールバックし、
+        // d97e38b の「allday 高さ変動を吸収」意図を温存する。
         const newScrollArea = this.container.querySelector('.timeline-scroll-area') as HTMLElement | null;
         if (newScrollArea) {
             if (this.scrollToNowOnNextRender) {
                 this.scrollToNowOnNextRender = false;
                 this.scrollToCurrentTime();
             } else if (this.savedScrollTop !== null) {
-                const newGrid = newScrollArea.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
-                const gridOffset = newGrid?.offsetTop ?? 0;
-                newScrollArea.scrollTop = gridOffset + this.savedScrollTop;
+                const newAllday = newScrollArea.querySelector('.allday-section') as HTMLElement | null;
+                const newAlldayHeight = newAllday?.offsetHeight ?? 0;
+                if (this.savedAbsScrollTop !== null && newAlldayHeight === this.savedAlldayHeight) {
+                    newScrollArea.scrollTop = this.savedAbsScrollTop;
+                } else {
+                    const newGrid = newScrollArea.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
+                    const gridOffset = newGrid?.offsetTop ?? 0;
+                    newScrollArea.scrollTop = gridOffset + this.savedScrollTop;
+                }
             }
         }
 
