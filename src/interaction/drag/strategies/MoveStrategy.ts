@@ -120,7 +120,7 @@ export class MoveStrategy extends BaseDragStrategy {
     // ========== Timeline Move ==========
 
     private initTimelineMove(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
-        this.scrollContainer = context.container.querySelector('.timeline-scroll-area') as HTMLElement;
+        this.scrollContainer = context.container.querySelector('.timeline-grid') as HTMLElement;
         const ghostContainer = this.scrollContainer?.querySelector('.timeline-scroll-area__grid') as HTMLElement
             || this.scrollContainer || context.container;
         this.ghostManager = new GhostManager(ghostContainer);

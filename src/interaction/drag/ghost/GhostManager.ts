@@ -52,11 +52,12 @@ export class GhostManager {
 
             if (dayCol) {
                 // Account for border-top of day-timeline-column
-                // For absolute-positioned ghosts in scroll-area, use container-relative offsets.
+                // For absolute-positioned ghosts in .timeline-grid (the scroll container),
+                // use container-relative offsets.
                 const computedStyle = window.getComputedStyle(dayCol);
                 const borderTop = parseFloat(computedStyle.borderTopWidth || '0');
 
-                // Position relative to timeline-scroll-area.
+                // Position relative to .timeline-grid (the scroll container).
                 // seg.top/seg.height are logical values and converted to display values here.
                 // left/width はソースカードの cascade レイアウト (TimelineSectionRenderer の
                 // calc((100% - 8px) * widthFraction) / calc(4px + (100% - 8px) * leftFraction))

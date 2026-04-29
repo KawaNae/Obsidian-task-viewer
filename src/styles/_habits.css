@@ -4,12 +4,16 @@
              habits-section__label, habit-row, habit inputs, collapsed state
 ============================================================================= */
 
-/* Habits Section Container (the grid row) */
+/* Habits Section Container (the grid row)
+   Sticky just below date-header. z-index between date-header (50) and
+   allday-section (30). top is the date-header height. */
 .habits-section {
     background-color: var(--tv-bg-habits);
     flex-shrink: 0;
     overflow-y: visible;
-    position: relative;
+    position: sticky;
+    top: var(--header-height);
+    z-index: 45;
 }
 
 /* Axis Cell (column 1: toggle + vertical label) */

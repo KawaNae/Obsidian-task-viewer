@@ -3,11 +3,16 @@
    Contains: date-header, date-header__cell, is-today highlight
 ============================================================================= */
 
-/* Date Header Row */
+/* Date Header Row
+   Sticky at top of .timeline-grid scroll viewport. z-index above
+   habits-section (45) and allday-section (30) so it always stays on top. */
 .date-header {
     background-color: var(--tv-bg-date-header);
     flex-shrink: 0;
     overflow-y: hidden;
+    position: sticky;
+    top: 0;
+    z-index: 50;
 }
 
 .date-header__cell {
