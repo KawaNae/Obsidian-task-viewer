@@ -103,17 +103,20 @@ export class TimelineView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private unsubscribeDelete: (() => void) | null = null;
     private currentTimeInterval: number | null = null;
-    // Scroll-restore: 3 値を保存し、復元時に allday 高さの一致で経路を選ぶ。
-    //   - savedAbsScrollTop: scrollArea.scrollTop の絶対値。allday 高さ不変なら誤差ゼロで復元できる。
-    //   - savedScrollTop:    grid 相対値 (scrollTop - grid.offsetTop)。allday 高さが変わったときに
-    //                        grid 内の表示位置を保つフォールバック (元の d97e38b 設計)。
-    //   - savedAlldayHeight: 復元時に「allday 高さが変わったか」を判定する基準。
-    // 動機: モバイル WebKit/Blink で grid.offsetTop の値が保存時/復元時で微妙にずれ、ドラッグ完了後
-    // のスクロール位置が下に流れる症状があった。allday 高さが変わらない経路 (= ドラッグ完了等) では
-    // offsetTop に頼らず絶対値で復元することで、計算誤差を回避する。
+    // Scroll-restore: 3 値を保存し、復元時に allday 内容が変わったかで経路を選ぶ。
+    //   - savedAbsScrollTop:     scrollArea.scrollTop の絶対値。allday 内容不変なら誤差ゼロで復元。
+    //   - savedScrollTop:        grid 相対値 (scrollTop - grid.offsetTop)。allday 内容変動時の
+    //                            フォールバック (元の d97e38b 設計を温存)。
+    //   - savedAlldayCardCount:  allday の .task-card 数。WebKit の subpixel rounding に左右されない
+    //                            離散指標で「allday が変わったか」を判定する。
+    // 動機: モバイル WebKit (iPad) で allday.offsetHeight / grid.offsetTop が保存時/復元時に
+    // カードあたり一定量ずれ、ドラッグ完了後のスクロール位置がカード数 × 単位誤差ぶん下方へ
+    // 流れる症状があった。連続値の高さ比較は WebKit の rounding 誤差を吸収できないので、
+    // allday の内容変化を表すのに整数のカード数を使い、不変経路では offsetTop を一切読まずに
+    // 絶対値で復元する。
     private savedAbsScrollTop: number | null = null;
     private savedScrollTop: number | null = null;
-    private savedAlldayHeight: number | null = null;
+    private savedAlldayCardCount: number | null = null;
     private scrollToNowOnNextRender = false;
 
     /**
@@ -653,7 +656,7 @@ export class TimelineView extends ItemView {
         if (scrollArea && grid) {
             this.savedAbsScrollTop = scrollArea.scrollTop;
             this.savedScrollTop = scrollArea.scrollTop - grid.offsetTop;
-            this.savedAlldayHeight = allday?.offsetHeight ?? 0;
+            this.savedAlldayCardCount = allday?.querySelectorAll('.task-card').length ?? 0;
         }
     }
 
@@ -862,10 +865,10 @@ export class TimelineView extends ItemView {
         this.renderCurrentTimeIndicator();
 
         // Restore scroll position synchronously to avoid 1-frame "scroll-to-top" flicker.
-        // allday 高さが保存時と一致する経路 (ドラッグ完了等) では絶対値で復元 — モバイル
-        // WebKit/Blink で grid.offsetTop が保存時/復元時に微妙にずれて下方ドリフトする問題を回避。
-        // allday 高さが変わった経路 (タスク追加削除等) は grid 相対値でフォールバックし、
-        // d97e38b の「allday 高さ変動を吸収」意図を温存する。
+        // allday の .task-card 数が保存時と一致する経路 (ドラッグ完了等) では絶対値で復元 —
+        // iPad WebKit で offsetHeight/offsetTop がカード単位でずれる subpixel rounding 誤差を回避。
+        // 数が変わった経路 (タスク追加削除等) は grid 相対値でフォールバックし、d97e38b の
+        // 「allday 内容変動を吸収」意図を温存する。
         const newScrollArea = this.container.querySelector('.timeline-scroll-area') as HTMLElement | null;
         if (newScrollArea) {
             if (this.scrollToNowOnNextRender) {
@@ -873,8 +876,8 @@ export class TimelineView extends ItemView {
                 this.scrollToCurrentTime();
             } else if (this.savedScrollTop !== null) {
                 const newAllday = newScrollArea.querySelector('.allday-section') as HTMLElement | null;
-                const newAlldayHeight = newAllday?.offsetHeight ?? 0;
-                if (this.savedAbsScrollTop !== null && newAlldayHeight === this.savedAlldayHeight) {
+                const newAlldayCardCount = newAllday?.querySelectorAll('.task-card').length ?? 0;
+                if (this.savedAbsScrollTop !== null && newAlldayCardCount === this.savedAlldayCardCount) {
                     newScrollArea.scrollTop = this.savedAbsScrollTop;
                 } else {
                     const newGrid = newScrollArea.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
