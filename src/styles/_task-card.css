@@ -14,7 +14,6 @@
     /* Layout */
     display: flex;
     flex-direction: column;
-    touch-action: pan-y;
 
     /* Box Model */
     padding: 2px 2px 2px 8px;
