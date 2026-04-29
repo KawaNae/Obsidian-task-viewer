@@ -619,10 +619,21 @@ export class TimelineView extends ItemView {
     }
 
     /** Scrolls the timeline to center the current time-of-day vertically.
-     *  Uses the time-axis-column as a vertical anchor; the date columns'
-     *  contents are irrelevant to the vertical scroll target, so this works
-     *  whether or not today's column happens to be in the visible date range. */
+     *  Uses the time-axis-column as a vertical anchor; works whether or not
+     *  today's column is in the visible date range.
+     *
+     *  Runs sync + rAF: the sync pass places the scroll on this frame so the
+     *  user sees no scroll-to-top flicker; the rAF pass re-runs after layout
+     *  has settled to absorb transient clientHeight / allday-height shifts
+     *  (e.g. on initial render, allday cards or the leaf size finalize one
+     *  frame later). When layout is already stable, the rAF pass is a
+     *  no-op (writes the same value). */
     private scrollToCurrentTime(): void {
+        this.applyScrollToCurrentTime();
+        requestAnimationFrame(() => this.applyScrollToCurrentTime());
+    }
+
+    private applyScrollToCurrentTime(): void {
         const scrollArea = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (!scrollArea) return;
         const timeCol = scrollArea.querySelector('.time-axis-column') as HTMLElement | null;
