@@ -621,9 +621,15 @@ export class TimelineView extends ItemView {
     /** Scrolls the timeline to center the current time vertically. */
     private scrollToCurrentTime(): void {
         const scrollArea = this.container.querySelector('.timeline-grid') as HTMLElement | null;
-        if (!scrollArea) return;
-        // Only scroll if today is visible (indicator was rendered)
-        if (!this.container.querySelector('.current-time-indicator')) return;
+        if (!scrollArea) {
+            console.log('[scroll-debug] scrollToCurrentTime: no scrollArea');
+            return;
+        }
+        const indicator = this.container.querySelector('.current-time-indicator');
+        if (!indicator) {
+            console.log('[scroll-debug] scrollToCurrentTime: no indicator, bail');
+            return;
+        }
 
         const now = new Date();
         const startHour = this.plugin.settings.startHour;
@@ -632,13 +638,33 @@ export class TimelineView extends ItemView {
 
         const hourHeight = 60 * this.getEffectiveZoomLevel();
         const nowPx = minutesFromStart * hourHeight / 60;
-        // Offset of the timed grid from the scroll container's content origin.
-        // getBoundingClientRect avoids dependence on positioned-ancestor chain.
         const timeCol = scrollArea.querySelector('.time-axis-column') as HTMLElement | null;
         const gridOffset = timeCol
             ? timeCol.getBoundingClientRect().top - scrollArea.getBoundingClientRect().top + scrollArea.scrollTop
             : 0;
-        scrollArea.scrollTop = gridOffset + nowPx - scrollArea.clientHeight / 2;
+        const target = gridOffset + nowPx - scrollArea.clientHeight / 2;
+        console.log('[scroll-debug] scrollToCurrentTime', JSON.stringify({
+            t: Math.round(performance.now()),
+            now: `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`,
+            startHour,
+            minutesFromStart,
+            hourHeight,
+            nowPx,
+            gridOffset,
+            timeColTop: timeCol?.getBoundingClientRect().top ?? -1,
+            scrollAreaTop: scrollArea.getBoundingClientRect().top,
+            scrollAreaScrollTop: scrollArea.scrollTop,
+            clientHeight: scrollArea.clientHeight,
+            scrollHeight: scrollArea.scrollHeight,
+            target,
+            zoom: this.getEffectiveZoomLevel(),
+        }));
+        scrollArea.scrollTop = target;
+        console.log('[scroll-debug] scrollToCurrentTime after', JSON.stringify({
+            t: Math.round(performance.now()),
+            scrollTopAfterWrite: scrollArea.scrollTop,
+            target,
+        }));
     }
 
     /**
