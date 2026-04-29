@@ -243,6 +243,8 @@ export class DragHandler implements DragContext {
         const target = e.target as HTMLElement;
         if (target.closest('.task-card__handle-btn')) {
             e.stopPropagation();
+            // WebKit/Blink finalize the scroll-gesture decision at touchstart; dynamic touchAction='none' in onPointerDown arrives too late.
+            if (e.cancelable) e.preventDefault();
         }
     }
 
