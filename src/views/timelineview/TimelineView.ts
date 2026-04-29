@@ -109,6 +109,7 @@ export class TimelineView extends ItemView {
     // grid.offsetTop returning intermediate values mid-render.
     private savedScrollTop: number | null = null;
     private scrollToNowOnNextRender = false;
+    private stickyAnchorObserver: ResizeObserver | null = null;
 
     /**
      * Init barrier: viewState-dependent initialization (e.g. computing the
@@ -517,6 +518,13 @@ export class TimelineView extends ItemView {
         this.initBarrier.domReady = true;
         this.tryRunInitialStateLogic();
 
+        // Self-heal --allday-sticky-top whenever .date-header or .habits-section
+        // resizes (habits collapse, window resize, sidebar toggle, daysToShow
+        // change). Re-observed at the end of performRender after empty().
+        this.stickyAnchorObserver = new ResizeObserver(() => {
+            this.updateAlldayStickyTop();
+        });
+
         // Initial render — scroll to current time
         this.scrollToNowOnNextRender = true;
         this.render();
@@ -569,6 +577,10 @@ export class TimelineView extends ItemView {
         if (this.currentTimeInterval) {
             window.clearInterval(this.currentTimeInterval);
             this.currentTimeInterval = null;
+        }
+        if (this.stickyAnchorObserver) {
+            this.stickyAnchorObserver.disconnect();
+            this.stickyAnchorObserver = null;
         }
         this.renderController?.dispose();
     }
@@ -651,7 +663,8 @@ export class TimelineView extends ItemView {
 
     /** Sets --allday-sticky-top to date-header.offsetHeight + habits-section.offsetHeight
      *  so the sticky allday-section stacks below them. Habits height is dynamic
-     *  (collapsed vs expanded), so this must run after each render. */
+     *  (collapsed vs expanded), so this must run after each render and whenever
+     *  either anchor resizes (handled by stickyAnchorObserver). */
     private updateAlldayStickyTop(): void {
         const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (!grid) return;
@@ -659,6 +672,12 @@ export class TimelineView extends ItemView {
         const habits = grid.querySelector('.habits-section') as HTMLElement | null;
         const top = (dateHeader?.offsetHeight ?? 0) + (habits?.offsetHeight ?? 0);
         grid.style.setProperty('--allday-sticky-top', `${top}px`);
+
+        if (this.stickyAnchorObserver) {
+            this.stickyAnchorObserver.disconnect();
+            if (dateHeader) this.stickyAnchorObserver.observe(dateHeader);
+            if (habits) this.stickyAnchorObserver.observe(habits);
+        }
     }
 
     private getPinnedListCallbacks(): PinnedListCallbacks {

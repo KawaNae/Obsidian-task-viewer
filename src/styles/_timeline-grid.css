@@ -56,7 +56,7 @@
 .timeline-scroll-area > .allday-section {
     position: sticky;
     top: var(--allday-sticky-top, var(--header-height));
-    z-index: 30;
+    z-index: var(--z-timeline-allday-sticky);
 }
 
 /* Mobile: disable sticky so allday scrolls with timeline */

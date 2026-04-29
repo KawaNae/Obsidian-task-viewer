@@ -13,7 +13,7 @@
     overflow-y: visible;
     position: sticky;
     top: var(--header-height);
-    z-index: 45;
+    z-index: var(--z-timeline-habits-section);
 }
 
 /* Axis Cell (column 1: toggle + vertical label) */
