@@ -236,8 +236,8 @@ export class DragHandler implements DragContext {
 
     /**
      * Capture-phase touchstart handler.
-     * Stops propagation when touching a drag handle to prevent
-     * Obsidian's gesture recognizers from receiving the event.
+     * On a drag handle: stops propagation (blocks Obsidian's gesture recognizers)
+     * and cancels the native scroll-gesture decision before WebKit/Blink lock it in.
      */
     private onTouchStart(e: TouchEvent) {
         const target = e.target as HTMLElement;
