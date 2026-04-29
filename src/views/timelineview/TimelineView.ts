@@ -618,26 +618,22 @@ export class TimelineView extends ItemView {
         this.gridRenderer.renderCurrentTimeIndicator();
     }
 
-    /** Scrolls the timeline to center the current time-of-day vertically.
-     *  Uses the time-axis-column as a vertical anchor; works whether or not
-     *  today's column is in the visible date range.
+    /** Scrolls so that the current time-of-day sits HOURS_ABOVE_NOW hours
+     *  below the timed grid's top edge (= just below the sticky stack of
+     *  date-header / habits / allday).
      *
-     *  Runs sync + rAF: the sync pass places the scroll on this frame so the
-     *  user sees no scroll-to-top flicker; the rAF pass re-runs after layout
-     *  has settled to absorb transient clientHeight / allday-height shifts
-     *  (e.g. on initial render, allday cards or the leaf size finalize one
-     *  frame later). When layout is already stable, the rAF pass is a
-     *  no-op (writes the same value). */
+     *  Formula is intentionally layout-independent: it uses only the current
+     *  time and the zoom-derived hourHeight. It does NOT read gridOffset
+     *  (allday-height-dependent) or clientHeight (leaf-size-dependent), so
+     *  transient layout values during render — which previously caused
+     *  initial scrollTo to land off-by-N from the settled value, visible as
+     *  a jump on the next Now click — no longer affect the result. The
+     *  indicator's pixel position within the visible area shifts naturally
+     *  with allday/leaf size, but scrollTop itself is stable across renders. */
     private scrollToCurrentTime(): void {
-        this.applyScrollToCurrentTime();
-        requestAnimationFrame(() => this.applyScrollToCurrentTime());
-    }
-
-    private applyScrollToCurrentTime(): void {
         const scrollArea = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (!scrollArea) return;
-        const timeCol = scrollArea.querySelector('.time-axis-column') as HTMLElement | null;
-        if (!timeCol) return;
+        if (!scrollArea.querySelector('.time-axis-column')) return;
 
         const now = new Date();
         const startHour = this.plugin.settings.startHour;
@@ -646,8 +642,8 @@ export class TimelineView extends ItemView {
 
         const hourHeight = 60 * this.getEffectiveZoomLevel();
         const nowPx = minutesFromStart * hourHeight / 60;
-        const gridOffset = timeCol.getBoundingClientRect().top - scrollArea.getBoundingClientRect().top + scrollArea.scrollTop;
-        scrollArea.scrollTop = gridOffset + nowPx - scrollArea.clientHeight / 2;
+        const HOURS_ABOVE_NOW = 2;
+        scrollArea.scrollTop = nowPx - HOURS_ABOVE_NOW * hourHeight;
     }
 
     /**
