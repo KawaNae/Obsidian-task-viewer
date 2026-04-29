@@ -521,14 +521,7 @@ export class TimelineView extends ItemView {
         // Self-heal --allday-sticky-top whenever .date-header or .habits-section
         // resizes (habits collapse, window resize, sidebar toggle, daysToShow
         // change). Re-observed at the end of performRender after empty().
-        this.stickyAnchorObserver = new ResizeObserver((entries) => {
-            console.log('[scroll-debug] resize-observer fire', JSON.stringify({
-                t: Math.round(performance.now()),
-                entries: entries.length,
-                targets: entries.map(e => (e.target as HTMLElement).className.split(' ').filter(c => c.startsWith('date-') || c.startsWith('habits-'))[0] ?? '?'),
-                scrollTop: (this.container.querySelector('.timeline-grid') as HTMLElement | null)?.scrollTop ?? -1,
-                scrollHeight: (this.container.querySelector('.timeline-grid') as HTMLElement | null)?.scrollHeight ?? -1,
-            }));
+        this.stickyAnchorObserver = new ResizeObserver(() => {
             this.updateAlldayStickyTop();
         });
 
@@ -618,32 +611,20 @@ export class TimelineView extends ItemView {
         this.gridRenderer.renderCurrentTimeIndicator();
     }
 
-    /** Scrolls so that the current time-of-day sits HOURS_ABOVE_NOW hours
-     *  below the timed grid's top edge (= just below the sticky stack of
-     *  date-header / habits / allday).
-     *
-     *  Formula is intentionally layout-independent: it uses only the current
-     *  time and the zoom-derived hourHeight. It does NOT read gridOffset
-     *  (allday-height-dependent) or clientHeight (leaf-size-dependent), so
-     *  transient layout values during render — which previously caused
-     *  initial scrollTo to land off-by-N from the settled value, visible as
-     *  a jump on the next Now click — no longer affect the result. The
-     *  indicator's pixel position within the visible area shifts naturally
-     *  with allday/leaf size, but scrollTop itself is stable across renders. */
+    /** Scrolls so that the current-time indicator sits at viewport vertical
+     *  center. Delegates the center calculation to the browser via
+     *  `Element.scrollIntoView({ block: 'center' })` so that JS never reads a
+     *  transient `clientHeight` mid-render — the browser uses the fully
+     *  resolved layout each time it executes the call. To absorb post-render
+     *  settle (allday/habits/header height), the caller invokes this across
+     *  two `requestAnimationFrame` ticks ("last write wins"). */
     private scrollToCurrentTime(): void {
         const scrollArea = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (!scrollArea) return;
         if (!scrollArea.querySelector('.time-axis-column')) return;
-
-        const now = new Date();
-        const startHour = this.plugin.settings.startHour;
-        let minutesFromStart = now.getHours() * 60 + now.getMinutes() - startHour * 60;
-        if (minutesFromStart < 0) minutesFromStart += 1440;
-
-        const hourHeight = 60 * this.getEffectiveZoomLevel();
-        const nowPx = minutesFromStart * hourHeight / 60;
-        const HOURS_ABOVE_NOW = 2;
-        scrollArea.scrollTop = nowPx - HOURS_ABOVE_NOW * hourHeight;
+        const indicator = scrollArea.querySelector('.current-time-indicator') as HTMLElement | null;
+        if (!indicator) return;
+        indicator.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' as ScrollBehavior });
     }
 
     /**
@@ -671,14 +652,6 @@ export class TimelineView extends ItemView {
     private saveScrollPosition(): void {
         const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (grid) {
-            console.log('[scroll-debug] save', JSON.stringify({
-                t: Math.round(performance.now()),
-                scrollTop: grid.scrollTop,
-                scrollHeight: grid.scrollHeight,
-                clientHeight: grid.clientHeight,
-                alldayCards: grid.querySelectorAll('.allday-section .task-card').length,
-                timedCards: grid.querySelectorAll('.timeline-scroll-area__grid .task-card').length,
-            }));
             this.savedScrollTop = grid.scrollTop;
         }
     }
@@ -694,21 +667,7 @@ export class TimelineView extends ItemView {
         const dateHeader = grid.querySelector('.date-header') as HTMLElement | null;
         const habits = grid.querySelector('.habits-section') as HTMLElement | null;
         const top = (dateHeader?.offsetHeight ?? 0) + (habits?.offsetHeight ?? 0);
-        console.log('[scroll-debug] sticky-top before', JSON.stringify({
-            t: Math.round(performance.now()),
-            scrollTop: grid.scrollTop,
-            scrollHeight: grid.scrollHeight,
-            dateHeaderH: dateHeader?.offsetHeight ?? 0,
-            habitsH: habits?.offsetHeight ?? 0,
-            newTop: top,
-            prevTop: getComputedStyle(grid).getPropertyValue('--allday-sticky-top'),
-        }));
         grid.style.setProperty('--allday-sticky-top', `${top}px`);
-        console.log('[scroll-debug] sticky-top after', JSON.stringify({
-            t: Math.round(performance.now()),
-            scrollTop: grid.scrollTop,
-            scrollHeight: grid.scrollHeight,
-        }));
     }
 
     /** Rebind the resize observer to the freshly-rendered anchor elements.
@@ -943,42 +902,18 @@ export class TimelineView extends ItemView {
         // .timeline-grid is the single scroll container; scrollTop alone fully
         // describes scroll position — no offsetTop arithmetic needed.
         const newGrid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
-        console.log('[scroll-debug] restore-pre', JSON.stringify({
-            t: Math.round(performance.now()),
-            scrollTopNow: newGrid?.scrollTop ?? -1,
-            scrollHeight: newGrid?.scrollHeight ?? -1,
-            clientHeight: newGrid?.clientHeight ?? -1,
-            saved: this.savedScrollTop,
-            target: this.savedScrollTop,
-        }));
         if (newGrid) {
             if (this.scrollToNowOnNextRender) {
                 this.scrollToNowOnNextRender = false;
                 this.scrollToCurrentTime();
+                requestAnimationFrame(() => {
+                    this.scrollToCurrentTime();
+                    requestAnimationFrame(() => this.scrollToCurrentTime());
+                });
             } else if (this.savedScrollTop !== null) {
                 newGrid.scrollTop = this.savedScrollTop;
             }
         }
-        console.log('[scroll-debug] restore-post', JSON.stringify({
-            t: Math.round(performance.now()),
-            scrollTopAfterWrite: newGrid?.scrollTop ?? -1,
-            saved: this.savedScrollTop,
-            delta: (newGrid?.scrollTop ?? 0) - (this.savedScrollTop ?? 0),
-        }));
-        requestAnimationFrame(() => {
-            console.log('[scroll-debug] restore-raf1', JSON.stringify({
-                t: Math.round(performance.now()),
-                scrollTop: newGrid?.scrollTop ?? -1,
-                scrollHeight: newGrid?.scrollHeight ?? -1,
-            }));
-            requestAnimationFrame(() => {
-                console.log('[scroll-debug] restore-raf2', JSON.stringify({
-                    t: Math.round(performance.now()),
-                    scrollTop: newGrid?.scrollTop ?? -1,
-                    scrollHeight: newGrid?.scrollHeight ?? -1,
-                }));
-            });
-        });
 
         // Attach handles to the selected card after scroll restoration.
         // Section renderers already tagged cards with `.selected` during render;
