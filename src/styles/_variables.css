@@ -59,6 +59,9 @@
     --z-current-time-indicator: 200;
     --z-task-card-handle: 20;
     --z-task-card-allday: 25;
+    --z-timeline-allday-sticky: 30;
+    --z-timeline-habits-section: 45;
+    --z-timeline-date-header: 50;
     --z-allday-cell-drag-over: 50;
     --z-timer-widget: 65;
     --z-task-card-allday-handle: 100;

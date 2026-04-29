@@ -103,8 +103,13 @@ export class TimelineView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private unsubscribeDelete: (() => void) | null = null;
     private currentTimeInterval: number | null = null;
+    // Scroll container is .timeline-grid (the single scrollable element). Save
+    // and restore use scrollTop directly — no offsetTop arithmetic, no allday
+    // height bookkeeping. Avoids iPad WebKit deferred-layout drift caused by
+    // grid.offsetTop returning intermediate values mid-render.
     private savedScrollTop: number | null = null;
     private scrollToNowOnNextRender = false;
+    private stickyAnchorObserver: ResizeObserver | null = null;
 
     /**
      * Init barrier: viewState-dependent initialization (e.g. computing the
@@ -423,7 +428,7 @@ export class TimelineView extends ItemView {
             if (newZoom === oldZoom) return;
 
             // Keep the time under cursor stable during zoom when cursor is over scroll area.
-            const scrollArea = this.container.querySelector('.timeline-scroll-area') as HTMLElement | null;
+            const scrollArea = this.container.querySelector('.timeline-grid') as HTMLElement | null;
             if (scrollArea) {
                 const rect = scrollArea.getBoundingClientRect();
                 const cursorY = e.clientY - rect.top;
@@ -452,7 +457,7 @@ export class TimelineView extends ItemView {
 
             // Capture initial midpoint and scrollTop so scroll correction uses absolute values
             // instead of accumulating per-frame rounding errors.
-            const scrollArea = this.container.querySelector('.timeline-scroll-area') as HTMLElement | null;
+            const scrollArea = this.container.querySelector('.timeline-grid') as HTMLElement | null;
             if (scrollArea) {
                 const rect = scrollArea.getBoundingClientRect();
                 this.pinchInitialMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
@@ -473,7 +478,7 @@ export class TimelineView extends ItemView {
 
             // Compute scrollTop from initial values (absolute), not from previous frame (relative).
             // This avoids rounding-error accumulation across frames.
-            const scrollArea = this.container.querySelector('.timeline-scroll-area') as HTMLElement | null;
+            const scrollArea = this.container.querySelector('.timeline-grid') as HTMLElement | null;
             if (scrollArea) {
                 const midY = this.pinchInitialMidY;
                 if (midY >= 0 && midY <= scrollArea.clientHeight) {
@@ -512,6 +517,13 @@ export class TimelineView extends ItemView {
         // immediately; otherwise it waits for the missing gate.
         this.initBarrier.domReady = true;
         this.tryRunInitialStateLogic();
+
+        // Self-heal --allday-sticky-top whenever .date-header or .habits-section
+        // resizes (habits collapse, window resize, sidebar toggle, daysToShow
+        // change). Re-observed at the end of performRender after empty().
+        this.stickyAnchorObserver = new ResizeObserver(() => {
+            this.updateAlldayStickyTop();
+        });
 
         // Initial render — scroll to current time
         this.scrollToNowOnNextRender = true;
@@ -566,6 +578,10 @@ export class TimelineView extends ItemView {
             window.clearInterval(this.currentTimeInterval);
             this.currentTimeInterval = null;
         }
+        if (this.stickyAnchorObserver) {
+            this.stickyAnchorObserver.disconnect();
+            this.stickyAnchorObserver = null;
+        }
         this.renderController?.dispose();
     }
 
@@ -595,23 +611,20 @@ export class TimelineView extends ItemView {
         this.gridRenderer.renderCurrentTimeIndicator();
     }
 
-    /** Scrolls the timeline to center the current time vertically. */
+    /** Scrolls so that the current-time indicator sits at viewport vertical
+     *  center. Delegates the center calculation to the browser via
+     *  `Element.scrollIntoView({ block: 'center' })` so that JS never reads a
+     *  transient `clientHeight` mid-render — the browser uses the fully
+     *  resolved layout each time it executes the call. To absorb post-render
+     *  settle (allday/habits/header height), the caller invokes this across
+     *  two `requestAnimationFrame` ticks ("last write wins"). */
     private scrollToCurrentTime(): void {
-        const scrollArea = this.container.querySelector('.timeline-scroll-area') as HTMLElement | null;
+        const scrollArea = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (!scrollArea) return;
-        // Only scroll if today is visible (indicator was rendered)
-        if (!this.container.querySelector('.current-time-indicator')) return;
-
-        const now = new Date();
-        const startHour = this.plugin.settings.startHour;
-        let minutesFromStart = now.getHours() * 60 + now.getMinutes() - startHour * 60;
-        if (minutesFromStart < 0) minutesFromStart += 1440;
-
-        const hourHeight = 60 * this.getEffectiveZoomLevel();
-        const nowPx = minutesFromStart * hourHeight / 60;
-        const timeCol = scrollArea.querySelector('.time-axis-column') as HTMLElement | null;
-        const gridOffset = timeCol?.offsetTop ?? 0;
-        scrollArea.scrollTop = gridOffset + nowPx - scrollArea.clientHeight / 2;
+        if (!scrollArea.querySelector('.time-axis-column')) return;
+        const indicator = scrollArea.querySelector('.current-time-indicator') as HTMLElement | null;
+        if (!indicator) return;
+        indicator.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' as ScrollBehavior });
     }
 
     /**
@@ -637,12 +650,37 @@ export class TimelineView extends ItemView {
     }
 
     private saveScrollPosition(): void {
-        const scrollArea = this.container.querySelector('.timeline-scroll-area');
-        const grid = scrollArea?.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
-        if (scrollArea && grid) {
-            // Save relative to grid offset so allday height changes don't cause drift
-            this.savedScrollTop = scrollArea.scrollTop - grid.offsetTop;
+        const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
+        if (grid) {
+            this.savedScrollTop = grid.scrollTop;
         }
+    }
+
+    /** Sets --allday-sticky-top to date-header.offsetHeight + habits-section.offsetHeight
+     *  so the sticky allday-section stacks below them. Idempotent on size; safe to
+     *  call from the resize observer callback (does NOT rebind the observer here —
+     *  doing so re-arms the initial-observation callback per observe() call and
+     *  causes an infinite ping-pong loop). */
+    private updateAlldayStickyTop(): void {
+        const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
+        if (!grid) return;
+        const dateHeader = grid.querySelector('.date-header') as HTMLElement | null;
+        const habits = grid.querySelector('.habits-section') as HTMLElement | null;
+        const top = (dateHeader?.offsetHeight ?? 0) + (habits?.offsetHeight ?? 0);
+        grid.style.setProperty('--allday-sticky-top', `${top}px`);
+    }
+
+    /** Rebind the resize observer to the freshly-rendered anchor elements.
+     *  Called from performRender after container.empty() rebuilds the DOM. */
+    private rebindStickyAnchorObserver(): void {
+        if (!this.stickyAnchorObserver) return;
+        const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
+        if (!grid) return;
+        const dateHeader = grid.querySelector('.date-header') as HTMLElement | null;
+        const habits = grid.querySelector('.habits-section') as HTMLElement | null;
+        this.stickyAnchorObserver.disconnect();
+        if (dateHeader) this.stickyAnchorObserver.observe(dateHeader);
+        if (habits) this.stickyAnchorObserver.observe(habits);
     }
 
     private getPinnedListCallbacks(): PinnedListCallbacks {
@@ -849,18 +887,31 @@ export class TimelineView extends ItemView {
 
         this.renderCurrentTimeIndicator();
 
-        // Restore scroll position synchronously to avoid 1-frame "scroll-to-top" flicker.
-        // offsetTop の読み取り自体が forced reflow を誘発し layout が確定するので
-        // rAF 経由は不要。
-        const newScrollArea = this.container.querySelector('.timeline-scroll-area') as HTMLElement | null;
-        if (newScrollArea) {
+        // Update --allday-sticky-top so allday-section sticks below the
+        // sticky date-header + habits-section. Read offsetHeight after the
+        // section renders so the value reflects the actual rendered heights
+        // (habits-section height varies with collapsed/expanded state).
+        this.updateAlldayStickyTop();
+        // Rebind observer to the freshly-rendered anchor elements after
+        // container.empty() detached the previous ones. Done outside
+        // updateAlldayStickyTop to avoid observer ping-pong (each observe()
+        // call fires an initial-observation callback).
+        this.rebindStickyAnchorObserver();
+
+        // Restore scroll position synchronously to avoid 1-frame flicker.
+        // .timeline-grid is the single scroll container; scrollTop alone fully
+        // describes scroll position — no offsetTop arithmetic needed.
+        const newGrid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
+        if (newGrid) {
             if (this.scrollToNowOnNextRender) {
                 this.scrollToNowOnNextRender = false;
                 this.scrollToCurrentTime();
+                requestAnimationFrame(() => {
+                    this.scrollToCurrentTime();
+                    requestAnimationFrame(() => this.scrollToCurrentTime());
+                });
             } else if (this.savedScrollTop !== null) {
-                const newGrid = newScrollArea.querySelector('.timeline-scroll-area__grid') as HTMLElement | null;
-                const gridOffset = newGrid?.offsetTop ?? 0;
-                newScrollArea.scrollTop = gridOffset + this.savedScrollTop;
+                newGrid.scrollTop = this.savedScrollTop;
             }
         }
 

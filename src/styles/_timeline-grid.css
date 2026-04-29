@@ -20,13 +20,26 @@
     flex-shrink: 0;
 }
 
-/* Timeline Grid Container (Flex Column of Rows) */
+/* Timeline Grid Container (Flex Column of Rows)
+   Acts as the single scroll container for the entire timeline (date-header,
+   habits-section, allday-section, and timed grid all scroll within it).
+   Scroll responsibility lives here so saveScrollPosition / restore can rely
+   on a single scrollTop value without offsetTop arithmetic — fixes iPad
+   WebKit deferred-layout drift. */
 .timeline-grid {
     display: flex;
     flex-direction: column;
     flex: 1;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: scroll;
+    /* We manage scroll restoration ourselves; disable Chromium's scroll
+       anchoring so it does not bump scrollTop when allday cards finish
+       laying out post-render (visible as per-render downward drift). */
+    overflow-anchor: none;
     position: relative;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    background-color: var(--tv-bg-timeline);
 }
 
 /* Common Row Style */
@@ -35,25 +48,19 @@
     width: 100%;
 }
 
-/* Timeline Scroll Area */
+/* Transparent passthrough box (was the scroll container previously).
+   Keeps class name for export / ghost / downstream queries; no scrolling. */
 .timeline-scroll-area {
-    flex: 1;
-    overflow-x: hidden;
-    overflow-y: scroll;
+    overflow: visible;
     position: relative;
-    /* Hide scrollbar but keep scroll functionality */
-    scrollbar-width: none;
-    /* Firefox */
-    -ms-overflow-style: none;
-    /* IE/Edge */
-    background-color: var(--tv-bg-timeline);
 }
 
-/* PC: allday stays fixed at top via sticky */
+/* PC: allday stays fixed below the sticky date-header + habits-section.
+   --allday-sticky-top is set from JS after render based on actual heights. */
 .timeline-scroll-area > .allday-section {
     position: sticky;
-    top: 0;
-    z-index: 30;
+    top: var(--allday-sticky-top, var(--header-height));
+    z-index: var(--z-timeline-allday-sticky);
 }
 
 /* Mobile: disable sticky so allday scrolls with timeline */
@@ -71,7 +78,7 @@
 }
 
 /* Webkit browsers (Chrome, Safari, Obsidian) */
-.timeline-scroll-area::-webkit-scrollbar {
+.timeline-grid::-webkit-scrollbar {
     display: none;
 }
 
