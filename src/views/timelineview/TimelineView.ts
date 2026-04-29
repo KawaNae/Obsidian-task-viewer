@@ -679,9 +679,10 @@ export class TimelineView extends ItemView {
     }
 
     /** Sets --allday-sticky-top to date-header.offsetHeight + habits-section.offsetHeight
-     *  so the sticky allday-section stacks below them. Habits height is dynamic
-     *  (collapsed vs expanded), so this must run after each render and whenever
-     *  either anchor resizes (handled by stickyAnchorObserver). */
+     *  so the sticky allday-section stacks below them. Idempotent on size; safe to
+     *  call from the resize observer callback (does NOT rebind the observer here —
+     *  doing so re-arms the initial-observation callback per observe() call and
+     *  causes an infinite ping-pong loop). */
     private updateAlldayStickyTop(): void {
         const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (!grid) return;
@@ -698,17 +699,24 @@ export class TimelineView extends ItemView {
             prevTop: getComputedStyle(grid).getPropertyValue('--allday-sticky-top'),
         }));
         grid.style.setProperty('--allday-sticky-top', `${top}px`);
-
-        if (this.stickyAnchorObserver) {
-            this.stickyAnchorObserver.disconnect();
-            if (dateHeader) this.stickyAnchorObserver.observe(dateHeader);
-            if (habits) this.stickyAnchorObserver.observe(habits);
-        }
         console.log('[scroll-debug] sticky-top after', JSON.stringify({
             t: Math.round(performance.now()),
             scrollTop: grid.scrollTop,
             scrollHeight: grid.scrollHeight,
         }));
+    }
+
+    /** Rebind the resize observer to the freshly-rendered anchor elements.
+     *  Called from performRender after container.empty() rebuilds the DOM. */
+    private rebindStickyAnchorObserver(): void {
+        if (!this.stickyAnchorObserver) return;
+        const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
+        if (!grid) return;
+        const dateHeader = grid.querySelector('.date-header') as HTMLElement | null;
+        const habits = grid.querySelector('.habits-section') as HTMLElement | null;
+        this.stickyAnchorObserver.disconnect();
+        if (dateHeader) this.stickyAnchorObserver.observe(dateHeader);
+        if (habits) this.stickyAnchorObserver.observe(habits);
     }
 
     private getPinnedListCallbacks(): PinnedListCallbacks {
@@ -920,6 +928,11 @@ export class TimelineView extends ItemView {
         // section renders so the value reflects the actual rendered heights
         // (habits-section height varies with collapsed/expanded state).
         this.updateAlldayStickyTop();
+        // Rebind observer to the freshly-rendered anchor elements after
+        // container.empty() detached the previous ones. Done outside
+        // updateAlldayStickyTop to avoid observer ping-pong (each observe()
+        // call fires an initial-observation callback).
+        this.rebindStickyAnchorObserver();
 
         // Restore scroll position synchronously to avoid 1-frame flicker.
         // .timeline-grid is the single scroll container; scrollTop alone fully
