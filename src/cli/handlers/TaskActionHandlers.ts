@@ -37,7 +37,7 @@ export function createDuplicateHandler(plugin: TaskViewerPlugin) {
             const result = await plugin.api.duplicate({ id: params.id, dayOffset, count });
             return cliOk({ duplicated: result.duplicated });
         } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.message : `Failed to duplicate task: ${e instanceof Error ? e.message : String(e)}`);
+            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to duplicate task: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 }
@@ -50,7 +50,7 @@ export function createConvertHandler(plugin: TaskViewerPlugin) {
             const result = await plugin.api.convertToFrontmatter({ id: params.id });
             return cliOk({ convertedFrom: result.convertedFrom, newFile: result.newFile });
         } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.message : `Failed to convert task: ${e instanceof Error ? e.message : String(e)}`);
+            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to convert task: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 }
@@ -64,7 +64,7 @@ export function createCategorizedTasksForDateRangeHandler(plugin: TaskViewerPlug
             const result = plugin.api.categorizedTasksForDateRange({ start: params.start, end: params.end });
             return cliOk(result);
         } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.message : `Failed to categorize tasks: ${e instanceof Error ? e.message : String(e)}`);
+            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to categorize tasks: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 }
@@ -81,7 +81,7 @@ export function createInsertChildTaskHandler(plugin: TaskViewerPlugin) {
             });
             return cliOk({ parentId: result.parentId });
         } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.message : `Failed to insert child task: ${e instanceof Error ? e.message : String(e)}`);
+            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to insert child task: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 }
@@ -100,7 +100,7 @@ export function createCreateFrontmatterHandler(plugin: TaskViewerPlugin) {
             });
             return cliOk({ newFile: result.newFile });
         } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.message : `Failed to create frontmatter task: ${e instanceof Error ? e.message : String(e)}`);
+            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to create frontmatter task: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 }
@@ -142,7 +142,7 @@ export function createTasksForDateRangeHandler(plugin: TaskViewerPlugin) {
             const fields = resolveFields(params.outputFields);
             return formatOutput(result.tasks, format, fields);
         } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.message : `Failed to query date range: ${e instanceof Error ? e.message : String(e)}`);
+            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to query date range: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 }

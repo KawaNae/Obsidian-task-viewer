@@ -74,7 +74,7 @@ const result = api.today({
 | `leaf` | `boolean` | 子なしタスクのみ |
 | `property` | `string` | カスタムプロパティ（`key:value`） |
 | `color` | `string \| string[]` | カード色 |
-| `type` | `string \| string[]` | タスク種別（`at-notation`, `frontmatter`） |
+| `type` | `string \| string[]` | タスク notation（`taskviewer`, `tasks`, `dayplanner`） |
 | `root` | `boolean` | 親タスクを持たないタスクのみ |
 | `filter` | `FilterState` | 完全なフィルタ定義（上記フラグより優先） |
 | `filterFile` | `string` | vault 内フィルタファイルパス（`.json` / `.md` テンプレート） |

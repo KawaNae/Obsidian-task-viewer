@@ -37,9 +37,11 @@ export interface NormalizedTask {
 // ── Error ──
 
 export class TaskApiError extends Error {
+    readonly rawMessage: string;
     constructor(message: string) {
         super(`${message} — See api.help() for reference`);
         this.name = 'TaskApiError';
+        this.rawMessage = message;
     }
 }
 

@@ -44,7 +44,7 @@ obsidian obsidian-task-viewer:list tag=work format=json outputFields=content,sta
 | `leaf` | 子タスクを持たないタスクのみ | `leaf` |
 | `property` | カスタムプロパティ（`key:value` 形式） | `property=priority:high` |
 | `color` | カード色で絞り込み（カンマ区切り） | `color=red,blue` |
-| `type` | タスク種別で絞り込み | `type=frontmatter` |
+| `type` | タスク notation で絞り込み | `type=taskviewer` |
 | `root` | 親タスクを持たないタスクのみ | `root` |
 | `filter-file` | FilterState JSON (.json) またはビューテンプレート (.md) | `filter-file=filters/tag.json` |
 | `list` | ピン留めリスト名（`.md` テンプレート用） | `list=urgent` |
@@ -274,7 +274,7 @@ obsidian obsidian-task-viewer:help
 | `endTime` | `string \| null` | 生の終了時刻 |
 | `due` | `string \| null` | 生の締切日 |
 | `tags` | `string[]` | タグ一覧 |
-| `parserId` | `string` | パーサー種別（`at-notation` / `frontmatter`） |
+| `parserId` | `string` | パーサー種別（`tv-inline` / `tv-file` / `tasks-plugin` / `day-planner`） |
 | `parentId` | `string \| null` | 親タスクID |
 | `childIds` | `string[]` | 子タスクID一覧 |
 | `color` | `string \| null` | カードの色 |

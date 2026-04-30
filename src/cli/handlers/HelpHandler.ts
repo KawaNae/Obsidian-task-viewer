@@ -64,7 +64,7 @@ list: Filter Flags
   leaf                 Only leaf tasks (no children)
   root                 Only root tasks (no parent)
   color=<colors>       Card color(s), comma-separated
-  type=<types>         Task type (at-notation, frontmatter)
+  type=<types>         Task notation (taskviewer, tasks, dayplanner)
   property=<key:value> Custom property (e.g. "priority:high")
   filter-file=<path>   FilterState JSON file (.json) or view template (.md)
                        Overrides all simple filter flags above (see below)

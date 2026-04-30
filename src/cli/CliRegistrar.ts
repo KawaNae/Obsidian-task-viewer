@@ -28,7 +28,7 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
         leaf:    { description: 'Only leaf tasks (no children)' },
         property: { value: '<key:value>',   description: 'Filter by custom property (e.g. "優先度:高")' },
         color:   { value: '<colors>',        description: 'Filter by color(s), comma-separated' },
-        type:    { value: '<types>',          description: 'Filter by task type (at-notation, frontmatter)' },
+        type:    { value: '<types>',          description: 'Filter by task notation (taskviewer, tasks, dayplanner)' },
         root:    { description: 'Only root tasks (no parent)' },
         'filter-file': { value: '<path>',     description: 'FilterState JSON (.json) or view template (.md). Overrides simple filter flags' },
         list:    { value: '<name>',          description: 'Pinned list name (for .md templates with pinnedLists)' },
