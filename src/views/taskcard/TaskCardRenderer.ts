@@ -92,21 +92,33 @@ export class TaskCardRenderer extends Component {
         const parentMarkdown = this.buildParentMarkdown(task, settings);
 
         if (compact) {
+            // Build the expand-bar synchronously, BEFORE the markdown await.
+            // Without this, the bar appears in a microtask after MarkdownRenderer
+            // resolves, briefly shrinking compact cards by ~21px. For allday
+            // cards stacked on a CSS grid, that transient propagates to the
+            // allday-section height, which combined with the sync scroll-restore
+            // in TimelineView.performRender produces a 1-frame flicker of timed
+            // cards shifting up then settling back.
+            const expandBar = container.createDiv('task-card__expand-bar');
+            const expandIconSpan = expandBar.createSpan();
+            const expandLabelSpan = expandBar.createSpan();
+            expandBar.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.onDetailClick?.(task);
+            });
+
             const strippedMarkdown = parentMarkdown
                 .replace(/!\[\[([^\]]*)\]\]/g, '')
                 .replace(/!\[([^\]]*)\]\([^)]*\)/g, '');
             await MarkdownRenderer.render(this.app, strippedMarkdown, contentContainer, task.file, cardComp);
 
+            // Populate expand-bar contents post-await. Element is already in DOM
+            // with stable height locked by .task-card__expand-bar min-height.
+            setIcon(expandIconSpan, 'expand');
             const { completed, total } = this.getChildCompletion(task, settings);
-            const expandBar = container.createDiv('task-card__expand-bar');
-            setIcon(expandBar.createSpan(), 'expand');
             if (total > 0) {
-                expandBar.createSpan().setText(` ${completed}/${total}`);
+                expandLabelSpan.setText(` ${completed}/${total}`);
             }
-            expandBar.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.onDetailClick?.(task);
-            });
         } else if (isFrontmatterTask(task)) {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
             await this.renderFrontmatterChildren(contentContainer, task, cardComp, settings, cardInstanceId, forceExpand);
