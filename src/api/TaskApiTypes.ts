@@ -191,9 +191,9 @@ export interface InsertChildTaskResult {
     parentId: string;
 }
 
-// ── createFrontmatterTask ──
+// ── createTvFile ──
 
-export interface CreateFrontmatterParams {
+export interface CreateTvFileParams {
     content: string;
     start?: string;
     end?: string;
@@ -201,7 +201,7 @@ export interface CreateFrontmatterParams {
     status?: string;
 }
 
-export interface CreateFrontmatterResult {
+export interface CreateTvFileResult {
     newFile: string;
 }
 

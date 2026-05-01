@@ -1,6 +1,6 @@
 import { App, Menu } from 'obsidian';
 import { TaskWriteService } from '../../../services/data/TaskWriteService';
-import { CheckboxMenuBuilder, type CheckboxLineOps, type CreateFrontmatterTaskCallback } from './CheckboxMenuBuilder';
+import { CheckboxMenuBuilder, type CheckboxLineOps, type CreateTvFileCallback } from './CheckboxMenuBuilder';
 import TaskViewerPlugin from '../../../main';
 import type { Task, ChildLine } from '../../../types';
 import type { CreateTaskResult } from '../../../modals/CreateTaskModal';
@@ -18,14 +18,14 @@ export class ChildLineMenuBuilder {
         private writeService: TaskWriteService,
         private plugin: TaskViewerPlugin
     ) {
-        const onCreateFrontmatterTask: CreateFrontmatterTaskCallback = async (result, statusChar) => {
-            return this.createFrontmatterTask(result, statusChar);
+        const onCreateTvFile: CreateTvFileCallback = async (result, statusChar) => {
+            return this.createTvFile(result, statusChar);
         };
 
         this.checkboxMenuBuilder = new CheckboxMenuBuilder(
             app,
             () => plugin.settings.startHour,
-            onCreateFrontmatterTask
+            onCreateTvFile
         );
     }
 
@@ -44,8 +44,8 @@ export class ChildLineMenuBuilder {
         menu.showAtPosition({ x, y });
     }
 
-    private async createFrontmatterTask(result: CreateTaskResult, statusChar: string): Promise<string> {
-        return this.writeService.createFrontmatterTaskFromData({
+    private async createTvFile(result: CreateTaskResult, statusChar: string): Promise<string> {
+        return this.writeService.createTvFileFromData({
             content: result.content,
             statusChar,
             startDate: result.startDate,

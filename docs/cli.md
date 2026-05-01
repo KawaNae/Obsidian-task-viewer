@@ -207,12 +207,12 @@ obsidian obsidian-task-viewer:insert-child-task parent-id=abc123 content="サブ
 
 **戻り値:** `{ "parentId": "abc123" }`
 
-### create-frontmatter — Frontmatterタスクファイル作成
+### create-tv-file — tv-file（frontmatter）タスク作成
 
-新しいfrontmatterタスクファイルを作成します。
+新しい tv-file タスクを作成します。
 
 ```bash
-obsidian obsidian-task-viewer:create-frontmatter content="プロジェクト名" start=2026-03-15 due=2026-03-31
+obsidian obsidian-task-viewer:create-tv-file content="プロジェクト名" start=2026-03-15 due=2026-03-31
 ```
 
 | フラグ | 必須 | 説明 |

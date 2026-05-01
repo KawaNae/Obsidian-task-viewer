@@ -47,7 +47,7 @@ export function createConvertHandler(plugin: TaskViewerPlugin) {
         if (!params.id) return cliError('Missing required flag: --id');
 
         try {
-            const result = await plugin.api.convertToFrontmatter({ id: params.id });
+            const result = await plugin.api.convertToTvFile({ id: params.id });
             return cliOk({ convertedFrom: result.convertedFrom, newFile: result.newFile });
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to convert task: ${e instanceof Error ? e.message : String(e)}`);
@@ -86,12 +86,12 @@ export function createInsertChildTaskHandler(plugin: TaskViewerPlugin) {
     };
 }
 
-export function createCreateFrontmatterHandler(plugin: TaskViewerPlugin) {
+export function createCreateTvFileHandler(plugin: TaskViewerPlugin) {
     return async (params: CliData): Promise<string> => {
         if (!params.content) return cliError('Missing required flag: --content');
 
         try {
-            const result = await plugin.api.createFrontmatterTask({
+            const result = await plugin.api.createTvFile({
                 content: params.content,
                 start: params.start,
                 end: params.end,

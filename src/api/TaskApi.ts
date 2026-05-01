@@ -38,8 +38,8 @@ import {
     type CategorizedTasksForDateRangeResult,
     type InsertChildTaskParams,
     type InsertChildTaskResult,
-    type CreateFrontmatterParams,
-    type CreateFrontmatterResult,
+    type CreateTvFileParams,
+    type CreateTvFileResult,
     type StartHourResult,
 } from './TaskApiTypes';
 
@@ -133,8 +133,8 @@ Methods
       dayOffset?: number           Days to shift dates (default: 0)
       count?: number               Number of copies (default: 1)
 
-  convertToFrontmatter(params: ConvertParams): Promise<ConvertResult>
-    Convert an inline task to a frontmatter task file.
+  convertToTvFile(params: ConvertParams): Promise<ConvertResult>
+    Convert a tv-inline task to a tv-file (frontmatter) task.
 
     ConvertParams:
       id: string                   Task ID (required)
@@ -167,10 +167,10 @@ Methods
       parentId: string             Parent task ID (required)
       content: string              Child task content (required)
 
-  createFrontmatterTask(params: CreateFrontmatterParams): Promise<CreateFrontmatterResult>
-    Create a new frontmatter task file from structured data.
+  createTvFile(params: CreateTvFileParams): Promise<CreateTvFileResult>
+    Create a new tv-file (frontmatter) task from structured data.
 
-    CreateFrontmatterParams:
+    CreateTvFileParams:
       content: string              Task content (required)
       start?: string               Start date/datetime
       end?: string                 End date/datetime
@@ -275,8 +275,8 @@ Examples
   // Duplicate a task 3 times (no date shift)
   await api.duplicate({ id: 'tv-inline:daily/2026-03-15.md:ln:5', count: 3 });
 
-  // Convert an inline task to a frontmatter task file
-  await api.convertToFrontmatter({ id: 'tv-inline:daily/2026-03-15.md:ln:5' });
+  // Convert a tv-inline task to a tv-file (frontmatter) task
+  await api.convertToTvFile({ id: 'tv-inline:daily/2026-03-15.md:ln:5' });
 
   // List tasks in a date range
   await api.tasksForDateRange({ start: '2026-03-01', end: '2026-03-31' });
@@ -294,8 +294,8 @@ Examples
   // Insert a child task
   await api.insertChildTask({ parentId: 'tv-inline:daily/2026-03-15.md:ln:5', content: 'Sub-task' });
 
-  // Create a frontmatter task
-  await api.createFrontmatterTask({ content: 'Project task', start: '2026-03-20 10:00' });
+  // Create a tv-file (frontmatter) task
+  await api.createTvFile({ content: 'Project task', start: '2026-03-20 10:00' });
 
   // Get visual day boundary setting
   api.getStartHour();
@@ -571,9 +571,9 @@ export class TaskApi {
     }
 
     /**
-     * Convert an inline task to a frontmatter task file.
+     * Convert a tv-inline task to a tv-file (frontmatter) task.
      */
-    async convertToFrontmatter(params: ConvertParams): Promise<ConvertResult> {
+    async convertToTvFile(params: ConvertParams): Promise<ConvertResult> {
         if (!params.id) throw new TaskApiError('Missing required parameter: id');
         const task = this.readService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
@@ -632,13 +632,13 @@ export class TaskApi {
     }
 
     /**
-     * Create a new frontmatter task file from structured data.
+     * Create a new tv-file (frontmatter) task from structured data.
      */
-    async createFrontmatterTask(params: CreateFrontmatterParams): Promise<CreateFrontmatterResult> {
+    async createTvFile(params: CreateTvFileParams): Promise<CreateTvFileResult> {
         if (!params.content) throw new TaskApiError('Missing required parameter: content');
         const parsed = params.start ? parseDateTimeFlag(params.start) : null;
         const parsedEnd = params.end ? parseDateTimeFlag(params.end) : null;
-        const newFile = await this.writeService.createFrontmatterTaskFromData({
+        const newFile = await this.writeService.createTvFileFromData({
             content: params.content,
             statusChar: params.status ?? ' ',
             startDate: parsed?.date,

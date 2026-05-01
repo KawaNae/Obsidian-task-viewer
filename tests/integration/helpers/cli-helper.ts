@@ -76,7 +76,7 @@ export function cliDuplicate(flags: Record<string, string>): DuplicateResult {
     return obsidianCli('duplicate', flags) as DuplicateResult;
 }
 
-/** Convert inline task to frontmatter. Returns { convertedFrom, newFile }. */
+/** Convert tv-inline task to tv-file. Returns { convertedFrom, newFile }. */
 export function cliConvert(id: string): ConvertResult {
     return obsidianCli('convert', { id }) as ConvertResult;
 }
@@ -96,9 +96,9 @@ export function cliInsertChildTask(flags: Record<string, string>): InsertChildTa
     return obsidianCli('insert-child-task', flags) as InsertChildTaskResult;
 }
 
-/** Create a frontmatter task file. Returns { newFile }. */
-export function cliCreateFrontmatter(flags: Record<string, string>): CreateFrontmatterResult {
-    return obsidianCli('create-frontmatter', flags) as CreateFrontmatterResult;
+/** Create a tv-file (frontmatter) task. Returns { newFile }. */
+export function cliCreateTvFile(flags: Record<string, string>): CreateTvFileResult {
+    return obsidianCli('create-tv-file', flags) as CreateTvFileResult;
 }
 
 /** Get the current startHour setting. Returns { startHour }. */
@@ -203,7 +203,7 @@ export interface InsertChildTaskResult {
     parentId: string;
 }
 
-export interface CreateFrontmatterResult {
+export interface CreateTvFileResult {
     newFile: string;
 }
 

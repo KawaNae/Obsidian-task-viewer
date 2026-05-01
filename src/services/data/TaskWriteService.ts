@@ -57,8 +57,8 @@ export class TaskWriteService {
         return this.taskIndex.insertChildTask(parentTaskId, childLine);
     }
 
-    async createFrontmatterTaskFromData(taskData: Partial<Task>): Promise<string> {
-        return this.taskIndex.createFrontmatterTaskFromData(taskData);
+    async createTvFileFromData(taskData: Partial<Task>): Promise<string> {
+        return this.taskIndex.createTvFileFromData(taskData);
     }
 
     // ===== Line-level operations =====
@@ -107,7 +107,7 @@ export class TaskWriteService {
     }
 
     /**
-     * Validate that bodyLine is a writable (plain / wikilink) child entry of
+     * Validate that bodyLine is a writable (line / wikilink) child entry of
      * parentTaskId. Throws on missing parent, unknown bodyLine, or 'task' entry
      * — those should be edited via updateTask instead. Returns the parent for
      * file-path access.

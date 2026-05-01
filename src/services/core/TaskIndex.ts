@@ -590,7 +590,7 @@ export class TaskIndex {
         });
     }
 
-    async createFrontmatterTaskFromData(taskData: Partial<Task>): Promise<string> {
+    async createTvFileFromData(taskData: Partial<Task>): Promise<string> {
         return this.withNotify(async () => {
             const tempTask = createTempTask({
                 id: 'convert-temp',

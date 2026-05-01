@@ -1190,7 +1190,7 @@ src/cli/
   handlers/
     TaskQueryHandlers.ts   # list / today / get
     TaskCrudHandlers.ts    # create / update / delete
-    TaskActionHandlers.ts  # duplicate / convert / tasks-for-date-range / tasks-for-date / insert-child-task / create-frontmatter / get-start-hour
+    TaskActionHandlers.ts  # duplicate / convert / tasks-for-date-range / tasks-for-date / insert-child-task / create-tv-file / get-start-hour
     HelpHandler.ts         # help
 ```
 
@@ -1219,11 +1219,11 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `update({ id, ... })` | async | `MutationResult` |
 | `delete({ id })` | async | `DeleteResult { deleted: string }` |
 | `duplicate({ id, ... })` | async | `DuplicateResult { duplicated: string }` |
-| `convertToFrontmatter({ id })` | async | `ConvertResult { convertedFrom, newFile }` |
+| `convertToTvFile({ id })` | async | `ConvertResult { convertedFrom, newFile }` |
 | `tasksForDateRange({ start, end, ... })` | async | `TaskListResult` |
 | `tasksForDate({ date, ... })` | sync | `CategorizedTasksResult { allDay, timed, dueOnly }` |
 | `insertChildTask({ parentId, content })` | async | `InsertChildTaskResult { parentId }` |
-| `createFrontmatterTask({ content, ... })` | async | `CreateFrontmatterResult { newFile }` |
+| `createTvFile({ content, ... })` | async | `CreateTvFileResult { newFile }` |
 | `getStartHour()` | sync | `StartHourResult { startHour }` |
 | `onChange(callback)` | sync | `() => void` (unsubscribe) |
 | `help()` | sync | `string` |
@@ -1243,7 +1243,7 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `tasks-for-date-range` | Tasks in date range | start (req), end (req), sort, limit, offset |
 | `tasks-for-date` | Categorized tasks for date | date (required) |
 | `insert-child-task` | Insert child task | parent-id (req), content (req) |
-| `create-frontmatter` | Create frontmatter file | content (req), start, end, due, status |
+| `create-tv-file` | Create tv-file (frontmatter) task | content (req), start, end, due, status |
 | `get-start-hour` | Get startHour setting | *(none)* |
 | `help` | Show CLI reference | *(none)* |
 
