@@ -473,7 +473,7 @@ export class TaskIndex {
         }
 
         if (isTvFile(task)) {
-            await this.repository.updateTvFile(task, updates, this.settings.frontmatterTaskKeys);
+            await this.repository.updateTvFile(task, updates, this.settings.tvFileKeys);
         } else {
             // All inline tasks route through InlineTaskWriter; TaskParser.format
             // dispatches by parserId. TVInlineParser.format() handles both
@@ -493,7 +493,7 @@ export class TaskIndex {
             this.syncDetector.markLocalEdit(task.file);
 
             if (isTvFile(task)) {
-                await this.repository.deleteTvFile(task, this.settings.frontmatterTaskKeys);
+                await this.repository.deleteTvFile(task, this.settings.tvFileKeys);
             } else {
                 await this.repository.deleteTaskFromFile(task);
             }
@@ -511,7 +511,7 @@ export class TaskIndex {
             this.syncDetector.markLocalEdit(task.file);
 
             if (isTvFile(task)) {
-                await this.repository.duplicateTvFile(task, this.settings.frontmatterTaskKeys, options);
+                await this.repository.duplicateTvFile(task, this.settings.tvFileKeys, options);
             } else {
                 await this.repository.duplicateInlineTask(task, options);
             }
@@ -538,9 +538,9 @@ export class TaskIndex {
 
             const newPath = await this.tvInlineToTvFileConverter.convertTvInlineToTvFile(
                 task,
-                this.settings.frontmatterTaskHeader,
-                this.settings.frontmatterTaskHeaderLevel,
-                this.settings.frontmatterTaskKeys
+                this.settings.tvFileChildHeader,
+                this.settings.tvFileChildHeaderLevel,
+                this.settings.tvFileKeys
             );
 
             await this.scanner.waitForScan(task.file);
@@ -578,8 +578,8 @@ export class TaskIndex {
             if (isTvFile(task)) {
                 await this.repository.insertLineAfterTvFile(
                     task.file, childLine,
-                    this.settings.frontmatterTaskHeader,
-                    this.settings.frontmatterTaskHeaderLevel
+                    this.settings.tvFileChildHeader,
+                    this.settings.tvFileChildHeaderLevel
                 );
             } else {
                 const childIndent = FileOperations.getChildIndent(task.originalText);
@@ -604,11 +604,11 @@ export class TaskIndex {
             });
             return await this.repository.createTvFile(
                 tempTask,
-                this.settings.frontmatterTaskHeader,
-                this.settings.frontmatterTaskHeaderLevel,
+                this.settings.tvFileChildHeader,
+                this.settings.tvFileChildHeaderLevel,
                 undefined,
                 undefined,
-                this.settings.frontmatterTaskKeys
+                this.settings.tvFileKeys
             );
         });
     }

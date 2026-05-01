@@ -37,9 +37,9 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
         .setDesc(t('settings.notes.childTaskHeadingDesc'))
         .addText(text => text
             .setPlaceholder('Tasks')
-            .setValue(plugin.settings.frontmatterTaskHeader)
+            .setValue(plugin.settings.tvFileChildHeader)
             .onChange(async (value) => {
-                plugin.settings.frontmatterTaskHeader = value;
+                plugin.settings.tvFileChildHeader = value;
                 await plugin.saveSettings();
             }));
 
@@ -48,10 +48,10 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
         .setDesc(t('settings.notes.childTaskHeadingLevelDesc'))
         .addSlider(slider => slider
             .setLimits(1, 6, 1)
-            .setValue(plugin.settings.frontmatterTaskHeaderLevel)
+            .setValue(plugin.settings.tvFileChildHeaderLevel)
             .setDynamicTooltip()
             .onChange(async (value) => {
-                plugin.settings.frontmatterTaskHeaderLevel = value;
+                plugin.settings.tvFileChildHeaderLevel = value;
                 await plugin.saveSettings();
             }));
 

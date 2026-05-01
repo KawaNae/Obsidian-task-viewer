@@ -10,9 +10,9 @@ import { createTempTask } from './services/data/createTempTask';
 import {
     TaskViewerSettings,
     DEFAULT_SETTINGS,
-    DEFAULT_FRONTMATTER_TASK_KEYS,
-    normalizeFrontmatterTaskKeys,
-    validateFrontmatterTaskKeys,
+    DEFAULT_TV_FILE_KEYS,
+    normalizeTvFileKeys,
+    validateTvFileKeys,
 } from './types';
 import type { DefaultLeafPosition, PinnedListDefinition, Task } from './types';
 import { isTvFile } from './types';
@@ -243,11 +243,11 @@ export default class TaskViewerPlugin extends Plugin {
                 });
                 return await repository.createTvFile(
                     tempTask,
-                    this.settings.frontmatterTaskHeader,
-                    this.settings.frontmatterTaskHeaderLevel,
+                    this.settings.tvFileChildHeader,
+                    this.settings.tvFileChildHeaderLevel,
                     undefined,
                     undefined,
-                    this.settings.frontmatterTaskKeys
+                    this.settings.tvFileKeys
                 );
             }
         );
@@ -273,7 +273,7 @@ export default class TaskViewerPlugin extends Plugin {
         // so we surface the full task menu via Obsidian's file-menu (file explorer / tab / pane).
         this.registerEvent(
             this.app.workspace.on('file-menu', (menu, file) => {
-                if (!this.settings.fileMenuForFrontmatterTasks) return;
+                if (!this.settings.fileMenuForTvFile) return;
                 if (!(file instanceof TFile)) return;
 
                 const task = this.taskIndex.getTasks().find(t =>
@@ -418,17 +418,30 @@ export default class TaskViewerPlugin extends Plugin {
     async loadSettings() {
         const raw = await this.loadData();
         const rawObject = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {};
-        const merged = Object.assign({}, DEFAULT_SETTINGS, rawObject) as TaskViewerSettings & {
-            frontmatterTaskKeys?: unknown;
+
+        // Legacy setting key migration (v0.33 → v0.34): values written under the
+        // old Frontmatter* names are transcribed to the new Tv* names. Next
+        // saveSettings persists only the new keys so legacy ones disappear.
+        const migrate = (oldKey: string, newKey: string) => {
+            if (rawObject[oldKey] !== undefined && rawObject[newKey] === undefined) {
+                rawObject[newKey] = rawObject[oldKey];
+            }
+            delete rawObject[oldKey];
         };
-        const normalizedFrontmatterKeys = normalizeFrontmatterTaskKeys(merged.frontmatterTaskKeys);
-        const keysValidationError = validateFrontmatterTaskKeys(normalizedFrontmatterKeys);
+        migrate('frontmatterTaskKeys', 'tvFileKeys');
+        migrate('frontmatterTaskHeader', 'tvFileChildHeader');
+        migrate('frontmatterTaskHeaderLevel', 'tvFileChildHeaderLevel');
+        migrate('fileMenuForFrontmatterTasks', 'fileMenuForTvFile');
+
+        const merged = Object.assign({}, DEFAULT_SETTINGS, rawObject) as TaskViewerSettings;
+        const normalizedKeys = normalizeTvFileKeys(merged.tvFileKeys);
+        const keysValidationError = validateTvFileKeys(normalizedKeys);
 
         this.settings = {
             ...merged,
-            frontmatterTaskKeys: keysValidationError
-                ? { ...DEFAULT_FRONTMATTER_TASK_KEYS }
-                : normalizedFrontmatterKeys,
+            tvFileKeys: keysValidationError
+                ? { ...DEFAULT_TV_FILE_KEYS }
+                : normalizedKeys,
         };
     }
 

@@ -137,9 +137,9 @@ export class TaskScanner {
             frontmatterObj,
             bodyLines,
             bodyStartIndex,
-            this.settings.frontmatterTaskKeys,
-            this.settings.frontmatterTaskHeader,
-            this.settings.frontmatterTaskHeaderLevel
+            this.settings.tvFileKeys,
+            this.settings.tvFileChildHeader,
+            this.settings.tvFileChildHeaderLevel
         );
 
         // デイリーノートのファイル名から日付を抽出（親タスクからの継承は廃止）
@@ -148,12 +148,12 @@ export class TaskScanner {
 
         // --- ツリーパイプライン ---
         const doc = DocumentTreeBuilder.build(file.path, lines, bodyStartIndex);
-        SectionPropertyResolver.resolve(doc, frontmatterObj, this.settings.frontmatterTaskKeys);
+        SectionPropertyResolver.resolve(doc, frontmatterObj, this.settings.tvFileKeys);
         const allExtractedTasks = TreeTaskExtractor.extract(doc, {
             filePath: file.path,
             dailyNoteDate: dailyNoteDate ?? undefined,
-            hasFrontmatterParent: hasFmParent,
-            frontmatterTaskKeys: this.settings.frontmatterTaskKeys,
+            hasTvFileParent: hasFmParent,
+            tvFileKeys: this.settings.tvFileKeys,
         });
 
         // バリデーション警告を収集
@@ -309,7 +309,7 @@ export class TaskScanner {
         lines: string[],
         bodyStartIndex: number
     ): boolean {
-        const ignoreKey = this.settings.frontmatterTaskKeys.ignore;
+        const ignoreKey = this.settings.tvFileKeys.ignore;
         const fromCache = frontmatterObj?.[ignoreKey];
         if (this.isTruthyIgnoreValue(fromCache)) {
             return true;

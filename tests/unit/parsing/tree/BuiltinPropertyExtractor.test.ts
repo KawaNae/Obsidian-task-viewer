@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { BuiltinPropertyExtractor } from '../../../../src/services/parsing/tree/BuiltinPropertyExtractor';
-import { DEFAULT_FRONTMATTER_TASK_KEYS } from '../../../../src/types';
+import { DEFAULT_TV_FILE_KEYS } from '../../../../src/types';
 import type { PropertyValue } from '../../../../src/types';
 
-const keys = DEFAULT_FRONTMATTER_TASK_KEYS;
+const keys = DEFAULT_TV_FILE_KEYS;
 
 function pv(value: string, type: 'string' | 'number' | 'boolean' | 'array' = 'string'): PropertyValue {
     return { value, type };

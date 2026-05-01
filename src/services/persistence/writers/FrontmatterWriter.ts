@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import type { FrontmatterTaskKeys, Task } from '../../../types';
+import type { TvFileKeys, Task } from '../../../types';
 import { FileOperations } from '../utils/FileOperations';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 import { HeadingInserter } from '../../../utils/HeadingInserter';
@@ -24,7 +24,7 @@ export class FrontmatterWriter {
     async updateTvFile(
         task: Task,
         updates: Partial<Task>,
-        frontmatterKeys: FrontmatterTaskKeys
+        frontmatterKeys: TvFileKeys
     ): Promise<void> {
         const fmUpdates: Record<string, string | null> = {};
 
@@ -58,7 +58,7 @@ export class FrontmatterWriter {
      * tv-file タスクを削除する（タスク関連キーを除去のみ）。
      * ファイル自体は削除しない。
      */
-    async deleteTvFile(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
+    async deleteTvFile(task: Task, frontmatterKeys: TvFileKeys): Promise<void> {
         await this.updateFrontmatterFields(task.file, {
             [frontmatterKeys.start]: null,
             [frontmatterKeys.end]: null,

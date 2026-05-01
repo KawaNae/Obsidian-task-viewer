@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { TVFileBuilder } from '../../../src/services/parsing/tv-file/TVFileBuilder';
-import { DEFAULT_FRONTMATTER_TASK_KEYS } from '../../../src/types';
+import { DEFAULT_TV_FILE_KEYS } from '../../../src/types';
 
-const keys = DEFAULT_FRONTMATTER_TASK_KEYS;
+const keys = DEFAULT_TV_FILE_KEYS;
 const defaultHeader = 'Tasks';
 const defaultHeaderLevel = 2;
 

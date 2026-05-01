@@ -1,4 +1,4 @@
-import type { FrontmatterTaskKeys } from '../../../types';
+import type { TvFileKeys } from '../../../types';
 
 /**
  * True when the frontmatter declares the file as task-bearing.
@@ -13,11 +13,11 @@ import type { FrontmatterTaskKeys } from '../../../types';
  */
 export function isTaskBearingFile(
     frontmatter: Record<string, unknown> | undefined,
-    fmKeys: FrontmatterTaskKeys
+    fmKeys: TvFileKeys
 ): boolean {
     if (!frontmatter) return false;
 
-    const signalKeys: Array<keyof FrontmatterTaskKeys> = [
+    const signalKeys: Array<keyof TvFileKeys> = [
         'start',
         'end',
         'due',

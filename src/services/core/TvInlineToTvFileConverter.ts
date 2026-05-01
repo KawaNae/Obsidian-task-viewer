@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import type { FrontmatterTaskKeys, Task } from '../../types';
+import type { TvFileKeys, Task } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { TagExtractor } from '../parsing/utils/TagExtractor';
 
@@ -19,7 +19,7 @@ export class TvInlineToTvFileConverter {
         task: Task,
         headerName: string,
         headerLevel: number,
-        frontmatterKeys: FrontmatterTaskKeys,
+        frontmatterKeys: TvFileKeys,
     ): Promise<string> {
         const sourceColor = this.getSourceFileColor(task.file, frontmatterKeys.color);
         const sourceSharedTags = this.getSourceFileSharedTags(task.file);

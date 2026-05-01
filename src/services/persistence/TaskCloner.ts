@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import type { DuplicateOptions, FrontmatterTaskKeys, Task } from '../../types';
+import type { DuplicateOptions, TvFileKeys, Task } from '../../types';
 import { TaskParser } from '../parsing/TaskParser';
 import { DateUtils } from '../../utils/DateUtils';
 import { FileOperations } from './utils/FileOperations';
@@ -76,7 +76,7 @@ export class TaskCloner {
      * - dayOffset=0: `Name.md` → `Name copy.md` → `Name copy 2.md` → ...
      * - dayOffset>0: dayOffset..dayOffset+count-1 の各日付でシフトしたファイルを作成
      */
-    async duplicateTvFile(task: Task, frontmatterKeys: FrontmatterTaskKeys, options?: DuplicateOptions): Promise<void> {
+    async duplicateTvFile(task: Task, frontmatterKeys: TvFileKeys, options?: DuplicateOptions): Promise<void> {
         const { dayOffset = 0, count = 1 } = options ?? {};
 
         const file = this.app.vault.getAbstractFileByPath(task.file);
@@ -230,7 +230,7 @@ export class TaskCloner {
     }
 
     /** frontmatter の日付キー (start/end/due) の日付部分を N日シフトする。 */
-    private shiftFrontmatterDates(content: string, dayOffset: number, frontmatterKeys: FrontmatterTaskKeys): string {
+    private shiftFrontmatterDates(content: string, dayOffset: number, frontmatterKeys: TvFileKeys): string {
         const lines = content.split('\n');
         const fmEnd = FrontmatterLineEditor.findEnd(lines);
         if (fmEnd < 0) return content;

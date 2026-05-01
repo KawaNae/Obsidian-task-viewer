@@ -107,7 +107,7 @@ export class TimerTargetManager {
 
         const newTargetId = this.storageUtils.generateTimerTargetId();
         try {
-            const timerTargetIdKey = this.ctx.plugin.settings.frontmatterTaskKeys.timerTargetId;
+            const timerTargetIdKey = this.ctx.plugin.settings.tvFileKeys.timerTargetId;
             await this.ctx.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
                 frontmatter[timerTargetIdKey] = newTargetId;
             });
@@ -193,7 +193,7 @@ export class TimerTargetManager {
         if (!(file instanceof TFile)) return;
 
         try {
-            const timerTargetIdKey = this.ctx.plugin.settings.frontmatterTaskKeys.timerTargetId;
+            const timerTargetIdKey = this.ctx.plugin.settings.tvFileKeys.timerTargetId;
             await this.ctx.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
                 if (frontmatter?.[timerTargetIdKey] === timer.timerTargetId) {
                     delete frontmatter[timerTargetIdKey];

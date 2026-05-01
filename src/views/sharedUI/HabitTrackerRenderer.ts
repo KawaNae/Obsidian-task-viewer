@@ -135,7 +135,7 @@ export class HabitTrackerRenderer {
 
     private buildExcludeKeys(): Set<string> {
         const excludeKeys = new Set(this.plugin.settings.habitExcludeKeys);
-        for (const value of Object.values(this.plugin.settings.frontmatterTaskKeys)) {
+        for (const value of Object.values(this.plugin.settings.tvFileKeys)) {
             if (typeof value === 'string') {
                 excludeKeys.add(value);
             } else if (value && typeof value === 'object' && 'key' in value) {

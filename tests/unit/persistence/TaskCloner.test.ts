@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TaskCloner } from '../../../src/services/persistence/TaskCloner';
-import { DEFAULT_FRONTMATTER_TASK_KEYS } from '../../../src/types';
-import type { Task, FrontmatterTaskKeys } from '../../../src/types';
+import { DEFAULT_TV_FILE_KEYS } from '../../../src/types';
+import type { Task, TvFileKeys } from '../../../src/types';
 import { TFile } from 'obsidian';
 
 // Access private methods via prototype
@@ -15,8 +15,8 @@ function callResetChildCheckboxes(lines: string[]): string[] {
     return proto.resetChildCheckboxes.call(null, lines);
 }
 
-function callShiftFrontmatterDates(content: string, dayOffset: number, keys?: FrontmatterTaskKeys): string {
-    return proto.shiftFrontmatterDates.call(null, content, dayOffset, keys ?? DEFAULT_FRONTMATTER_TASK_KEYS);
+function callShiftFrontmatterDates(content: string, dayOffset: number, keys?: TvFileKeys): string {
+    return proto.shiftFrontmatterDates.call(null, content, dayOffset, keys ?? DEFAULT_TV_FILE_KEYS);
 }
 
 function callGenerateDatedPath(file: TFile, task: Partial<Task>, dayOffset: number): string {

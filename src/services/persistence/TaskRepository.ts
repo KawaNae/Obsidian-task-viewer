@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import type { DuplicateOptions, FrontmatterTaskKeys, Task } from '../../types';
+import type { DuplicateOptions, TvFileKeys, Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
@@ -72,12 +72,12 @@ export class TaskRepository {
     async updateTvFile(
         task: Task,
         updates: Partial<Task>,
-        frontmatterKeys: FrontmatterTaskKeys
+        frontmatterKeys: TvFileKeys
     ): Promise<void> {
         return this.frontmatterWriter.updateTvFile(task, updates, frontmatterKeys);
     }
 
-    async deleteTvFile(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
+    async deleteTvFile(task: Task, frontmatterKeys: TvFileKeys): Promise<void> {
         return this.frontmatterWriter.deleteTvFile(task, frontmatterKeys);
     }
 
@@ -91,7 +91,7 @@ export class TaskRepository {
         return this.cloner.duplicateInlineTask(task, options);
     }
 
-    async duplicateTvFile(task: Task, keys: FrontmatterTaskKeys, options?: DuplicateOptions): Promise<void> {
+    async duplicateTvFile(task: Task, keys: TvFileKeys, options?: DuplicateOptions): Promise<void> {
         return this.cloner.duplicateTvFile(task, keys, options);
     }
 
@@ -107,7 +107,7 @@ export class TaskRepository {
         headerLevel: number,
         sourceFileColor?: string,
         sourceSharedTags?: string[],
-        frontmatterKeys?: FrontmatterTaskKeys
+        frontmatterKeys?: TvFileKeys
     ): Promise<string> {
         return this.converter.convertToTvFile(
             task,

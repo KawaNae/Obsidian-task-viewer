@@ -1,4 +1,4 @@
-import type { Task, FrontmatterTaskKeys, PropertyValue } from '../../../types';
+import type { Task, TvFileKeys, PropertyValue } from '../../../types';
 import type { DocumentNode, SectionNode, TaskBlock } from './DocumentTree';
 import { BuiltinPropertyExtractor } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
@@ -9,8 +9,8 @@ import { ImplicitCalendarDateResolver } from '../../display/ImplicitCalendarDate
 export interface TaskExtractionContext {
     filePath: string;
     dailyNoteDate?: string;
-    hasFrontmatterParent: boolean;
-    frontmatterTaskKeys: FrontmatterTaskKeys;
+    hasTvFileParent: boolean;
+    tvFileKeys: TvFileKeys;
 }
 
 /**
@@ -59,7 +59,7 @@ export class TreeTaskExtractor {
 
         // 非デイリーノートかつ task-bearing でないファイルで、
         // 日付・コマンドを持たない bare checkbox は表出させない。
-        if (task && !ctx.dailyNoteDate && !ctx.hasFrontmatterParent
+        if (task && !ctx.dailyNoteDate && !ctx.hasTvFileParent
             && !task.startDate && !task.endDate && !task.due
             && (!task.commands || task.commands.length === 0)) {
             task = null;
@@ -146,7 +146,7 @@ export class TreeTaskExtractor {
         const rawProps = ChildLineClassifier.collectProperties(task.childLines);
 
         // 組み込みプロパティを専用フィールドに分離
-        const extracted = BuiltinPropertyExtractor.extract(rawProps, ctx.frontmatterTaskKeys);
+        const extracted = BuiltinPropertyExtractor.extract(rawProps, ctx.tvFileKeys);
 
         // セクションプロパティ → 子行プロパティの順でマージ（child-wins）
         task.properties = { ...section.resolvedProperties, ...extracted.properties };
@@ -195,7 +195,7 @@ export class TreeTaskExtractor {
         hasAncestorTask: boolean = false
     ): boolean {
         let task = TaskParser.parse(rawLine, filePath, lineNumber);
-        if (task && !ctx.dailyNoteDate && !ctx.hasFrontmatterParent
+        if (task && !ctx.dailyNoteDate && !ctx.hasTvFileParent
             && !task.startDate && !task.endDate && !task.due
             && (!task.commands || task.commands.length === 0)) {
             task = null;

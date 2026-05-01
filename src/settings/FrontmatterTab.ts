@@ -1,6 +1,6 @@
 import { Notice, Setting } from 'obsidian';
 import TaskViewerPlugin from '../main';
-import { FrontmatterTaskKeys, validateFrontmatterTaskKeys } from '../types';
+import { TvFileKeys, validateTvFileKeys } from '../types';
 import { t } from '../i18n';
 
 export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
@@ -54,28 +54,28 @@ function addFrontmatterTaskKeySetting(
     name: string,
     description: string,
     placeholder: string,
-    key: keyof FrontmatterTaskKeys
+    key: keyof TvFileKeys
 ): void {
     new Setting(containerEl)
         .setName(name)
         .setDesc(description)
         .addText((text) => {
             text.setPlaceholder(placeholder);
-            text.setValue(plugin.settings.frontmatterTaskKeys[key]);
+            text.setValue(plugin.settings.tvFileKeys[key]);
             text.onChange(async (value) => {
-                const nextKeys: FrontmatterTaskKeys = {
-                    ...plugin.settings.frontmatterTaskKeys,
+                const nextKeys: TvFileKeys = {
+                    ...plugin.settings.tvFileKeys,
                     [key]: value.trim(),
                 };
 
-                const error = validateFrontmatterTaskKeys(nextKeys);
+                const error = validateTvFileKeys(nextKeys);
                 if (error) {
                     new Notice(error);
-                    text.setValue(plugin.settings.frontmatterTaskKeys[key]);
+                    text.setValue(plugin.settings.tvFileKeys[key]);
                     return;
                 }
 
-                plugin.settings.frontmatterTaskKeys = nextKeys;
+                plugin.settings.tvFileKeys = nextKeys;
                 await plugin.saveSettings();
             });
         });

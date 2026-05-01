@@ -47,8 +47,8 @@ export class PropertySuggestObserver {
 
     private attachPropertySuggests(): void {
         const settings = this.getSettings();
-        const colorKey = settings.frontmatterTaskKeys.color;
-        const linestyleKey = settings.frontmatterTaskKeys.linestyle;
+        const colorKey = settings.tvFileKeys.color;
+        const linestyleKey = settings.tvFileKeys.linestyle;
 
         // ネイティブサジェスト抑制の同期（独自 OFF → 抑制解除）
         if (!settings.suggestColor) this.restoreNativePropertySuggest(colorKey);
@@ -146,7 +146,7 @@ export class PropertySuggestObserver {
             }
 
             const settings = this.getSettings();
-            const colorKey = settings.frontmatterTaskKeys.color;
+            const colorKey = settings.tvFileKeys.color;
             await this.app.fileManager.processFrontMatter(activeFile, (frontmatter: Record<string, unknown>) => {
                 frontmatter[colorKey] = normalizeColor(colorInput.value);
             });

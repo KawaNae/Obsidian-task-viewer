@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import { DEFAULT_FRONTMATTER_TASK_KEYS, FrontmatterTaskKeys, Task, PropertyValue } from '../../types';
+import { DEFAULT_TV_FILE_KEYS, TvFileKeys, Task, PropertyValue } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { DateUtils } from '../../utils/DateUtils';
 import { TagExtractor } from '../parsing/utils/TagExtractor';
@@ -23,7 +23,7 @@ export class TaskConverter {
         headerLevel: number,
         sourceFileColor?: string,
         sourceSharedTags?: string[],
-        frontmatterKeys: FrontmatterTaskKeys = DEFAULT_FRONTMATTER_TASK_KEYS
+        frontmatterKeys: TvFileKeys = DEFAULT_TV_FILE_KEYS
     ): Promise<string> {
         const filePath = this.generateFilePath(task);
         const frontmatter = this.buildFrontmatterContent(task, sourceFileColor, sourceSharedTags, frontmatterKeys);
@@ -83,7 +83,7 @@ export class TaskConverter {
         task: Task,
         color?: string,
         sharedTags?: string[],
-        frontmatterKeys: FrontmatterTaskKeys = DEFAULT_FRONTMATTER_TASK_KEYS
+        frontmatterKeys: TvFileKeys = DEFAULT_TV_FILE_KEYS
     ): string {
         const lines = ['---'];
 
