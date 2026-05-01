@@ -57,8 +57,9 @@ export interface ChildLine {
  * absolute file line is owned by exactly one ChildEntry across all tasks.
  *
  * - `task`: line is occupied by an independent child task (resolved via TaskIndex)
- * - `wikilink`: line references another file's frontmatter task (unresolved)
- * - `plain`: raw checkbox / property / text line under this task
+ * - `wikilink`: line references another file's tv-file task (unresolved)
+ * - `line`: raw checkbox / property / text line under this task (unrelated to
+ *   the legacy `'plain'` parserId migration alias in TimerPersistence)
  *
  * Render layer walks `task.children` directly without re-classifying.
  * Write layer uses `bodyLine` as the absolute file line for surgical edits.
@@ -66,7 +67,7 @@ export interface ChildLine {
 export type ChildEntry =
     | { kind: 'task'; taskId: string; bodyLine: number }
     | { kind: 'wikilink'; target: string; bodyLine: number; line: ChildLine }
-    | { kind: 'plain'; line: ChildLine; bodyLine: number };
+    | { kind: 'line'; line: ChildLine; bodyLine: number };
 
 /**
  * Identifier of the parser that produced a task.

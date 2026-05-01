@@ -15,7 +15,7 @@ export { getTaskDateRange } from '../../services/display/VisualDateRange';
 /**
  * A task is complete iff its own status char is complete AND every child
  * entry resolves to a complete status. Child entries cover both inline
- * checkbox lines (`plain` kind) and child tasks (`task`/`wikilink` kinds),
+ * checkbox lines (`line` kind) and child tasks (`task`/`wikilink` kinds),
  * so child task status now factors into the calendar completion indicator
  * — earlier the check only looked at the parent's own checkbox lines.
  */
@@ -30,7 +30,7 @@ export function isTaskCompleted(
     }
 
     for (const entry of task.childEntries) {
-        if (entry.kind === 'plain') {
+        if (entry.kind === 'line') {
             const ch = entry.line.checkboxChar;
             if (ch !== null && !isCompleteStatusChar(ch, completeStatusChars)) return false;
         } else {

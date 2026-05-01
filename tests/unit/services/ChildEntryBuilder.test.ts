@@ -30,8 +30,8 @@ describe('buildChildEntries', () => {
         });
         const entries = buildChildEntries(parent, () => undefined);
         expect(entries).toHaveLength(2);
-        expect(entries[0]).toMatchObject({ kind: 'plain', bodyLine: 5 });
-        expect(entries[1]).toMatchObject({ kind: 'plain', bodyLine: 6 });
+        expect(entries[0]).toMatchObject({ kind: 'line', bodyLine: 5 });
+        expect(entries[1]).toMatchObject({ kind: 'line', bodyLine: 6 });
     });
 
     it('emits task entries for childIds and orders them by bodyLine', () => {
@@ -79,7 +79,7 @@ describe('buildChildEntries', () => {
         // line 7: kept as 'plain'
         expect(entries.map(e => ({ kind: e.kind, bodyLine: e.bodyLine }))).toEqual([
             { kind: 'task', bodyLine: 5 },
-            { kind: 'plain', bodyLine: 7 },
+            { kind: 'line', bodyLine: 7 },
         ]);
     });
 
@@ -121,9 +121,9 @@ describe('buildChildEntries', () => {
         const lookup = (id: string): Task | undefined => id === 'c' ? c : undefined;
         const entries = buildChildEntries(parent, lookup);
         expect(entries.map(e => ({ kind: e.kind, bodyLine: e.bodyLine }))).toEqual([
-            { kind: 'plain', bodyLine: 11 },
+            { kind: 'line', bodyLine: 11 },
             { kind: 'task', bodyLine: 12 },
-            { kind: 'plain', bodyLine: 13 },
+            { kind: 'line', bodyLine: 13 },
         ]);
     });
 });

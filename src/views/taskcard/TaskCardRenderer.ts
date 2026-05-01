@@ -158,7 +158,7 @@ export class TaskCardRenderer extends Component {
                 if (!child) continue;
                 total++;
                 if (isCompleteStatusChar(child.statusChar, settings.statusDefinitions)) completed++;
-            } else if (entry.kind === 'plain' && entry.line.checkboxChar !== null) {
+            } else if (entry.kind === 'line' && entry.line.checkboxChar !== null) {
                 total++;
                 if (isCompleteStatusChar(entry.line.checkboxChar, settings.statusDefinitions)) completed++;
             }
