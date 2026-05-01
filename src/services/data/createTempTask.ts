@@ -23,7 +23,7 @@ export interface TempTaskFields {
 /**
  * Builds a synthetic raw {@link Task} suitable for one of:
  * - feeding through `TaskParser.format()` for string serialization
- * - `TaskRepository.createFrontmatterTaskFile()` for file creation
+ * - `TaskRepository.createTvFile()` for file creation
  * - `toDisplayTask(t, startHour, NO_TASK_LOOKUP)` for modal placeholders
  *
  * Centralizing the construction keeps the substrate fields

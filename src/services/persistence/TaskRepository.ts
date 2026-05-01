@@ -67,22 +67,22 @@ export class TaskRepository {
         return this.inlineWriter.appendTaskWithChildren(destPath, content, task);
     }
 
-    // --- Frontmatter Task Operations ---
+    // --- tv-file Task Operations ---
 
-    async updateFrontmatterTask(
+    async updateTvFile(
         task: Task,
         updates: Partial<Task>,
         frontmatterKeys: FrontmatterTaskKeys
     ): Promise<void> {
-        return this.frontmatterWriter.updateFrontmatterTask(task, updates, frontmatterKeys);
+        return this.frontmatterWriter.updateTvFile(task, updates, frontmatterKeys);
     }
 
-    async deleteFrontmatterTask(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
-        return this.frontmatterWriter.deleteFrontmatterTask(task, frontmatterKeys);
+    async deleteTvFile(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
+        return this.frontmatterWriter.deleteTvFile(task, frontmatterKeys);
     }
 
-    async insertLineAfterFrontmatter(filePath: string, lineContent: string, header: string, headerLevel: number): Promise<void> {
-        return this.frontmatterWriter.insertLineAfterFrontmatter(filePath, lineContent, header, headerLevel);
+    async insertLineAfterTvFile(filePath: string, lineContent: string, header: string, headerLevel: number): Promise<void> {
+        return this.frontmatterWriter.insertLineAfterTvFile(filePath, lineContent, header, headerLevel);
     }
 
     // --- Task Cloning Operations ---
@@ -91,8 +91,8 @@ export class TaskRepository {
         return this.cloner.duplicateInlineTask(task, options);
     }
 
-    async duplicateFrontmatterTask(task: Task, keys: FrontmatterTaskKeys, options?: DuplicateOptions): Promise<void> {
-        return this.cloner.duplicateFrontmatterTask(task, keys, options);
+    async duplicateTvFile(task: Task, keys: FrontmatterTaskKeys, options?: DuplicateOptions): Promise<void> {
+        return this.cloner.duplicateTvFile(task, keys, options);
     }
 
     async insertRecurrenceForTask(task: Task, content: string, newTask?: Task, copyChildren = true): Promise<void> {
@@ -101,7 +101,7 @@ export class TaskRepository {
 
     // --- Task Conversion Operations ---
 
-    async createFrontmatterTaskFile(
+    async createTvFile(
         task: Task,
         headerName: string,
         headerLevel: number,
@@ -109,7 +109,7 @@ export class TaskRepository {
         sourceSharedTags?: string[],
         frontmatterKeys?: FrontmatterTaskKeys
     ): Promise<string> {
-        return this.converter.convertToFrontmatterTask(
+        return this.converter.convertToTvFile(
             task,
             headerName,
             headerLevel,

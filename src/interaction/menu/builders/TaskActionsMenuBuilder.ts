@@ -218,11 +218,11 @@ export class TaskActionsMenuBuilder {
                         menu.close();
                         new ConfirmModal(
                             this.app,
-                            t('menu.convertToFrontmatterTask'),
-                            t('menu.convertToFrontmatterTaskMessage'),
+                            t('menu.convertToTvFile'),
+                            t('menu.convertToTvFileMessage'),
                             async () => {
                                 try {
-                                    await this.writeService.convertToFrontmatterTask(task.id);
+                                    await this.writeService.convertToTvFile(task.id);
                                     new Notice(t('notice.taskConverted'));
                                 } catch (e) {
                                     new Notice(t('notice.taskConvertFailed') + ': ' + (e as Error).message);

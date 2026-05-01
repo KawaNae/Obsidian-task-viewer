@@ -4,18 +4,18 @@ import { TaskRepository } from '../persistence/TaskRepository';
 import { TagExtractor } from '../parsing/utils/TagExtractor';
 
 /**
- * inline タスクを frontmatter タスクファイルへ変換する業務フローを担当。
+ * tv-inline タスクを tv-file タスクへ変換する業務フローを担当。
  * - ソースファイルの color / tags 読み取り
  * - 変換先ファイル作成
  * - 元タスクを wikilink へ置換
  */
-export class InlineToFrontmatterConversionService {
+export class TvInlineToTvFileConverter {
     constructor(
         private app: App,
         private repository: TaskRepository,
     ) {}
 
-    async convertInlineTaskToFrontmatter(
+    async convertTvInlineToTvFile(
         task: Task,
         headerName: string,
         headerLevel: number,
@@ -24,7 +24,7 @@ export class InlineToFrontmatterConversionService {
         const sourceColor = this.getSourceFileColor(task.file, frontmatterKeys.color);
         const sourceSharedTags = this.getSourceFileSharedTags(task.file);
 
-        const newPath = await this.repository.createFrontmatterTaskFile(
+        const newPath = await this.repository.createTvFile(
             task,
             headerName,
             headerLevel,

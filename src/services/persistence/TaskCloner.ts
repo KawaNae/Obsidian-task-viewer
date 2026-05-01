@@ -72,11 +72,11 @@ export class TaskCloner {
     }
 
     /**
-     * Frontmatter タスクを複製する（新規ファイル作成）。
+     * tv-file タスクを複製する（新規ファイル作成）。
      * - dayOffset=0: `Name.md` → `Name copy.md` → `Name copy 2.md` → ...
      * - dayOffset>0: dayOffset..dayOffset+count-1 の各日付でシフトしたファイルを作成
      */
-    async duplicateFrontmatterTask(task: Task, frontmatterKeys: FrontmatterTaskKeys, options?: DuplicateOptions): Promise<void> {
+    async duplicateTvFile(task: Task, frontmatterKeys: FrontmatterTaskKeys, options?: DuplicateOptions): Promise<void> {
         const { dayOffset = 0, count = 1 } = options ?? {};
 
         const file = this.app.vault.getAbstractFileByPath(task.file);

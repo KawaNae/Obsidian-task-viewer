@@ -577,7 +577,7 @@ export class TaskApi {
         if (!params.id) throw new TaskApiError('Missing required parameter: id');
         const task = this.readService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
-        const newPath = await this.writeService.convertToFrontmatterTask(params.id);
+        const newPath = await this.writeService.convertToTvFile(params.id);
         return { convertedFrom: params.id, newFile: newPath };
     }
 

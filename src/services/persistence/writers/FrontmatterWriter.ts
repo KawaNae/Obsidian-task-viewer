@@ -7,8 +7,8 @@ import { DateUtils } from '../../../utils/DateUtils';
 
 
 /**
- * Frontmatterタスクの書き込み操作を担当するクラス
- * Frontmatterフィールドの更新、削除、挿入などの操作を提供
+ * tv-file (frontmatter-form) タスクの書き込み操作を担当するクラス。
+ * 下請けの YAML 操作には FrontmatterLineEditor を使用。
  */
 export class FrontmatterWriter {
     constructor(
@@ -17,11 +17,11 @@ export class FrontmatterWriter {
     ) {}
 
     /**
-     * Frontmatter タスクの日付・ステータス等を更新する。
+     * tv-file タスクの日付・ステータス等を更新する。
      * task オブジェクトは Object.assign で既に最新値に更新済み。
      * updates には変更されたフィールドのキーのみが含まれる。
      */
-    async updateFrontmatterTask(
+    async updateTvFile(
         task: Task,
         updates: Partial<Task>,
         frontmatterKeys: FrontmatterTaskKeys
@@ -55,10 +55,10 @@ export class FrontmatterWriter {
     }
 
     /**
-     * Frontmatter タスクを削除する（タスク関連キーを除去のみ）。
+     * tv-file タスクを削除する（タスク関連キーを除去のみ）。
      * ファイル自体は削除しない。
      */
-    async deleteFrontmatterTask(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
+    async deleteTvFile(task: Task, frontmatterKeys: FrontmatterTaskKeys): Promise<void> {
         await this.updateFrontmatterFields(task.file, {
             [frontmatterKeys.start]: null,
             [frontmatterKeys.end]: null,
@@ -69,10 +69,10 @@ export class FrontmatterWriter {
     }
 
     /**
-     * Frontmatter タスクファイルの指定見出し下に子タスク行を挿入する。
+     * tv-file タスクファイルの指定見出し下に子タスク行を挿入する。
      * 見出しが存在しない場合はファイル末尾に作成する。
      */
-    async insertLineAfterFrontmatter(
+    async insertLineAfterTvFile(
         filePath: string,
         lineContent: string,
         header: string,

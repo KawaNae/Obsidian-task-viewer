@@ -5,7 +5,7 @@ import { DateUtils } from '../../utils/DateUtils';
 import { TagExtractor } from '../parsing/utils/TagExtractor';
 
 /**
- * Inline タスクを Frontmatter タスクファイルに変換する。
+ * tv-inline タスクを tv-file タスク（frontmatter ベース）に変換する。
  */
 export class TaskConverter {
     constructor(
@@ -14,10 +14,10 @@ export class TaskConverter {
     ) {}
 
     /**
-     * inline タスクを frontmatter タスクファイルに変換。
+     * tv-inline タスクを tv-file タスクへ変換。
      * 新ファイルパスを返す。
      */
-    async convertToFrontmatterTask(
+    async convertToTvFile(
         task: Task,
         headerName: string,
         headerLevel: number,

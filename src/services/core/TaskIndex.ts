@@ -10,7 +10,7 @@ import { TaskScanner } from './TaskScanner';
 import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { EditorObserver } from './EditorObserver';
-import { InlineToFrontmatterConversionService } from './InlineToFrontmatterConversionService';
+import { TvInlineToTvFileConverter } from './TvInlineToTvFileConverter';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { DateUtils as CoreDateUtils } from '../../utils/DateUtils';
 import { toDisplayTask } from '../display/DisplayTaskConverter';
@@ -37,7 +37,7 @@ export class TaskIndex {
     private syncDetector: SyncDetector;
     private editorObserver: EditorObserver;
     private repository: TaskRepository;
-    private inlineToFrontmatterConversionService: InlineToFrontmatterConversionService;
+    private tvInlineToTvFileConverter: TvInlineToTvFileConverter;
     private commandExecutor: TaskCommandExecutor;
     private settings: TaskViewerSettings;
     private draggingFilePath: string | null = null;  // ドラッグ中のファイルパス
@@ -64,7 +64,7 @@ export class TaskIndex {
         this.validator = new TaskValidator();
         this.syncDetector = new SyncDetector();
         this.repository = new TaskRepository(app);
-        this.inlineToFrontmatterConversionService = new InlineToFrontmatterConversionService(app, this.repository);
+        this.tvInlineToTvFileConverter = new TvInlineToTvFileConverter(app, this.repository);
         this.commandExecutor = new TaskCommandExecutor(this.repository, this, app);
         this.editorObserver = new EditorObserver(app, this.syncDetector);
         this.scanner = new TaskScanner(
@@ -473,7 +473,7 @@ export class TaskIndex {
         }
 
         if (isTvFile(task)) {
-            await this.repository.updateFrontmatterTask(task, updates, this.settings.frontmatterTaskKeys);
+            await this.repository.updateTvFile(task, updates, this.settings.frontmatterTaskKeys);
         } else {
             // All inline tasks route through InlineTaskWriter; TaskParser.format
             // dispatches by parserId. TVInlineParser.format() handles both
@@ -493,7 +493,7 @@ export class TaskIndex {
             this.syncDetector.markLocalEdit(task.file);
 
             if (isTvFile(task)) {
-                await this.repository.deleteFrontmatterTask(task, this.settings.frontmatterTaskKeys);
+                await this.repository.deleteTvFile(task, this.settings.frontmatterTaskKeys);
             } else {
                 await this.repository.deleteTaskFromFile(task);
             }
@@ -511,7 +511,7 @@ export class TaskIndex {
             this.syncDetector.markLocalEdit(task.file);
 
             if (isTvFile(task)) {
-                await this.repository.duplicateFrontmatterTask(task, this.settings.frontmatterTaskKeys, options);
+                await this.repository.duplicateTvFile(task, this.settings.frontmatterTaskKeys, options);
             } else {
                 await this.repository.duplicateInlineTask(task, options);
             }
@@ -525,18 +525,18 @@ export class TaskIndex {
      * ソースファイル + 新ファイルの両方を再スキャン。
      * @returns 新ファイルのパス
      */
-    async convertToFrontmatterTask(taskId: string): Promise<string> {
+    async convertToTvFile(taskId: string): Promise<string> {
         return this.withNotify(async () => {
             const task = this.store.getTask(taskId);
             if (!task) throw new Error('Task not found');
 
             if (!isTvInline(task)) {
-                throw new Error('Only inline tasks can be converted to frontmatter tasks');
+                throw new Error('Only tv-inline tasks can be converted to tv-file tasks');
             }
 
             this.syncDetector.markLocalEdit(task.file);
 
-            const newPath = await this.inlineToFrontmatterConversionService.convertInlineTaskToFrontmatter(
+            const newPath = await this.tvInlineToTvFileConverter.convertTvInlineToTvFile(
                 task,
                 this.settings.frontmatterTaskHeader,
                 this.settings.frontmatterTaskHeaderLevel,
@@ -576,7 +576,7 @@ export class TaskIndex {
             this.syncDetector.markLocalEdit(task.file);
 
             if (isTvFile(task)) {
-                await this.repository.insertLineAfterFrontmatter(
+                await this.repository.insertLineAfterTvFile(
                     task.file, childLine,
                     this.settings.frontmatterTaskHeader,
                     this.settings.frontmatterTaskHeaderLevel
@@ -602,7 +602,7 @@ export class TaskIndex {
                 endTime: taskData.endTime,
                 due: taskData.due,
             });
-            return await this.repository.createFrontmatterTaskFile(
+            return await this.repository.createTvFile(
                 tempTask,
                 this.settings.frontmatterTaskHeader,
                 this.settings.frontmatterTaskHeaderLevel,

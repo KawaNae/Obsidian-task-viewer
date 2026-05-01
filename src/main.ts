@@ -241,7 +241,7 @@ export default class TaskViewerPlugin extends Plugin {
                     endTime: result.endTime,
                     due: result.due,
                 });
-                return await repository.createFrontmatterTaskFile(
+                return await repository.createTvFile(
                     tempTask,
                     this.settings.frontmatterTaskHeader,
                     this.settings.frontmatterTaskHeaderLevel,

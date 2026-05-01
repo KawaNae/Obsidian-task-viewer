@@ -43,8 +43,8 @@ export class TaskWriteService {
         return this.taskIndex.duplicateTask(taskId, options);
     }
 
-    async convertToFrontmatterTask(taskId: string): Promise<string> {
-        return this.taskIndex.convertToFrontmatterTask(taskId);
+    async convertToTvFile(taskId: string): Promise<string> {
+        return this.taskIndex.convertToTvFile(taskId);
     }
 
     // ===== Task creation =====

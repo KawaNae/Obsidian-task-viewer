@@ -151,7 +151,7 @@ export class CheckboxMenuBuilder {
                                     await ops.updateLine(`${indent}${marker} [[${linkTarget}|${fileName}]]`);
                                 },
                                 { content, startDate: today },
-                                { title: t('menu.convertToFrontmatterTaskTitle'), submitLabel: t('modal.convert'), focusField: 'start', startHour: this.getStartHour(), dailyNoteDate }
+                                { title: t('menu.convertToTvFileTitle'), submitLabel: t('modal.convert'), focusField: 'start', startHour: this.getStartHour(), dailyNoteDate }
                             ).open();
                         });
                 });
