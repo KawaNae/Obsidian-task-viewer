@@ -26,6 +26,7 @@ export class MenuHandler {
     private validationMenuBuilder: ValidationMenuBuilder;
 
     private viewStartDate: string | null = null;
+    private currentMenu: Menu | null = null;
 
     constructor(
         private app: App,
@@ -93,7 +94,15 @@ export class MenuHandler {
         // Convert to DisplayTask for property display (implicit/explicit flags)
         const displayTask = toDisplayTask(task, this.plugin.settings.startHour);
 
+        // Touch 長押しでは Obsidian Menu の outside-click による自動 close が発火しないため、
+        // 前のメニューが残ったまま重なる。明示的に閉じてから新しい menu を表示する。
+        this.currentMenu?.hide();
+
         const menu = new Menu();
+        this.currentMenu = menu;
+        menu.onHide(() => {
+            if (this.currentMenu === menu) this.currentMenu = null;
+        });
 
         // 0. Validation warning (if any)
         this.validationMenuBuilder.addValidationWarning(menu, task);
