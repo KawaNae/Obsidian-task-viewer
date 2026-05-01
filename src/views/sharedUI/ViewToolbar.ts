@@ -72,13 +72,17 @@ export class DateNavigator {
 
 /**
  * View mode selector (1 Day / 3 Days / Week).
+ *
+ * Returns an `update()` handle so external state changes (layout restore, URI
+ * params, template apply) can refresh the label. Reads `getValue()` lazily on
+ * every menu open so the checked item always reflects current state.
  */
 export class ViewModeSelector {
     static render(
         toolbar: HTMLElement,
-        currentValue: number,
+        getValue: () => number,
         onChange: (newValue: number) => void
-    ): void {
+    ): { update: () => void } {
         const getLabel = (val: number) => {
             if (val === 1) return t('toolbar.viewMode1Day');
             if (val === 3) return t('toolbar.viewMode3Days');
@@ -90,45 +94,36 @@ export class ViewModeSelector {
         const labelEl = button.createSpan({ cls: 'timeline-toolbar__btn-label' });
         setIcon(iconEl, 'chevrons-up-down');
 
-        const applyModeLabel = (value: number) => {
-            const label = getLabel(value);
+        const update = () => {
+            const label = getLabel(getValue());
             labelEl.setText(label);
             button.setAttribute('aria-label', t('toolbar.viewModeLabel', { label }));
         };
-        applyModeLabel(currentValue);
+        update();
+
+        const options: Array<{ value: number; title: string }> = [
+            { value: 1, title: t('toolbar.viewMode1Day') },
+            { value: 3, title: t('toolbar.viewMode3Days') },
+            { value: 7, title: t('toolbar.viewModeWeek') },
+        ];
 
         button.onclick = (e) => {
+            const current = getValue();
             const menu = new Menu();
-
-            menu.addItem((item: MenuItem) => {
-                item.setTitle(t('toolbar.viewMode1Day'))
-                    .setChecked(currentValue === 1)
-                    .onClick(() => {
-                        onChange(1);
-                        applyModeLabel(1);
-                    });
-            });
-
-            menu.addItem((item: MenuItem) => {
-                item.setTitle(t('toolbar.viewMode3Days'))
-                    .setChecked(currentValue === 3)
-                    .onClick(() => {
-                        onChange(3);
-                        applyModeLabel(3);
-                    });
-            });
-
-            menu.addItem((item: MenuItem) => {
-                item.setTitle(t('toolbar.viewModeWeek'))
-                    .setChecked(currentValue === 7)
-                    .onClick(() => {
-                        onChange(7);
-                        applyModeLabel(7);
-                    });
-            });
-
+            for (const opt of options) {
+                menu.addItem((item: MenuItem) => {
+                    item.setTitle(opt.title)
+                        .setChecked(current === opt.value)
+                        .onClick(() => {
+                            onChange(opt.value);
+                            update();
+                        });
+                });
+            }
             menu.showAtPosition({ x: e.pageX, y: e.pageY });
         };
+
+        return { update };
     }
 }
 
@@ -139,42 +134,46 @@ export class ZoomSelector {
     /**
      * Renders zoom selector button with dropdown options.
      * @param toolbar - Parent element to render into
-     * @param currentZoom - Current zoom level (e.g., 1.0 = 100%)
+     * @param getZoom - Lazy reader for the current zoom level (1.0 = 100%)
      * @param onZoomChange - Callback when zoom changes
+     * @returns `update()` to refresh the label after external state changes
      */
     static render(
         toolbar: HTMLElement,
-        currentZoom: number,
+        getZoom: () => number,
         onZoomChange: (newZoom: number) => Promise<void>
-    ): void {
+    ): { update: () => void } {
         const button = toolbar.createEl('button', { cls: 'timeline-toolbar__btn--range timeline-toolbar__btn--zoom' });
         const iconEl = button.createSpan('timeline-toolbar__btn-icon');
         const labelEl = button.createSpan({ cls: 'timeline-toolbar__btn-label' });
         setIcon(iconEl, 'search');
 
-        const applyLabel = (zoom: number) => {
-            const pct = `${Math.round(zoom * 100)}%`;
+        const update = () => {
+            const pct = `${Math.round(getZoom() * 100)}%`;
             labelEl.setText(pct);
             button.setAttribute('aria-label', t('toolbar.zoomLabel', { pct }));
         };
-        applyLabel(currentZoom);
+        update();
 
         const zoomLevels = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
         button.onclick = (e) => {
+            const current = getZoom();
             const menu = new Menu();
             for (const level of zoomLevels) {
                 const pct = `${Math.round(level * 100)}%`;
                 menu.addItem((item: MenuItem) => {
                     item.setTitle(pct)
-                        .setChecked(currentZoom === level)
+                        .setChecked(current === level)
                         .onClick(async () => {
                             await onZoomChange(level);
-                            applyLabel(level);
+                            update();
                         });
                 });
             }
             menu.showAtPosition({ x: e.pageX, y: e.pageY });
         };
+
+        return { update };
     }
 }
 
