@@ -1,16 +1,15 @@
 import { Task } from '../../../types';
-import { ParserStrategy } from './ParserStrategy';
+import { LeafParserStrategy, ParserStrategy } from './ParserStrategy';
 
 /**
  * Chain of Responsibility pattern for multiple parser support.
  * Tries each parser in order until one successfully parses the line.
  */
 export class ParserChain implements ParserStrategy {
-    readonly id = 'chain';
     readonly isReadOnly = false;
-    private parsers: ParserStrategy[];
+    private parsers: LeafParserStrategy[];
 
-    constructor(parsers: ParserStrategy[]) {
+    constructor(parsers: LeafParserStrategy[]) {
         if (parsers.length === 0) {
             throw new Error('ParserChain requires at least one parser');
         }
@@ -62,14 +61,14 @@ export class ParserChain implements ParserStrategy {
     /**
      * Add a parser to the chain.
      */
-    addParser(parser: ParserStrategy): void {
+    addParser(parser: LeafParserStrategy): void {
         this.parsers.push(parser);
     }
 
     /**
      * Get all parsers in the chain.
      */
-    getParsers(): readonly ParserStrategy[] {
+    getParsers(): readonly LeafParserStrategy[] {
         return this.parsers;
     }
 }

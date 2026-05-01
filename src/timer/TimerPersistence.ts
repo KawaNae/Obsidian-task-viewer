@@ -2,6 +2,7 @@
  * Timer persistence: serialize, deserialize, migrate, reconcile.
  */
 
+import type { ParserId } from '../types';
 import {
     IntervalGroup,
     IntervalTimer,
@@ -25,15 +26,19 @@ import TaskViewerPlugin from '../main';
  * Migration is one-way and idempotent — once read and re-saved, persisted
  * data uses the new values. Safe to remove this table after a few releases.
  */
-const PARSER_ID_MIGRATION: Record<string, string> = {
+const PARSER_ID_MIGRATION: Record<string, ParserId> = {
     'at-notation': 'tv-inline',
     'frontmatter': 'tv-file',
     'plain': 'tv-inline',
 };
 
-function normalizeParserId(value: string | undefined): string {
+const CURRENT_PARSER_IDS: ReadonlySet<ParserId> = new Set(['tv-inline', 'tv-file', 'tasks-plugin', 'day-planner']);
+
+function normalizeParserId(value: string | undefined): ParserId {
     if (!value) return 'tv-inline';
-    return PARSER_ID_MIGRATION[value] ?? value;
+    const migrated = PARSER_ID_MIGRATION[value];
+    if (migrated) return migrated;
+    return CURRENT_PARSER_IDS.has(value as ParserId) ? (value as ParserId) : 'tv-inline';
 }
 
 export interface PersistedTimer {

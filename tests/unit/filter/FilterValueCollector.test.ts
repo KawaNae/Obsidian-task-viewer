@@ -87,15 +87,14 @@ describe('FilterValueCollector', () => {
     });
 
     describe('collectNotations', () => {
-        it('collects unique sorted notations derived from parserId (plain merged into taskviewer)', () => {
+        it('collects unique sorted notations derived from parserId (tv-inline + tv-file collapse into taskviewer)', () => {
             const tasks = [
-                makeTask({ parserId: 'frontmatter' }),
-                makeTask({ parserId: 'at-notation' }),
-                makeTask({ parserId: 'at-notation' }),
-                makeTask({ parserId: 'plain' }),
+                makeTask({ parserId: 'tv-file' }),
+                makeTask({ parserId: 'tv-inline' }),
+                makeTask({ parserId: 'tv-inline' }),
                 makeTask({ parserId: 'tasks-plugin' }),
             ];
-            // frontmatter + at-notation + plain all collapse into 'taskviewer'
+            // tv-inline + tv-file both collapse into 'taskviewer'
             expect(FilterValueCollector.collectNotations(tasks)).toEqual(['tasks', 'taskviewer']);
         });
     });

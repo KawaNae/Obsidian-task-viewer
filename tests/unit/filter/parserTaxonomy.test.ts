@@ -18,10 +18,8 @@ describe('parserTaxonomy', () => {
         it('day-planner → inline', () => {
             expect(getTaskKind('day-planner')).toBe('inline');
         });
-
-        it('unknown parserId → inline (non-file fallback)', () => {
-            expect(getTaskKind('xyz-unknown')).toBe('inline');
-        });
+        // No fallback test: ParserId is a closed union, unknown values cannot
+        // reach getTaskKind without a type assertion. Switch is exhaustive.
     });
 
     describe('getTaskNotation', () => {
@@ -40,9 +38,7 @@ describe('parserTaxonomy', () => {
         it('day-planner → dayplanner', () => {
             expect(getTaskNotation('day-planner')).toBe('dayplanner');
         });
-
-        it('unknown parserId → taskviewer (fallback)', () => {
-            expect(getTaskNotation('xyz-unknown')).toBe('taskviewer');
-        });
+        // No fallback test: ParserId is a closed union, unknown values cannot
+        // reach getTaskNotation without a type assertion. Switch is exhaustive.
     });
 });

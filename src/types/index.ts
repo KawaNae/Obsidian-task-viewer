@@ -68,6 +68,15 @@ export type ChildEntry =
     | { kind: 'wikilink'; target: string; bodyLine: number; line: ChildLine }
     | { kind: 'plain'; line: ChildLine; bodyLine: number };
 
+/**
+ * Identifier of the parser that produced a task.
+ *
+ * Production parsers emit one of these four values. Legacy persisted values
+ * (`'at-notation'`, `'frontmatter'`, `'plain'`) are migrated at load time
+ * by `TimerPersistence.normalizeParserId`; they never appear on a live Task.
+ */
+export type ParserId = 'tv-inline' | 'tv-file' | 'tasks-plugin' | 'day-planner';
+
 export interface Task {
     // Identity and source location.
     id: string;
@@ -139,10 +148,10 @@ export interface Task {
     };
 
     /**
-     * Parser identifier that produced this task (e.g. at-notation/frontmatter).
+     * Parser identifier that produced this task. See {@link ParserId}.
      * Used for parser-specific writeback behavior.
      */
-    parserId: string;
+    parserId: ParserId;
 
     // Resolved styling (from child lines or parent-task inheritance).
     color?: string;

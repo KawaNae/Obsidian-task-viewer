@@ -1,5 +1,5 @@
 import type { Task, FlowCommand, FlowModifier } from '../../../types';
-import { ParserStrategy } from '../strategies/ParserStrategy';
+import { LeafParserStrategy } from '../strategies/ParserStrategy';
 import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';
@@ -28,7 +28,7 @@ interface DateBlockResult {
  * so a task gaining or losing dates is handled by the same parser without
  * promotion/demotion bookkeeping.
  */
-export class TVInlineParser implements ParserStrategy {
+export class TVInlineParser implements LeafParserStrategy {
     readonly id = 'tv-inline';
     readonly isReadOnly = false;
 
