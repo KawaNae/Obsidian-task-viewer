@@ -255,6 +255,7 @@ export class TimelineToolbar {
                 this.callbacks.onRender();
                 this.app.workspace.requestSaveLayout();
             },
+            menuPresenter: this.plugin.menuPresenter,
         });
 
         // Sidebar Toggle
@@ -302,7 +303,8 @@ export class TimelineToolbar {
                 this.viewState.daysToShow = newValue;
                 this.callbacks.onRender();
                 this.app.workspace.requestSaveLayout();
-            }
+            },
+            this.plugin.menuPresenter
         );
     }
 
@@ -314,7 +316,8 @@ export class TimelineToolbar {
                 this.viewState.zoomLevel = newZoom;
                 this.callbacks.onRender();
                 this.app.workspace.requestSaveLayout();
-            }
+            },
+            this.plugin.menuPresenter
         );
     }
 

@@ -1,4 +1,4 @@
-import { App, Menu } from 'obsidian';
+import { App } from 'obsidian';
 import { TaskWriteService } from '../../../services/data/TaskWriteService';
 import { CheckboxMenuBuilder, type CheckboxLineOps, type CreateTvFileCallback } from './CheckboxMenuBuilder';
 import TaskViewerPlugin from '../../../main';
@@ -32,7 +32,6 @@ export class ChildLineMenuBuilder {
     showMenu(parentTask: Task, line: ChildLine, bodyLine: number, x: number, y: number): void {
         if (bodyLine < 0) return;
         const settings = this.plugin.settings;
-        const menu = new Menu();
 
         const ops: CheckboxLineOps = {
             updateLine: (content) => this.writeService.updateChildLine(parentTask.id, bodyLine, content),
@@ -40,8 +39,9 @@ export class ChildLineMenuBuilder {
             deleteLine: () => this.writeService.deleteChildLine(parentTask.id, bodyLine),
         };
 
-        this.checkboxMenuBuilder.addFullMenu(menu, line.text, settings, ops, parentTask.file);
-        menu.showAtPosition({ x, y });
+        this.plugin.menuPresenter.present((menu) => {
+            this.checkboxMenuBuilder.addFullMenu(menu, line.text, settings, ops, parentTask.file);
+        }, { kind: 'position', x, y });
     }
 
     private async createTvFile(result: CreateTaskResult, statusChar: string): Promise<string> {

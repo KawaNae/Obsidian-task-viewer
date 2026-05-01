@@ -190,7 +190,7 @@ export class TimelineView extends ItemView {
             },
             getIsOpen: () => this.viewState.showSidebar,
         });
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings);

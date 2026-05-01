@@ -1,8 +1,8 @@
-import { Menu } from 'obsidian';
 import { t } from '../../../i18n';
 import type { DisplayTask } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
+import { TouchLongPressBinder } from '../../../interaction/menu/TouchLongPressBinder';
 import { DateUtils } from '../../../utils/DateUtils';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
 import { TaskLayout } from '../TaskLayout';
@@ -116,48 +116,17 @@ export class TimelineSectionRenderer {
 
     /** Adds click/context listeners for creating new tasks. */
     public addCreateTaskListeners(col: HTMLElement, date: string) {
-        // Context Menu (Right Click)
-        col.addEventListener('contextmenu', (e) => {
-            // Prevent default context menu if clicking on empty space
-            if (e.target === col) {
-                e.preventDefault();
-                this.showEmptySpaceMenu(e.pageX, e.pageY, e.offsetY, date);
-            }
-        });
-
-        // Long Press (Touch)
-        let touchTimer: NodeJS.Timeout | null = null;
-        let touchStartX: number = 0;
-        let touchStartY: number = 0;
-        col.addEventListener('touchstart', (e) => {
-            if (e.target === col && e.touches.length === 1) {
-                const touch = e.touches[0];
-                // Calculate offsetY relative to col
+        TouchLongPressBinder.bind(col, {
+            getThreshold: () => this.plugin.settings.longPressThreshold,
+            targetCheck: (t) => t === col,
+            onLongPress: (x, y) => {
                 const rect = col.getBoundingClientRect();
-                const offsetY = touch.clientY - rect.top;
-                touchStartX = touch.clientX;
-                touchStartY = touch.clientY;
-
-                touchTimer = setTimeout(() => {
-                    // Show context menu instead of directly opening modal
-                    this.showEmptySpaceMenu(touchStartX, touchStartY, offsetY, date);
-                }, this.plugin.settings.longPressThreshold);
-            }
-        }, { passive: true });
-
-        col.addEventListener('touchend', () => {
-            if (touchTimer) {
-                clearTimeout(touchTimer);
-                touchTimer = null;
-            }
-        }, { passive: true });
-
-        col.addEventListener('touchmove', () => {
-            if (touchTimer) {
-                clearTimeout(touchTimer);
-                touchTimer = null;
-            }
-        }, { passive: true });
+                this.showEmptySpaceMenu(x, y, y - rect.top, date);
+            },
+            onContextMenu: (e) => {
+                this.showEmptySpaceMenu(e.pageX, e.pageY, e.offsetY, date);
+            },
+        });
     }
 
     private handleCreateTaskTrigger(offsetY: number, date: string) {
@@ -237,32 +206,30 @@ export class TimelineSectionRenderer {
 
     /** Show context menu for empty space click */
     private showEmptySpaceMenu(x: number, y: number, offsetY: number, date: string) {
-        const menu = new Menu();
+        this.plugin.menuPresenter.present((menu) => {
+            // Create new Task
+            menu.addItem((item) => {
+                item.setTitle(t('menu.createTaskForDailyNote'))
+                    .setIcon('plus')
+                    .onClick(() => this.handleCreateTaskTrigger(offsetY, date));
+            });
 
-        // Create new Task
-        menu.addItem((item) => {
-            item.setTitle(t('menu.createTaskForDailyNote'))
-                .setIcon('plus')
-                .onClick(() => this.handleCreateTaskTrigger(offsetY, date));
-        });
+            menu.addSeparator();
 
-        menu.addSeparator();
+            // Open Countup (Daily Note)
+            menu.addItem((item) => {
+                item.setTitle(t('menu.openCountupForDailyNote'))
+                    .setIcon('clock')
+                    .onClick(() => this.openDailyNoteTimer(date, 'countup'));
+            });
 
-        // Open Countup (Daily Note)
-        menu.addItem((item) => {
-            item.setTitle(t('menu.openCountupForDailyNote'))
-                .setIcon('clock')
-                .onClick(() => this.openDailyNoteTimer(date, 'countup'));
-        });
-
-        // Open Pomodoro (Daily Note)
-        menu.addItem((item) => {
-            item.setTitle(t('menu.openPomodoroForDailyNote'))
-                .setIcon('timer')
-                .onClick(() => this.openDailyNoteTimer(date, 'pomodoro'));
-        });
-
-        menu.showAtPosition({ x, y });
+            // Open Pomodoro (Daily Note)
+            menu.addItem((item) => {
+                item.setTitle(t('menu.openPomodoroForDailyNote'))
+                    .setIcon('timer')
+                    .onClick(() => this.openDailyNoteTimer(date, 'pomodoro'));
+            });
+        }, { kind: 'position', x, y });
     }
 
     /** Open timer for daily note */

@@ -1,5 +1,3 @@
-import { Menu } from 'obsidian';
-
 import TaskViewerPlugin from '../../main';
 import { t } from '../../i18n';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
@@ -122,32 +120,30 @@ export class AllDaySectionRenderer {
 
     /** Show context menu for empty space click */
     private showEmptySpaceMenu(x: number, y: number, date: string) {
-        const menu = new Menu();
+        this.plugin.menuPresenter.present((menu) => {
+            // Create Task (All-Day type)
+            menu.addItem((item) => {
+                item.setTitle(t('menu.createTaskForDailyNote'))
+                    .setIcon('plus')
+                    .onClick(() => this.handleCreateTask(date));
+            });
 
-        // Create Task (All-Day type)
-        menu.addItem((item) => {
-            item.setTitle(t('menu.createTaskForDailyNote'))
-                .setIcon('plus')
-                .onClick(() => this.handleCreateTask(date));
-        });
+            menu.addSeparator();
 
-        menu.addSeparator();
+            // Open Pomodoro (Daily Note)
+            menu.addItem((item) => {
+                item.setTitle(t('menu.openPomodoroForDailyNote'))
+                    .setIcon('timer')
+                    .onClick(() => this.openDailyNoteTimer(date, 'pomodoro'));
+            });
 
-        // Open Pomodoro (Daily Note)
-        menu.addItem((item) => {
-            item.setTitle(t('menu.openPomodoroForDailyNote'))
-                .setIcon('timer')
-                .onClick(() => this.openDailyNoteTimer(date, 'pomodoro'));
-        });
-
-        // Open Timer (Daily Note)
-        menu.addItem((item) => {
-            item.setTitle(t('menu.openCountupForDailyNote'))
-                .setIcon('clock')
-                .onClick(() => this.openDailyNoteTimer(date, 'countup'));
-        });
-
-        menu.showAtPosition({ x, y });
+            // Open Timer (Daily Note)
+            menu.addItem((item) => {
+                item.setTitle(t('menu.openCountupForDailyNote'))
+                    .setIcon('clock')
+                    .onClick(() => this.openDailyNoteTimer(date, 'countup'));
+            });
+        }, { kind: 'position', x, y });
     }
 
     /** Create an all-day task for the specified date */

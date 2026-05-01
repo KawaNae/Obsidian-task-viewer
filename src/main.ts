@@ -36,6 +36,7 @@ import { TimerMenuBuilder } from './interaction/menu/builders/TimerMenuBuilder';
 import { TaskActionsMenuBuilder } from './interaction/menu/builders/TaskActionsMenuBuilder';
 import { CheckboxMenuBuilder } from './interaction/menu/builders/CheckboxMenuBuilder';
 import { ValidationMenuBuilder } from './interaction/menu/builders/ValidationMenuBuilder';
+import { MenuPresenter } from './interaction/menu/MenuPresenter';
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 import { toDisplayTask } from './services/display/DisplayTaskConverter';
 import { registerCliHandlers } from './cli/CliRegistrar';
@@ -52,6 +53,7 @@ export default class TaskViewerPlugin extends Plugin {
     private timerWidget: TimerWidget;
     public settings: TaskViewerSettings;
     public api: TaskApi;
+    public menuPresenter: MenuPresenter;
 
     // Day boundary check
     private lastVisualDate: string = '';
@@ -78,6 +80,9 @@ export default class TaskViewerPlugin extends Plugin {
         await this.taskIndex.initialize();
         this.readService = new TaskReadService(this.taskIndex, this.settings.startHour);
         this.writeService = new TaskWriteService(this.taskIndex);
+
+        // Single source of truth for menu lifecycle (dedup across all views/touch paths).
+        this.menuPresenter = new MenuPresenter();
 
         // Public API (plugin interop / DataviewJS)
         this.api = new TaskApi(this);
@@ -262,6 +267,7 @@ export default class TaskViewerPlugin extends Plugin {
             editorActionsBuilder,
             editorCheckboxBuilder,
             editorValidationBuilder,
+            this.menuPresenter,
             () => this.settings
         );
         this.registerEditorExtension(taskMenuResult.extension);

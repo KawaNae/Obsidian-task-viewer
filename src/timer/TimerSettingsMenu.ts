@@ -1,4 +1,4 @@
-import { App, Menu } from 'obsidian';
+import { App } from 'obsidian';
 import TaskViewerPlugin from '../main';
 import { InputModal } from '../modals/InputModal';
 import { IntervalTimer } from './TimerInstance';
@@ -22,8 +22,7 @@ export class TimerSettingsMenu {
             return;
         }
 
-        const menu = new Menu();
-
+        plugin.menuPresenter.present((menu) => {
         menu.addItem((item) => {
             item.setTitle('Work Duration').setDisabled(true);
         });
@@ -123,7 +122,7 @@ export class TimerSettingsMenu {
                 });
         });
 
-        menu.showAtMouseEvent(event);
+        }, { kind: 'mouseEvent', event });
     }
 
     private static syncIdleDisplay(timer: IntervalTimer, onRender: () => void): void {

@@ -488,23 +488,23 @@ export class TimerView extends ItemView {
 
         modeBtn.onclick = (e) => {
             if (!isIdle) return;
-            const menu = new Menu();
-            for (const mode of ['countup', 'countdown', 'pomodoro', 'interval'] as TimerViewMode[]) {
-                menu.addItem((item) => {
-                    item.setTitle(labels[mode])
-                        .setChecked(this.timerViewMode === mode)
-                        .onClick(async () => {
-                            this.timerViewMode = mode;
-                            this.timer = null;
-                            this.selectedTemplate = null;
-                            if (mode === 'interval') {
-                                await this.loadTemplates();
-                            }
-                            this.render();
-                        });
-                });
-            }
-            menu.showAtMouseEvent(e);
+            this.plugin.menuPresenter.present((menu) => {
+                for (const mode of ['countup', 'countdown', 'pomodoro', 'interval'] as TimerViewMode[]) {
+                    menu.addItem((item) => {
+                        item.setTitle(labels[mode])
+                            .setChecked(this.timerViewMode === mode)
+                            .onClick(async () => {
+                                this.timerViewMode = mode;
+                                this.timer = null;
+                                this.selectedTemplate = null;
+                                if (mode === 'interval') {
+                                    await this.loadTemplates();
+                                }
+                                this.render();
+                            });
+                    });
+                }
+            }, { kind: 'mouseEvent', event: e });
         };
 
         // Spacer
@@ -695,42 +695,40 @@ export class TimerView extends ItemView {
     // ─── Settings Menu ──────────────────────────────────────────
 
     private showSettingsMenu(e: MouseEvent): void {
-        const menu = new Menu();
+        this.plugin.menuPresenter.present((menu) => {
+            // Mode-specific settings
+            if (this.timerViewMode === 'countdown') {
+                this.addCountdownSettings(menu);
+                menu.addSeparator();
+            } else if (this.timerViewMode === 'pomodoro') {
+                this.addPomodoroSettings(menu);
+                menu.addSeparator();
+            }
 
-        // Mode-specific settings
-        if (this.timerViewMode === 'countdown') {
-            this.addCountdownSettings(menu);
-            menu.addSeparator();
-        } else if (this.timerViewMode === 'pomodoro') {
-            this.addPomodoroSettings(menu);
-            menu.addSeparator();
-        }
+            // Copy URI (all modes)
+            menu.addItem((item) => {
+                item.setTitle(t('timer.copyUri'))
+                    .setIcon('link')
+                    .onClick(async () => {
+                        const uri = this.buildCurrentUri();
+                        await navigator.clipboard.writeText(uri);
+                        new Notice(t('notice.uriCopied'));
+                    });
+            });
 
-        // Copy URI (all modes)
-        menu.addItem((item) => {
-            item.setTitle(t('timer.copyUri'))
-                .setIcon('link')
-                .onClick(async () => {
-                    const uri = this.buildCurrentUri();
-                    await navigator.clipboard.writeText(uri);
-                    new Notice(t('notice.uriCopied'));
-                });
-        });
-
-        // Copy as link (all modes)
-        menu.addItem((item) => {
-            item.setTitle(t('timer.copyAsLink'))
-                .setIcon('external-link')
-                .onClick(async () => {
-                    const uri = this.buildCurrentUri();
-                    const name = VIEW_META_TIMER.displayText;
-                    const link = `[${name}](${uri})`;
-                    await navigator.clipboard.writeText(link);
-                    new Notice(t('notice.linkCopied'));
-                });
-        });
-
-        menu.showAtMouseEvent(e);
+            // Copy as link (all modes)
+            menu.addItem((item) => {
+                item.setTitle(t('timer.copyAsLink'))
+                    .setIcon('external-link')
+                    .onClick(async () => {
+                        const uri = this.buildCurrentUri();
+                        const name = VIEW_META_TIMER.displayText;
+                        const link = `[${name}](${uri})`;
+                        await navigator.clipboard.writeText(link);
+                        new Notice(t('notice.linkCopied'));
+                    });
+            });
+        }, { kind: 'mouseEvent', event: e });
     }
 
     private buildCurrentUri(): string {

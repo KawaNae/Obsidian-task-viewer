@@ -108,7 +108,7 @@ export class CalendarView extends ItemView {
         this.plugin = plugin;
         this.readService = plugin.getTaskReadService();
         this.writeService = plugin.getTaskWriteService();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings);
@@ -538,6 +538,7 @@ export class CalendarView extends ItemView {
                 this.render();
                 this.pinnedListRenderer?.refresh();
             },
+            menuPresenter: this.plugin.menuPresenter,
         });
 
         const toggleBtn = toolbar.createEl('button', {
