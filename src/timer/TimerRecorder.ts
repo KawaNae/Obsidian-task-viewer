@@ -11,6 +11,7 @@ import { TimerInstance, getTimerElapsedSeconds } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { Task, isFrontmatterTask } from '../types';
+import { createTempTask } from '../services/data/createTempTask';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
 import { TimerStorageUtils } from './TimerStorageUtils';
@@ -371,28 +372,15 @@ export class TimerRecorder {
         endDate: string,
         endTime: string
     ): Task {
-        return {
+        return createTempTask({
             id: 'timer-temp',
-            file: '',
-            line: 0,
-            indent: 0,
             content: label,
             statusChar: 'x',
-            parentId: undefined,
-            childIds: [],
             startDate,
             startTime,
             endDate: endDate || undefined,
             endTime: endTime || undefined,
-            due: undefined,
-            commands: [],
-            originalText: '',
-            childLines: [],
-            childLineBodyOffsets: [],
-            tags: [],
-            parserId: 'tv-inline',
-            properties: {},
-        };
+        });
     }
 
     private formatDate(d: Date): string {

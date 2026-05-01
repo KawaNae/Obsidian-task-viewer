@@ -2,6 +2,7 @@ import { App, TFile } from 'obsidian';
 import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
 import { isFrontmatterTask, isTaskViewerInlineTask, hasBodyLine } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
+import { createTempTask } from '../data/createTempTask';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
 import { WikiLinkResolver } from './WikiLinkResolver';
 import { TaskStore } from './TaskStore';
@@ -591,27 +592,16 @@ export class TaskIndex {
 
     async createFrontmatterTaskFromData(taskData: Partial<Task>): Promise<string> {
         return this.withNotify(async () => {
-            const tempTask: Task = {
+            const tempTask = createTempTask({
                 id: 'convert-temp',
-                file: '',
-                line: 0,
-                indent: 0,
                 content: taskData.content ?? '',
                 statusChar: taskData.statusChar ?? ' ',
-                childIds: [],
-                childLines: [],
                 startDate: taskData.startDate,
                 startTime: taskData.startTime,
                 endDate: taskData.endDate,
                 endTime: taskData.endTime,
                 due: taskData.due,
-                commands: [],
-                originalText: '',
-                childLineBodyOffsets: [],
-                tags: [],
-                parserId: 'tv-inline',
-                properties: {},
-            };
+            });
             return await this.repository.createFrontmatterTaskFile(
                 tempTask,
                 this.settings.frontmatterTaskHeader,

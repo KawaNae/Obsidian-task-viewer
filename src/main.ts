@@ -6,6 +6,7 @@ import { CalendarView, VIEW_TYPE_CALENDAR, MiniCalendarView, VIEW_TYPE_MINI_CALE
 import { KanbanView, VIEW_TYPE_KANBAN } from './views/kanban';
 import { TimerView, VIEW_TYPE_TIMER } from './views/TimerView';
 import { TimerWidget } from './timer/TimerWidget';
+import { createTempTask } from './services/data/createTempTask';
 import {
     TaskViewerSettings,
     DEFAULT_SETTINGS,
@@ -229,28 +230,17 @@ export default class TaskViewerPlugin extends Plugin {
             () => this.settings.startHour,
             async (result, statusChar) => {
                 const repository = this.getTaskRepository();
-                const tempTask: Task = {
+                const tempTask = createTempTask({
                     id: 'convert-temp',
-                    file: '',
-                    line: 0,
-                    indent: 0,
                     content: result.content,
                     statusChar,
-                    childIds: [],
-                    childLines: [],
                     startDate: result.startDate,
                     startTime: result.startTime,
                     // endDate が省略されていて endTime がある場合、startDate から同日推論
                     endDate: result.endDate || (result.endTime && result.startDate ? result.startDate : undefined),
                     endTime: result.endTime,
                     due: result.due,
-                    commands: [],
-                    originalText: '',
-                    childLineBodyOffsets: [],
-                    tags: [],
-                    parserId: 'tv-inline',
-                    properties: {},
-                };
+                });
                 return await repository.createFrontmatterTaskFile(
                     tempTask,
                     this.settings.frontmatterTaskHeader,
