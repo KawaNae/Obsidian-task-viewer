@@ -37,6 +37,7 @@ function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
         endTimeImplicit: overrides.endTimeImplicit ?? false,
         originalTaskId: overrides.originalTaskId ?? overrides.id ?? 'test-1',
         isSplit: overrides.isSplit ?? false,
+        childEntries: overrides.childEntries ?? [],
         ...overrides,
     };
 }
@@ -688,25 +689,32 @@ describe('TaskFilterEngine', () => {
 
     describe('children property', () => {
         it('isSet — task has children', () => {
-            const task = makeTask({ childIds: ['c-1', 'c-2'] });
+            const task = makeDisplayTask({
+                childEntries: [
+                    { kind: 'task', taskId: 'c-1', bodyLine: 2 },
+                    { kind: 'task', taskId: 'c-2', bodyLine: 3 },
+                ],
+            });
             const state = stateFromCondition(cond('children', 'isSet'));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
 
         it('isSet — task has no children', () => {
-            const task = makeTask({ childIds: [] });
+            const task = makeDisplayTask({ childEntries: [] });
             const state = stateFromCondition(cond('children', 'isSet'));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
         });
 
         it('isNotSet — task has no children', () => {
-            const task = makeTask({ childIds: [] });
+            const task = makeDisplayTask({ childEntries: [] });
             const state = stateFromCondition(cond('children', 'isNotSet'));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
 
         it('isNotSet — task has children', () => {
-            const task = makeTask({ childIds: ['c-1'] });
+            const task = makeDisplayTask({
+                childEntries: [{ kind: 'task', taskId: 'c-1', bodyLine: 2 }],
+            });
             const state = stateFromCondition(cond('children', 'isNotSet'));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
         });

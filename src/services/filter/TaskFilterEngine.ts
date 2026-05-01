@@ -89,10 +89,15 @@ export class TaskFilterEngine {
                 if (condition.operator === 'isSet') return !!task.parentId;
                 if (condition.operator === 'isNotSet') return !task.parentId;
                 return true;
-            case 'children':
-                if (condition.operator === 'isSet') return task.childIds.length > 0;
-                if (condition.operator === 'isNotSet') return task.childIds.length === 0;
+            case 'children': {
+                // 'children' = independent child tasks. Plain checkbox lines
+                // and wikilinks aren't tasks of their own, so we filter to
+                // 'task' kind entries.
+                const hasChildTask = task.childEntries.some(e => e.kind === 'task');
+                if (condition.operator === 'isSet') return hasChildTask;
+                if (condition.operator === 'isNotSet') return !hasChildTask;
                 return true;
+            }
             case 'property':
                 return this.evalProperty(task, condition);
             default:
@@ -124,7 +129,9 @@ export class TaskFilterEngine {
             if (!ancestor) return false;
             // Lift raw Task into a minimal DisplayTask for filter evaluation.
             // Effective dates fall back to raw values; ancestor filters in
-            // practice only inspect non-date properties (file/tag/status/etc).
+            // practice only inspect non-date properties (file/tag/status/etc),
+            // and childEntries is empty since we don't walk the ancestor's
+            // children during filter evaluation.
             const ancestorDt: DisplayTask = {
                 ...ancestor,
                 effectiveStartDate: ancestor.startDate ?? '',
@@ -137,6 +144,7 @@ export class TaskFilterEngine {
                 endTimeImplicit: false,
                 originalTaskId: ancestor.id,
                 isSplit: false,
+                childEntries: [],
             };
             if (this.evalCondition(ancestorDt, selfCondition, context)) return true;
             currentParentId = ancestor.parentId;

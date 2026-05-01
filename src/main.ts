@@ -294,7 +294,7 @@ export default class TaskViewerPlugin extends Plugin {
                 menu.addSeparator();
                 editorValidationBuilder.addValidationWarning(menu, task);
                 editorPropertiesBuilder.addStatusSubmenu(menu, task);
-                const dt = toDisplayTask(task, this.settings.startHour);
+                const dt = toDisplayTask(task, this.settings.startHour, (id) => this.taskIndex.getTask(id));
                 editorPropertiesBuilder.buildPropertiesSubmenu(menu, dt, null);
                 menu.addSeparator();
                 editorTimerBuilder.addTimerSubmenu(menu, task);

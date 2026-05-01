@@ -78,14 +78,14 @@ export class ChildItemBuilder {
     /**
      * Wikilink → child Task resolution.
      *
-     * Searches `parent.childIds` for a frontmatter task whose file matches
-     * the target. The wikilink-to-childId wiring is established at parse
-     * time by `WikiLinkResolver`, so direct childIds is the canonical path.
+     * Walks the parent's `task`-kind ChildEntries (frontmatter children
+     * wired up by WikiLinkResolver at parse time) and matches by file path.
      */
     private resolveWikilink(parent: Task, linkName: string): Task | undefined {
         const target = extractWikilinkTarget(linkName);
-        for (const cid of parent.childIds) {
-            const c = this.readService.getTask(cid);
+        for (const entry of this.readService.getChildEntries(parent)) {
+            if (entry.kind !== 'task') continue;
+            const c = this.readService.getTask(entry.taskId);
             if (!c || !isFrontmatterTask(c)) continue;
             const baseName = c.file.replace(/\.md$/, '').split('/').pop() || '';
             const fullPath = c.file.replace(/\.md$/, '');

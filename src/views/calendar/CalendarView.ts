@@ -855,8 +855,8 @@ export class CalendarView extends ItemView {
         });
     }
 
-    private isTaskCompleted(task: Task): boolean {
-        return isTaskCompletedUtil(task, this.plugin.settings.statusDefinitions);
+    private isTaskCompleted(task: DisplayTask): boolean {
+        return isTaskCompletedUtil(task, this.plugin.settings.statusDefinitions, this.readService);
     }
 
     private getViewStartDateString(): string {

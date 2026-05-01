@@ -193,7 +193,7 @@ export class ResizeStrategy extends BaseDragStrategy {
 
         const zoomLevel = context.getZoomLevel();
         const startHour = context.plugin.settings.startHour;
-        const displayTask = toDisplayTask(originalTask, startHour);
+        const displayTask = toDisplayTask(originalTask, startHour, (id) => context.readService.getTask(id));
         const startHourMinutes = startHour * 60;
 
         const hasInlineTop = this.dragEl.style.top.length > 0;

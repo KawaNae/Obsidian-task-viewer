@@ -122,7 +122,7 @@ export class TaskCardRenderer extends Component {
         } else if (isFrontmatterTask(task)) {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
             await this.renderFrontmatterChildren(contentContainer, task, cardComp, settings, cardInstanceId, forceExpand);
-        } else if (task.childLines.length > 0 || task.childIds.length > 0) {
+        } else if (task.childEntries.length > 0) {
             await this.renderInlineChildren(contentContainer, task, cardComp, settings, parentMarkdown, cardInstanceId, forceExpand);
         } else {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
@@ -145,26 +145,40 @@ export class TaskCardRenderer extends Component {
         cards.forEach(card => this.dispose(card));
     }
 
-    private getChildCompletion(task: Task, settings: TaskViewerSettings): { completed: number; total: number } {
+    private getChildCompletion(task: DisplayTask, settings: TaskViewerSettings): { completed: number; total: number } {
         let completed = 0;
         let total = 0;
+        const lookup = this.childItemBuilder.getReadService();
 
-        if (isFrontmatterTask(task)) {
-            for (const childId of task.childIds) {
-                const child = this.childItemBuilder.getReadService().getTask(childId);
+        for (const entry of task.childEntries) {
+            if (entry.kind === 'task' || entry.kind === 'wikilink') {
+                const child = entry.kind === 'task'
+                    ? lookup.getTask(entry.taskId)
+                    : this.resolveWikilinkChild(task, entry.target);
                 if (!child) continue;
                 total++;
                 if (isCompleteStatusChar(child.statusChar, settings.statusDefinitions)) completed++;
+            } else if (entry.kind === 'plain' && entry.line.checkboxChar !== null) {
+                total++;
+                if (isCompleteStatusChar(entry.line.checkboxChar, settings.statusDefinitions)) completed++;
             }
         }
 
-        for (const cl of task.childLines) {
-            if (cl.checkboxChar === null) continue;
-            total++;
-            if (isCompleteStatusChar(cl.checkboxChar, settings.statusDefinitions)) completed++;
-        }
-
         return { completed, total };
+    }
+
+    private resolveWikilinkChild(parent: DisplayTask, target: string): Task | undefined {
+        const t = target.split('|')[0].trim();
+        const lookup = this.childItemBuilder.getReadService();
+        for (const entry of parent.childEntries) {
+            if (entry.kind !== 'task') continue;
+            const c = lookup.getTask(entry.taskId);
+            if (!c || !isFrontmatterTask(c)) continue;
+            const baseName = c.file.replace(/\.md$/, '').split('/').pop() || '';
+            const fullPath = c.file.replace(/\.md$/, '');
+            if (t === baseName || t === fullPath || t === c.file) return c;
+        }
+        return undefined;
     }
 
     private renderTopRightMeta(
@@ -262,13 +276,13 @@ export class TaskCardRenderer extends Component {
 
     private async renderFrontmatterChildren(
         contentContainer: HTMLElement,
-        task: Task,
+        task: DisplayTask,
         component: Component,
         settings: TaskViewerSettings,
         cardInstanceId: string,
         forceExpand = false
     ): Promise<void> {
-        if (task.childIds.length === 0 && task.childLines.length === 0) {
+        if (task.childEntries.length === 0) {
             return;
         }
 

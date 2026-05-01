@@ -2,7 +2,7 @@ import { App, Modal, Setting, setIcon } from 'obsidian';
 import { t } from '../i18n';
 import { DisplayTask, Task } from '../types';
 import { TaskParser } from '../services/parsing/TaskParser';
-import { toDisplayTask } from '../services/display/DisplayTaskConverter';
+import { NO_TASK_LOOKUP, toDisplayTask } from '../services/display/DisplayTaskConverter';
 import { validateDateTimeFormats, validateDateRequirements, validateDateRange, type DateValidationError } from './TaskDateValidator';
 import { TaskNameSuggest } from '../suggest/TaskNameSuggest';
 
@@ -424,7 +424,8 @@ export class CreateTaskModal extends Modal {
             properties: {},
         };
 
-        const dt = toDisplayTask(formTask, startHour);
+        // Synthetic temp task built from form input — no children to materialize.
+        const dt = toDisplayTask(formTask, startHour, NO_TASK_LOOKUP);
 
         // --- Start Date placeholder ---
         if (this.startDateInput) {

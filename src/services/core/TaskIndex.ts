@@ -385,7 +385,7 @@ export class TaskIndex {
             }
 
             // Resolve effective dates to match splitDisplayTaskAtBoundary's logic
-            const dt = toDisplayTask(originalTask, this.settings.startHour);
+            const dt = toDisplayTask(originalTask, this.settings.startHour, (id) => this.store.getTask(id));
             if (!dt.effectiveStartDate) {
                 console.warn(`[TaskIndex] Original task ${originalId} has no effective start date`);
                 return;

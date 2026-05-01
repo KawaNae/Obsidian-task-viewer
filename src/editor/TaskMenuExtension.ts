@@ -87,7 +87,7 @@ export function createTaskMenuExtension(
         if (isTaskviewerTask && task) {
             // Recognized taskviewer-notation task: full menu
             validationBuilder.addValidationWarning(menu, task);
-            const dt = toDisplayTask(task, getSettings().startHour);
+            const dt = toDisplayTask(task, getSettings().startHour, (id) => readService.getTask(id));
             propertiesBuilder.addStatusSubmenu(menu, task);
             propertiesBuilder.buildPropertiesSubmenu(menu, dt, null);
             menu.addSeparator();

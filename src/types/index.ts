@@ -235,7 +235,7 @@ export interface DuplicateOptions {
 }
 
 /**
- * 表示用タスク型。暗黙値解決 + split 情報を統合。
+ * 表示用タスク型。暗黙値解決 + split 情報 + 子要素 partition を統合。
  * Task（生データ）→ toDisplayTask() → DisplayTask の 2 層構造。
  * 編集パスは raw フィールド (startDate 等) のみを参照する。
  */
@@ -255,6 +255,12 @@ export interface DisplayTask extends Task {
     isSplit: boolean;
     splitContinuesBefore?: boolean;
     splitContinuesAfter?: boolean;
+    /**
+     * Materialized child entries (body 順、1 行 1 オーナー)。
+     * Task.childIds / childLines / childLineBodyOffsets から
+     * `buildChildEntries` で derive。render / write の唯一の入口。
+     */
+    childEntries: ChildEntry[];
 }
 
 export interface FlowCommand {

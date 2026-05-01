@@ -485,7 +485,7 @@ export class TaskApi {
 
         if (!created) throw new TaskApiError('Task was created but could not be found after scan');
 
-        return { task: normalizeTask(toDisplayTask(created, this.plugin.settings.startHour)) };
+        return { task: normalizeTask(toDisplayTask(created, this.plugin.settings.startHour, (id) => this.readService.getTask(id))) };
     }
 
     /**
@@ -540,7 +540,7 @@ export class TaskApi {
         const updated = this.readService.getTask(params.id);
         if (!updated) throw new TaskApiError(`Task not found after update: ${params.id}`);
 
-        return { task: normalizeTask(toDisplayTask(updated, this.plugin.settings.startHour)) };
+        return { task: normalizeTask(toDisplayTask(updated, this.plugin.settings.startHour, (id) => this.readService.getTask(id))) };
     }
 
     /**

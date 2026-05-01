@@ -85,7 +85,8 @@ export class TaskReadService {
         if (this.cachedDisplayTasks && this.cacheRevision === currentRevision) {
             return this.cachedDisplayTasks;
         }
-        this.cachedDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), this.startHour);
+        const lookup = this.taskLookup;
+        this.cachedDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), this.startHour, lookup);
         this.cacheRevision = currentRevision;
         return this.cachedDisplayTasks;
     }
@@ -97,8 +98,10 @@ export class TaskReadService {
     getDisplayTask(taskId: string): DisplayTask | undefined {
         const task = this.taskIndex.getTask(taskId);
         if (!task) return undefined;
-        return toDisplayTask(task, this.startHour);
+        return toDisplayTask(task, this.startHour, this.taskLookup);
     }
+
+    private readonly taskLookup = (id: string): Task | undefined => this.taskIndex.getTask(id);
 
     // ===== Date-based queries =====
 

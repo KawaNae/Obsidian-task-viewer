@@ -92,7 +92,7 @@ export class MenuHandler {
         if (task.isReadOnly) return;
 
         // Convert to DisplayTask for property display (implicit/explicit flags)
-        const displayTask = toDisplayTask(task, this.plugin.settings.startHour);
+        const displayTask = toDisplayTask(task, this.plugin.settings.startHour, (id) => this.readService.getTask(id));
 
         // Touch 長押しでは Obsidian Menu の outside-click による自動 close が発火しないため、
         // 前のメニューが残ったまま重なる。明示的に閉じてから新しい menu を表示する。

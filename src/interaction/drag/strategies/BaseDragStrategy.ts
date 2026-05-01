@@ -1,7 +1,7 @@
 import { DragStrategy, DragContext } from '../DragStrategy';
 import { Task } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
-import { toDisplayTask } from '../../../services/display/DisplayTaskConverter';
+import { NO_TASK_LOOKUP, toDisplayTask } from '../../../services/display/DisplayTaskConverter';
 import { getTaskDateRange } from '../../../services/display/VisualDateRange';
 
 export interface CalendarPointerTarget {
@@ -191,7 +191,8 @@ export abstract class BaseDragStrategy implements DragStrategy {
      * Compute inclusive visual date range for a task, matching the renderer's logic.
      */
     protected getVisualDateRange(task: Task, startHour: number): { start: string; end: string } {
-        const dt = toDisplayTask(task, startHour);
+        // Date range only depends on the task's own dates; childEntries are irrelevant.
+        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
         const range = getTaskDateRange(dt, startHour);
         const start = range.effectiveStart || task.startDate || '';
         const end = range.effectiveEnd || start;
