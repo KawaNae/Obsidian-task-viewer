@@ -1,4 +1,4 @@
-import type { Task, DisplayTask } from '../../types';
+import type { Task, DisplayTask, ChildEntry } from '../../types';
 import type { FilterState, FilterContext } from '../filter/FilterTypes';
 import { hasConditions } from '../filter/FilterTypes';
 import type { SortState } from '../sort/SortTypes';
@@ -8,6 +8,7 @@ import { TaskFilterEngine } from '../filter/TaskFilterEngine';
 import { TaskSorter } from '../sort/TaskSorter';
 import { DateUtils } from '../../utils/DateUtils';
 import { getTaskDateRange } from '../display/VisualDateRange';
+import { buildChildEntries } from './ChildEntryBuilder';
 
 /**
  * Read-side entry point for views and interaction handlers.
@@ -53,6 +54,17 @@ export class TaskReadService {
     /** Inline task lookup by file + line. Primary use: editor extensions. */
     getTaskByFileLine(filePath: string, line: number): Task | undefined {
         return this.taskIndex.getTaskByFileLine(filePath, line);
+    }
+
+    /**
+     * Ordered ChildEntry[] for a task. Source of truth for the renderer.
+     *
+     * Each entry carries an absolute `bodyLine`, so callers never recompute
+     * line numbers. Sibling subtree overlap is filtered out, enforcing the
+     * "1 line = 1 owner" invariant the new render path relies on.
+     */
+    getChildEntries(task: Task): ChildEntry[] {
+        return buildChildEntries(task, (id) => this.taskIndex.getTask(id));
     }
 
     // ===== Event subscription =====

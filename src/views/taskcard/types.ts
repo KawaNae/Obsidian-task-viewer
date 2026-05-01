@@ -1,5 +1,5 @@
 import type { HoverParent } from 'obsidian';
-import { Task } from '../../types';
+import { Task, ChildLine } from '../../types';
 
 export interface ChildRenderItem {
     markdown: string;
@@ -10,9 +10,17 @@ export interface ChildRenderItem {
     propertyKey?: string;
 }
 
+/**
+ * Click target for a rendered child item.
+ *
+ * - `task`: route through TaskWriteService.updateTask(taskId).
+ * - `childLine`: route through TaskWriteService.updateLine(parentTask.file, bodyLine).
+ *   `line` is a snapshot captured at render time (current text/state).
+ *   `bodyLine` is the absolute file line — already resolved, never recomputed.
+ */
 export type CheckboxHandler =
     | { type: 'task'; taskId: string }
-    | { type: 'childLine'; parentTask: Task; childLineIndex: number };
+    | { type: 'childLine'; parentTask: Task; line: ChildLine; bodyLine: number };
 
 export interface TaskCardLinkRuntime {
     hoverSource: string;

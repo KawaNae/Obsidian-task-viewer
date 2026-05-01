@@ -1,9 +1,8 @@
 import { App, Menu } from 'obsidian';
 import { TaskWriteService } from '../../../services/data/TaskWriteService';
 import { CheckboxMenuBuilder, type CheckboxLineOps, type CreateFrontmatterTaskCallback } from './CheckboxMenuBuilder';
-import { resolveChildLineNumber } from '../../../views/taskcard/ChildLineUtils';
 import TaskViewerPlugin from '../../../main';
-import type { Task } from '../../../types';
+import type { Task, ChildLine } from '../../../types';
 import type { CreateTaskResult } from '../../../modals/CreateTaskModal';
 
 /**
@@ -30,14 +29,10 @@ export class ChildLineMenuBuilder {
         );
     }
 
-    showMenu(parentTask: Task, childLineIndex: number, x: number, y: number): void {
-        const lineNumber = resolveChildLineNumber(this.app, parentTask, childLineIndex);
-        if (lineNumber === -1) return;
-
-        const cl = parentTask.childLines[childLineIndex];
-        if (!cl) return;
-
-        const lineText = cl.text;
+    showMenu(parentTask: Task, line: ChildLine, bodyLine: number, x: number, y: number): void {
+        if (bodyLine < 0) return;
+        const lineNumber = bodyLine;
+        const lineText = line.text;
         const filePath = parentTask.file;
         const settings = this.plugin.settings;
         const menu = new Menu();

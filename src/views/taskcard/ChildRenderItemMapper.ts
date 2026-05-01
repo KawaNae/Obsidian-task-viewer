@@ -25,7 +25,7 @@ export class ChildRenderItemMapper {
         }
 
         return {
-            markdown: `${indent}- [${char}] ${task.content || '\u200B'}`,
+            markdown: `${indent}- [${char}] ${task.content || '​'}`,
             notation: NotationUtils.buildNotationLabel(task),
             isCheckbox: true,
             handler: { type: 'task', taskId: task.id }
@@ -45,16 +45,18 @@ export class ChildRenderItemMapper {
     }
 
     /**
-     * Converts plain child line to ChildRenderItem.
-     * This path is only reached for lines NOT recognized as tasks by the parser,
-     * so no @notation extraction or removal is performed — the line is rendered as-is.
+     * Converts a plain child line to ChildRenderItem.
+     * Used for lines NOT recognized as tasks by the parser, so no @notation
+     * extraction is performed — the line is rendered as-is. The handler
+     * carries `bodyLine` (absolute file line) and a `line` snapshot, so
+     * write paths never recompute line numbers.
      */
-    processChildLine(cl: ChildLine, idx: number, task: Task, indent: string): ChildRenderItem {
-        const isCb = cl.checkboxChar !== null;
+    createPlainItem(line: ChildLine, bodyLine: number, parentTask: Task, indent: string): ChildRenderItem {
+        const isCb = line.checkboxChar !== null;
 
-        let cleaned = cl.text.trimEnd();
+        let cleaned = line.text.trimEnd();
         if (isCb && /^\s*-\s*\[.\]$/.test(cleaned)) {
-            cleaned += ' \u200B';
+            cleaned += ' ​';
         }
 
         return {
@@ -62,9 +64,9 @@ export class ChildRenderItemMapper {
             notation: null,
             isCheckbox: isCb,
             handler: isCb
-                ? { type: 'childLine', parentTask: task, childLineIndex: idx }
+                ? { type: 'childLine', parentTask, line, bodyLine }
                 : null,
-            propertyKey: cl.propertyKey ?? undefined,
+            propertyKey: line.propertyKey ?? undefined,
         };
     }
 

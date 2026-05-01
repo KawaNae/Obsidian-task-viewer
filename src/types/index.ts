@@ -52,6 +52,22 @@ export interface ChildLine {
     propertyValue: string | null;
 }
 
+/**
+ * Ordered partition of a task's body children. Parser/index ensures each
+ * absolute file line is owned by exactly one ChildEntry across all tasks.
+ *
+ * - `task`: line is occupied by an independent child task (resolved via TaskIndex)
+ * - `wikilink`: line references another file's frontmatter task (unresolved)
+ * - `plain`: raw checkbox / property / text line under this task
+ *
+ * Render layer walks `task.children` directly without re-classifying.
+ * Write layer uses `bodyLine` as the absolute file line for surgical edits.
+ */
+export type ChildEntry =
+    | { kind: 'task'; taskId: string; bodyLine: number }
+    | { kind: 'wikilink'; target: string; bodyLine: number; line: ChildLine }
+    | { kind: 'plain'; line: ChildLine; bodyLine: number };
+
 export interface Task {
     // Identity and source location.
     id: string;

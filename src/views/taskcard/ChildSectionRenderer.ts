@@ -1,12 +1,18 @@
 import { App, MarkdownRenderer, Component, setIcon } from 'obsidian';
-import { Task, TaskViewerSettings, isCompleteStatusChar } from '../../types';
+import { Task, ChildLine, TaskViewerSettings, isCompleteStatusChar } from '../../types';
 import { TaskReadService } from '../../services/data/TaskReadService';
 import { ChildRenderItem } from './types';
 import { CheckboxWiring } from './CheckboxWiring';
 import { NotationUtils } from './NotationUtils';
 
 export type ChildMenuCallback = (taskId: string, x: number, y: number) => void;
-export type ChildLineEditCallback = (parentTask: Task, childLineIndex: number, x: number, y: number) => void;
+export type ChildLineEditCallback = (
+    parentTask: Task,
+    line: ChildLine,
+    bodyLine: number,
+    x: number,
+    y: number
+) => void;
 
 function countChildCompletion(
     items: ChildRenderItem[],
@@ -24,8 +30,8 @@ function countChildCompletion(
                 completed++;
             }
         } else {
-            const cl = item.handler.parentTask.childLines[item.handler.childLineIndex];
-            if (cl?.checkboxChar !== null && cl?.checkboxChar !== undefined && isCompleteStatusChar(cl.checkboxChar, settings.statusDefinitions)) {
+            const ch = item.handler.line.checkboxChar;
+            if (ch !== null && ch !== undefined && isCompleteStatusChar(ch, settings.statusDefinitions)) {
                 completed++;
             }
         }
@@ -175,7 +181,7 @@ export class ChildSectionRenderer {
             if (isTask && this.onChildMenuClick) {
                 el = this.createChildMenuButton(handler.taskId);
             } else if (!isTask && handler && handler.type === 'childLine' && this.onChildLineEditClick) {
-                el = this.createChildLineEditButton(handler.parentTask, handler.childLineIndex);
+                el = this.createChildLineEditButton(handler.parentTask, handler.line, handler.bodyLine);
             } else if (item.notation) {
                 el = document.createElement('span');
                 el.className = 'task-card__child-notation';
@@ -225,7 +231,7 @@ export class ChildSectionRenderer {
         return btn;
     }
 
-    private createChildLineEditButton(parentTask: Task, childLineIndex: number): HTMLButtonElement {
+    private createChildLineEditButton(parentTask: Task, line: ChildLine, bodyLine: number): HTMLButtonElement {
         const btn = document.createElement('button');
         btn.className = 'task-card__child-menu-btn';
         btn.setAttribute('aria-label', 'Child line menu');
@@ -239,7 +245,7 @@ export class ChildSectionRenderer {
             e.preventDefault();
             e.stopPropagation();
             const rect = btn.getBoundingClientRect();
-            this.onChildLineEditClick?.(parentTask, childLineIndex, rect.left, rect.bottom);
+            this.onChildLineEditClick?.(parentTask, line, bodyLine, rect.left, rect.bottom);
         });
 
         btn.addEventListener('mousedown', (e) => {

@@ -66,8 +66,8 @@ export class KanbanView extends ItemView {
         this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.writeService, this.plugin);
-        this.taskRenderer.setChildLineEditCallback((parentTask, childLineIndex, x, y) => {
-            childLineMenuBuilder.showMenu(parentTask, childLineIndex, x, y);
+        this.taskRenderer.setChildLineEditCallback((parentTask, line, bodyLine, x, y) => {
+            childLineMenuBuilder.showMenu(parentTask, line, bodyLine, x, y);
         });
         this.taskRenderer.setDetailCallback((task) => {
             new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();

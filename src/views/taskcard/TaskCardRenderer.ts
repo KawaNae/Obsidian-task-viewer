@@ -24,7 +24,7 @@ export class TaskCardRenderer extends Component {
 
     constructor(private app: App, readService: TaskReadService, writeService: TaskWriteService, private linkRuntime: TaskCardLinkRuntime, getSettings: () => TaskViewerSettings) {
         super();
-        this.checkboxWiring = new CheckboxWiring(app, writeService);
+        this.checkboxWiring = new CheckboxWiring(writeService);
         this.childItemBuilder = new ChildItemBuilder(readService);
         this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, readService);
         this.linkInteractionManager = new TaskLinkInteractionManager(app, getSettings);
