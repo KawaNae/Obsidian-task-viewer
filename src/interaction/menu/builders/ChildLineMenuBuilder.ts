@@ -31,19 +31,16 @@ export class ChildLineMenuBuilder {
 
     showMenu(parentTask: Task, line: ChildLine, bodyLine: number, x: number, y: number): void {
         if (bodyLine < 0) return;
-        const lineNumber = bodyLine;
-        const lineText = line.text;
-        const filePath = parentTask.file;
         const settings = this.plugin.settings;
         const menu = new Menu();
 
         const ops: CheckboxLineOps = {
-            updateLine: (content) => this.writeService.updateLine(filePath, lineNumber, content),
-            insertLineAfter: (content) => this.writeService.insertLineAfterLine(filePath, lineNumber, content),
-            deleteLine: () => this.writeService.deleteLine(filePath, lineNumber),
+            updateLine: (content) => this.writeService.updateChildLine(parentTask.id, bodyLine, content),
+            insertLineAfter: (content) => this.writeService.insertChildLineAfter(parentTask.id, bodyLine, content),
+            deleteLine: () => this.writeService.deleteChildLine(parentTask.id, bodyLine),
         };
 
-        this.checkboxMenuBuilder.addFullMenu(menu, lineText, settings, ops, filePath);
+        this.checkboxMenuBuilder.addFullMenu(menu, line.text, settings, ops, parentTask.file);
         menu.showAtPosition({ x, y });
     }
 

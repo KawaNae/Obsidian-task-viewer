@@ -88,11 +88,24 @@ export interface Task {
     parentId?: string;
     indent: number;
     childIds: string[];
+
+    /**
+     * Raw body lines under this task as the parser emitted them.
+     *
+     * Internal substrate. Render and write code should consume children via
+     * `TaskReadService.getChildEntries(task)`, which derives an ordered
+     * `ChildEntry[]` (1 line = 1 owner across siblings) from these fields.
+     * Direct iteration silently misses childIds-based task entries and the
+     * sibling-subtree filter — use it only for parser / persistence code
+     * that explicitly needs the raw substrate.
+     */
     childLines: ChildLine[];
     /**
-     * Line map for childLines.
-     * - frontmatter tasks: absolute file line numbers
-     * - inline tasks: may be empty and fallback to (task.line + 1 + index)
+     * Absolute file line for each entry in `childLines`.
+     *
+     * Always absolute (frontmatter / inline both populate via parser). Use
+     * `getChildEntries(task)[i].bodyLine` from render and write paths
+     * instead of indexing this array directly.
      */
     childLineBodyOffsets: number[];
 

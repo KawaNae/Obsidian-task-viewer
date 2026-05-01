@@ -24,15 +24,21 @@ src/views/taskcard/
 2. `TaskCardRenderer` keeps frontmatter child rendering on a single path:
    parent render -> frontmatter child section render (no inline child branch).
 3. `ChildSectionRenderer` owns child markdown render pipeline and notation injection.
-4. `CheckboxWiring` owns all checkbox event binding and line-resolution logic.
-5. `ChildItemBuilder` owns descendant expansion order and duplicate suppression.
+4. `CheckboxWiring` owns all checkbox event binding (delegates writes to `TaskWriteService.updateChildLine`).
+5. `ChildItemBuilder` walks `TaskReadService.getChildEntries(parent)` — the single source of truth for child render order.
 
-### Frontmatter child rendering rule
+### Child rendering rule
 
-1. Frontmatter cards must show a single child toggle set per card.
-2. Child ordering follows file order from `childLines` first, then remaining `childIds`.
-3. Duplicate line rendering is prevented with consumed line keys (`file:line`).
-4. Checkbox updates for frontmatter child lines use absolute body line offsets.
+1. The renderer consumes `getChildEntries(parent): ChildEntry[]` (`'task' | 'wikilink' | 'plain'`).
+2. Each entry carries an absolute `bodyLine`. UI handlers carry the entry's `bodyLine` and a `line` snapshot — no line-number arithmetic in render or write code.
+3. The data layer (`buildChildEntries`) enforces a 1-line-1-owner invariant across siblings: a body line owned by a sibling task's subtree never surfaces in a `'plain'` / `'wikilink'` entry, so the renderer never deduplicates.
+4. Frontmatter and inline tasks share the same render path; the only difference is `parser.line === -1` for the synthetic frontmatter container.
+
+### Child line write rule
+
+1. UI write paths (card checkbox toggle, child line menu) call `TaskWriteService.updateChildLine` / `insertChildLineAfter` / `deleteChildLine` with `(parentTaskId, bodyLine, ...)`.
+2. The write service validates that `bodyLine` belongs to a writable (`'plain'` / `'wikilink'`) entry of the named parent before delegating. Bad parent / wrong line / task entry all fail fast.
+3. Raw `updateLine(file, line, text)` is reserved for editor-cursor callers (`TaskMenuExtension`) and persistence internals — UI layers never call it.
 
 ### Shared type policy
 

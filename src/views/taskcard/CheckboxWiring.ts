@@ -124,7 +124,7 @@ export class CheckboxWiring {
             const newText = line.text.replace(`[${line.checkboxChar}]`, `[${newChar}]`);
             this.updateCheckboxDataTask(checkbox as HTMLElement, newChar);
 
-            await this.writeService.updateLine(parentTask.file, bodyLine, newText);
+            await this.writeService.updateChildLine(parentTask.id, bodyLine, newText);
         });
         checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
 
@@ -142,7 +142,7 @@ export class CheckboxWiring {
                     this.updateCheckboxDataTask(targetEl, statusChar);
                 }
 
-                await this.writeService.updateLine(parentTask.file, bodyLine, newText);
+                await this.writeService.updateChildLine(parentTask.id, bodyLine, newText);
             });
         });
         checkbox.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
