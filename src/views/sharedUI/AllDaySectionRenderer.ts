@@ -1,6 +1,7 @@
 import TaskViewerPlugin from '../../main';
 import { t } from '../../i18n';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
+import { TouchLongPressBinder } from '../../interaction/menu/TouchLongPressBinder';
 import { TaskStyling } from './TaskStyling';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { HandleManager } from '../timelineview/HandleManager';
@@ -110,11 +111,11 @@ export class AllDaySectionRenderer {
 
     /** Add context menu listeners to AllDay section cell */
     public addEmptySpaceContextMenu(cell: HTMLElement, date: string) {
-        cell.addEventListener('contextmenu', (e) => {
-            if (e.target === cell) {
-                e.preventDefault();
-                this.showEmptySpaceMenu(e.pageX, e.pageY, date);
-            }
+        TouchLongPressBinder.bind(cell, {
+            getThreshold: () => this.plugin.settings.longPressThreshold,
+            targetCheck: (t) => t === cell,
+            onLongPress: (x, y) => this.showEmptySpaceMenu(x, y, date),
+            onContextMenu: (e) => this.showEmptySpaceMenu(e.pageX, e.pageY, date),
         });
     }
 
