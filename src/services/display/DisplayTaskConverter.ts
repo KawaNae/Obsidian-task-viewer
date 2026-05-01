@@ -1,17 +1,36 @@
 import type { Task, DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { TaskIdGenerator } from './TaskIdGenerator';
+import { buildChildEntries } from '../data/ChildEntryBuilder';
 
-/** Get the original (pre-split) task ID. Works for both Task and DisplayTask. */
-export function getOriginalTaskId(task: Task): string {
-    return ('originalTaskId' in task) ? (task as DisplayTask).originalTaskId : task.id;
+/** Lookup signature for resolving sibling tasks during ChildEntry materialization. */
+export type TaskLookup = (id: string) => Task | undefined;
+
+/** No-op lookup for synthetic temp tasks that have no children. */
+export const NO_TASK_LOOKUP: TaskLookup = () => undefined;
+
+/**
+ * Get the original (pre-split) task ID.
+ *
+ * Accepts both raw Task and DisplayTask via structural typing: a raw Task
+ * has no `originalTaskId` so it falls through to `id`; a DisplayTask carries
+ * `originalTaskId` (equal to `id` for non-split, the parent id for split
+ * segments).
+ */
+export function getOriginalTaskId(task: { id: string; originalTaskId?: string }): string {
+    return task.originalTaskId ?? task.id;
 }
 
 /**
- * Converts raw Task objects into DisplayTask with resolved effective fields.
- * This is the single entry point for implicit value resolution.
+ * Converts raw Task objects into DisplayTask with resolved effective fields
+ * and materialized {@link ChildEntry} list. This is the single entry point
+ * for implicit value resolution.
+ *
+ * `getTask` resolves sibling tasks for child-entry partitioning. Pass
+ * {@link NO_TASK_LOOKUP} for synthetic temp tasks that have no children
+ * (modal placeholders, drag previews, etc.).
  */
-export function toDisplayTask(task: Task, startHour: number): DisplayTask {
+export function toDisplayTask(task: Task, startHour: number, getTask: TaskLookup): DisplayTask {
     let effectiveStartDate = task.startDate ?? '';
     let effectiveStartTime = task.startTime;
     let effectiveEndDate = task.endDate;
@@ -123,12 +142,13 @@ export function toDisplayTask(task: Task, startHour: number): DisplayTask {
         endTimeImplicit,
         originalTaskId: task.id,
         isSplit: false,
+        childEntries: buildChildEntries(task, getTask),
     };
 }
 
 /** Batch convert tasks to DisplayTask (no split). */
-export function toDisplayTasks(tasks: Task[], startHour: number): DisplayTask[] {
-    return tasks.map(t => toDisplayTask(t, startHour));
+export function toDisplayTasks(tasks: Task[], startHour: number, getTask: TaskLookup): DisplayTask[] {
+    return tasks.map(t => toDisplayTask(t, startHour, getTask));
 }
 
 /**
@@ -231,8 +251,8 @@ export function isDisplayTaskOnVisualDate(
  * Convert a Task to DisplayTask(s), splitting at the visual day boundary if needed.
  * Returns 1 element for non-split tasks, 2 for split tasks.
  */
-export function toDisplayTaskWithSplit(task: Task, startHour: number): DisplayTask[] {
-    const dt = toDisplayTask(task, startHour);
+export function toDisplayTaskWithSplit(task: Task, startHour: number, getTask: TaskLookup): DisplayTask[] {
+    const dt = toDisplayTask(task, startHour, getTask);
     if (shouldSplitDisplayTask(dt, startHour)) {
         const [head, tail] = splitDisplayTaskAtBoundary(dt, startHour);
         return [head, tail];

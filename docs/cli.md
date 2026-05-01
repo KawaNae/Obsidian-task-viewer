@@ -44,7 +44,7 @@ obsidian obsidian-task-viewer:list tag=work format=json outputFields=content,sta
 | `leaf` | 子タスクを持たないタスクのみ | `leaf` |
 | `property` | カスタムプロパティ（`key:value` 形式） | `property=priority:high` |
 | `color` | カード色で絞り込み（カンマ区切り） | `color=red,blue` |
-| `type` | タスク種別で絞り込み | `type=frontmatter` |
+| `type` | タスク notation で絞り込み | `type=taskviewer` |
 | `root` | 親タスクを持たないタスクのみ | `root` |
 | `filter-file` | FilterState JSON (.json) またはビューテンプレート (.md) | `filter-file=filters/tag.json` |
 | `list` | ピン留めリスト名（`.md` テンプレート用） | `list=urgent` |
@@ -207,12 +207,12 @@ obsidian obsidian-task-viewer:insert-child-task parent-id=abc123 content="サブ
 
 **戻り値:** `{ "parentId": "abc123" }`
 
-### create-frontmatter — Frontmatterタスクファイル作成
+### create-tv-file — tv-file（frontmatter）タスク作成
 
-新しいfrontmatterタスクファイルを作成します。
+新しい tv-file タスクを作成します。
 
 ```bash
-obsidian obsidian-task-viewer:create-frontmatter content="プロジェクト名" start=2026-03-15 due=2026-03-31
+obsidian obsidian-task-viewer:create-tv-file content="プロジェクト名" start=2026-03-15 due=2026-03-31
 ```
 
 | フラグ | 必須 | 説明 |
@@ -274,7 +274,7 @@ obsidian obsidian-task-viewer:help
 | `endTime` | `string \| null` | 生の終了時刻 |
 | `due` | `string \| null` | 生の締切日 |
 | `tags` | `string[]` | タグ一覧 |
-| `parserId` | `string` | パーサー種別（`at-notation` / `frontmatter`） |
+| `parserId` | `string` | パーサー種別（`tv-inline` / `tv-file` / `tasks-plugin` / `day-planner`） |
 | `parentId` | `string \| null` | 親タスクID |
 | `childIds` | `string[]` | 子タスクID一覧 |
 | `color` | `string \| null` | カードの色 |

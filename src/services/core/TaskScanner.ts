@@ -1,6 +1,6 @@
 import { App, TFile, parseYaml } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
-import { isFrontmatterContainer } from '../../types';
+import { isTvFileUnscheduled } from '../../types';
 import { TaskParser } from '../parsing/TaskParser';
 import { TVFileBuilder } from '../parsing/tv-file/TVFileBuilder';
 import { WikiLinkResolver } from './WikiLinkResolver';
@@ -137,9 +137,9 @@ export class TaskScanner {
             frontmatterObj,
             bodyLines,
             bodyStartIndex,
-            this.settings.frontmatterTaskKeys,
-            this.settings.frontmatterTaskHeader,
-            this.settings.frontmatterTaskHeaderLevel
+            this.settings.tvFileKeys,
+            this.settings.tvFileChildHeader,
+            this.settings.tvFileChildHeaderLevel
         );
 
         // デイリーノートのファイル名から日付を抽出（親タスクからの継承は廃止）
@@ -148,12 +148,12 @@ export class TaskScanner {
 
         // --- ツリーパイプライン ---
         const doc = DocumentTreeBuilder.build(file.path, lines, bodyStartIndex);
-        SectionPropertyResolver.resolve(doc, frontmatterObj, this.settings.frontmatterTaskKeys);
+        SectionPropertyResolver.resolve(doc, frontmatterObj, this.settings.tvFileKeys);
         const allExtractedTasks = TreeTaskExtractor.extract(doc, {
             filePath: file.path,
             dailyNoteDate: dailyNoteDate ?? undefined,
-            hasFrontmatterParent: hasFmParent,
-            frontmatterTaskKeys: this.settings.frontmatterTaskKeys,
+            hasTvFileParent: hasFmParent,
+            tvFileKeys: this.settings.tvFileKeys,
         });
 
         // バリデーション警告を収集
@@ -172,7 +172,7 @@ export class TaskScanner {
             const fmTask = fmResult.task;
 
             // Container の content フォールバック: ファイル名のbasenameを使用
-            if (isFrontmatterContainer(fmTask) && !fmTask.content) {
+            if (isTvFileUnscheduled(fmTask) && !fmTask.content) {
                 fmTask.content = file.basename;
             }
 
@@ -188,7 +188,7 @@ export class TaskScanner {
             }
 
             // Container は子がなければ作成しない
-            const isEmptyContainer = isFrontmatterContainer(fmTask) && fmTask.childIds.length === 0 && fmTask.childLines.length === 0;
+            const isEmptyContainer = isTvFileUnscheduled(fmTask) && fmTask.childIds.length === 0 && fmTask.childLines.length === 0;
             if (!isEmptyContainer) {
                 newTasks.push(fmTask);
             }
@@ -309,7 +309,7 @@ export class TaskScanner {
         lines: string[],
         bodyStartIndex: number
     ): boolean {
-        const ignoreKey = this.settings.frontmatterTaskKeys.ignore;
+        const ignoreKey = this.settings.tvFileKeys.ignore;
         const fromCache = frontmatterObj?.[ignoreKey];
         if (this.isTruthyIgnoreValue(fromCache)) {
             return true;

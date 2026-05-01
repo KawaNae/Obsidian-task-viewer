@@ -12,7 +12,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
     cliList, cliToday, cliGet, cliCreate, cliUpdate, cliDelete,
     cliDuplicate, cliConvert, cliTasksForDateRange, cliCategorizedTasksForDateRange,
-    cliInsertChildTask, cliCreateFrontmatter, cliGetStartHour, cliHelp,
+    cliInsertChildTask, cliCreateTvFile, cliGetStartHour, cliHelp,
     isObsidianRunning, obsidianCli, waitForTask, waitForTaskGone,
 } from '../helpers/cli-helper';
 import { deleteTestFile, writeTestFile, waitForFileIndexed, readTestFile } from '../helpers/test-file-manager';
@@ -497,9 +497,9 @@ describe('insert-child-task', () => {
 });
 
 // ────────────────────────────────────────────
-// 15. create-frontmatter
+// 15. create-tv-file
 // ────────────────────────────────────────────
-describe('create-frontmatter', () => {
+describe('create-tv-file', () => {
     const filesToCleanup: string[] = [];
 
     afterAll(() => {
@@ -509,14 +509,14 @@ describe('create-frontmatter', () => {
     });
 
     it('creates frontmatter task file', () => {
-        const r = cliCreateFrontmatter({ content: 'E2E-fm-task' });
+        const r = cliCreateTvFile({ content: 'E2E-fm-task' });
         expect(r).not.toHaveProperty('error');
         expect(r.newFile).toBeTruthy();
         filesToCleanup.push(r.newFile);
     });
 
     it('creates with dates', () => {
-        const r = cliCreateFrontmatter({
+        const r = cliCreateTvFile({
             content: 'E2E-fm-dated',
             start: '2026-05-01 10:00',
             end: '2026-05-01 12:00',
@@ -528,7 +528,7 @@ describe('create-frontmatter', () => {
     });
 
     it('missing content returns error', () => {
-        const r = obsidianCli('create-frontmatter', {}) as Record<string, unknown>;
+        const r = obsidianCli('create-tv-file', {}) as Record<string, unknown>;
         expect(r).toHaveProperty('error');
     });
 });

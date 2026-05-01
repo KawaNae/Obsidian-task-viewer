@@ -2,17 +2,17 @@ import { describe, it, expect } from 'vitest';
 import { DocumentTreeBuilder } from '../../../../src/services/parsing/tree/DocumentTreeBuilder';
 import { SectionPropertyResolver } from '../../../../src/services/parsing/tree/SectionPropertyResolver';
 import { TreeTaskExtractor, type TaskExtractionContext } from '../../../../src/services/parsing/tree/TreeTaskExtractor';
-import { DEFAULT_FRONTMATTER_TASK_KEYS } from '../../../../src/types';
+import { DEFAULT_TV_FILE_KEYS } from '../../../../src/types';
 
 const defaultCtx: TaskExtractionContext = {
     filePath: 'test.md',
-    hasFrontmatterParent: false,
-    frontmatterTaskKeys: DEFAULT_FRONTMATTER_TASK_KEYS,
+    hasTvFileParent: false,
+    tvFileKeys: DEFAULT_TV_FILE_KEYS,
 };
 
 function extractTasks(bodyLines: string[], frontmatter?: Record<string, any>, ctx?: Partial<TaskExtractionContext>) {
     const doc = DocumentTreeBuilder.build('test.md', bodyLines, 0);
-    SectionPropertyResolver.resolve(doc, frontmatter, DEFAULT_FRONTMATTER_TASK_KEYS);
+    SectionPropertyResolver.resolve(doc, frontmatter, DEFAULT_TV_FILE_KEYS);
     return TreeTaskExtractor.extract(doc, { ...defaultCtx, ...ctx });
 }
 
@@ -531,7 +531,7 @@ describe('TreeTaskExtractor', () => {
         it('task-bearing file の top-level bare checkbox は inbox Task として抽出される', () => {
             const tasks = extractTasks([
                 '- [ ] やりたいこと',
-            ], undefined, { hasFrontmatterParent: true });
+            ], undefined, { hasTvFileParent: true });
             expect(tasks).toHaveLength(1);
             expect(tasks[0].parserId).toBe('tv-inline');
             expect(tasks[0].content).toBe('やりたいこと');
@@ -551,7 +551,7 @@ describe('TreeTaskExtractor', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    - [ ] 子手順',
-            ], undefined, { dailyNoteDate: '2026-03-24', hasFrontmatterParent: true });
+            ], undefined, { dailyNoteDate: '2026-03-24', hasTvFileParent: true });
             const scheduledTasks = tasks.filter(isScheduled);
             const bareTasks = tasks.filter(isBare);
             expect(scheduledTasks).toHaveLength(1);
@@ -564,7 +564,7 @@ describe('TreeTaskExtractor', () => {
             const tasks = extractTasks([
                 '- [ ] inbox 親',
                 '    - [ ] scheduled @2026-03-24',
-            ], undefined, { hasFrontmatterParent: true });
+            ], undefined, { hasTvFileParent: true });
             const inbox = tasks.find(isBare)!;
             const scheduled = tasks.find(isScheduled)!;
             expect(inbox).toBeDefined();
@@ -577,7 +577,7 @@ describe('TreeTaskExtractor', () => {
             const tasks = extractTasks([
                 '- [ ] inbox 親',
                 '    - [ ] nested plain',
-            ], undefined, { hasFrontmatterParent: true });
+            ], undefined, { hasTvFileParent: true });
             const bareTasks = tasks.filter(isBare);
             expect(bareTasks).toHaveLength(1);
             expect(bareTasks[0].content).toBe('inbox 親');
@@ -597,7 +597,7 @@ describe('TreeTaskExtractor', () => {
             const tasks = extractTasks([
                 '- [ ] scheduled @2026-03-24',
                 '- [ ] inbox item',
-            ], undefined, { hasFrontmatterParent: true });
+            ], undefined, { hasTvFileParent: true });
             expect(tasks).toHaveLength(2);
             const scheduled = tasks.find(isScheduled)!;
             const inbox = tasks.find(isBare)!;

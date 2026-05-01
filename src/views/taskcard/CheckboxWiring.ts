@@ -1,16 +1,17 @@
-import { App, Menu, Notice } from 'obsidian';
-import { Task, TaskViewerSettings } from '../../types';
+import { Menu, Notice } from 'obsidian';
+import { Task, ChildLine, TaskViewerSettings } from '../../types';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
 import { ChildRenderItem } from './types';
 import { buildStatusOptions, createStatusTitle } from '../../constants/statusOptions';
-import { resolveChildLineNumber } from './ChildLineUtils';
 
 /**
  * Wires checkbox interactions for parent and child items.
+ *
+ * Child line writes use the `bodyLine` carried on the handler — the absolute
+ * file line resolved at parse time. No line-number arithmetic happens here.
  */
 export class CheckboxWiring {
     constructor(
-        private app: App,
         private writeService: TaskWriteService
     ) {}
 
@@ -74,7 +75,7 @@ export class CheckboxWiring {
             if (handler.type === 'task') {
                 this.wireTaskCheckbox(checkbox, handler.taskId, settings);
             } else {
-                this.wireChildLineCheckbox(checkbox, handler.parentTask, handler.childLineIndex, settings);
+                this.wireChildLineCheckbox(checkbox, handler.parentTask, handler.line, handler.bodyLine, settings);
             }
         }
     }
@@ -106,28 +107,24 @@ export class CheckboxWiring {
 
     private wireChildLineCheckbox(
         checkbox: Element,
-        task: Task,
-        childLineIndex: number,
+        parentTask: Task,
+        line: ChildLine,
+        bodyLine: number,
         settings: TaskViewerSettings
     ): void {
+        if (bodyLine < 0) {
+            console.warn('[CheckboxWiring] childLine handler has invalid bodyLine; skipping wire.');
+            return;
+        }
+
         checkbox.addEventListener('click', async () => {
-            if (childLineIndex >= task.childLines.length) return;
+            if (line.checkboxChar === null) return;
 
-            const cl = task.childLines[childLineIndex];
-            if (cl.checkboxChar === null) return;
-
-            const newChar = cl.checkboxChar === ' ' ? 'x' : ' ';
-            const newText = cl.text.replace(`[${cl.checkboxChar}]`, `[${newChar}]`);
+            const newChar = line.checkboxChar === ' ' ? 'x' : ' ';
+            const newText = line.text.replace(`[${line.checkboxChar}]`, `[${newChar}]`);
             this.updateCheckboxDataTask(checkbox as HTMLElement, newChar);
 
-            const absoluteLineNumber = this.resolveChildLineNumber(task, childLineIndex);
-            if (absoluteLineNumber === -1) {
-                console.warn('[CheckboxWiring] Failed to resolve child task line number.');
-                new Notice('子タスクの行番号を特定できませんでした。ファイルを開いて再実行してください。');
-                return;
-            }
-
-            await this.writeService.updateLine(task.file, absoluteLineNumber, newText);
+            await this.writeService.updateChildLine(parentTask.id, bodyLine, newText);
         });
         checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
 
@@ -138,22 +135,14 @@ export class CheckboxWiring {
             e.stopPropagation();
             const targetEl = e.target as HTMLElement | null;
             this.showStatusMenu(e as MouseEvent, settings, async (statusChar) => {
-                if (childLineIndex >= task.childLines.length) return;
+                if (line.checkboxChar === null) return;
 
-                const cl = task.childLines[childLineIndex];
-                const newText = cl.text.replace(`[${cl.checkboxChar}]`, `[${statusChar}]`);
+                const newText = line.text.replace(`[${line.checkboxChar}]`, `[${statusChar}]`);
                 if (targetEl) {
                     this.updateCheckboxDataTask(targetEl, statusChar);
                 }
 
-                const absoluteLineNumber = this.resolveChildLineNumber(task, childLineIndex);
-                if (absoluteLineNumber === -1) {
-                    console.warn('[CheckboxWiring] Failed to resolve child task line number for status update.');
-                    new Notice('子タスクの行番号を特定できませんでした。');
-                    return;
-                }
-
-                await this.writeService.updateLine(task.file, absoluteLineNumber, newText);
+                await this.writeService.updateChildLine(parentTask.id, bodyLine, newText);
             });
         });
         checkbox.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
@@ -200,7 +189,4 @@ export class CheckboxWiring {
         }
     }
 
-    private resolveChildLineNumber(task: Task, childLineIndex: number): number {
-        return resolveChildLineNumber(this.app, task, childLineIndex);
-    }
 }

@@ -1,4 +1,16 @@
-import { Task } from '../../types';
+import { DisplayTask, Task } from '../../types';
+
+/**
+ * Polymorphic notation label input. Effective fields (DisplayTask) are
+ * preferred when present; raw fields (Task) act as fallback.
+ *
+ * Defined structurally rather than as `Task | DisplayTask` so child Task
+ * objects (resolved from TaskIndex without conversion) and DisplayTask
+ * parents both pass without a cast.
+ */
+type NotationInput =
+    Pick<Task, 'startDate' | 'startTime' | 'endDate' | 'endTime'>
+    & Partial<Pick<DisplayTask, 'effectiveStartDate' | 'effectiveStartTime' | 'effectiveEndDate' | 'effectiveEndTime'>>;
 
 /**
  * @notation の構築・フォーマットユーティリティ。
@@ -7,19 +19,25 @@ import { Task } from '../../types';
 export class NotationUtils {
     /**
      * タスクの日時フィールドから @notation ラベルを構築する。
+     * effective フィールドが利用可能なら優先（E/ED 型でも表示可能）、
+     * 未設定なら raw フィールドにフォールバック。
      * 例: @2026-02-10T14:00>15:00
      */
-    static buildNotationLabel(task: Task): string | null {
-        if (!task.startDate && !task.startTime) return null;
+    static buildNotationLabel(task: NotationInput): string | null {
+        const startDate = task.effectiveStartDate || task.startDate;
+        const startTime = task.effectiveStartTime ?? task.startTime;
+        if (!startDate && !startTime) return null;
         const parts: string[] = [];
-        if (task.startDate) parts.push(task.startDate);
-        if (task.startTime) parts.push(task.startTime);
+        if (startDate) parts.push(startDate);
+        if (startTime) parts.push(startTime);
         let notation = '@' + parts.join('T');
-        if (task.endDate || task.endTime) {
+        const endDate = task.effectiveEndDate ?? task.endDate;
+        const endTime = task.effectiveEndTime ?? task.endTime;
+        if (endDate || endTime) {
             notation += '>';
             const endParts: string[] = [];
-            if (task.endDate) endParts.push(task.endDate);
-            if (task.endTime) endParts.push(task.endTime);
+            if (endDate) endParts.push(endDate);
+            if (endTime) endParts.push(endTime);
             notation += endParts.join('T');
         }
         return notation;

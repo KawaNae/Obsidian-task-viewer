@@ -1,5 +1,5 @@
 import { App, MarkdownView, Menu, Notice } from 'obsidian';
-import { Task, isTaskViewerInlineTask, hasBodyLine } from '../../../types';
+import { Task, isTvInline, hasBodyLine } from '../../../types';
 import { TaskWriteService } from '../../../services/data/TaskWriteService';
 import TaskViewerPlugin from '../../../main';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
@@ -178,7 +178,7 @@ export class TaskActionsMenuBuilder {
      */
     private addConvertSubmenu(menu: Menu, task: Task): void {
         // Frontmatter tasks have no convert options (reverse conversion is too complex)
-        if (!isTaskViewerInlineTask(task)) return;
+        if (!isTvInline(task)) return;
 
         menu.addItem((item) => {
             const subMenu = item
@@ -218,11 +218,11 @@ export class TaskActionsMenuBuilder {
                         menu.close();
                         new ConfirmModal(
                             this.app,
-                            t('menu.convertToFrontmatterTask'),
-                            t('menu.convertToFrontmatterTaskMessage'),
+                            t('menu.convertToTvFile'),
+                            t('menu.convertToTvFileMessage'),
                             async () => {
                                 try {
-                                    await this.writeService.convertToFrontmatterTask(task.id);
+                                    await this.writeService.convertToTvFile(task.id);
                                     new Notice(t('notice.taskConverted'));
                                 } catch (e) {
                                     new Notice(t('notice.taskConvertFailed') + ': ' + (e as Error).message);

@@ -44,7 +44,7 @@ export class TaskDetailModal extends Modal {
         TaskStyling.applyReadOnly(card, this.task);
         this.menuHandler.addTaskContextMenu(card, this.task);
 
-        const dt = toDisplayTask(this.task, this.settings.startHour);
+        const dt = toDisplayTask(this.task, this.settings.startHour, (id) => this.readService.getTask(id));
         await this.taskRenderer.render(card, dt, this.settings, {
             cardInstanceId: `modal::detail::${dt.id}`,
             forceExpand: true,

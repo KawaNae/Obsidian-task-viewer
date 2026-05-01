@@ -104,7 +104,7 @@ export function createListHandler(plugin: TaskViewerPlugin) {
             const fields = resolveFields(params.outputFields);
             return formatOutput(listResult.tasks, format, fields);
         } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.message : String(e));
+            return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));
         }
     };
 }
@@ -122,7 +122,7 @@ export function createTodayHandler(plugin: TaskViewerPlugin) {
             const fields = resolveFields(params.outputFields);
             return formatOutput(result.tasks, format, fields);
         } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.message : String(e));
+            return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));
         }
     };
 }
@@ -139,7 +139,7 @@ export function createGetHandler(plugin: TaskViewerPlugin) {
             const fields = resolveFields(params.outputFields);
             return formatSingleTask(displayTask, format, fields);
         } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.message : String(e));
+            return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));
         }
     };
 }

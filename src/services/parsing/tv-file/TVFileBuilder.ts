@@ -1,4 +1,4 @@
-import { FrontmatterTaskKeys, Task, WikilinkRef, ChildLine, PropertyType, PropertyValue } from '../../../types';
+import { TvFileKeys, Task, WikilinkRef, ChildLine, PropertyType, PropertyValue } from '../../../types';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
@@ -16,8 +16,8 @@ export interface FrontmatterParseResult {
  * Task Viewer file-level Task builder.
  *
  * Builds a Task from a file's frontmatter (TaskViewer's file-level format).
- * Also builds container-style tasks (no dates, groups inline tasks) —
- * identified via the derived isFrontmatterContainer() helper.
+ * Also builds unscheduled tv-file tasks (no dates, groups inline tasks) —
+ * identified via the derived isTvFileUnscheduled() helper.
  */
 export class TVFileBuilder {
     /**
@@ -29,9 +29,9 @@ export class TVFileBuilder {
         frontmatter: Record<string, any> | undefined,
         bodyLines: string[],
         bodyStartIndex: number = 0,
-        frontmatterKeys: FrontmatterTaskKeys,
-        frontmatterTaskHeader: string,
-        frontmatterTaskHeaderLevel: number
+        frontmatterKeys: TvFileKeys,
+        tvFileChildHeader: string,
+        tvFileChildHeaderLevel: number
     ): FrontmatterParseResult | null {
         if (!isTaskBearingFile(frontmatter, frontmatterKeys)) return null;
         const fm = frontmatter as Record<string, any>;
@@ -79,8 +79,8 @@ export class TVFileBuilder {
         // Collect childLines from configured heading section (for card display)
         const section = this.findHeaderSection(
             bodyLines,
-            frontmatterTaskHeader,
-            frontmatterTaskHeaderLevel
+            tvFileChildHeader,
+            tvFileChildHeaderLevel
         );
         if (section) {
             const block = this.collectAllListItems(

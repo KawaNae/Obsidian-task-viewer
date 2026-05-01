@@ -52,6 +52,32 @@ export interface ChildLine {
     propertyValue: string | null;
 }
 
+/**
+ * Ordered partition of a task's body children. Parser/index ensures each
+ * absolute file line is owned by exactly one ChildEntry across all tasks.
+ *
+ * - `task`: line is occupied by an independent child task (resolved via TaskIndex)
+ * - `wikilink`: line references another file's tv-file task (unresolved)
+ * - `line`: raw checkbox / property / text line under this task (unrelated to
+ *   the legacy `'plain'` parserId migration alias in TimerPersistence)
+ *
+ * Render layer walks `task.children` directly without re-classifying.
+ * Write layer uses `bodyLine` as the absolute file line for surgical edits.
+ */
+export type ChildEntry =
+    | { kind: 'task'; taskId: string; bodyLine: number }
+    | { kind: 'wikilink'; target: string; bodyLine: number; line: ChildLine }
+    | { kind: 'line'; line: ChildLine; bodyLine: number };
+
+/**
+ * Identifier of the parser that produced a task.
+ *
+ * Production parsers emit one of these four values. Legacy persisted values
+ * (`'at-notation'`, `'frontmatter'`, `'plain'`) are migrated at load time
+ * by `TimerPersistence.normalizeParserId`; they never appear on a live Task.
+ */
+export type ParserId = 'tv-inline' | 'tv-file' | 'tasks-plugin' | 'day-planner';
+
 export interface Task {
     // Identity and source location.
     id: string;
@@ -60,7 +86,7 @@ export interface Task {
      * 0-indexed line number in the source file.
      * `-1` is a generic sentinel meaning "no body line" (e.g., frontmatter root tasks).
      * Use `hasBodyLine(task)` to test validity. `-1` is NOT a frontmatter discriminator
-     * — use `isFrontmatterTask(task)` for type identification.
+     * — use `isTvFile(task)` for type identification.
      */
     line: number;
 
@@ -71,12 +97,19 @@ export interface Task {
     // Tree relationship.
     parentId?: string;
     indent: number;
+    /**
+     * @internal Parser-emitted ids of independent child tasks. Substrate for
+     * `buildChildEntries`; render/write consume via `DisplayTask.childEntries`.
+     */
     childIds: string[];
+    /**
+     * @internal Parser-emitted raw body lines. Substrate for
+     * `buildChildEntries`; render/write consume via `DisplayTask.childEntries`.
+     */
     childLines: ChildLine[];
     /**
-     * Line map for childLines.
-     * - frontmatter tasks: absolute file line numbers
-     * - inline tasks: may be empty and fallback to (task.line + 1 + index)
+     * @internal Absolute file line per `childLines` entry. Substrate for
+     * `buildChildEntries`; render/write consume via `DisplayTask.childEntries`.
      */
     childLineBodyOffsets: number[];
 
@@ -110,10 +143,10 @@ export interface Task {
     };
 
     /**
-     * Parser identifier that produced this task (e.g. at-notation/frontmatter).
+     * Parser identifier that produced this task. See {@link ParserId}.
      * Used for parser-specific writeback behavior.
      */
-    parserId: string;
+    parserId: ParserId;
 
     // Resolved styling (from child lines or parent-task inheritance).
     color?: string;
@@ -129,24 +162,34 @@ export interface Task {
     properties: Record<string, PropertyValue>;
 }
 
-/** Check whether a task was produced by the file-level (frontmatter) parser. */
-export function isFrontmatterTask(task: Pick<Task, 'parserId'>): boolean {
+/** TaskViewer file-form (frontmatter) task. */
+export function isTvFile(task: Pick<Task, 'parserId'>): boolean {
     return task.parserId === 'tv-file';
 }
 
-/** Check whether a task was produced by the TaskViewer inline parser. */
-export function isTaskViewerInlineTask(task: Pick<Task, 'parserId'>): boolean {
+/** TaskViewer inline-form task (writable; primary write target). */
+export function isTvInline(task: Pick<Task, 'parserId'>): boolean {
     return task.parserId === 'tv-inline';
+}
+
+/** Day Planner inline-form task (read-only). */
+export function isDpInline(task: Pick<Task, 'parserId'>): boolean {
+    return task.parserId === 'day-planner';
+}
+
+/** Tasks Plugin inline-form task (read-only). */
+export function isTpInline(task: Pick<Task, 'parserId'>): boolean {
+    return task.parserId === 'tasks-plugin';
 }
 
 /**
  * task.line が body 行アクセスに使える有効値かを判定する。
- * `false` の場合: frontmatter task (line === -1) など、ファイル本体に
+ * `false` の場合: tv-file task (line === -1) など、ファイル本体に
  * 紐付く行を持たないタスク。
  *
- * 注意: 種別判定（frontmatter かどうか）には使わないこと。
- * `-1` は「body 行なし」の汎用 sentinel であり、frontmatter discriminator
- * ではない。種別判定は `isFrontmatterTask()` を使用する。
+ * 注意: 種別判定（file-form かどうか）には使わないこと。
+ * `-1` は「body 行なし」の汎用 sentinel であり、形式 discriminator
+ * ではない。種別判定は `isTvFile()` を使用する。
  */
 export function hasBodyLine(task: Pick<Task, 'line'>): boolean {
     return task.line >= 0;
@@ -167,14 +210,14 @@ export function hasDates(
 }
 
 /**
- * Derived: a frontmatter task with no scheduling is a "container" — it groups
- * inline tasks from the same file without carrying dates itself. Replaces the
- * former Task.isContainer flag.
+ * Derived: a tv-file task with no scheduling. Groups inline tasks from the
+ * same file without carrying dates itself. Replaces the former Task.isContainer
+ * flag.
  */
-export function isFrontmatterContainer(
+export function isTvFileUnscheduled(
     task: Pick<Task, 'parserId' | 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'due'>
 ): boolean {
-    return isFrontmatterTask(task) && !hasScheduling(task);
+    return isTvFile(task) && !hasScheduling(task);
 }
 
 /**
@@ -197,7 +240,7 @@ export interface DuplicateOptions {
 }
 
 /**
- * 表示用タスク型。暗黙値解決 + split 情報を統合。
+ * 表示用タスク型。暗黙値解決 + split 情報 + 子要素 partition を統合。
  * Task（生データ）→ toDisplayTask() → DisplayTask の 2 層構造。
  * 編集パスは raw フィールド (startDate 等) のみを参照する。
  */
@@ -217,6 +260,12 @@ export interface DisplayTask extends Task {
     isSplit: boolean;
     splitContinuesBefore?: boolean;
     splitContinuesAfter?: boolean;
+    /**
+     * Materialized child entries (body 順、1 行 1 オーナー)。
+     * Task.childIds / childLines / childLineBodyOffsets から
+     * `buildChildEntries` で derive。render / write の唯一の入口。
+     */
+    childEntries: ChildEntry[];
 }
 
 export interface FlowCommand {
@@ -264,7 +313,7 @@ export interface ViewTemplate extends ViewTemplateSummary {
     grid?: PinnedListDefinition[][];
 }
 
-export interface FrontmatterTaskKeys {
+export interface TvFileKeys {
     start: string;
     end: string;
     due: string;
@@ -277,7 +326,7 @@ export interface FrontmatterTaskKeys {
     ignore: string;
 }
 
-export const DEFAULT_FRONTMATTER_TASK_KEYS: FrontmatterTaskKeys = {
+export const DEFAULT_TV_FILE_KEYS: TvFileKeys = {
     start: 'tv-start',
     end: 'tv-end',
     due: 'tv-due',
@@ -290,19 +339,19 @@ export const DEFAULT_FRONTMATTER_TASK_KEYS: FrontmatterTaskKeys = {
     ignore: 'tv-ignore',
 };
 
-export function normalizeFrontmatterTaskKeys(value: unknown): FrontmatterTaskKeys {
+export function normalizeTvFileKeys(value: unknown): TvFileKeys {
     const source = (value && typeof value === 'object')
-        ? value as Partial<Record<keyof FrontmatterTaskKeys, unknown>>
+        ? value as Partial<Record<keyof TvFileKeys, unknown>>
         : {};
 
-    const normalize = (key: keyof FrontmatterTaskKeys): string => {
+    const normalize = (key: keyof TvFileKeys): string => {
         const raw = source[key];
         if (typeof raw !== 'string') {
-            return DEFAULT_FRONTMATTER_TASK_KEYS[key];
+            return DEFAULT_TV_FILE_KEYS[key];
         }
 
         const trimmed = raw.trim();
-        return trimmed.length > 0 ? trimmed : DEFAULT_FRONTMATTER_TASK_KEYS[key];
+        return trimmed.length > 0 ? trimmed : DEFAULT_TV_FILE_KEYS[key];
     };
 
     return {
@@ -319,8 +368,8 @@ export function normalizeFrontmatterTaskKeys(value: unknown): FrontmatterTaskKey
     };
 }
 
-export function validateFrontmatterTaskKeys(keys: FrontmatterTaskKeys): string | null {
-    const names: Array<keyof FrontmatterTaskKeys> = [
+export function validateTvFileKeys(keys: TvFileKeys): string | null {
+    const names: Array<keyof TvFileKeys> = [
         'start',
         'end',
         'due',
@@ -333,11 +382,11 @@ export function validateFrontmatterTaskKeys(keys: FrontmatterTaskKeys): string |
         'ignore',
     ];
 
-    const normalizedValues = new Map<keyof FrontmatterTaskKeys, string>();
+    const normalizedValues = new Map<keyof TvFileKeys, string>();
     for (const name of names) {
         const value = keys[name].trim();
         if (!value) {
-            return 'Frontmatter keys cannot be empty.';
+            return 'tv-file keys cannot be empty.';
         }
         normalizedValues.set(name, value);
     }
@@ -346,7 +395,7 @@ export function validateFrontmatterTaskKeys(keys: FrontmatterTaskKeys): string |
     for (const name of names) {
         const value = normalizedValues.get(name)!;
         if (seen.has(value)) {
-            return `Frontmatter keys must be unique. Duplicate: "${value}".`;
+            return `tv-file keys must be unique. Duplicate: "${value}".`;
         }
         seen.add(value);
     }
@@ -361,7 +410,7 @@ export interface TaskViewerSettings {
     applyGlobalStyles: boolean;
     enableStatusMenu: boolean;
     statusDefinitions: StatusDefinition[];
-    frontmatterTaskKeys: FrontmatterTaskKeys;
+    tvFileKeys: TvFileKeys;
     zoomLevel: number;
     dailyNoteHeader: string;
     dailyNoteHeaderLevel: number;
@@ -371,14 +420,14 @@ export interface TaskViewerSettings {
     pastDaysToShow: number;
     startFromOldestOverdue: boolean;
     habitExcludeKeys: string[];
-    frontmatterTaskHeader: string;
-    frontmatterTaskHeaderLevel: number;
+    tvFileChildHeader: string;
+    tvFileChildHeaderLevel: number;
     longPressThreshold: number;
     taskSelectAction: 'click' | 'dblclick';
     reuseExistingTab: boolean;
     editorMenuForTasks: boolean;
     editorMenuForCheckboxes: boolean;
-    fileMenuForFrontmatterTasks: boolean;
+    fileMenuForTvFile: boolean;
     calendarWeekStartDay: 0 | 1;
     calendarShowWeekNumbers: boolean;
     weeklyNoteFormat: string;
@@ -427,7 +476,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     applyGlobalStyles: false,
     enableStatusMenu: true,
     statusDefinitions: [...DEFAULT_STATUS_DEFINITIONS],
-    frontmatterTaskKeys: { ...DEFAULT_FRONTMATTER_TASK_KEYS },
+    tvFileKeys: { ...DEFAULT_TV_FILE_KEYS },
     zoomLevel: 1.0,
     dailyNoteHeader: 'Tasks',
     dailyNoteHeaderLevel: 2,
@@ -437,14 +486,14 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     pastDaysToShow: 0,
     startFromOldestOverdue: true,
     habitExcludeKeys: ['tags', 'cssclasses', 'aliases'],
-    frontmatterTaskHeader: 'Tasks',
-    frontmatterTaskHeaderLevel: 2,
+    tvFileChildHeader: 'Tasks',
+    tvFileChildHeaderLevel: 2,
     longPressThreshold: 400,
     taskSelectAction: 'click',
     reuseExistingTab: true,
     editorMenuForTasks: true,
     editorMenuForCheckboxes: true,
-    fileMenuForFrontmatterTasks: true,
+    fileMenuForTvFile: true,
     calendarWeekStartDay: 0,
     calendarShowWeekNumbers: false,
     weeklyNoteFormat: 'gggg-[W]ww',

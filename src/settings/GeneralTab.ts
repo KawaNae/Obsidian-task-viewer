@@ -33,9 +33,9 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
         .setName(t('settings.general.showFileMenuForFrontmatterTasks'))
         .setDesc(t('settings.general.showFileMenuForFrontmatterTasksDesc'))
         .addToggle(toggle => toggle
-            .setValue(plugin.settings.fileMenuForFrontmatterTasks)
+            .setValue(plugin.settings.fileMenuForTvFile)
             .onChange(async (value) => {
-                plugin.settings.fileMenuForFrontmatterTasks = value;
+                plugin.settings.fileMenuForTvFile = value;
                 await plugin.saveSettings();
             }));
 

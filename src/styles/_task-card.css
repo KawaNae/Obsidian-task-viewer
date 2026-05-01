@@ -208,6 +208,12 @@
     font-size: 0.85em;
     padding: 4px 0 2px 1.5em;
     user-select: none;
+    /* Lock height so the bar reserves space before setIcon paints.
+       Without this, the bar collapses to padding-only (~6px) while
+       MarkdownRenderer awaits, then jumps to ~21px when the icon
+       appears in a microtask — visible as a 1-frame layout flux. */
+    min-height: 21px;
+    box-sizing: border-box;
 }
 
 .task-card__expand-bar:hover {
@@ -220,6 +226,24 @@
     height: 12px;
     vertical-align: middle;
     margin-right: 4px;
+}
+
+/* Lock allday card height so the allday-section grid row keeps a
+   stable size across the sync→async render boundary. The compact
+   render path creates `.task-card__content` (markdown awaits) and
+   `.task-card__expand-bar` (icon awaits in microtask). Without a
+   floor, the card briefly collapses while those awaits resolve,
+   shrinking the entire allday-section by ~Δexpand-bar per stack row
+   and producing a 1-frame upward shift of the timed grid. */
+.task-card--allday {
+    min-height: var(--task-card-allday-min-height, 58px);
+    box-sizing: border-box;
+}
+
+.task-card--allday .task-card__content {
+    /* Reserve content height so the inner markdown paragraph does
+       not collapse to 0 while MarkdownRenderer.render awaits. */
+    min-height: var(--task-card-allday-content-min-height, 1.5em);
 }
 
 /* Child task menu button */

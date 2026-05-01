@@ -1,7 +1,8 @@
 import { App, TFile } from 'obsidian';
 import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
-import { isFrontmatterTask, isTaskViewerInlineTask, hasBodyLine } from '../../types';
+import { isTvFile, isTvInline, hasBodyLine } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
+import { createTempTask } from '../data/createTempTask';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
 import { WikiLinkResolver } from './WikiLinkResolver';
 import { TaskStore } from './TaskStore';
@@ -9,7 +10,7 @@ import { TaskScanner } from './TaskScanner';
 import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { EditorObserver } from './EditorObserver';
-import { InlineToFrontmatterConversionService } from './InlineToFrontmatterConversionService';
+import { TvInlineToTvFileConverter } from './TvInlineToTvFileConverter';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { DateUtils as CoreDateUtils } from '../../utils/DateUtils';
 import { toDisplayTask } from '../display/DisplayTaskConverter';
@@ -36,7 +37,7 @@ export class TaskIndex {
     private syncDetector: SyncDetector;
     private editorObserver: EditorObserver;
     private repository: TaskRepository;
-    private inlineToFrontmatterConversionService: InlineToFrontmatterConversionService;
+    private tvInlineToTvFileConverter: TvInlineToTvFileConverter;
     private commandExecutor: TaskCommandExecutor;
     private settings: TaskViewerSettings;
     private draggingFilePath: string | null = null;  // ドラッグ中のファイルパス
@@ -63,7 +64,7 @@ export class TaskIndex {
         this.validator = new TaskValidator();
         this.syncDetector = new SyncDetector();
         this.repository = new TaskRepository(app);
-        this.inlineToFrontmatterConversionService = new InlineToFrontmatterConversionService(app, this.repository);
+        this.tvInlineToTvFileConverter = new TvInlineToTvFileConverter(app, this.repository);
         this.commandExecutor = new TaskCommandExecutor(this.repository, this, app);
         this.editorObserver = new EditorObserver(app, this.syncDetector);
         this.scanner = new TaskScanner(
@@ -385,7 +386,7 @@ export class TaskIndex {
             }
 
             // Resolve effective dates to match splitDisplayTaskAtBoundary's logic
-            const dt = toDisplayTask(originalTask, this.settings.startHour);
+            const dt = toDisplayTask(originalTask, this.settings.startHour, (id) => this.store.getTask(id));
             if (!dt.effectiveStartDate) {
                 console.warn(`[TaskIndex] Original task ${originalId} has no effective start date`);
                 return;
@@ -471,8 +472,8 @@ export class TaskIndex {
             this.store.notifyListeners(taskId, Object.keys(updates));
         }
 
-        if (isFrontmatterTask(task)) {
-            await this.repository.updateFrontmatterTask(task, updates, this.settings.frontmatterTaskKeys);
+        if (isTvFile(task)) {
+            await this.repository.updateTvFile(task, updates, this.settings.tvFileKeys);
         } else {
             // All inline tasks route through InlineTaskWriter; TaskParser.format
             // dispatches by parserId. TVInlineParser.format() handles both
@@ -491,8 +492,8 @@ export class TaskIndex {
 
             this.syncDetector.markLocalEdit(task.file);
 
-            if (isFrontmatterTask(task)) {
-                await this.repository.deleteFrontmatterTask(task, this.settings.frontmatterTaskKeys);
+            if (isTvFile(task)) {
+                await this.repository.deleteTvFile(task, this.settings.tvFileKeys);
             } else {
                 await this.repository.deleteTaskFromFile(task);
             }
@@ -509,8 +510,8 @@ export class TaskIndex {
 
             this.syncDetector.markLocalEdit(task.file);
 
-            if (isFrontmatterTask(task)) {
-                await this.repository.duplicateFrontmatterTask(task, this.settings.frontmatterTaskKeys, options);
+            if (isTvFile(task)) {
+                await this.repository.duplicateTvFile(task, this.settings.tvFileKeys, options);
             } else {
                 await this.repository.duplicateInlineTask(task, options);
             }
@@ -524,22 +525,22 @@ export class TaskIndex {
      * ソースファイル + 新ファイルの両方を再スキャン。
      * @returns 新ファイルのパス
      */
-    async convertToFrontmatterTask(taskId: string): Promise<string> {
+    async convertToTvFile(taskId: string): Promise<string> {
         return this.withNotify(async () => {
             const task = this.store.getTask(taskId);
             if (!task) throw new Error('Task not found');
 
-            if (!isTaskViewerInlineTask(task)) {
-                throw new Error('Only inline tasks can be converted to frontmatter tasks');
+            if (!isTvInline(task)) {
+                throw new Error('Only tv-inline tasks can be converted to tv-file tasks');
             }
 
             this.syncDetector.markLocalEdit(task.file);
 
-            const newPath = await this.inlineToFrontmatterConversionService.convertInlineTaskToFrontmatter(
+            const newPath = await this.tvInlineToTvFileConverter.convertTvInlineToTvFile(
                 task,
-                this.settings.frontmatterTaskHeader,
-                this.settings.frontmatterTaskHeaderLevel,
-                this.settings.frontmatterTaskKeys
+                this.settings.tvFileChildHeader,
+                this.settings.tvFileChildHeaderLevel,
+                this.settings.tvFileKeys
             );
 
             await this.scanner.waitForScan(task.file);
@@ -574,11 +575,11 @@ export class TaskIndex {
 
             this.syncDetector.markLocalEdit(task.file);
 
-            if (isFrontmatterTask(task)) {
-                await this.repository.insertLineAfterFrontmatter(
+            if (isTvFile(task)) {
+                await this.repository.insertLineAfterTvFile(
                     task.file, childLine,
-                    this.settings.frontmatterTaskHeader,
-                    this.settings.frontmatterTaskHeaderLevel
+                    this.settings.tvFileChildHeader,
+                    this.settings.tvFileChildHeaderLevel
                 );
             } else {
                 const childIndent = FileOperations.getChildIndent(task.originalText);
@@ -589,36 +590,25 @@ export class TaskIndex {
         });
     }
 
-    async createFrontmatterTaskFromData(taskData: Partial<Task>): Promise<string> {
+    async createTvFileFromData(taskData: Partial<Task>): Promise<string> {
         return this.withNotify(async () => {
-            const tempTask: Task = {
+            const tempTask = createTempTask({
                 id: 'convert-temp',
-                file: '',
-                line: 0,
-                indent: 0,
                 content: taskData.content ?? '',
                 statusChar: taskData.statusChar ?? ' ',
-                childIds: [],
-                childLines: [],
                 startDate: taskData.startDate,
                 startTime: taskData.startTime,
                 endDate: taskData.endDate,
                 endTime: taskData.endTime,
                 due: taskData.due,
-                commands: [],
-                originalText: '',
-                childLineBodyOffsets: [],
-                tags: [],
-                parserId: 'tv-inline',
-                properties: {},
-            };
-            return await this.repository.createFrontmatterTaskFile(
+            });
+            return await this.repository.createTvFile(
                 tempTask,
-                this.settings.frontmatterTaskHeader,
-                this.settings.frontmatterTaskHeaderLevel,
+                this.settings.tvFileChildHeader,
+                this.settings.tvFileChildHeaderLevel,
                 undefined,
                 undefined,
-                this.settings.frontmatterTaskKeys
+                this.settings.tvFileKeys
             );
         });
     }

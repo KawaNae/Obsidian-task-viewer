@@ -1,4 +1,10 @@
-import { isFrontmatterTask } from '../../types';
+import { isTvFile, ParserId } from '../../types';
+
+const PARSER_IDS: ReadonlySet<ParserId> = new Set(['tv-inline', 'tv-file', 'tasks-plugin', 'day-planner']);
+
+function isParserId(value: string): value is ParserId {
+    return PARSER_IDS.has(value as ParserId);
+}
 
 export interface ParsedTaskId {
     parserId: string;
@@ -10,7 +16,7 @@ export interface AnchorResolutionInput {
     blockId?: string;
     timerTargetId?: string;
     line?: number;
-    parserId: string;
+    parserId: ParserId;
 }
 
 export interface ParsedSegmentId {
@@ -22,7 +28,7 @@ const TASK_ID_REGEX = /^([^:]+):(.+):(blk:[^:]+|tid:[^:]+|ln:\d+|fm-root)$/;
 const SEGMENT_ID_REGEX = /^(.*)##seg:(\d{4}-\d{2}-\d{2})$/;
 
 export class TaskIdGenerator {
-    static generate(parserId: string, filePath: string, anchor: string): string {
+    static generate(parserId: ParserId, filePath: string, anchor: string): string {
         return `${parserId}:${filePath}:${anchor}`;
     }
 
@@ -37,7 +43,7 @@ export class TaskIdGenerator {
             return `tid:${timerTargetId}`;
         }
 
-        if (isFrontmatterTask(input)) {
+        if (isTvFile(input)) {
             return 'fm-root';
         }
 
@@ -87,6 +93,12 @@ export class TaskIdGenerator {
 
         const parsed = this.parse(id);
         if (!parsed || parsed.filePath !== oldPath) {
+            return id;
+        }
+
+        // parse() returns parserId as a raw string from regex; validate before
+        // re-generating so renameFile cannot smuggle an unknown ParserId.
+        if (!isParserId(parsed.parserId)) {
             return id;
         }
 

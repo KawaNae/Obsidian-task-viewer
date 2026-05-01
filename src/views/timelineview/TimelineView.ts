@@ -103,11 +103,29 @@ export class TimelineView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private unsubscribeDelete: (() => void) | null = null;
     private currentTimeInterval: number | null = null;
-    // Scroll container is .timeline-grid (the single scrollable element). Save
-    // and restore use scrollTop directly — no offsetTop arithmetic, no allday
-    // height bookkeeping. Avoids iPad WebKit deferred-layout drift caused by
-    // grid.offsetTop returning intermediate values mid-render.
-    private savedScrollTop: number | null = null;
+    // Scroll save/restore is layout-independent: we save the visible time at
+    // the viewport top of the timed area (as minutes from 00:00) and restore
+    // by recomputing scrollTop from current --hour-height at apply time.
+    //
+    // Why time, not pixels? `.timeline-grid` is the single scroll container
+    // and allday-section is always sticky once any scrolling occurs, so the
+    // identity `visibleTopTime = scrollTop / hourHeight` holds regardless of
+    // allday height (allday is part of the sticky stack). Storing minutes
+    // makes the save/restore robust against:
+    //   1. Async layout flux (e.g. expand-bar settling) — see fix in
+    //      TaskCardRenderer hoist; this anchor approach is the secondary
+    //      defense in depth.
+    //   2. Zoom changes between save and restore — toolbar zoom now
+    //      preserves time at viewport top (matches pinch zoom semantics).
+    //
+    // iPad WebKit safety: the formula reads only --hour-height (set sync at
+    // the start of performRender from zoomLevel) and grid.scrollTop. No
+    // offsetTop / offsetHeight reads, so the deferred-layout drift that
+    // motivated 6c6b208 cannot recur.
+    //
+    // Three-pass rAF (sync + 2× rAF), mirroring scrollToCurrentTime, absorbs
+    // any residual transient that might still occur.
+    private savedScrollAnchor: { minutesFromTop: number } | null = null;
     private scrollToNowOnNextRender = false;
     private stickyAnchorObserver: ResizeObserver | null = null;
 
@@ -281,8 +299,8 @@ export class TimelineView extends ItemView {
         this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.writeService, this.plugin);
-        this.taskRenderer.setChildLineEditCallback((parentTask, childLineIndex, x, y) => {
-            childLineMenuBuilder.showMenu(parentTask, childLineIndex, x, y);
+        this.taskRenderer.setChildLineEditCallback((parentTask, line, bodyLine, x, y) => {
+            childLineMenuBuilder.showMenu(parentTask, line, bodyLine, x, y);
         });
         this.taskRenderer.setDetailCallback((task) => {
             new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
@@ -651,9 +669,31 @@ export class TimelineView extends ItemView {
 
     private saveScrollPosition(): void {
         const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
-        if (grid) {
-            this.savedScrollTop = grid.scrollTop;
-        }
+        if (!grid) return;
+        const hourHeight = this.readHourHeightPx(grid);
+        if (hourHeight <= 0) return;
+        this.savedScrollAnchor = {
+            minutesFromTop: grid.scrollTop / hourHeight * 60,
+        };
+    }
+
+    /** Restore the saved viewport-top time by computing scrollTop from
+     *  current --hour-height. Idempotent on stable layout; safe to call
+     *  multiple times across rAF passes. */
+    private applyScrollAnchor(): void {
+        const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
+        if (!grid || !this.savedScrollAnchor) return;
+        const hourHeight = this.readHourHeightPx(grid);
+        if (hourHeight <= 0) return;
+        grid.scrollTop = this.savedScrollAnchor.minutesFromTop / 60 * hourHeight;
+    }
+
+    /** Read the resolved --hour-height in px from the scroll container.
+     *  Falls back to 60 (the design default) if the variable is missing. */
+    private readHourHeightPx(grid: HTMLElement): number {
+        const raw = getComputedStyle(grid).getPropertyValue('--hour-height').trim();
+        const v = parseFloat(raw);
+        return Number.isFinite(v) && v > 0 ? v : 60;
     }
 
     /** Sets --allday-sticky-top to date-header.offsetHeight + habits-section.offsetHeight
@@ -898,9 +938,11 @@ export class TimelineView extends ItemView {
         // call fires an initial-observation callback).
         this.rebindStickyAnchorObserver();
 
-        // Restore scroll position synchronously to avoid 1-frame flicker.
-        // .timeline-grid is the single scroll container; scrollTop alone fully
-        // describes scroll position — no offsetTop arithmetic needed.
+        // Restore scroll position with a sync write (avoids 1-frame flicker
+        // on first paint) followed by two rAF re-applies (absorbs any
+        // residual async layout settle, e.g. data-driven layout flux that
+        // may slip past the TaskCardRenderer expand-bar fix). Mirrors the
+        // scrollToCurrentTime three-pass pattern from 4029ac9 / 7c44468.
         const newGrid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (newGrid) {
             if (this.scrollToNowOnNextRender) {
@@ -910,8 +952,12 @@ export class TimelineView extends ItemView {
                     this.scrollToCurrentTime();
                     requestAnimationFrame(() => this.scrollToCurrentTime());
                 });
-            } else if (this.savedScrollTop !== null) {
-                newGrid.scrollTop = this.savedScrollTop;
+            } else if (this.savedScrollAnchor !== null) {
+                this.applyScrollAnchor();
+                requestAnimationFrame(() => {
+                    this.applyScrollAnchor();
+                    requestAnimationFrame(() => this.applyScrollAnchor());
+                });
             }
         }
 

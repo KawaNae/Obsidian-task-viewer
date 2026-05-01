@@ -1,9 +1,9 @@
-import type { Task, DisplayTask, PropertyValue } from '../types';
+import type { DisplayTask, PropertyValue } from '../types';
 import type { NormalizedTask } from './TaskApiTypes';
 
 // ── Field extractors ──
 
-const FIELD_EXTRACTORS: Record<string, (task: Task | DisplayTask) => unknown> = {
+const FIELD_EXTRACTORS: Record<string, (task: DisplayTask) => unknown> = {
     id:          t => t.id,
     file:        t => t.file,
     line:        t => t.line,
@@ -20,10 +20,10 @@ const FIELD_EXTRACTORS: Record<string, (task: Task | DisplayTask) => unknown> = 
     childIds:    t => t.childIds,
     color:       t => t.color ?? null,
     linestyle:   t => t.linestyle ?? null,
-    effectiveStartDate: t => ('effectiveStartDate' in t) ? (t as DisplayTask).effectiveStartDate || null : null,
-    effectiveStartTime: t => ('effectiveStartTime' in t) ? (t as DisplayTask).effectiveStartTime ?? null : null,
-    effectiveEndDate:   t => ('effectiveEndDate' in t) ? (t as DisplayTask).effectiveEndDate ?? null : null,
-    effectiveEndTime:   t => ('effectiveEndTime' in t) ? (t as DisplayTask).effectiveEndTime ?? null : null,
+    effectiveStartDate: t => t.effectiveStartDate || null,
+    effectiveStartTime: t => t.effectiveStartTime ?? null,
+    effectiveEndDate:   t => t.effectiveEndDate ?? null,
+    effectiveEndTime:   t => t.effectiveEndTime ?? null,
     durationMinutes:    t => computeDurationMinutes(t),
     properties:         t => {
         const result: Record<string, unknown> = {};
@@ -52,10 +52,9 @@ function toNativeValue(pv: PropertyValue): unknown {
 
 // ── Duration computation ──
 
-function computeDurationMinutes(task: Task | DisplayTask): number | null {
-    const dt = task as Partial<DisplayTask>;
-    const startTime = dt.effectiveStartTime ?? task.startTime;
-    const endTime = dt.effectiveEndTime ?? task.endTime;
+function computeDurationMinutes(task: DisplayTask): number | null {
+    const startTime = task.effectiveStartTime;
+    const endTime = task.effectiveEndTime;
     if (!startTime || !endTime) return null;
 
     const [sh, sm] = startTime.split(':').map(Number);
@@ -67,7 +66,7 @@ function computeDurationMinutes(task: Task | DisplayTask): number | null {
 
 // ── Record extraction (for CLI field selection) ──
 
-export function taskToRecord(task: Task | DisplayTask, fields: string[]): Record<string, unknown> {
+export function taskToRecord(task: DisplayTask, fields: string[]): Record<string, unknown> {
     const record: Record<string, unknown> = {};
     for (const field of fields) {
         const extractor = FIELD_EXTRACTORS[field];

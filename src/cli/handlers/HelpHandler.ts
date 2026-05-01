@@ -13,11 +13,11 @@ Commands
   update             Update an existing task
   delete             Delete a task
   duplicate          Duplicate a task with optional date shifting
-  convert            Convert an inline task to a frontmatter file
+  convert            Convert a tv-inline task to a tv-file (frontmatter) task
   tasks-for-date-range  List tasks overlapping a date range (flat list)
   categorized-tasks-for-date-range  Get tasks in a date range, categorized per date
   insert-child-task     Insert a child task under a parent task
-  create-frontmatter    Create a new frontmatter task file
+  create-tv-file        Create a new tv-file (frontmatter) task
   get-start-hour        Get the current startHour setting
   help               Show this reference
 
@@ -64,7 +64,7 @@ list: Filter Flags
   leaf                 Only leaf tasks (no children)
   root                 Only root tasks (no parent)
   color=<colors>       Card color(s), comma-separated
-  type=<types>         Task type (at-notation, frontmatter)
+  type=<types>         Task notation (taskviewer, tasks, dayplanner)
   property=<key:value> Custom property (e.g. "priority:high")
   filter-file=<path>   FilterState JSON file (.json) or view template (.md)
                        Overrides all simple filter flags above (see below)
@@ -98,7 +98,7 @@ duplicate: Flags
 convert: Flags
 --------------
   id=<taskId>          Task ID [required]
-                       Converts the inline task to a new frontmatter task file.
+                       Converts the tv-inline task to a new tv-file (frontmatter) task.
                        Returns the path of the newly created file.
 
 categorized-tasks-for-date-range: Flags
@@ -113,14 +113,14 @@ insert-child-task: Flags
   content=<text>     Child task content [required]
                      Inserts a new child task (- [ ] content) under the parent.
 
-create-frontmatter: Flags
--------------------------
+create-tv-file: Flags
+---------------------
   content=<text>       Task content [required]
   start=<date|datetime> Start date/datetime
   end=<date|datetime>  End date/datetime
   due=<YYYY-MM-DD>     Due date
   status=<char>        Status character (default: space)
-                       Creates a new frontmatter task file. Returns the new file path.
+                       Creates a new tv-file (frontmatter) task. Returns the new file path.
 
 get-start-hour: Flags
 ---------------------

@@ -3,7 +3,7 @@ import type TaskViewerPlugin from '../main';
 import { createListHandler, createTodayHandler, createGetHandler } from './handlers/TaskQueryHandlers';
 
 import { createCreateHandler, createUpdateHandler, createDeleteHandler } from './handlers/TaskCrudHandlers';
-import { createDuplicateHandler, createConvertHandler, createTasksForDateRangeHandler, createCategorizedTasksForDateRangeHandler, createInsertChildTaskHandler, createCreateFrontmatterHandler, createGetStartHourHandler } from './handlers/TaskActionHandlers';
+import { createDuplicateHandler, createConvertHandler, createTasksForDateRangeHandler, createCategorizedTasksForDateRangeHandler, createInsertChildTaskHandler, createCreateTvFileHandler, createGetStartHourHandler } from './handlers/TaskActionHandlers';
 import { createHelpHandler } from './handlers/HelpHandler';
 
 /**
@@ -11,7 +11,7 @@ import { createHelpHandler } from './handlers/HelpHandler';
  * Call once from plugin.onload() after TaskIndex is initialized.
  *
  * Commands (14): list, today, get, create, update, delete, duplicate, convert, tasks-for-date-range,
- *                 categorized-tasks-for-date-range, insert-child-task, create-frontmatter, get-start-hour, help
+ *                 categorized-tasks-for-date-range, insert-child-task, create-tv-file, get-start-hour, help
  */
 export function registerCliHandlers(plugin: TaskViewerPlugin): void {
     // ── Query commands (read-only) ──
@@ -28,7 +28,7 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
         leaf:    { description: 'Only leaf tasks (no children)' },
         property: { value: '<key:value>',   description: 'Filter by custom property (e.g. "優先度:高")' },
         color:   { value: '<colors>',        description: 'Filter by color(s), comma-separated' },
-        type:    { value: '<types>',          description: 'Filter by task type (at-notation, frontmatter)' },
+        type:    { value: '<types>',          description: 'Filter by task notation (taskviewer, tasks, dayplanner)' },
         root:    { description: 'Only root tasks (no parent)' },
         'filter-file': { value: '<path>',     description: 'FilterState JSON (.json) or view template (.md). Overrides simple filter flags' },
         list:    { value: '<name>',          description: 'Pinned list name (for .md templates with pinnedLists)' },
@@ -132,7 +132,7 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
 
     plugin.registerCliHandler(
         'obsidian-task-viewer:convert',
-        'Convert inline task to frontmatter file. Details: obsidian obsidian-task-viewer:help',
+        'Convert tv-inline task to tv-file (frontmatter) task. Details: obsidian obsidian-task-viewer:help',
         {
             id: { value: '<taskId>', description: 'Task ID', required: true },
         },
@@ -177,8 +177,8 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
     );
 
     plugin.registerCliHandler(
-        'obsidian-task-viewer:create-frontmatter',
-        'Create a new frontmatter task file. Details: obsidian obsidian-task-viewer:help',
+        'obsidian-task-viewer:create-tv-file',
+        'Create a new tv-file (frontmatter) task. Details: obsidian obsidian-task-viewer:help',
         {
             content: { value: '<text>',          description: 'Task content', required: true },
             start:   { value: '<date|datetime>', description: 'Start date/datetime' },
@@ -186,7 +186,7 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
             due:     { value: '<YYYY-MM-DD>',    description: 'Due date' },
             status:  { value: '<char>',          description: 'Status character (default: space)' },
         },
-        createCreateFrontmatterHandler(plugin),
+        createCreateTvFileHandler(plugin),
     );
 
     plugin.registerCliHandler(

@@ -1,5 +1,5 @@
-import type { Task } from '../../../types';
-import { ParserStrategy } from '../strategies/ParserStrategy';
+import type { ParserId, Task } from '../../../types';
+import { LeafParserStrategy } from '../strategies/ParserStrategy';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
@@ -22,8 +22,8 @@ export interface ReadOnlyTaskParams {
  * Abstract base class for read-only parsers.
  * Read-only parsers parse external task formats for display only — no writeback.
  */
-export abstract class ReadOnlyParserBase implements ParserStrategy {
-    abstract readonly id: string;
+export abstract class ReadOnlyParserBase implements LeafParserStrategy {
+    abstract readonly id: ParserId;
     readonly isReadOnly = true;
 
     abstract parse(line: string, filePath: string, lineNumber: number): Task | null;

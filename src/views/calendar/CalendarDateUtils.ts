@@ -3,6 +3,7 @@ import type { StatusDefinition, Task, DisplayTask } from '../../types';
 import { isCompleteStatusChar } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import type { TaskReadService } from '../../services/data/TaskReadService';
 
 /**
  * Shared calendar date utilities used by both CalendarView and MiniCalendarView.
@@ -11,23 +12,36 @@ import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 // Canonical implementation lives in services/display/VisualDateRange.ts
 export { getTaskDateRange } from '../../services/display/VisualDateRange';
 
+/**
+ * A task is complete iff its own status char is complete AND every child
+ * entry resolves to a complete status. Child entries cover both inline
+ * checkbox lines (`line` kind) and child tasks (`task`/`wikilink` kinds),
+ * so child task status now factors into the calendar completion indicator
+ * — earlier the check only looked at the parent's own checkbox lines.
+ */
 export function isTaskCompleted(
-    task: Task,
-    completeStatusChars: StatusDefinition[]
+    task: DisplayTask,
+    completeStatusChars: StatusDefinition[],
+    readService: TaskReadService,
 ): boolean {
     let completed = isCompleteStatusChar(task.statusChar || ' ', completeStatusChars);
-    if (!completed || task.childLines.length === 0) {
+    if (!completed || task.childEntries.length === 0) {
         return completed;
     }
 
-    for (const cl of task.childLines) {
-        if (cl.checkboxChar !== null && !isCompleteStatusChar(cl.checkboxChar, completeStatusChars)) {
-            completed = false;
-            break;
+    for (const entry of task.childEntries) {
+        if (entry.kind === 'line') {
+            const ch = entry.line.checkboxChar;
+            if (ch !== null && !isCompleteStatusChar(ch, completeStatusChars)) return false;
+        } else {
+            const childId = entry.kind === 'task' ? entry.taskId : null;
+            const child = childId ? readService.getTask(childId) : undefined;
+            if (!child) continue;
+            if (!isCompleteStatusChar(child.statusChar || ' ', completeStatusChars)) return false;
         }
     }
 
-    return completed;
+    return true;
 }
 
 export function parseLocalDateString(value: string): Date | null {

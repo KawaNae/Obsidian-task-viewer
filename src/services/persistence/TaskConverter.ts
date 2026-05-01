@@ -1,11 +1,11 @@
 import { App, TFile } from 'obsidian';
-import { DEFAULT_FRONTMATTER_TASK_KEYS, FrontmatterTaskKeys, Task, PropertyValue } from '../../types';
+import { DEFAULT_TV_FILE_KEYS, TvFileKeys, Task, PropertyValue } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { DateUtils } from '../../utils/DateUtils';
 import { TagExtractor } from '../parsing/utils/TagExtractor';
 
 /**
- * Inline タスクを Frontmatter タスクファイルに変換する。
+ * tv-inline タスクを tv-file タスク（frontmatter ベース）に変換する。
  */
 export class TaskConverter {
     constructor(
@@ -14,16 +14,16 @@ export class TaskConverter {
     ) {}
 
     /**
-     * inline タスクを frontmatter タスクファイルに変換。
+     * tv-inline タスクを tv-file タスクへ変換。
      * 新ファイルパスを返す。
      */
-    async convertToFrontmatterTask(
+    async convertToTvFile(
         task: Task,
         headerName: string,
         headerLevel: number,
         sourceFileColor?: string,
         sourceSharedTags?: string[],
-        frontmatterKeys: FrontmatterTaskKeys = DEFAULT_FRONTMATTER_TASK_KEYS
+        frontmatterKeys: TvFileKeys = DEFAULT_TV_FILE_KEYS
     ): Promise<string> {
         const filePath = this.generateFilePath(task);
         const frontmatter = this.buildFrontmatterContent(task, sourceFileColor, sourceSharedTags, frontmatterKeys);
@@ -83,7 +83,7 @@ export class TaskConverter {
         task: Task,
         color?: string,
         sharedTags?: string[],
-        frontmatterKeys: FrontmatterTaskKeys = DEFAULT_FRONTMATTER_TASK_KEYS
+        frontmatterKeys: TvFileKeys = DEFAULT_TV_FILE_KEYS
     ): string {
         const lines = ['---'];
 

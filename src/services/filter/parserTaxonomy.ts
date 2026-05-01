@@ -1,3 +1,5 @@
+import type { ParserId } from '../../types';
+
 /**
  * Decomposes `parserId` into two orthogonal axes for filtering:
  * - kind: where the task is written (inline vs file)
@@ -13,19 +15,25 @@ export type TaskNotation = 'taskviewer' | 'tasks' | 'dayplanner';
 export const TASK_KIND_VALUES: readonly TaskKind[] = ['inline', 'file'];
 export const TASK_NOTATION_VALUES: readonly TaskNotation[] = ['taskviewer', 'tasks', 'dayplanner'];
 
-export function getTaskKind(parserId: string): TaskKind {
-    return parserId === 'tv-file' ? 'file' : 'inline';
+export function getTaskKind(parserId: ParserId): TaskKind {
+    switch (parserId) {
+        case 'tv-file':
+            return 'file';
+        case 'tv-inline':
+        case 'tasks-plugin':
+        case 'day-planner':
+            return 'inline';
+    }
 }
 
-export function getTaskNotation(parserId: string): TaskNotation {
+export function getTaskNotation(parserId: ParserId): TaskNotation {
     switch (parserId) {
         case 'tasks-plugin':
             return 'tasks';
         case 'day-planner':
             return 'dayplanner';
-        default:
-            // tv-inline, tv-file, and anything unknown are treated as
-            // TaskViewer-owned (this plugin's parsers surface them).
+        case 'tv-inline':
+        case 'tv-file':
             return 'taskviewer';
     }
 }

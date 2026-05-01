@@ -20,7 +20,7 @@ export function createCreateHandler(plugin: TaskViewerPlugin) {
             });
             return cliOk({ task: pickFields(result.task, resolveFields(params.outputFields)) });
         } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.message : `Failed to create task: ${e instanceof Error ? e.message : String(e)}`);
+            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to create task: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 }
@@ -40,7 +40,7 @@ export function createUpdateHandler(plugin: TaskViewerPlugin) {
             });
             return cliOk({ task: pickFields(result.task, resolveFields(params.outputFields)) });
         } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.message : `Failed to update task: ${e instanceof Error ? e.message : String(e)}`);
+            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to update task: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 }
@@ -53,7 +53,7 @@ export function createDeleteHandler(plugin: TaskViewerPlugin) {
             const result = await plugin.api.delete({ id: params.id });
             return cliOk({ deleted: result.deleted });
         } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.message : `Failed to delete task: ${e instanceof Error ? e.message : String(e)}`);
+            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to delete task: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 }

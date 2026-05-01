@@ -8,7 +8,7 @@ import type { DisplayTask } from '../../../src/types';
 
 function makeDT(overrides: Partial<DisplayTask> = {}): DisplayTask {
     return {
-        id: 'at-notation:note.md:ln:1',
+        id: 'tv-inline:note.md:ln:1',
         file: 'note.md',
         line: 0,
         content: 'Test',
@@ -19,13 +19,13 @@ function makeDT(overrides: Partial<DisplayTask> = {}): DisplayTask {
         childLineBodyOffsets: [],
         originalText: '',
         tags: [],
-        parserId: 'at-notation',
+        parserId: 'tv-inline',
         effectiveStartDate: '2026-03-11',
         startDateImplicit: false,
         startTimeImplicit: false,
         endDateImplicit: false,
         endTimeImplicit: false,
-        originalTaskId: 'at-notation:note.md:ln:1',
+        originalTaskId: 'tv-inline:note.md:ln:1',
         isSplit: false,
         ...overrides,
     };

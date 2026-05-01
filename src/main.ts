@@ -6,15 +6,16 @@ import { CalendarView, VIEW_TYPE_CALENDAR, MiniCalendarView, VIEW_TYPE_MINI_CALE
 import { KanbanView, VIEW_TYPE_KANBAN } from './views/kanban';
 import { TimerView, VIEW_TYPE_TIMER } from './views/TimerView';
 import { TimerWidget } from './timer/TimerWidget';
+import { createTempTask } from './services/data/createTempTask';
 import {
     TaskViewerSettings,
     DEFAULT_SETTINGS,
-    DEFAULT_FRONTMATTER_TASK_KEYS,
-    normalizeFrontmatterTaskKeys,
-    validateFrontmatterTaskKeys,
+    DEFAULT_TV_FILE_KEYS,
+    normalizeTvFileKeys,
+    validateTvFileKeys,
 } from './types';
 import type { DefaultLeafPosition, PinnedListDefinition, Task } from './types';
-import { isFrontmatterTask } from './types';
+import { isTvFile } from './types';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/color/ColorSuggest';
 import { LineStyleSuggest } from './suggest/line/LineStyleSuggest';
@@ -229,35 +230,24 @@ export default class TaskViewerPlugin extends Plugin {
             () => this.settings.startHour,
             async (result, statusChar) => {
                 const repository = this.getTaskRepository();
-                const tempTask: Task = {
+                const tempTask = createTempTask({
                     id: 'convert-temp',
-                    file: '',
-                    line: 0,
-                    indent: 0,
                     content: result.content,
                     statusChar,
-                    childIds: [],
-                    childLines: [],
                     startDate: result.startDate,
                     startTime: result.startTime,
                     // endDate が省略されていて endTime がある場合、startDate から同日推論
                     endDate: result.endDate || (result.endTime && result.startDate ? result.startDate : undefined),
                     endTime: result.endTime,
                     due: result.due,
-                    commands: [],
-                    originalText: '',
-                    childLineBodyOffsets: [],
-                    tags: [],
-                    parserId: 'tv-inline',
-                    properties: {},
-                };
-                return await repository.createFrontmatterTaskFile(
+                });
+                return await repository.createTvFile(
                     tempTask,
-                    this.settings.frontmatterTaskHeader,
-                    this.settings.frontmatterTaskHeaderLevel,
+                    this.settings.tvFileChildHeader,
+                    this.settings.tvFileChildHeaderLevel,
                     undefined,
                     undefined,
-                    this.settings.frontmatterTaskKeys
+                    this.settings.tvFileKeys
                 );
             }
         );
@@ -283,18 +273,18 @@ export default class TaskViewerPlugin extends Plugin {
         // so we surface the full task menu via Obsidian's file-menu (file explorer / tab / pane).
         this.registerEvent(
             this.app.workspace.on('file-menu', (menu, file) => {
-                if (!this.settings.fileMenuForFrontmatterTasks) return;
+                if (!this.settings.fileMenuForTvFile) return;
                 if (!(file instanceof TFile)) return;
 
                 const task = this.taskIndex.getTasks().find(t =>
-                    t.file === file.path && isFrontmatterTask(t)
+                    t.file === file.path && isTvFile(t)
                 );
                 if (!task) return;
 
                 menu.addSeparator();
                 editorValidationBuilder.addValidationWarning(menu, task);
                 editorPropertiesBuilder.addStatusSubmenu(menu, task);
-                const dt = toDisplayTask(task, this.settings.startHour);
+                const dt = toDisplayTask(task, this.settings.startHour, (id) => this.taskIndex.getTask(id));
                 editorPropertiesBuilder.buildPropertiesSubmenu(menu, dt, null);
                 menu.addSeparator();
                 editorTimerBuilder.addTimerSubmenu(menu, task);
@@ -428,17 +418,30 @@ export default class TaskViewerPlugin extends Plugin {
     async loadSettings() {
         const raw = await this.loadData();
         const rawObject = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {};
-        const merged = Object.assign({}, DEFAULT_SETTINGS, rawObject) as TaskViewerSettings & {
-            frontmatterTaskKeys?: unknown;
+
+        // Legacy setting key migration (v0.33 → v0.34): values written under the
+        // old Frontmatter* names are transcribed to the new Tv* names. Next
+        // saveSettings persists only the new keys so legacy ones disappear.
+        const migrate = (oldKey: string, newKey: string) => {
+            if (rawObject[oldKey] !== undefined && rawObject[newKey] === undefined) {
+                rawObject[newKey] = rawObject[oldKey];
+            }
+            delete rawObject[oldKey];
         };
-        const normalizedFrontmatterKeys = normalizeFrontmatterTaskKeys(merged.frontmatterTaskKeys);
-        const keysValidationError = validateFrontmatterTaskKeys(normalizedFrontmatterKeys);
+        migrate('frontmatterTaskKeys', 'tvFileKeys');
+        migrate('frontmatterTaskHeader', 'tvFileChildHeader');
+        migrate('frontmatterTaskHeaderLevel', 'tvFileChildHeaderLevel');
+        migrate('fileMenuForFrontmatterTasks', 'fileMenuForTvFile');
+
+        const merged = Object.assign({}, DEFAULT_SETTINGS, rawObject) as TaskViewerSettings;
+        const normalizedKeys = normalizeTvFileKeys(merged.tvFileKeys);
+        const keysValidationError = validateTvFileKeys(normalizedKeys);
 
         this.settings = {
             ...merged,
-            frontmatterTaskKeys: keysValidationError
-                ? { ...DEFAULT_FRONTMATTER_TASK_KEYS }
-                : normalizedFrontmatterKeys,
+            tvFileKeys: keysValidationError
+                ? { ...DEFAULT_TV_FILE_KEYS }
+                : normalizedKeys,
         };
     }
 

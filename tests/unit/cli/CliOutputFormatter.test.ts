@@ -14,7 +14,7 @@ describe('CliOutputFormatter', () => {
     describe('taskToRecord (from TaskNormalizer)', () => {
         it('formats a basic task with specified fields', () => {
             const task = makeTask({
-                id: 'at-notation:daily/2026-03-14.md:ln:5',
+                id: 'tv-inline:daily/2026-03-14.md:ln:5',
                 file: 'daily/2026-03-14.md',
                 line: 5,
                 content: 'Buy groceries',
@@ -24,13 +24,13 @@ describe('CliOutputFormatter', () => {
                 endDate: '2026-03-14',
                 endTime: '11:00',
                 tags: ['#shopping'],
-                parserId: 'at-notation',
+                parserId: 'tv-inline',
             });
 
             const fields = resolveFields('file,line,content,status,startDate,startTime,endDate,endTime,tags,parserId');
             const result = taskToRecord(task, fields);
 
-            expect(result.id).toBe('at-notation:daily/2026-03-14.md:ln:5');
+            expect(result.id).toBe('tv-inline:daily/2026-03-14.md:ln:5');
             expect(result.file).toBe('daily/2026-03-14.md');
             expect(result.line).toBe(5);
             expect(result.content).toBe('Buy groceries');
@@ -40,7 +40,7 @@ describe('CliOutputFormatter', () => {
             expect(result.endDate).toBe('2026-03-14');
             expect(result.endTime).toBe('11:00');
             expect(result.tags).toEqual(['#shopping']);
-            expect(result.parserId).toBe('at-notation');
+            expect(result.parserId).toBe('tv-inline');
         });
 
         it('uses null for missing optional fields', () => {

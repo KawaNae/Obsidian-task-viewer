@@ -1,16 +1,14 @@
-import { Task } from '../../../types';
+import { ParserId, Task } from '../../../types';
 
 /**
  * Interface for task parser strategies.
  * Allows different parsing implementations for various task notation formats.
+ *
+ * Implemented by leaf parsers (TVInlineParser, TVFileBuilder, etc.) that
+ * each emit one specific {@link ParserId}, and by the meta-strategy
+ * {@link ParserChain} that delegates to leaf parsers.
  */
 export interface ParserStrategy {
-    /**
-     * Unique identifier for this parser.
-     * Examples: 'tv-inline', 'tv-file', 'tasks-plugin', 'day-planner'
-     */
-    readonly id: string;
-
     /** True when this parser is read-only (no writeback support). */
     readonly isReadOnly: boolean;
 
@@ -28,4 +26,13 @@ export interface ParserStrategy {
      * Check if the task's status should trigger commands (e.g., recurrence).
      */
     isTriggerableStatus(task: Task): boolean;
+}
+
+/**
+ * Leaf parser that stamps a specific {@link ParserId} onto each Task it
+ * produces. ParserChain wraps a list of these and propagates `id` to
+ * `Task.parserId` after parsing.
+ */
+export interface LeafParserStrategy extends ParserStrategy {
+    readonly id: ParserId;
 }

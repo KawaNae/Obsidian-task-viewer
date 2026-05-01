@@ -1,4 +1,4 @@
-import type { FrontmatterTaskKeys, PropertyValue } from '../../../types';
+import type { TvFileKeys, PropertyValue } from '../../../types';
 import { VALID_LINE_STYLES } from '../../../constants/style';
 import { normalizeColor } from '../../../utils/ColorUtils';
 import { TagExtractor } from '../utils/TagExtractor';
@@ -20,7 +20,7 @@ export interface ExtractedProperties {
 export class BuiltinPropertyExtractor {
     static extract(
         rawProperties: Record<string, PropertyValue>,
-        keys: FrontmatterTaskKeys
+        keys: TvFileKeys
     ): ExtractedProperties {
         const result: ExtractedProperties = { properties: {} };
 

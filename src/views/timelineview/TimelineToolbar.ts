@@ -49,6 +49,8 @@ export class TimelineToolbar {
     private rootEl: HTMLElement | null = null;
     private filterBtn: HTMLElement | null = null;
     private sidebarToggleBtn: HTMLElement | null = null;
+    private viewModeHandle: { update: () => void } | null = null;
+    private zoomHandle: { update: () => void } | null = null;
 
     constructor(
         private app: App,
@@ -156,6 +158,11 @@ export class TimelineToolbar {
     update(): void {
         if (!this.rootEl) return;
         this.maybeRehydrateFilterState();
+        // View-mode and zoom labels are built once in buildDom; refresh them
+        // here so external state changes (layout restore, URI params, template
+        // apply) reflect in the persistent toolbar DOM.
+        this.viewModeHandle?.update();
+        this.zoomHandle?.update();
         if (this.filterBtn) {
             this.filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
         }
@@ -288,9 +295,9 @@ export class TimelineToolbar {
     }
 
     private renderViewModeSwitch(toolbar: HTMLElement): void {
-        ViewModeSelector.render(
+        this.viewModeHandle = ViewModeSelector.render(
             toolbar,
-            this.viewState.daysToShow,
+            () => this.viewState.daysToShow,
             (newValue) => {
                 this.viewState.daysToShow = newValue;
                 this.callbacks.onRender();
@@ -300,10 +307,9 @@ export class TimelineToolbar {
     }
 
     private renderZoomControls(toolbar: HTMLElement): void {
-        const currentZoom = this.viewState.zoomLevel ?? this.plugin.settings.zoomLevel;
-        ZoomSelector.render(
+        this.zoomHandle = ZoomSelector.render(
             toolbar,
-            currentZoom,
+            () => this.viewState.zoomLevel ?? this.plugin.settings.zoomLevel,
             async (newZoom) => {
                 this.viewState.zoomLevel = newZoom;
                 this.callbacks.onRender();

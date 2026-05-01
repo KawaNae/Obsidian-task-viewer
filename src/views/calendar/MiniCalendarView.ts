@@ -1,7 +1,7 @@
 import { ItemView, WorkspaceLeaf, TFile, Menu, Notice, setIcon, type ViewStateResult } from 'obsidian';
 import type { MenuItem } from 'obsidian';
 import { t } from '../../i18n';
-import { Task } from '../../types';
+import { DisplayTask, Task } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
@@ -401,8 +401,8 @@ export class MiniCalendarView extends ItemView {
         return indicatorMap;
     }
 
-    private isTaskCompleted(task: Task): boolean {
-        return isTaskCompletedUtil(task, this.plugin.settings.statusDefinitions);
+    private isTaskCompleted(task: DisplayTask): boolean {
+        return isTaskCompletedUtil(task, this.plugin.settings.statusDefinitions, this.readService);
     }
 
     private getCalendarDateRange(): { startDate: Date; endDate: Date } {

@@ -10,7 +10,8 @@ import TaskViewerPlugin from '../main';
 import { TimerInstance, getTimerElapsedSeconds } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { TaskParser } from '../services/parsing/TaskParser';
-import { Task, isFrontmatterTask } from '../types';
+import { Task, isTvFile } from '../types';
+import { createTempTask } from '../services/data/createTempTask';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
 import { TimerStorageUtils } from './TimerStorageUtils';
@@ -133,9 +134,9 @@ export class TimerRecorder {
     async updateTaskStartTime(timer: TimerInstance): Promise<void> {
         const now = new Date();
         const taskIndex = this.plugin.getTaskIndex();
-        const task = isFrontmatterTask(timer)
-            ? this.resolver.resolveFrontmatterTask(timer)
-            : this.resolver.resolveInlineTask(timer);
+        const task = isTvFile(timer)
+            ? this.resolver.resolveTvFile(timer)
+            : this.resolver.resolveTvInline(timer);
 
         if (!task) return;
 
@@ -195,9 +196,9 @@ export class TimerRecorder {
         await this.insertChildRecord(timer, formattedLine);
 
         // Wait for scan to pick up the new child, then find it by blockId
-        const parentTask = isFrontmatterTask(timer)
-            ? this.resolver.resolveFrontmatterTask(timer)
-            : this.resolver.resolveInlineTask(timer);
+        const parentTask = isTvFile(timer)
+            ? this.resolver.resolveTvFile(timer)
+            : this.resolver.resolveTvInline(timer);
         if (!parentTask) return undefined;
 
         const taskIndex = this.plugin.getTaskIndex();
@@ -286,9 +287,9 @@ export class TimerRecorder {
 
         if (timer.taskId) {
             const taskIndex = this.plugin.getTaskIndex();
-            const task = isFrontmatterTask(timer)
-                ? this.resolver.resolveFrontmatterTask(timer)
-                : this.resolver.resolveInlineTask(timer);
+            const task = isTvFile(timer)
+                ? this.resolver.resolveTvFile(timer)
+                : this.resolver.resolveTvInline(timer);
 
             if (!task) {
                 new Notice(t('notice.timerTargetNotFound'));
@@ -331,9 +332,9 @@ export class TimerRecorder {
             return;
         }
 
-        const resolvedTask = isFrontmatterTask(timer)
-            ? this.resolver.resolveFrontmatterTask(timer)
-            : this.resolver.resolveInlineTask(timer);
+        const resolvedTask = isTvFile(timer)
+            ? this.resolver.resolveTvFile(timer)
+            : this.resolver.resolveTvInline(timer);
 
         if (!resolvedTask) {
             new Notice(t('notice.timerTargetNotFound'));
@@ -371,28 +372,15 @@ export class TimerRecorder {
         endDate: string,
         endTime: string
     ): Task {
-        return {
+        return createTempTask({
             id: 'timer-temp',
-            file: '',
-            line: 0,
-            indent: 0,
             content: label,
             statusChar: 'x',
-            parentId: undefined,
-            childIds: [],
             startDate,
             startTime,
             endDate: endDate || undefined,
             endTime: endTime || undefined,
-            due: undefined,
-            commands: [],
-            originalText: '',
-            childLines: [],
-            childLineBodyOffsets: [],
-            tags: [],
-            parserId: 'tv-inline',
-            properties: {},
-        };
+        });
     }
 
     private formatDate(d: Date): string {

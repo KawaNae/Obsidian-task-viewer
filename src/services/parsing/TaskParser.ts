@@ -1,5 +1,5 @@
 import type { Task, TaskViewerSettings } from '../../types';
-import { ParserStrategy } from './strategies/ParserStrategy';
+import { LeafParserStrategy, ParserStrategy } from './strategies/ParserStrategy';
 import { ParserChain } from './strategies/ParserChain';
 import { TVInlineParser } from './tv-inline/TVInlineParser';
 import { DayPlannerParser } from './tv-inline/DayPlannerParser';
@@ -23,7 +23,7 @@ export class TaskParser {
      * every remaining checkbox line (with or without @notation).
      */
     static rebuildChain(settings: TaskViewerSettings): void {
-        const parsers: ParserStrategy[] = [];
+        const parsers: LeafParserStrategy[] = [];
         if (settings.enableDayPlanner) {
             parsers.push(new DayPlannerParser());
         }

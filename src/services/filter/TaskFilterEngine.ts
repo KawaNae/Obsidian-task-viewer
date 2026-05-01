@@ -1,4 +1,4 @@
-import type { Task, DisplayTask } from '../../types';
+import type { DisplayTask, Task } from '../../types';
 import type { FilterState, FilterCondition, FilterGroup, FilterItem, FilterContext, DateFilterValue } from './FilterTypes';
 import { isFilterCondition } from './FilterTypes';
 import { DateResolver } from './DateResolver';
@@ -9,19 +9,19 @@ import { getTaskKind, getTaskNotation } from './parserTaxonomy';
  * Evaluates whether a task passes a recursive filter tree.
  * Groups can contain both conditions and sub-groups at any depth.
  *
- * Accepts both Task and DisplayTask:
- * - DisplayTask: date filters use effective (resolved) values via effectiveStartDate/effectiveEndDate
- * - Raw Task: date filters fall back to raw startDate/endDate (E/ED implicit dates not available)
+ * DisplayTask-only: date filters use effective (resolved) fields directly.
+ * Raw Task callers must convert via TaskReadService / DisplayTaskConverter
+ * first — TaskReadService.getFilteredTasks is the canonical entry point.
  *
- * Callers passing DisplayTask: KanbanView, PinnedListRenderer
- * Callers passing raw Task: FilterMenuComponent, ScheduleTaskCategorizer, GridRenderer
+ * The `parent` target uses raw Task lookups from context.taskLookup since
+ * ancestor resolution doesn't need date semantics.
  */
 export class TaskFilterEngine {
-    static evaluate(task: Task, filterState: FilterState, context?: FilterContext): boolean {
+    static evaluate(task: DisplayTask, filterState: FilterState, context?: FilterContext): boolean {
         return this.evaluateGroup(task, filterState, context);
     }
 
-    private static evaluateGroup(task: Task, group: FilterGroup, context?: FilterContext): boolean {
+    private static evaluateGroup(task: DisplayTask, group: FilterGroup, context?: FilterContext): boolean {
         if (group.filters.length === 0) return true;
 
         if (group.logic === 'or') {
@@ -30,33 +30,25 @@ export class TaskFilterEngine {
         return group.filters.every(child => this.evaluateItem(task, child, context));
     }
 
-    private static evaluateItem(task: Task, node: FilterItem, context?: FilterContext): boolean {
+    private static evaluateItem(task: DisplayTask, node: FilterItem, context?: FilterContext): boolean {
         if (isFilterCondition(node)) {
             return this.evalCondition(task, node, context);
         }
         return this.evaluateGroup(task, node, context);
     }
 
-    private static evalCondition(task: Task, condition: FilterCondition, context?: FilterContext): boolean {
+    private static evalCondition(task: DisplayTask, condition: FilterCondition, context?: FilterContext): boolean {
         // Skip conditions with empty array values (value not yet selected)
         if (Array.isArray(condition.value) && condition.value.length === 0) return true;
 
-        // Target resolution: evaluate condition against any ancestor
+        // Target resolution: evaluate condition against any ancestor.
+        // Ancestors are looked up as raw Task; ancestor-driven filters don't
+        // need effective dates so the lookup stays Task-typed.
         if (condition.target === 'parent') {
             const selfCondition = { ...condition, target: undefined } as FilterCondition;
-            const seen = new Set<string>();
-            let current: Task | undefined = task;
-            while (current?.parentId && !seen.has(current.parentId)) {
-                seen.add(current.parentId);
-                const ancestor: Task | undefined = context?.taskLookup?.(current.parentId);
-                if (!ancestor) break;
-                if (this.evalCondition(ancestor, selfCondition, context)) return true;
-                current = ancestor;
-            }
-            return false;
+            return this.evaluateAncestor(task, selfCondition, context);
         }
 
-        const dt = task as Partial<DisplayTask>;
         switch (condition.property) {
             case 'file':
                 return this.evalStringSet(task.file, condition);
@@ -67,19 +59,17 @@ export class TaskFilterEngine {
             case 'content':
                 return this.evalContent(task, condition);
             case 'startDate':
-                return this.evalDate(dt.effectiveStartDate ?? task.startDate, condition, context?.startHour ?? 0);
+                return this.evalDate(task.effectiveStartDate || task.startDate, condition, context?.startHour ?? 0);
             case 'endDate':
-                return this.evalDate(dt.effectiveEndDate ?? task.endDate, condition, context?.startHour ?? 0);
+                return this.evalDate(task.effectiveEndDate ?? task.endDate, condition, context?.startHour ?? 0);
             case 'due':
                 return this.evalDate(task.due?.split('T')[0], condition, context?.startHour ?? 0);
             case 'anyDate': {
-                // Aggregate over startDate / endDate / due.
+                // Aggregate over startDate / endDate / due using effective fields.
                 // isSet = any of the three set (scheduled)
                 // isNotSet = all three unset (inbox)
-                // Uses effective* when available (DisplayTask) to respect
-                // resolved end-date / implicit start-date.
-                const hasAny = !!(dt.effectiveStartDate ?? task.startDate)
-                            || !!(dt.effectiveEndDate   ?? task.endDate)
+                const hasAny = !!task.effectiveStartDate
+                            || !!task.effectiveEndDate
                             || !!task.due;
                 if (condition.operator === 'isSet') return hasAny;
                 if (condition.operator === 'isNotSet') return !hasAny;
@@ -99,10 +89,15 @@ export class TaskFilterEngine {
                 if (condition.operator === 'isSet') return !!task.parentId;
                 if (condition.operator === 'isNotSet') return !task.parentId;
                 return true;
-            case 'children':
-                if (condition.operator === 'isSet') return task.childIds.length > 0;
-                if (condition.operator === 'isNotSet') return task.childIds.length === 0;
+            case 'children': {
+                // 'children' = independent child tasks. Plain checkbox lines
+                // and wikilinks aren't tasks of their own, so we filter to
+                // 'task' kind entries.
+                const hasChildTask = task.childEntries.some(e => e.kind === 'task');
+                if (condition.operator === 'isSet') return hasChildTask;
+                if (condition.operator === 'isNotSet') return !hasChildTask;
                 return true;
+            }
             case 'property':
                 return this.evalProperty(task, condition);
             default:
@@ -119,6 +114,42 @@ export class TaskFilterEngine {
 
     private static tagMatches(taskTag: string, filterTag: string): boolean {
         return taskTag === filterTag || taskTag.startsWith(filterTag + '/');
+    }
+
+    private static evaluateAncestor(
+        task: DisplayTask,
+        selfCondition: FilterCondition,
+        context: FilterContext | undefined,
+    ): boolean {
+        const seen = new Set<string>();
+        let currentParentId: string | undefined = task.parentId;
+        while (currentParentId && !seen.has(currentParentId)) {
+            seen.add(currentParentId);
+            const ancestor: Task | undefined = context?.taskLookup?.(currentParentId);
+            if (!ancestor) return false;
+            // Lift raw Task into a minimal DisplayTask for filter evaluation.
+            // Effective dates fall back to raw values; ancestor filters in
+            // practice only inspect non-date properties (file/tag/status/etc),
+            // and childEntries is empty since we don't walk the ancestor's
+            // children during filter evaluation.
+            const ancestorDt: DisplayTask = {
+                ...ancestor,
+                effectiveStartDate: ancestor.startDate ?? '',
+                effectiveStartTime: ancestor.startTime,
+                effectiveEndDate: ancestor.endDate,
+                effectiveEndTime: ancestor.endTime,
+                startDateImplicit: false,
+                startTimeImplicit: false,
+                endDateImplicit: false,
+                endTimeImplicit: false,
+                originalTaskId: ancestor.id,
+                isSplit: false,
+                childEntries: [],
+            };
+            if (this.evalCondition(ancestorDt, selfCondition, context)) return true;
+            currentParentId = ancestor.parentId;
+        }
+        return false;
     }
 
     private static evalTag(task: Task, c: FilterCondition): boolean {
@@ -181,22 +212,18 @@ export class TaskFilterEngine {
         }
     }
 
-    private static evalLength(task: Task, c: FilterCondition, startHour: number): boolean {
-        const dt = task as Partial<DisplayTask>;
-        const effectiveStartDate = dt.effectiveStartDate ?? task.startDate;
-        const effectiveStartTime = dt.effectiveStartTime ?? task.startTime;
-
-        const hasDuration = !!effectiveStartDate;
+    private static evalLength(task: DisplayTask, c: FilterCondition, startHour: number): boolean {
+        const hasDuration = !!task.effectiveStartDate;
         if (c.operator === 'isSet') return hasDuration;
         if (c.operator === 'isNotSet') return !hasDuration;
 
         if (typeof c.value !== 'number') return true;
-        if (!effectiveStartDate) return false;
+        if (!task.effectiveStartDate) return false;
 
         const durationMs = DateUtils.getTaskDurationMs(
-            effectiveStartDate, effectiveStartTime,
-            dt.effectiveEndDate ?? task.endDate,
-            dt.effectiveEndTime ?? task.endTime,
+            task.effectiveStartDate, task.effectiveStartTime,
+            task.effectiveEndDate,
+            task.effectiveEndTime,
             startHour,
         );
         if (!Number.isFinite(durationMs) || durationMs < 0) return false;

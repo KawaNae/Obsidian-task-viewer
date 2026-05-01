@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import { Task, WikilinkRef, isFrontmatterTask, hasBodyLine } from '../../types';
+import { Task, WikilinkRef, isTvFile, hasBodyLine } from '../../types';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 
 /**
@@ -60,7 +60,7 @@ export class WikiLinkResolver {
 
         // frontmatter タスクの childIds をファイル内の出現順にソート
         for (const [parentId, parentTask] of tasks) {
-            if (!isFrontmatterTask(parentTask) || parentTask.childIds.length <= 1) continue;
+            if (!isTvFile(parentTask) || parentTask.childIds.length <= 1) continue;
             const childLineMap = wikiChildLineMap.get(parentId);
             parentTask.childIds.sort((a, b) => {
                 const lineA = this.getChildBodyLine(a, childLineMap, tasks);

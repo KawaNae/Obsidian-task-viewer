@@ -2,7 +2,8 @@ import { App, Modal, Setting, setIcon } from 'obsidian';
 import { t } from '../i18n';
 import { DisplayTask, Task } from '../types';
 import { TaskParser } from '../services/parsing/TaskParser';
-import { toDisplayTask } from '../services/display/DisplayTaskConverter';
+import { NO_TASK_LOOKUP, toDisplayTask } from '../services/display/DisplayTaskConverter';
+import { createTempTask } from '../services/data/createTempTask';
 import { validateDateTimeFormats, validateDateRequirements, validateDateRange, type DateValidationError } from './TaskDateValidator';
 import { TaskNameSuggest } from '../suggest/TaskNameSuggest';
 
@@ -20,27 +21,15 @@ export interface CreateTaskResult {
  * Uses TaskParser.format() to ensure notation is consistent with the rest of the plugin.
  */
 export function formatTaskLine(result: CreateTaskResult): string {
-    const task: Task = {
+    const task = createTempTask({
         id: 'create-temp',
-        file: '',
-        line: 0,
-        indent: 0,
         content: result.content,
-        statusChar: ' ',
-        childIds: [],
-        childLines: [],
         startDate: result.startDate,
         startTime: result.startTime,
         endDate: result.endDate,
         endTime: result.endTime,
         due: result.due,
-        commands: [],
-        originalText: '',
-        childLineBodyOffsets: [],
-        tags: [],
-        parserId: 'tv-inline',
-        properties: {},
-    };
+    });
     return TaskParser.format(task);
 }
 
@@ -402,29 +391,16 @@ export class CreateTaskModal extends Modal {
     private updatePlaceholders(): void {
         const startHour = this.options.startHour ?? 0;
 
-        // Build a partial Task from current form values
-        const formTask: Task = {
+        // Build a partial Task from current form values.
+        // Synthetic temp task built from form input — no children to materialize.
+        const formTask = createTempTask({
             id: 'placeholder-temp',
-            file: '',
-            line: 0,
-            indent: 0,
-            content: '',
-            statusChar: ' ',
-            childIds: [],
-            childLines: [],
             startDate: this.result.startDate || this.options.dailyNoteDate,
             startTime: this.result.startTime,
             endDate: this.result.endDate,
             endTime: this.result.endTime,
-            commands: [],
-            originalText: '',
-            childLineBodyOffsets: [],
-            tags: [],
-            parserId: 'tv-inline',
-            properties: {},
-        };
-
-        const dt = toDisplayTask(formTask, startHour);
+        });
+        const dt = toDisplayTask(formTask, startHour, NO_TASK_LOOKUP);
 
         // --- Start Date placeholder ---
         if (this.startDateInput) {

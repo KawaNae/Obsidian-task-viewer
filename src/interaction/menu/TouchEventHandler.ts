@@ -19,6 +19,7 @@ export class TouchEventHandler {
     ): void {
         // Touch events
         el.addEventListener('touchstart', (e) => {
+            this.cancelLongPress();
             this.longPressTimer = setTimeout(() => {
                 const touch = e.touches[0];
                 if (touch) {

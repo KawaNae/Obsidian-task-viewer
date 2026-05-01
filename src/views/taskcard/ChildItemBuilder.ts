@@ -1,167 +1,98 @@
-import { Task } from '../../types';
+import { Task, ChildEntry, isTvFile } from '../../types';
 import { TaskReadService } from '../../services/data/TaskReadService';
 import { ChildRenderItem } from './types';
-import { ChildLineResolver } from './ChildLineResolver';
 import { ChildRenderItemMapper } from './ChildRenderItemMapper';
+import { extractWikilinkTarget } from '../../services/data/ChildEntryBuilder';
 
 /**
- * Builds child render items for inline/frontmatter tasks.
+ * Builds child render items by walking `TaskReadService.getChildEntries(parent)`.
  *
- * Orchestrates ChildLineResolver (line→task mapping) and
- * ChildRenderItemMapper (task/line→ChildRenderItem conversion).
+ * The data layer (`buildChildEntries`) produces an ordered, partitioned
+ * `ChildEntry[]` where each absolute body line is owned by exactly one entry
+ * across siblings. This walker simply translates each entry into render items
+ * and recurses into 'task' / resolved 'wikilink' children — no re-classification,
+ * no consumed-line tracking, no orphan recovery.
  */
 export class ChildItemBuilder {
     private static readonly MAX_RENDER_DEPTH = 10;
 
-    private resolver: ChildLineResolver;
-    private mapper: ChildRenderItemMapper;
+    private mapper: ChildRenderItemMapper = new ChildRenderItemMapper();
 
-    constructor(private readService: TaskReadService) {
-        this.resolver = new ChildLineResolver(readService);
-        this.mapper = new ChildRenderItemMapper();
-    }
+    constructor(private readService: TaskReadService) {}
 
     getReadService(): TaskReadService {
         return this.readService;
     }
 
-    /**
-     * 親 Task の descendants を ChildRenderItem[] に変換する統一エントリーポイント。
-     * inline / frontmatter どちらの親でも同じロジックで処理する。
-     *
-     * @param indent Prefix added to every generated markdown line (default '').
-     */
     buildChildItems(task: Task, indent: string = ''): ChildRenderItem[] {
+        return this.walk(task, indent, new Set(), 0);
+    }
+
+    private walk(parent: Task, indent: string, visited: Set<string>, depth: number): ChildRenderItem[] {
+        if (depth >= ChildItemBuilder.MAX_RENDER_DEPTH) return [];
+        if (visited.has(parent.id)) return [];
+        const next = new Set(visited);
+        next.add(parent.id);
+
         const items: ChildRenderItem[] = [];
-        const visitedIds = new Set<string>();
-        this.appendDescendants(task, indent, task.id, items, visitedIds, 0);
+        const entries = this.readService.getChildEntries(parent);
+
+        for (const entry of entries) {
+            this.appendEntry(entry, parent, indent, next, depth, items);
+        }
         return items;
     }
 
+    private appendEntry(
+        entry: ChildEntry,
+        parent: Task,
+        indent: string,
+        visited: Set<string>,
+        depth: number,
+        out: ChildRenderItem[]
+    ): void {
+        if (entry.kind === 'task') {
+            const child = this.readService.getTask(entry.taskId);
+            if (!child || visited.has(child.id)) return;
+            out.push(this.mapper.createTaskItem(child, indent, parent.file));
+            out.push(...this.walk(child, indent + '    ', visited, depth + 1));
+            return;
+        }
+
+        if (entry.kind === 'wikilink') {
+            const resolved = this.resolveWikilink(parent, entry.target);
+            if (resolved && !visited.has(resolved.id)) {
+                out.push(this.mapper.createWikiLinkItem(resolved, indent));
+                out.push(...this.walk(resolved, indent + '    ', visited, depth + 1));
+                return;
+            }
+            // Unresolved wikilink → fall through to raw render
+            out.push(this.mapper.createPlainItem(entry.line, entry.bodyLine, parent, indent));
+            return;
+        }
+
+        // 'plain'
+        out.push(this.mapper.createPlainItem(entry.line, entry.bodyLine, parent, indent));
+    }
+
     /**
-     * Recursively appends descendants.
+     * Wikilink → child Task resolution.
      *
-     * Phase 1: iterate childLines in file order.
-     * Phase 2: append remaining childIds not surfaced in phase 1.
+     * Walks the parent's `task`-kind ChildEntries (frontmatter children
+     * wired up by WikiLinkResolver at parse time) and matches by file path.
      */
-    private appendDescendants(
-        task: Task,
-        indent: string,
-        rootId: string,
-        items: ChildRenderItem[],
-        visitedIds: Set<string>,
-        depth: number = 0
-    ): void {
-        if (depth >= ChildItemBuilder.MAX_RENDER_DEPTH) return;
-
-        const childIdByLine = this.resolver.buildChildIdByLine(task);
-        const renderedChildIds = new Set<string>();
-        const consumedLineKeys = new Set<string>();
-
-        this.appendFromChildLines(
-            task, indent, rootId, items, visitedIds, depth,
-            childIdByLine, renderedChildIds, consumedLineKeys
-        );
-
-        this.appendRemainingChildIds(
-            task, indent, rootId, items, visitedIds, depth, renderedChildIds
-        );
-    }
-
-    private appendFromChildLines(
-        task: Task,
-        indent: string,
-        rootId: string,
-        items: ChildRenderItem[],
-        visitedIds: Set<string>,
-        depth: number,
-        childIdByLine: Map<number, Task>,
-        renderedChildIds: Set<string>,
-        consumedLineKeys: Set<string>
-    ): void {
-        for (let i = 0; i < task.childLines.length; i++) {
-            const cl = task.childLines[i];
-            const absLine = this.resolver.resolveChildAbsoluteLine(task, i);
-            const lineKey = this.resolver.toLineKey(task.file, absLine);
-            if (consumedLineKeys.has(lineKey)) continue;
-            const effectiveIndent = indent + cl.indent;
-
-            const childIdTask = childIdByLine.get(absLine);
-            if (childIdTask) {
-                if (visitedIds.has(childIdTask.id) || childIdTask.id === rootId) {
-                    renderedChildIds.add(childIdTask.id);
-                    continue;
-                }
-
-                visitedIds.add(childIdTask.id);
-                renderedChildIds.add(childIdTask.id);
-                items.push(this.mapper.createTaskItem(childIdTask, effectiveIndent, task.file));
-                this.appendDescendants(
-                    childIdTask, effectiveIndent + '    ', rootId, items, visitedIds, depth + 1
-                );
-                this.resolver.markTaskSubtreeLines(childIdTask, consumedLineKeys);
-                continue;
-            }
-
-            const orphanTask = this.resolver.findOrphanTask(task.file, absLine);
-            if (orphanTask) {
-                if (orphanTask.parentId && orphanTask.parentId !== task.id) {
-                    continue;
-                }
-                if (visitedIds.has(orphanTask.id) || orphanTask.id === rootId) {
-                    continue;
-                }
-
-                items.push(this.mapper.createTaskItem(orphanTask, effectiveIndent, task.file));
-                visitedIds.add(orphanTask.id);
-                renderedChildIds.add(orphanTask.id);
-                this.resolver.markTaskSubtreeLines(orphanTask, consumedLineKeys);
-                continue;
-            }
-
-            const wikiChildTask = cl.wikilinkTarget !== null
-                ? this.resolver.findWikiLinkChild(task, childIdByLine, cl.wikilinkTarget)
-                : null;
-
-            if (wikiChildTask && !visitedIds.has(wikiChildTask.id) && wikiChildTask.id !== rootId) {
-                visitedIds.add(wikiChildTask.id);
-                renderedChildIds.add(wikiChildTask.id);
-
-                items.push(this.mapper.createWikiLinkItem(wikiChildTask, effectiveIndent));
-
-                this.appendDescendants(
-                    wikiChildTask, indent + cl.indent + '    ', rootId, items, visitedIds, depth + 1
-                );
-                this.resolver.markTaskSubtreeLines(wikiChildTask, consumedLineKeys);
-                continue;
-            }
-
-            if (!wikiChildTask) {
-                items.push(this.mapper.processChildLine(cl, i, task, indent));
+    private resolveWikilink(parent: Task, linkName: string): Task | undefined {
+        const target = extractWikilinkTarget(linkName);
+        for (const entry of this.readService.getChildEntries(parent)) {
+            if (entry.kind !== 'task') continue;
+            const c = this.readService.getTask(entry.taskId);
+            if (!c || !isTvFile(c)) continue;
+            const baseName = c.file.replace(/\.md$/, '').split('/').pop() || '';
+            const fullPath = c.file.replace(/\.md$/, '');
+            if (target === baseName || target === fullPath || target === c.file) {
+                return c;
             }
         }
-    }
-
-    private appendRemainingChildIds(
-        task: Task,
-        indent: string,
-        rootId: string,
-        items: ChildRenderItem[],
-        visitedIds: Set<string>,
-        depth: number,
-        renderedChildIds: Set<string>
-    ): void {
-        for (const childId of task.childIds) {
-            if (renderedChildIds.has(childId) || visitedIds.has(childId) || childId === rootId) continue;
-
-            visitedIds.add(childId);
-            const child = this.readService.getTask(childId);
-            if (!child) continue;
-
-            items.push(this.mapper.createTaskItem(child, indent, task.file));
-            this.appendDescendants(
-                child, indent + '    ', rootId, items, visitedIds, depth + 1
-            );
-        }
+        return undefined;
     }
 }

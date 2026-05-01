@@ -1,5 +1,5 @@
 import { App, MarkdownRenderer, Component, setIcon } from 'obsidian';
-import { Task, DisplayTask, TaskViewerSettings, isCompleteStatusChar, isFrontmatterTask } from '../../types';
+import { Task, DisplayTask, TaskViewerSettings, isCompleteStatusChar, isTvFile } from '../../types';
 import { TaskReadService } from '../../services/data/TaskReadService';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
 import { DateUtils } from '../../utils/DateUtils';
@@ -24,7 +24,7 @@ export class TaskCardRenderer extends Component {
 
     constructor(private app: App, readService: TaskReadService, writeService: TaskWriteService, private linkRuntime: TaskCardLinkRuntime, getSettings: () => TaskViewerSettings) {
         super();
-        this.checkboxWiring = new CheckboxWiring(app, writeService);
+        this.checkboxWiring = new CheckboxWiring(writeService);
         this.childItemBuilder = new ChildItemBuilder(readService);
         this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, readService);
         this.linkInteractionManager = new TaskLinkInteractionManager(app, getSettings);
@@ -92,25 +92,37 @@ export class TaskCardRenderer extends Component {
         const parentMarkdown = this.buildParentMarkdown(task, settings);
 
         if (compact) {
+            // Build the expand-bar synchronously, BEFORE the markdown await.
+            // Without this, the bar appears in a microtask after MarkdownRenderer
+            // resolves, briefly shrinking compact cards by ~21px. For allday
+            // cards stacked on a CSS grid, that transient propagates to the
+            // allday-section height, which combined with the sync scroll-restore
+            // in TimelineView.performRender produces a 1-frame flicker of timed
+            // cards shifting up then settling back.
+            const expandBar = container.createDiv('task-card__expand-bar');
+            const expandIconSpan = expandBar.createSpan();
+            const expandLabelSpan = expandBar.createSpan();
+            expandBar.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.onDetailClick?.(task);
+            });
+
             const strippedMarkdown = parentMarkdown
                 .replace(/!\[\[([^\]]*)\]\]/g, '')
                 .replace(/!\[([^\]]*)\]\([^)]*\)/g, '');
             await MarkdownRenderer.render(this.app, strippedMarkdown, contentContainer, task.file, cardComp);
 
+            // Populate expand-bar contents post-await. Element is already in DOM
+            // with stable height locked by .task-card__expand-bar min-height.
+            setIcon(expandIconSpan, 'expand');
             const { completed, total } = this.getChildCompletion(task, settings);
-            const expandBar = container.createDiv('task-card__expand-bar');
-            setIcon(expandBar.createSpan(), 'expand');
             if (total > 0) {
-                expandBar.createSpan().setText(` ${completed}/${total}`);
+                expandLabelSpan.setText(` ${completed}/${total}`);
             }
-            expandBar.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.onDetailClick?.(task);
-            });
-        } else if (isFrontmatterTask(task)) {
+        } else if (isTvFile(task)) {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
             await this.renderFrontmatterChildren(contentContainer, task, cardComp, settings, cardInstanceId, forceExpand);
-        } else if (task.childLines.length > 0 || task.childIds.length > 0) {
+        } else if (task.childEntries.length > 0) {
             await this.renderInlineChildren(contentContainer, task, cardComp, settings, parentMarkdown, cardInstanceId, forceExpand);
         } else {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
@@ -133,26 +145,40 @@ export class TaskCardRenderer extends Component {
         cards.forEach(card => this.dispose(card));
     }
 
-    private getChildCompletion(task: Task, settings: TaskViewerSettings): { completed: number; total: number } {
+    private getChildCompletion(task: DisplayTask, settings: TaskViewerSettings): { completed: number; total: number } {
         let completed = 0;
         let total = 0;
+        const lookup = this.childItemBuilder.getReadService();
 
-        if (isFrontmatterTask(task)) {
-            for (const childId of task.childIds) {
-                const child = this.childItemBuilder.getReadService().getTask(childId);
+        for (const entry of task.childEntries) {
+            if (entry.kind === 'task' || entry.kind === 'wikilink') {
+                const child = entry.kind === 'task'
+                    ? lookup.getTask(entry.taskId)
+                    : this.resolveWikilinkChild(task, entry.target);
                 if (!child) continue;
                 total++;
                 if (isCompleteStatusChar(child.statusChar, settings.statusDefinitions)) completed++;
+            } else if (entry.kind === 'line' && entry.line.checkboxChar !== null) {
+                total++;
+                if (isCompleteStatusChar(entry.line.checkboxChar, settings.statusDefinitions)) completed++;
             }
         }
 
-        for (const cl of task.childLines) {
-            if (cl.checkboxChar === null) continue;
-            total++;
-            if (isCompleteStatusChar(cl.checkboxChar, settings.statusDefinitions)) completed++;
-        }
-
         return { completed, total };
+    }
+
+    private resolveWikilinkChild(parent: DisplayTask, target: string): Task | undefined {
+        const t = target.split('|')[0].trim();
+        const lookup = this.childItemBuilder.getReadService();
+        for (const entry of parent.childEntries) {
+            if (entry.kind !== 'task') continue;
+            const c = lookup.getTask(entry.taskId);
+            if (!c || !isTvFile(c)) continue;
+            const baseName = c.file.replace(/\.md$/, '').split('/').pop() || '';
+            const fullPath = c.file.replace(/\.md$/, '');
+            if (t === baseName || t === fullPath || t === c.file) return c;
+        }
+        return undefined;
     }
 
     private renderTopRightMeta(
@@ -250,13 +276,13 @@ export class TaskCardRenderer extends Component {
 
     private async renderFrontmatterChildren(
         contentContainer: HTMLElement,
-        task: Task,
+        task: DisplayTask,
         component: Component,
         settings: TaskViewerSettings,
         cardInstanceId: string,
         forceExpand = false
     ): Promise<void> {
-        if (task.childIds.length === 0 && task.childLines.length === 0) {
+        if (task.childEntries.length === 0) {
             return;
         }
 

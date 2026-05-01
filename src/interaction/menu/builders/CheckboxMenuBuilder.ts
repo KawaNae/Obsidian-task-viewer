@@ -7,7 +7,7 @@ import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { TaskLineClassifier } from '../../../services/parsing/utils/TaskLineClassifier';
 import { t } from '../../../i18n';
 
-export type CreateFrontmatterTaskCallback = (result: CreateTaskResult, statusChar: string) => Promise<string>;
+export type CreateTvFileCallback = (result: CreateTaskResult, statusChar: string) => Promise<string>;
 
 export interface CheckboxLineOps {
     updateLine(newContent: string): void | Promise<void>;
@@ -24,7 +24,7 @@ export class CheckboxMenuBuilder {
     constructor(
         private app: App,
         private getStartHour: () => number,
-        private onCreateFrontmatterTask?: CreateFrontmatterTaskCallback
+        private onCreateTvFile?: CreateTvFileCallback
     ) {}
 
     /**
@@ -135,7 +135,7 @@ export class CheckboxMenuBuilder {
             });
 
             // Frontmatter Task
-            if (this.onCreateFrontmatterTask) {
+            if (this.onCreateTvFile) {
                 subMenu.addItem((sub) => {
                     sub.setTitle(t('menu.frontmatterTask'))
                         .setIcon('file-plus')
@@ -145,13 +145,13 @@ export class CheckboxMenuBuilder {
                             new CreateTaskModal(
                                 this.app,
                                 async (result) => {
-                                    const newPath = await this.onCreateFrontmatterTask!(result, statusChar);
+                                    const newPath = await this.onCreateTvFile!(result, statusChar);
                                     const linkTarget = newPath.replace(/\.md$/, '');
                                     const fileName = linkTarget.split('/').pop() || 'task';
                                     await ops.updateLine(`${indent}${marker} [[${linkTarget}|${fileName}]]`);
                                 },
                                 { content, startDate: today },
-                                { title: t('menu.convertToFrontmatterTaskTitle'), submitLabel: t('modal.convert'), focusField: 'start', startHour: this.getStartHour(), dailyNoteDate }
+                                { title: t('menu.convertToTvFileTitle'), submitLabel: t('modal.convert'), focusField: 'start', startHour: this.getStartHour(), dailyNoteDate }
                             ).open();
                         });
                 });

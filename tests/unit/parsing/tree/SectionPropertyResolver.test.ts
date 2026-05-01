@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { DocumentTreeBuilder } from '../../../../src/services/parsing/tree/DocumentTreeBuilder';
 import { SectionPropertyResolver } from '../../../../src/services/parsing/tree/SectionPropertyResolver';
-import { DEFAULT_FRONTMATTER_TASK_KEYS } from '../../../../src/types';
+import { DEFAULT_TV_FILE_KEYS } from '../../../../src/types';
 
-const keys = DEFAULT_FRONTMATTER_TASK_KEYS;
+const keys = DEFAULT_TV_FILE_KEYS;
 
 function buildAndResolve(bodyLines: string[], frontmatter?: Record<string, any>) {
     const doc = DocumentTreeBuilder.build('test.md', bodyLines, 0);

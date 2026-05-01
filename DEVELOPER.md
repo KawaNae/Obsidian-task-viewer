@@ -8,8 +8,6 @@
 src/views/taskcard/
   TaskCardRenderer.ts              # Orchestrator for one task card
   ChildItemBuilder.ts              # Task/childLines -> ChildRenderItem[]
-  ChildLineResolver.ts             # Child line resolution from file content
-  ChildLineUtils.ts                # Child line utility helpers
   ChildRenderItemMapper.ts         # Maps child data to ChildRenderItem[]
   ChildSectionRenderer.ts          # Child markdown/toggle rendering
   CheckboxWiring.ts                # Parent/child checkbox interaction and status menu
@@ -25,15 +23,21 @@ src/views/taskcard/
 2. `TaskCardRenderer` keeps frontmatter child rendering on a single path:
    parent render -> frontmatter child section render (no inline child branch).
 3. `ChildSectionRenderer` owns child markdown render pipeline and notation injection.
-4. `CheckboxWiring` owns all checkbox event binding and line-resolution logic.
-5. `ChildItemBuilder` owns descendant expansion order and duplicate suppression.
+4. `CheckboxWiring` owns all checkbox event binding (delegates writes to `TaskWriteService.updateChildLine`).
+5. `ChildItemBuilder` walks `TaskReadService.getChildEntries(parent)` — the single source of truth for child render order.
 
-### Frontmatter child rendering rule
+### Child rendering rule
 
-1. Frontmatter cards must show a single child toggle set per card.
-2. Child ordering follows file order from `childLines` first, then remaining `childIds`.
-3. Duplicate line rendering is prevented with consumed line keys (`file:line`).
-4. Checkbox updates for frontmatter child lines use absolute body line offsets.
+1. The renderer consumes `getChildEntries(parent): ChildEntry[]` (`'task' | 'wikilink' | 'plain'`).
+2. Each entry carries an absolute `bodyLine`. UI handlers carry the entry's `bodyLine` and a `line` snapshot — no line-number arithmetic in render or write code.
+3. The data layer (`buildChildEntries`) enforces a 1-line-1-owner invariant across siblings: a body line owned by a sibling task's subtree never surfaces in a `'plain'` / `'wikilink'` entry, so the renderer never deduplicates.
+4. Frontmatter and inline tasks share the same render path; the only difference is `parser.line === -1` for the synthetic frontmatter container.
+
+### Child line write rule
+
+1. UI write paths (card checkbox toggle, child line menu) call `TaskWriteService.updateChildLine` / `insertChildLineAfter` / `deleteChildLine` with `(parentTaskId, bodyLine, ...)`.
+2. The write service validates that `bodyLine` belongs to a writable (`'plain'` / `'wikilink'`) entry of the named parent before delegating. Bad parent / wrong line / task entry all fail fast.
+3. Raw `updateLine(file, line, text)` is reserved for editor-cursor callers (`TaskMenuExtension`) and persistence internals — UI layers never call it.
 
 ### Shared type policy
 
@@ -105,8 +109,8 @@ src/
 │   ├── data/                  # Data access facade (TaskReadService, TaskWriteService)
 │   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, TaskDateCategorizer, TaskIdGenerator, ImplicitCalendarDateResolver)
 │   ├── parsing/               # Parser layer
-│   │   ├── inline/            # Line-level parsers (AtNotationParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
-│   │   ├── file/              # File-level parsers (FrontmatterTaskBuilder)
+│   │   ├── tv-inline/         # Line-level parsers (TVInlineParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
+│   │   ├── tv-file/           # File-level builder (TVFileBuilder)
 │   │   ├── strategies/        # ParserChain, ParserStrategy
 │   │   ├── tree/              # Document structure tree (DocumentTree, DocumentTreeBuilder, SectionPropertyResolver, etc.)
 │   │   └── utils/             # Parser utilities (ChildLineClassifier, TagExtractor, TaskContent, TaskLineClassifier)
@@ -154,8 +158,8 @@ Quick reference for locating the right layer when implementing a feature.
 | **WikiLinkResolver** | `services/core/WikiLinkResolver.ts` | Resolves frontmatter wikilink parent–child relationships (via `WikilinkRef` in TaskStore / `childLines`) |
 | **SyncDetector / EditorObserver** | `services/core/SyncDetector.ts` et al. | Distinguishes local edits from remote sync changes |
 | **ParserChain** | `services/parsing/strategies/ParserChain.ts` | Tries multiple parsers in order (Strategy chain) |
-| **AtNotationParser** | `services/parsing/inline/AtNotationParser.ts` | Parses `@date` inline notation (line-level) |
-| **FrontmatterTaskBuilder** | `services/parsing/file/FrontmatterTaskBuilder.ts` | Converts YAML frontmatter to Task objects (file-level) |
+| **TVInlineParser** | `services/parsing/tv-inline/TVInlineParser.ts` | Parses `@date` inline notation (line-level) |
+| **TVFileBuilder** | `services/parsing/tv-file/TVFileBuilder.ts` | Converts YAML frontmatter to Task objects (file-level) |
 | **TaskRepository** | `services/persistence/TaskRepository.ts` | Write facade; dispatches to the correct writer based on `parserId` |
 | **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical YAML edits + heading-based child insertion |
 | **FrontmatterLineEditor** | `services/persistence/utils/FrontmatterLineEditor.ts` | Low-level YAML line operations; never touches unrelated lines |
@@ -231,10 +235,13 @@ TreeTaskExtractor がインラインタスクの `childLines` を構築するル
 
 #### childLineBodyOffsets のセマンティクス
 
-| タスク種別 | 格納値 | 利用側 |
-|-----------|--------|--------|
-| frontmatter | body 相対オフセット（FM末尾からの距離） | `ChildLineUtils`: `fmEndLine + 1 + offset` |
-| inline | 絶対行番号 | `ChildLineResolver` / `ChildLineUtils`: そのまま返す |
+frontmatter / inline タスク共に **ファイル先頭からの絶対行番号** を格納する。
+レンダラ／ライタは `DisplayTask.childEntries[i].bodyLine` を直接読む（`buildChildEntries`
+が `childLineBodyOffsets[i]` をそのまま entry に転載する）。
+
+- `TVFileBuilder` では `bodyStartIndex + relIndex`（= 絶対行）を格納
+- `TreeTaskExtractor` では `block.childLineNumbers`（= 絶対行）を格納
+- offset が欠落している entry は `buildChildEntries` で除外される（parser 契約上発生しない想定）
 
 ---
 
@@ -358,11 +365,11 @@ Due represents a deadline date (calendarDate). If time complement is needed,
 - Duration < 24 h → Timeline lane
 - Exactly 24 h (e.g. 12:00 → 12:00 next day) → All-day lane
 
-### Frontmatter child element extraction (v0.13.1)
+### tv-file child element extraction (v0.13.1)
 
-The heading configured in settings (`frontmatterTaskHeader` / `frontmatterTaskHeaderLevel`) acts as the virtual root for child elements.
+The heading configured in settings (`tvFileChildHeader` / `tvFileChildHeaderLevel`) acts as the virtual root for child elements.
 
-1. `FrontmatterTaskBuilder.parse()` receives `frontmatterTaskHeader` and `frontmatterTaskHeaderLevel` and locates the matching heading section.
+1. `TVFileBuilder.parse()` receives `tvFileChildHeader` and `tvFileChildHeaderLevel` and locates the matching heading section.
 2. Starting from the first root-level list item under that heading, only the first contiguous list block is extracted.
 3. Results are stored in `Task.childLines` and `Task.childLineBodyOffsets` (absolute line numbers).
 4. `TaskScanner` attaches unparented tasks found in `childLineBodyOffsets` to `fmTask.childIds`.
@@ -536,7 +543,7 @@ npm run build     # Production build
 
 ### File naming
 
-- **Parsers**: `<Target>Parser.ts` (e.g. `AtNotationParser.ts`)
+- **Parsers**: `<Target>Parser.ts` (e.g. `TVInlineParser.ts`)
 - **Services**: `<Feature>Service.ts` (e.g. `TaskReadService.ts`)
 - **Views**: `<Name>View.ts` (e.g. `TimelineView.ts`, `TimerView.ts`)
 
@@ -863,26 +870,26 @@ When working with `FrontmatterWriter` / `FrontmatterLineEditor`:
 ### parserId-based write dispatch
 
 ```
-task.parserId === 'frontmatter'   →  FrontmatterWriter
-task.parserId === 'at-notation'   →  InlineTaskWriter
+isTvFile(task)    →  FrontmatterWriter
+isTvInline(task)  →  InlineTaskWriter
 ```
 
-- `line: -1` means "no valid line number" only — **do not use it for type detection** (use `parserId`).
+- `line: -1` means "no valid line number" only — **do not use it for type detection** (use `isTvFile()` / `isTvInline()`).
 - In `TimerRecorder`, `line: -1` specifically means "line number unknown → force content-based search".
 
-### Inline vs Frontmatter persistence rules
+### tv-inline vs tv-file persistence rules
 
 #### Date field handling
 
-| Aspect | Inline (`at-notation`) | Frontmatter |
-|--------|----------------------|-------------|
+| Aspect | tv-inline | tv-file |
+|--------|-----------|---------|
 | Time-only values | ✅ Allowed (`@10:00`) | ❌ Prohibited (returns null → key deleted) |
 | startDateInherited | ✅ Used (daily note date inheritance) | ❌ Never set |
 | endDate same-day omission | ✅ Normal (`>14:00` = same day as start) | ❌ Always explicit date |
-| Update strategy | Full line re-format via `AtNotationParser.format()` | Surgical YAML key edit via `FrontmatterLineEditor` |
+| Update strategy | Full line re-format via `TVInlineParser.format()` | Surgical YAML key edit via `FrontmatterLineEditor` |
 | Empty field in Properties modal | Sparse update (field omitted → preserved) | Resolved value written (field filled from PropertyCalculator) |
 
-#### Inline notation format rules (`AtNotationParser.format()`)
+#### tv-inline notation format rules (`TVInlineParser.format()`)
 
 **startDateInherited**:
 - `true` + startTime → `@10:00` (date omitted)
@@ -1061,10 +1068,10 @@ Defined in `src/types/index.ts` as `TaskViewerSettings`. Defaults are in `DEFAUL
 | `applyGlobalStyles` | boolean | `false` | Apply plugin CSS globally |
 | `enableStatusMenu` | boolean | `true` | Show status menu on checkbox long-press |
 | `statusDefinitions` | StatusDefinition[] | *(see below)* | Status character definitions (char, label, isComplete) |
-| `frontmatterTaskKeys` | FrontmatterTaskKeys | `tv-*` family | Frontmatter key names (all fields are individually customisable) |
+| `tvFileKeys` | TvFileKeys | `tv-*` family | tv-file frontmatter key names (all fields are individually customisable) |
 | `habits` | HabitDefinition[] | `[]` | Habit tracking definitions (boolean / number / string) |
-| `frontmatterTaskHeader` | string | `'Tasks'` | Heading text under which child tasks are inserted |
-| `frontmatterTaskHeaderLevel` | number | 2 | Heading level for the above (2 = `##`) |
+| `tvFileChildHeader` | string | `'Tasks'` | Heading text under which tv-file child elements live |
+| `tvFileChildHeaderLevel` | number | 2 | Heading level for the above (2 = `##`) |
 | `longPressThreshold` | number | 400 | Long-press detection time (ms) |
 | `taskSelectAction` | `'click'` \| `'dblclick'` | `'click'` | Task card select action to open file |
 | `zoomLevel` | number | 1.0 | Default timeline zoom level |
@@ -1104,7 +1111,7 @@ Defined in `src/types/index.ts` as `TaskViewerSettings`. Defaults are in `DEFAUL
 
 **`tasksPluginMapping` defaults**: `{ start: 'startDate', scheduled: 'startDate', due: 'due' }`
 
-All `FrontmatterTaskKeys` fields (`start`, `end`, `due`, `status`, `content`, `timerTargetId`, `color`, `linestyle`, `mask`, `ignore`) are independently customisable. Duplicate key values are not allowed.
+All `TvFileKeys` fields (`start`, `end`, `due`, `status`, `content`, `timerTargetId`, `color`, `linestyle`, `mask`, `ignore`) are independently customisable. Duplicate key values are not allowed.
 
 ---
 
@@ -1183,7 +1190,7 @@ src/cli/
   handlers/
     TaskQueryHandlers.ts   # list / today / get
     TaskCrudHandlers.ts    # create / update / delete
-    TaskActionHandlers.ts  # duplicate / convert / tasks-for-date-range / tasks-for-date / insert-child-task / create-frontmatter / get-start-hour
+    TaskActionHandlers.ts  # duplicate / convert / tasks-for-date-range / tasks-for-date / insert-child-task / create-tv-file / get-start-hour
     HelpHandler.ts         # help
 ```
 
@@ -1212,11 +1219,11 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `update({ id, ... })` | async | `MutationResult` |
 | `delete({ id })` | async | `DeleteResult { deleted: string }` |
 | `duplicate({ id, ... })` | async | `DuplicateResult { duplicated: string }` |
-| `convertToFrontmatter({ id })` | async | `ConvertResult { convertedFrom, newFile }` |
+| `convertToTvFile({ id })` | async | `ConvertResult { convertedFrom, newFile }` |
 | `tasksForDateRange({ start, end, ... })` | async | `TaskListResult` |
 | `tasksForDate({ date, ... })` | sync | `CategorizedTasksResult { allDay, timed, dueOnly }` |
 | `insertChildTask({ parentId, content })` | async | `InsertChildTaskResult { parentId }` |
-| `createFrontmatterTask({ content, ... })` | async | `CreateFrontmatterResult { newFile }` |
+| `createTvFile({ content, ... })` | async | `CreateTvFileResult { newFile }` |
 | `getStartHour()` | sync | `StartHourResult { startHour }` |
 | `onChange(callback)` | sync | `() => void` (unsubscribe) |
 | `help()` | sync | `string` |
@@ -1236,7 +1243,7 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `tasks-for-date-range` | Tasks in date range | start (req), end (req), sort, limit, offset |
 | `tasks-for-date` | Categorized tasks for date | date (required) |
 | `insert-child-task` | Insert child task | parent-id (req), content (req) |
-| `create-frontmatter` | Create frontmatter file | content (req), start, end, due, status |
+| `create-tv-file` | Create tv-file (frontmatter) task | content (req), start, end, due, status |
 | `get-start-hour` | Get startHour setting | *(none)* |
 | `help` | Show CLI reference | *(none)* |
 

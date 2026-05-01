@@ -1,5 +1,5 @@
 import type { DocumentNode, SectionNode } from './DocumentTree';
-import type { FrontmatterTaskKeys, PropertyValue } from '../../../types';
+import type { TvFileKeys, PropertyValue } from '../../../types';
 import { BuiltinPropertyExtractor, type ExtractedProperties } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { normalizeColor } from '../../../utils/ColorUtils';
@@ -14,7 +14,7 @@ export class SectionPropertyResolver {
     static resolve(
         doc: DocumentNode,
         frontmatter: Record<string, any> | undefined,
-        keys: FrontmatterTaskKeys
+        keys: TvFileKeys
     ): void {
         // frontmatter からベースプロパティを抽出
         const fmBase = this.extractFrontmatterBase(frontmatter, keys);
@@ -27,7 +27,7 @@ export class SectionPropertyResolver {
     private static resolveSection(
         section: SectionNode,
         parentProps: ExtractedProperties,
-        keys: FrontmatterTaskKeys
+        keys: TvFileKeys
     ): void {
         // セクション自身の PropertyBlock からプロパティ抽出
         const ownRaw = this.propertyBlockToRecord(section);
@@ -73,7 +73,7 @@ export class SectionPropertyResolver {
     /** frontmatter オブジェクトからプロパティベースを抽出 */
     private static extractFrontmatterBase(
         frontmatter: Record<string, any> | undefined,
-        keys: FrontmatterTaskKeys
+        keys: TvFileKeys
     ): ExtractedProperties {
         if (!frontmatter) return { properties: {} };
 

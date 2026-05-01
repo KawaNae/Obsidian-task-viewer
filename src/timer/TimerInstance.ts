@@ -4,6 +4,8 @@
  * Shared types for timer instances used by TimerWidget / TimerRecorder / TimerProgressUI.
  */
 
+import type { ParserId } from '../types';
+
 export type TimerPhase = 'idle' | 'work' | 'break' | 'prepare';
 
 export interface TimerBase {
@@ -26,7 +28,8 @@ export interface TimerBase {
 
     customLabel: string;
     recordMode: 'child' | 'self';
-    parserId: string;
+    /** Always a current {@link ParserId}; legacy persisted values are normalized at load. */
+    parserId: ParserId;
     taskColor: string;
 }
 
@@ -79,7 +82,7 @@ export interface TimerStartConfig {
     taskOriginalText?: string;
     taskFile?: string;
     recordMode?: 'child' | 'self';
-    parserId?: string;
+    parserId?: ParserId;
     timerTargetId?: string;
     taskColor?: string;
     timerType: TimerType | 'pomodoro';

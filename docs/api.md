@@ -22,11 +22,11 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `api.update({ id, ... })` | タスク更新 | async |
 | `api.delete({ id })` | タスク削除 | async |
 | `api.duplicate({ id, ... })` | タスク複製 | async |
-| `api.convertToFrontmatter({ id })` | インライン→Frontmatter変換 | async |
+| `api.convertToTvFile({ id })` | tv-inline → tv-file 変換 | async |
 | `api.tasksForDateRange({ start, end, ... })` | 日付範囲のタスク取得 | async |
 | `api.categorizedTasksForDateRange({ start, end, ... })` | 日付範囲のタスク（分類済み） | sync |
 | `api.insertChildTask({ parentId, content })` | 子タスク挿入 | async |
-| `api.createFrontmatterTask({ content, ... })` | Frontmatterタスクファイル作成 | async |
+| `api.createTvFile({ content, ... })` | tv-file タスク作成 | async |
 | `api.getStartHour()` | startHour設定値取得 | sync |
 | `api.onChange(callback)` | タスク変更の購読 | sync |
 | `api.help()` | API リファレンス表示 | sync |
@@ -74,7 +74,7 @@ const result = api.today({
 | `leaf` | `boolean` | 子なしタスクのみ |
 | `property` | `string` | カスタムプロパティ（`key:value`） |
 | `color` | `string \| string[]` | カード色 |
-| `type` | `string \| string[]` | タスク種別（`at-notation`, `frontmatter`） |
+| `type` | `string \| string[]` | タスク notation（`taskviewer`, `tasks`, `dayplanner`） |
 | `root` | `boolean` | 親タスクを持たないタスクのみ |
 | `filter` | `FilterState` | 完全なフィルタ定義（上記フラグより優先） |
 | `filterFile` | `string` | vault 内フィルタファイルパス（`.json` / `.md` テンプレート） |
@@ -165,14 +165,14 @@ const result = await api.duplicate({ id: 'abc123', dayOffset: 1, count: 3 });
 | `dayOffset` | | `number` | 日付シフト日数（デフォルト: 0） |
 | `count` | | `number` | コピー数（デフォルト: 1） |
 
-## convertToFrontmatter
+## convertToTvFile
 
 ```javascript
-const result = await api.convertToFrontmatter({ id: 'abc123' });
+const result = await api.convertToTvFile({ id: 'abc123' });
 // => { convertedFrom: 'abc123', newFile: 'path/to/new-file.md' }
 ```
 
-インラインタスクをfrontmatterタスクファイルに変換します。
+tv-inline タスクを tv-file（frontmatter ベース）タスクに変換します。
 
 ## tasksForDateRange
 
@@ -226,10 +226,10 @@ const result = await api.insertChildTask({
 // => { parentId: 'abc123' }
 ```
 
-## createFrontmatterTask
+## createTvFile
 
 ```javascript
-const result = await api.createFrontmatterTask({
+const result = await api.createTvFile({
   content: 'プロジェクト名',
   start: '2026-03-15',
   due: '2026-03-31',
@@ -237,7 +237,7 @@ const result = await api.createFrontmatterTask({
 // => { newFile: 'path/to/new-file.md' }
 ```
 
-**CreateFrontmatterParams:**
+**CreateTvFileParams:**
 
 | パラメータ | 必須 | 型 | 説明 |
 |-----------|------|-----|------|
