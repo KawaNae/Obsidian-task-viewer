@@ -32,7 +32,7 @@ export class TaskActionsMenuBuilder {
         // File operations
         this.addOpenInEditorItem(menu, task);
         this.addDuplicateSubmenu(menu, task);
-        this.addConvertSubmenu(menu, task);
+        this.addConvertToFileItem(menu, task);
         this.addSwitchToSubmenu(menu, task);
         this.addDeleteItem(menu, task);
     }
@@ -174,64 +174,32 @@ export class TaskActionsMenuBuilder {
     }
 
     /**
-     * "Convert to" サブメニュー — ストレージ形式変換（全操作 ConfirmModal）
+     * "Convert to File" 単独項目 — tvInline → tvFile（ConfirmModal）
      */
-    private addConvertSubmenu(menu: Menu, task: Task): void {
-        // Frontmatter tasks have no convert options (reverse conversion is too complex)
+    private addConvertToFileItem(menu: Menu, task: Task): void {
+        // tvFile tasks have no convert options (reverse conversion is too complex)
         if (!isTvInline(task)) return;
 
         menu.addItem((item) => {
-            const subMenu = item
-                .setTitle(t('menu.convertTo'))
-                .setIcon('arrow-right-left')
-                .setSubmenu();
-
-            // Inline Task → Plain Checkbox
-            subMenu.addItem((sub) => {
-                sub.setTitle(t('menu.plainCheckbox'))
-                    .setIcon('square')
-                    .onClick(() => {
-                        menu.close();
-                        new ConfirmModal(
-                            this.app,
-                            t('menu.convertToPlainCheckbox'),
-                            t('menu.convertToPlainCheckboxMessage'),
-                            async () => {
-                                await this.writeService.updateTask(task.id, {
-                                    startDate: undefined,
-                                    startTime: undefined,
-                                    endDate: undefined,
-                                    endTime: undefined,
-                                    due: undefined,
-                                });
-                            },
-                            { confirmLabel: t('modal.convert') }
-                        ).open();
-                    });
-            });
-
-            // Inline Task → Frontmatter Task
-            subMenu.addItem((sub) => {
-                sub.setTitle(t('menu.frontmatterTask'))
-                    .setIcon('file-plus')
-                    .onClick(() => {
-                        menu.close();
-                        new ConfirmModal(
-                            this.app,
-                            t('menu.convertToTvFile'),
-                            t('menu.convertToTvFileMessage'),
-                            async () => {
-                                try {
-                                    await this.writeService.convertToTvFile(task.id);
-                                    new Notice(t('notice.taskConverted'));
-                                } catch (e) {
-                                    new Notice(t('notice.taskConvertFailed') + ': ' + (e as Error).message);
-                                }
-                            },
-                            { confirmLabel: t('modal.convert') }
-                        ).open();
-                    });
-            });
+            item.setTitle(t('menu.convertToFile'))
+                .setIcon('file-plus')
+                .onClick(() => {
+                    menu.close();
+                    new ConfirmModal(
+                        this.app,
+                        t('menu.convertToFile'),
+                        t('menu.convertToFileMessage'),
+                        async () => {
+                            try {
+                                await this.writeService.convertToTvFile(task.id);
+                                new Notice(t('notice.taskConverted'));
+                            } catch (e) {
+                                new Notice(t('notice.taskConvertFailed') + ': ' + (e as Error).message);
+                            }
+                        },
+                        { confirmLabel: t('modal.convert') }
+                    ).open();
+                });
         });
     }
 
@@ -346,6 +314,32 @@ export class TaskActionsMenuBuilder {
                             });
                     });
                 }
+            }
+
+            // → Undated (dated タスクのみ表示)
+            if (hasDate) {
+                subMenu.addItem((sub) => {
+                    sub.setTitle(t('menu.undated'))
+                        .setIcon('calendar-x')
+                        .onClick(() => {
+                            menu.close();
+                            new ConfirmModal(
+                                this.app,
+                                t('menu.switchToUndated'),
+                                t('menu.switchToUndatedMessage'),
+                                async () => {
+                                    await this.writeService.updateTask(task.id, {
+                                        startDate: undefined,
+                                        startTime: undefined,
+                                        endDate: undefined,
+                                        endTime: undefined,
+                                        due: undefined,
+                                    });
+                                },
+                                { confirmLabel: t('modal.convert') }
+                            ).open();
+                        });
+                });
             }
         });
     }
