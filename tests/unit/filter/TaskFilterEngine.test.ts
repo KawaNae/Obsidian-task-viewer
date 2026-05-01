@@ -430,43 +430,43 @@ describe('TaskFilterEngine', () => {
     // isNotSet = all three unset (inbox)
     describe('anyDate filter', () => {
         it('isSet — task with startDate matches', () => {
-            const task = makeTask({ startDate: '2026-03-10' });
+            const task = makeDisplayTask({ startDate: '2026-03-10' });
             const state = stateFromCondition(cond('anyDate', 'isSet'));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
 
         it('isSet — task with only due matches', () => {
-            const task = makeTask({ due: '2026-03-10' });
+            const task = makeDisplayTask({ due: '2026-03-10' });
             const state = stateFromCondition(cond('anyDate', 'isSet'));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
 
         it('isSet — task with only endDate matches', () => {
-            const task = makeTask({ endDate: '2026-03-10' });
+            const task = makeDisplayTask({ endDate: '2026-03-10', effectiveEndDate: '2026-03-10' });
             const state = stateFromCondition(cond('anyDate', 'isSet'));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
 
         it('isSet — task with no dates does not match', () => {
-            const task = makeTask();
+            const task = makeDisplayTask();
             const state = stateFromCondition(cond('anyDate', 'isSet'));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
         });
 
         it('isNotSet — task with no dates matches (inbox)', () => {
-            const task = makeTask();
+            const task = makeDisplayTask();
             const state = stateFromCondition(cond('anyDate', 'isNotSet'));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
 
         it('isNotSet — dated task does not match', () => {
-            const task = makeTask({ startDate: '2026-03-10' });
+            const task = makeDisplayTask({ startDate: '2026-03-10' });
             const state = stateFromCondition(cond('anyDate', 'isNotSet'));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
         });
 
         it('uses effective date fields when provided (DisplayTask)', () => {
-            const dt = { ...makeTask(), effectiveStartDate: '2026-03-10' } as any;
+            const dt = makeDisplayTask({ effectiveStartDate: '2026-03-10' });
             const state = stateFromCondition(cond('anyDate', 'isSet'));
             expect(TaskFilterEngine.evaluate(dt, state)).toBe(true);
         });
@@ -475,11 +475,15 @@ describe('TaskFilterEngine', () => {
     // ── Length filter ──
     describe('length filter', () => {
         // Task with 2-hour duration: 09:00 - 11:00 same day
-        const task = makeTask({
+        const task = makeDisplayTask({
             startDate: '2026-03-10',
             startTime: '09:00',
             endDate: '2026-03-10',
             endTime: '11:00',
+            effectiveStartDate: '2026-03-10',
+            effectiveStartTime: '09:00',
+            effectiveEndDate: '2026-03-10',
+            effectiveEndTime: '11:00',
         });
 
         it('isSet — has start date', () => {
@@ -488,7 +492,7 @@ describe('TaskFilterEngine', () => {
         });
 
         it('isNotSet — no start date', () => {
-            const noDate = makeTask();
+            const noDate = makeDisplayTask();
             const state = stateFromCondition(cond('length', 'isNotSet'));
             expect(TaskFilterEngine.evaluate(noDate, state)).toBe(true);
         });

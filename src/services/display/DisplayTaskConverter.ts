@@ -2,9 +2,16 @@ import type { Task, DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { TaskIdGenerator } from './TaskIdGenerator';
 
-/** Get the original (pre-split) task ID. Works for both Task and DisplayTask. */
-export function getOriginalTaskId(task: Task): string {
-    return ('originalTaskId' in task) ? (task as DisplayTask).originalTaskId : task.id;
+/**
+ * Get the original (pre-split) task ID.
+ *
+ * Accepts both raw Task and DisplayTask via structural typing: a raw Task
+ * has no `originalTaskId` so it falls through to `id`; a DisplayTask carries
+ * `originalTaskId` (equal to `id` for non-split, the parent id for split
+ * segments).
+ */
+export function getOriginalTaskId(task: { id: string; originalTaskId?: string }): string {
+    return task.originalTaskId ?? task.id;
 }
 
 /**
