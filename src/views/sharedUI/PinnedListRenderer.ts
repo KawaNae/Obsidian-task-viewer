@@ -3,7 +3,7 @@
  * and appears as a collapsible group with task cards.
  */
 
-import { Menu, setIcon } from 'obsidian';
+import { setIcon } from 'obsidian';
 import { t } from '../../i18n';
 import type { DisplayTask, PinnedListDefinition } from '../../types';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -272,8 +272,7 @@ export class PinnedListRenderer {
         index: number,
         totalCount: number,
     ): void {
-        const menu = new Menu();
-
+        this.plugin.menuPresenter.present((menu) => {
         menu.addItem(item => {
             item.setTitle(t('menu.rename'))
                 .setIcon('pencil')
@@ -324,8 +323,7 @@ export class PinnedListRenderer {
                 .onClick(() => callbacks.onRemove(listDef));
             item.dom?.addClass('is-danger');
         });
-
-        menu.showAtMouseEvent(e);
+        }, { kind: 'mouseEvent', event: e });
     }
 
     private startRename(

@@ -1,4 +1,4 @@
-import { setIcon, Menu, Notice } from 'obsidian';
+import { setIcon, Notice } from 'obsidian';
 import type { App, MenuItem, WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../sharedLogic/ViewUriBuilder';
@@ -9,6 +9,7 @@ import { ViewTemplateWriter } from '../../services/template/ViewTemplateWriter';
 import { ViewExporter } from '../../services/export/ViewExporter';
 import type { ExportStrategy } from '../../services/export/ExportTypes';
 import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 
 /**
  * Date navigation component with prev/next/today buttons.
@@ -81,7 +82,8 @@ export class ViewModeSelector {
     static render(
         toolbar: HTMLElement,
         getValue: () => number,
-        onChange: (newValue: number) => void
+        onChange: (newValue: number) => void,
+        menuPresenter: MenuPresenter
     ): { update: () => void } {
         const getLabel = (val: number) => {
             if (val === 1) return t('toolbar.viewMode1Day');
@@ -109,18 +111,18 @@ export class ViewModeSelector {
 
         button.onclick = (e) => {
             const current = getValue();
-            const menu = new Menu();
-            for (const opt of options) {
-                menu.addItem((item: MenuItem) => {
-                    item.setTitle(opt.title)
-                        .setChecked(current === opt.value)
-                        .onClick(() => {
-                            onChange(opt.value);
-                            update();
-                        });
-                });
-            }
-            menu.showAtPosition({ x: e.pageX, y: e.pageY });
+            menuPresenter.present((menu) => {
+                for (const opt of options) {
+                    menu.addItem((item: MenuItem) => {
+                        item.setTitle(opt.title)
+                            .setChecked(current === opt.value)
+                            .onClick(() => {
+                                onChange(opt.value);
+                                update();
+                            });
+                    });
+                }
+            }, { kind: 'position', x: e.pageX, y: e.pageY });
         };
 
         return { update };
@@ -141,7 +143,8 @@ export class ZoomSelector {
     static render(
         toolbar: HTMLElement,
         getZoom: () => number,
-        onZoomChange: (newZoom: number) => Promise<void>
+        onZoomChange: (newZoom: number) => Promise<void>,
+        menuPresenter: MenuPresenter
     ): { update: () => void } {
         const button = toolbar.createEl('button', { cls: 'timeline-toolbar__btn--range timeline-toolbar__btn--zoom' });
         const iconEl = button.createSpan('timeline-toolbar__btn-icon');
@@ -158,19 +161,19 @@ export class ZoomSelector {
         const zoomLevels = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
         button.onclick = (e) => {
             const current = getZoom();
-            const menu = new Menu();
-            for (const level of zoomLevels) {
-                const pct = `${Math.round(level * 100)}%`;
-                menu.addItem((item: MenuItem) => {
-                    item.setTitle(pct)
-                        .setChecked(current === level)
-                        .onClick(async () => {
-                            await onZoomChange(level);
-                            update();
-                        });
-                });
-            }
-            menu.showAtPosition({ x: e.pageX, y: e.pageY });
+            menuPresenter.present((menu) => {
+                for (const level of zoomLevels) {
+                    const pct = `${Math.round(level * 100)}%`;
+                    menu.addItem((item: MenuItem) => {
+                        item.setTitle(pct)
+                            .setChecked(current === level)
+                            .onClick(async () => {
+                                await onZoomChange(level);
+                                update();
+                            });
+                    });
+                }
+            }, { kind: 'position', x: e.pageX, y: e.pageY });
         };
 
         return { update };
@@ -203,6 +206,7 @@ export interface ViewSettingsOptions {
     getViewTemplate: () => ViewTemplate;
     onApplyTemplate: (template: ViewTemplate) => void;
     onReset: () => void;
+    menuPresenter: MenuPresenter;
     getExportContainer?: () => HTMLElement | null;
     getReadService?: () => TaskReadService;
     getExportStrategy?: () => ExportStrategy;
@@ -222,14 +226,15 @@ export class ViewSettingsMenu {
     }
 
     static showMenu(e: MouseEvent, options: ViewSettingsOptions): void {
-        const menu = new Menu();
         const {
             app, leaf, getCustomName, getDefaultName, onRename,
             buildUri, viewType, getViewTemplateFolder, getViewTemplate, onApplyTemplate, onReset,
+            menuPresenter,
         } = options;
 
-        // Save view... (name required, saves template + updates customName)
         const folder = getViewTemplateFolder();
+        menuPresenter.present((menu) => {
+        // Save view... (name required, saves template + updates customName)
         menu.addItem((item) => {
             item.setTitle(t('toolbar.saveView'))
                 .setIcon('save')
@@ -395,8 +400,7 @@ export class ViewSettingsMenu {
                 .setChecked(true)
                 .setDisabled(true);
         });
-
-        menu.showAtMouseEvent(e);
+        }, { kind: 'mouseEvent', event: e });
     }
 
     private static toShortViewType(viewType: string): string {

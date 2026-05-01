@@ -1,4 +1,4 @@
-import { ItemView, Menu, WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
+import { ItemView, WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
@@ -57,7 +57,7 @@ export class KanbanView extends ItemView {
         this.plugin = plugin;
         this.readService = this.plugin.getTaskReadService();
         this.writeService = this.plugin.getTaskWriteService();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings);
@@ -269,6 +269,7 @@ export class KanbanView extends ItemView {
                 this.requestSaveLayout();
                 this.render();
             },
+            menuPresenter: this.plugin.menuPresenter,
         });
     }
 
@@ -383,8 +384,7 @@ export class KanbanView extends ItemView {
     // ─── Cell Context Menu ────────────────────────────────────
 
     private showCellMenu(e: MouseEvent, listDef: PinnedListDefinition, nameEl: HTMLElement, row: number, col: number): void {
-        const menu = new Menu();
-
+        this.plugin.menuPresenter.present((menu) => {
         menu.addItem(item => {
             item.setTitle(t('menu.rename'))
                 .setIcon('pencil')
@@ -453,8 +453,7 @@ export class KanbanView extends ItemView {
                     .onClick(() => this.removeColumn(col));
             });
         }
-
-        menu.showAtMouseEvent(e);
+        }, { kind: 'mouseEvent', event: e });
     }
 
     private startCellRename(nameEl: HTMLElement, listDef: PinnedListDefinition): void {

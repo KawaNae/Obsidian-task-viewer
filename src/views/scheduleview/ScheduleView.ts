@@ -80,7 +80,7 @@ export class ScheduleView extends ItemView {
         this.plugin = plugin;
         this.readService = plugin.getTaskReadService();
         this.writeService = plugin.getTaskWriteService();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings);
@@ -361,6 +361,7 @@ export class ScheduleView extends ItemView {
                 this.app.workspace.requestSaveLayout();
                 this.render();
             },
+            menuPresenter: this.plugin.menuPresenter,
         });
     }
 

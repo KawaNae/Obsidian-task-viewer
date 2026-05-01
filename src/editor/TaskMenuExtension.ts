@@ -1,6 +1,6 @@
 import { ViewPlugin, ViewUpdate, Decoration, WidgetType, EditorView, DecorationSet } from '@codemirror/view';
 import { StateEffect, RangeSet, type Extension } from '@codemirror/state';
-import { editorInfoField, Menu, setIcon, MarkdownView } from 'obsidian';
+import { editorInfoField, setIcon, MarkdownView } from 'obsidian';
 import type { App } from 'obsidian';
 import type { TaskReadService } from '../services/data/TaskReadService';
 import type { TaskWriteService } from '../services/data/TaskWriteService';
@@ -11,6 +11,7 @@ import type { TimerMenuBuilder } from '../interaction/menu/builders/TimerMenuBui
 import type { TaskActionsMenuBuilder } from '../interaction/menu/builders/TaskActionsMenuBuilder';
 import type { CheckboxMenuBuilder, CheckboxLineOps } from '../interaction/menu/builders/CheckboxMenuBuilder';
 import type { ValidationMenuBuilder } from '../interaction/menu/builders/ValidationMenuBuilder';
+import type { MenuPresenter } from '../interaction/menu/MenuPresenter';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { getTaskNotation } from '../services/filter/parserTaxonomy';
 
@@ -72,6 +73,7 @@ export function createTaskMenuExtension(
     actionsBuilder: TaskActionsMenuBuilder,
     checkboxBuilder: CheckboxMenuBuilder,
     validationBuilder: ValidationMenuBuilder,
+    menuPresenter: MenuPresenter,
     getSettings: () => TaskViewerSettings
 ): TaskMenuExtensionResult {
 
@@ -82,34 +84,33 @@ export function createTaskMenuExtension(
 
         const task = readService.getTaskByFileLine(filePath, lineNumber);
         const isTaskviewerTask = !!task && getTaskNotation(task.parserId) === 'taskviewer';
-        const menu = new Menu();
-
-        if (isTaskviewerTask && task) {
-            // Recognized taskviewer-notation task: full menu
-            validationBuilder.addValidationWarning(menu, task);
-            const dt = toDisplayTask(task, getSettings().startHour, (id) => readService.getTask(id));
-            propertiesBuilder.addStatusSubmenu(menu, task);
-            propertiesBuilder.buildPropertiesSubmenu(menu, dt, null);
-            menu.addSeparator();
-            timerBuilder.addTimerSubmenu(menu, task);
-            menu.addSeparator();
-            actionsBuilder.addTaskActions(menu, task);
-        } else {
-            // Plain checkbox or external-notation task (tasks-plugin / day-planner):
-            // status + basic actions, writing through CheckboxLineOps preserves the original notation.
-            const lineText = view.state.doc.line(lineNumber + 1).text; // CM6 lines are 1-based
-
-            const ops: CheckboxLineOps = {
-                updateLine: (content) => writeService.updateLine(filePath, lineNumber, content),
-                insertLineAfter: (content) => writeService.insertLineAfterLine(filePath, lineNumber, content),
-                deleteLine: () => writeService.deleteLine(filePath, lineNumber),
-            };
-
-            checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops, filePath);
-        }
-
         const rect = btnEl.getBoundingClientRect();
-        menu.showAtPosition({ x: rect.left, y: rect.bottom });
+
+        menuPresenter.present((menu) => {
+            if (isTaskviewerTask && task) {
+                // Recognized taskviewer-notation task: full menu
+                validationBuilder.addValidationWarning(menu, task);
+                const dt = toDisplayTask(task, getSettings().startHour, (id) => readService.getTask(id));
+                propertiesBuilder.addStatusSubmenu(menu, task);
+                propertiesBuilder.buildPropertiesSubmenu(menu, dt, null);
+                menu.addSeparator();
+                timerBuilder.addTimerSubmenu(menu, task);
+                menu.addSeparator();
+                actionsBuilder.addTaskActions(menu, task);
+            } else {
+                // Plain checkbox or external-notation task (tasks-plugin / day-planner):
+                // status + basic actions, writing through CheckboxLineOps preserves the original notation.
+                const lineText = view.state.doc.line(lineNumber + 1).text; // CM6 lines are 1-based
+
+                const ops: CheckboxLineOps = {
+                    updateLine: (content) => writeService.updateLine(filePath, lineNumber, content),
+                    insertLineAfter: (content) => writeService.insertLineAfterLine(filePath, lineNumber, content),
+                    deleteLine: () => writeService.deleteLine(filePath, lineNumber),
+                };
+
+                checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops, filePath);
+            }
+        }, { kind: 'belowRect', rect });
     };
 
     const buildDecorations = (view: EditorView): DecorationSet => {

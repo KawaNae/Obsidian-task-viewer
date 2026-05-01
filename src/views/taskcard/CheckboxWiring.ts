@@ -1,6 +1,7 @@
-import { Menu, Notice } from 'obsidian';
+import { Notice } from 'obsidian';
 import { Task, ChildLine, TaskViewerSettings } from '../../types';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
+import { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { ChildRenderItem } from './types';
 import { buildStatusOptions, createStatusTitle } from '../../constants/statusOptions';
 
@@ -12,7 +13,8 @@ import { buildStatusOptions, createStatusTitle } from '../../constants/statusOpt
  */
 export class CheckboxWiring {
     constructor(
-        private writeService: TaskWriteService
+        private writeService: TaskWriteService,
+        private menuPresenter: MenuPresenter
     ) {}
 
     wireChildCheckboxes(
@@ -149,20 +151,19 @@ export class CheckboxWiring {
     }
 
     private showStatusMenu(e: MouseEvent, settings: TaskViewerSettings, onSelect: (statusChar: string) => Promise<void>): void {
-        const menu = new Menu();
         const options = buildStatusOptions(settings.statusDefinitions);
 
-        for (const option of options) {
-            menu.addItem((item) => {
-                item
-                    .setTitle(createStatusTitle(option))
-                    .onClick(async () => {
-                        await onSelect(option.char);
-                    });
-            });
-        }
-
-        menu.showAtPosition({ x: e.pageX, y: e.pageY });
+        this.menuPresenter.present((menu) => {
+            for (const option of options) {
+                menu.addItem((item) => {
+                    item
+                        .setTitle(createStatusTitle(option))
+                        .onClick(async () => {
+                            await onSelect(option.char);
+                        });
+                });
+            }
+        }, { kind: 'position', x: e.pageX, y: e.pageY });
     }
 
     private updateCheckboxDataTask(el: HTMLElement, newChar: string): void {

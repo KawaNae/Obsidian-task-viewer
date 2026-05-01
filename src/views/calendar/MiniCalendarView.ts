@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, TFile, Menu, Notice, setIcon, type ViewStateResult } from 'obsidian';
+import { ItemView, WorkspaceLeaf, TFile, Notice, setIcon, type ViewStateResult } from 'obsidian';
 import type { MenuItem } from 'obsidian';
 import { t } from '../../i18n';
 import { DisplayTask, Task } from '../../types';
@@ -662,8 +662,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     private showSettingsMenu(e: MouseEvent, moreBtn: HTMLElement): void {
-        const menu = new Menu();
-
+        this.plugin.menuPresenter.present((menu) => {
         // Filter
         menu.addItem((item: MenuItem) => {
             const title = this.filterMenu.hasActiveFilters()
@@ -823,8 +822,7 @@ export class MiniCalendarView extends ItemView {
                 .setChecked(true)
                 .setDisabled(true);
         });
-
-        menu.showAtMouseEvent(e);
+        }, { kind: 'mouseEvent', event: e });
     }
 
     private buildUriOptions(folder: string): ViewUriOptions {

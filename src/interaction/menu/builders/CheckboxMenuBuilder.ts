@@ -29,7 +29,7 @@ export class CheckboxMenuBuilder {
 
     /**
      * Build the full menu for a plain checkbox line:
-     * Status + Duplicate + Convert to Inline Task + Delete
+     * Status + Duplicate + Convert to Inline + Convert to File + Delete
      */
     addFullMenu(menu: Menu, lineText: string, settings: TaskViewerSettings, ops: CheckboxLineOps, filePath?: string): boolean {
         const classified = TaskLineClassifier.classify(lineText);
@@ -44,8 +44,9 @@ export class CheckboxMenuBuilder {
         // Duplicate
         this.addDuplicateItem(menu, lineText, ops);
 
-        // Convert to > Inline Task / Frontmatter Task
-        this.addConvertSubmenu(menu, classified, lineText, ops, filePath);
+        // Convert to Inline / Convert to File (independent items)
+        this.addConvertToInlineItem(menu, classified, lineText, ops, filePath);
+        this.addConvertToFileItem(menu, classified, lineText, ops, filePath);
 
         // Delete
         this.addDeleteItem(menu, ops);
@@ -96,7 +97,7 @@ export class CheckboxMenuBuilder {
         });
     }
 
-    private addConvertSubmenu(
+    private addConvertToInlineItem(
         menu: Menu,
         classified: NonNullable<ReturnType<typeof TaskLineClassifier.classify>>,
         lineText: string,
@@ -109,53 +110,56 @@ export class CheckboxMenuBuilder {
         const dailyNoteDate = filePath ? DailyNoteUtils.parseDateFromFilePath(this.app, filePath) ?? undefined : undefined;
 
         menu.addItem((item) => {
-            const subMenu = item
-                .setTitle(t('menu.convertTo'))
-                .setIcon('arrow-right-left')
-                .setSubmenu();
-
-            // Inline Task
-            subMenu.addItem((sub) => {
-                sub.setTitle(t('menu.inlineTask'))
-                    .setIcon('at-sign')
-                    .onClick(() => {
-                        menu.close();
-                        const today = DateUtils.getVisualDateOfNow(this.getStartHour());
-                        new CreateTaskModal(
-                            this.app,
-                            async (result) => {
-                                const formatted = formatTaskLine(result);
-                                const newLine = indent + formatted.replace(/^- \[ \]/, `${marker} [${statusChar}]`);
-                                await ops.updateLine(newLine);
-                            },
-                            { content, startDate: today },
-                            { title: t('menu.convertToInlineTask'), submitLabel: t('modal.convert'), focusField: 'start', startHour: this.getStartHour(), dailyNoteDate }
-                        ).open();
-                    });
-            });
-
-            // Frontmatter Task
-            if (this.onCreateTvFile) {
-                subMenu.addItem((sub) => {
-                    sub.setTitle(t('menu.frontmatterTask'))
-                        .setIcon('file-plus')
-                        .onClick(() => {
-                            menu.close();
-                            const today = DateUtils.getVisualDateOfNow(this.getStartHour());
-                            new CreateTaskModal(
-                                this.app,
-                                async (result) => {
-                                    const newPath = await this.onCreateTvFile!(result, statusChar);
-                                    const linkTarget = newPath.replace(/\.md$/, '');
-                                    const fileName = linkTarget.split('/').pop() || 'task';
-                                    await ops.updateLine(`${indent}${marker} [[${linkTarget}|${fileName}]]`);
-                                },
-                                { content, startDate: today },
-                                { title: t('menu.convertToTvFileTitle'), submitLabel: t('modal.convert'), focusField: 'start', startHour: this.getStartHour(), dailyNoteDate }
-                            ).open();
-                        });
+            item.setTitle(t('menu.convertToInline'))
+                .setIcon('at-sign')
+                .onClick(() => {
+                    menu.close();
+                    const today = DateUtils.getVisualDateOfNow(this.getStartHour());
+                    new CreateTaskModal(
+                        this.app,
+                        async (result) => {
+                            const formatted = formatTaskLine(result);
+                            const newLine = indent + formatted.replace(/^- \[ \]/, `${marker} [${statusChar}]`);
+                            await ops.updateLine(newLine);
+                        },
+                        { content, startDate: today },
+                        { title: t('menu.convertToInline'), submitLabel: t('modal.convert'), focusField: 'start', startHour: this.getStartHour(), dailyNoteDate }
+                    ).open();
                 });
-            }
+        });
+    }
+
+    private addConvertToFileItem(
+        menu: Menu,
+        classified: NonNullable<ReturnType<typeof TaskLineClassifier.classify>>,
+        lineText: string,
+        ops: CheckboxLineOps,
+        filePath?: string
+    ): void {
+        if (!this.onCreateTvFile) return;
+        const { rawContent, statusChar, indent } = classified;
+        const marker = TaskLineClassifier.extractMarker(lineText);
+        const content = rawContent.trim();
+        const dailyNoteDate = filePath ? DailyNoteUtils.parseDateFromFilePath(this.app, filePath) ?? undefined : undefined;
+
+        menu.addItem((item) => {
+            item.setTitle(t('menu.convertToFile'))
+                .setIcon('file-plus')
+                .onClick(() => {
+                    menu.close();
+                    const today = DateUtils.getVisualDateOfNow(this.getStartHour());
+                    new CreateTaskModal(
+                        this.app,
+                        async (result) => {
+                            const newPath = await this.onCreateTvFile!(result, statusChar);
+                            const linkTarget = newPath.replace(/\.md$/, '');
+                            const fileName = linkTarget.split('/').pop() || 'task';
+                            await ops.updateLine(`${indent}${marker} [[${linkTarget}|${fileName}]]`);
+                        },
+                        { content, startDate: today },
+                        { title: t('menu.convertToFile'), submitLabel: t('modal.convert'), focusField: 'start', startHour: this.getStartHour(), dailyNoteDate }
+                    ).open();
+                });
         });
     }
 

@@ -7,6 +7,7 @@ import { getFileBaseName, hasTaskContent, isContentMatchingBaseName } from '../.
 import { ChildItemBuilder } from './ChildItemBuilder';
 import { ChildSectionRenderer, ChildMenuCallback, ChildLineEditCallback } from './ChildSectionRenderer';
 import { CheckboxWiring } from './CheckboxWiring';
+import { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
 import type { TaskCardLinkRuntime } from './types';
 
@@ -22,9 +23,9 @@ export class TaskCardRenderer extends Component {
     private cardComponents: WeakMap<HTMLElement, Component> = new WeakMap();
     private unsubscribeTaskDeleted: (() => void) | null = null;
 
-    constructor(private app: App, readService: TaskReadService, writeService: TaskWriteService, private linkRuntime: TaskCardLinkRuntime, getSettings: () => TaskViewerSettings) {
+    constructor(private app: App, readService: TaskReadService, writeService: TaskWriteService, menuPresenter: MenuPresenter, private linkRuntime: TaskCardLinkRuntime, getSettings: () => TaskViewerSettings) {
         super();
-        this.checkboxWiring = new CheckboxWiring(writeService);
+        this.checkboxWiring = new CheckboxWiring(writeService, menuPresenter);
         this.childItemBuilder = new ChildItemBuilder(readService);
         this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, readService);
         this.linkInteractionManager = new TaskLinkInteractionManager(app, getSettings);

@@ -1,8 +1,7 @@
-import { Menu } from 'obsidian';
-
 import TaskViewerPlugin from '../../main';
 import { t } from '../../i18n';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
+import { TouchLongPressBinder } from '../../interaction/menu/TouchLongPressBinder';
 import { TaskStyling } from './TaskStyling';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { HandleManager } from '../timelineview/HandleManager';
@@ -112,42 +111,40 @@ export class AllDaySectionRenderer {
 
     /** Add context menu listeners to AllDay section cell */
     public addEmptySpaceContextMenu(cell: HTMLElement, date: string) {
-        cell.addEventListener('contextmenu', (e) => {
-            if (e.target === cell) {
-                e.preventDefault();
-                this.showEmptySpaceMenu(e.pageX, e.pageY, date);
-            }
+        TouchLongPressBinder.bind(cell, {
+            getThreshold: () => this.plugin.settings.longPressThreshold,
+            targetCheck: (t) => t === cell,
+            onLongPress: (x, y) => this.showEmptySpaceMenu(x, y, date),
+            onContextMenu: (e) => this.showEmptySpaceMenu(e.pageX, e.pageY, date),
         });
     }
 
     /** Show context menu for empty space click */
     private showEmptySpaceMenu(x: number, y: number, date: string) {
-        const menu = new Menu();
+        this.plugin.menuPresenter.present((menu) => {
+            // Create Task (All-Day type)
+            menu.addItem((item) => {
+                item.setTitle(t('menu.createTaskForDailyNote'))
+                    .setIcon('plus')
+                    .onClick(() => this.handleCreateTask(date));
+            });
 
-        // Create Task (All-Day type)
-        menu.addItem((item) => {
-            item.setTitle(t('menu.createTaskForDailyNote'))
-                .setIcon('plus')
-                .onClick(() => this.handleCreateTask(date));
-        });
+            menu.addSeparator();
 
-        menu.addSeparator();
+            // Open Pomodoro (Daily Note)
+            menu.addItem((item) => {
+                item.setTitle(t('menu.openPomodoroForDailyNote'))
+                    .setIcon('timer')
+                    .onClick(() => this.openDailyNoteTimer(date, 'pomodoro'));
+            });
 
-        // Open Pomodoro (Daily Note)
-        menu.addItem((item) => {
-            item.setTitle(t('menu.openPomodoroForDailyNote'))
-                .setIcon('timer')
-                .onClick(() => this.openDailyNoteTimer(date, 'pomodoro'));
-        });
-
-        // Open Timer (Daily Note)
-        menu.addItem((item) => {
-            item.setTitle(t('menu.openCountupForDailyNote'))
-                .setIcon('clock')
-                .onClick(() => this.openDailyNoteTimer(date, 'countup'));
-        });
-
-        menu.showAtPosition({ x, y });
+            // Open Timer (Daily Note)
+            menu.addItem((item) => {
+                item.setTitle(t('menu.openCountupForDailyNote'))
+                    .setIcon('clock')
+                    .onClick(() => this.openDailyNoteTimer(date, 'countup'));
+            });
+        }, { kind: 'position', x, y });
     }
 
     /** Create an all-day task for the specified date */
