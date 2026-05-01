@@ -244,7 +244,7 @@ describe('create inline task', () => {
     it('created task has correct parserId', async () => {
         const task = await findTaskWait('Newly created task');
         expect(task).not.toBeNull();
-        expect(task!.parserId).toBe('at-notation');
+        expect(task!.parserId).toBe('tv-inline');
     });
 
     it('creates task with end date', async () => {

@@ -16,7 +16,7 @@ function makeTimed(id: string, startMin: number, endMin: number): TimedDisplayTa
         childLineBodyOffsets: [],
         originalText: '',
         tags: [],
-        parserId: 'at-notation',
+        parserId: 'tv-inline',
         effectiveStartDate: '2026-03-11',
         startDateImplicit: false,
         startTimeImplicit: false,

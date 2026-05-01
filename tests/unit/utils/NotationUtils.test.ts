@@ -8,7 +8,7 @@ import type { Task } from '../../../src/types';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
     return {
-        id: 'at-notation:note.md:ln:1',
+        id: 'tv-inline:note.md:ln:1',
         file: 'note.md',
         line: 0,
         content: 'Test',
@@ -19,7 +19,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
         childLineBodyOffsets: [],
         originalText: '',
         tags: [],
-        parserId: 'at-notation',
+        parserId: 'tv-inline',
         ...overrides,
     };
 }

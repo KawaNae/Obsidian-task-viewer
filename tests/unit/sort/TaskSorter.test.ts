@@ -16,7 +16,7 @@ function makeDT(overrides: Partial<DisplayTask> = {}): DisplayTask {
         childLineBodyOffsets: [],
         originalText: '',
         tags: overrides.tags ?? [],
-        parserId: 'at-notation',
+        parserId: 'tv-inline',
         effectiveStartDate: overrides.effectiveStartDate ?? '',
         startDateImplicit: false,
         startTimeImplicit: false,

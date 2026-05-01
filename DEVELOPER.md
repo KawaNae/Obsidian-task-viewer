@@ -109,8 +109,8 @@ src/
 │   ├── data/                  # Data access facade (TaskReadService, TaskWriteService)
 │   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, TaskDateCategorizer, TaskIdGenerator, ImplicitCalendarDateResolver)
 │   ├── parsing/               # Parser layer
-│   │   ├── inline/            # Line-level parsers (AtNotationParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
-│   │   ├── file/              # File-level parsers (FrontmatterTaskBuilder)
+│   │   ├── tv-inline/         # Line-level parsers (TVInlineParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
+│   │   ├── tv-file/           # File-level builder (TVFileBuilder)
 │   │   ├── strategies/        # ParserChain, ParserStrategy
 │   │   ├── tree/              # Document structure tree (DocumentTree, DocumentTreeBuilder, SectionPropertyResolver, etc.)
 │   │   └── utils/             # Parser utilities (ChildLineClassifier, TagExtractor, TaskContent, TaskLineClassifier)
@@ -158,8 +158,8 @@ Quick reference for locating the right layer when implementing a feature.
 | **WikiLinkResolver** | `services/core/WikiLinkResolver.ts` | Resolves frontmatter wikilink parent–child relationships (via `WikilinkRef` in TaskStore / `childLines`) |
 | **SyncDetector / EditorObserver** | `services/core/SyncDetector.ts` et al. | Distinguishes local edits from remote sync changes |
 | **ParserChain** | `services/parsing/strategies/ParserChain.ts` | Tries multiple parsers in order (Strategy chain) |
-| **AtNotationParser** | `services/parsing/inline/AtNotationParser.ts` | Parses `@date` inline notation (line-level) |
-| **FrontmatterTaskBuilder** | `services/parsing/file/FrontmatterTaskBuilder.ts` | Converts YAML frontmatter to Task objects (file-level) |
+| **TVInlineParser** | `services/parsing/tv-inline/TVInlineParser.ts` | Parses `@date` inline notation (line-level) |
+| **TVFileBuilder** | `services/parsing/tv-file/TVFileBuilder.ts` | Converts YAML frontmatter to Task objects (file-level) |
 | **TaskRepository** | `services/persistence/TaskRepository.ts` | Write facade; dispatches to the correct writer based on `parserId` |
 | **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical YAML edits + heading-based child insertion |
 | **FrontmatterLineEditor** | `services/persistence/utils/FrontmatterLineEditor.ts` | Low-level YAML line operations; never touches unrelated lines |
@@ -365,11 +365,11 @@ Due represents a deadline date (calendarDate). If time complement is needed,
 - Duration < 24 h → Timeline lane
 - Exactly 24 h (e.g. 12:00 → 12:00 next day) → All-day lane
 
-### Frontmatter child element extraction (v0.13.1)
+### tv-file child element extraction (v0.13.1)
 
-The heading configured in settings (`frontmatterTaskHeader` / `frontmatterTaskHeaderLevel`) acts as the virtual root for child elements.
+The heading configured in settings (`tvFileChildHeader` / `tvFileChildHeaderLevel`) acts as the virtual root for child elements.
 
-1. `FrontmatterTaskBuilder.parse()` receives `frontmatterTaskHeader` and `frontmatterTaskHeaderLevel` and locates the matching heading section.
+1. `TVFileBuilder.parse()` receives `tvFileChildHeader` and `tvFileChildHeaderLevel` and locates the matching heading section.
 2. Starting from the first root-level list item under that heading, only the first contiguous list block is extracted.
 3. Results are stored in `Task.childLines` and `Task.childLineBodyOffsets` (absolute line numbers).
 4. `TaskScanner` attaches unparented tasks found in `childLineBodyOffsets` to `fmTask.childIds`.
@@ -543,7 +543,7 @@ npm run build     # Production build
 
 ### File naming
 
-- **Parsers**: `<Target>Parser.ts` (e.g. `AtNotationParser.ts`)
+- **Parsers**: `<Target>Parser.ts` (e.g. `TVInlineParser.ts`)
 - **Services**: `<Feature>Service.ts` (e.g. `TaskReadService.ts`)
 - **Views**: `<Name>View.ts` (e.g. `TimelineView.ts`, `TimerView.ts`)
 
@@ -870,26 +870,26 @@ When working with `FrontmatterWriter` / `FrontmatterLineEditor`:
 ### parserId-based write dispatch
 
 ```
-task.parserId === 'frontmatter'   →  FrontmatterWriter
-task.parserId === 'at-notation'   →  InlineTaskWriter
+isTvFile(task)    →  FrontmatterWriter
+isTvInline(task)  →  InlineTaskWriter
 ```
 
-- `line: -1` means "no valid line number" only — **do not use it for type detection** (use `parserId`).
+- `line: -1` means "no valid line number" only — **do not use it for type detection** (use `isTvFile()` / `isTvInline()`).
 - In `TimerRecorder`, `line: -1` specifically means "line number unknown → force content-based search".
 
-### Inline vs Frontmatter persistence rules
+### tv-inline vs tv-file persistence rules
 
 #### Date field handling
 
-| Aspect | Inline (`at-notation`) | Frontmatter |
-|--------|----------------------|-------------|
+| Aspect | tv-inline | tv-file |
+|--------|-----------|---------|
 | Time-only values | ✅ Allowed (`@10:00`) | ❌ Prohibited (returns null → key deleted) |
 | startDateInherited | ✅ Used (daily note date inheritance) | ❌ Never set |
 | endDate same-day omission | ✅ Normal (`>14:00` = same day as start) | ❌ Always explicit date |
-| Update strategy | Full line re-format via `AtNotationParser.format()` | Surgical YAML key edit via `FrontmatterLineEditor` |
+| Update strategy | Full line re-format via `TVInlineParser.format()` | Surgical YAML key edit via `FrontmatterLineEditor` |
 | Empty field in Properties modal | Sparse update (field omitted → preserved) | Resolved value written (field filled from PropertyCalculator) |
 
-#### Inline notation format rules (`AtNotationParser.format()`)
+#### tv-inline notation format rules (`TVInlineParser.format()`)
 
 **startDateInherited**:
 - `true` + startTime → `@10:00` (date omitted)
@@ -1068,10 +1068,10 @@ Defined in `src/types/index.ts` as `TaskViewerSettings`. Defaults are in `DEFAUL
 | `applyGlobalStyles` | boolean | `false` | Apply plugin CSS globally |
 | `enableStatusMenu` | boolean | `true` | Show status menu on checkbox long-press |
 | `statusDefinitions` | StatusDefinition[] | *(see below)* | Status character definitions (char, label, isComplete) |
-| `frontmatterTaskKeys` | FrontmatterTaskKeys | `tv-*` family | Frontmatter key names (all fields are individually customisable) |
+| `tvFileKeys` | TvFileKeys | `tv-*` family | tv-file frontmatter key names (all fields are individually customisable) |
 | `habits` | HabitDefinition[] | `[]` | Habit tracking definitions (boolean / number / string) |
-| `frontmatterTaskHeader` | string | `'Tasks'` | Heading text under which child tasks are inserted |
-| `frontmatterTaskHeaderLevel` | number | 2 | Heading level for the above (2 = `##`) |
+| `tvFileChildHeader` | string | `'Tasks'` | Heading text under which tv-file child elements live |
+| `tvFileChildHeaderLevel` | number | 2 | Heading level for the above (2 = `##`) |
 | `longPressThreshold` | number | 400 | Long-press detection time (ms) |
 | `taskSelectAction` | `'click'` \| `'dblclick'` | `'click'` | Task card select action to open file |
 | `zoomLevel` | number | 1.0 | Default timeline zoom level |
@@ -1111,7 +1111,7 @@ Defined in `src/types/index.ts` as `TaskViewerSettings`. Defaults are in `DEFAUL
 
 **`tasksPluginMapping` defaults**: `{ start: 'startDate', scheduled: 'startDate', due: 'due' }`
 
-All `FrontmatterTaskKeys` fields (`start`, `end`, `due`, `status`, `content`, `timerTargetId`, `color`, `linestyle`, `mask`, `ignore`) are independently customisable. Duplicate key values are not allowed.
+All `TvFileKeys` fields (`start`, `end`, `due`, `status`, `content`, `timerTargetId`, `color`, `linestyle`, `mask`, `ignore`) are independently customisable. Duplicate key values are not allowed.
 
 ---
 

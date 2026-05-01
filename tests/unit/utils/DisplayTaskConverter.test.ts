@@ -5,7 +5,7 @@ import type { Task } from '../../../src/types';
 /** Build a minimal Task for testing. */
 function makeTask(overrides: Partial<Task> = {}): Task {
     return {
-        id: 'at-notation:test.md:ln:1',
+        id: 'tv-inline:test.md:ln:1',
         file: 'test.md',
         line: 0,
         content: 'test task',
@@ -16,7 +16,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
         childLineBodyOffsets: [],
         tags: [],
         originalText: '- [ ] test task @2026-01-15',
-        parserId: 'at-notation',
+        parserId: 'tv-inline',
         ...overrides,
     };
 }

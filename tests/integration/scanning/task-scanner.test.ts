@@ -52,13 +52,13 @@ describe('inline task extraction', () => {
         const task = r.tasks.find(t => t.content === 'Buy groceries');
         expect(task).toBeDefined();
         expect(task!.startDate).toBe('2026-03-11');
-        expect(task!.parserId).toBe('at-notation');
+        expect(task!.parserId).toBe('tv-inline');
     });
 
     it('extracts multiple tasks from body', () => {
         const r = cliList({ file: FILE, outputFields: OUTPUT_FIELDS });
         // Should have exactly 3 @notation tasks
-        const atTasks = r.tasks.filter(t => t.parserId === 'at-notation');
+        const atTasks = r.tasks.filter(t => t.parserId === 'tv-inline');
         expect(atTasks).toHaveLength(3);
     });
 
@@ -144,7 +144,7 @@ describe('frontmatter tasks', () => {
 
     it('creates frontmatter task when tv-start is present', () => {
         const r = cliList({ file: FILE, outputFields: OUTPUT_FIELDS });
-        const fmTask = r.tasks.find(t => t.parserId === 'frontmatter');
+        const fmTask = r.tasks.find(t => t.parserId === 'tv-file');
         expect(fmTask).toBeDefined();
         expect(fmTask!.startDate).toBe('2026-03-11');
         expect(fmTask!.content).toBe('Project Alpha');
@@ -165,7 +165,7 @@ describe('no frontmatter task when no tv-start/end/due', () => {
 
     it('has no frontmatter task', () => {
         const r = cliList({ file: FILE, outputFields: OUTPUT_FIELDS });
-        const fmTasks = r.tasks.filter(t => t.parserId === 'frontmatter');
+        const fmTasks = r.tasks.filter(t => t.parserId === 'tv-file');
         expect(fmTasks).toHaveLength(0);
         // But inline task should still be found
         expect(r.count).toBeGreaterThanOrEqual(1);
@@ -261,7 +261,7 @@ describe('shared tags', () => {
 
     it('merges shared tags from frontmatter into task tags', () => {
         const r = cliList({ file: FILE, outputFields: OUTPUT_FIELDS });
-        const task = r.tasks.find(t => t.parserId === 'at-notation');
+        const task = r.tasks.find(t => t.parserId === 'tv-inline');
         expect(task).toBeDefined();
         const tags = task!.tags as string[];
         expect(tags).toContain('project');
@@ -287,7 +287,7 @@ describe('file-level styling', () => {
     it('applies tv-color from frontmatter to task', () => {
         const r = cliList({ file: FILE, outputFields: OUTPUT_FIELDS });
         expect(r.count).toBeGreaterThan(0);
-        const task = r.tasks.find(t => t.parserId === 'at-notation');
+        const task = r.tasks.find(t => t.parserId === 'tv-inline');
         expect(task).toBeDefined();
         expect(task!.color).toBe('ff0000');
     });

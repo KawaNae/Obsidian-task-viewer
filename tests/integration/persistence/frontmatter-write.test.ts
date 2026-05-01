@@ -33,14 +33,14 @@ const OUTPUT_FIELDS = 'content,status,startDate,startTime,endDate,endTime,due,ta
 /** Find the frontmatter task in our test file (parserId=frontmatter). */
 function findFmTask(): Record<string, unknown> | undefined {
     const r = cliList({ file: TEST_FILE, outputFields: OUTPUT_FIELDS });
-    return r.tasks.find(t => t.parserId === 'frontmatter');
+    return r.tasks.find(t => t.parserId === 'tv-file');
 }
 
 /** Wait for the frontmatter task to appear in the index. */
 async function waitForFmTask(timeoutMs = 8000): Promise<Record<string, unknown> | null> {
     return waitForTask(
         { file: TEST_FILE, outputFields: OUTPUT_FIELDS },
-        t => t.parserId === 'frontmatter',
+        t => t.parserId === 'tv-file',
         timeoutMs,
     );
 }
@@ -361,7 +361,7 @@ describe('delete frontmatter task', () => {
     it('task disappears from index after delete', async () => {
         const gone = await waitForTaskGone(
             { file: TEST_FILE, outputFields: 'parserId' },
-            t => t.parserId === 'frontmatter',
+            t => t.parserId === 'tv-file',
             5000,
         );
         expect(gone).toBe(true);
@@ -407,7 +407,7 @@ describe('mixed file — frontmatter + inline coexistence', () => {
     it('can update inline task without affecting frontmatter task', async () => {
         const r = cliList({ file: TEST_FILE, outputFields: OUTPUT_FIELDS });
         const inlineTask = r.tasks.find(
-            t => t.parserId === 'at-notation' && (t.content as string).includes('Inline task A'),
+            t => t.parserId === 'tv-inline' && (t.content as string).includes('Inline task A'),
         );
         expect(inlineTask).toBeDefined();
 
