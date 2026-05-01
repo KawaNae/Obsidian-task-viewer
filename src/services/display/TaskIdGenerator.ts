@@ -1,4 +1,4 @@
-import { isFrontmatterTask, ParserId } from '../../types';
+import { isTvFile, ParserId } from '../../types';
 
 const PARSER_IDS: ReadonlySet<ParserId> = new Set(['tv-inline', 'tv-file', 'tasks-plugin', 'day-planner']);
 
@@ -43,7 +43,7 @@ export class TaskIdGenerator {
             return `tid:${timerTargetId}`;
         }
 
-        if (isFrontmatterTask(input)) {
+        if (isTvFile(input)) {
             return 'fm-root';
         }
 

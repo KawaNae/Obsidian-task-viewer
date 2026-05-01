@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
-    isFrontmatterTask,
-    isFrontmatterContainer,
+    isTvFile,
+    isTvInline,
+    isDpInline,
+    isTpInline,
+    isTvFileUnscheduled,
     hasScheduling,
     hasDates,
 } from '../../../src/types';
@@ -9,11 +12,33 @@ import {
 const baseFm = { parserId: 'tv-file' as const };
 const baseInline = { parserId: 'tv-inline' as const };
 
-describe('isFrontmatterTask', () => {
+describe('isTvFile', () => {
     it('matches only parserId==="tv-file"', () => {
-        expect(isFrontmatterTask({ parserId: 'tv-file' })).toBe(true);
-        expect(isFrontmatterTask({ parserId: 'tv-inline' })).toBe(false);
-        expect(isFrontmatterTask({ parserId: 'tasks-plugin' })).toBe(false);
+        expect(isTvFile({ parserId: 'tv-file' })).toBe(true);
+        expect(isTvFile({ parserId: 'tv-inline' })).toBe(false);
+        expect(isTvFile({ parserId: 'tasks-plugin' })).toBe(false);
+    });
+});
+
+describe('isTvInline', () => {
+    it('matches only parserId==="tv-inline"', () => {
+        expect(isTvInline({ parserId: 'tv-inline' })).toBe(true);
+        expect(isTvInline({ parserId: 'tv-file' })).toBe(false);
+        expect(isTvInline({ parserId: 'day-planner' })).toBe(false);
+    });
+});
+
+describe('isDpInline', () => {
+    it('matches only parserId==="day-planner"', () => {
+        expect(isDpInline({ parserId: 'day-planner' })).toBe(true);
+        expect(isDpInline({ parserId: 'tv-inline' })).toBe(false);
+    });
+});
+
+describe('isTpInline', () => {
+    it('matches only parserId==="tasks-plugin"', () => {
+        expect(isTpInline({ parserId: 'tasks-plugin' })).toBe(true);
+        expect(isTpInline({ parserId: 'tv-inline' })).toBe(false);
     });
 });
 
@@ -43,19 +68,19 @@ describe('hasDates', () => {
     });
 });
 
-describe('isFrontmatterContainer', () => {
-    it('is true for FM task with no scheduling', () => {
-        expect(isFrontmatterContainer(baseFm)).toBe(true);
+describe('isTvFileUnscheduled', () => {
+    it('is true for tv-file task with no scheduling', () => {
+        expect(isTvFileUnscheduled(baseFm)).toBe(true);
     });
 
-    it('is false when FM task has any scheduling field', () => {
-        expect(isFrontmatterContainer({ ...baseFm, startDate: '2026-01-01' })).toBe(false);
-        expect(isFrontmatterContainer({ ...baseFm, startTime: '09:00' })).toBe(false);
-        expect(isFrontmatterContainer({ ...baseFm, due: '2026-01-01' })).toBe(false);
+    it('is false when tv-file task has any scheduling field', () => {
+        expect(isTvFileUnscheduled({ ...baseFm, startDate: '2026-01-01' })).toBe(false);
+        expect(isTvFileUnscheduled({ ...baseFm, startTime: '09:00' })).toBe(false);
+        expect(isTvFileUnscheduled({ ...baseFm, due: '2026-01-01' })).toBe(false);
     });
 
-    it('is false for non-frontmatter tasks regardless of scheduling', () => {
-        expect(isFrontmatterContainer(baseInline)).toBe(false);
-        expect(isFrontmatterContainer({ parserId: 'tasks-plugin' })).toBe(false);
+    it('is false for non-tv-file tasks regardless of scheduling', () => {
+        expect(isTvFileUnscheduled(baseInline)).toBe(false);
+        expect(isTvFileUnscheduled({ parserId: 'tasks-plugin' })).toBe(false);
     });
 });

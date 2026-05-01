@@ -1,5 +1,5 @@
 import TaskViewerPlugin from '../main';
-import { Task, isFrontmatterTask, isTaskViewerInlineTask } from '../types';
+import { Task, isTvFile, isTvInline } from '../types';
 import { TimerInstance } from './TimerInstance';
 
 /**
@@ -8,14 +8,14 @@ import { TimerInstance } from './TimerInstance';
 export class TimerTaskResolver {
     constructor(private plugin: TaskViewerPlugin) { }
 
-    resolveInlineTask(timer: Pick<TimerInstance, 'taskId' | 'taskFile' | 'taskOriginalText' | 'timerTargetId'>): Task | undefined {
+    resolveTvInline(timer: Pick<TimerInstance, 'taskId' | 'taskFile' | 'taskOriginalText' | 'timerTargetId'>): Task | undefined {
         const taskIndex = this.plugin.getTaskIndex();
         const allTasks = taskIndex.getTasks();
 
         if (timer.timerTargetId) {
             const byTargetInFile = timer.taskFile
                 ? allTasks.find((task) =>
-                    isTaskViewerInlineTask(task)
+                    isTvInline(task)
                     && task.file === timer.taskFile
                     && (task.timerTargetId === timer.timerTargetId || task.blockId === timer.timerTargetId)
                 )
@@ -25,7 +25,7 @@ export class TimerTaskResolver {
             }
 
             const byTarget = allTasks.find((task) =>
-                isTaskViewerInlineTask(task)
+                isTvInline(task)
                 && (task.timerTargetId === timer.timerTargetId || task.blockId === timer.timerTargetId)
             );
             if (byTarget) {
@@ -34,7 +34,7 @@ export class TimerTaskResolver {
         }
 
         const byId = taskIndex.getTask(timer.taskId);
-        if (byId && isTaskViewerInlineTask(byId)) {
+        if (byId && isTvInline(byId)) {
             if (!timer.taskFile || byId.file === timer.taskFile) {
                 return byId;
             }
@@ -42,7 +42,7 @@ export class TimerTaskResolver {
 
         if (timer.taskOriginalText && timer.taskFile) {
             const byOriginalText = allTasks.find((task) =>
-                isTaskViewerInlineTask(task)
+                isTvInline(task)
                 && task.file === timer.taskFile
                 && task.originalText === timer.taskOriginalText
             );
@@ -54,14 +54,14 @@ export class TimerTaskResolver {
         return undefined;
     }
 
-    resolveFrontmatterTask(timer: Pick<TimerInstance, 'taskId' | 'taskFile' | 'timerTargetId'>): Task | undefined {
+    resolveTvFile(timer: Pick<TimerInstance, 'taskId' | 'taskFile' | 'timerTargetId'>): Task | undefined {
         const taskIndex = this.plugin.getTaskIndex();
         const allTasks = taskIndex.getTasks();
 
         if (timer.timerTargetId) {
             const byTargetInFile = timer.taskFile
                 ? allTasks.find((task) =>
-                    isFrontmatterTask(task)
+                    isTvFile(task)
                     && task.file === timer.taskFile
                     && task.timerTargetId === timer.timerTargetId
                 )
@@ -71,7 +71,7 @@ export class TimerTaskResolver {
             }
 
             const byTarget = allTasks.find((task) =>
-                isFrontmatterTask(task)
+                isTvFile(task)
                 && task.timerTargetId === timer.timerTargetId
             );
             if (byTarget) {
@@ -80,7 +80,7 @@ export class TimerTaskResolver {
         }
 
         const byId = taskIndex.getTask(timer.taskId);
-        if (byId && isFrontmatterTask(byId)) {
+        if (byId && isTvFile(byId)) {
             return byId;
         }
 
@@ -88,7 +88,7 @@ export class TimerTaskResolver {
             return undefined;
         }
 
-        return allTasks.find((task) => isFrontmatterTask(task) && task.file === timer.taskFile);
+        return allTasks.find((task) => isTvFile(task) && task.file === timer.taskFile);
     }
 }
 

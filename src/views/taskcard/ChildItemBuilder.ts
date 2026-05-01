@@ -1,4 +1,4 @@
-import { Task, ChildEntry, isFrontmatterTask } from '../../types';
+import { Task, ChildEntry, isTvFile } from '../../types';
 import { TaskReadService } from '../../services/data/TaskReadService';
 import { ChildRenderItem } from './types';
 import { ChildRenderItemMapper } from './ChildRenderItemMapper';
@@ -86,7 +86,7 @@ export class ChildItemBuilder {
         for (const entry of this.readService.getChildEntries(parent)) {
             if (entry.kind !== 'task') continue;
             const c = this.readService.getTask(entry.taskId);
-            if (!c || !isFrontmatterTask(c)) continue;
+            if (!c || !isTvFile(c)) continue;
             const baseName = c.file.replace(/\.md$/, '').split('/').pop() || '';
             const fullPath = c.file.replace(/\.md$/, '');
             if (target === baseName || target === fullPath || target === c.file) {

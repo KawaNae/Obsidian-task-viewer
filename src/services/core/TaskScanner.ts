@@ -1,6 +1,6 @@
 import { App, TFile, parseYaml } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
-import { isFrontmatterContainer } from '../../types';
+import { isTvFileUnscheduled } from '../../types';
 import { TaskParser } from '../parsing/TaskParser';
 import { TVFileBuilder } from '../parsing/tv-file/TVFileBuilder';
 import { WikiLinkResolver } from './WikiLinkResolver';
@@ -172,7 +172,7 @@ export class TaskScanner {
             const fmTask = fmResult.task;
 
             // Container の content フォールバック: ファイル名のbasenameを使用
-            if (isFrontmatterContainer(fmTask) && !fmTask.content) {
+            if (isTvFileUnscheduled(fmTask) && !fmTask.content) {
                 fmTask.content = file.basename;
             }
 
@@ -188,7 +188,7 @@ export class TaskScanner {
             }
 
             // Container は子がなければ作成しない
-            const isEmptyContainer = isFrontmatterContainer(fmTask) && fmTask.childIds.length === 0 && fmTask.childLines.length === 0;
+            const isEmptyContainer = isTvFileUnscheduled(fmTask) && fmTask.childIds.length === 0 && fmTask.childLines.length === 0;
             if (!isEmptyContainer) {
                 newTasks.push(fmTask);
             }

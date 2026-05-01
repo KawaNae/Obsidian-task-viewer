@@ -1,5 +1,5 @@
 import { App, Menu } from 'obsidian';
-import { Task, DisplayTask, PropertyType, isFrontmatterTask } from '../../../types';
+import { Task, DisplayTask, PropertyType, isTvFile } from '../../../types';
 import { TaskWriteService } from '../../../services/data/TaskWriteService';
 import TaskViewerPlugin from '../../../main';
 import { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } from '../PropertyCalculator';
@@ -252,7 +252,7 @@ export class PropertiesMenuBuilder {
 
         const updates: Partial<Task> = { content: result.content ?? '' };
 
-        if (isFrontmatterTask(task)) {
+        if (isTvFile(task)) {
             // frontmatter: 常に解決済み値を書く（空欄→暗黙値で埋める）
             updates.startDate = startDate ?? startCalc.date;
             updates.startTime = startTime ?? startCalc.time;

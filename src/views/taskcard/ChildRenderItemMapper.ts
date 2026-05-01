@@ -1,4 +1,4 @@
-import { Task, ChildLine, isFrontmatterTask } from '../../types';
+import { Task, ChildLine, isTvFile } from '../../types';
 import { NotationUtils } from './NotationUtils';
 import { ChildRenderItem } from './types';
 import { getFileBaseName } from '../../services/parsing/utils/TaskContent';
@@ -15,7 +15,7 @@ export class ChildRenderItemMapper {
      */
     createTaskItem(task: Task, indent: string, contextFile: string): ChildRenderItem {
         const char = task.statusChar || ' ';
-        if (isFrontmatterTask(task) && task.file !== contextFile) {
+        if (isTvFile(task) && task.file !== contextFile) {
             return {
                 markdown: `${indent}- [${char}] ${this.formatWikiLink(task.file)}`,
                 notation: NotationUtils.buildNotationLabel(task),

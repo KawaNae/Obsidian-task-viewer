@@ -7,7 +7,7 @@ import { TimerInstance } from './TimerInstance';
 import { TimerContext } from './TimerContext';
 import { TimerStorageUtils } from './TimerStorageUtils';
 import { TimerTaskResolver } from './TimerTaskResolver';
-import { Task, isFrontmatterTask, isTaskViewerInlineTask } from '../types';
+import { Task, isTvFile, isTvInline } from '../types';
 
 export class TimerTargetManager {
     private resolver: TimerTaskResolver;
@@ -32,12 +32,12 @@ export class TimerTargetManager {
             return;
         }
 
-        if (isTaskViewerInlineTask(timer)) {
+        if (isTvInline(timer)) {
             await this.ensureInlineTimerTargetId(timer);
             return;
         }
 
-        if (isFrontmatterTask(timer)) {
+        if (isTvFile(timer)) {
             await this.ensureFrontmatterTimerTargetId(timer);
         }
     }
@@ -136,12 +136,12 @@ export class TimerTargetManager {
         if (!this.storageUtils.isAutoManagedTimerTargetId(timer.timerTargetId)) return;
         if (this.hasAnotherActiveTimerWithTarget(timer.timerTargetId)) return;
 
-        if (isTaskViewerInlineTask(timer)) {
+        if (isTvInline(timer)) {
             await this.removeInlineTimerTargetId(timer);
             return;
         }
 
-        if (isFrontmatterTask(timer)) {
+        if (isTvFile(timer)) {
             await this.removeFrontmatterTimerTargetId(timer);
         }
     }
@@ -165,7 +165,7 @@ export class TimerTargetManager {
         if (!targetTask) {
             targetTask = taskIndex
                 .getTasks()
-                .find((task) => isTaskViewerInlineTask(task) && task.timerTargetId === timer.timerTargetId);
+                .find((task) => isTvInline(task) && task.timerTargetId === timer.timerTargetId);
         }
         if (!targetTask) return;
 
@@ -208,13 +208,13 @@ export class TimerTargetManager {
     // ─── Task Resolution ─────────────────────────────────────
 
     private resolveInlineTaskForTimer(timer: TimerInstance): Task | undefined {
-        if (!isTaskViewerInlineTask(timer)) return undefined;
-        return this.resolver.resolveInlineTask(timer);
+        if (!isTvInline(timer)) return undefined;
+        return this.resolver.resolveTvInline(timer);
     }
 
     private resolveFrontmatterTaskForTimer(timer: TimerInstance): Task | undefined {
-        if (!isFrontmatterTask(timer)) return undefined;
-        return this.resolver.resolveFrontmatterTask(timer);
+        if (!isTvFile(timer)) return undefined;
+        return this.resolver.resolveTvFile(timer);
     }
 
     private findInlineTaskByTimerTargetId(filePath: string, timerTargetId: string): Task | undefined {
@@ -222,7 +222,7 @@ export class TimerTargetManager {
             .getTaskIndex()
             .getTasks()
             .find((task) =>
-                isTaskViewerInlineTask(task)
+                isTvInline(task)
                 && task.file === filePath
                 && (task.timerTargetId === timerTargetId || task.blockId === timerTargetId)
             );
@@ -233,7 +233,7 @@ export class TimerTargetManager {
             .getTaskIndex()
             .getTasks()
             .find((task) =>
-                isFrontmatterTask(task)
+                isTvFile(task)
                 && task.timerTargetId === timerTargetId
                 && (!filePath || task.file === filePath)
             );

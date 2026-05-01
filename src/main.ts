@@ -15,7 +15,7 @@ import {
     validateFrontmatterTaskKeys,
 } from './types';
 import type { DefaultLeafPosition, PinnedListDefinition, Task } from './types';
-import { isFrontmatterTask } from './types';
+import { isTvFile } from './types';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/color/ColorSuggest';
 import { LineStyleSuggest } from './suggest/line/LineStyleSuggest';
@@ -277,7 +277,7 @@ export default class TaskViewerPlugin extends Plugin {
                 if (!(file instanceof TFile)) return;
 
                 const task = this.taskIndex.getTasks().find(t =>
-                    t.file === file.path && isFrontmatterTask(t)
+                    t.file === file.path && isTvFile(t)
                 );
                 if (!task) return;
 

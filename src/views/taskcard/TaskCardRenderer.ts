@@ -1,5 +1,5 @@
 import { App, MarkdownRenderer, Component, setIcon } from 'obsidian';
-import { Task, DisplayTask, TaskViewerSettings, isCompleteStatusChar, isFrontmatterTask } from '../../types';
+import { Task, DisplayTask, TaskViewerSettings, isCompleteStatusChar, isTvFile } from '../../types';
 import { TaskReadService } from '../../services/data/TaskReadService';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
 import { DateUtils } from '../../utils/DateUtils';
@@ -119,7 +119,7 @@ export class TaskCardRenderer extends Component {
             if (total > 0) {
                 expandLabelSpan.setText(` ${completed}/${total}`);
             }
-        } else if (isFrontmatterTask(task)) {
+        } else if (isTvFile(task)) {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
             await this.renderFrontmatterChildren(contentContainer, task, cardComp, settings, cardInstanceId, forceExpand);
         } else if (task.childEntries.length > 0) {
@@ -173,7 +173,7 @@ export class TaskCardRenderer extends Component {
         for (const entry of parent.childEntries) {
             if (entry.kind !== 'task') continue;
             const c = lookup.getTask(entry.taskId);
-            if (!c || !isFrontmatterTask(c)) continue;
+            if (!c || !isTvFile(c)) continue;
             const baseName = c.file.replace(/\.md$/, '').split('/').pop() || '';
             const fullPath = c.file.replace(/\.md$/, '');
             if (t === baseName || t === fullPath || t === c.file) return c;

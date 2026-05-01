@@ -16,8 +16,8 @@ export interface FrontmatterParseResult {
  * Task Viewer file-level Task builder.
  *
  * Builds a Task from a file's frontmatter (TaskViewer's file-level format).
- * Also builds container-style tasks (no dates, groups inline tasks) —
- * identified via the derived isFrontmatterContainer() helper.
+ * Also builds unscheduled tv-file tasks (no dates, groups inline tasks) —
+ * identified via the derived isTvFileUnscheduled() helper.
  */
 export class TVFileBuilder {
     /**

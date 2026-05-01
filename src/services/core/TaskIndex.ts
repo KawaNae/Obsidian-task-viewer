@@ -1,6 +1,6 @@
 import { App, TFile } from 'obsidian';
 import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
-import { isFrontmatterTask, isTaskViewerInlineTask, hasBodyLine } from '../../types';
+import { isTvFile, isTvInline, hasBodyLine } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { createTempTask } from '../data/createTempTask';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
@@ -472,7 +472,7 @@ export class TaskIndex {
             this.store.notifyListeners(taskId, Object.keys(updates));
         }
 
-        if (isFrontmatterTask(task)) {
+        if (isTvFile(task)) {
             await this.repository.updateFrontmatterTask(task, updates, this.settings.frontmatterTaskKeys);
         } else {
             // All inline tasks route through InlineTaskWriter; TaskParser.format
@@ -492,7 +492,7 @@ export class TaskIndex {
 
             this.syncDetector.markLocalEdit(task.file);
 
-            if (isFrontmatterTask(task)) {
+            if (isTvFile(task)) {
                 await this.repository.deleteFrontmatterTask(task, this.settings.frontmatterTaskKeys);
             } else {
                 await this.repository.deleteTaskFromFile(task);
@@ -510,7 +510,7 @@ export class TaskIndex {
 
             this.syncDetector.markLocalEdit(task.file);
 
-            if (isFrontmatterTask(task)) {
+            if (isTvFile(task)) {
                 await this.repository.duplicateFrontmatterTask(task, this.settings.frontmatterTaskKeys, options);
             } else {
                 await this.repository.duplicateInlineTask(task, options);
@@ -530,7 +530,7 @@ export class TaskIndex {
             const task = this.store.getTask(taskId);
             if (!task) throw new Error('Task not found');
 
-            if (!isTaskViewerInlineTask(task)) {
+            if (!isTvInline(task)) {
                 throw new Error('Only inline tasks can be converted to frontmatter tasks');
             }
 
@@ -575,7 +575,7 @@ export class TaskIndex {
 
             this.syncDetector.markLocalEdit(task.file);
 
-            if (isFrontmatterTask(task)) {
+            if (isTvFile(task)) {
                 await this.repository.insertLineAfterFrontmatter(
                     task.file, childLine,
                     this.settings.frontmatterTaskHeader,

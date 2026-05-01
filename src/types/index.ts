@@ -85,7 +85,7 @@ export interface Task {
      * 0-indexed line number in the source file.
      * `-1` is a generic sentinel meaning "no body line" (e.g., frontmatter root tasks).
      * Use `hasBodyLine(task)` to test validity. `-1` is NOT a frontmatter discriminator
-     * — use `isFrontmatterTask(task)` for type identification.
+     * — use `isTvFile(task)` for type identification.
      */
     line: number;
 
@@ -161,24 +161,34 @@ export interface Task {
     properties: Record<string, PropertyValue>;
 }
 
-/** Check whether a task was produced by the file-level (frontmatter) parser. */
-export function isFrontmatterTask(task: Pick<Task, 'parserId'>): boolean {
+/** TaskViewer file-form (frontmatter) task. */
+export function isTvFile(task: Pick<Task, 'parserId'>): boolean {
     return task.parserId === 'tv-file';
 }
 
-/** Check whether a task was produced by the TaskViewer inline parser. */
-export function isTaskViewerInlineTask(task: Pick<Task, 'parserId'>): boolean {
+/** TaskViewer inline-form task (writable; primary write target). */
+export function isTvInline(task: Pick<Task, 'parserId'>): boolean {
     return task.parserId === 'tv-inline';
+}
+
+/** Day Planner inline-form task (read-only). */
+export function isDpInline(task: Pick<Task, 'parserId'>): boolean {
+    return task.parserId === 'day-planner';
+}
+
+/** Tasks Plugin inline-form task (read-only). */
+export function isTpInline(task: Pick<Task, 'parserId'>): boolean {
+    return task.parserId === 'tasks-plugin';
 }
 
 /**
  * task.line が body 行アクセスに使える有効値かを判定する。
- * `false` の場合: frontmatter task (line === -1) など、ファイル本体に
+ * `false` の場合: tv-file task (line === -1) など、ファイル本体に
  * 紐付く行を持たないタスク。
  *
- * 注意: 種別判定（frontmatter かどうか）には使わないこと。
- * `-1` は「body 行なし」の汎用 sentinel であり、frontmatter discriminator
- * ではない。種別判定は `isFrontmatterTask()` を使用する。
+ * 注意: 種別判定（file-form かどうか）には使わないこと。
+ * `-1` は「body 行なし」の汎用 sentinel であり、形式 discriminator
+ * ではない。種別判定は `isTvFile()` を使用する。
  */
 export function hasBodyLine(task: Pick<Task, 'line'>): boolean {
     return task.line >= 0;
@@ -199,14 +209,14 @@ export function hasDates(
 }
 
 /**
- * Derived: a frontmatter task with no scheduling is a "container" — it groups
- * inline tasks from the same file without carrying dates itself. Replaces the
- * former Task.isContainer flag.
+ * Derived: a tv-file task with no scheduling. Groups inline tasks from the
+ * same file without carrying dates itself. Replaces the former Task.isContainer
+ * flag.
  */
-export function isFrontmatterContainer(
+export function isTvFileUnscheduled(
     task: Pick<Task, 'parserId' | 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'due'>
 ): boolean {
-    return isFrontmatterTask(task) && !hasScheduling(task);
+    return isTvFile(task) && !hasScheduling(task);
 }
 
 /**
