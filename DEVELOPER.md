@@ -8,7 +8,6 @@
 src/views/taskcard/
   TaskCardRenderer.ts              # Orchestrator for one task card
   ChildItemBuilder.ts              # Task/childLines -> ChildRenderItem[]
-  ChildLineResolver.ts             # Child line resolution (absolute line / orphan / wikilink / subtree marking)
   ChildRenderItemMapper.ts         # Maps child data to ChildRenderItem[]
   ChildSectionRenderer.ts          # Child markdown/toggle rendering
   CheckboxWiring.ts                # Parent/child checkbox interaction and status menu
@@ -237,13 +236,12 @@ TreeTaskExtractor がインラインタスクの `childLines` を構築するル
 #### childLineBodyOffsets のセマンティクス
 
 frontmatter / inline タスク共に **ファイル先頭からの絶対行番号** を格納する。
-`ChildLineResolver.resolveChildAbsoluteLine(task, i)` が単一のリゾルバとして
-`task.childLineBodyOffsets[i]` をそのまま返す。
+レンダラ／ライタは `DisplayTask.childEntries[i].bodyLine` を直接読む（`buildChildEntries`
+が `childLineBodyOffsets[i]` をそのまま entry に転載する）。
 
 - `TVFileBuilder` では `bodyStartIndex + relIndex`（= 絶対行）を格納
 - `TreeTaskExtractor` では `block.childLineNumbers`（= 絶対行）を格納
-- フォールバック: offset が欠落している場合、inline タスクなら `task.line + 1 + index`、
-  frontmatter タスクなら `-1`（= 解決不能）を返す
+- offset が欠落している entry は `buildChildEntries` で除外される（parser 契約上発生しない想定）
 
 ---
 
