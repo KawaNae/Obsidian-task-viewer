@@ -265,7 +265,7 @@
        at top: 12px) so the button does not overlap the card content
        (especially the top-right time display). Keep horizontal padding 0
        so the card stays flush with the modal frame. */
-    padding: 48px 0 0 0;
+    padding: 20px 0 0 0;
 }
 
 .task-detail-modal .task-card {
