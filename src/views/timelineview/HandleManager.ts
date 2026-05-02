@@ -240,7 +240,10 @@ export class HandleManager {
         const handle = container.createDiv('task-card__handle-btn');
         // setIcon needs a span wrapper for WebKit to render reliably inside
         // an inline-flex button (matches the more-btn pattern in filter-popover).
-        setIcon(handle.createSpan(), 'expand');
+        // 'info' (i in a circle) over 'expand' (4 outward arrows): the latter
+        // looks like an X and visually bleeds into the card's top-left corner
+        // due to the -12px outset, especially on mobile where cards are small.
+        setIcon(handle.createSpan(), 'info');
         handle.dataset.taskId = taskId;
         handle.dataset.handleType = 'detail';
         handle.style.cursor = 'pointer';

@@ -261,7 +261,11 @@
    Task Detail Modal
    ====================================================== */
 .task-detail-modal {
-    padding: 0;
+    /* Push the card below the modal's top-right close button (×, ~32px tall
+       at top: 12px) so the button does not overlap the card content
+       (especially the top-right time display). Keep horizontal padding 0
+       so the card stays flush with the modal frame. */
+    padding: 48px 0 0 0;
 }
 
 .task-detail-modal .task-card {
