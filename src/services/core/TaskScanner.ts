@@ -9,7 +9,7 @@ import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
-import { PropertyInheritanceResolver } from './PropertyInheritanceResolver';
+import { TaskPropertyResolver } from '../parsing/TaskPropertyResolver';
 import { DocumentTreeBuilder } from '../parsing/tree/DocumentTreeBuilder';
 import { SectionPropertyResolver } from '../parsing/tree/SectionPropertyResolver';
 import { TreeTaskExtractor } from '../parsing/tree/TreeTaskExtractor';
@@ -195,8 +195,8 @@ export class TaskScanner {
         }
         newTasks.push(...allExtractedTasks);
 
-        // 同一ファイル内の親→子 properties/tags/color/linestyle 継承
-        PropertyInheritanceResolver.resolve(newTasks);
+        // Task scope: cross-block parent → child properties/tags BFS
+        TaskPropertyResolver.resolve(newTasks);
 
         // 2. 現在の完了カウント
         const currentCounts = new Map<string, number>();

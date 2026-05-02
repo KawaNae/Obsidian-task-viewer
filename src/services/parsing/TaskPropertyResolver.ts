@@ -1,11 +1,19 @@
 import type { Task } from '../../types';
-import { TagExtractor } from '../parsing/utils/TagExtractor';
+import { TagExtractor } from './utils/TagExtractor';
 
-export class PropertyInheritanceResolver {
-    /**
-     * 同一ファイル内の親→子 properties / tags 継承（child-wins マージ）。
-     * parentId/childIds が設定済みの Task 配列に対して BFS で解決。
-     */
+/**
+ * Task-scope property resolver.
+ *
+ * BFS over the parentId graph (within a single file), merging parent
+ * properties/tags into children with child-wins precedence. The Task layer
+ * in the File/Section/Task inheritance pipeline.
+ *
+ * Style fields (color/linestyle/mask) are resolved at extraction time by
+ * TreeTaskExtractor's parentStyle propagation — that is the in-block
+ * optimization of the same Task-scope inheritance, kept inline for
+ * efficiency. See DEVELOPER.md "Inheritance pipeline".
+ */
+export class TaskPropertyResolver {
     static resolve(tasks: Task[]): void {
         const taskMap = new Map<string, Task>();
         for (const t of tasks) taskMap.set(t.id, t);
@@ -29,7 +37,6 @@ export class PropertyInheritanceResolver {
                 if (parent.tags.length > 0) {
                     child.tags = TagExtractor.merge(parent.tags, child.tags);
                 }
-                // color/linestyle/mask はツリー走査時に解決済み（TreeTaskExtractor）
                 queue.push(child);
             }
         }
