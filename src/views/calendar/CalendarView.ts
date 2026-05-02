@@ -261,6 +261,12 @@ export class CalendarView extends ItemView {
             () => this.getViewStartDateString(),
             () => this.plugin.settings.zoomLevel
         );
+        this.dragHandler.onDetailClick = (taskId: string) => {
+            const task = this.readService.getTask(taskId);
+            if (task) {
+                new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
+            }
+        };
 
         this.container.addEventListener('click', (event: MouseEvent) => {
             const target = event.target as HTMLElement;

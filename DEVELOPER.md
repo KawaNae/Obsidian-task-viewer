@@ -1078,7 +1078,6 @@ Defined in `src/types/index.ts` as `TaskViewerSettings`. Defaults are in `DEFAUL
 | `tvFileChildHeader` | string | `'Tasks'` | Heading text under which tv-file child elements live |
 | `tvFileChildHeaderLevel` | number | 2 | Heading level for the above (2 = `##`) |
 | `longPressThreshold` | number | 400 | Long-press detection time (ms) |
-| `taskSelectAction` | `'click'` \| `'dblclick'` | `'click'` | Task card select action to open file |
 | `zoomLevel` | number | 1.0 | Default timeline zoom level |
 | `pastDaysToShow` | number | 0 | Number of past days to show in timeline |
 | `pomodoroWorkMinutes` | number | 25 | Pomodoro work segment length |

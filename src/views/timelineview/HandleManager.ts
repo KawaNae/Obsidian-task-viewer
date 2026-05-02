@@ -1,3 +1,4 @@
+import { setIcon } from 'obsidian';
 import { Task } from '../../types';
 
 const SELECTED_Z_INDEX = 200;
@@ -154,15 +155,18 @@ export class HandleManager {
                     return; // middle segment: no handles
                 }
 
-                // Left edge = start
+                // Left edge = start. Move handle moved to bottom edge.
+                // detail-handle (top-left) only on the start segment to avoid
+                // duplication across split segments.
                 if (!continuesBefore) {
-                    this.createMoveHandle(taskEl, taskId, 'top-left');
+                    this.createDetailHandle(taskEl, taskId);
+                    this.createMoveHandle(taskEl, taskId, 'bottom-left');
                     this.createResizeHandle(taskEl, taskId, 'left', '↔');
                 }
 
-                // Right edge = end
+                // Right edge = end. Move handle moved to bottom edge.
                 if (!continuesAfter) {
-                    this.createMoveHandle(taskEl, taskId, 'top-right');
+                    this.createMoveHandle(taskEl, taskId, 'bottom-right');
                     this.createResizeHandle(taskEl, taskId, 'right', '↔');
                 }
             } else if (isAllDay) {
@@ -170,10 +174,14 @@ export class HandleManager {
                 this.createResizeHandle(taskEl, taskId, 'left', '↔');
                 // Right Resize Handle
                 this.createResizeHandle(taskEl, taskId, 'right', '↔');
-                // Move Handle (Top-Right default for AllDay)
-                this.createMoveHandle(taskEl, taskId, 'top-right');
+                // Move Handles moved to bottom edges (was top-right).
+                this.createMoveHandle(taskEl, taskId, 'bottom-left');
+                this.createMoveHandle(taskEl, taskId, 'bottom-right');
+                // detail-handle on top-left.
+                this.createDetailHandle(taskEl, taskId);
             } else {
                 // Timed tasks: Top/Bottom resize + Top-Right/Bottom-Right Move
+                // + detail-handle at top-left (when not touching top boundary).
 
                 const startHour = this.deps.getStartHour();
                 const [startH, startM] = (task.startTime || '00:00').split(':').map(Number);
@@ -194,8 +202,11 @@ export class HandleManager {
                     }
                 }
 
-                // Render Top Handles (Hide if touching top)
+                // Render Top Handles (Hide if touching top).
+                // detail-handle shares the top-edge constraint: -12px would
+                // overlap the previous day boundary.
                 if (!isTouchingTop) {
+                    this.createDetailHandle(taskEl, taskId);
                     this.createResizeHandle(taskEl, taskId, 'top', '↕');
                     this.createMoveHandle(taskEl, taskId, 'top-right');
                 }
@@ -216,11 +227,22 @@ export class HandleManager {
         handle.dataset.taskId = taskId;
     }
 
-    private createMoveHandle(taskEl: HTMLElement, taskId: string, position: 'top-right' | 'bottom-right' | 'top-left'): void {
+    private createMoveHandle(taskEl: HTMLElement, taskId: string, position: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'): void {
         const container = taskEl.createDiv(`task-card__handle task-card__handle--move-${position}`);
         const handle = container.createDiv('task-card__handle-btn');
         handle.setText('::');
         handle.dataset.taskId = taskId;
         handle.style.cursor = 'move';
+    }
+
+    private createDetailHandle(taskEl: HTMLElement, taskId: string): void {
+        const container = taskEl.createDiv('task-card__handle task-card__handle--detail');
+        const handle = container.createDiv('task-card__handle-btn');
+        // setIcon needs a span wrapper for WebKit to render reliably inside
+        // an inline-flex button (matches the more-btn pattern in filter-popover).
+        setIcon(handle.createSpan(), 'expand');
+        handle.dataset.taskId = taskId;
+        handle.dataset.handleType = 'detail';
+        handle.style.cursor = 'pointer';
     }
 }

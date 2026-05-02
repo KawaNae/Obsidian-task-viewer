@@ -14,6 +14,7 @@ export class DragHandler implements DragContext {
     plugin: TaskViewerPlugin;
     onTaskMove: () => void;
     public onTaskClick: (taskId: string) => void;
+    public onDetailClick: ((taskId: string) => void) | null = null;
 
     private currentStrategy: DragStrategy | null = null;
     private currentDragTaskId: string | null = null;
@@ -26,9 +27,6 @@ export class DragHandler implements DragContext {
     private boundPointerUp: (e: PointerEvent) => void;
     private boundTouchStart: (e: TouchEvent) => void;
     private boundTouchMove: (e: TouchEvent) => void;
-
-    private lastClickTaskId: string | null = null;
-    private lastClickTime: number = 0;
 
     constructor(container: HTMLElement, readService: TaskReadService, writeService: TaskWriteService, plugin: TaskViewerPlugin, onTaskClick: (taskId: string) => void, onTaskMove: () => void, getViewStartDate: () => string, getZoomLevel: () => number) {
         this.container = container;
@@ -116,6 +114,14 @@ export class DragHandler implements DragContext {
                     taskId = taskEl.dataset.splitOriginalId;
                 }
             }
+
+            // detail-handle: open detail modal, no drag.
+            if (taskId && target.closest('.task-card__handle--detail')) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.onDetailClick?.(taskId);
+                return;
+            }
         } else {
             taskEl = target.closest('.task-card') as HTMLElement;
             if (taskEl) {
@@ -171,21 +177,10 @@ export class DragHandler implements DragContext {
             target.closest('.task-card__handle--resize-left') ||
             target.closest('.task-card__handle--resize-right');
 
-        // AllDay/Timeline両方でハンドルからのドラッグが必要
+        // Non-handle click: select the card. Detail modal is opened via
+        // double-click (TaskCardRenderer) or detail-handle, never single click.
         if (!isFromHandle) {
-            if (this.plugin.settings.taskSelectAction === 'dblclick') {
-                const now = Date.now();
-                if (this.lastClickTaskId === taskId && now - this.lastClickTime < 400) {
-                    this.lastClickTaskId = null;
-                    this.lastClickTime = 0;
-                    this.onTaskClick(taskId);
-                } else {
-                    this.lastClickTaskId = taskId;
-                    this.lastClickTime = now;
-                }
-            } else {
-                this.onTaskClick(taskId);
-            }
+            this.onTaskClick(taskId);
             return;
         }
 

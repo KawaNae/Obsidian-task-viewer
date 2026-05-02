@@ -201,31 +201,19 @@
     white-space: nowrap;
 }
 
-/* Compact card expand bar (opens detail modal) */
-.task-card__expand-bar {
-    cursor: pointer;
+/* Compact card child-count bar (non-clickable label).
+   Detail modal is opened via card double-click or the detail-handle,
+   not by clicking this bar. */
+.task-card__child-count {
     color: var(--tv-text-muted);
     font-size: 0.85em;
     padding: 4px 0 2px 1.5em;
     user-select: none;
-    /* Lock height so the bar reserves space before setIcon paints.
-       Without this, the bar collapses to padding-only (~6px) while
-       MarkdownRenderer awaits, then jumps to ~21px when the icon
-       appears in a microtask — visible as a 1-frame layout flux. */
+    pointer-events: none;
+    /* Reserve height to keep allday card / section dimensions stable
+       across the markdown await, matching the previous expand-bar floor. */
     min-height: 21px;
     box-sizing: border-box;
-}
-
-.task-card__expand-bar:hover {
-    color: var(--tv-text);
-    background-color: var(--tv-bg-hover);
-}
-
-.task-card__expand-bar .svg-icon {
-    width: 12px;
-    height: 12px;
-    vertical-align: middle;
-    margin-right: 4px;
 }
 
 /* Lock allday card height so the allday-section grid row keeps a
@@ -329,6 +317,25 @@
 .task-card__handle--move-bottom-right {
     bottom: -12px;
     right: -12px;
+}
+
+.task-card__handle--move-bottom-left {
+    bottom: -12px;
+    left: -12px;
+}
+
+.task-card__handle--detail {
+    top: -12px;
+    left: -12px;
+}
+
+.task-card__handle--detail .task-card__handle-btn {
+    cursor: pointer;
+}
+
+.task-card__handle--detail .svg-icon {
+    width: 14px;
+    height: 14px;
 }
 
 .task-card__handle-btn {

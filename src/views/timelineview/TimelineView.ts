@@ -388,6 +388,12 @@ export class TimelineView extends ItemView {
             () => this.viewState.startDate,
             () => this.getEffectiveZoomLevel()
         );
+        this.dragHandler.onDetailClick = (taskId: string) => {
+            const task = this.readService.getTask(taskId);
+            if (task) {
+                new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
+            }
+        };
 
         // Background click to deselect
         this.container.addEventListener('click', (e) => {

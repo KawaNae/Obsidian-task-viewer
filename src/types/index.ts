@@ -436,7 +436,6 @@ export interface TaskViewerSettings {
     tvFileChildHeader: string;
     tvFileChildHeaderLevel: number;
     longPressThreshold: number;
-    taskSelectAction: 'click' | 'dblclick';
     reuseExistingTab: boolean;
     editorMenuForTasks: boolean;
     editorMenuForCheckboxes: boolean;
@@ -502,7 +501,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     tvFileChildHeader: 'Tasks',
     tvFileChildHeaderLevel: 2,
     longPressThreshold: 400,
-    taskSelectAction: 'click',
     reuseExistingTab: true,
     editorMenuForTasks: true,
     editorMenuForCheckboxes: true,
