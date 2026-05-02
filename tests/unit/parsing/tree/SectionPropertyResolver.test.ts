@@ -73,6 +73,20 @@ describe('SectionPropertyResolver', () => {
         expect(section.resolvedLinestyle).toBeUndefined();
     });
 
+    it('frontmatter + 見出し直後空行 + section property: section が FM を上書き', () => {
+        // Markdown loose list: heading 直後の空行は list を終了させない。
+        // section property block が正しく検出され、FM の tv-color を上書きする。
+        const doc = buildAndResolve([
+            '## Section',
+            '',
+            '- tv-color:: 00ff00',
+            '- [ ] task @2026-03-24',
+        ], { 'tv-color': 'ff0000' });
+
+        const section = doc.sections[0];
+        expect(section.resolvedColor).toBe('00ff00');
+    });
+
     it('frontmatter の position キーは properties に含めない', () => {
         const doc = buildAndResolve([
             '## Section',
