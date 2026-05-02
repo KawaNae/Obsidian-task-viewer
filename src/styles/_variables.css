@@ -59,8 +59,12 @@
     --z-current-time-indicator: 200;
     --z-task-card-handle: 20;
     --z-task-card-allday: 25;
-    --z-timeline-allday-sticky: 30;
     --z-timeline-habits-section: 45;
+    /* Above habits-section (45) so the topmost allday card's handles —
+       which extend -12px above the section bounds — render over habits
+       instead of being clipped by its stacking context. Still below
+       date-header (50). */
+    --z-timeline-allday-sticky: 46;
     --z-timeline-date-header: 50;
     --z-allday-cell-drag-over: 50;
     --z-timer-widget: 65;
