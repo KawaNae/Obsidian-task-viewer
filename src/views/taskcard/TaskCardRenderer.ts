@@ -1,4 +1,4 @@
-import { App, MarkdownRenderer, Component, setIcon } from 'obsidian';
+import { App, MarkdownRenderer, Component } from 'obsidian';
 import { Task, DisplayTask, TaskViewerSettings, isCompleteStatusChar, isTvFile } from '../../types';
 import { TaskReadService } from '../../services/data/TaskReadService';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
@@ -88,37 +88,30 @@ export class TaskCardRenderer extends Component {
         this.cardComponents.set(container, cardComp);
 
         this.renderTopRightMeta(container, task, settings, topRight);
+        this.bindDetailDoubleClick(container, task);
 
         const contentContainer = container.createDiv('task-card__content');
         const parentMarkdown = this.buildParentMarkdown(task, settings);
 
         if (compact) {
-            // Build the expand-bar synchronously, BEFORE the markdown await.
+            // Reserve the child-count bar synchronously, BEFORE the markdown await.
             // Without this, the bar appears in a microtask after MarkdownRenderer
             // resolves, briefly shrinking compact cards by ~21px. For allday
             // cards stacked on a CSS grid, that transient propagates to the
             // allday-section height, which combined with the sync scroll-restore
             // in TimelineView.performRender produces a 1-frame flicker of timed
             // cards shifting up then settling back.
-            const expandBar = container.createDiv('task-card__expand-bar');
-            const expandIconSpan = expandBar.createSpan();
-            const expandLabelSpan = expandBar.createSpan();
-            expandBar.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.onDetailClick?.(task);
-            });
+            const childCountBar = container.createDiv('task-card__child-count');
+            const countLabelSpan = childCountBar.createSpan();
 
             const strippedMarkdown = parentMarkdown
                 .replace(/!\[\[([^\]]*)\]\]/g, '')
                 .replace(/!\[([^\]]*)\]\([^)]*\)/g, '');
             await MarkdownRenderer.render(this.app, strippedMarkdown, contentContainer, task.file, cardComp);
 
-            // Populate expand-bar contents post-await. Element is already in DOM
-            // with stable height locked by .task-card__expand-bar min-height.
-            setIcon(expandIconSpan, 'expand');
             const { completed, total } = this.getChildCompletion(task, settings);
             if (total > 0) {
-                expandLabelSpan.setText(` ${completed}/${total}`);
+                countLabelSpan.setText(`${completed}/${total}`);
             }
         } else if (isTvFile(task)) {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
@@ -180,6 +173,41 @@ export class TaskCardRenderer extends Component {
             if (t === baseName || t === fullPath || t === c.file) return c;
         }
         return undefined;
+    }
+
+    private bindDetailDoubleClick(container: HTMLElement, task: DisplayTask): void {
+        // Native dblclick covers mouse and most touch environments.
+        // Touch on iOS sometimes routes to dblclick; for environments where
+        // it does not, the pointer-based fallback below also fires detail.
+        const fireDetail = (e: Event) => {
+            const t = e.target as HTMLElement;
+            // Ignore double-clicks on handles, checkboxes, links — these have their own behavior.
+            if (t.closest('.task-card__handle')) return;
+            if (t.closest('input[type="checkbox"]')) return;
+            if (t.closest('a')) return;
+            e.stopPropagation();
+            this.onDetailClick?.(task);
+        };
+        container.addEventListener('dblclick', fireDetail);
+
+        // Touch fallback: detect double-tap manually using pointerup events.
+        // 400ms threshold matches existing convention in DragHandler.
+        let lastTapTime = 0;
+        container.addEventListener('pointerup', (e) => {
+            if (e.pointerType !== 'touch') return;
+            const t = e.target as HTMLElement;
+            if (t.closest('.task-card__handle')) return;
+            if (t.closest('input[type="checkbox"]')) return;
+            if (t.closest('a')) return;
+            const now = Date.now();
+            if (now - lastTapTime < 400) {
+                lastTapTime = 0;
+                e.stopPropagation();
+                this.onDetailClick?.(task);
+            } else {
+                lastTapTime = now;
+            }
+        });
     }
 
     private renderTopRightMeta(

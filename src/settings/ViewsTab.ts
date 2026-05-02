@@ -66,18 +66,6 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
             }));
 
     new Setting(el)
-        .setName(t('settings.views.taskSelectAction'))
-        .setDesc(t('settings.views.taskSelectActionDesc'))
-        .addDropdown(dropdown => dropdown
-            .addOption('click', t('settings.views.singleClick'))
-            .addOption('dblclick', t('settings.views.doubleClick'))
-            .setValue(plugin.settings.taskSelectAction)
-            .onChange(async (value) => {
-                plugin.settings.taskSelectAction = value as 'click' | 'dblclick';
-                await plugin.saveSettings();
-            }));
-
-    new Setting(el)
         .setName(t('settings.views.reuseExistingTab'))
         .setDesc(t('settings.views.reuseExistingTabDesc'))
         .addToggle(toggle => toggle

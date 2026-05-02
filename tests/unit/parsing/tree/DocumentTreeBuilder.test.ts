@@ -231,7 +231,7 @@ describe('DocumentTreeBuilder', () => {
             expect(doc.sections[0].blocks).toHaveLength(2); // task + "- custom:: after-task" as text
         });
 
-        it('空行でプロパティ収集が停止', () => {
+        it('空行を挟んだプロパティも収集 (Markdown loose list)', () => {
             const doc = buildFromBody([
                 '## Section',
                 '- tv-color:: red',
@@ -240,7 +240,90 @@ describe('DocumentTreeBuilder', () => {
                 '- [ ] task @2026-03-24',
             ]);
             const pb = doc.sections[0].propertyBlock!;
+            expect(pb.entries).toHaveLength(2);
+            expect(pb.entries[0].key).toBe('tv-color');
+            expect(pb.entries[1].key).toBe('custom');
+        });
+
+        it('見出し直後の空行を挟んでも property block を検出', () => {
+            const doc = buildFromBody([
+                '## Section',
+                '',
+                '- tv-color:: red',
+                '- custom:: value',
+                '- [ ] task @2026-03-24',
+            ]);
+            const pb = doc.sections[0].propertyBlock!;
+            expect(pb).not.toBeNull();
+            expect(pb.entries).toHaveLength(2);
+        });
+
+        it('見出し直後の空行 + group form でも検出', () => {
+            const doc = buildFromBody([
+                '## Section',
+                '',
+                '- properties::',
+                '    - tv-color:: red',
+                '    - custom:: value',
+                '- [ ] task @2026-03-24',
+            ]);
+            const pb = doc.sections[0].propertyBlock!;
+            expect(pb).not.toBeNull();
+            expect(pb.entries).toHaveLength(2);
+        });
+
+        it('連続する複数空行を許容', () => {
+            const doc = buildFromBody([
+                '## Section',
+                '',
+                '',
+                '- tv-color:: red',
+                '',
+                '',
+                '- custom:: value',
+                '- [ ] task @2026-03-24',
+            ]);
+            const pb = doc.sections[0].propertyBlock!;
+            expect(pb.entries).toHaveLength(2);
+        });
+
+        it('wikilink 行は property block を終端する (現状維持)', () => {
+            const doc = buildFromBody([
+                '## Section',
+                '- tv-color:: red',
+                '- [[wiki-target]]',
+                '- custom:: ignored',
+                '- [ ] task @2026-03-24',
+            ]);
+            const pb = doc.sections[0].propertyBlock!;
             expect(pb.entries).toHaveLength(1);
+            expect(pb.entries[0].key).toBe('tv-color');
+        });
+
+        it('非リスト行 (plain text) は property block を終端する (現状維持)', () => {
+            const doc = buildFromBody([
+                '## Section',
+                '- tv-color:: red',
+                'plain paragraph text',
+                '- custom:: ignored',
+                '- [ ] task @2026-03-24',
+            ]);
+            const pb = doc.sections[0].propertyBlock!;
+            expect(pb.entries).toHaveLength(1);
+            expect(pb.entries[0].key).toBe('tv-color');
+        });
+
+        it('property block の endLine は最後の entry 行 + 1 (claim 範囲)', () => {
+            const doc = buildFromBody([
+                '## Section',
+                '- tv-color:: red',
+                '',
+                '',
+                '- [ ] task @2026-03-24',
+            ]);
+            const pb = doc.sections[0].propertyBlock!;
+            // entry は line 1 のみ。endLine は claim 範囲の終端 = 2
+            expect(pb.endLine).toBe(2);
         });
 
         it('テキストブロックを検出', () => {

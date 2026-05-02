@@ -1,11 +1,10 @@
-import { TvFileKeys, Task, WikilinkRef, ChildLine, PropertyType, PropertyValue } from '../../../types';
+import { TvFileKeys, Task, WikilinkRef, ChildLine } from '../../../types';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
-import { VALID_LINE_STYLES } from '../../../constants/style';
-import { normalizeColor } from '../../../utils/ColorUtils';
 import { validateDateTimeRules } from '../utils/DateTimeRuleValidator';
 import { isTaskBearingFile } from '../utils/FrontmatterPolicy';
+import { FilePropertyResolver } from '../FilePropertyResolver';
 
 export interface FrontmatterParseResult {
     task: Task;
@@ -35,10 +34,6 @@ export class TVFileBuilder {
     ): FrontmatterParseResult | null {
         if (!isTaskBearingFile(frontmatter, frontmatterKeys)) return null;
         const fm = frontmatter as Record<string, any>;
-
-        // Extract custom properties from frontmatter (non-plugin keys)
-        const excludedKeys = new Set<string>(Object.values(frontmatterKeys));
-        excludedKeys.add('tags'); // Always exclude standard Obsidian tags key
 
         const startNorm = this.normalizeYamlDate(fm[frontmatterKeys.start]);
         const start = this.parseDateTimeField(startNorm);
@@ -108,29 +103,7 @@ export class TVFileBuilder {
         }
 
         const contentTags = TagExtractor.fromContent(content);
-        const taskTags = TagExtractor.fromFrontmatter(fm['tags']);
-
-        const fmProperties: Record<string, PropertyValue> = {};
-        for (const [key, value] of Object.entries(fm)) {
-            if (excludedKeys.has(key)) continue;
-            if (value === null || value === undefined) continue;
-            const type: PropertyType =
-                typeof value === 'number' ? 'number'
-                : typeof value === 'boolean' ? 'boolean'
-                : Array.isArray(value) ? 'array'
-                : 'string';
-            fmProperties[key] = {
-                value: Array.isArray(value) ? value.join(', ') : String(value),
-                type,
-            };
-        }
-
-        // Resolve color/linestyle/mask directly on the task
-        const rawColor = fm[frontmatterKeys.color];
-        const color = (typeof rawColor === 'string' && rawColor.trim()) ? normalizeColor(rawColor) : undefined;
-        const linestyle = this.resolveLinestyle(fm[frontmatterKeys.linestyle]);
-        const rawMask = fm[frontmatterKeys.mask];
-        const mask = (typeof rawMask === 'string' && rawMask.trim()) ? rawMask.trim() : undefined;
+        const fmExtracted = FilePropertyResolver.extract(fm, frontmatterKeys);
 
         // Validate date/time constraints
         const validation = hasDateFields
@@ -161,28 +134,19 @@ export class TVFileBuilder {
                 endDate: end.date,
                 endTime: end.time,
                 due,
-                tags: TagExtractor.merge(contentTags, taskTags),
+                tags: TagExtractor.merge(contentTags, fmExtracted.tags ?? []),
                 originalText: '',
                 commands: [],
                 timerTargetId,
                 parserId: 'tv-file',
-                properties: fmProperties,
-                color,
-                linestyle,
-                mask,
+                properties: fmExtracted.properties,
+                color: fmExtracted.color,
+                linestyle: fmExtracted.linestyle,
+                mask: fmExtracted.mask,
                 validation,
             },
             wikilinkRefs,
         };
-    }
-
-    /**
-     * Resolve and validate linestyle value.
-     */
-    private static resolveLinestyle(value: unknown): string | undefined {
-        if (typeof value !== 'string') return undefined;
-        const normalized = value.trim().toLowerCase();
-        return VALID_LINE_STYLES.has(normalized) ? normalized : undefined;
     }
 
     /**

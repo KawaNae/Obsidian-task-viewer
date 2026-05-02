@@ -176,20 +176,36 @@ export class DocumentTreeBuilder {
         return ranges;
     }
 
-    /** セクション先頭のプロパティブロックを収集 */
+    /**
+     * セクション先頭のプロパティブロックを収集する。
+     *
+     * Markdown list-aware な走査: 空行は list を終了させない (CommonMark の
+     * loose list と同じ semantics) ので transparent に skip する。
+     * property block を終端するのは:
+     *   - task 行 (checkbox)
+     *   - property でも group header でもない list 行 (wikilink, 通常 bullet)
+     *   - 非 list 行 (plain text)
+     *
+     * 返却する `endLine` は最後に収集した property entry の次行 (= entries が
+     * claim する範囲の終端)。後続の空行は claim しない。
+     */
     private static collectPropertyBlock(
         allLines: string[],
         startLine: number,
         endLine: number
     ): PropertyBlock | null {
         const entries: PropertyBlockEntry[] = [];
-        let i = startLine;
+        let scanIndex = startLine;
+        let lastEntryLine = -1;
 
-        while (i < endLine) {
-            const line = allLines[i];
+        while (scanIndex < endLine) {
+            const line = allLines[scanIndex];
 
-            // 空行で終了
-            if (line.trim() === '') break;
+            // Markdown: 空行は list を終了させない (loose list)
+            if (line.trim() === '') {
+                scanIndex++;
+                continue;
+            }
 
             // チェックボックス行（タスク行）で終了
             if (TaskLineClassifier.isTaskLine(line)) break;
@@ -197,11 +213,13 @@ export class DocumentTreeBuilder {
             // グループ形式: `- properties::`
             if (PROPERTY_GROUP_HEADER.test(line)) {
                 const groupIndent = line.search(/\S|$/);
-                i++;
-                // インデントされた子プロパティを収集
-                while (i < endLine) {
-                    const childLine = allLines[i];
-                    if (childLine.trim() === '') break;
+                scanIndex++;
+                while (scanIndex < endLine) {
+                    const childLine = allLines[scanIndex];
+                    if (childLine.trim() === '') {
+                        scanIndex++;
+                        continue;
+                    }
                     const childIndent = childLine.search(/\S|$/);
                     if (childIndent <= groupIndent) break;
 
@@ -210,10 +228,11 @@ export class DocumentTreeBuilder {
                         entries.push({
                             key: propMatch[1].trim(),
                             value: propMatch[2].trim(),
-                            line: i,
+                            line: scanIndex,
                         });
+                        lastEntryLine = scanIndex;
                     }
-                    i++;
+                    scanIndex++;
                 }
                 continue;
             }
@@ -224,13 +243,14 @@ export class DocumentTreeBuilder {
                 entries.push({
                     key: propMatch[1].trim(),
                     value: propMatch[2].trim(),
-                    line: i,
+                    line: scanIndex,
                 });
-                i++;
+                lastEntryLine = scanIndex;
+                scanIndex++;
                 continue;
             }
 
-            // リスト項目だがプロパティでもタスクでもない → 終了
+            // リスト項目だがプロパティでもタスクでもない (wikilink 等) → 終了
             if (LIST_ITEM.test(line)) break;
 
             // 非リスト行 → 終了
@@ -242,7 +262,7 @@ export class DocumentTreeBuilder {
         return {
             type: 'property-block',
             startLine,
-            endLine: i,
+            endLine: lastEntryLine + 1,
             entries,
         };
     }

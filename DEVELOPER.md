@@ -105,9 +105,9 @@ src/
 ├── api/                       # Public API (TaskApi, TaskNormalizer, FilterParamsBuilder, FilterFileLoader, TaskApiTypes)
 ├── cli/                       # CLI handlers (CliRegistrar, CliFilterBuilder, CliDatePresetParser, CliOutputFormatter, handlers/)
 ├── services/
-│   ├── core/                  # Core services (TaskIndex, TaskStore, WikiLinkResolver, PropertyInheritanceResolver, TaskValidator, etc.)
+│   ├── core/                  # Core services (TaskIndex, TaskStore, WikiLinkResolver, TaskValidator, etc.)
 │   ├── data/                  # Data access facade (TaskReadService, TaskWriteService)
-│   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, TaskDateCategorizer, TaskIdGenerator, ImplicitCalendarDateResolver)
+│   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, TaskDateCategorizer, TaskIdGenerator)
 │   ├── parsing/               # Parser layer
 │   │   ├── tv-inline/         # Line-level parsers (TVInlineParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
 │   │   ├── tv-file/           # File-level builder (TVFileBuilder)
@@ -174,7 +174,8 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskSplitter** | `services/display/TaskSplitter.ts` | Visual-date / date-range task splitting |
 | **TaskDateCategorizer** | `services/display/TaskDateCategorizer.ts` | Categorizes tasks into allDay / timed / dueOnly |
 | **ViewExporter** | `services/export/ViewExporter.ts` | View data export with per-view ExportStrategy |
-| **PropertyInheritanceResolver** | `services/core/PropertyInheritanceResolver.ts` | Task-level parent→child property inheritance (BFS; separate from section-level cascade) |
+| **TaskPropertyResolver** | `services/parsing/TaskPropertyResolver.ts` | Task-scope parent→child property/tag inheritance (BFS); see "Inheritance pipeline" |
+| **FilePropertyResolver** | `services/parsing/FilePropertyResolver.ts` | File-scope frontmatter → ExtractedProperties; shared by TVFileBuilder and SectionPropertyResolver |
 | **TaskValidator** | `services/core/TaskValidator.ts` | Task validation |
 | **DocumentTreeBuilder** | `services/parsing/tree/DocumentTreeBuilder.ts` | Document structure tree for section property inheritance |
 | **DayPlannerParser** | `services/parsing/inline/DayPlannerParser.ts` | Day Planner compatible parser (read-only) |
@@ -205,20 +206,24 @@ Quick reference for locating the right layer when implementing a feature.
 
 ```
 1. DocumentTreeBuilder.build()         — Parse file into heading-based hierarchy tree
-2. SectionPropertyResolver.resolve()   — Cascade properties through section nesting
-3. TreeTaskExtractor.extract()         — Extract Task[] from tree with section properties attached
-4. PropertyInheritanceResolver.resolve() — BFS parent→child property inheritance across tasks
+2. SectionPropertyResolver.resolve()   — Cascade properties through section nesting (delegates FM extraction to FilePropertyResolver)
+3. TreeTaskExtractor.extract()         — Extract Task[] from tree with section properties attached (in-block parent→child style propagated via parentStyle arg)
+4. TaskPropertyResolver.resolve()      — BFS parent→child property/tag inheritance across tasks
 ```
 
-### Two-tier property inheritance
+### Inheritance pipeline (File / Section / Task)
 
-| Tier | Resolver | Basis | Merge strategy |
-|------|----------|-------|----------------|
-| **Section-level** | `SectionPropertyResolver` | Heading nesting (e.g. `## A` → `### B`) | Child-wins cascade; resolves `color`, `linestyle`, `mask`, custom properties |
-| **Task-level** | `PropertyInheritanceResolver` | `parentId` / `childIds` relationships | BFS child-wins; inherits `color`, `linestyle`, `mask`, `tags`, custom properties |
+Properties / tags / styling cascade through three scopes, each with a dedicated resolver:
 
-Section-level resolution happens **during** tree building.
-Task-level resolution happens **after** task extraction, on the flat `Task[]` array.
+| Scope | Resolver | Basis | Responsibility |
+|-------|----------|-------|----------------|
+| **File** | `FilePropertyResolver` | Frontmatter object | Extract builtin keys (`color`/`linestyle`/`mask`) with validation, normalize tags, separate custom properties. Used as the cascade root by both `SectionPropertyResolver` and `TVFileBuilder`. |
+| **Section** | `SectionPropertyResolver` | Heading hierarchy (`## A` → `### B`) + section property blocks | FM → root section → nested sections, child-wins cascade for `color`/`linestyle`/`mask`/`tags`/custom properties. Output stored on `SectionNode.resolvedX`. |
+| **Task** | `TaskPropertyResolver` (post-pass) + `TreeTaskExtractor.parentStyle` (in-block) | `parentId` / `childIds` graph | Cross-block parent→child inheritance for `tags` and custom `properties` via BFS. Style fields (`color`/`linestyle`/`mask`) are resolved during extraction by `TreeTaskExtractor`'s `parentStyle` argument — semantically Task-scope inheritance, kept inline as an in-block optimization. |
+
+**Builtin vs custom properties.** Builtin (`color`/`linestyle`/`mask`/`tags`) have a fixed schema, validation, and dedicated UI rendering; their FM keys are configurable via `TvFileKeys`. Custom properties are user-defined free-form key-value pairs stored in `task.properties: Record<string, PropertyValue>`. Both inherit with child-wins precedence at every layer; the only structural difference is type-level (separate Task fields vs `Record`).
+
+**Style asymmetry rationale.** `TaskPropertyResolver` does not re-merge style fields because (a) within-block parent→child style is already handled by `parentStyle` propagation in `TreeTaskExtractor`, and (b) the only cross-block style relationship — fmTask (tv-file) → its tv-inline children — pulls from the same FM source via the section path, so a BFS re-merge would be a no-op.
 
 ### Inline child line extraction
 
@@ -267,7 +272,7 @@ The plugin recognizes eight task types internally.
 Tasks are classified by **display behavior** — where they appear and what values are inferred.
 All times are relative to the configured `startHour` (default 5 → visual day 05:00–04:59).
 Display-layer implicit value resolution is centralised in `toDisplayTask()` (in `services/display/DisplayTaskConverter.ts`).
-Storage-layer daily-note date inheritance is in `ImplicitCalendarDateResolver.resolveDailyNoteDates()`.
+Parse-layer daily-note date inheritance is in `resolveDailyNoteDates()` (`src/services/parsing/resolveDailyNoteDates.ts`).
 
 #### 1. Timed tasks (S-Timed / E-Timed / SD-Timed / ED-Timed)
 
@@ -1073,7 +1078,6 @@ Defined in `src/types/index.ts` as `TaskViewerSettings`. Defaults are in `DEFAUL
 | `tvFileChildHeader` | string | `'Tasks'` | Heading text under which tv-file child elements live |
 | `tvFileChildHeaderLevel` | number | 2 | Heading level for the above (2 = `##`) |
 | `longPressThreshold` | number | 400 | Long-press detection time (ms) |
-| `taskSelectAction` | `'click'` \| `'dblclick'` | `'click'` | Task card select action to open file |
 | `zoomLevel` | number | 1.0 | Default timeline zoom level |
 | `pastDaysToShow` | number | 0 | Number of past days to show in timeline |
 | `pomodoroWorkMinutes` | number | 25 | Pomodoro work segment length |

@@ -104,6 +104,35 @@ describe('TVFileBuilder', () => {
             const result = TVFileBuilder.parse('file.md', fm, [], 0, keys, defaultHeader, defaultHeaderLevel);
             expect(result!.task.due).toBe('2026-01-20T18:00');
         });
+
+        it('rejects invalid linestyle (validation)', () => {
+            const fm = {
+                [keys.start]: '2026-01-15',
+                [keys.linestyle]: 'bogus-value',
+            };
+            const result = TVFileBuilder.parse('file.md', fm, [], 0, keys, defaultHeader, defaultHeaderLevel);
+            expect(result!.task.linestyle).toBeUndefined();
+        });
+
+        it('accepts valid linestyle (case-insensitive)', () => {
+            const fm = {
+                [keys.start]: '2026-01-15',
+                [keys.linestyle]: 'Dashed',
+            };
+            const result = TVFileBuilder.parse('file.md', fm, [], 0, keys, defaultHeader, defaultHeaderLevel);
+            expect(result!.task.linestyle).toBe('dashed');
+        });
+
+        it('excludes Obsidian internal `position` key from properties', () => {
+            const fm = {
+                [keys.start]: '2026-01-15',
+                position: { start: { line: 0 }, end: { line: 5 } },
+                'real-prop': 'kept',
+            };
+            const result = TVFileBuilder.parse('file.md', fm, [], 0, keys, defaultHeader, defaultHeaderLevel);
+            expect(result!.task.properties['position']).toBeUndefined();
+            expect(result!.task.properties['real-prop']).toEqual({ value: 'kept', type: 'string' });
+        });
     });
 
     describe('body lines and wikilink refs', () => {
