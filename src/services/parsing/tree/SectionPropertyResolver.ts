@@ -2,13 +2,15 @@ import type { DocumentNode, SectionNode } from './DocumentTree';
 import type { TvFileKeys, PropertyValue } from '../../../types';
 import { BuiltinPropertyExtractor, type ExtractedProperties } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
-import { normalizeColor } from '../../../utils/ColorUtils';
 import { TagExtractor } from '../utils/TagExtractor';
+import { FilePropertyResolver } from '../FilePropertyResolver';
 
 /**
- * ドキュメントツリーのセクションプロパティをカスケード解決する。
+ * Section-scope property resolver.
  *
- * 継承順序: frontmatter → 親セクション → 子セクション（child-wins）
+ * Cascades properties along the section tree (frontmatter → parent section →
+ * child section, child-wins). The frontmatter base is delegated to
+ * FilePropertyResolver (the File layer in the File/Section/Task pipeline).
  */
 export class SectionPropertyResolver {
     static resolve(
@@ -16,8 +18,7 @@ export class SectionPropertyResolver {
         frontmatter: Record<string, any> | undefined,
         keys: TvFileKeys
     ): void {
-        // frontmatter からベースプロパティを抽出
-        const fmBase = this.extractFrontmatterBase(frontmatter, keys);
+        const fmBase = FilePropertyResolver.extract(frontmatter, keys);
 
         for (const section of doc.sections) {
             this.resolveSection(section, fmBase, keys);
@@ -68,51 +69,5 @@ export class SectionPropertyResolver {
             };
         }
         return result;
-    }
-
-    /** frontmatter オブジェクトからプロパティベースを抽出 */
-    private static extractFrontmatterBase(
-        frontmatter: Record<string, any> | undefined,
-        keys: TvFileKeys
-    ): ExtractedProperties {
-        if (!frontmatter) return { properties: {} };
-
-        // frontmatter の組み込みキーを直接抽出
-        const rawColor = this.extractStringValue(frontmatter, keys.color);
-        const color = rawColor ? normalizeColor(rawColor) : undefined;
-        const linestyle = this.extractStringValue(frontmatter, keys.linestyle);
-        const mask = this.extractStringValue(frontmatter, keys.mask);
-
-        // 残りのカスタムプロパティ
-        const excludedKeys = new Set<string>(Object.values(keys));
-        excludedKeys.add('tags');
-
-        const properties: Record<string, PropertyValue> = {};
-        for (const [key, value] of Object.entries(frontmatter)) {
-            if (excludedKeys.has(key)) continue;
-            if (value === null || value === undefined) continue;
-            if (key === 'position') continue; // Obsidian internal
-            const type = typeof value === 'number' ? 'number' as const
-                : typeof value === 'boolean' ? 'boolean' as const
-                : Array.isArray(value) ? 'array' as const
-                : 'string' as const;
-            properties[key] = {
-                value: Array.isArray(value) ? value.join(', ') : String(value),
-                type,
-            };
-        }
-
-        const tags = TagExtractor.fromFrontmatter(frontmatter?.['tags']);
-
-        return { color: color ?? undefined, linestyle: linestyle ?? undefined, mask: mask ?? undefined, tags: tags.length > 0 ? tags : undefined, properties };
-    }
-
-    private static extractStringValue(
-        obj: Record<string, any>,
-        key: string
-    ): string | undefined {
-        const raw = obj[key];
-        if (typeof raw === 'string' && raw.trim()) return raw.trim();
-        return undefined;
     }
 }
