@@ -120,7 +120,20 @@ export interface Task {
     endTime?: string;
     due?: string;
 
-    // True when startDate was inherited from the daily note filename.
+    /**
+     * True when startDate was inherited from the daily note filename at parse time
+     * (tv-inline only; tv-file never sets this). Set by `resolveDailyNoteDates()`
+     * via `TreeTaskExtractor`.
+     *
+     * Read by 3 layers:
+     * - `DisplayTaskConverter.toDisplayTask` — derives `startDateImplicit` /
+     *   `startDateExplicit` so display marks the value as non-explicit.
+     * - `TVInlineParser.format` — emits time-only notation (`@HH:mm`) instead of
+     *   the full `@YYYY-MM-DDTHH:mm` form, preserving round-trip with the original
+     *   markdown.
+     * - `TaskIndex.updateTask` / `MoveCommand` / `GenerationCommands` — clear to
+     *   `false` when an explicit startDate is set, moved, or recurrence-spawned.
+     */
     startDateInherited?: boolean;
 
     // Original parsed text and stable IDs.

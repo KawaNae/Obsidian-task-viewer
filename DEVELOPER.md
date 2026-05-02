@@ -107,7 +107,7 @@ src/
 ├── services/
 │   ├── core/                  # Core services (TaskIndex, TaskStore, WikiLinkResolver, TaskValidator, etc.)
 │   ├── data/                  # Data access facade (TaskReadService, TaskWriteService)
-│   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, TaskDateCategorizer, TaskIdGenerator, ImplicitCalendarDateResolver)
+│   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, TaskDateCategorizer, TaskIdGenerator)
 │   ├── parsing/               # Parser layer
 │   │   ├── tv-inline/         # Line-level parsers (TVInlineParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
 │   │   ├── tv-file/           # File-level builder (TVFileBuilder)
@@ -272,7 +272,7 @@ The plugin recognizes eight task types internally.
 Tasks are classified by **display behavior** — where they appear and what values are inferred.
 All times are relative to the configured `startHour` (default 5 → visual day 05:00–04:59).
 Display-layer implicit value resolution is centralised in `toDisplayTask()` (in `services/display/DisplayTaskConverter.ts`).
-Storage-layer daily-note date inheritance is in `ImplicitCalendarDateResolver.resolveDailyNoteDates()`.
+Parse-layer daily-note date inheritance is in `resolveDailyNoteDates()` (`src/services/parsing/resolveDailyNoteDates.ts`).
 
 #### 1. Timed tasks (S-Timed / E-Timed / SD-Timed / ED-Timed)
 

@@ -4,7 +4,7 @@ import { BuiltinPropertyExtractor } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TagExtractor } from '../utils/TagExtractor';
 import { TaskParser } from '../TaskParser';
-import { ImplicitCalendarDateResolver } from '../../display/ImplicitCalendarDateResolver';
+import { resolveDailyNoteDates } from '../resolveDailyNoteDates';
 
 export interface TaskExtractionContext {
     filePath: string;
@@ -81,7 +81,7 @@ export class TreeTaskExtractor {
 
         // デイリーノートの日付を継承
         if (ctx.dailyNoteDate) {
-            Object.assign(task, ImplicitCalendarDateResolver.resolveDailyNoteDates(task, ctx.dailyNoteDate));
+            Object.assign(task, resolveDailyNoteDates(task, ctx.dailyNoteDate));
         }
 
         // インデントを設定
