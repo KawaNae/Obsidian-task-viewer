@@ -168,6 +168,47 @@ export abstract class BaseDragStrategy implements DragStrategy {
     }
 
     /**
+     * Stage-1 (allday): timeline view の `.allday-section` に対し、view 端で clip
+     * した 1 segment の GhostPlan を返す。view 完全外なら []。
+     *
+     * grid 座標は dates[0] からの 0-based offset に axis col(+1) と grid 1-based
+     * 補正(+1)を加えた 2-based。`AllDaySectionRenderer.renderTaskCard` が
+     * `gridColumn = colStart + 1 / span N` で配置するのと同じ計算 (gridColOffset=1)。
+     */
+    protected planAllDaySegments(context: DragContext, rangeStart: string, rangeEnd: string): GhostPlan[] {
+        if (!this.dragEl) return [];
+        const alldaySection = context.container.querySelector('.allday-section') as HTMLElement | null;
+        if (!alldaySection) return [];
+
+        const start = rangeStart <= rangeEnd ? rangeStart : rangeEnd;
+        const end = rangeStart <= rangeEnd ? rangeEnd : rangeStart;
+        const viewStart = context.getViewStartDate();
+        const viewEnd = context.getViewEndDate();
+        if (!viewStart || !viewEnd) return [];
+        if (end < viewStart || start > viewEnd) return [];
+
+        const clippedStart = start < viewStart ? viewStart : start;
+        const clippedEnd = end > viewEnd ? viewEnd : end;
+        const colStartIdx = DateUtils.getDiffDays(viewStart, clippedStart);
+        const span = DateUtils.getDiffDays(clippedStart, clippedEnd) + 1;
+        if (span < 1) return [];
+
+        const trackIndex = Number.parseInt(this.dragEl.dataset.trackIndex || '0', 10);
+        const splitClasses: string[] = [];
+        if (start < viewStart) splitClasses.push('task-card--split-continues-before');
+        if (end > viewEnd) splitClasses.push('task-card--split-continues-after');
+
+        return [{
+            parent: alldaySection,
+            // axis col(+1) + grid 1-based(+1) = +2
+            gridColumn: `${colStartIdx + 2} / span ${span}`,
+            // row 1 が padding なので +2
+            gridRow: `${trackIndex + 2}`,
+            splitClasses,
+        }];
+    }
+
+    /**
      * Stage-2 (viewType 非依存): GhostPlan[] を DOM に反映。既存 ghost を再利用
      * する diff-update で remove→append による reflow を最小化する。
      */
