@@ -8,7 +8,8 @@ import {
     toLogicalHeightPx,
     toLogicalTopPx,
 } from '../../../../views/sharedLogic/TimelineCardPosition';
-import { getOriginalTaskId, toDisplayTask } from '../../../../services/display/DisplayTaskConverter';
+import { DisplayDateEdits, getOriginalTaskId, toDisplayTask } from '../../../../services/display/DisplayTaskConverter';
+import type { DragPlan } from '../../DragPlan';
 
 /**
  * Timeline (timed タスク) の Resize Gesture。
@@ -148,30 +149,39 @@ export class TimelineResizeGesture extends BaseDragStrategy {
         const normStart = ((roundedStart % 1440) + 1440) % 1440;
         const normEnd = ((roundedEnd % 1440) + 1440) % 1440;
 
+        // newStart/End は raw 表記 (currentDayDate + offset、normalize 0-1439)。
+        // 注: displayTask.effective* も実は raw 表記 (toDisplayTask は implicit
+        // 補完だけして visual 変換しない — visual range は getTaskDateRange が
+        // toVisualDate で別計算する)。つまりこのメソッドは raw 値しか持たない。
+        //
+        // commitPlan は edits を visual と前提するため、materializeRawDates の
+        // unshiftVisual が time<startHour で +1 day 適用する。raw を渡すと
+        // 二重 shift になるので、すべて toVisualDate で visual に正規化してから
+        // 渡し、round-trip で raw に戻す。
         const newStartDate = DateUtils.addDays(this.currentDayDate, startDayOffset);
         const newStartTime = DateUtils.minutesToTime(normStart);
         const newEndDate = DateUtils.addDays(this.currentDayDate, endDayOffset);
         const newEndTime = DateUtils.minutesToTime(normEnd);
 
-        const updates: Partial<Task> = {};
-        if (this.resizeDirection === 'top') {
-            updates.startDate = newStartDate;
-            updates.startTime = newStartTime;
-            updates.endDate = displayTask.effectiveEndDate;
-            updates.endTime = displayTask.effectiveEndTime;
-        } else {
-            updates.startDate = displayTask.effectiveStartDate;
-            updates.startTime = displayTask.effectiveStartTime;
-            updates.endDate = newEndDate;
-            updates.endTime = newEndTime;
-        }
+        const rawToVisual = (date: string | undefined, time: string | undefined): string | undefined =>
+            date ? DateUtils.toVisualDate(date, time, startHour) : undefined;
 
-        if (Object.keys(updates).length > 0) {
-            const taskIdToRestore = this.dragTask.id;
-            await context.writeService.updateTask(this.dragTask.id, updates);
-            this.restoreSelection(context, taskIdToRestore);
-        }
+        const edits: DisplayDateEdits = this.resizeDirection === 'top'
+            ? {
+                effectiveStartDate: DateUtils.toVisualDate(newStartDate, newStartTime, startHour),
+                effectiveStartTime: newStartTime,
+                effectiveEndDate: rawToVisual(displayTask.effectiveEndDate, displayTask.effectiveEndTime),
+                effectiveEndTime: displayTask.effectiveEndTime,
+            }
+            : {
+                effectiveStartDate: rawToVisual(displayTask.effectiveStartDate, displayTask.effectiveStartTime),
+                effectiveStartTime: displayTask.effectiveStartTime,
+                effectiveEndDate: DateUtils.toVisualDate(newEndDate, newEndTime, startHour),
+                effectiveEndTime: newEndTime,
+            };
 
+        const plan: DragPlan = { edits, baseTask: originalTask };
+        await this.commitPlan(context, plan, this.dragTask.id);
         this.cleanup();
     }
 

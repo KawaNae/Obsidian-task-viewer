@@ -311,15 +311,21 @@ export class TimelineMoveGesture extends BaseDragStrategy {
             return;
         }
 
-        // Visual edits 経由で commitPlan に流す。lastDragResult の (startDate,
-        // startTime, endDate, endTime) は visual 値なので、materializeRawDates が
-        // baseTask.endTime を見て raw endDate の inclusive/exclusive を決める。
-        // これで Timeline / Calendar / AllDay すべての commit が同じ経路に乗る。
+        // lastDragResult は **raw 表記** (clock day + clock time) で計算されている。
+        // 例: visual day "2026-04-21" の 02:00 (startHour=5) ドロップ
+        //   → totalStartMinutes=1560 → startDayOffset=1, normStart=120
+        //   → lastDragResult = { startDate: "2026-04-22", startTime: "02:00" }
+        // これをそのまま `effective*` edits として commitPlan に渡すと、
+        // materializeRawDates 内部の unshiftVisual が再度 +1 day shift し、
+        // raw startDate が 1 日先送りされる (00:00 跨ぎで 1 日ズレるバグ)。
+        // toVisualDate で raw → visual に正規化することで round-trip を成立させる。
+        const startHour = context.plugin.settings.startHour;
+        const { startDate, startTime, endDate, endTime } = this.lastDragResult;
         const edits: DisplayDateEdits = {
-            effectiveStartDate: this.lastDragResult.startDate,
-            effectiveStartTime: this.lastDragResult.startTime,
-            effectiveEndDate: this.lastDragResult.endDate,
-            effectiveEndTime: this.lastDragResult.endTime,
+            effectiveStartDate: DateUtils.toVisualDate(startDate, startTime, startHour),
+            effectiveStartTime: startTime,
+            effectiveEndDate: DateUtils.toVisualDate(endDate, endTime, startHour),
+            effectiveEndTime: endTime,
         };
         const plan: DragPlan = { edits, baseTask: this.baseTask };
         await this.commitPlan(context, plan, this.dragTask.id);
