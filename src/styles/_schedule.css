@@ -30,7 +30,7 @@
 }
 
 /* PC: allday stays fixed at top via sticky */
-.schedule-body-scroll > .allday-section {
+.schedule-view__body-scroll > .allday-section {
     position: sticky;
     top: 0;
     z-index: 30;
@@ -38,7 +38,7 @@
 
 /* Mobile: disable sticky so allday scrolls with timeline */
 @container (max-width: 768px) {
-    .schedule-body-scroll > .allday-section {
+    .schedule-view__body-scroll > .allday-section {
         position: relative;
         top: auto;
     }
@@ -49,17 +49,10 @@
     background-color: transparent;
 }
 
-.schedule-view__container {
+.schedule-view__fixed-rows,
+.schedule-view__scroll-content {
     margin: 0 auto;
     width: 100%;
-}
-
-.schedule-view__fixed-rows {
-    display: flex;
-    flex-direction: column;
-}
-
-.schedule-view__scroll-content {
     display: flex;
     flex-direction: column;
 }

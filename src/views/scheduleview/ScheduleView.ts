@@ -259,10 +259,10 @@ export class ScheduleView extends ItemView {
         this.menuHandler.setViewStartDate(this.currentVisualDate);
 
         const fixedHost = this.container.createDiv('schedule-view__fixed-host');
-        const fixedContainer = fixedHost.createDiv('schedule-view__container schedule-view__fixed-rows');
+        const fixedContainer = fixedHost.createDiv('schedule-view__fixed-rows');
 
-        const bodyScroll = this.container.createDiv('schedule-view__body-scroll schedule-body-scroll');
-        const bodyContainer = bodyScroll.createDiv('schedule-view__container schedule-view__scroll-content');
+        const bodyScroll = this.container.createDiv('schedule-view__body-scroll');
+        const bodyContainer = bodyScroll.createDiv('schedule-view__scroll-content');
 
         await this.renderDayTimeline(fixedContainer, bodyContainer, this.currentVisualDate, baseCategorized);
 
