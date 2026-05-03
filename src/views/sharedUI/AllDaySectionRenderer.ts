@@ -120,6 +120,15 @@ export class AllDaySectionRenderer {
         });
         this.menuHandler.addTaskContextMenu(el, task);
 
+        // Grid 座標を dataset で公開し、drag move/resize が style.gridColumn の
+        // regex parse を経ずに済むようにする。calendar card と命名対称。
+        // colStart は dates 配列内 0-based (calendar は week-row 内 1-based) で
+        // 意味は parent コンテキスト依存。drag 側は parent ごとに colOffset を
+        // 加算する設計に閉じ込めることで衝突しない。
+        el.dataset.colStart = String(entry.colStart);
+        el.dataset.span = String(entry.span);
+        el.dataset.trackIndex = String(entry.trackIndex);
+
         el.style.gridColumn = `${entry.colStart + gridColOffset} / span ${entry.span}`;
         el.style.gridRow = `${entry.trackIndex + gridRowOffset}`;
         el.style.zIndex = '10';
