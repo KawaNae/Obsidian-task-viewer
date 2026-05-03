@@ -276,4 +276,5 @@
 
 .task-detail-modal .task-card .task-card__shape {
     box-shadow: none;
+    filter: none;
 }

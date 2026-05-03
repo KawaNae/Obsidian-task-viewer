@@ -134,8 +134,9 @@
 
 /* Horizontal cut: cut 辺は左/右なので、base の `border-bottom:none` /
    `border-top:none` (vertical 用) を打ち消し、left/right を除去して
-   3 辺枠にする。 */
-.calendar-view .task-card.is-selected.task-card--split-continues-after .task-card__shape::after {
+   3 辺枠にする。selection と drag-preview を同じ規則で扱う。 */
+.calendar-view .task-card.is-selected.task-card--split-continues-after .task-card__shape::after,
+.calendar-view .task-card--drag-preview.task-card--split-continues-after .task-card__shape::after {
     border-top: 2px solid var(--file-accent, var(--tv-accent));
     border-bottom: 2px solid var(--file-accent, var(--tv-accent));
     border-right: none;
@@ -144,7 +145,8 @@
     border-bottom-left-radius: var(--task-card-border-radius);
 }
 
-.calendar-view .task-card.is-selected.task-card--split-continues-before .task-card__shape::after {
+.calendar-view .task-card.is-selected.task-card--split-continues-before .task-card__shape::after,
+.calendar-view .task-card--drag-preview.task-card--split-continues-before .task-card__shape::after {
     border-top: 2px solid var(--file-accent, var(--tv-accent));
     border-bottom: 2px solid var(--file-accent, var(--tv-accent));
     border-left: none;
@@ -153,7 +155,8 @@
     border-top-right-radius: var(--task-card-border-radius);
 }
 
-.calendar-view .task-card.is-selected.task-card--split-continues-before.task-card--split-continues-after .task-card__shape::after {
+.calendar-view .task-card.is-selected.task-card--split-continues-before.task-card--split-continues-after .task-card__shape::after,
+.calendar-view .task-card--drag-preview.task-card--split-continues-before.task-card--split-continues-after .task-card__shape::after {
     border-top: 2px solid var(--file-accent, var(--tv-accent));
     border-bottom: 2px solid var(--file-accent, var(--tv-accent));
     border-left: none;

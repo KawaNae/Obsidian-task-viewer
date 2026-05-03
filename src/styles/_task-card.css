@@ -43,7 +43,11 @@
     pointer-events: none;
     background-color: var(--tv-bg-card);
     border-radius: var(--task-card-border-radius);
-    box-shadow: 0 4px 10px 3px var(--tv-shadow-strong);
+    /* drop-shadow は box-shadow と違い post-mask で適用されるため、
+       split mask の sawtooth 輪郭を辿った影が出る。box-shadow だと
+       mask 透明領域では影も切り取られて split カード同士が密接した
+       際に陰影が消える。 */
+    filter: drop-shadow(0 4px 8px var(--tv-shadow-strong));
 }
 
 /* --- Accent border (linestyle bar) --- */
@@ -560,18 +564,6 @@
     z-index: 10;
 }
 
-.task-card--drag-preview::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border: 2px solid var(--file-accent, var(--tv-accent));
-    border-radius: var(--task-card-border-radius);
-    pointer-events: none;
-}
-
 .task-card--drag-preview .task-card__handle {
     display: none !important;
 }
@@ -587,9 +579,10 @@
 }
 
 /* Ghost-specific shadow goes on __shape so visual coincides with the
-   actual painted card (host carries no bg/shadow). */
+   actual painted card (host carries no bg/shadow). drop-shadow は base
+   の `__shape { filter }` を上書き。 */
 .task-card--drag-ghost .task-card__shape {
-    box-shadow: 0 4px 12px var(--tv-ghost-shadow);
+    filter: drop-shadow(0 4px 12px var(--tv-ghost-shadow));
 }
 
 .task-card--drag-ghost .task-card__handle {
@@ -609,8 +602,11 @@
     cursor: grabbing;
 }
 
-/* Selection Border using __shape::after. */
-.task-card.is-selected .task-card__shape::after {
+/* Selection / drag-preview 枠は同形状で、どちらも __shape::after に置く。
+   __shape の mask が当たっていれば sawtooth に追従するため、cut 辺の
+   border は下の override で除去する。 */
+.task-card.is-selected .task-card__shape::after,
+.task-card--drag-preview .task-card__shape::after {
     content: '';
     position: absolute;
     inset: 0;
@@ -623,13 +619,15 @@
    形状に切り刻まれて散在するため、整然とした 3 辺枠にする。
    base は vertical cut (timeline grid) を担当、horizontal cut は view
    別ファイルで上書き。 */
-.task-card.is-selected.task-card--split-continues-after .task-card__shape::after {
+.task-card.is-selected.task-card--split-continues-after .task-card__shape::after,
+.task-card--drag-preview.task-card--split-continues-after .task-card__shape::after {
     border-bottom: none;
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
 }
 
-.task-card.is-selected.task-card--split-continues-before .task-card__shape::after {
+.task-card.is-selected.task-card--split-continues-before .task-card__shape::after,
+.task-card--drag-preview.task-card--split-continues-before .task-card__shape::after {
     border-top: none;
     border-top-left-radius: 0;
     border-top-right-radius: 0;
