@@ -81,7 +81,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
      * ビュータイプを判定する（要素の親コンテナから）
      */
     protected determineViewType(el: HTMLElement): 'timeline' | 'allday' | 'calendar' {
-        if (el.closest('.calendar-week-row')) {
+        if (el.closest('.cal-week-row')) {
             return 'calendar';
         }
         if (el.closest('.timeline-scroll-area__day-column')) {
@@ -207,7 +207,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
     }
 
     protected getCalendarWeekRows(context: DragContext): HTMLElement[] {
-        return Array.from(context.container.querySelectorAll('.calendar-week-row'))
+        return Array.from(context.container.querySelectorAll('.cal-week-row'))
             .filter((el): el is HTMLElement => el instanceof HTMLElement);
     }
 
@@ -242,7 +242,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
         if (weekRect.width > 0) {
             let dayAreaWidth = weekRect.width;
             if (this.getCalendarColumnOffset(weekRow) > 0) {
-                const weekNumberEl = weekRow.querySelector('.calendar-week-number');
+                const weekNumberEl = weekRow.querySelector('.cal-week-number');
                 if (weekNumberEl instanceof HTMLElement) {
                     const weekNumberRect = weekNumberEl.getBoundingClientRect();
                     dayAreaWidth = Math.max(0, weekRect.right - weekNumberRect.right);
@@ -296,7 +296,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
             elBelow = doc.elementFromPoint(clientX, clientY);
         }
 
-        let weekRow = elBelow?.closest('.calendar-week-row') as HTMLElement | null;
+        let weekRow = elBelow?.closest('.cal-week-row') as HTMLElement | null;
         if (!weekRow) {
             weekRow = this.findNearestCalendarWeekRow(clientY, context);
         }
@@ -347,7 +347,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
             let dayAreaWidth = weekRect.width;
 
             if (this.getCalendarColumnOffset(weekRow) > 0) {
-                const weekNumberEl = weekRow.querySelector('.calendar-week-number');
+                const weekNumberEl = weekRow.querySelector('.cal-week-number');
                 if (weekNumberEl instanceof HTMLElement) {
                     const weekNumberRect = weekNumberEl.getBoundingClientRect();
                     dayAreaLeft = weekNumberRect.right;

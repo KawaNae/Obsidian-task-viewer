@@ -248,7 +248,7 @@ export class ResizeStrategy extends BaseDragStrategy {
     // ========== Calendar Resize ==========
 
     private initCalendarResize(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
-        const weekRow = (el.closest('.calendar-week-row') as HTMLElement) || context.container;
+        const weekRow = (el.closest('.cal-week-row') as HTMLElement) || context.container;
         this.container = weekRow;
 
         const headerCell = weekRow.querySelector('.calendar-date-header') as HTMLElement;

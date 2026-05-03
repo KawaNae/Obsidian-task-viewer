@@ -196,11 +196,11 @@ export class MiniCalendarView extends ItemView {
         const toolbarHost = this.container.createDiv('mini-calendar-view__toolbar-host');
         this.toolbar.mount(toolbarHost);
 
-        const grid = this.container.createDiv('mini-calendar-grid');
+        const grid = this.container.createDiv('cal-grid cal-grid--mini');
         this.renderWeekdayHeader(grid);
 
-        const body = grid.createDiv('mini-calendar-body');
-        const track = body.createDiv('mini-calendar-body__track');
+        const body = grid.createDiv('cal-grid__body cal-grid__body--mini');
+        const track = body.createDiv('cal-grid__body-track');
         body.addEventListener('wheel', (e: WheelEvent) => {
             if (e.deltaY === 0) {
                 return;
@@ -219,7 +219,7 @@ export class MiniCalendarView extends ItemView {
         const cursor = new Date(startDate);
         for (let weekIndex = 0; weekIndex < 6; weekIndex++) {
             const weekStartDate = new Date(cursor);
-            const weekEl = track.createDiv('mini-calendar-week');
+            const weekEl = track.createDiv('cal-week-row cal-week-row--mini');
             if (showWeekNumbers) {
                 weekEl.addClass('has-week-numbers');
                 this.renderWeekNumberCell(weekEl, weekStartDate);
@@ -241,14 +241,14 @@ export class MiniCalendarView extends ItemView {
     }
 
     private renderWeekdayHeader(grid: HTMLElement): void {
-        const header = grid.createDiv('mini-calendar-weekday-header');
+        const header = grid.createDiv('cal-weekday-header cal-weekday-header--mini');
         if (this.shouldShowWeekNumbers()) {
             header.addClass('has-week-numbers');
-            header.createDiv({ cls: 'mini-calendar-weekday-cell', text: t('calendar.w') });
+            header.createDiv({ cls: 'cal-weekday-cell cal-weekday-cell--mini', text: t('calendar.w') });
         }
         const weekdays = this.getWeekdayNames();
         weekdays.forEach((label) => {
-            header.createDiv({ cls: 'mini-calendar-weekday-cell', text: label });
+            header.createDiv({ cls: 'cal-weekday-cell cal-weekday-cell--mini', text: label });
         });
     }
 
@@ -369,7 +369,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     private renderWeekNumberCell(weekEl: HTMLElement, weekStartDate: Date): void {
-        const weekNumberEl = weekEl.createDiv('mini-calendar-week-number');
+        const weekNumberEl = weekEl.createDiv('cal-week-number cal-week-number--mini');
         const weekNumber = DateUtils.getISOWeekNumber(weekStartDate);
 
         const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.calendarWeekStartDay);
@@ -477,7 +477,7 @@ export class MiniCalendarView extends ItemView {
             return;
         }
 
-        const weekRows = Array.from(track.querySelectorAll('.mini-calendar-week'))
+        const weekRows = Array.from(track.querySelectorAll('.cal-week-row--mini'))
             .filter((el): el is HTMLElement => el instanceof HTMLElement);
         if (weekRows.length !== 6) {
             void this.render();
@@ -506,7 +506,7 @@ export class MiniCalendarView extends ItemView {
             track.style.transition = '';
             track.style.transform = '';
             track.style.willChange = '';
-            track.querySelectorAll('.mini-calendar-week').forEach((row) => {
+            track.querySelectorAll('.cal-week-row--mini').forEach((row) => {
                 if (row instanceof HTMLElement) {
                     row.style.height = '';
                     row.style.flex = '';
@@ -528,7 +528,7 @@ export class MiniCalendarView extends ItemView {
             track.style.willChange = 'transform';
             track.style.transform = `translateY(-${rowHeight}px)`;
             track.addEventListener('transitionend', () => {
-                const firstWeek = track.querySelector('.mini-calendar-week');
+                const firstWeek = track.querySelector('.cal-week-row--mini');
                 if (firstWeek instanceof HTMLElement) {
                     firstWeek.remove();
                 }
@@ -546,7 +546,7 @@ export class MiniCalendarView extends ItemView {
         track.style.transition = 'transform 150ms ease-out';
         track.style.transform = 'translateY(0)';
         track.addEventListener('transitionend', () => {
-            const currentWeeks = track.querySelectorAll('.mini-calendar-week');
+            const currentWeeks = track.querySelectorAll('.cal-week-row--mini');
             const lastWeek = currentWeeks.item(currentWeeks.length - 1);
             if (lastWeek instanceof HTMLElement) {
                 lastWeek.remove();
@@ -562,7 +562,7 @@ export class MiniCalendarView extends ItemView {
         rowHeight: number,
     ): HTMLElement {
         const weekEl = document.createElement('div');
-        weekEl.addClass('mini-calendar-week');
+        weekEl.addClass('cal-week-row cal-week-row--mini');
         if (this.shouldShowWeekNumbers()) {
             weekEl.addClass('has-week-numbers');
         }

@@ -390,7 +390,7 @@ export class CalendarView extends ItemView {
 
     private render(): void {
         if (!this.scrollRestorePending) {
-            const oldMain = this.container?.querySelector('.calendar-grid__body') as HTMLElement | null;
+            const oldMain = this.container?.querySelector('.cal-grid__body') as HTMLElement | null;
             if (oldMain) {
                 this.savedScrollTop = oldMain.scrollTop;
             }
@@ -429,7 +429,7 @@ export class CalendarView extends ItemView {
 
         this.renderSidebarContent(sidebarHeader, sidebarBody);
 
-        const calendarHost = main.createDiv('calendar-grid');
+        const calendarHost = main.createDiv('cal-grid');
 
         const { startDate, endDate } = this.getCalendarDateRange();
         const rangeStartStr = DateUtils.getLocalDateString(startDate);
@@ -437,14 +437,14 @@ export class CalendarView extends ItemView {
         this.menuHandler.setViewStartDate(rangeStartStr);
 
         const allVisibleTasks = this.getVisibleTasksInRange(rangeStartStr, rangeEndStr);
-        const body = calendarHost.createDiv('calendar-grid__body');
+        const body = calendarHost.createDiv('cal-grid__body');
         this.renderWeekdayHeader(body);
         const referenceMonth = this.getReferenceMonth();
         const showWeekNumbers = this.shouldShowWeekNumbers();
 
         let cursor = new Date(startDate);
         while (cursor <= endDate) {
-            const weekRow = body.createDiv('calendar-week-row');
+            const weekRow = body.createDiv('cal-week-row');
             if (showWeekNumbers) {
                 weekRow.addClass('has-week-numbers');
             }
@@ -469,7 +469,7 @@ export class CalendarView extends ItemView {
             // Add column separators (skip the outer-right edge).
             const separatorCount = showWeekNumbers ? 7 : 6;
             for (let i = 1; i <= separatorCount; i++) {
-                const separator = weekRow.createDiv('calendar-col-separator');
+                const separator = weekRow.createDiv('cal-col-separator');
                 if (showWeekNumbers) {
                     if (i === 1) {
                         separator.style.left = 'var(--calendar-wk-col-width, 32px)';
@@ -502,7 +502,7 @@ export class CalendarView extends ItemView {
             const scrollTarget = this.savedScrollTop;
             requestAnimationFrame(() => {
                 this.scrollRestorePending = false;
-                const newMain = this.container.querySelector('.calendar-grid__body') as HTMLElement | null;
+                const newMain = this.container.querySelector('.cal-grid__body') as HTMLElement | null;
                 if (newMain) {
                     newMain.scrollTop = scrollTarget;
                 }
@@ -645,22 +645,22 @@ export class CalendarView extends ItemView {
     }
 
     private renderWeekdayHeader(container: HTMLElement): void {
-        const header = container.createDiv('calendar-weekday-header');
+        const header = container.createDiv('cal-weekday-header');
         const showWeekNumbers = this.shouldShowWeekNumbers();
         if (showWeekNumbers) {
             header.addClass('has-week-numbers');
-            header.createEl('div', { cls: 'calendar-weekday-cell', text: t('calendar.wk') });
+            header.createEl('div', { cls: 'cal-weekday-cell', text: t('calendar.wk') });
         }
 
         const weekdays = this.getWeekdayNames();
         weekdays.forEach((label) => {
-            header.createEl('div', { cls: 'calendar-weekday-cell', text: label });
+            header.createEl('div', { cls: 'cal-weekday-cell', text: label });
         });
 
         // Add column separators matching week rows (align vertical grid lines exactly)
         const separatorCount = showWeekNumbers ? 7 : 6;
         for (let i = 1; i <= separatorCount; i++) {
-            const separator = header.createDiv('calendar-col-separator');
+            const separator = header.createDiv('cal-col-separator');
             if (showWeekNumbers) {
                 if (i === 1) {
                     separator.style.left = 'var(--calendar-wk-col-width, 32px)';
@@ -848,7 +848,7 @@ export class CalendarView extends ItemView {
     }
 
     private renderWeekNumberCell(weekRow: HTMLElement, weekStartDate: Date): void {
-        const weekNumberEl = weekRow.createDiv('calendar-week-number');
+        const weekNumberEl = weekRow.createDiv('cal-week-number');
         const weekNumber = DateUtils.getISOWeekNumber(weekStartDate);
 
         const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.calendarWeekStartDay);

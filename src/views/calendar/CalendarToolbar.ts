@@ -101,7 +101,7 @@ export class CalendarToolbar extends ViewToolbarBase {
                 filterState: deps.filterMenu.getFilterState(),
                 pinnedLists: deps.getPinnedLists(),
             }),
-            getExportContainer: () => deps.container.querySelector<HTMLElement>('.calendar-grid'),
+            getExportContainer: () => deps.container.querySelector<HTMLElement>('.cal-grid'),
             getReadService: () => deps.readService,
             getExportStrategy: () => new CalendarExportStrategy(),
             onApplyTemplate: (template) => {

@@ -140,7 +140,7 @@ export class HandleManager {
             existingHandles.forEach(h => h.remove());
 
 
-            const isCalendar = !!taskEl.closest('.calendar-week-row');
+            const isCalendar = !!taskEl.closest('.cal-week-row');
             const isAllDay = taskEl.classList.contains('task-card--allday');
 
             // Split checks (continuation flags)
