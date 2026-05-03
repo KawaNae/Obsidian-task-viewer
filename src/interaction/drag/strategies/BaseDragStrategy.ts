@@ -91,14 +91,39 @@ export abstract class BaseDragStrategy implements DragStrategy {
     };
 
     /**
+     * Install the kill-listener synchronously. Called from
+     * `DragHandler.onPointerUp` BEFORE awaiting `onUp()` — registering inside
+     * `cleanup()` is too late because the synthetic click fires during the
+     * await yield, and the listener would then consume the user's NEXT real
+     * click instead (the bug that made selection-deselect take two tries).
+     *
+     * For a no-op drag (handle press-release without movement) the browser
+     * suppresses the synthetic click entirely because `onPointerDown` calls
+     * `e.preventDefault()` which blocks compat mouse events. In that case
+     * `cleanup()` disarms this listener so it doesn't outlive the gesture.
+     */
+    public armSyntheticClickKill(): void {
+        document.addEventListener('click', this.killNextClick, { once: true, capture: true });
+    }
+
+    private disarmSyntheticClickKill(): void {
+        document.removeEventListener('click', this.killNextClick, { capture: true });
+    }
+
+    /**
      * ドラッグ状態をクリーンアップする
      */
     protected cleanup(): void {
         this.clearHighlight();
         document.body.style.cursor = '';
 
-        if (this.hasMoved) {
-            document.addEventListener('click', this.killNextClick, { once: true, capture: true });
+        // hasMoved=true: synthetic click fires and the once-listener consumes
+        // itself; this disarm is a no-op.
+        // hasMoved=false: synthetic click was suppressed (see
+        // armSyntheticClickKill JSDoc) — disarm so we don't trap the next
+        // real click.
+        if (!this.hasMoved) {
+            this.disarmSyntheticClickKill();
         }
 
         if (this.dragEl) {

@@ -31,4 +31,13 @@ export interface DragStrategy {
 
     // Called on pointer up
     onUp(e: PointerEvent, context: DragContext): Promise<void>;
+
+    /**
+     * Synchronously install the kill-listener for the synthetic click that
+     * the browser dispatches right after pointerup. Must be invoked before
+     * `onUp()` is awaited — otherwise the synthetic click slips through
+     * during the await yield and the listener ends up consuming the next
+     * real click instead.
+     */
+    armSyntheticClickKill(): void;
 }

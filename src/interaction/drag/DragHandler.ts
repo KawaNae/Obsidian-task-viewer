@@ -177,6 +177,14 @@ export class DragHandler implements DragContext {
         if (this.currentStrategy) {
             e.preventDefault();
             const taskId = this.currentDragTaskId;
+
+            // The browser dispatches a synthetic click right after pointerup,
+            // BEFORE the first await below yields control back. Arm the
+            // kill-listener synchronously so it's in place when that synthetic
+            // click fires; otherwise it slips through and the listener instead
+            // consumes the user's next real click.
+            this.currentStrategy.armSyntheticClickKill();
+
             await this.currentStrategy.onUp(e, this);
 
             // ドラッグで触り得るのは start/end の date/time のみ。
