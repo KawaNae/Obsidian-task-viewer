@@ -225,7 +225,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
     }
 
     protected getCalendarDayHeaders(weekRow: HTMLElement): HTMLElement[] {
-        return Array.from(weekRow.querySelectorAll('.calendar-date-header'))
+        return Array.from(weekRow.querySelectorAll('.cal-day-cell'))
             .filter((el): el is HTMLElement => el instanceof HTMLElement);
     }
 

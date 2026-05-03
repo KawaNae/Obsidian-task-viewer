@@ -133,15 +133,15 @@
     border-bottom: none;
 }
 
-.mini-calendar-cell {
+.cal-day-cell--mini {
     min-width: 0;
 }
 
-.mini-calendar-cell:last-child {
+.cal-day-cell--mini:last-child {
     border-right: none;
 }
 
-.mini-calendar-cell__link {
+.cal-day-cell--mini .cal-day-cell__date-link {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -156,16 +156,16 @@
     padding: 4px 2px;
 }
 
-.mini-calendar-cell__link:hover {
+.cal-day-cell--mini .cal-day-cell__date-link:hover {
     background: var(--tv-bg-hover);
 }
 
-.mini-calendar-cell__date {
+.cal-day-cell--mini .cal-day-cell__date-label {
     font-size: 0.82em;
     line-height: 1;
 }
 
-.mini-calendar-cell__indicators {
+.cal-day-cell--mini .cal-day-cell__indicators {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -173,28 +173,28 @@
     min-height: 6px;
 }
 
-.mini-calendar-cell.is-outside-month .mini-calendar-cell__link {
+.cal-day-cell--mini.is-outside-month .cal-day-cell--mini .cal-day-cell__date-link {
     opacity: 0.56;
 }
 
-.mini-calendar-cell.is-today .mini-calendar-cell__link {
+.cal-day-cell--mini.is-today .cal-day-cell--mini .cal-day-cell__date-link {
     background: rgba(var(--tv-accent-rgb), 0.16);
     color: var(--tv-text-accent);
 }
 
-.mini-calendar-cell__indicator {
+.cal-day-cell--mini .cal-day-cell__indicator {
     width: 6px;
     height: 6px;
     border-radius: 999px;
     box-sizing: border-box;
 }
 
-.mini-calendar-cell__indicator--incomplete {
+.cal-day-cell--mini .cal-day-cell__indicator--incomplete {
     border: 1.5px solid var(--tv-text);
     background: transparent;
 }
 
-.mini-calendar-cell__indicator--complete {
+.cal-day-cell--mini .cal-day-cell__indicator--complete {
     border: 1px solid var(--tv-text);
     background: var(--tv-text);
 }

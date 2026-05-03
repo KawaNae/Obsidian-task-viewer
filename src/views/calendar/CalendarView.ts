@@ -675,7 +675,7 @@ export class CalendarView extends ItemView {
     }
 
     private renderDateHeader(weekRow: HTMLElement, date: Date, colIndex: number, referenceMonth: { year: number; month: number }): void {
-        const header = weekRow.createDiv('calendar-date-header');
+        const header = weekRow.createDiv('cal-day-cell');
         const dateKey = DateUtils.getLocalDateString(date);
         const todayKey = DateUtils.getLocalDateString(new Date());
         const isFirstOfMonth = date.getDate() === 1;

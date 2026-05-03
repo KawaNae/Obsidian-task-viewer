@@ -260,7 +260,7 @@ export class MiniCalendarView extends ItemView {
         referenceMonth: { year: number; month: number },
         indicatorState: IndicatorState = { hasIncomplete: false, hasComplete: false },
     ): void {
-        const cell = weekEl.createDiv('mini-calendar-cell');
+        const cell = weekEl.createDiv('cal-day-cell cal-day-cell--mini');
         cell.style.gridColumn = `${this.getGridColumnForDay(colIndex)}`;
         cell.dataset.date = dateKey;
 
@@ -273,7 +273,7 @@ export class MiniCalendarView extends ItemView {
 
         const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(this.app, date);
         const link = cell.createEl('a', {
-            cls: 'internal-link mini-calendar-cell__link',
+            cls: 'internal-link cal-day-cell__date-link',
         });
         link.dataset.href = linkTarget;
         link.setAttribute('href', linkTarget);
@@ -282,19 +282,19 @@ export class MiniCalendarView extends ItemView {
         });
 
         link.createSpan({
-            cls: 'mini-calendar-cell__date',
+            cls: 'cal-day-cell__date-label',
             text: String(date.getDate()),
         });
 
-        const indicatorRow = link.createDiv({ cls: 'mini-calendar-cell__indicators' });
+        const indicatorRow = link.createDiv({ cls: 'cal-day-cell__indicators' });
         if (indicatorState.hasIncomplete) {
             indicatorRow.createSpan({
-                cls: 'mini-calendar-cell__indicator mini-calendar-cell__indicator--incomplete'
+                cls: 'cal-day-cell__indicator cal-day-cell__indicator--incomplete'
             });
         }
         if (indicatorState.hasComplete) {
             indicatorRow.createSpan({
-                cls: 'mini-calendar-cell__indicator mini-calendar-cell__indicator--complete'
+                cls: 'cal-day-cell__indicator cal-day-cell__indicator--complete'
             });
         }
 

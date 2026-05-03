@@ -251,7 +251,7 @@ export class ResizeStrategy extends BaseDragStrategy {
         const weekRow = (el.closest('.cal-week-row') as HTMLElement) || context.container;
         this.container = weekRow;
 
-        const headerCell = weekRow.querySelector('.calendar-date-header') as HTMLElement;
+        const headerCell = weekRow.querySelector('.cal-day-cell') as HTMLElement;
         this.refHeaderCell = headerCell;
         this.colWidth = this.getCalendarDayColumnWidth(weekRow);
 

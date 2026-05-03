@@ -202,7 +202,7 @@
     z-index: 5;
 }
 
-.calendar-date-header {
+.cal-day-cell {
     display: flex;
     justify-content: flex-end;
     align-items: flex-start;
@@ -214,18 +214,18 @@
     background: var(--tv-bg-primary);
 }
 
-.calendar-date-header.is-outside-month {
+.cal-day-cell.is-outside-month {
     background: var(--tv-bg-secondary);
     opacity: 0.72;
 }
 
-.calendar-date-header.is-today {
+.cal-day-cell.is-today {
     position: relative;
     z-index: var(--z-task-card);
     color: var(--tv-text-on-accent);
 }
 
-.calendar-date-header.is-today::after {
+.cal-day-cell.is-today::after {
     content: '';
     position: absolute;
     top: 0;
@@ -238,12 +238,12 @@
     pointer-events: none;
 }
 
-.calendar-date-header .internal-link {
+.cal-day-cell .internal-link {
     color: inherit;
     text-decoration: none;
 }
 
-.calendar-date-header .internal-link:hover {
+.cal-day-cell .internal-link:hover {
     text-decoration: underline;
 }
 
