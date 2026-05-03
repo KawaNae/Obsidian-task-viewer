@@ -47,7 +47,7 @@ export class TaskDetailModal extends Modal {
         const dt = toDisplayTask(this.task, this.settings.startHour, (id) => this.readService.getTask(id));
         await this.taskRenderer.render(card, dt, this.settings, {
             cardInstanceId: `modal::detail::${dt.id}`,
-            forceExpand: true,
+            context: 'detail-modal',
         });
     }
 

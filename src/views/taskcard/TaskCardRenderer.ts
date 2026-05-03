@@ -70,12 +70,14 @@ export class TaskCardRenderer extends Component {
         container: HTMLElement,
         task: DisplayTask,
         settings: TaskViewerSettings,
-        options: { cardInstanceId: string; topRight?: 'time' | 'due' | 'none'; compact?: boolean; forceExpand?: boolean }
+        options: { cardInstanceId: string; context?: 'inline' | 'detail-modal'; topRight?: 'time' | 'due' | 'none'; compact?: boolean }
     ): Promise<void> {
         const cardInstanceId = options.cardInstanceId;
         const topRight = options.topRight ?? 'time';
         const compact = options.compact ?? false;
-        const forceExpand = options.forceExpand ?? false;
+        const isDetailModal = options.context === 'detail-modal';
+        const forceExpand = isDetailModal;
+        const enableLinks = isDetailModal || settings.enableCardFileLink;
 
         // Tag the card with its instance id so partial-update paths
         // (e.g. TimelineView.tryPartialUpdate) can reuse the same key.
@@ -122,7 +124,7 @@ export class TaskCardRenderer extends Component {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
         }
 
-        this.bindInternalLinks(contentContainer, task.file, settings.enableCardFileLink);
+        this.bindInternalLinks(contentContainer, task.file, enableLinks);
         this.bindParentCheckbox(contentContainer, task.originalTaskId ?? task.id, settings, task.isReadOnly);
     }
 
