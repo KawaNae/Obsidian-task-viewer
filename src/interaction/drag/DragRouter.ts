@@ -1,7 +1,9 @@
 import type { DragContext, DragStrategy } from './DragStrategy';
 import type { DragSession } from './DragSession';
-import { MoveStrategy } from './strategies/MoveStrategy';
-import { ResizeStrategy } from './strategies/ResizeStrategy';
+import { TimelineMoveGesture } from './strategies/timeline/TimelineMoveGesture';
+import { TimelineResizeGesture } from './strategies/timeline/TimelineResizeGesture';
+import { GridMoveGesture } from './strategies/grid/GridMoveGesture';
+import { GridResizeGesture } from './strategies/grid/GridResizeGesture';
 
 /**
  * pointerdown を受けて、その対象 (handle / card / 背景) を解析し、適切な
@@ -84,22 +86,31 @@ export class DragRouter {
             return;
         }
 
-        const strategy = this.pickStrategy(target);
-        this.session.start(strategy, e, task, taskEl);
+        const gesture = this.pickGesture(target, taskEl);
+        this.session.start(gesture, e, task, taskEl);
         e.preventDefault();
     }
 
     /**
-     * クリックされた要素から resize / move を判別する。pickStrategy は target
-     * のクラス情報のみを見るため、Surface（Calendar/AllDay/Timeline）に依存
-     * しない。Surface 別の振る舞いは Strategy 内部で view を読んで分岐する。
+     * `(mode, surface)` の二軸で 4 種類の Gesture から選択。
+     *   - mode    : target に resize handle modifier があるかどうか (move / resize)
+     *   - surface : taskEl が timeline 列に属するかどうか (timeline / grid)
+     *
+     * Calendar と AllDay は同じ Grid surface 上で動くので 1 つの Gesture に集約
+     * (Surface 注入で方言を吸収)。Timeline は時間軸という根本的に別の座標系を
+     * 持つので Gesture 自体を分けている。
      */
-    private pickStrategy(target: HTMLElement): DragStrategy {
+    private pickGesture(target: HTMLElement, taskEl: HTMLElement): DragStrategy {
         const isResize =
             target.closest('.task-card__handle--resize-top') ||
             target.closest('.task-card__handle--resize-bottom') ||
             target.closest('.task-card__handle--resize-left') ||
             target.closest('.task-card__handle--resize-right');
-        return isResize ? new ResizeStrategy() : new MoveStrategy();
+        const isTimeline = !!taskEl.closest('.timeline-scroll-area__day-column');
+
+        if (isResize) {
+            return isTimeline ? new TimelineResizeGesture() : new GridResizeGesture();
+        }
+        return isTimeline ? new TimelineMoveGesture() : new GridMoveGesture();
     }
 }

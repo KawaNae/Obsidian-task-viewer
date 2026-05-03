@@ -71,4 +71,15 @@ export interface GridSurface {
 
     /** 1 列の幅 (px)。move drag の x 軸スケーリングなどに使う代表値。 */
     getColWidth(): number;
+
+    /**
+     * Cross-view drop の検出 (optional)。Surface が「自分のサーフェスから別の
+     * サーフェスへ抜けるドロップ」をサポートするときに実装する。AllDay は
+     * Timeline へのドロップを許す (timed task 化) ため AllDayGridSurface のみ
+     * 実装する。Calendar は内側で完結するので未実装。
+     *
+     * 戻り値: ドロップ先の DOM 要素 (例: .timeline-scroll-area__day-column)、
+     *         サーフェス内ならば null。
+     */
+    canCrossToTimeline?(clientX: number, clientY: number, doc: Document): HTMLElement | null;
 }

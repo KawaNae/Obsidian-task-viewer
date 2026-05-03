@@ -91,6 +91,15 @@ export class AllDayGridSurface implements GridSurface {
         return headerCell?.getBoundingClientRect().width || 100;
     }
 
+    /**
+     * AllDay → Timeline cross-view drop の検出。pointer 直下に
+     * `.timeline-scroll-area__day-column` があれば、その day-column を返す。
+     */
+    canCrossToTimeline(clientX: number, clientY: number, doc: Document): HTMLElement | null {
+        const el = doc.elementFromPoint(clientX, clientY);
+        return (el?.closest('.timeline-scroll-area__day-column') as HTMLElement | null) ?? null;
+    }
+
     private getSection(): HTMLElement | null {
         return this.container.querySelector('.allday-section') as HTMLElement | null;
     }
