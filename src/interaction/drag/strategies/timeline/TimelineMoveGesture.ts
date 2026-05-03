@@ -2,7 +2,9 @@ import { BaseDragStrategy } from '../BaseDragStrategy';
 import type { DragContext } from '../../DragStrategy';
 import type { Task } from '../../../../types';
 import { DateUtils } from '../../../../utils/DateUtils';
-import { GhostManager, GhostSegment } from '../../ghost/GhostManager';
+import { GhostRenderer } from '../../ghost/GhostRenderer';
+import type { GhostPlan } from '../../ghost/GhostPlan';
+import { toDisplayHeightPx, toDisplayTopPx } from '../../../../views/sharedLogic/TimelineCardPosition';
 import { DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
 import type { DragPlan } from '../../DragPlan';
 
@@ -10,14 +12,15 @@ import type { DragPlan } from '../../DragPlan';
  * Timeline (timed タスク, 縦軸) の Move Gesture。
  *
  * - 分単位の縦座標 (zoomLevel × minutes) で扱う
- * - GhostManager で複数日跨ぎの cascade ghost を同時表示
+ * - 複数日跨ぎの cascade ghost を {@link GhostRenderer} 経由で同時表示
  * - 上下の autoScroll 機能あり
  * - Calendar/AllDay とは grid 座標系・preview 戦略が根本的に異なるため Gesture を分離
  */
 export class TimelineMoveGesture extends BaseDragStrategy {
     name = 'TimelineMove';
 
-    private ghostManager: GhostManager | null = null;
+    private ghostRenderer: GhostRenderer | null = null;
+    private ghostContainer: HTMLElement | null = null;
     private dragTimeOffset: number = 0;
     private anchorType: 'start' | 'end' = 'start';
     private currentDayDate: string | null = null;
@@ -43,9 +46,10 @@ export class TimelineMoveGesture extends BaseDragStrategy {
         this.initialY = e.clientY;
 
         this.scrollContainer = context.container.querySelector('.timeline-grid') as HTMLElement;
-        const ghostContainer = this.scrollContainer?.querySelector('.timeline-scroll-area__grid') as HTMLElement
+        this.ghostContainer = this.scrollContainer?.querySelector('.timeline-scroll-area__grid') as HTMLElement
             || this.scrollContainer || context.container;
-        this.ghostManager = new GhostManager(ghostContainer);
+        const doc = context.container.ownerDocument || document;
+        this.ghostRenderer = new GhostRenderer(el, doc);
 
         const zoomLevel = context.getZoomLevel();
         const startMinutes = Number.parseFloat(el.style.getPropertyValue('--start-minutes') || '0');
@@ -148,7 +152,7 @@ export class TimelineMoveGesture extends BaseDragStrategy {
     }
 
     private processMove(clientX: number, clientY: number): void {
-        if (!this.dragTask || !this.dragEl || !this.currentContext || !this.ghostManager) return;
+        if (!this.dragTask || !this.dragEl || !this.currentContext || !this.ghostRenderer || !this.ghostContainer) return;
         const context = this.currentContext;
 
         const zoomLevel = context.getZoomLevel();
@@ -204,34 +208,58 @@ export class TimelineMoveGesture extends BaseDragStrategy {
             endTime: DateUtils.minutesToTime(normEnd),
         };
 
-        // ghost segments: -1 / 0 / +1 day window で task と重なる部分を出す
-        const segments: GhostSegment[] = [];
-        const checkWindow = (offsetDays: number) => {
+        // -1 / 0 / +1 day window で task と重なる部分を AbsoluteGhostPlan に変換。
+        // 各 segment は対応する day-column の DOM 位置 (offsetLeft + offsetTop) を
+        // 起点に絶対配置する。複数 segments がある場合は隣接ペアに sawtooth split
+        // class を付ける (cascade 表示)。
+        const candidates: { date: string; top: number; height: number }[] = [];
+        for (const offsetDays of [-1, 0, 1]) {
             const windowStart = startHourMinutes + (offsetDays * 1440);
             const windowEnd = windowStart + 1440;
             const overlapStart = Math.max(totalStartMinutes, windowStart);
             const overlapEnd = Math.min(totalEndMinutes, windowEnd);
             if (overlapStart < overlapEnd) {
-                segments.push({
+                candidates.push({
                     date: DateUtils.addDays(this.currentDayDate!, offsetDays),
                     top: (overlapStart - windowStart) * zoomLevel,
                     height: (overlapEnd - overlapStart) * zoomLevel,
                 });
             }
-        };
-        checkWindow(-1);
-        checkWindow(0);
-        checkWindow(1);
+        }
 
-        this.ghostManager.update(segments, this.dragEl);
+        const plans: GhostPlan[] = [];
+        candidates.forEach((seg, index) => {
+            const dayCol = this.scrollContainer?.querySelector(
+                `.timeline-scroll-area__day-column[data-date="${seg.date}"]`,
+            ) as HTMLElement | null;
+            if (!dayCol) return;
+            // dayCol の border-top を考慮 (TimelineSection の row 1 padding と同期)
+            const cs = window.getComputedStyle(dayCol);
+            const borderTop = parseFloat(cs.borderTopWidth || '0');
+            const splitClasses: string[] = [];
+            if (candidates.length > 1) {
+                if (index > 0) splitClasses.push('task-card--split-continues-before');
+                if (index < candidates.length - 1) splitClasses.push('task-card--split-continues-after');
+            }
+            // left/width はソースカードの cascade レイアウト位置に合わせる
+            // (sourceEl.offsetLeft/Width は is-drag-hidden 中でも layout 値を返す)
+            plans.push({
+                layout: 'absolute',
+                parent: this.ghostContainer!,
+                left: dayCol.offsetLeft + this.dragEl!.offsetLeft,
+                top: dayCol.offsetTop + borderTop + toDisplayTopPx(seg.top),
+                width: this.dragEl!.offsetWidth,
+                height: toDisplayHeightPx(seg.height),
+                splitClasses,
+            });
+        });
+
+        this.ghostRenderer.render(plans);
     }
 
     private async finishMove(context: DragContext): Promise<void> {
-        const ghostManagerToClean = this.ghostManager;
-        this.ghostManager = null;
-
         if (!this.lastDragResult || !this.dragTask || !this.baseTask) {
-            ghostManagerToClean?.clear();
+            this.ghostRenderer?.clear();
             this.cleanup();
             return;
         }
@@ -248,7 +276,7 @@ export class TimelineMoveGesture extends BaseDragStrategy {
         };
         const plan: DragPlan = { edits, baseTask: this.baseTask };
         await this.commitPlan(context, plan, this.dragTask.id);
-        ghostManagerToClean?.clear();
+        this.ghostRenderer?.clear();
         this.cleanup();
     }
 
@@ -295,9 +323,7 @@ export class TimelineMoveGesture extends BaseDragStrategy {
     }
 
     private cleanupAndSelect(context: DragContext, taskId: string): void {
-        this.ghostManager?.clear();
-        this.ghostManager = null;
-        this.clearPreviewGhosts();
+        this.ghostRenderer?.clear();
         context.onTaskClick(taskId);
         this.cleanup();
     }
@@ -306,6 +332,9 @@ export class TimelineMoveGesture extends BaseDragStrategy {
         for (const el of this.hiddenElements) {
             el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
         }
+        this.ghostRenderer?.clear();
+        this.ghostRenderer = null;
+        this.ghostContainer = null;
         super.cleanup();
         this.hiddenElements = [];
         this.lastDragResult = null;

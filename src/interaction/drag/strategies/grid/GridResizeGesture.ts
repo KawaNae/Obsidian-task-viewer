@@ -7,6 +7,7 @@ import type { DragPlan } from '../../DragPlan';
 import type { GridSurface } from '../../grid/GridSurface';
 import { CalendarGridSurface } from '../../grid/CalendarGridSurface';
 import { AllDayGridSurface } from '../../grid/AllDayGridSurface';
+import { GhostRenderer } from '../../ghost/GhostRenderer';
 
 /**
  * Calendar / AllDay の両 Grid Surface を扱う Resize Gesture。
@@ -33,6 +34,7 @@ export class GridResizeGesture extends BaseDragStrategy {
     private hiddenElements: HTMLElement[] = [];
     private calendarPreviewTargetDate: string | null = null;
     private isAllDay: boolean = false;
+    private ghostRenderer: GhostRenderer | null = null;
 
     onDown(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext): void {
         this.dragTask = task;
@@ -86,7 +88,8 @@ export class GridResizeGesture extends BaseDragStrategy {
         this.initialGridColumn = el.style.gridColumn;
         this.calendarPreviewTargetDate = null;
         this.hiddenElements = [];
-        this.clearPreviewGhosts();
+        const doc = context.container.ownerDocument || document;
+        this.ghostRenderer = new GhostRenderer(el, doc);
 
         // Calendar 限定: 跨週 resize で source segments を hide するため事前収集
         if (isCalendar) {
@@ -157,14 +160,14 @@ export class GridResizeGesture extends BaseDragStrategy {
             if (crossWeek) {
                 this.hiddenElements.forEach(el => el.classList.add('is-drag-hidden'));
                 this.dragEl.classList.add('is-drag-source-faint');
-                this.updateSplitPreview(this.gridSurface.planSegments({
+                this.ghostRenderer?.render(this.gridSurface.planSegments({
                     rangeStart: this.initialVisualStart, rangeEnd: boundedEnd, trackIndex,
                 }));
                 return;
             }
 
             this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
-            this.clearPreviewGhosts();
+            this.ghostRenderer?.clear();
             this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
             const newSpan = Math.max(1, target.col - this.startCol + 1);
             this.dragEl.style.gridColumn = `${this.startCol + colOffset} / span ${newSpan}`;
@@ -175,14 +178,14 @@ export class GridResizeGesture extends BaseDragStrategy {
             if (crossWeek) {
                 this.hiddenElements.forEach(el => el.classList.add('is-drag-hidden'));
                 this.dragEl.classList.add('is-drag-source-faint');
-                this.updateSplitPreview(this.gridSurface.planSegments({
+                this.ghostRenderer?.render(this.gridSurface.planSegments({
                     rangeStart: boundedStart, rangeEnd: this.initialVisualEnd, trackIndex,
                 }));
                 return;
             }
 
             this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
-            this.clearPreviewGhosts();
+            this.ghostRenderer?.clear();
             this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
             const currentEndCol = this.startCol + this.initialSpan - 1;
             let targetStartCol = target.col;
@@ -310,6 +313,8 @@ export class GridResizeGesture extends BaseDragStrategy {
         for (const el of this.hiddenElements) {
             el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
         }
+        this.ghostRenderer?.clear();
+        this.ghostRenderer = null;
         super.cleanup();
         this.container = null;
         this.hiddenElements = [];

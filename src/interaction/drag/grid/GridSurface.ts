@@ -1,4 +1,4 @@
-import type { GhostPlan } from '../strategies/BaseDragStrategy';
+import type { GhostPlan } from '../ghost/GhostPlan';
 
 /**
  * locatePointer が返す target 情報。Calendar は週単位の row、AllDay は単一の

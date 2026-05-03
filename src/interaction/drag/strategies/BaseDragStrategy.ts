@@ -5,23 +5,10 @@ import { getTaskDateRange } from '../../../services/display/VisualDateRange';
 import type { DragPlan } from '../DragPlan';
 
 /**
- * Drag-preview ghost 1 個分の配置プラン。Surface 別の planSegments() が計算し、
- * viewType 非依存の updateSplitPreview() が DOM に反映する 2-stage 設計。
- */
-export interface GhostPlan {
-    /** parent grid 要素 (.cal-week-row | .allday-section など) */
-    parent: HTMLElement;
-    /** "{col} / span {n}" 形式に解決済み */
-    gridColumn: string;
-    /** "{row}" 形式に解決済み */
-    gridRow: string;
-    /** "task-card--split-continues-{before,after}" の組合せ */
-    splitClasses: string[];
-}
-
-/**
  * ドラッグストラテジーの基底クラス。
- * MoveStrategyとResizeStrategyで共通のプロパティとメソッドを提供。
+ * 共通の lifecycle / commit / utility を提供する。Ghost 描画は各 Gesture が
+ * 自前で {@link GhostRenderer} を保持して行う (旧 updateSplitPreview /
+ * previewGhosts は廃止)。
  */
 export abstract class BaseDragStrategy implements DragStrategy {
     abstract name: string;
@@ -32,8 +19,6 @@ export abstract class BaseDragStrategy implements DragStrategy {
     protected lastHighlighted: HTMLElement | null = null;
     protected hasMoved: boolean = false;
     protected currentContext: DragContext | null = null;
-    /** Drag 中の split-aware preview ghosts。calendar / allday 共通。 */
-    protected previewGhosts: HTMLElement[] = [];
 
     // ビュータイプ（Timeline or AllDay or Calendar）
     protected viewType: 'timeline' | 'allday' | 'calendar' = 'timeline';
@@ -130,7 +115,6 @@ export abstract class BaseDragStrategy implements DragStrategy {
         this.dragEl = null;
         this.currentContext = null;
         this.hasMoved = false;
-        this.clearPreviewGhosts();
     }
 
     /**
@@ -162,62 +146,6 @@ export abstract class BaseDragStrategy implements DragStrategy {
     }
 
     /**
-     * Stage-2 (viewType 非依存): GhostPlan[] を DOM に反映。既存 ghost を再利用
-     * する diff-update で remove→append による reflow を最小化する。
-     * Stage-1 (plan) は GridSurface 実装側 (CalendarGridSurface / AllDayGridSurface) が担当。
-     */
-    protected updateSplitPreview(plans: GhostPlan[]): void {
-        if (!this.dragEl) return;
-        const oldCount = this.previewGhosts.length;
-        const newCount = plans.length;
-
-        for (let i = 0; i < Math.min(oldCount, newCount); i++) {
-            const ghost = this.previewGhosts[i];
-            const plan = plans[i];
-            if (ghost.parentElement !== plan.parent) {
-                plan.parent.appendChild(ghost);
-            }
-            ghost.style.gridColumn = plan.gridColumn;
-            ghost.style.gridRow = plan.gridRow;
-            ghost.removeClass('task-card--split-continues-before', 'task-card--split-continues-after');
-            for (const cls of plan.splitClasses) ghost.addClass(cls);
-        }
-
-        for (let i = newCount; i < oldCount; i++) {
-            this.previewGhosts[i].remove();
-        }
-
-        for (let i = oldCount; i < newCount; i++) {
-            const plan = plans[i];
-            const preview = this.createPreviewGhost(plan);
-            plan.parent.appendChild(preview);
-            this.previewGhosts.push(preview);
-        }
-
-        this.previewGhosts.length = newCount;
-    }
-
-    /**
-     * dragEl から preview ghost を派生させる。grid 座標と split クラスは plan に
-     * 従う。host 直下の handle は除去 (ghost は pointer 不可なので)。
-     */
-    private createPreviewGhost(plan: GhostPlan): HTMLElement {
-        const preview = this.dragEl!.cloneNode(true) as HTMLElement;
-        preview.querySelectorAll('.task-card__handle').forEach(h => h.remove());
-        preview.removeClass('is-selected', 'is-dragging');
-        preview.removeClass('task-card--split-continues-before', 'task-card--split-continues-after');
-        preview.addClass('task-card--drag-preview');
-        preview.style.gridColumn = plan.gridColumn;
-        preview.style.gridRow = plan.gridRow;
-        preview.style.transform = '';
-        preview.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
-        preview.style.zIndex = '1001';
-        preview.style.pointerEvents = 'none';
-        for (const cls of plan.splitClasses) preview.addClass(cls);
-        return preview;
-    }
-
-    /**
      * Compute inclusive visual date range for a task, matching the renderer's logic.
      */
     protected getVisualDateRange(task: Task, startHour: number): { start: string; end: string } {
@@ -228,12 +156,4 @@ export abstract class BaseDragStrategy implements DragStrategy {
         const end = range.effectiveEnd || start;
         return { start, end };
     }
-
-    protected clearPreviewGhosts(): void {
-        for (const ghost of this.previewGhosts) {
-            ghost.remove();
-        }
-        this.previewGhosts = [];
-    }
-
 }

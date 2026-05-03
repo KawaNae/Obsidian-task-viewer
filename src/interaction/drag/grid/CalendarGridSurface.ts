@@ -1,5 +1,5 @@
 import { DateUtils } from '../../../utils/DateUtils';
-import type { GhostPlan } from '../strategies/BaseDragStrategy';
+import type { GhostPlan } from '../ghost/GhostPlan';
 import type { GridSurface, GridSurfaceTarget, LocatePointerOpts, PlanSegmentsInput } from './GridSurface';
 
 const HANDLE_HYSTERESIS_PX = 8;
@@ -139,6 +139,7 @@ export class CalendarGridSurface implements GridSurface {
             if (end > weekEnd) splitClasses.push('task-card--split-continues-after');
 
             plans.push({
+                layout: 'grid',
                 parent: weekRow,
                 gridColumn: `${colStart + colOffset} / span ${span}`,
                 gridRow: `${trackIndex + 2}`,

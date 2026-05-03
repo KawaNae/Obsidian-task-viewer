@@ -1,8 +1,9 @@
-import { BaseDragStrategy, GhostPlan } from '../BaseDragStrategy';
+import { BaseDragStrategy } from '../BaseDragStrategy';
 import type { DragContext } from '../../DragStrategy';
 import type { Task } from '../../../../types';
 import { DateUtils } from '../../../../utils/DateUtils';
-import { createGhostElement, removeGhostElement } from '../../ghost/GhostFactory';
+import { GhostRenderer } from '../../ghost/GhostRenderer';
+import type { GhostPlan } from '../../ghost/GhostPlan';
 import { DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
 import type { GridSurface } from '../../grid/GridSurface';
 import { CalendarGridSurface } from '../../grid/CalendarGridSurface';
@@ -53,7 +54,7 @@ export class GridMoveGesture extends BaseDragStrategy {
     name = 'GridMove';
 
     private gridSurface: GridSurface | null = null;
-    private ghostEl: HTMLElement | null = null;
+    private ghostRenderer: GhostRenderer | null = null;
     private colWidth: number = 0;
     private startCol: number = 0;
     private grabCol: number = 0;
@@ -123,8 +124,7 @@ export class GridMoveGesture extends BaseDragStrategy {
         el.style.zIndex = '1000';
 
         const doc = context.container.ownerDocument || document;
-        this.ghostEl = createGhostElement(el, doc);
-        this.clearPreviewGhosts();
+        this.ghostRenderer = new GhostRenderer(el, doc);
 
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         context.container.querySelectorAll(selector).forEach(segment => {
@@ -158,8 +158,8 @@ export class GridMoveGesture extends BaseDragStrategy {
         if (!this.dragTask || !this.dragEl || !this.gridSurface || !this.baseTask) return;
 
         this.clearHighlight();
-        removeGhostElement(this.ghostEl);
-        this.ghostEl = null;
+        // 以後 ghost は不要 (commit 後 re-render で fresh card が出る)
+        this.ghostRenderer?.clear();
 
         if (!this.hasMoved) {
             // drag せず press-release → 単純な card click として selection 設定
@@ -254,35 +254,45 @@ export class GridMoveGesture extends BaseDragStrategy {
     }
 
     /**
-     * plan を DOM に反映 (副作用)。preview と cross-view-drop で source/preview/
-     * floating ghost の見せ方が変わる。
+     * plan を DOM に反映 (副作用)。
+     *
+     * - cross-view-drop: source を dimmed、ghost は単一 fixed (pointer 追従)
+     * - preview        : source を hide、ghost は plan.ghostPlans の grid layout で展開
+     *
+     * ghost 描画は全て {@link GhostRenderer.render} 経由 (旧 ghostEl /
+     * updateSplitPreview の二重実装が一本化された)。
      */
     private render(plan: GridMovePlan): void {
-        if (!this.dragEl || !this.ghostEl) return;
+        if (!this.dragEl || !this.ghostRenderer) return;
 
         if (plan.render.mode === 'cross-view-drop') {
-            // floating ghost を pointer に追従、preview は消す。source 側は dimmed。
-            this.ghostEl.classList.remove('is-drag-hidden');
-            this.ghostEl.style.left = `${plan.render.floatingGhostPos.x}px`;
-            this.ghostEl.style.top = `${plan.render.floatingGhostPos.y}px`;
+            // floating fixed ghost を pointer に追従。source は dimmed。
             this.hiddenElements.forEach(el => {
                 el.classList.remove('is-drag-hidden');
                 el.classList.add('is-drag-source-dimmed');
             });
             this.dragEl.style.transform = '';
             this.dragEl.style.gridColumn = this.initialGridColumn;
-            this.clearPreviewGhosts();
+
+            const rect = this.dragEl.getBoundingClientRect();
+            const fixedGhost: GhostPlan = {
+                layout: 'fixed',
+                left: plan.render.floatingGhostPos.x,
+                top: plan.render.floatingGhostPos.y,
+                width: rect.width,
+                height: rect.height,
+                splitClasses: [],
+            };
+            this.ghostRenderer.render([fixedGhost]);
         } else {
-            // section 内: source を hide → split-aware preview ghost で WYSIWYG 表示
-            this.ghostEl.classList.add('is-drag-hidden');
-            this.ghostEl.style.left = '-9999px';
+            // grid 内 preview: source を hide、ghost は split-aware grid layout で展開
             this.hiddenElements.forEach(el => {
                 el.classList.remove('is-drag-source-dimmed', 'is-drag-source-faint');
                 el.classList.add('is-drag-hidden');
             });
             this.dragEl.style.transform = '';
             this.dragEl.style.gridColumn = this.initialGridColumn;
-            this.updateSplitPreview(plan.render.ghostPlans);
+            this.ghostRenderer.render(plan.render.ghostPlans);
         }
         this.updateArrowPosition(plan.render.arrowEndLine);
     }
@@ -375,7 +385,6 @@ export class GridMoveGesture extends BaseDragStrategy {
         const doc = context.container.ownerDocument || document;
         const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
         document.body.style.cursor = '';
-        this.ghostEl?.removeClass('is-invalid');
         this.clearHighlight();
 
         const timelineCol = elBelow?.closest('.timeline-scroll-area__day-column') as HTMLElement;
@@ -389,11 +398,12 @@ export class GridMoveGesture extends BaseDragStrategy {
         for (const el of this.hiddenElements) {
             el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
         }
+        this.ghostRenderer?.clear();
+        this.ghostRenderer = null;
         super.cleanup();
         this.hiddenElements = [];
         this.container = null;
         this.baseTask = null;
         this.gridSurface = null;
-        this.ghostEl = null;
     }
 }

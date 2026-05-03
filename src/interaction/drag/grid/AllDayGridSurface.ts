@@ -1,5 +1,5 @@
 import { DateUtils } from '../../../utils/DateUtils';
-import type { GhostPlan } from '../strategies/BaseDragStrategy';
+import type { GhostPlan } from '../ghost/GhostPlan';
 import type { GridSurface, GridSurfaceTarget, LocatePointerOpts, PlanSegmentsInput } from './GridSurface';
 
 /**
@@ -66,6 +66,7 @@ export class AllDayGridSurface implements GridSurface {
         if (end > viewEnd) splitClasses.push('task-card--split-continues-after');
 
         return [{
+            layout: 'grid',
             parent: section,
             // axis col(+1) + grid 1-based(+1) = +2
             gridColumn: `${colStartIdx + 2} / span ${span}`,
