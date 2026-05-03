@@ -345,7 +345,12 @@ export class MoveStrategy extends BaseDragStrategy {
         const span = Number.parseInt(el.dataset.span || '1', 10);
         this.startCol = colStart;
         const target = e.target as HTMLElement;
-        if (target.closest('.task-card__handle--move-top-right')) {
+        // Calendar / AllDay では HandleManager が move handle を `bottom-left` /
+        // `bottom-right` で生成する (top-* は Timeline 縦タスク専用)。
+        // 以前は `move-top-right` で判定しており常に false 評価 → grabCol が
+        // 左端に固定され、右側 handle を握っても startDate 基準で平行移動する
+        // バグになっていた。
+        if (target.closest('.task-card__handle--move-bottom-right')) {
             this.grabCol = Math.min(7, this.startCol + span - 1);
         } else {
             this.grabCol = this.startCol;

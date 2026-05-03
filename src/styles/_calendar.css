@@ -49,18 +49,38 @@
     z-index: 5;
 }
 
-/* --- Split direction (horizontal for calendar) --- */
+/* --- Split direction (horizontal for calendar) ---
+   Card 自体は cell 端ぴったり (margin: 0) を維持し、dashed indicator は
+   ::after / ::before の擬似要素で card 内側 4px の位置に描画する。これに
+   より view 右端 = window 右端のとき、border-right を直接使うと dashed が
+   window フレームと同化して見切れる問題を回避する。
+   selected 時は `.task-card.is-selected::after` (specificity 0.2.1) と
+   `.task-card--split-continues-*.is-selected::after` の上書きが優先され、
+   dashed indicator の代わりに solid な選択枠が表示される現状挙動を維持。 */
+
 .calendar-view .task-card--split-continues-after {
     border-bottom: none;
-    border-right: 2px dashed var(--file-accent, var(--tv-accent));
+    border-right: none;
     border-top-right-radius: 0 !important;
     border-bottom-right-radius: 0 !important;
     margin-right: 0;
 }
 
-.calendar-view .task-card--split-continues-before.task-card--split-continues-after {
-    border-left: 2px dashed var(--file-accent, var(--tv-accent));
+.calendar-view .task-card--split-continues-after::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 4px;
+    width: 0;
     border-right: 2px dashed var(--file-accent, var(--tv-accent));
+    pointer-events: none;
+    z-index: 1;
+}
+
+.calendar-view .task-card--split-continues-before.task-card--split-continues-after {
+    border-left: none;
+    border-right: none;
     border-top-left-radius: 0 !important;
     border-bottom-left-radius: 0 !important;
     border-top-right-radius: 0 !important;
@@ -71,15 +91,27 @@
 
 .calendar-view .task-card--split-continues-before {
     border-top: none;
-    border-left: 2px dashed var(--file-accent, var(--tv-accent));
+    border-left: none;
     border-top-left-radius: 0 !important;
     border-bottom-left-radius: 0 !important;
     margin-left: 0;
 }
 
-.calendar-view .task-card--split-continues-before.task-card--split-continues-after::before,
 .calendar-view .task-card--split-continues-before::before {
-    display: none;
+    /* file-linestyle decoration (左の vertical bar) を dashed indicator で上書き。
+       continues-before かつ continues-after の場合は ::before (左) + ::after (右)
+       が両側に dashed を描く。 */
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 4px;
+    width: 0;
+    border-left: 2px dashed var(--file-accent, var(--tv-accent));
+    pointer-events: none;
+    z-index: 1;
+    /* linestyle 由来の background は不要 */
+    background: none !important;
 }
 
 /* Selection border direction for horizontal split */

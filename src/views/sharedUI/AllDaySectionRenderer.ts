@@ -11,6 +11,7 @@ import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout'
 import { renderDueArrow } from './DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { getTaskDateRange } from '../../services/display/VisualDateRange';
+import { getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 
 export class AllDaySectionRenderer {
     constructor(
@@ -91,10 +92,19 @@ export class AllDaySectionRenderer {
         }
         if (entry.continuesBefore) el.addClass('task-card--split-continues-before');
         if (entry.continuesAfter) el.addClass('task-card--split-continues-after');
-        if (task.id === this.handleManager.getSelectedTaskId()) {
+
+        // split segment は base task の id とは別の segment id を持つため、
+        // selection 照合 (HandleManager) には base id (`originalTaskId`) を
+        // `dataset.splitOriginalId` として併せて公開する。これがないと
+        // segment cards に `.is-selected` も handles も attach されない。
+        const originalTaskId = getOriginalTaskId(task);
+        el.dataset.id = task.id;
+        if (entry.continuesBefore || entry.continuesAfter) {
+            el.dataset.splitOriginalId = originalTaskId;
+        }
+        if (originalTaskId === this.handleManager.getSelectedTaskId()) {
             el.addClass('is-selected');
         }
-        el.dataset.id = task.id;
 
         TaskStyling.applyTaskColor(el, task.color ?? null);
         TaskStyling.applyTaskLinestyle(el, task.linestyle ?? null);
