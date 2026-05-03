@@ -521,8 +521,11 @@
         0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
 }
 
+/* horizontal cut の continues-before 側は sawtooth 自体が「続きカード」
+   のシグナルなので linestyle bar を出さない。アクセントバーは「タスク
+   起点」のサインに意味を絞る。 */
 .task-card--multi-day.task-card--split-continues-before .task-card__shape::before {
-    left: var(--task-card-split-zig);
+    display: none;
 }
 
 .task-card--multi-day.task-card--split-continues-before.task-card--split-continues-after {
