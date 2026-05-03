@@ -378,6 +378,7 @@ export class TimelineView extends ItemView {
             },
             () => { /* no-op: handles are inside task cards */ },
             () => this.viewState.startDate,
+            () => DateUtils.addDays(this.viewState.startDate, this.viewState.daysToShow - 1),
             () => this.getEffectiveZoomLevel()
         );
         this.dragHandler.onDetailClick = (taskId: string) => {

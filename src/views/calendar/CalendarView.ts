@@ -321,6 +321,7 @@ export class CalendarView extends ItemView {
             },
             () => { /* no-op: handles are inside task cards */ },
             () => this.getViewStartDateString(),
+            () => this.getViewEndDateString(),
             () => this.plugin.settings.zoomLevel
         );
         this.dragHandler.onDetailClick = (taskId: string) => {
@@ -821,6 +822,11 @@ export class CalendarView extends ItemView {
     private getViewStartDateString(): string {
         const { startDate } = this.getCalendarDateRange();
         return DateUtils.getLocalDateString(startDate);
+    }
+
+    private getViewEndDateString(): string {
+        const { endDate } = this.getCalendarDateRange();
+        return DateUtils.getLocalDateString(endDate);
     }
 
     private getCalendarDateRange(): { startDate: Date; endDate: Date } {

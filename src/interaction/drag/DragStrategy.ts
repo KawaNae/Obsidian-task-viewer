@@ -14,6 +14,8 @@ export interface DragContext {
     getDateFromCol: (el: HTMLElement) => string | null;
     // Helper to get the view start date
     getViewStartDate: () => string;
+    // Helper to get the view end date (inclusive). For range-clip / split-preview.
+    getViewEndDate: () => string;
     // Helper to get per-view zoom level
     getZoomLevel: () => number;
 }
