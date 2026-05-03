@@ -13,6 +13,21 @@ export interface CalendarPointerTarget {
 }
 
 /**
+ * Drag-preview ghost 1 個分の配置プラン。view 別の plan*Segments() が計算し、
+ * viewType 非依存の updateSplitPreview() が DOM に反映する 2-stage 設計。
+ */
+export interface GhostPlan {
+    /** parent grid 要素 (.cal-week-row | .allday-section など) */
+    parent: HTMLElement;
+    /** "{col} / span {n}" 形式に解決済み */
+    gridColumn: string;
+    /** "{row}" 形式に解決済み */
+    gridRow: string;
+    /** "task-card--split-continues-{before,after}" の組合せ */
+    splitClasses: string[];
+}
+
+/**
  * ドラッグストラテジーの基底クラス。
  * MoveStrategyとResizeStrategyで共通のプロパティとメソッドを提供。
  */
@@ -25,7 +40,8 @@ export abstract class BaseDragStrategy implements DragStrategy {
     protected lastHighlighted: HTMLElement | null = null;
     protected hasMoved: boolean = false;
     protected currentContext: DragContext | null = null;
-    protected calendarPreviewGhosts: HTMLElement[] = [];
+    /** Drag 中の split-aware preview ghosts。calendar / allday 共通。 */
+    protected previewGhosts: HTMLElement[] = [];
 
     // ビュータイプ（Timeline or AllDay）
     protected viewType: 'timeline' | 'allday' | 'calendar' = 'timeline';
@@ -80,7 +96,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
         this.currentContext = null;
         this.hasMoved = false;
         this.activeResizeDirection = null;
-        this.clearCalendarPreviewGhosts();
+        this.clearPreviewGhosts();
     }
 
     /**
@@ -111,17 +127,19 @@ export abstract class BaseDragStrategy implements DragStrategy {
         return false;
     }
 
-    protected updateCalendarSplitPreview(context: DragContext, rangeStart: string, rangeEnd: string): void {
-        if (!this.dragEl) return;
-
+    /**
+     * Stage-1 (calendar): visible 範囲全体を week-row 単位に切り、各 segment に
+     * 必要な split クラス・grid 座標を解決した GhostPlan[] を返す。
+     */
+    protected planCalendarSegments(context: DragContext, rangeStart: string, rangeEnd: string): GhostPlan[] {
+        if (!this.dragEl) return [];
         const start = rangeStart <= rangeEnd ? rangeStart : rangeEnd;
         const end = rangeStart <= rangeEnd ? rangeEnd : rangeStart;
         const trackIndex = Number.parseInt(this.dragEl.dataset.trackIndex || '0', 10);
         const weekRows = this.getCalendarWeekRows(context);
-        if (weekRows.length === 0) return;
+        if (weekRows.length === 0) return [];
 
-        // Compute desired segments
-        const segments: { weekRow: HTMLElement; colStart: number; span: number; splitClasses: string[] }[] = [];
+        const plans: GhostPlan[] = [];
         for (const weekRow of weekRows) {
             const weekStart = weekRow.dataset.weekStart;
             if (!weekStart) continue;
@@ -134,62 +152,73 @@ export abstract class BaseDragStrategy implements DragStrategy {
             const span = DateUtils.getDiffDays(segStart, segEnd) + 1;
             if (colStart < 1 || span < 1) continue;
 
-            const continuesBefore = start < weekStart;
-            const continuesAfter = end > weekEnd;
+            const colOffset = this.getCalendarColumnOffset(weekRow);
             const splitClasses: string[] = [];
-            if (continuesBefore) splitClasses.push('task-card--split-continues-before');
-            if (continuesAfter) splitClasses.push('task-card--split-continues-after');
+            if (start < weekStart) splitClasses.push('task-card--split-continues-before');
+            if (end > weekEnd) splitClasses.push('task-card--split-continues-after');
 
-            segments.push({ weekRow, colStart, span, splitClasses });
+            plans.push({
+                parent: weekRow,
+                gridColumn: `${colStart + colOffset} / span ${span}`,
+                gridRow: `${trackIndex + 2}`,
+                splitClasses,
+            });
         }
-
-        // Diff-update: reuse existing ghosts to avoid remove→append reflow jitter
-        const oldCount = this.calendarPreviewGhosts.length;
-        const newCount = segments.length;
-
-        for (let i = 0; i < Math.min(oldCount, newCount); i++) {
-            const ghost = this.calendarPreviewGhosts[i];
-            const seg = segments[i];
-            const colOffset = this.getCalendarColumnOffset(seg.weekRow);
-            if (ghost.parentElement !== seg.weekRow) {
-                seg.weekRow.appendChild(ghost);
-            }
-            ghost.style.gridColumn = `${seg.colStart + colOffset} / span ${seg.span}`;
-            ghost.style.gridRow = `${trackIndex + 2}`;
-            ghost.removeClass('task-card--split-continues-before', 'task-card--split-continues-after');
-            for (const cls of seg.splitClasses) ghost.addClass(cls);
-        }
-
-        // Remove excess ghosts
-        for (let i = newCount; i < oldCount; i++) {
-            this.calendarPreviewGhosts[i].remove();
-        }
-
-        // Create missing ghosts
-        for (let i = oldCount; i < newCount; i++) {
-            const seg = segments[i];
-            const colOffset = this.getCalendarColumnOffset(seg.weekRow);
-            const preview = this.createPreviewGhost(seg.colStart, seg.span, trackIndex, colOffset, seg.splitClasses);
-            seg.weekRow.appendChild(preview);
-            this.calendarPreviewGhosts.push(preview);
-        }
-
-        this.calendarPreviewGhosts.length = newCount;
+        return plans;
     }
 
-    private createPreviewGhost(colStart: number, span: number, trackIndex: number, colOffset: number, splitClasses: string[]): HTMLElement {
+    /**
+     * Stage-2 (viewType 非依存): GhostPlan[] を DOM に反映。既存 ghost を再利用
+     * する diff-update で remove→append による reflow を最小化する。
+     */
+    protected updateSplitPreview(plans: GhostPlan[]): void {
+        if (!this.dragEl) return;
+        const oldCount = this.previewGhosts.length;
+        const newCount = plans.length;
+
+        for (let i = 0; i < Math.min(oldCount, newCount); i++) {
+            const ghost = this.previewGhosts[i];
+            const plan = plans[i];
+            if (ghost.parentElement !== plan.parent) {
+                plan.parent.appendChild(ghost);
+            }
+            ghost.style.gridColumn = plan.gridColumn;
+            ghost.style.gridRow = plan.gridRow;
+            ghost.removeClass('task-card--split-continues-before', 'task-card--split-continues-after');
+            for (const cls of plan.splitClasses) ghost.addClass(cls);
+        }
+
+        for (let i = newCount; i < oldCount; i++) {
+            this.previewGhosts[i].remove();
+        }
+
+        for (let i = oldCount; i < newCount; i++) {
+            const plan = plans[i];
+            const preview = this.createPreviewGhost(plan);
+            plan.parent.appendChild(preview);
+            this.previewGhosts.push(preview);
+        }
+
+        this.previewGhosts.length = newCount;
+    }
+
+    /**
+     * dragEl から preview ghost を派生させる。grid 座標と split クラスは plan に
+     * 従う。host 直下の handle は除去 (ghost は pointer 不可なので)。
+     */
+    private createPreviewGhost(plan: GhostPlan): HTMLElement {
         const preview = this.dragEl!.cloneNode(true) as HTMLElement;
         preview.querySelectorAll('.task-card__handle').forEach(h => h.remove());
         preview.removeClass('is-selected', 'is-dragging');
         preview.removeClass('task-card--split-continues-before', 'task-card--split-continues-after');
         preview.addClass('task-card--drag-preview');
-        preview.style.gridColumn = `${colStart + colOffset} / span ${span}`;
-        preview.style.gridRow = `${trackIndex + 2}`;
+        preview.style.gridColumn = plan.gridColumn;
+        preview.style.gridRow = plan.gridRow;
         preview.style.transform = '';
         preview.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
         preview.style.zIndex = '1001';
         preview.style.pointerEvents = 'none';
-        for (const cls of splitClasses) preview.addClass(cls);
+        for (const cls of plan.splitClasses) preview.addClass(cls);
         return preview;
     }
 
@@ -205,11 +234,11 @@ export abstract class BaseDragStrategy implements DragStrategy {
         return { start, end };
     }
 
-    protected clearCalendarPreviewGhosts(): void {
-        for (const ghost of this.calendarPreviewGhosts) {
+    protected clearPreviewGhosts(): void {
+        for (const ghost of this.previewGhosts) {
             ghost.remove();
         }
-        this.calendarPreviewGhosts = [];
+        this.previewGhosts = [];
     }
 
     protected getCalendarWeekRows(context: DragContext): HTMLElement[] {

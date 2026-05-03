@@ -361,7 +361,7 @@ export class MoveStrategy extends BaseDragStrategy {
 
         const doc = context.container.ownerDocument || document;
         this.ghostEl = createGhostElement(el, doc, { useCloneNode: true });
-        this.clearCalendarPreviewGhosts();
+        this.clearPreviewGhosts();
 
         const originalId = getOriginalTaskId(task);
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
@@ -391,7 +391,7 @@ export class MoveStrategy extends BaseDragStrategy {
 
         const movedStart = DateUtils.addDays(this.initialCalendarVisualStart, dayDelta);
         const movedEnd = DateUtils.addDays(this.initialCalendarVisualEnd, dayDelta);
-        this.updateCalendarSplitPreview(context, movedStart, movedEnd);
+        this.updateSplitPreview(this.planCalendarSegments(context, movedStart, movedEnd));
         this.dragEl.style.transform = '';
     }
 
@@ -400,7 +400,7 @@ export class MoveStrategy extends BaseDragStrategy {
         this.ghostEl = null;
 
         if (!this.dragTask || !this.dragEl) {
-            this.clearCalendarPreviewGhosts();
+            this.clearPreviewGhosts();
             this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
             this.cleanup();
             return;
@@ -416,7 +416,7 @@ export class MoveStrategy extends BaseDragStrategy {
         }
 
         if (dayDelta === 0) {
-            this.clearCalendarPreviewGhosts();
+            this.clearPreviewGhosts();
             this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
             this.cleanup();
             return;
@@ -430,7 +430,7 @@ export class MoveStrategy extends BaseDragStrategy {
         if (Object.keys(updates).length > 0) {
             await context.writeService.updateTask(this.dragTask.id, updates);
         }
-        this.clearCalendarPreviewGhosts();
+        this.clearPreviewGhosts();
 
         this.cleanup();
     }
@@ -685,7 +685,7 @@ export class MoveStrategy extends BaseDragStrategy {
         this.ghostManager?.clear();
         removeGhostElement(this.ghostEl);
         this.ghostEl = null;
-        this.clearCalendarPreviewGhosts();
+        this.clearPreviewGhosts();
         context.onTaskClick(taskId);
         this.cleanup();
     }

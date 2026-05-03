@@ -290,7 +290,7 @@ export class ResizeStrategy extends BaseDragStrategy {
         this.initialGridColumn = el.style.gridColumn;
         this.calendarPreviewTargetDate = null;
         this.hiddenElements = [];
-        this.clearCalendarPreviewGhosts();
+        this.clearPreviewGhosts();
 
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         context.container.querySelectorAll(selector).forEach(segment => {
@@ -323,12 +323,12 @@ export class ResizeStrategy extends BaseDragStrategy {
             if (crossWeek) {
                 this.hiddenElements.forEach(el => el.classList.add('is-drag-hidden'));
                 this.dragEl.classList.add('is-drag-source-faint');
-                this.updateCalendarSplitPreview(context, this.initialCalendarVisualStart, boundedEnd);
+                this.updateSplitPreview(this.planCalendarSegments(context, this.initialCalendarVisualStart, boundedEnd));
                 return;
             }
 
             this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
-            this.clearCalendarPreviewGhosts();
+            this.clearPreviewGhosts();
             this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
             const newSpan = Math.max(1, target.col - this.startCol + 1);
             this.dragEl.style.gridColumn = `${this.startCol + colOffset} / span ${newSpan}`;
@@ -339,12 +339,12 @@ export class ResizeStrategy extends BaseDragStrategy {
             if (crossWeek) {
                 this.hiddenElements.forEach(el => el.classList.add('is-drag-hidden'));
                 this.dragEl.classList.add('is-drag-source-faint');
-                this.updateCalendarSplitPreview(context, boundedStart, this.initialCalendarVisualEnd);
+                this.updateSplitPreview(this.planCalendarSegments(context, boundedStart, this.initialCalendarVisualEnd));
                 return;
             }
 
             this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
-            this.clearCalendarPreviewGhosts();
+            this.clearPreviewGhosts();
             this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
             const currentEndCol = this.startCol + this.initialSpan - 1;
             let targetStartCol = target.col;
@@ -357,7 +357,7 @@ export class ResizeStrategy extends BaseDragStrategy {
 
     private async finishCalendarResize(e: PointerEvent, context: DragContext) {
         if (!this.dragTask || !this.dragEl || !this.baseTask) {
-            this.clearCalendarPreviewGhosts();
+            this.clearPreviewGhosts();
             this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
             this.cleanup();
             return;
@@ -366,7 +366,7 @@ export class ResizeStrategy extends BaseDragStrategy {
         const target = this.resolveCalendarPointerTarget(e.clientX, e.clientY, context);
         const targetDate = this.calendarPreviewTargetDate || target?.targetDate;
         if (!targetDate) {
-            this.clearCalendarPreviewGhosts();
+            this.clearPreviewGhosts();
             this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
             if (this.dragEl) this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
             this.cleanup();
@@ -399,7 +399,7 @@ export class ResizeStrategy extends BaseDragStrategy {
             : {};
 
         if (Object.keys(updates).length === 0) {
-            this.clearCalendarPreviewGhosts();
+            this.clearPreviewGhosts();
             this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
             if (this.dragEl) this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
             this.cleanup();
@@ -407,7 +407,7 @@ export class ResizeStrategy extends BaseDragStrategy {
         }
 
         await context.writeService.updateTask(this.dragTask.id, updates);
-        this.clearCalendarPreviewGhosts();
+        this.clearPreviewGhosts();
 
         this.cleanup();
     }
