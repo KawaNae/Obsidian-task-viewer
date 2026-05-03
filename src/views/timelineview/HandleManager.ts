@@ -1,5 +1,7 @@
-import { setIcon } from 'obsidian';
 import { Task } from '../../types';
+import { GridHandleStrategy } from './handles/GridHandleStrategy';
+import { TimelineHandleStrategy } from './handles/TimelineHandleStrategy';
+import type { HandleStrategy } from './handles/HandleStrategy';
 
 const SELECTED_Z_INDEX = 200;
 
@@ -14,6 +16,8 @@ interface HandleManagerDeps {
  */
 export class HandleManager {
     private selectedTaskId: string | null = null;
+    private readonly gridStrategy: HandleStrategy = new GridHandleStrategy();
+    private readonly timelineStrategy: HandleStrategy = new TimelineHandleStrategy();
 
     constructor(
         private container: HTMLElement,
@@ -104,6 +108,9 @@ export class HandleManager {
 
     /**
      * Renders handles directly inside the task card element.
+     * Surface 別の判定とは「どの edge に何の handle を出すか」だけが違う問題で、
+     * それは HandleStrategy が知っている。HandleManager は taskEl の所属を見て
+     * strategy を選び、render を委譲するだけ。
      */
     private renderHandles(taskId: string): void {
         const taskCards = Array.from(this.getMainTaskCards()).filter(el => {
@@ -117,132 +124,27 @@ export class HandleManager {
         if (!task) return;
         if (task.isReadOnly) return;
 
+        const startHour = this.deps.getStartHour();
+
         taskCards.forEach(el => {
             const taskEl = el as HTMLElement;
 
             const existingHandles = taskEl.querySelectorAll('.task-card__handle');
             existingHandles.forEach(h => h.remove());
 
-
-            const isCalendar = !!taskEl.closest('.cal-week-row');
-            const isAllDay = taskEl.classList.contains('task-card--allday');
-
-            // Split checks (continuation flags)
-            const isSplitHead = taskEl.classList.contains('task-card--split-continues-after');
-            const isSplitTail = taskEl.classList.contains('task-card--split-continues-before');
-
-            // --- Render Handles ---
-            if (isCalendar) {
-                const continuesBefore = taskEl.classList.contains('task-card--split-continues-before');
-                const continuesAfter = taskEl.classList.contains('task-card--split-continues-after');
-                if (continuesBefore && continuesAfter) {
-                    return; // middle segment: no handles
-                }
-
-                // Left edge = start. Move handle moved to bottom edge.
-                // detail-handle (top-left) only on the start segment to avoid
-                // duplication across split segments.
-                if (!continuesBefore) {
-                    this.createDetailHandle(taskEl, taskId);
-                    this.createMoveHandle(taskEl, taskId, 'bottom-left');
-                    this.createResizeHandle(taskEl, taskId, 'left', '↔');
-                }
-
-                // Right edge = end. Move handle moved to bottom edge.
-                if (!continuesAfter) {
-                    this.createMoveHandle(taskEl, taskId, 'bottom-right');
-                    this.createResizeHandle(taskEl, taskId, 'right', '↔');
-                }
-            } else if (isAllDay) {
-                // Allday は horizontal split。sawtooth 辺(continues-before の左 /
-                // continues-after の右)には handle を出さない。calendar と同じ
-                // 設計で、両端 sawtooth (中央 segment) の場合は handles 全部抑制。
-                const continuesBefore = isSplitTail;
-                const continuesAfter = isSplitHead;
-                if (continuesBefore && continuesAfter) {
-                    return; // middle segment: no handles
-                }
-
-                // Left edge = start. detail-handle は起点 segment にだけ出す
-                // (split 跨ぎでの重複を避ける)。
-                if (!continuesBefore) {
-                    this.createDetailHandle(taskEl, taskId);
-                    this.createResizeHandle(taskEl, taskId, 'left', '↔');
-                    this.createMoveHandle(taskEl, taskId, 'bottom-left');
-                }
-
-                // Right edge = end.
-                if (!continuesAfter) {
-                    this.createResizeHandle(taskEl, taskId, 'right', '↔');
-                    this.createMoveHandle(taskEl, taskId, 'bottom-right');
-                }
-            } else {
-                // Timed tasks: Top/Bottom resize + Top-Right/Bottom-Right Move
-                // + detail-handle at top-left (when not touching top boundary).
-
-                const startHour = this.deps.getStartHour();
-                const [startH, startM] = (task.startTime || '00:00').split(':').map(Number);
-
-                // Touching Top Boundary if:
-                // 1. It continues before (always starts at boundary)
-                // 2. OR it starts exactly at StartHour:00 (for normal tasks)
-                const isTouchingTop = isSplitTail || (startH === startHour && startM === 0);
-
-                // Check if touching Bottom Boundary (Next Start Hour)
-                // A continues-after segment always ends at boundary.
-                let isTouchingBottom = isSplitHead;
-
-                if (!isTouchingBottom && task.endTime) {
-                    const [endH, endM] = task.endTime.split(':').map(Number);
-                    if (endH === startHour && endM === 0) {
-                        isTouchingBottom = true;
-                    }
-                }
-
-                // Render Top Handles (Hide if touching top).
-                // detail-handle shares the top-edge constraint: -12px would
-                // overlap the previous day boundary.
-                if (!isTouchingTop) {
-                    this.createDetailHandle(taskEl, taskId);
-                    this.createResizeHandle(taskEl, taskId, 'top', '↕');
-                    this.createMoveHandle(taskEl, taskId, 'top-right');
-                }
-
-                // Render Bottom Handles (Hide if touching bottom)
-                if (!isTouchingBottom) {
-                    this.createResizeHandle(taskEl, taskId, 'bottom', '↕');
-                    this.createMoveHandle(taskEl, taskId, 'bottom-right');
-                }
-            }
+            const strategy = this.pickStrategy(taskEl);
+            strategy.render(taskEl, taskId, task, startHour);
         });
     }
 
-    private createResizeHandle(taskEl: HTMLElement, taskId: string, position: 'left' | 'right' | 'top' | 'bottom', icon: string): void {
-        const container = taskEl.createDiv(`task-card__handle task-card__handle--resize-${position}`);
-        const handle = container.createDiv('task-card__handle-btn');
-        handle.setText(icon);
-        handle.dataset.taskId = taskId;
-    }
-
-    private createMoveHandle(taskEl: HTMLElement, taskId: string, position: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'): void {
-        const container = taskEl.createDiv(`task-card__handle task-card__handle--move-${position}`);
-        const handle = container.createDiv('task-card__handle-btn');
-        handle.setText('::');
-        handle.dataset.taskId = taskId;
-        handle.style.cursor = 'move';
-    }
-
-    private createDetailHandle(taskEl: HTMLElement, taskId: string): void {
-        const container = taskEl.createDiv('task-card__handle task-card__handle--detail');
-        const handle = container.createDiv('task-card__handle-btn');
-        // setIcon needs a span wrapper for WebKit to render reliably inside
-        // an inline-flex button (matches the more-btn pattern in filter-popover).
-        // 'info' (i in a circle) over 'expand' (4 outward arrows): the latter
-        // looks like an X and visually bleeds into the card's top-left corner
-        // due to the -12px outset, especially on mobile where cards are small.
-        setIcon(handle.createSpan(), 'info');
-        handle.dataset.taskId = taskId;
-        handle.dataset.handleType = 'detail';
-        handle.style.cursor = 'pointer';
+    /**
+     * cal-week-row 配下、または .task-card--allday は両方とも grid 系（同じ
+     * handle セット: detail + resize-{L,R} + move-bottom-{L,R}）。それ以外は
+     * timed task として timeline 戦略。
+     */
+    private pickStrategy(taskEl: HTMLElement): HandleStrategy {
+        if (taskEl.closest('.cal-week-row')) return this.gridStrategy;
+        if (taskEl.classList.contains('task-card--allday')) return this.gridStrategy;
+        return this.timelineStrategy;
     }
 }
