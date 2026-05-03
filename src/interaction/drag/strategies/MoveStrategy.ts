@@ -455,15 +455,28 @@ export class MoveStrategy extends BaseDragStrategy {
         this.initialCalendarVisualEnd = visual.end;
         this.initialSpan = DateUtils.getDiffDays(visual.start, visual.end) + 1;
 
-        const gridCol = el.style.gridColumn;
-        const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
-        this.startCol = colMatch ? parseInt(colMatch[1]) : 2;
+        // dataset から grid 座標を取得 (calendar 側と対称)。dataset.colStart は
+        // dates 配列内 1-based (dates[0] → 1)、`AllDaySectionRenderer` が
+        // `gridColumn = entry.colStart + 1 / span N` と axis col 補正で +1 する。
+        // due-arrow の座標計算は startCol を 1-based grid column で扱うため +1。
+        const dataColStart = Number.parseInt(el.dataset.colStart || '1', 10);
+        this.startCol = dataColStart + 1;
         this.initialGridColumn = el.style.gridColumn;
 
         el.style.zIndex = '1000';
 
         const doc = context.container.ownerDocument || document;
         this.ghostEl = createGhostElement(el, doc, { useCloneNode: true });
+
+        // 同一 originalId の split segments を hide する (calendar と同じパターン)。
+        // preview ghost で正本を出すため、source 側はすべて消しておく。
+        const originalId = getOriginalTaskId(task);
+        const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
+        context.container.querySelectorAll(selector).forEach(segment => {
+            if (segment instanceof HTMLElement && !segment.closest('.pinned-list')) {
+                this.hiddenElements.push(segment);
+            }
+        });
     }
 
     private processAllDayMove(e: PointerEvent, context: DragContext) {
@@ -471,34 +484,44 @@ export class MoveStrategy extends BaseDragStrategy {
 
         const deltaX = e.clientX - this.initialX;
         const snapPixels = this.colWidth;
-        let dayDelta = Math.round(deltaX / snapPixels);
+        const dayDelta = Math.round(deltaX / snapPixels);
 
-        const minColOffset = 2 - this.startCol;
-        if (dayDelta < minColOffset) dayDelta = minColOffset;
-
-        const snappedDeltaX = dayDelta * snapPixels;
-
-        // セクション外判定
+        // セクション外判定 (timeline 列にホバー)
         const doc = context.container.ownerDocument || document;
         const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
         const timelineSection = elBelow?.closest('.timeline-scroll-area__day-column');
         this.isOutsideSection = !!timelineSection;
 
         if (this.isOutsideSection && this.ghostEl) {
+            // timeline ドロップ用 floating ghost をポインタに追従させ、preview は消す。
+            // source 側は dimmed 表示で視覚的にドラッグ中であることを示す。
             this.ghostEl.classList.remove('is-drag-hidden');
             this.ghostEl.style.left = `${e.clientX + 10}px`;
             this.ghostEl.style.top = `${e.clientY + 10}px`;
-            this.dragEl.classList.add('is-drag-source-dimmed');
+            this.hiddenElements.forEach(el => {
+                el.classList.remove('is-drag-hidden');
+                el.classList.add('is-drag-source-dimmed');
+            });
             this.dragEl.style.transform = '';
             this.dragEl.style.gridColumn = this.initialGridColumn;
+            this.clearPreviewGhosts();
 
             const originalEndLine = this.startCol + this.initialSpan;
             this.updateArrowPosition(originalEndLine);
         } else if (this.ghostEl) {
+            // section 内: source を hide → split-aware preview ghost で WYSIWYG 表示。
             this.ghostEl.classList.add('is-drag-hidden');
             this.ghostEl.style.left = '-9999px';
-            this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
-            this.dragEl.style.transform = `translateX(${snappedDeltaX}px)`;
+            this.hiddenElements.forEach(el => {
+                el.classList.remove('is-drag-source-dimmed', 'is-drag-source-faint');
+                el.classList.add('is-drag-hidden');
+            });
+            this.dragEl.style.transform = '';
+            this.dragEl.style.gridColumn = this.initialGridColumn;
+
+            const movedStart = DateUtils.addDays(this.initialCalendarVisualStart, dayDelta);
+            const movedEnd = DateUtils.addDays(this.initialCalendarVisualEnd, dayDelta);
+            this.updateSplitPreview(this.planAllDaySegments(context, movedStart, movedEnd));
 
             const newTaskEndLine = this.startCol + this.initialSpan + dayDelta;
             this.updateArrowPosition(newTaskEndLine);
@@ -691,6 +714,12 @@ export class MoveStrategy extends BaseDragStrategy {
     }
 
     protected cleanup(): void {
+        // hiddenElements は drag 中に `is-drag-hidden` 等を付与した DOM 要素群。
+        // super.cleanup() は dragEl のみ class 除去するため、関連 segments は
+        // 各 finish で個別 remove していた。cleanup() に集約することで漏れを防ぐ。
+        for (const el of this.hiddenElements) {
+            el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
+        }
         super.cleanup();
         this.hiddenElements = [];
         this.lastDragResult = null;
