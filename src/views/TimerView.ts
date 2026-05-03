@@ -26,6 +26,7 @@ import { TimeFormatter } from '../utils/TimeFormatter';
 import { ViewUriBuilder } from './sharedLogic/ViewUriBuilder';
 import type { ViewUriOptions } from './sharedLogic/ViewUriBuilder';
 import { IntervalTemplateCreator } from './customMenus/IntervalTemplateCreator';
+import { TimerToolbar } from './TimerToolbar';
 import { t } from '../i18n';
 
 export const VIEW_TYPE_TIMER = VIEW_META_TIMER.type;
@@ -50,11 +51,53 @@ export class TimerView extends ItemView {
     private templateCreator: IntervalTemplateCreator | null = null;
     private templates: IntervalTemplate[] = [];
     private selectedTemplate: IntervalTemplate | null = null;
+    private toolbar: TimerToolbar;
 
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
         this.plugin = plugin;
         this.templateLoader = new IntervalTemplateLoader(plugin.app);
+
+        this.toolbar = new TimerToolbar({
+            plugin: this.plugin,
+            getMode: () => this.timerViewMode,
+            isIdle: () => !this.timer || this.timer.phase === 'idle',
+            onSelectMode: (event) => this.showModeMenu(event),
+            onReloadTemplates: () => {
+                void (async () => {
+                    await this.loadTemplates();
+                    this.render();
+                })();
+            },
+            onShowSettingsMenu: (e) => this.showSettingsMenu(e),
+        });
+    }
+
+    private showModeMenu(event: MouseEvent): void {
+        if (this.timer && this.timer.phase !== 'idle') return;
+        const labels: Record<TimerViewMode, string> = {
+            countup: t('timer.countup'),
+            countdown: t('timer.countdown'),
+            pomodoro: t('timer.pomodoro'),
+            interval: t('timer.interval'),
+        };
+        this.plugin.menuPresenter.present((menu) => {
+            for (const mode of ['countup', 'countdown', 'pomodoro', 'interval'] as TimerViewMode[]) {
+                menu.addItem((item) => {
+                    item.setTitle(labels[mode])
+                        .setChecked(this.timerViewMode === mode)
+                        .onClick(async () => {
+                            this.timerViewMode = mode;
+                            this.timer = null;
+                            this.selectedTemplate = null;
+                            if (mode === 'interval') {
+                                await this.loadTemplates();
+                            }
+                            this.render();
+                        });
+                });
+            }
+        }, { kind: 'mouseEvent', event });
     }
 
     getViewType(): string {
@@ -442,10 +485,11 @@ export class TimerView extends ItemView {
     // ─── Rendering ──────────────────────────────────────────────
 
     private render(): void {
+        this.toolbar.detach();
         this.container.empty();
 
-        // Toolbar
-        this.renderToolbar();
+        const toolbarHost = this.container.createDiv('timer-view__toolbar-host');
+        this.toolbar.mount(toolbarHost);
 
         const mainContainer = this.container.createDiv('timer-view__main');
 
@@ -463,69 +507,6 @@ export class TimerView extends ItemView {
         // Controls
         const controls = mainContainer.createDiv('timer-view__controls');
         this.renderControls(controls);
-    }
-
-    private renderToolbar(): void {
-        const toolbarHost = this.container.createDiv('timer-view__toolbar-host');
-        const toolbar = toolbarHost.createDiv('view-toolbar');
-
-        const isIdle = !this.timer || this.timer.phase === 'idle';
-
-        // Mode dropdown (left)
-        const modeBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--dropdown' });
-        const modeIcon = modeBtn.createSpan('view-toolbar__btn-icon');
-        const modeLabel = modeBtn.createSpan({ cls: 'view-toolbar__btn-label' });
-        setIcon(modeIcon, 'chevrons-up-down');
-
-        const labels: Record<TimerViewMode, string> = {
-            countup: t('timer.countup'),
-            countdown: t('timer.countdown'),
-            pomodoro: t('timer.pomodoro'),
-            interval: t('timer.interval'),
-        };
-        modeLabel.setText(labels[this.timerViewMode]);
-        modeBtn.disabled = !isIdle;
-
-        modeBtn.onclick = (e) => {
-            if (!isIdle) return;
-            this.plugin.menuPresenter.present((menu) => {
-                for (const mode of ['countup', 'countdown', 'pomodoro', 'interval'] as TimerViewMode[]) {
-                    menu.addItem((item) => {
-                        item.setTitle(labels[mode])
-                            .setChecked(this.timerViewMode === mode)
-                            .onClick(async () => {
-                                this.timerViewMode = mode;
-                                this.timer = null;
-                                this.selectedTemplate = null;
-                                if (mode === 'interval') {
-                                    await this.loadTemplates();
-                                }
-                                this.render();
-                            });
-                    });
-                }
-            }, { kind: 'mouseEvent', event: e });
-        };
-
-        // Spacer
-        toolbar.createDiv('view-toolbar__spacer');
-
-        // Interval mode: refresh button
-        if (this.timerViewMode === 'interval' && isIdle) {
-            const refreshBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-            setIcon(refreshBtn, 'refresh-cw');
-            refreshBtn.setAttribute('aria-label', t('timer.reloadTemplates'));
-            refreshBtn.onclick = async () => {
-                await this.loadTemplates();
-                this.render();
-            };
-        }
-
-        // Settings gear (all modes)
-        const settingsBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(settingsBtn, 'settings');
-        settingsBtn.setAttribute('aria-label', t('timer.settings'));
-        settingsBtn.onclick = (e) => this.showSettingsMenu(e);
     }
 
     private updateDisplay(): void {

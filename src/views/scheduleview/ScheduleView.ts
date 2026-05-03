@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
+import { ItemView, WorkspaceLeaf, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { isCompleteStatusChar } from '../../types';
@@ -10,11 +10,10 @@ import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import TaskViewerPlugin from '../../main';
 
-import { DateNavigator, ViewSettingsMenu } from '../sharedUI/ViewToolbar';
-import { ScheduleExportStrategy } from '../../services/export/ScheduleExportStrategy';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
+import { ScheduleToolbar } from './ScheduleToolbar';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
@@ -53,6 +52,7 @@ export class ScheduleView extends ItemView {
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly habitRenderer: HabitTrackerRenderer;
     private readonly filterMenu = new FilterMenuComponent();
+    private readonly toolbar: ScheduleToolbar;
     private readonly menuHandler: MenuHandler;
     private readonly gridCalculator: ScheduleGridCalculator;
     private readonly taskCategorizer: ScheduleTaskCategorizer;
@@ -125,6 +125,40 @@ export class ScheduleView extends ItemView {
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
+
+        this.toolbar = new ScheduleToolbar({
+            app: this.app,
+            leaf: this.leaf,
+            plugin: this.plugin,
+            readService: this.readService,
+            filterMenu: this.filterMenu,
+            container: this.containerEl,
+            onNavigate: (days) => this.navigateDate(days),
+            onToday: () => {
+                this.currentVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+                this.scrollToNowOnNextRender = true;
+                void this.app.workspace.requestSaveLayout();
+                this.render();
+            },
+            onFilterChange: () => {
+                void this.app.workspace.requestSaveLayout();
+                this.render();
+            },
+            getCustomName: () => this.customName,
+            onRename: (newName) => {
+                this.customName = newName;
+                this.leaf.updateHeader();
+                this.app.workspace.requestSaveLayout();
+            },
+            onApplyFilterTemplate: () => {
+                this.app.workspace.requestSaveLayout();
+                this.render();
+            },
+            onReset: () => {
+                this.app.workspace.requestSaveLayout();
+                this.render();
+            },
+        });
     }
 
     getViewType(): string {
@@ -244,10 +278,11 @@ export class ScheduleView extends ItemView {
             return;
         }
 
+        this.toolbar.detach();
         this.taskRenderer.disposeInside(this.container);
         this.container.empty();
         const toolbarHost = this.container.createDiv('schedule-view__toolbar-host');
-        this.renderToolbar(toolbarHost);
+        this.toolbar.mount(toolbarHost);
 
         const filterState = this.filterMenu.getFilterState();
         const startHour = this.plugin.settings.startHour;
@@ -284,85 +319,6 @@ export class ScheduleView extends ItemView {
                 }
             });
         }
-    }
-
-    private renderToolbar(parent: HTMLElement): void {
-        const toolbar = parent.createDiv('view-toolbar');
-        DateNavigator.render(
-            toolbar,
-            (days) => this.navigateDate(days),
-            () => {
-                this.currentVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-                this.scrollToNowOnNextRender = true;
-                void this.app.workspace.requestSaveLayout();
-                this.render();
-            },
-            { label: t('toolbar.now') }
-        );
-
-        toolbar.createDiv('view-toolbar__spacer');
-
-        const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(filterBtn, 'filter');
-        filterBtn.setAttribute('aria-label', t('toolbar.filter'));
-        filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
-        filterBtn.addEventListener('click', (event: MouseEvent) => {
-            this.filterMenu.showMenu(event, {
-                onFilterChange: () => {
-                    void this.app.workspace.requestSaveLayout();
-                    this.render();
-                    filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
-                },
-                getTasks: () => this.readService.getTasks(),
-                getStartHour: () => this.plugin.settings.startHour,
-            });
-        });
-
-        // View Settings
-        ViewSettingsMenu.renderButton(toolbar, {
-            app: this.app,
-            leaf: this.leaf,
-            getCustomName: () => this.customName,
-            getDefaultName: () => VIEW_META_SCHEDULE.displayText,
-            onRename: (newName) => {
-                this.customName = newName;
-                this.leaf.updateHeader();
-                this.app.workspace.requestSaveLayout();
-            },
-            buildUri: () => ({
-                filterState: this.filterMenu.getFilterState(),
-            }),
-            viewType: VIEW_META_SCHEDULE.type,
-            getViewTemplateFolder: () => this.plugin.settings.viewTemplateFolder,
-            getViewTemplate: () => ({
-                filePath: '',
-                name: this.customName || VIEW_META_SCHEDULE.displayText,
-                viewType: 'schedule',
-                filterState: this.filterMenu.getFilterState(),
-            }),
-            getExportContainer: () => this.container,
-            getReadService: () => this.readService,
-            getExportStrategy: () => new ScheduleExportStrategy(),
-            onApplyTemplate: (template) => {
-                if (template.filterState) {
-                    this.filterMenu.setFilterState(template.filterState);
-                }
-                if (template.name) {
-                    this.customName = template.name;
-                    this.leaf.updateHeader();
-                }
-                this.app.workspace.requestSaveLayout();
-                this.render();
-            },
-            onReset: () => {
-                this.filterMenu.setFilterState(createEmptyFilterState());
-                this.customName = undefined;
-                this.leaf.updateHeader();
-                this.app.workspace.requestSaveLayout();
-                this.render();
-            },
-            menuPresenter: this.plugin.menuPresenter,
-        });
     }
 
     private async renderDayTimeline(

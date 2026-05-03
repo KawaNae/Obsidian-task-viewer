@@ -28,6 +28,7 @@ import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../share
 import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
 import { ViewTemplateWriter } from '../../services/template/ViewTemplateWriter';
 import { InputModal } from '../../modals/InputModal';
+import { MiniCalendarToolbar } from './MiniCalendarToolbar';
 
 export const VIEW_TYPE_MINI_CALENDAR = VIEW_META_MINI_CALENDAR.type;
 
@@ -48,6 +49,7 @@ export class MiniCalendarView extends ItemView {
     private readonly readService: TaskReadService;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly filterMenu = new FilterMenuComponent();
+    private readonly toolbar: MiniCalendarToolbar;
 
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
@@ -72,6 +74,28 @@ export class MiniCalendarView extends ItemView {
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
         const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
         this.windowStart = DateUtils.getLocalDateString(weekStart);
+
+        this.toolbar = new MiniCalendarToolbar({
+            app: this.app,
+            leaf: this.leaf,
+            plugin: this.plugin,
+            filterMenu: this.filterMenu,
+            linkInteractionManager: this.linkInteractionManager,
+            hoverParent: this.hoverParent,
+            getReferenceMonth: () => this.getReferenceMonth(),
+            onNavigateWeek: (direction) => this.navigateWeek(direction),
+            onJumpToCurrentMonth: () => {
+                if (this.isAnimating) return;
+                const today = new Date();
+                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
+                this.windowStart = DateUtils.getLocalDateString(weekStart);
+                void this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
+            onOpenPeriodicNote: (kind, date) => this.openOrCreatePeriodicNote(kind, date),
+            onShowSettingsMenu: (e, anchor) => this.showSettingsMenu(e, anchor),
+        });
     }
 
     getViewType(): string {
@@ -166,9 +190,11 @@ export class MiniCalendarView extends ItemView {
             this.windowStart = normalizedWindowStart;
         }
 
+        this.toolbar.detach();
         this.container.empty();
 
-        this.renderToolbar();
+        const toolbarHost = this.container.createDiv('mini-calendar-view__toolbar-host');
+        this.toolbar.mount(toolbarHost);
 
         const grid = this.container.createDiv('mini-calendar-grid');
         this.renderWeekdayHeader(grid);
@@ -214,97 +240,6 @@ export class MiniCalendarView extends ItemView {
         }
     }
 
-    private renderToolbar(): void {
-        const toolbarHost = this.container.createDiv('mini-calendar-view__toolbar-host');
-        const toolbar = toolbarHost.createDiv('view-toolbar mini-calendar-toolbar');
-
-        const labelGroup = toolbar.createDiv('mini-calendar-toolbar__label');
-        const referenceMonth = this.getReferenceMonth();
-        const now = new Date();
-        const isCurrentYear = referenceMonth.year === now.getFullYear();
-        const isCurrentMonth = isCurrentYear && referenceMonth.month === now.getMonth();
-
-        const yearDate = new Date(referenceMonth.year, 0, 1);
-        const yearLinkTarget = DailyNoteUtils.getYearlyNoteLinkTarget(this.plugin.settings, yearDate);
-        const yearWrapper = labelGroup.createSpan({ cls: 'mini-calendar-toolbar__year' });
-        const yearLink = yearWrapper.createEl('a', {
-            cls: 'internal-link',
-            text: `${referenceMonth.year}`,
-        });
-        yearLink.dataset.href = yearLinkTarget;
-        yearLink.setAttribute('href', yearLinkTarget);
-        yearWrapper.toggleClass('is-current', isCurrentYear);
-        yearLink.addEventListener('click', (event: MouseEvent) => {
-            event.preventDefault();
-        });
-        this.linkInteractionManager.bind(yearWrapper, {
-            sourcePath: '',
-            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            hoverParent: this.hoverParent,
-        }, { bindClick: false });
-        yearWrapper.addEventListener('click', () => {
-            void this.openOrCreatePeriodicNote('yearly', yearDate);
-        });
-
-        labelGroup.createSpan({ cls: 'mini-calendar-toolbar__separator', text: '-' });
-
-        const monthDate = new Date(referenceMonth.year, referenceMonth.month, 1);
-        const monthLinkTarget = DailyNoteUtils.getMonthlyNoteLinkTarget(this.plugin.settings, monthDate);
-        const monthWrapper = labelGroup.createSpan({ cls: 'mini-calendar-toolbar__month' });
-        const monthLink = monthWrapper.createEl('a', {
-            cls: 'internal-link',
-            text: `${String(referenceMonth.month + 1).padStart(2, '0')}`,
-        });
-        monthLink.dataset.href = monthLinkTarget;
-        monthLink.setAttribute('href', monthLinkTarget);
-        monthWrapper.toggleClass('is-current', isCurrentMonth);
-        monthLink.addEventListener('click', (event: MouseEvent) => {
-            event.preventDefault();
-        });
-        this.linkInteractionManager.bind(monthWrapper, {
-            sourcePath: '',
-            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            hoverParent: this.hoverParent,
-        }, { bindClick: false });
-        monthWrapper.addEventListener('click', () => {
-            void this.openOrCreatePeriodicNote('monthly', monthDate);
-        });
-
-        toolbar.createDiv('view-toolbar__spacer');
-        const navGroup = toolbar.createDiv('mini-calendar-toolbar__nav');
-
-        const prevBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(prevBtn, 'chevron-up');
-        prevBtn.setAttribute('aria-label', 'Previous week');
-        prevBtn.addEventListener('click', () => this.navigateWeek(-1));
-
-        const todayBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--today mini-calendar-toolbar__today', text: t('toolbar.today') });
-        todayBtn.setAttribute('aria-label', 'Today');
-        todayBtn.addEventListener('click', () => {
-            if (this.isAnimating) {
-                return;
-            }
-            const today = new Date();
-            const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-            const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
-            this.windowStart = DateUtils.getLocalDateString(weekStart);
-            void this.app.workspace.requestSaveLayout();
-            void this.render();
-        });
-
-        const nextBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(nextBtn, 'chevron-down');
-        nextBtn.setAttribute('aria-label', 'Next week');
-        nextBtn.addEventListener('click', () => this.navigateWeek(1));
-
-        const moreBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(moreBtn, 'more-vertical');
-        moreBtn.setAttribute('aria-label', t('toolbar.viewSettings'));
-        if (this.filterMenu.hasActiveFilters()) {
-            moreBtn.classList.add('is-filtered');
-        }
-        moreBtn.addEventListener('click', (e) => this.showSettingsMenu(e, moreBtn));
-    }
     private renderWeekdayHeader(grid: HTMLElement): void {
         const header = grid.createDiv('mini-calendar-weekday-header');
         if (this.shouldShowWeekNumbers()) {

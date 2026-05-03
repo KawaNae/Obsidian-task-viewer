@@ -6,8 +6,7 @@ import { TaskDetailModal } from '../../modals/TaskDetailModal';
 import TaskViewerPlugin from '../../main';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
-import { ViewSettingsMenu } from '../sharedUI/ViewToolbar';
-import { KanbanExportStrategy } from '../../services/export/KanbanExportStrategy';
+import { KanbanToolbar } from './KanbanToolbar';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { combineFilterStates, createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import type { FilterState } from '../../services/filter/FilterTypes';
@@ -42,6 +41,7 @@ export class KanbanView extends ItemView {
     private readonly filterMenu = new FilterMenuComponent();
     private readonly sortMenu = new SortMenuComponent();
     private readonly viewFilterMenu = new FilterMenuComponent();
+    private readonly toolbar: KanbanToolbar;
 
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
@@ -82,6 +82,45 @@ export class KanbanView extends ItemView {
             () => this.plugin.settings.pinnedListPageSize,
             (container, tasks, listId) => this.renderTaskCards(container, tasks, listId),
         );
+
+        this.toolbar = new KanbanToolbar({
+            app: this.app,
+            leaf: this.leaf,
+            plugin: this.plugin,
+            readService: this.readService,
+            filterMenu: this.viewFilterMenu,
+            container: this.containerEl,
+            onFilterChange: () => {
+                this.persistViewFilterState();
+                this.render();
+            },
+            getCustomName: () => this.customName,
+            onRename: (newName) => {
+                this.customName = newName;
+                this.leaf.updateHeader();
+                this.app.workspace.requestSaveLayout();
+            },
+            getGrid: () => this.grid,
+            onApplyTemplate: (template) => {
+                if (template.grid && template.grid.length > 0) {
+                    this.grid = template.grid;
+                    this.gridCollapsed = {};
+                }
+                if (template.filterState) {
+                    this.viewFilterState = template.filterState;
+                }
+                this.requestSaveLayout();
+                this.render();
+            },
+            onReset: () => {
+                this.grid = [[this.createDefaultList()]];
+                this.gridCollapsed = {};
+                this.customName = undefined;
+                this.viewFilterState = undefined;
+                this.requestSaveLayout();
+                this.render();
+            },
+        });
     }
 
     getViewType(): string {
@@ -177,13 +216,14 @@ export class KanbanView extends ItemView {
     // ─── Render ───────────────────────────────────────────────
 
     private render(): void {
+        this.toolbar.detach();
         this.taskRenderer.disposeInside(this.container);
         this.container.empty();
         this.paging.clear();
 
         // Toolbar
         const toolbarHost = this.container.createDiv('kanban-view__toolbar-host');
-        this.renderToolbar(toolbarHost);
+        this.toolbar.mount(toolbarHost);
 
         // Grid host
         const gridHost = this.container.createDiv('kanban-view__grid-host');
@@ -198,79 +238,6 @@ export class KanbanView extends ItemView {
             }
         }
 
-    }
-
-    private renderToolbar(host: HTMLElement): void {
-        const toolbar = host.createDiv('view-toolbar');
-
-        toolbar.createDiv('view-toolbar__spacer');
-
-        // View-level filter button
-        const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(filterBtn, 'filter');
-        filterBtn.setAttribute('aria-label', t('toolbar.filter'));
-        filterBtn.classList.toggle('is-filtered', this.viewFilterMenu.hasActiveFilters());
-        filterBtn.onclick = (e) => {
-            this.viewFilterMenu.showMenu(e as MouseEvent, {
-                onFilterChange: () => {
-                    this.persistViewFilterState();
-                    this.render();
-                    filterBtn.classList.toggle('is-filtered', this.viewFilterMenu.hasActiveFilters());
-                },
-                getTasks: () => this.readService.getTasks(),
-                getStartHour: () => this.plugin.settings.startHour,
-            });
-        };
-
-        ViewSettingsMenu.renderButton(toolbar, {
-            app: this.app,
-            leaf: this.leaf,
-            getCustomName: () => this.customName,
-            getDefaultName: () => VIEW_META_KANBAN.displayText,
-            onRename: (newName) => {
-                this.customName = newName;
-                this.leaf.updateHeader();
-                this.app.workspace.requestSaveLayout();
-            },
-            buildUri: () => ({
-                grid: this.grid,
-                filterState: this.viewFilterMenu.getFilterState(),
-            }),
-            viewType: VIEW_META_KANBAN.type,
-            getViewTemplateFolder: () => this.plugin.settings.viewTemplateFolder,
-            getViewTemplate: () => ({
-                filePath: '',
-                name: this.customName || VIEW_META_KANBAN.displayText,
-                viewType: 'kanban',
-                grid: this.grid,
-                filterState: this.viewFilterMenu.getFilterState(),
-            }),
-            getExportContainer: () => this.container,
-            getReadService: () => this.readService,
-            getExportStrategy: () => new KanbanExportStrategy(),
-            onApplyTemplate: (template) => {
-                if (template.grid && template.grid.length > 0) {
-                    this.grid = template.grid;
-                    this.gridCollapsed = {};
-                }
-                if (template.filterState) {
-                    this.viewFilterState = template.filterState;
-                    this.viewFilterMenu.setFilterState(template.filterState);
-                }
-                this.requestSaveLayout();
-                this.render();
-            },
-            onReset: () => {
-                this.grid = [[this.createDefaultList()]];
-                this.gridCollapsed = {};
-                this.customName = undefined;
-                this.viewFilterState = undefined;
-                this.viewFilterMenu.setFilterState(createEmptyFilterState());
-                this.requestSaveLayout();
-                this.render();
-            },
-            menuPresenter: this.plugin.menuPresenter,
-        });
     }
 
     private renderCell(gridEl: HTMLElement, listDef: PinnedListDefinition, row: number, col: number): void {

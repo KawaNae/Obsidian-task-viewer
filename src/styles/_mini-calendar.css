@@ -11,7 +11,7 @@
     padding: 12px !important;
 }
 
-.mini-calendar-view .mini-calendar-toolbar {
+.mini-calendar-view .view-toolbar {
     justify-content: space-between;
     padding: 0 0 7px;
     border-bottom: none;
