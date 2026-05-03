@@ -1,25 +1,53 @@
-import { BaseDragStrategy } from '../BaseDragStrategy';
+import { BaseDragStrategy, GhostPlan } from '../BaseDragStrategy';
 import type { DragContext } from '../../DragStrategy';
 import type { Task } from '../../../../types';
 import { DateUtils } from '../../../../utils/DateUtils';
 import { createGhostElement, removeGhostElement } from '../../ghost/GhostFactory';
 import { DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
-import type { DragPlan } from '../../DragPlan';
 import type { GridSurface } from '../../grid/GridSurface';
 import { CalendarGridSurface } from '../../grid/CalendarGridSurface';
 import { AllDayGridSurface } from '../../grid/AllDayGridSurface';
 
 /**
+ * pointer 解決の結果。state に依存しない pure な意味単位。
+ *  - dayDelta : 視覚的に何日分動いたか (clamp/locate 適用後)
+ *  - crossViewSection : AllDay→Timeline drop のターゲット。Calendar では常に null
+ */
+export interface GridMoveTarget {
+    dayDelta: number;
+    crossViewSection: HTMLElement | null;
+}
+
+/**
+ * planChange の結果。render と commit に渡す全情報。
+ *  - render        : 描画方針 (preview ghost or cross-view floating)
+ *  - commit        : 書き戻し時に使う edits。dayDelta=0 のときは null
+ */
+export interface GridMovePlan {
+    render: GridMoveRenderPlan;
+    commit: { edits: DisplayDateEdits; baseTask: Task } | null;
+}
+
+export type GridMoveRenderPlan =
+    | {
+          mode: 'preview';
+          ghostPlans: GhostPlan[];
+          arrowEndLine: number;
+      }
+    | {
+          mode: 'cross-view-drop';
+          floatingGhostPos: { x: number; y: number };
+          arrowEndLine: number;
+      };
+
+/**
  * Calendar / AllDay の両 Grid Surface を扱う Move Gesture。
  *
- * Surface 注入で Calendar/AllDay の差を吸収し、grid 座標系の dayDelta 平行移動
- * という共通モデルで実装する。Surface ごとの方言:
- *   - Calendar: cal-week-row × N、cross-week 判定で grabCol を使用
- *   - AllDay  : 単一 .allday-section、X 軸絶対で dayDelta 計算、Timeline drop
- *               (canCrossToTimeline) を許す
- *
- * Move 中の preview は GridSurface.planSegments による split-aware ghost。
- * Floating ghost (`ghostEl`) は cross-view drop 中に pointer に追従させるための補助。
+ * onMove / onUp は **resolveTarget → planChange → render → commit** の 4 段
+ * pipeline。pure 部 (resolveTarget の DOM 読みは Surface 内に隔離、planChange
+ * 自体は state + target → plan の組み立て) と副作用 (render の DOM 操作、
+ * commit の updateTask) の境界が分離されており、planChange の核は static
+ * helper として unit test 可能。
  */
 export class GridMoveGesture extends BaseDragStrategy {
     name = 'GridMove';
@@ -37,9 +65,8 @@ export class GridMoveGesture extends BaseDragStrategy {
     private refHeaderCell: HTMLElement | null = null;
     private baseTask: Task | null = null;
     private hiddenElements: HTMLElement[] = [];
-    /** AllDay → Timeline drop 中なら true。preview/ghost 表示の切替に使う。 */
-    private isOutsideSection: boolean = false;
-    /** Calendar / AllDay どちらの Surface か。is-calendar 判定なしに updateArrowPosition 等の AllDay 限定機能を分岐するためのフラグ。 */
+    /** Calendar / AllDay どちらの Surface か。一部の機能 (due-arrow, cross-view drop)
+     *  が AllDay 限定なのでフラグで分岐する。 */
     private isAllDay: boolean = false;
 
     onDown(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext): void {
@@ -53,7 +80,6 @@ export class GridMoveGesture extends BaseDragStrategy {
         const isCalendar = !!el.closest('.cal-week-row');
         this.isAllDay = !isCalendar;
 
-        // Surface 選択
         if (isCalendar) {
             const weekRow = el.closest('.cal-week-row') as HTMLElement;
             this.container = weekRow;
@@ -70,11 +96,9 @@ export class GridMoveGesture extends BaseDragStrategy {
             );
         }
 
-        // baseTask を split safety のため original から取る
         const originalId = getOriginalTaskId(task);
         this.baseTask = context.readService.getTask(originalId) ?? task;
 
-        // Visual range (inclusive) — preview ghost 描画用
         const startHour = context.plugin.settings.startHour;
         const visual = this.getVisualDateRange(this.baseTask, startHour);
         this.initialVisualStart = visual.start;
@@ -82,31 +106,26 @@ export class GridMoveGesture extends BaseDragStrategy {
         this.initialSpan = DateUtils.getDiffDays(visual.start, visual.end) + 1;
         this.colWidth = this.gridSurface.getColWidth();
 
-        // grid 座標取得 + grabCol (Calendar 専用、AllDay は使わないが一応設定)
         const colStart = Number.parseInt(el.dataset.colStart || '1', 10);
         const span = Number.parseInt(el.dataset.span || '1', 10);
         if (isCalendar) {
             this.startCol = colStart;
             const target = e.target as HTMLElement;
-            // bottom-right move handle なら grabCol は span 末端、それ以外は startCol
             this.grabCol = target.closest('.task-card__handle--move-bottom-right')
                 ? Math.min(7, this.startCol + span - 1)
                 : this.startCol;
         } else {
-            // AllDay: dataset.colStart は dates[] 0-based、+1 で grid 1-based
-            this.startCol = colStart + 1;
-            this.grabCol = this.startCol; // unused for allday but set for safety
+            this.startCol = colStart + 1; // AllDay: dataset.colStart は 0-based、+1 で grid 1-based
+            this.grabCol = this.startCol;
         }
 
         this.initialGridColumn = el.style.gridColumn;
         el.style.zIndex = '1000';
 
-        // floating ghost (cross-view drop で pointer 追従に使う)
         const doc = context.container.ownerDocument || document;
         this.ghostEl = createGhostElement(el, doc);
         this.clearPreviewGhosts();
 
-        // 同一 originalId の split segments を hide リストへ
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         context.container.querySelectorAll(selector).forEach(segment => {
             if (segment instanceof HTMLElement && !segment.closest('.tv-sidebar__pinned-lists')) {
@@ -129,11 +148,10 @@ export class GridMoveGesture extends BaseDragStrategy {
             this.hiddenElements.forEach(el => el.classList.add('is-drag-hidden'));
         }
 
-        if (this.isAllDay) {
-            this.processAllDayLikeMove(e, context);
-        } else {
-            this.processCalendarLikeMove(e, context);
-        }
+        const target = this.resolveTarget(e, context);
+        const plan = this.planChange(target, e, context);
+        this.render(plan);
+        this.updateDropZoneHighlight(e, context);
     }
 
     async onUp(e: PointerEvent, context: DragContext): Promise<void> {
@@ -144,70 +162,109 @@ export class GridMoveGesture extends BaseDragStrategy {
         this.ghostEl = null;
 
         if (!this.hasMoved) {
-            // drag せず press-release: 単純な card click として selection 設定
+            // drag せず press-release → 単純な card click として selection 設定
             context.onTaskClick(this.dragTask.id);
             this.cleanup();
             return;
         }
 
-        // AllDay 専用: timeline へのドロップ判定
-        if (this.isAllDay) {
-            const doc = context.container.ownerDocument || document;
-            const tlSection = this.gridSurface.canCrossToTimeline?.(e.clientX, e.clientY, doc) ?? null;
-            if (tlSection) {
-                const plan = this.buildTimelineDropPlan(tlSection, e.clientY, context);
-                await this.commitPlan(context, plan, this.dragTask.id);
-                this.cleanup();
-                return;
-            }
-        }
-
-        // 通常の grid 内 move: dayDelta から DragPlan 構築 → commitPlan
-        const dayDelta = this.computeDayDelta(e, context);
-        await this.commitPlan(context, this.buildMoveDayShiftPlan(dayDelta), this.dragTask.id);
+        const target = this.resolveTarget(e, context);
+        const plan = this.planChange(target, e, context);
+        await this.commit(context, plan);
         this.cleanup();
     }
 
-    /** Calendar 経路: locatePointer 経由で dayDelta、preview を planSegments で更新。 */
-    private processCalendarLikeMove(e: PointerEvent, context: DragContext): void {
-        if (!this.dragEl || !this.gridSurface) return;
-        const dayDelta = this.computeDayDelta(e, context);
+    // ========== Pipeline 4 段 ==========
 
-        if (this.ghostEl) {
-            this.ghostEl.classList.add('is-drag-hidden');
-            this.ghostEl.style.left = '-9999px';
+    /**
+     * pointer (clientX, clientY) を意味のある target に解決する。
+     * Surface 内部で DOM を読むが、Gesture 側は target 構造体を受け取るだけ。
+     */
+    private resolveTarget(e: PointerEvent, context: DragContext): GridMoveTarget {
+        if (!this.gridSurface) return { dayDelta: 0, crossViewSection: null };
+
+        if (this.isAllDay) {
+            const doc = context.container.ownerDocument || document;
+            const crossViewSection = this.gridSurface.canCrossToTimeline?.(e.clientX, e.clientY, doc) ?? null;
+            const dayDelta = this.gridSurface.clampDayDelta(
+                Math.round((e.clientX - this.initialX) / this.colWidth),
+                this.initialVisualStart,
+                this.initialVisualEnd,
+            );
+            return { dayDelta, crossViewSection };
         }
 
-        const movedStart = DateUtils.addDays(this.initialVisualStart, dayDelta);
-        const movedEnd = DateUtils.addDays(this.initialVisualEnd, dayDelta);
-        const trackIndex = Number.parseInt(this.dragEl.dataset.trackIndex || '0', 10);
-        this.updateSplitPreview(this.gridSurface.planSegments({ rangeStart: movedStart, rangeEnd: movedEnd, trackIndex }));
-        this.dragEl.style.transform = '';
+        // Calendar
+        const sourceWeekRow = this.container as HTMLElement | null;
+        const sourceWeekStart = sourceWeekRow?.dataset.weekStart || context.getViewStartDate();
+        const located = this.gridSurface.locatePointer(e.clientX, e.clientY, { suppressEl: this.dragEl });
+        const dayDelta = (located && located.weekStart)
+            ? DateUtils.getDiffDays(sourceWeekStart, located.weekStart) + located.col - this.grabCol
+            : Math.round((e.clientX - this.initialX) / this.colWidth);
+        return { dayDelta, crossViewSection: null };
     }
 
     /**
-     * AllDay 経路: X 軸絶対値で dayDelta、Timeline drop 検出 → floating ghost or
-     * 通常 split-aware preview。
+     * target + 内部 state から render/commit プランを組み立てる。Surface への
+     * 呼び出しはここで起きるが、計算自体は (initialVisualStart/End, baseTask,
+     * dayDelta, crossViewSection) のみに依存し、副作用なし。
      */
-    private processAllDayLikeMove(e: PointerEvent, context: DragContext): void {
-        if (!this.dragEl || !this.gridSurface) return;
-        const deltaX = e.clientX - this.initialX;
-        const dayDelta = this.gridSurface.clampDayDelta(
-            Math.round(deltaX / this.colWidth),
+    private planChange(target: GridMoveTarget, e: PointerEvent, context: DragContext): GridMovePlan {
+        if (!this.dragEl || !this.gridSurface || !this.baseTask) {
+            return { render: { mode: 'preview', ghostPlans: [], arrowEndLine: 0 }, commit: null };
+        }
+        const trackIndex = Number.parseInt(this.dragEl.dataset.trackIndex || '0', 10);
+
+        if (target.crossViewSection) {
+            // AllDay → Timeline drop
+            const edits = GridMoveGesture.buildTimelineDropEdits(
+                target.crossViewSection,
+                e.clientY,
+                context.getZoomLevel(),
+                context.plugin.settings.startHour,
+            );
+            return {
+                render: {
+                    mode: 'cross-view-drop',
+                    floatingGhostPos: { x: e.clientX + 10, y: e.clientY + 10 },
+                    arrowEndLine: this.startCol + this.initialSpan,
+                },
+                commit: edits ? { edits, baseTask: this.baseTask } : null,
+            };
+        }
+
+        // 通常の grid 内 move
+        const movedStart = DateUtils.addDays(this.initialVisualStart, target.dayDelta);
+        const movedEnd = DateUtils.addDays(this.initialVisualEnd, target.dayDelta);
+        const ghostPlans = this.gridSurface.planSegments({ rangeStart: movedStart, rangeEnd: movedEnd, trackIndex });
+        const edits = GridMoveGesture.buildMoveEdits(
             this.initialVisualStart,
             this.initialVisualEnd,
+            target.dayDelta,
+            this.baseTask,
         );
+        return {
+            render: {
+                mode: 'preview',
+                ghostPlans,
+                arrowEndLine: this.startCol + this.initialSpan + target.dayDelta,
+            },
+            commit: edits ? { edits, baseTask: this.baseTask } : null,
+        };
+    }
 
-        const doc = context.container.ownerDocument || document;
-        const tlSection = this.gridSurface.canCrossToTimeline?.(e.clientX, e.clientY, doc) ?? null;
-        this.isOutsideSection = !!tlSection;
+    /**
+     * plan を DOM に反映 (副作用)。preview と cross-view-drop で source/preview/
+     * floating ghost の見せ方が変わる。
+     */
+    private render(plan: GridMovePlan): void {
+        if (!this.dragEl || !this.ghostEl) return;
 
-        if (this.isOutsideSection && this.ghostEl) {
-            // timeline ドロップ用 floating ghost を pointer に追従、preview は消す。
-            // source 側は dimmed 表示で視覚的にドラッグ中であることを示す。
+        if (plan.render.mode === 'cross-view-drop') {
+            // floating ghost を pointer に追従、preview は消す。source 側は dimmed。
             this.ghostEl.classList.remove('is-drag-hidden');
-            this.ghostEl.style.left = `${e.clientX + 10}px`;
-            this.ghostEl.style.top = `${e.clientY + 10}px`;
+            this.ghostEl.style.left = `${plan.render.floatingGhostPos.x}px`;
+            this.ghostEl.style.top = `${plan.render.floatingGhostPos.y}px`;
             this.hiddenElements.forEach(el => {
                 el.classList.remove('is-drag-hidden');
                 el.classList.add('is-drag-source-dimmed');
@@ -215,8 +272,7 @@ export class GridMoveGesture extends BaseDragStrategy {
             this.dragEl.style.transform = '';
             this.dragEl.style.gridColumn = this.initialGridColumn;
             this.clearPreviewGhosts();
-            this.updateArrowPosition(this.startCol + this.initialSpan); // 元位置のまま
-        } else if (this.ghostEl) {
+        } else {
             // section 内: source を hide → split-aware preview ghost で WYSIWYG 表示
             this.ghostEl.classList.add('is-drag-hidden');
             this.ghostEl.style.left = '-9999px';
@@ -226,74 +282,64 @@ export class GridMoveGesture extends BaseDragStrategy {
             });
             this.dragEl.style.transform = '';
             this.dragEl.style.gridColumn = this.initialGridColumn;
-
-            const movedStart = DateUtils.addDays(this.initialVisualStart, dayDelta);
-            const movedEnd = DateUtils.addDays(this.initialVisualEnd, dayDelta);
-            const trackIndex = Number.parseInt(this.dragEl.dataset.trackIndex || '0', 10);
-            this.updateSplitPreview(this.gridSurface.planSegments({ rangeStart: movedStart, rangeEnd: movedEnd, trackIndex }));
-            this.updateArrowPosition(this.startCol + this.initialSpan + dayDelta);
+            this.updateSplitPreview(plan.render.ghostPlans);
         }
-
-        this.updateDropZoneHighlight(e, context);
+        this.updateArrowPosition(plan.render.arrowEndLine);
     }
 
-    /**
-     * locatePointer 経由を第 1 候補、X 軸絶対値を fallback として dayDelta を出す。
-     * Calendar 経路では cross-week 跨ぎを正しく検出するため target.weekStart 経由必須。
-     */
-    private computeDayDelta(e: PointerEvent, context: DragContext): number {
-        if (!this.gridSurface) return 0;
-
-        if (this.isAllDay) {
-            return this.gridSurface.clampDayDelta(
-                Math.round((e.clientX - this.initialX) / this.colWidth),
-                this.initialVisualStart,
-                this.initialVisualEnd,
-            );
-        }
-
-        // Calendar
-        const sourceWeekRow = this.container as HTMLElement | null;
-        const sourceWeekStart = sourceWeekRow?.dataset.weekStart || context.getViewStartDate();
-        const target = this.gridSurface.locatePointer(e.clientX, e.clientY, { suppressEl: this.dragEl });
-        if (target && target.weekStart) {
-            return DateUtils.getDiffDays(sourceWeekStart, target.weekStart) + target.col - this.grabCol;
-        }
-        return Math.round((e.clientX - this.initialX) / this.colWidth);
+    private async commit(context: DragContext, plan: GridMovePlan): Promise<void> {
+        if (!plan.commit || !this.dragTask) return;
+        await this.commitPlan(context, { edits: plan.commit.edits, baseTask: plan.commit.baseTask }, this.dragTask.id);
     }
 
+    // ========== Pure helpers (unit-testable) ==========
+
     /**
-     * Calendar/AllDay 共通の Move 用 DragPlan ビルダ。endDate 系の値があれば
+     * Calendar/AllDay 共通の Move 用 edits ビルダ。endDate 系の値があれば
      * effectiveEndDate も同 dayDelta だけ shift し、なければ start のみ更新。
+     *
+     * pure: 入力 (initialVisualStart, initialVisualEnd, dayDelta, baseTask の
+     * endDate/endTime 有無) のみで結果が決まる。
      */
-    private buildMoveDayShiftPlan(dayDelta: number): DragPlan | null {
-        if (dayDelta === 0 || !this.baseTask) return null;
-        const movedStart = DateUtils.addDays(this.initialVisualStart, dayDelta);
-        const movedEnd = DateUtils.addDays(this.initialVisualEnd, dayDelta);
+    static buildMoveEdits(
+        initialVisualStart: string,
+        initialVisualEnd: string,
+        dayDelta: number,
+        baseTask: Task,
+    ): DisplayDateEdits | null {
+        if (dayDelta === 0) return null;
+        const movedStart = DateUtils.addDays(initialVisualStart, dayDelta);
+        const movedEnd = DateUtils.addDays(initialVisualEnd, dayDelta);
         const edits: DisplayDateEdits = { effectiveStartDate: movedStart };
-        if (this.baseTask.endDate || this.baseTask.endTime) {
+        if (baseTask.endDate || baseTask.endTime) {
             edits.effectiveEndDate = movedEnd;
         }
-        return { edits, baseTask: this.baseTask };
+        return edits;
     }
 
     /**
-     * AllDay → Timeline cross-view drop の DragPlan ビルダ。
-     * effectiveStart/End × Date/Time 4 つを visual edit で渡し、
-     * materializeRawDates の inclusive semantic (willHaveEndTime=true) で raw 化。
+     * AllDay → Timeline cross-view drop 用 edits ビルダ。day-column の dataset.date
+     * と clientY から、startTime ＝ 15 分単位 snap、endTime ＝ start +
+     * DEFAULT_TIMED_DURATION_MINUTES。day boundary を跨ぐ場合は startDate /
+     * endDate も day オフセットで補正。
+     *
+     * pure: timelineSection.dataset.date と timelineSection.getBoundingClientRect()
+     * への依存はあるが、それ以外は引数のみ。
      */
-    private buildTimelineDropPlan(timelineSection: HTMLElement, clientY: number, context: DragContext): DragPlan | null {
-        if (!this.baseTask) return null;
+    static buildTimelineDropEdits(
+        timelineSection: HTMLElement,
+        clientY: number,
+        zoomLevel: number,
+        startHour: number,
+    ): DisplayDateEdits | null {
         const targetDate = timelineSection.dataset.date;
         if (!targetDate) return null;
 
         const rect = timelineSection.getBoundingClientRect();
         const yInContainer = clientY - rect.top;
-        const zoomLevel = context.getZoomLevel();
         const snapPixels = 15 * zoomLevel;
         const snappedTop = Math.round(yInContainer / snapPixels) * snapPixels;
 
-        const startHour = context.plugin.settings.startHour;
         const startHourMinutes = startHour * 60;
         const minutesFromStart = snappedTop / zoomLevel;
         const totalMin = startHourMinutes + minutesFromStart;
@@ -302,16 +348,17 @@ export class GridMoveGesture extends BaseDragStrategy {
         const startDayOffset = Math.floor(totalMin / 1440);
         const endDayOffset = Math.floor(totalEndMin / 1440);
 
-        const edits: DisplayDateEdits = {
+        return {
             effectiveStartDate: DateUtils.addDays(targetDate, startDayOffset),
             effectiveStartTime: DateUtils.minutesToTime(totalMin),
             effectiveEndDate: DateUtils.addDays(targetDate, endDayOffset),
             effectiveEndTime: DateUtils.minutesToTime(totalEndMin),
         };
-        return { edits, baseTask: this.baseTask };
     }
 
-    /** AllDay の due-arrow 位置更新 (Calendar では .due-arrow 自体が無いので no-op)。 */
+    // ========== UI side-effects ==========
+
+    /** AllDay の due-arrow 位置更新 (Calendar では .due-arrow が無いので no-op)。 */
     private updateArrowPosition(taskEndGridLine: number): void {
         if (!this.isAllDay) return;
         if (!this.dragEl?.dataset.id || !this.container) return;

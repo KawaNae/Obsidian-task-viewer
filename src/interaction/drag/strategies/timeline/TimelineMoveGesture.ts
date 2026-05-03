@@ -3,7 +3,8 @@ import type { DragContext } from '../../DragStrategy';
 import type { Task } from '../../../../types';
 import { DateUtils } from '../../../../utils/DateUtils';
 import { GhostManager, GhostSegment } from '../../ghost/GhostManager';
-import { getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
+import { DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
+import type { DragPlan } from '../../DragPlan';
 
 /**
  * Timeline (timed タスク, 縦軸) の Move Gesture。
@@ -24,6 +25,9 @@ export class TimelineMoveGesture extends BaseDragStrategy {
     private hiddenElements: HTMLElement[] = [];
     private initialTop: number = 0;
     private initialHeight: number = 0;
+    /** Original (pre-split) raw task. commitPlan の materializeRawDates が
+     *  endDate dual-semantic (inclusive vs exclusive) を判定するのに使う。 */
+    private baseTask: Task | null = null;
 
     private autoScrollTimer: number | null = null;
     private scrollContainer: HTMLElement | null = null;
@@ -62,6 +66,7 @@ export class TimelineMoveGesture extends BaseDragStrategy {
         // 分割タスク: 元 task の絶対分時刻を取得して anchor 計算と initialHeight に使う
         const originalId = getOriginalTaskId(task);
         const originalTask = context.readService.getTask(originalId);
+        this.baseTask = originalTask ?? task;
 
         let originalTaskStartMinutes: number | null = null;
         let originalTaskEndMinutes: number | null = null;
@@ -225,22 +230,24 @@ export class TimelineMoveGesture extends BaseDragStrategy {
         const ghostManagerToClean = this.ghostManager;
         this.ghostManager = null;
 
-        if (!this.lastDragResult || !this.dragTask) {
+        if (!this.lastDragResult || !this.dragTask || !this.baseTask) {
             ghostManagerToClean?.clear();
             this.cleanup();
             return;
         }
 
-        const updates: Partial<Task> = {
-            startDate: this.lastDragResult.startDate,
-            startTime: this.lastDragResult.startTime,
-            endDate: this.lastDragResult.endDate,
-            endTime: this.lastDragResult.endTime,
+        // Visual edits 経由で commitPlan に流す。lastDragResult の (startDate,
+        // startTime, endDate, endTime) は visual 値なので、materializeRawDates が
+        // baseTask.endTime を見て raw endDate の inclusive/exclusive を決める。
+        // これで Timeline / Calendar / AllDay すべての commit が同じ経路に乗る。
+        const edits: DisplayDateEdits = {
+            effectiveStartDate: this.lastDragResult.startDate,
+            effectiveStartTime: this.lastDragResult.startTime,
+            effectiveEndDate: this.lastDragResult.endDate,
+            effectiveEndTime: this.lastDragResult.endTime,
         };
-
-        const taskIdToRestore = this.dragTask.id;
-        await context.writeService.updateTask(this.dragTask.id, updates);
-        this.restoreSelection(context, taskIdToRestore);
+        const plan: DragPlan = { edits, baseTask: this.baseTask };
+        await this.commitPlan(context, plan, this.dragTask.id);
         ghostManagerToClean?.clear();
         this.cleanup();
     }
@@ -303,5 +310,6 @@ export class TimelineMoveGesture extends BaseDragStrategy {
         this.hiddenElements = [];
         this.lastDragResult = null;
         this.currentDayDate = null;
+        this.baseTask = null;
     }
 }
