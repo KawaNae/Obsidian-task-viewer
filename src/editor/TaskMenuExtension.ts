@@ -88,15 +88,23 @@ export function createTaskMenuExtension(
 
         menuPresenter.present((menu) => {
             if (isTaskviewerTask && task) {
-                // Recognized taskviewer-notation task: full menu
+                // Recognized taskviewer-notation task: full menu (G1〜G4)
                 validationBuilder.addValidationWarning(menu, task);
                 const dt = toDisplayTask(task, getSettings().startHour, (id) => readService.getTask(id));
+                // G1: 自身のデータ操作
                 propertiesBuilder.addStatusSubmenu(menu, task);
                 propertiesBuilder.buildPropertiesSubmenu(menu, dt, null);
-                menu.addSeparator();
+                actionsBuilder.addOwnDataActions(menu, task);
                 timerBuilder.addTimerSubmenu(menu, task);
                 menu.addSeparator();
-                actionsBuilder.addTaskActions(menu, task);
+                // G2: 子のデータ操作
+                actionsBuilder.addChildActions(menu, task);
+                menu.addSeparator();
+                // G3: 複製
+                actionsBuilder.addDuplicateActions(menu, task);
+                menu.addSeparator();
+                // G4: 破壊的変更
+                actionsBuilder.addDestructiveActions(menu, task);
             } else {
                 // Plain checkbox or external-notation task (tasks-plugin / day-planner):
                 // status + basic actions, writing through CheckboxLineOps preserves the original notation.

@@ -70,7 +70,13 @@ export class TaskCardRenderer extends Component {
         container: HTMLElement,
         task: DisplayTask,
         settings: TaskViewerSettings,
-        options: { cardInstanceId: string; context?: 'inline' | 'detail-modal'; topRight?: 'time' | 'due' | 'none'; compact?: boolean }
+        options: {
+            cardInstanceId: string;
+            context?: 'inline' | 'detail-modal';
+            topRight?: 'time' | 'due' | 'none';
+            compact?: boolean;
+            hooks?: { onNavigate?: () => void };
+        }
     ): Promise<void> {
         const cardInstanceId = options.cardInstanceId;
         const topRight = options.topRight ?? 'time';
@@ -78,6 +84,7 @@ export class TaskCardRenderer extends Component {
         const isDetailModal = options.context === 'detail-modal';
         const forceExpand = isDetailModal;
         const enableLinks = isDetailModal || settings.enableCardFileLink;
+        const onNavigate = options.hooks?.onNavigate;
 
         // Tag the card with its instance id so partial-update paths
         // (e.g. TimelineView.tryPartialUpdate) can reuse the same key.
@@ -90,7 +97,9 @@ export class TaskCardRenderer extends Component {
         this.cardComponents.set(container, cardComp);
 
         this.renderTopRightMeta(container, task, settings, topRight);
-        this.bindDetailDoubleClick(container, task);
+        if (!isDetailModal) {
+            this.bindDetailDoubleClick(container, task);
+        }
 
         const contentContainer = container.createDiv('task-card__content');
         const parentMarkdown = this.buildParentMarkdown(task, settings);
@@ -124,7 +133,7 @@ export class TaskCardRenderer extends Component {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
         }
 
-        this.bindInternalLinks(contentContainer, task.file, enableLinks);
+        this.bindInternalLinks(contentContainer, task.file, enableLinks, onNavigate);
         this.bindParentCheckbox(contentContainer, task.originalTaskId ?? task.id, settings, task.isReadOnly);
     }
 
@@ -347,12 +356,12 @@ export class TaskCardRenderer extends Component {
         );
     }
 
-    private bindInternalLinks(contentContainer: HTMLElement, sourcePath: string, enableClick: boolean): void {
+    private bindInternalLinks(contentContainer: HTMLElement, sourcePath: string, enableClick: boolean, onNavigate?: () => void): void {
         this.linkInteractionManager.bind(contentContainer, {
             sourcePath,
             hoverSource: this.linkRuntime.hoverSource,
             hoverParent: this.linkRuntime.getHoverParent(),
-        }, { bindClick: enableClick });
+        }, { bindClick: enableClick, onNavigate });
     }
 
     private bindParentCheckbox(

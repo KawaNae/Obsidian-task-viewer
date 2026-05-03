@@ -12,6 +12,11 @@ import { TaskActionsMenuBuilder } from './builders/TaskActionsMenuBuilder';
 import { ValidationMenuBuilder } from './builders/ValidationMenuBuilder';
 import { toDisplayTask, getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 
+export type TaskMenuHooks = {
+    /** Invoked after a destructive action (open in editor / convert to file / delete). */
+    onDestructiveAction?: () => void;
+};
+
 /**
  * MenuHandler - タスクコンテキストメニューの統括ファサード
  * 各種ビルダーに処理を委譲
@@ -59,13 +64,13 @@ export class MenuHandler {
     /**
      * Add context menu to task element
      */
-    addTaskContextMenu(el: HTMLElement, task: Task) {
+    addTaskContextMenu(el: HTMLElement, task: Task, hooks?: TaskMenuHooks) {
         TouchLongPressBinder.bind(el, {
             getThreshold: () => this.plugin.settings.longPressThreshold,
-            onLongPress: (x, y) => this.showContextMenu(x, y, task),
+            onLongPress: (x, y) => this.showContextMenu(x, y, task, hooks),
             onContextMenu: (e) => {
                 e.stopPropagation();
-                this.showContextMenu(e.clientX, e.clientY, task);
+                this.showContextMenu(e.clientX, e.clientY, task, hooks);
             },
         });
     }
@@ -82,7 +87,7 @@ export class MenuHandler {
     /**
      * Show context menu
      */
-    private showContextMenu(x: number, y: number, taskInput: Task) {
+    private showContextMenu(x: number, y: number, taskInput: Task, hooks?: TaskMenuHooks) {
         // Resolve the real task from the index
         const originalId = getOriginalTaskId(taskInput);
         const task = this.readService.getTask(originalId);
@@ -100,19 +105,23 @@ export class MenuHandler {
             // 0. Validation warning (if any)
             this.validationMenuBuilder.addValidationWarning(menu, task);
 
-            // 1. Status (root level)
+            // G1: 自身のデータ操作 — status / properties / switch to / track self
             this.propertiesMenuBuilder.addStatusSubmenu(menu, task);
-
-            // 2. Properties Submenu (uses DisplayTask for correct implicit flags)
             this.propertiesMenuBuilder.buildPropertiesSubmenu(menu, displayTask, this.viewStartDate);
-            menu.addSeparator();
-
-            // 3. Start Timer (submenu)
+            this.taskActionsMenuBuilder.addOwnDataActions(menu, task);
             this.timerMenuBuilder.addTimerSubmenu(menu, task);
             menu.addSeparator();
 
-            // 4. Task Actions (child tasks, editor, duplicate, convert, switch, delete)
-            this.taskActionsMenuBuilder.addTaskActions(menu, task);
+            // G2: 子のデータ操作 — record as child / add child task
+            this.taskActionsMenuBuilder.addChildActions(menu, task);
+            menu.addSeparator();
+
+            // G3: 複製 — duplicate
+            this.taskActionsMenuBuilder.addDuplicateActions(menu, task);
+            menu.addSeparator();
+
+            // G4: 破壊的変更 — open in editor / convert to file / delete (closes detail-modal)
+            this.taskActionsMenuBuilder.addDestructiveActions(menu, task, hooks?.onDestructiveAction);
         }, { kind: 'position', x, y });
     }
 }

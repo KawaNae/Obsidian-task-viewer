@@ -5,6 +5,7 @@ import type { HoverLinkPayload, TaskLinkBindContext } from './types';
 
 type TaskLinkBindOptions = {
     bindClick?: boolean;
+    onNavigate?: () => void;
 };
 
 export class TaskLinkInteractionManager {
@@ -14,13 +15,14 @@ export class TaskLinkInteractionManager {
 
     bind(container: HTMLElement, context: TaskLinkBindContext, options: TaskLinkBindOptions = {}): void {
         const bindClick = options.bindClick ?? true;
+        const onNavigate = options.onNavigate;
         const internalLinks = container.querySelectorAll<HTMLElement>('a.internal-link[data-href]');
         internalLinks.forEach((linkEl) => {
-            this.bindLink(linkEl, context, bindClick);
+            this.bindLink(linkEl, context, bindClick, onNavigate);
         });
     }
 
-    private bindLink(linkEl: HTMLElement, context: TaskLinkBindContext, bindClick: boolean): void {
+    private bindLink(linkEl: HTMLElement, context: TaskLinkBindContext, bindClick: boolean, onNavigate?: () => void): void {
         if (this.boundLinks.has(linkEl)) {
             return;
         }
@@ -28,7 +30,7 @@ export class TaskLinkInteractionManager {
 
         if (bindClick) {
             linkEl.addEventListener('click', (event: MouseEvent) => {
-                this.handleClick(event, linkEl, context);
+                this.handleClick(event, linkEl, context, onNavigate);
             });
             linkEl.addEventListener('pointerdown', (event: PointerEvent) => {
                 event.stopPropagation();
@@ -46,7 +48,7 @@ export class TaskLinkInteractionManager {
         });
     }
 
-    private handleClick(event: MouseEvent, linkEl: HTMLElement, context: TaskLinkBindContext): void {
+    private handleClick(event: MouseEvent, linkEl: HTMLElement, context: TaskLinkBindContext, onNavigate?: () => void): void {
         event.preventDefault();
         event.stopPropagation();
 
@@ -60,6 +62,7 @@ export class TaskLinkInteractionManager {
         } else {
             void this.app.workspace.openLinkText(target, context.sourcePath, true);
         }
+        onNavigate?.();
     }
 
     private emitHoverLink(

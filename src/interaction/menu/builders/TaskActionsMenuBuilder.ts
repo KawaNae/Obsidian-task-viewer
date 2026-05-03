@@ -20,21 +20,36 @@ export class TaskActionsMenuBuilder {
     ) { }
 
     /**
-     * Task操作メニューを追加
+     * G1 残部: 自身のデータ操作 — Switch to (allday/timeline/undated)
+     * ※ status / properties / track-self は他のビルダー側で追加。本ビルダーは G1 のうち switch-to のみ担当
      */
-    addTaskActions(menu: Menu, task: Task): void {
-        // Record as Child (timer submenu)
-        this.addRecordAsChildSubmenu(menu, task);
-        // Add Child Task (standalone)
-        this.addChildTaskItem(menu, task);
-        menu.addSeparator();
-
-        // File operations
-        this.addOpenInEditorItem(menu, task);
-        this.addDuplicateSubmenu(menu, task);
-        this.addConvertToFileItem(menu, task);
+    addOwnDataActions(menu: Menu, task: Task): void {
         this.addSwitchToSubmenu(menu, task);
-        this.addDeleteItem(menu, task);
+    }
+
+    /**
+     * G2: 子のデータ操作 — Record as Child / Add Child Task
+     */
+    addChildActions(menu: Menu, task: Task): void {
+        this.addRecordAsChildSubmenu(menu, task);
+        this.addChildTaskItem(menu, task);
+    }
+
+    /**
+     * G3: 複製 — Duplicate
+     */
+    addDuplicateActions(menu: Menu, task: Task): void {
+        this.addDuplicateSubmenu(menu, task);
+    }
+
+    /**
+     * G4: 破壊的変更 — Open in Editor / Convert to File / Delete
+     * onDestructive が渡されているとき各アクション実行後に invoke する。
+     */
+    addDestructiveActions(menu: Menu, task: Task, onDestructive?: () => void): void {
+        this.addOpenInEditorItem(menu, task, onDestructive);
+        this.addConvertToFileItem(menu, task, onDestructive);
+        this.addDeleteItem(menu, task, onDestructive);
     }
 
     /**
@@ -105,7 +120,7 @@ export class TaskActionsMenuBuilder {
     /**
      * "Open in Editor"項目を追加
      */
-    private addOpenInEditorItem(menu: Menu, task: Task): void {
+    private addOpenInEditorItem(menu: Menu, task: Task, onDestructive?: () => void): void {
         menu.addItem((item) => {
             item.setTitle(t('menu.openInEditor'))
                 .setIcon('document')
@@ -130,6 +145,7 @@ export class TaskActionsMenuBuilder {
                             }
                         }, 100);
                     }
+                    onDestructive?.();
                 });
         });
     }
@@ -176,7 +192,7 @@ export class TaskActionsMenuBuilder {
     /**
      * "Convert to File" 単独項目 — tvInline → tvFile（ConfirmModal）
      */
-    private addConvertToFileItem(menu: Menu, task: Task): void {
+    private addConvertToFileItem(menu: Menu, task: Task, onDestructive?: () => void): void {
         // tvFile tasks have no convert options (reverse conversion is too complex)
         if (!isTvInline(task)) return;
 
@@ -193,6 +209,7 @@ export class TaskActionsMenuBuilder {
                             try {
                                 await this.writeService.convertToTvFile(task.id);
                                 new Notice(t('notice.taskConverted'));
+                                onDestructive?.();
                             } catch (e) {
                                 new Notice(t('notice.taskConvertFailed') + ': ' + (e as Error).message);
                             }
@@ -347,7 +364,7 @@ export class TaskActionsMenuBuilder {
     /**
      * "Delete"項目を追加
      */
-    private addDeleteItem(menu: Menu, task: Task): void {
+    private addDeleteItem(menu: Menu, task: Task, onDestructive?: () => void): void {
         menu.addItem((item) => {
             item.setTitle(t('menu.deleteTask'))
                 .setIcon('trash')
@@ -360,6 +377,7 @@ export class TaskActionsMenuBuilder {
                         t('menu.deleteTaskMessage'),
                         async () => {
                             await this.writeService.deleteTask(task.id);
+                            onDestructive?.();
                         },
                         { confirmLabel: t('modal.delete'), warning: true }
                     ).open();

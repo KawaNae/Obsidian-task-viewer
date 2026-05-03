@@ -42,12 +42,14 @@ export class TaskDetailModal extends Modal {
         TaskStyling.applyTaskColor(card, this.task.color ?? null);
         TaskStyling.applyTaskLinestyle(card, this.task.linestyle ?? null);
         TaskStyling.applyReadOnly(card, this.task);
-        this.menuHandler.addTaskContextMenu(card, this.task);
+        const closeModal = () => this.close();
+        this.menuHandler.addTaskContextMenu(card, this.task, { onDestructiveAction: closeModal });
 
         const dt = toDisplayTask(this.task, this.settings.startHour, (id) => this.readService.getTask(id));
         await this.taskRenderer.render(card, dt, this.settings, {
             cardInstanceId: `modal::detail::${dt.id}`,
             context: 'detail-modal',
+            hooks: { onNavigate: closeModal },
         });
     }
 
