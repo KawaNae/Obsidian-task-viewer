@@ -1,5 +1,11 @@
 /* ==========================================================================
-   Calendar View
+   Calendar View — full-size monthly grid.
+   Base cal-* styles live in _cal-base.css; this file only contains:
+     - .calendar-view shell + toolbar host
+     - task-card placement scoped to cal-week-row
+     - split-direction rules (horizontal for week rows)
+     - calendar modal
+     - responsive overrides
    ========================================================================== */
 
 .calendar-view {
@@ -10,117 +16,8 @@
     padding: 0 !important;
 }
 
-.cal-grid {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    background: var(--tv-bg-primary);
-}
-
-.cal-weekday-header {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-    background: var(--tv-bg-date-header);
-    border-bottom: 1px solid var(--tv-border);
-    position: sticky;
-    top: 0;
-    z-index: 2;
-}
-
-.cal-weekday-header.has-week-numbers {
-    grid-template-columns: var(--calendar-wk-col-width, 32px) repeat(7, minmax(0, 1fr));
-}
-
-.cal-weekday-cell {
-    padding: 6px 4px;
-    text-align: center;
-    font-size: 0.8em;
-    font-weight: 700;
-    color: var(--tv-text-muted);
-}
-
-.cal-grid__body {
-    flex: 1;
-    overflow: auto;
-    display: flex;
-    flex-direction: column;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-}
-
-.cal-grid__body::-webkit-scrollbar {
-    display: none;
-}
-
-.cal-week-row {
-    --calendar-header-height: 28px;
-    --calendar-track-height: 44px;
-    position: relative;
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-    grid-template-rows: var(--calendar-header-height);
-    grid-auto-rows: minmax(var(--calendar-track-height), auto);
-    min-height: 140px;
+.calendar-view__toolbar-host {
     flex-shrink: 0;
-    border-bottom: 1px solid var(--tv-border);
-}
-
-.cal-week-row.has-week-numbers {
-    grid-template-columns: var(--calendar-wk-col-width, 32px) repeat(7, minmax(0, 1fr));
-}
-
-.cal-week-number {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.72em;
-    font-weight: 600;
-    color: var(--tv-text-muted);
-    grid-column: 1;
-    grid-row: 1;
-    padding: 2px;
-    cursor: pointer;
-}
-
-.cal-week-number .internal-link {
-    color: inherit;
-    text-decoration: none;
-}
-
-.cal-week-number.is-current-week {
-    position: relative;
-    z-index: var(--z-task-card);
-    color: var(--tv-text-on-accent);
-}
-
-.cal-week-number.is-current-week::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: var(--tv-accent);
-    opacity: 0.9;
-    z-index: var(--z-negative);
-    pointer-events: none;
-}
-
-.cal-week-number:hover {
-    color: var(--tv-text);
-    background: var(--tv-bg-hover);
-    border-radius: var(--tv-radius-s);
-}
-
-.cal-col-separator {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 1px;
-    background: var(--tv-border);
-    pointer-events: none;
-    z-index: 0;
 }
 
 /* --- Calendar task card (grid positioned, scoped to week-row) --- */
@@ -146,6 +43,10 @@
 .cal-week-row > .task-card--multi-day {
     min-height: 20px;
     cursor: pointer;
+}
+
+.cal-week-row .due-arrow {
+    z-index: 5;
 }
 
 /* --- Split direction (horizontal for calendar) --- */
@@ -198,55 +99,6 @@
     border-bottom-left-radius: 0;
 }
 
-.cal-week-row .due-arrow {
-    z-index: 5;
-}
-
-.cal-day-cell {
-    display: flex;
-    justify-content: flex-end;
-    align-items: flex-start;
-    min-height: var(--calendar-header-height, 28px);
-    padding: 4px;
-    font-size: 0.82em;
-    font-weight: 700;
-    color: var(--tv-text-muted);
-    background: var(--tv-bg-primary);
-}
-
-.cal-day-cell.is-outside-month {
-    background: var(--tv-bg-secondary);
-    opacity: 0.72;
-}
-
-.cal-day-cell.is-today {
-    position: relative;
-    z-index: var(--z-task-card);
-    color: var(--tv-text-on-accent);
-}
-
-.cal-day-cell.is-today::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: var(--tv-accent);
-    opacity: 0.9;
-    z-index: var(--z-negative);
-    pointer-events: none;
-}
-
-.cal-day-cell .internal-link {
-    color: inherit;
-    text-decoration: none;
-}
-
-.cal-day-cell .internal-link:hover {
-    text-decoration: underline;
-}
-
 /* --- Calendar modal --- */
 .calendar-task-modal {
     padding: 12px;
@@ -279,8 +131,4 @@
         font-size: 0.72em;
         padding: 3px 2px 3px 6px;
     }
-}
-
-.calendar-view__toolbar-host {
-    flex-shrink: 0;
 }

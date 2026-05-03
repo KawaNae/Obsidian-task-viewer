@@ -1,5 +1,10 @@
 /* ==========================================================================
-   Mini Calendar View
+   Mini Calendar View — compact variant of cal-* primitives.
+   Base cal-* styles live in _cal-base.css. This file contains:
+     - .mini-calendar-view shell + toolbar elements
+     - --mini modifier overrides for cal-grid / cal-week-row / cal-week-number /
+       cal-weekday-header / cal-weekday-cell / cal-day-cell
+     - mini-only sub-elements (date-link, date-label, indicators)
    ========================================================================== */
 
 .mini-calendar-view {
@@ -9,6 +14,10 @@
     min-height: 280px;
     overflow: hidden;
     padding: 12px !important;
+}
+
+.mini-calendar-view__toolbar-host {
+    flex-shrink: 0;
 }
 
 .mini-calendar-view .view-toolbar {
@@ -57,35 +66,13 @@
     gap: 2px;
 }
 
+/* --- --mini modifier overrides ------------------------------------------ */
+
 .cal-grid--mini {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-}
-
-.cal-weekday-header--mini {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-}
-
-.cal-weekday-header--mini.has-week-numbers {
-    grid-template-columns: var(--mini-cal-wk-col-width, 24px) repeat(7, minmax(0, 1fr));
-}
-
-.cal-weekday-cell--mini {
-    text-align: center;
-    font-size: 0.72em;
-    font-weight: 700;
-    color: var(--tv-text-muted);
-    padding: 4px 2px;
+    background: none;
 }
 
 .cal-grid__body--mini {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
     overflow: hidden;
 }
 
@@ -96,50 +83,88 @@
     min-height: 0;
 }
 
+.cal-weekday-header--mini {
+    background: none;
+    border-bottom: none;
+    position: static;
+}
+
+.cal-weekday-header--mini.has-week-numbers {
+    grid-template-columns: var(--mini-cal-wk-col-width, 24px) repeat(7, minmax(0, 1fr));
+}
+
+.cal-weekday-cell--mini {
+    padding: 4px 2px;
+    font-size: 0.72em;
+}
+
 .cal-week-row--mini {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-rows: none;
+    grid-auto-rows: auto;
     min-height: 0;
     flex: 1;
+    border-bottom: none;
 }
 
 .cal-week-row--mini.has-week-numbers {
     grid-template-columns: var(--mini-cal-wk-col-width, 24px) repeat(7, minmax(0, 1fr));
 }
 
-.cal-week-number--mini {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.62em;
-    color: var(--tv-text-muted);
-    cursor: pointer;
-}
-
-.cal-week-number--mini .internal-link {
-    color: inherit;
-    text-decoration: none;
-}
-
-.cal-week-number--mini.is-current-week {
-    color: var(--tv-text-accent);
-}
-
-.cal-week-number--mini:hover {
-    color: var(--tv-text);
-}
-
 .cal-week-row--mini:last-child {
     border-bottom: none;
 }
 
+.cal-week-number--mini {
+    font-size: 0.62em;
+    font-weight: normal;
+}
+
+.cal-week-number--mini.is-current-week {
+    color: var(--tv-text-accent);
+    z-index: auto;
+}
+
+.cal-week-number--mini.is-current-week::after {
+    display: none;
+}
+
+.cal-week-number--mini:hover {
+    background: none;
+    color: var(--tv-text);
+}
+
 .cal-day-cell--mini {
+    display: block;
+    min-height: 0;
     min-width: 0;
+    padding: 0;
+    background: none;
+    font-weight: normal;
+    color: var(--tv-text);
 }
 
 .cal-day-cell--mini:last-child {
     border-right: none;
 }
+
+.cal-day-cell--mini.is-outside-month {
+    background: none;
+}
+
+.cal-day-cell--mini.is-outside-month .cal-day-cell__date-link {
+    opacity: 0.56;
+}
+
+.cal-day-cell--mini.is-today::after {
+    display: none;
+}
+
+.cal-day-cell--mini.is-today .cal-day-cell__date-link {
+    background: rgba(var(--tv-accent-rgb), 0.16);
+    color: var(--tv-text-accent);
+}
+
+/* --- mini-only sub-elements --------------------------------------------- */
 
 .cal-day-cell--mini .cal-day-cell__date-link {
     display: flex;
@@ -173,15 +198,6 @@
     min-height: 6px;
 }
 
-.cal-day-cell--mini.is-outside-month .cal-day-cell--mini .cal-day-cell__date-link {
-    opacity: 0.56;
-}
-
-.cal-day-cell--mini.is-today .cal-day-cell--mini .cal-day-cell__date-link {
-    background: rgba(var(--tv-accent-rgb), 0.16);
-    color: var(--tv-text-accent);
-}
-
 .cal-day-cell--mini .cal-day-cell__indicator {
     width: 6px;
     height: 6px;
@@ -197,8 +213,4 @@
 .cal-day-cell--mini .cal-day-cell__indicator--complete {
     border: 1px solid var(--tv-text);
     background: var(--tv-text);
-}
-
-.mini-calendar-view__toolbar-host {
-    flex-shrink: 0;
 }

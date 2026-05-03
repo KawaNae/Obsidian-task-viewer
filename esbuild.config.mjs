@@ -75,6 +75,7 @@ const copyStaticFiles = {
           '_habits.css',
           '_timeline-drag.css',
           '_schedule.css',
+          '_cal-base.css',
           '_calendar.css',
           '_mini-calendar.css',
           '_task-card.css',
