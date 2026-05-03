@@ -12,8 +12,6 @@ import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
 import type { TaskCardLinkRuntime } from './types';
 
 export class TaskCardRenderer extends Component {
-    private static readonly COLLAPSE_THRESHOLD = 3;
-
     private expandedTaskIds: Set<string> = new Set();
     private childItemBuilder: ChildItemBuilder;
     private childSectionRenderer: ChildSectionRenderer;
@@ -287,7 +285,7 @@ export class TaskCardRenderer extends Component {
         forceExpand = false
     ): Promise<void> {
         const items = this.childItemBuilder.buildChildItems(task, '');
-        if (!forceExpand && items.length >= TaskCardRenderer.COLLAPSE_THRESHOLD) {
+        if (!forceExpand && items.length >= settings.childCollapseThreshold) {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
             await this.childSectionRenderer.renderCollapsed(
                 contentContainer,
@@ -331,7 +329,7 @@ export class TaskCardRenderer extends Component {
             return;
         }
 
-        const shouldCollapse = !forceExpand && items.length >= TaskCardRenderer.COLLAPSE_THRESHOLD;
+        const shouldCollapse = !forceExpand && items.length >= settings.childCollapseThreshold;
         if (shouldCollapse) {
             await this.childSectionRenderer.renderCollapsed(
                 contentContainer,

@@ -460,6 +460,8 @@ export interface TaskViewerSettings {
         kanban: DefaultLeafPosition;
     };
     enableCardFileLink: boolean;
+    /** 子要素がこの数以上のとき、タスクカードはトグル付きの折りたたみ表示になる (1〜5) */
+    childCollapseThreshold: number;
     suggestColor: boolean;
     suggestLinestyle: boolean;
     hideViewHeader: boolean;
@@ -525,6 +527,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
         kanban: 'tab',
     },
     enableCardFileLink: true,
+    childCollapseThreshold: 3,
     suggestColor: true,
     suggestLinestyle: true,
     hideViewHeader: true,
