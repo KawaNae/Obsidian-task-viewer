@@ -717,9 +717,11 @@ export class CalendarView extends ItemView {
 
     private async renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: DisplayTask[]): Promise<void> {
         const startHour = this.plugin.settings.startHour;
-        // Pre-split: visual-date (startHour boundary) + date-range (week boundary)
-        const visualSplit = splitTasks(allTasks, { type: 'visual-date', startHour });
-        const weekSplit = splitTasks(visualSplit, { type: 'date-range', start: weekDates[0], end: weekDates[weekDates.length - 1], startHour });
+        // Calendar 月セルは calendar day ベースで 1 セル = 1 日。startHour 境界
+        // (visual-date split) を視覚化する意味はなく、入れると view 内部に
+        // 不要な dashed boundary が現れる。週行が物理的に分かれることによる
+        // per-week split (date-range) のみ適用する。
+        const weekSplit = splitTasks(allTasks, { type: 'date-range', start: weekDates[0], end: weekDates[weekDates.length - 1], startHour });
         const entries = computeGridLayout(weekSplit, {
             dates: weekDates,
             getDateRange: (task) => {

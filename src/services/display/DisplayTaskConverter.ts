@@ -152,6 +152,91 @@ export function toDisplayTasks(tasks: Task[], startHour: number, getTask: TaskLo
 }
 
 /**
+ * Inclusive visual edits to a DisplayTask, expressed in the same coordinate
+ * system as `effective*` fields. Pass only the fields that change; absent
+ * fields are not touched.
+ */
+export interface DisplayDateEdits {
+    /** Inclusive visual start date (matches DisplayTask.effectiveStartDate). */
+    effectiveStartDate?: string;
+    effectiveStartTime?: string;
+    /** Inclusive visual end date (matches DisplayTask.effectiveEndDate). */
+    effectiveEndDate?: string;
+    effectiveEndTime?: string;
+}
+
+/**
+ * Inverse of `toVisualDate`. Given a visual date and the time at that visual
+ * day, returns the underlying raw calendar date.
+ *
+ * `toVisualDate(date, time, startHour)` shifts -1 day when `time < startHour`,
+ * so the inverse shifts +1 day in the same condition.
+ */
+function unshiftVisual(visualDate: string, time: string | undefined, startHour: number): string {
+    if (!time) return visualDate;
+    const h = Number(time.split(':')[0]);
+    return Number.isFinite(h) && h < startHour
+        ? DateUtils.addDays(visualDate, 1)
+        : visualDate;
+}
+
+/**
+ * Convert inclusive visual edits to a raw `Partial<Task>` update.
+ *
+ * This is the **single boundary** between drag/resize layer (which thinks in
+ * inclusive visual dates, matching `DisplayTask.effective*`) and the raw Task
+ * layer (where `endDate` is exclusive when `endTime` is absent and inclusive
+ * when `endTime` is present — a dual semantic preserved for parser/writer
+ * round-trip with the external @notation).
+ *
+ * `baseTask` provides the existing endTime to decide which semantic applies
+ * to the raw `endDate` write. If `edits.effectiveEndTime` is also being
+ * changed, the edit value wins (a drag that adds/removes endTime can flip the
+ * semantic).
+ *
+ * Drag write-back must always go through this function. Direct
+ * `addDays(visualEnd, 1)` in caller code is the bug pattern this helper
+ * eliminates.
+ */
+export function materializeRawDates(
+    edits: DisplayDateEdits,
+    baseTask: Task,
+    startHour: number,
+): Partial<Task> {
+    const updates: Partial<Task> = {};
+
+    if (edits.effectiveStartDate !== undefined) {
+        const time = edits.effectiveStartTime !== undefined
+            ? edits.effectiveStartTime
+            : baseTask.startTime;
+        updates.startDate = unshiftVisual(edits.effectiveStartDate, time, startHour);
+    }
+    if (edits.effectiveStartTime !== undefined) {
+        updates.startTime = edits.effectiveStartTime;
+    }
+
+    if (edits.effectiveEndDate !== undefined) {
+        const willHaveEndTime = edits.effectiveEndTime !== undefined
+            ? !!edits.effectiveEndTime
+            : !!baseTask.endTime;
+        if (willHaveEndTime) {
+            const endTime = edits.effectiveEndTime !== undefined
+                ? edits.effectiveEndTime
+                : baseTask.endTime;
+            updates.endDate = unshiftVisual(edits.effectiveEndDate, endTime, startHour);
+        } else {
+            // pure all-day: visual inclusive end → raw exclusive (+1)
+            updates.endDate = DateUtils.addDays(edits.effectiveEndDate, 1);
+        }
+    }
+    if (edits.effectiveEndTime !== undefined) {
+        updates.endTime = edits.effectiveEndTime;
+    }
+
+    return updates;
+}
+
+/**
  * Returns true when a DisplayTask crosses the visual day boundary and should be split.
  * Uses effective values so E/ED types can also be split.
  */
@@ -188,6 +273,15 @@ export function splitDisplayTaskAtBoundary(dt: DisplayTask, startHour: number): 
 
     let boundaryCalendarDate: string;
     const boundaryTime = `${startHour.toString().padStart(2, '0')}:00`;
+    // 直前 boundary 時刻 (例: startHour=5 なら '04:59')。head の effective end に
+    // これを使うことで、`toVisualDate` が前日に -1 day シフトし、tail の visual
+    // start day と重ならない。boundaryTime ('05:00') を head end に置くと
+    // toVisualDate (`h < startHour`) が当日扱いとなり tail と同日に重複し、
+    // GridTaskLayout の greedy track 割り当てで別 track に飛ぶバグを生む。
+    // (cf. TaskSplitter.splitAtDateBoundary が同じ pattern を採用済み)
+    const beforeBoundaryTime = startHour === 0
+        ? '23:59'
+        : `${(startHour - 1).toString().padStart(2, '0')}:59`;
 
     if (dt.effectiveStartDate === dt.effectiveEndDate) {
         boundaryCalendarDate = dt.effectiveStartDate;
@@ -204,11 +298,11 @@ export function splitDisplayTaskAtBoundary(dt: DisplayTask, startHour: number): 
         isSplit: true,
         splitContinuesBefore: dt.splitContinuesBefore ?? false,
         splitContinuesAfter: true,
-        // Override both raw and effective end to boundary
+        // Override both raw and effective end to boundary - 1min (前日 inclusive)
         endDate: boundaryCalendarDate,
-        endTime: boundaryTime,
+        endTime: beforeBoundaryTime,
         effectiveEndDate: boundaryCalendarDate,
-        effectiveEndTime: boundaryTime,
+        effectiveEndTime: beforeBoundaryTime,
     };
 
     const tailSegment: DisplayTask = {

@@ -136,4 +136,64 @@ describe('computeGridLayout', () => {
         expect(result[0].continuesAfter).toBe(true);
         expect(result[0].span).toBe(2);
     });
+
+    it('split segments of same originalTaskId share the same track', () => {
+        // 同 task の 2 segments の間に他 task の segment が割り込んだとき、後続
+        // segment が空き track に飛んで上下にずれない (originalTaskId lock)。
+        // dump 再現: A_seg1 (task A, cs=2 sp=4), B_seg1 (task B, cs=2 sp=3),
+        // C_seg1 (task C, cs=3 sp=3), A_seg2 (task A, cs=6 sp=1), C_seg2 (task C, cs=6 sp=1)
+        const tasks = [
+            makeDT({ id: 'A_seg1', originalTaskId: 'A', file: 'a.md', line: 0 }),
+            makeDT({ id: 'B_seg1', originalTaskId: 'B', file: 'b.md', line: 0 }),
+            makeDT({ id: 'C_seg1', originalTaskId: 'C', file: 'c.md', line: 0 }),
+            makeDT({ id: 'A_seg2', originalTaskId: 'A', file: 'a.md', line: 0 }),
+            makeDT({ id: 'C_seg2', originalTaskId: 'C', file: 'c.md', line: 0 }),
+        ];
+        const dates = ['1', '2', '3', '4', '5', '6'];
+        const ranges = new Map<string, TaskDateRange>([
+            ['A_seg1', { effectiveStart: '2', effectiveEnd: '5' }], // cs=2, sp=4
+            ['B_seg1', { effectiveStart: '2', effectiveEnd: '4' }], // cs=2, sp=3
+            ['C_seg1', { effectiveStart: '3', effectiveEnd: '5' }], // cs=3, sp=3
+            ['A_seg2', { effectiveStart: '6', effectiveEnd: '6' }], // cs=6, sp=1
+            ['C_seg2', { effectiveStart: '6', effectiveEnd: '6' }], // cs=6, sp=1
+        ]);
+        const result = computeGridLayout(tasks, makeConfig(dates, ranges));
+
+        const trackOf = (id: string) =>
+            result.find(r => r.task.id === id)!.trackIndex;
+
+        // 同じ originalTaskId の segments は同じ track に
+        expect(trackOf('A_seg1')).toBe(trackOf('A_seg2'));
+        expect(trackOf('C_seg1')).toBe(trackOf('C_seg2'));
+        // 異なる task の segments は別 track でも可 (重なるなら別 track)
+        expect(trackOf('A_seg1')).not.toBe(trackOf('B_seg1'));
+    });
+
+    it('locked track falls back to first-fit when occupied at second segment', () => {
+        // locked track が後続 segment の colStart までに別 task で footprint 上書き
+        // されているケース: lock を諦めて新規 / 別の空き track に乗せる。
+        const tasks = [
+            makeDT({ id: 'A_seg1', originalTaskId: 'A', file: 'a.md', line: 0 }),
+            makeDT({ id: 'X', originalTaskId: 'X', file: 'x.md', line: 0 }),
+            makeDT({ id: 'A_seg2', originalTaskId: 'A', file: 'a.md', line: 0 }),
+        ];
+        const dates = ['1', '2', '3', '4', '5'];
+        const ranges = new Map<string, TaskDateRange>([
+            ['A_seg1', { effectiveStart: '1', effectiveEnd: '1' }], // cs=1, sp=1, fp=1
+            // X covers track 0 from col 2 to col 5, blocking A_seg2 from reusing track 0
+            ['X', { effectiveStart: '2', effectiveEnd: '5' }],     // cs=2, sp=4, fp=5
+            ['A_seg2', { effectiveStart: '4', effectiveEnd: '4' }], // cs=4, sp=1
+        ]);
+        const result = computeGridLayout(tasks, makeConfig(dates, ranges));
+
+        const trackOf = (id: string) =>
+            result.find(r => r.task.id === id)!.trackIndex;
+
+        // A_seg1 は track 0 (空)、X は cs=2 で track 0 が空 (fp=1 < 2) なので track 0
+        // → tracks=[5]。A_seg2 は lock=track 0 だが tracks[0]=5 ≥ 4 で再利用不可
+        // → first-fit で新規 track 1 にフォールバック
+        expect(trackOf('A_seg1')).toBe(0);
+        expect(trackOf('X')).toBe(0);
+        expect(trackOf('A_seg2')).toBe(1);
+    });
 });

@@ -116,6 +116,20 @@ export interface Task {
     // Date/time fields.
     startDate?: string;
     startTime?: string;
+    /**
+     * Raw end date as written in @notation / frontmatter. **Dual semantic**:
+     * - When `endTime` is present → `endDate` is **inclusive** (the calendar
+     *   date on which `endTime` occurs).
+     * - When `endTime` is absent (pure all-day) → `endDate` is **exclusive**
+     *   (one day past the last day the task covers).
+     *
+     * This duality is preserved at the raw layer for parser/writer round-trip
+     * with the external @notation. Display code should not read `endDate`
+     * directly; use `DisplayTask.effectiveEndDate` (always inclusive visual
+     * end) instead. Drag write-back must funnel updates through
+     * `materializeRawDates()` which collapses the duality based on
+     * `baseTask.endTime`.
+     */
     endDate?: string;
     endTime?: string;
     due?: string;
@@ -258,7 +272,15 @@ export interface DuplicateOptions {
  * 編集パスは raw フィールド (startDate 等) のみを参照する。
  */
 export interface DisplayTask extends Task {
-    /** 暗黙値解決済みの effective フィールド */
+    /**
+     * 暗黙値解決済みの effective フィールド (inclusive visual coordinates).
+     *
+     * `effectiveEndDate` は **常に inclusive な visual 終端日**として扱う。
+     * raw `Task.endDate` の `endTime` 有無による inclusive/exclusive の二重規格
+     * (Task.endDate 参照) は `toDisplayTask` が implicit endTime 注入 +
+     * `toVisualDate` シフトで吸収するため、display/render/drag layer は
+     * 統一的に inclusive として読み書きできる。
+     */
     effectiveStartDate: string;
     effectiveStartTime?: string;
     effectiveEndDate?: string;

@@ -8,7 +8,12 @@ import {
     toLogicalHeightPx,
     toLogicalTopPx
 } from '../../../views/sharedLogic/TimelineCardPosition';
-import { getOriginalTaskId, toDisplayTask } from '../../../services/display/DisplayTaskConverter';
+import {
+    DisplayDateEdits,
+    getOriginalTaskId,
+    materializeRawDates,
+    toDisplayTask,
+} from '../../../services/display/DisplayTaskConverter';
 
 /**
  * リサイズ操作を処理するドラッグストラテジー。
@@ -32,8 +37,12 @@ export class ResizeStrategy extends BaseDragStrategy {
     private initialSpan: number = 0;
     private initialCalendarDate: string = '';
     private initialCalendarEndDate: string = '';
+    private initialCalendarVisualStart: string = '';
     private initialCalendarVisualEnd: string = '';
     private initialGridColumn: string = '';
+    /** Original (pre-split) raw task. Cached at drag start so write-back has
+     *  access to baseTask.endTime without re-resolving from a split segment. */
+    private baseTask: Task | null = null;
     private container: HTMLElement | null = null;
     private refHeaderCell: HTMLElement | null = null;
     private hiddenElements: HTMLElement[] = [];
@@ -79,6 +88,10 @@ export class ResizeStrategy extends BaseDragStrategy {
             } else {
                 this.resizeDirection = 'right';
             }
+            // resolveCalendarPointerTarget のヒステリシスを有効化。
+            // ハンドル位置がセル境界線にあるため、これがないと 5px move
+            // しただけで判定セルが flip し +1 day ドリフトを生む。
+            this.activeResizeDirection = this.resizeDirection;
             this.initCalendarResize(e, task, el, context);
         } else {
             if (target.closest('.task-card__handle--resize-left')) {
@@ -255,12 +268,20 @@ export class ResizeStrategy extends BaseDragStrategy {
         this.refHeaderCell = headerCell;
         this.colWidth = this.getCalendarDayColumnWidth(weekRow);
 
+        // Resolve the original (pre-split) raw task. dragTask may be a split
+        // segment whose endTime/endDate differ from the source. Write-back
+        // needs to see the source's endTime to pick the correct inclusive/
+        // exclusive endDate semantic.
+        const originalId = getOriginalTaskId(task);
+        this.baseTask = context.readService.getTask(originalId) ?? task;
+
         const viewStartDate = context.getViewStartDate();
-        this.initialCalendarDate = task.startDate || viewStartDate || DateUtils.getToday();
-        this.initialCalendarEndDate = task.endDate || this.initialCalendarDate;
-        // Visual end date (inclusive) for ghost rendering — matches task card renderer
+        this.initialCalendarDate = this.baseTask.startDate || viewStartDate || DateUtils.getToday();
+        this.initialCalendarEndDate = this.baseTask.endDate || this.initialCalendarDate;
+        // Visual range (inclusive) for ghost rendering — matches task card renderer.
         const startHour = context.plugin.settings.startHour;
-        const visual = this.getVisualDateRange(task, startHour);
+        const visual = this.getVisualDateRange(this.baseTask, startHour);
+        this.initialCalendarVisualStart = visual.start;
         this.initialCalendarVisualEnd = visual.end;
 
         // Read position from data attributes
@@ -271,7 +292,6 @@ export class ResizeStrategy extends BaseDragStrategy {
         this.hiddenElements = [];
         this.clearCalendarPreviewGhosts();
 
-        const originalId = getOriginalTaskId(task);
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         context.container.querySelectorAll(selector).forEach(segment => {
             if (segment instanceof HTMLElement && !segment.closest('.pinned-list')) {
@@ -294,13 +314,16 @@ export class ResizeStrategy extends BaseDragStrategy {
         const crossWeek = target.weekStart !== sourceWeekStart;
 
         if (this.resizeDirection === 'right') {
-            const boundedEnd = target.targetDate < this.initialCalendarDate ? this.initialCalendarDate : target.targetDate;
+            // クランプは visual 座標で行う (target.targetDate も visual)。raw startDate と
+            // 直接比較すると深夜タスクの startHour シフトでズレる。
+            const boundedEnd = target.targetDate < this.initialCalendarVisualStart
+                ? this.initialCalendarVisualStart : target.targetDate;
             this.calendarPreviewTargetDate = boundedEnd;
 
             if (crossWeek) {
                 this.hiddenElements.forEach(el => el.classList.add('is-drag-hidden'));
                 this.dragEl.classList.add('is-drag-source-faint');
-                this.updateCalendarSplitPreview(context, this.initialCalendarDate, boundedEnd);
+                this.updateCalendarSplitPreview(context, this.initialCalendarVisualStart, boundedEnd);
                 return;
             }
 
@@ -333,7 +356,7 @@ export class ResizeStrategy extends BaseDragStrategy {
     }
 
     private async finishCalendarResize(e: PointerEvent, context: DragContext) {
-        if (!this.dragTask || !this.dragEl) {
+        if (!this.dragTask || !this.dragEl || !this.baseTask) {
             this.clearCalendarPreviewGhosts();
             this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
             this.cleanup();
@@ -350,32 +373,30 @@ export class ResizeStrategy extends BaseDragStrategy {
             return;
         }
 
-        const updates: Partial<Task> = {};
+        const startHour = context.plugin.settings.startHour;
+        const baseTask = this.baseTask;
+
+        // Build inclusive-visual edits, then funnel through materializeRawDates
+        // so the inclusive/exclusive endDate semantic is decided in one place
+        // (based on baseTask.endTime), eliminating the +1-day drift bug.
+        let edits: DisplayDateEdits | null = null;
         if (this.resizeDirection === 'right') {
-            const newEnd = targetDate < this.initialCalendarDate ? this.initialCalendarDate : targetDate;
-            if (newEnd >= this.initialCalendarDate) {
-                // targetDate is inclusive visual date; @notation endDate is exclusive (+1 day)
-                const newEndDate = DateUtils.addDays(newEnd, 1);
-                const originalEndDate = this.dragTask!.endDate
-                    || DateUtils.addDays(this.initialCalendarDate, 1);
-                if (newEndDate !== originalEndDate) {
-                    updates.endDate = newEndDate;
-                }
-            }
+            const newEnd = targetDate < this.initialCalendarVisualStart
+                ? this.initialCalendarVisualStart : targetDate;
+            edits = { effectiveEndDate: newEnd };
         } else if (this.resizeDirection === 'left') {
             const newStart = targetDate > this.initialCalendarVisualEnd
                 ? this.initialCalendarVisualEnd : targetDate;
-            if (newStart <= this.initialCalendarVisualEnd) {
-                if (newStart !== this.initialCalendarDate) {
-                    updates.startDate = newStart;
-                }
-                // endDate が未設定の場合、元の右端を保持するために明示的に設定
-                // (右リサイズと対称: inclusive visual → exclusive @notation)
-                if (!this.dragTask!.endDate) {
-                    updates.endDate = DateUtils.addDays(this.initialCalendarVisualEnd, 1);
-                }
+            edits = { effectiveStartDate: newStart };
+            if (!baseTask.endDate) {
+                // 元の右端 (visual) を固定して endDate を明示化
+                edits.effectiveEndDate = this.initialCalendarVisualEnd;
             }
         }
+
+        const updates: Partial<Task> = edits
+            ? this.diffUpdates(materializeRawDates(edits, baseTask, startHour), baseTask)
+            : {};
 
         if (Object.keys(updates).length === 0) {
             this.clearCalendarPreviewGhosts();
@@ -391,6 +412,20 @@ export class ResizeStrategy extends BaseDragStrategy {
         this.cleanup();
     }
 
+    /**
+     * Strip update keys whose value already matches baseTask. Prevents no-op
+     * writes when the user grabs a handle and releases without movement.
+     */
+    private diffUpdates(updates: Partial<Task>, baseTask: Task): Partial<Task> {
+        const result: Partial<Task> = {};
+        for (const key of Object.keys(updates) as (keyof Task)[]) {
+            if ((updates as any)[key] !== (baseTask as any)[key]) {
+                (result as any)[key] = (updates as any)[key];
+            }
+        }
+        return result;
+    }
+
     // ========== AllDay Resize ==========
 
     private initAllDayResize(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
@@ -401,14 +436,19 @@ export class ResizeStrategy extends BaseDragStrategy {
         this.refHeaderCell = headerCell;
         this.colWidth = headerCell?.getBoundingClientRect().width || 100;
 
+        // Resolve original task (split segment safety, see initCalendarResize).
+        const originalId = getOriginalTaskId(task);
+        this.baseTask = context.readService.getTask(originalId) ?? task;
+
         const viewStartDate = context.getViewStartDate();
-        this.initialCalendarDate = task.startDate || viewStartDate || DateUtils.getToday();
-        this.initialCalendarEndDate = task.endDate || this.initialCalendarDate;
-        // Visual end date (inclusive) for ghost rendering — matches task card renderer
+        this.initialCalendarDate = this.baseTask.startDate || viewStartDate || DateUtils.getToday();
+        this.initialCalendarEndDate = this.baseTask.endDate || this.initialCalendarDate;
+        // Visual range (inclusive) — matches task card renderer
         const startHour = context.plugin.settings.startHour;
-        const visual = this.getVisualDateRange(task, startHour);
+        const visual = this.getVisualDateRange(this.baseTask, startHour);
+        this.initialCalendarVisualStart = visual.start;
         this.initialCalendarVisualEnd = visual.end;
-        this.initialSpan = DateUtils.getDiffDays(this.initialCalendarDate, visual.end) + 1;
+        this.initialSpan = DateUtils.getDiffDays(visual.start, visual.end) + 1;
 
         const gridCol = el.style.gridColumn;
         const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
@@ -443,7 +483,7 @@ export class ResizeStrategy extends BaseDragStrategy {
     }
 
     private async finishAllDayResize(context: DragContext) {
-        if (!this.dragTask || !this.dragEl) {
+        if (!this.dragTask || !this.dragEl || !this.baseTask) {
             this.cleanup();
             return;
         }
@@ -465,30 +505,33 @@ export class ResizeStrategy extends BaseDragStrategy {
             return;
         }
 
-        const updates: Partial<Task> = {};
+        const startHour = context.plugin.settings.startHour;
+        const baseTask = this.baseTask;
+
+        // visual ベースで edits を組み立て、materializeRawDates で raw に正規化
+        let edits: DisplayDateEdits | null = null;
 
         if (this.resizeDirection === 'right') {
-            // 右リサイズ: end日付を変更
-            // initialSpan is visual-based, initialCalendarEndDate is raw (exclusive).
-            // This works because allDay tasks have no time-based visual shift on startDate,
-            // so the delta between visual span and raw span is constant.
             const spanDelta = currentSpan - this.initialSpan;
-            const newEnd = DateUtils.addDays(this.initialCalendarEndDate, spanDelta);
-            if (newEnd >= this.initialCalendarDate) {
-                updates.endDate = newEnd;
+            const newVisualEnd = DateUtils.addDays(this.initialCalendarVisualEnd, spanDelta);
+            if (newVisualEnd >= this.initialCalendarVisualStart) {
+                edits = { effectiveEndDate: newVisualEnd };
             }
         } else if (this.resizeDirection === 'left') {
-            // 左リサイズ: start日付を変更
             const startColDelta = currentStartCol - this.startCol;
-            const newStart = DateUtils.addDays(this.initialCalendarDate, startColDelta);
-            if (newStart <= this.initialCalendarVisualEnd) {
-                updates.startDate = newStart;
-                // endDate が未設定の場合、元の右端を保持するために明示的に設定
-                if (!this.dragTask!.endDate) {
-                    updates.endDate = DateUtils.addDays(this.initialCalendarVisualEnd, 1);
+            const newVisualStart = DateUtils.addDays(this.initialCalendarVisualStart, startColDelta);
+            if (newVisualStart <= this.initialCalendarVisualEnd) {
+                edits = { effectiveStartDate: newVisualStart };
+                if (!baseTask.endDate) {
+                    // 元の右端を visual で固定して endDate を明示化
+                    edits.effectiveEndDate = this.initialCalendarVisualEnd;
                 }
             }
         }
+
+        const updates: Partial<Task> = edits
+            ? this.diffUpdates(materializeRawDates(edits, baseTask, startHour), baseTask)
+            : {};
 
         if (Object.keys(updates).length > 0) {
             await context.writeService.updateTask(this.dragTask.id, updates);
@@ -517,5 +560,6 @@ export class ResizeStrategy extends BaseDragStrategy {
         this.container = null;
         this.hiddenElements = [];
         this.calendarPreviewTargetDate = null;
+        this.baseTask = null;
     }
 }

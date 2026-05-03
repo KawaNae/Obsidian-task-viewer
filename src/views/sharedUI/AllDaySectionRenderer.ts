@@ -37,8 +37,13 @@ export class AllDaySectionRenderer {
             return visualStart <= viewEnd && tEnd >= viewStart;
         });
 
-        // Pre-split at view boundaries (allDay tasks only need date-range split)
-        const splitResult = splitTasks(tasks, { type: 'date-range', start: viewStart, end: viewEnd, startHour });
+        // AllDay lane は 1 行が連続しており、week 境界は **物理的に分かれない**。
+        // そのため task は view 全体に対して 1 つの DOM (gridColumn span N) で
+        // 表現されるべきで、内部 split は必要ない。view 端を跨ぐ場合のみ
+        // continues-before/after の clip が立つ。
+        const splitResult = splitTasks(tasks, {
+            type: 'date-range', start: viewStart, end: viewEnd, startHour,
+        });
 
         // Use shared layout engine
         const entries = computeGridLayout(splitResult, {

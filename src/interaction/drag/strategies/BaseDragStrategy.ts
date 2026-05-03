@@ -30,6 +30,11 @@ export abstract class BaseDragStrategy implements DragStrategy {
     // ビュータイプ（Timeline or AllDay）
     protected viewType: 'timeline' | 'allday' | 'calendar' = 'timeline';
 
+    // Calendar resize 中のドラッグ方向。null は resize していない (Move/click 等は影響を受けない)。
+    // セル境界判定 (resolveCalendarPointerTarget) のヒステリシスを resize 中だけ
+    // 適用するためのスイッチ。
+    protected activeResizeDirection: 'left' | 'right' | null = null;
+
     // 初期位置
     protected initialX: number = 0;
     protected initialY: number = 0;
@@ -74,6 +79,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
         this.dragEl = null;
         this.currentContext = null;
         this.hasMoved = false;
+        this.activeResizeDirection = null;
         this.clearCalendarPreviewGhosts();
     }
 
@@ -317,7 +323,30 @@ export abstract class BaseDragStrategy implements DragStrategy {
             const firstRect = dayRects[0];
             const lastRect = dayRects[dayRects.length - 1];
 
-            const containsIndex = dayRects.findIndex((rect) => clientX >= rect.left && clientX <= rect.right);
+            // 右ハンドルは CSS で card.right から +12px 外側に置かれる (-12px right offset)。
+            // ハンドル中心は次セルの左端付近にあるため、ハンドルを掴んだだけで
+            // findIndex が次セルを返してしまい +1 day ドリフトを生む。
+            // resize 中だけヒステリシスを入れ、セル端の HYSTERESIS_PX 内は前セル扱いにする。
+            const HANDLE_HYSTERESIS_PX = 8;
+            let containsIndex = -1;
+            if (this.activeResizeDirection === 'right') {
+                containsIndex = dayRects.findIndex((rect) =>
+                    clientX >= rect.left && clientX <= rect.right - HANDLE_HYSTERESIS_PX);
+                if (containsIndex < 0) {
+                    containsIndex = dayRects.findIndex((rect) =>
+                        clientX >= rect.left && clientX <= rect.right);
+                }
+            } else if (this.activeResizeDirection === 'left') {
+                containsIndex = dayRects.findIndex((rect) =>
+                    clientX >= rect.left + HANDLE_HYSTERESIS_PX && clientX <= rect.right);
+                if (containsIndex < 0) {
+                    containsIndex = dayRects.findIndex((rect) =>
+                        clientX >= rect.left && clientX <= rect.right);
+                }
+            } else {
+                containsIndex = dayRects.findIndex((rect) =>
+                    clientX >= rect.left && clientX <= rect.right);
+            }
             if (containsIndex >= 0) {
                 col = containsIndex + 1;
             } else if (clientX < firstRect.left) {

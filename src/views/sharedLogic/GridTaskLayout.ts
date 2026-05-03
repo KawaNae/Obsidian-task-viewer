@@ -166,9 +166,16 @@ export function computeGridLayout(
         return a.task.id.localeCompare(b.task.id);
     });
 
-    // 4. Assign tracks (greedy first-fit)
-    // Each track stores the rightmost occupied column (including due arrow footprint)
+    // 4. Assign tracks (greedy first-fit, with same-task lock)
+    // Each track stores the rightmost occupied column (including due arrow footprint).
+    // 同じ originalTaskId を持つ segments (per-week / visual-date split で複数生まれる)
+    // は、最初の segment が乗った track に後続 segment も乗せることを優先する。
+    // これがないと、間に他 task の segment が割り込んだとき後続 segment が空き track に
+    // 飛び、視覚的に 1 task が複数行に分散して "上下にずれた連続バー" になる。
+    // ロックした track が後続 segment 側で他 task に占有されている場合のみ通常 first-fit
+    // にフォールバックする。
     const tracks: number[] = [];
+    const trackByOriginalId = new Map<string, number>();
     const result: GridTaskEntry[] = [];
 
     for (const entry of rawEntries) {
@@ -176,11 +183,18 @@ export function computeGridLayout(
             ? entry.dueArrow.arrowEndCol - 1
             : entry.colStart + entry.span - 1;
 
+        const originalId = (entry.task as DisplayTask).originalTaskId ?? entry.task.id;
+        const lockedTrack = trackByOriginalId.get(originalId);
+
         let trackIndex = -1;
-        for (let i = 0; i < tracks.length; i++) {
-            if (entry.colStart > tracks[i]) {
-                trackIndex = i;
-                break;
+        if (lockedTrack !== undefined && entry.colStart > tracks[lockedTrack]) {
+            trackIndex = lockedTrack;
+        } else {
+            for (let i = 0; i < tracks.length; i++) {
+                if (entry.colStart > tracks[i]) {
+                    trackIndex = i;
+                    break;
+                }
             }
         }
 
@@ -189,6 +203,10 @@ export function computeGridLayout(
             tracks.push(footprintEnd);
         } else {
             tracks[trackIndex] = footprintEnd;
+        }
+
+        if (!trackByOriginalId.has(originalId)) {
+            trackByOriginalId.set(originalId, trackIndex);
         }
 
         result.push({ ...entry, trackIndex });
