@@ -491,7 +491,7 @@ export class CalendarView extends ItemView {
         }
 
         // Attach handles to the selected card. Section renderers already
-        // tagged cards with `.selected` during render; reapplySelectionClass is
+        // tagged cards with `.is-selected` during render; reapplySelectionClass is
         // idempotent and ensures handles are attached on the fresh DOM.
         if (this.handleManager?.getSelectedTaskId()) {
             this.handleManager.reapplySelectionClass();

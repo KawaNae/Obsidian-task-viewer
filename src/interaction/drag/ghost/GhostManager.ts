@@ -63,12 +63,12 @@ export class GhostManager {
                 // calc((100% - 8px) * widthFraction) / calc(4px + (100% - 8px) * leftFraction))
                 // に揃える。dayCol 全幅で出すと level≥2 の重なりカードと右端が合わず、
                 // drag 開始時に「右に伸びる」見た目になる。
-                // sourceEl.offsetLeft/Width は drag-hidden (opacity:0) でも layout 値を返す。
+                // sourceEl.offsetLeft/Width は is-drag-hidden (opacity:0) でも layout 値を返す。
                 ghost.style.left = `${dayCol.offsetLeft + sourceEl.offsetLeft}px`;
                 ghost.style.top = `${dayCol.offsetTop + borderTop + toDisplayTopPx(seg.top)}px`;
                 ghost.style.width = `${sourceEl.offsetWidth}px`;
                 ghost.style.height = `${toDisplayHeightPx(seg.height)}px`;
-                ghost.classList.remove('drag-hidden');
+                ghost.classList.remove('is-drag-hidden');
                 ghost.style.display = 'block';
 
                 // --- Manage Split Classes and Inline Styles Dynamically ---

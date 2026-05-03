@@ -87,7 +87,7 @@ export class AllDaySectionRenderer {
         if (entry.continuesBefore) el.addClass('task-card--split-continues-before');
         if (entry.continuesAfter) el.addClass('task-card--split-continues-after');
         if (task.id === this.handleManager.getSelectedTaskId()) {
-            el.addClass('selected');
+            el.addClass('is-selected');
         }
         el.dataset.id = task.id;
 

@@ -457,7 +457,7 @@
 }
 
 /* ==========================================================================
-   7. STATES (:hover, .selected, .is-dragging)
+   7. STATES (:hover, .is-selected, .is-dragging)
    ========================================================================== */
 
 .task-card:hover {
@@ -470,7 +470,7 @@
 }
 
 /* Selection Border using ::after */
-.task-card.selected::after {
+.task-card.is-selected::after {
     content: '';
     position: absolute;
     top: 0;
@@ -483,13 +483,13 @@
     z-index: 5;
 }
 
-.task-card--split-continues-after.selected::after {
+.task-card--split-continues-after.is-selected::after {
     border-bottom: none;
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
 }
 
-.task-card--split-continues-before.selected::after {
+.task-card--split-continues-before.is-selected::after {
     border-top: none;
     border-top-left-radius: 0;
     border-top-right-radius: 0;

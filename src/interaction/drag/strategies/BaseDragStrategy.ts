@@ -66,7 +66,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
         if (this.dragEl) {
             this.dragEl.removeClass('is-dragging');
             this.dragEl.style.zIndex = '';
-            this.dragEl.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
+            this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
             this.dragEl.style.transform = '';
         }
 
@@ -174,13 +174,13 @@ export abstract class BaseDragStrategy implements DragStrategy {
     private createPreviewGhost(colStart: number, span: number, trackIndex: number, colOffset: number, splitClasses: string[]): HTMLElement {
         const preview = this.dragEl!.cloneNode(true) as HTMLElement;
         preview.querySelectorAll('.task-card__handle').forEach(h => h.remove());
-        preview.removeClass('selected', 'is-dragging');
+        preview.removeClass('is-selected', 'is-dragging');
         preview.removeClass('task-card--split-continues-before', 'task-card--split-continues-after');
         preview.addClass('task-card--drag-preview');
         preview.style.gridColumn = `${colStart + colOffset} / span ${span}`;
         preview.style.gridRow = `${trackIndex + 2}`;
         preview.style.transform = '';
-        preview.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
+        preview.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
         preview.style.zIndex = '1001';
         preview.style.pointerEvents = 'none';
         for (const cls of splitClasses) preview.addClass(cls);

@@ -404,7 +404,7 @@ export class TimelineView extends ItemView {
 
         // Clear selection when the selected task is deleted via the UI.
         // External-editor deletions are not tracked here by design — if that
-        // case causes a visual glitch (line-shifted task inherits `.selected`),
+        // case causes a visual glitch (line-shifted task inherits `.is-selected`),
         // user can click to re-select.
         this.unsubscribeDelete = this.writeService.onTaskDeleted((deletedId) => {
             if (this.handleManager.getSelectedTaskId() === deletedId) {
@@ -960,7 +960,7 @@ export class TimelineView extends ItemView {
         }
 
         // Attach handles to the selected card after scroll restoration.
-        // Section renderers already tagged cards with `.selected` during render;
+        // Section renderers already tagged cards with `.is-selected` during render;
         // reapplySelectionClass is idempotent and ensures handles are attached
         // and z-index is raised on the fresh DOM.
         // 同期実行することで、最初の paint からハンドル + SELECTED_Z_INDEX が

@@ -298,15 +298,15 @@ export class ResizeStrategy extends BaseDragStrategy {
             this.calendarPreviewTargetDate = boundedEnd;
 
             if (crossWeek) {
-                this.hiddenElements.forEach(el => el.classList.add('drag-hidden'));
-                this.dragEl.classList.add('drag-source-faint');
+                this.hiddenElements.forEach(el => el.classList.add('is-drag-hidden'));
+                this.dragEl.classList.add('is-drag-source-faint');
                 this.updateCalendarSplitPreview(context, this.initialCalendarDate, boundedEnd);
                 return;
             }
 
-            this.hiddenElements.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
+            this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
             this.clearCalendarPreviewGhosts();
-            this.dragEl.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
+            this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
             const newSpan = Math.max(1, target.col - this.startCol + 1);
             this.dragEl.style.gridColumn = `${this.startCol + colOffset} / span ${newSpan}`;
         } else if (this.resizeDirection === 'left') {
@@ -314,15 +314,15 @@ export class ResizeStrategy extends BaseDragStrategy {
             this.calendarPreviewTargetDate = boundedStart;
 
             if (crossWeek) {
-                this.hiddenElements.forEach(el => el.classList.add('drag-hidden'));
-                this.dragEl.classList.add('drag-source-faint');
+                this.hiddenElements.forEach(el => el.classList.add('is-drag-hidden'));
+                this.dragEl.classList.add('is-drag-source-faint');
                 this.updateCalendarSplitPreview(context, boundedStart, this.initialCalendarVisualEnd);
                 return;
             }
 
-            this.hiddenElements.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
+            this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
             this.clearCalendarPreviewGhosts();
-            this.dragEl.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
+            this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
             const currentEndCol = this.startCol + this.initialSpan - 1;
             let targetStartCol = target.col;
             targetStartCol = Math.min(targetStartCol, currentEndCol);
@@ -335,7 +335,7 @@ export class ResizeStrategy extends BaseDragStrategy {
     private async finishCalendarResize(e: PointerEvent, context: DragContext) {
         if (!this.dragTask || !this.dragEl) {
             this.clearCalendarPreviewGhosts();
-            this.hiddenElements.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
+            this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
             this.cleanup();
             return;
         }
@@ -344,8 +344,8 @@ export class ResizeStrategy extends BaseDragStrategy {
         const targetDate = this.calendarPreviewTargetDate || target?.targetDate;
         if (!targetDate) {
             this.clearCalendarPreviewGhosts();
-            this.hiddenElements.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
-            if (this.dragEl) this.dragEl.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
+            this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
+            if (this.dragEl) this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
             this.cleanup();
             return;
         }
@@ -379,8 +379,8 @@ export class ResizeStrategy extends BaseDragStrategy {
 
         if (Object.keys(updates).length === 0) {
             this.clearCalendarPreviewGhosts();
-            this.hiddenElements.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
-            if (this.dragEl) this.dragEl.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
+            this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
+            if (this.dragEl) this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
             this.cleanup();
             return;
         }

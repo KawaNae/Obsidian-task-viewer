@@ -36,7 +36,7 @@ export class TimelineSectionRenderer {
 
             const el = container.createDiv('task-card');
             if (task.id === this.handleManager.getSelectedTaskId()) {
-                el.addClass('selected');
+                el.addClass('is-selected');
             }
 
             // Add split segment classes if applicable

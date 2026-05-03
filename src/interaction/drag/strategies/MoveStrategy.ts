@@ -83,13 +83,13 @@ export class MoveStrategy extends BaseDragStrategy {
         if (this.viewType === 'timeline') {
             // 最初の移動時に要素を非表示
             if (this.hiddenElements.length > 0) {
-                this.hiddenElements.forEach(el => el.classList.add('drag-hidden'));
+                this.hiddenElements.forEach(el => el.classList.add('is-drag-hidden'));
             }
             this.processTimelineMove(e.clientX, e.clientY);
             this.checkAutoScroll(e.clientY);
         } else if (this.viewType === 'calendar') {
             if (this.hiddenElements.length > 0) {
-                this.hiddenElements.forEach(el => el.classList.add('drag-hidden'));
+                this.hiddenElements.forEach(el => el.classList.add('is-drag-hidden'));
             }
             this.processCalendarMove(e, context);
         } else {
@@ -380,7 +380,7 @@ export class MoveStrategy extends BaseDragStrategy {
         }
 
         if (this.ghostEl) {
-            this.ghostEl.classList.add('drag-hidden');
+            this.ghostEl.classList.add('is-drag-hidden');
             this.ghostEl.style.left = '-9999px';
         }
 
@@ -396,7 +396,7 @@ export class MoveStrategy extends BaseDragStrategy {
 
         if (!this.dragTask || !this.dragEl) {
             this.clearCalendarPreviewGhosts();
-            this.hiddenElements.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
+            this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
             this.cleanup();
             return;
         }
@@ -412,7 +412,7 @@ export class MoveStrategy extends BaseDragStrategy {
 
         if (dayDelta === 0) {
             this.clearCalendarPreviewGhosts();
-            this.hiddenElements.forEach(el => el.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint'));
+            this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
             this.cleanup();
             return;
         }
@@ -480,19 +480,19 @@ export class MoveStrategy extends BaseDragStrategy {
         this.isOutsideSection = !!timelineSection;
 
         if (this.isOutsideSection && this.ghostEl) {
-            this.ghostEl.classList.remove('drag-hidden');
+            this.ghostEl.classList.remove('is-drag-hidden');
             this.ghostEl.style.left = `${e.clientX + 10}px`;
             this.ghostEl.style.top = `${e.clientY + 10}px`;
-            this.dragEl.classList.add('drag-source-dimmed');
+            this.dragEl.classList.add('is-drag-source-dimmed');
             this.dragEl.style.transform = '';
             this.dragEl.style.gridColumn = this.initialGridColumn;
 
             const originalEndLine = this.startCol + this.initialSpan;
             this.updateArrowPosition(originalEndLine);
         } else if (this.ghostEl) {
-            this.ghostEl.classList.add('drag-hidden');
+            this.ghostEl.classList.add('is-drag-hidden');
             this.ghostEl.style.left = '-9999px';
-            this.dragEl.classList.remove('drag-hidden', 'drag-source-dimmed', 'drag-source-faint');
+            this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
             this.dragEl.style.transform = `translateX(${snappedDeltaX}px)`;
 
             const newTaskEndLine = this.startCol + this.initialSpan + dayDelta;

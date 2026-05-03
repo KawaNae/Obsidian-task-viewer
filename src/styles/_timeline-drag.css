@@ -23,15 +23,15 @@
 }
 
 /* ─── Drag opacity states ─── */
-.drag-hidden {
+.is-drag-hidden {
     opacity: 0 !important;
 }
 
-.drag-source-dimmed {
+.is-drag-source-dimmed {
     opacity: 0.3;
 }
 
-.drag-source-faint {
+.is-drag-source-faint {
     opacity: 0.15;
 }
 

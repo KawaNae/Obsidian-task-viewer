@@ -154,7 +154,7 @@
 }
 
 /* Selection border direction for horizontal split */
-.timeline-view .allday-section .task-card--split-continues-after.selected::after {
+.timeline-view .allday-section .task-card--split-continues-after.is-selected::after {
     border-bottom: 2px solid var(--file-accent, var(--tv-accent));
     border-bottom-left-radius: var(--task-card-border-radius);
     border-right: none;
@@ -162,7 +162,7 @@
     border-bottom-right-radius: 0;
 }
 
-.timeline-view .allday-section .task-card--split-continues-before.selected::after {
+.timeline-view .allday-section .task-card--split-continues-before.is-selected::after {
     border-top: 2px solid var(--file-accent, var(--tv-accent));
     border-top-right-radius: var(--task-card-border-radius);
     border-left: none;

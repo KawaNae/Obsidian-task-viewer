@@ -36,7 +36,7 @@ export class HandleManager {
     /**
      * Selects a task (or clears selection when passed null) and renders its handles.
      * The taskId should be a base task id (not a split segment id) so that all
-     * segments of the same task get `.selected` via `dataset.splitOriginalId`.
+     * segments of the same task get `.is-selected` via `dataset.splitOriginalId`.
      */
     selectTask(taskId: string | null): void {
         const prev = this.selectedTaskId;
@@ -75,7 +75,7 @@ export class HandleManager {
     }
 
     /**
-     * Applies `.selected` class and handles to the DOM based on the current
+     * Applies `.is-selected` class and handles to the DOM based on the current
      * selectedTaskId. Idempotent — safe to call after any re-render to reflect
      * selection state on fresh DOM.
      */
@@ -88,10 +88,10 @@ export class HandleManager {
                 if (!htmlEl.dataset.originalZIndex) {
                     htmlEl.dataset.originalZIndex = htmlEl.style.zIndex || '1';
                 }
-                el.addClass('selected');
+                el.addClass('is-selected');
                 htmlEl.style.zIndex = String(SELECTED_Z_INDEX);
             } else {
-                el.removeClass('selected');
+                el.removeClass('is-selected');
                 if (htmlEl.dataset.originalZIndex) {
                     htmlEl.style.zIndex = htmlEl.dataset.originalZIndex;
                     delete htmlEl.dataset.originalZIndex;

@@ -104,8 +104,8 @@ export class ExportUtils {
                     return false;
                 }
             }
-            if (node.classList?.contains('selected') && node.classList?.contains('task-card')) {
-                node.classList.remove('selected');
+            if (node.classList?.contains('is-selected') && node.classList?.contains('task-card')) {
+                node.classList.remove('is-selected');
             }
             return true;
         };

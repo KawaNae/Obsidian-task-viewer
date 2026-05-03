@@ -45,7 +45,7 @@ export function createGhostElement(
     ghost.style.position = container ? 'absolute' : 'fixed';
     ghost.style.zIndex = 'var(--z-task-card-drag-ghost, 9999)';
     ghost.style.pointerEvents = 'none';
-    if (!initiallyVisible) ghost.classList.add('drag-hidden');
+    if (!initiallyVisible) ghost.classList.add('is-drag-hidden');
     ghost.style.width = `${rect.width}px`;
     ghost.style.height = `${rect.height}px`;
     ghost.style.boxSizing = 'border-box';
