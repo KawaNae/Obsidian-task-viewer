@@ -118,54 +118,76 @@
     pointer-events: none;
 }
 
-/* --- Split direction override (allday cards span horizontally) --- */
+/* --- Split direction override (allday cards span horizontally) ---
+   base の vertical mask を horizontal (左右辺) に置き換える。mask は
+   `.task-card__shape` のみに当て、host 直下の handle / drag overlay は
+   mask の対象外にする。selection 枠は __shape::after が mask に追従する
+   ため、cut 辺の border 除去 override は不要。 */
 .timeline-view .allday-section .task-card--split-continues-after {
-    border-bottom: none;
-    border-right: 2px dashed var(--file-accent, var(--tv-accent));
-    border-bottom-left-radius: var(--task-card-border-radius);
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
+    padding-right: calc(2px + var(--task-card-split-zig));
 }
 
-.timeline-view .allday-section .task-card--split-continues-after::before {
+.timeline-view .allday-section .task-card--split-continues-after .task-card__shape {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: var(--task-card-border-radius);
+    -webkit-mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+}
+
+.timeline-view .allday-section .task-card--split-continues-after .task-card__shape::before {
     border-bottom-left-radius: inherit;
 }
 
 .timeline-view .allday-section .task-card--split-continues-before {
-    border-top: none;
-    border-left: 2px dashed var(--file-accent, var(--tv-accent));
+    padding-left: calc(8px + var(--task-card-split-zig));
+}
+
+.timeline-view .allday-section .task-card--split-continues-before .task-card__shape {
     border-top-right-radius: var(--task-card-border-radius);
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
+    -webkit-mask:
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask:
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
 }
 
-.timeline-view .allday-section .task-card--split-continues-before::before {
-    display: none;
+.timeline-view .allday-section .task-card--split-continues-before .task-card__shape::before {
+    left: var(--task-card-split-zig);
 }
 
 .timeline-view .allday-section .task-card--split-continues-before.task-card--split-continues-after {
-    border-left: 2px dashed var(--file-accent, var(--tv-accent));
-    border-right: 2px dashed var(--file-accent, var(--tv-accent));
+    padding-left: calc(8px + var(--task-card-split-zig));
+    padding-right: calc(2px + var(--task-card-split-zig));
+}
+
+.timeline-view .allday-section .task-card--split-continues-before.task-card--split-continues-after .task-card__shape {
     border-radius: 0;
-}
-
-.timeline-view .allday-section .task-card--split-continues-before.task-card--split-continues-after::before {
-    display: none;
-}
-
-/* Selection border direction for horizontal split */
-.timeline-view .allday-section .task-card--split-continues-after.is-selected::after {
-    border-bottom: 2px solid var(--file-accent, var(--tv-accent));
-    border-bottom-left-radius: var(--task-card-border-radius);
-    border-right: none;
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-}
-
-.timeline-view .allday-section .task-card--split-continues-before.is-selected::after {
-    border-top: 2px solid var(--file-accent, var(--tv-accent));
-    border-top-right-radius: var(--task-card-border-radius);
-    border-left: none;
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
+    -webkit-mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y,
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+    -webkit-mask-composite: source-in;
+            mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y,
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask-composite: intersect;
 }

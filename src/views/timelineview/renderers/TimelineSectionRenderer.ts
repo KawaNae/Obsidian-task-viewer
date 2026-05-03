@@ -35,6 +35,7 @@ export class TimelineSectionRenderer {
             if (!task.effectiveStartTime) return;
 
             const el = container.createDiv('task-card');
+            el.createDiv('task-card__shape');
             if (task.id === this.handleManager.getSelectedTaskId()) {
                 el.addClass('is-selected');
             }

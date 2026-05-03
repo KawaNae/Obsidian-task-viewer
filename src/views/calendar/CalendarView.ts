@@ -776,6 +776,7 @@ export class CalendarView extends ItemView {
 
         if (entry.isMultiDay || entry.continuesBefore || entry.continuesAfter) {
             const barEl = weekRow.createDiv('task-card task-card--multi-day');
+            barEl.createDiv('task-card__shape');
             barEl.dataset.id = entry.segmentId;
             if (entry.continuesBefore || entry.continuesAfter) {
                 barEl.dataset.splitOriginalId = (entry.task as DisplayTask).originalTaskId || entry.task.id;
@@ -799,6 +800,7 @@ export class CalendarView extends ItemView {
         }
 
         const card = weekRow.createDiv('task-card');
+        card.createDiv('task-card__shape');
         card.dataset.id = entry.task.id;
         applyGridPosition(card);
 

@@ -50,85 +50,80 @@
 }
 
 /* --- Split direction (horizontal for calendar) ---
-   Card 自体は cell 端ぴったり (margin: 0) を維持し、dashed indicator は
-   ::after / ::before の擬似要素で card 内側 4px の位置に描画する。これに
-   より view 右端 = window 右端のとき、border-right を直接使うと dashed が
-   window フレームと同化して見切れる問題を回避する。
-   selected 時は `.task-card.is-selected::after` (specificity 0.2.1) と
-   `.task-card--split-continues-*.is-selected::after` の上書きが優先され、
-   dashed indicator の代わりに solid な選択枠が表示される現状挙動を維持。 */
+   conic-gradient mask を `.task-card__shape` に当てて左右辺を sawtooth に
+   切り抜く。host は無 mask なので handle / drag overlay は影響を受けない。
+   linestyle ::before バーは continues-before 側で zig 分右にシフトして
+   sawtooth に切られないよう保護する。selection 枠は __shape::after 側で
+   mask に追従するため、cut 辺の border 除去 override は不要。 */
 
 .calendar-view .task-card--split-continues-after {
-    border-bottom: none;
-    border-right: none;
-    border-top-right-radius: 0 !important;
-    border-bottom-right-radius: 0 !important;
+    padding-right: calc(2px + var(--task-card-split-zig));
     margin-right: 0;
 }
 
-.calendar-view .task-card--split-continues-after::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    right: 4px;
-    width: 0;
-    border-right: 2px dashed var(--file-accent, var(--tv-accent));
-    pointer-events: none;
-    z-index: 1;
-}
-
-.calendar-view .task-card--split-continues-before.task-card--split-continues-after {
-    border-left: none;
-    border-right: none;
-    border-top-left-radius: 0 !important;
-    border-bottom-left-radius: 0 !important;
+.calendar-view .task-card--split-continues-after .task-card__shape {
     border-top-right-radius: 0 !important;
     border-bottom-right-radius: 0 !important;
-    margin-left: 0;
-    margin-right: 0;
+    -webkit-mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
 }
 
 .calendar-view .task-card--split-continues-before {
-    border-top: none;
-    border-left: none;
-    border-top-left-radius: 0 !important;
-    border-bottom-left-radius: 0 !important;
+    padding-left: calc(8px + var(--task-card-split-zig));
     margin-left: 0;
 }
 
-.calendar-view .task-card--split-continues-before::before {
-    /* file-linestyle decoration (左の vertical bar) を dashed indicator で上書き。
-       continues-before かつ continues-after の場合は ::before (左) + ::after (右)
-       が両側に dashed を描く。 */
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 4px;
-    width: 0;
-    border-left: 2px dashed var(--file-accent, var(--tv-accent));
-    pointer-events: none;
-    z-index: 1;
-    /* linestyle 由来の background は不要 */
-    background: none !important;
+.calendar-view .task-card--split-continues-before .task-card__shape {
+    border-top-left-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+    -webkit-mask:
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask:
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
 }
 
-/* Selection border direction for horizontal split */
-.calendar-view .task-card--split-continues-after.is-selected::after {
-    border-bottom: 2px solid var(--file-accent, var(--tv-accent));
-    border-bottom-left-radius: var(--task-card-border-radius);
-    border-right: none;
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
+.calendar-view .task-card--split-continues-before .task-card__shape::before {
+    left: var(--task-card-split-zig);
 }
 
-.calendar-view .task-card--split-continues-before.is-selected::after {
-    border-top: 2px solid var(--file-accent, var(--tv-accent));
-    border-top-right-radius: var(--task-card-border-radius);
-    border-left: none;
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
+.calendar-view .task-card--split-continues-before.task-card--split-continues-after {
+    padding-left: calc(8px + var(--task-card-split-zig));
+    padding-right: calc(2px + var(--task-card-split-zig));
+    margin-left: 0;
+    margin-right: 0;
+}
+
+.calendar-view .task-card--split-continues-before.task-card--split-continues-after .task-card__shape {
+    border-top-left-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+    border-top-right-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    -webkit-mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y,
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+    -webkit-mask-composite: source-in;
+            mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y,
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask-composite: intersect;
 }
 
 /* --- Calendar modal --- */

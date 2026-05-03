@@ -372,6 +372,7 @@ export class PinnedListRenderer {
         const viewId = this.viewId ?? 'unknown';
         tasks.forEach(task => {
             const card = body.createDiv('task-card');
+            card.createDiv('task-card__shape');
             card.dataset.id = task.id;
 
             TaskStyling.applyTaskColor(card, task.color ?? null);

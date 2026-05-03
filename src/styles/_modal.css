@@ -270,7 +270,10 @@
 
 .task-detail-modal .task-card {
     position: relative;
-    box-shadow: none;
     margin: 0;
     font-size: var(--task-card-font-size);
+}
+
+.task-detail-modal .task-card .task-card__shape {
+    box-shadow: none;
 }

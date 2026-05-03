@@ -39,6 +39,7 @@ export class TaskDetailModal extends Modal {
         contentEl.addClass('task-detail-modal');
 
         const card = contentEl.createDiv('task-card');
+        card.createDiv('task-card__shape');
         TaskStyling.applyTaskColor(card, this.task.color ?? null);
         TaskStyling.applyTaskLinestyle(card, this.task.linestyle ?? null);
         TaskStyling.applyReadOnly(card, this.task);

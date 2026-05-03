@@ -99,6 +99,7 @@ export class ScheduleTaskRenderer {
     async renderTaskCard(container: HTMLElement, task: DisplayTask, flowCard: boolean): Promise<void> {
         const wrapper = container.createDiv(flowCard ? 'schedule-tasks__card-wrap' : 'schedule-section__task-wrap');
         const card = wrapper.createDiv('task-card');
+        card.createDiv('task-card__shape');
         card.dataset.id = task.id;
 
         if (task.isSplit) {

@@ -23,20 +23,31 @@
     font-size: var(--task-card-font-size);
     color: var(--tv-text);
 
-    /* Visual */
-    background-color: var(--tv-bg-card);
-    border-radius: var(--task-card-border-radius);
-    box-shadow: 0 4px 10px 3px var(--tv-shadow-strong);
-
     /* Misc */
     scrollbar-width: none;
 }
 
 /* ==========================================================================
-   2. ACCENT BORDER (::before linestyle variants)
+   2. SHAPE LAYER (bg + linestyle + selection + sawtooth mask)
+
+   Visual 系 (背景色/角丸/影/linestyle/選択枠/split mask) は host ではなく
+   `.task-card__shape` 子要素に集約する。これにより handle 等の host 直下
+   absolute 子要素は mask の対象外になる (CSS Masking 仕様: mask は適用
+   要素の subtree にのみ作用するため、sibling である handle は escape)。
    ========================================================================== */
 
-.task-card::before {
+.task-card__shape {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-color: var(--tv-bg-card);
+    border-radius: var(--task-card-border-radius);
+    box-shadow: 0 4px 10px 3px var(--tv-shadow-strong);
+}
+
+/* --- Accent border (linestyle bar) --- */
+.task-card__shape::before {
     content: '';
     position: absolute;
     top: 0;
@@ -48,13 +59,13 @@
     border-radius: 4px 0 0 4px;
 }
 
-.task-card[data-file-linestyle='solid']::before {
+.task-card[data-file-linestyle='solid'] .task-card__shape::before {
     width: var(--task-card-accent-solid-width, 4px);
     background-color: var(--file-accent, var(--tv-accent));
     background-image: none;
 }
 
-.task-card[data-file-linestyle='dashed']::before {
+.task-card[data-file-linestyle='dashed'] .task-card__shape::before {
     width: var(--task-card-accent-dashed-width, 4px);
     background-color: transparent;
     background-image: repeating-linear-gradient(to bottom,
@@ -64,7 +75,7 @@
     background-repeat: repeat-y;
 }
 
-.task-card[data-file-linestyle='dotted']::before {
+.task-card[data-file-linestyle='dotted'] .task-card__shape::before {
     width: var(--task-card-accent-dotted-width, 4px);
     background-color: transparent;
     background-image: repeating-linear-gradient(to bottom,
@@ -74,7 +85,7 @@
     background-repeat: repeat-y;
 }
 
-.task-card[data-file-linestyle='double']::before {
+.task-card[data-file-linestyle='double'] .task-card__shape::before {
     width: calc(
         var(--task-card-accent-double-left-width, 1px) +
         var(--task-card-accent-double-gap, 2px) +
@@ -89,7 +100,7 @@
     background-repeat: no-repeat;
 }
 
-.task-card[data-file-linestyle='dashdotted']::before {
+.task-card[data-file-linestyle='dashdotted'] .task-card__shape::before {
     width: var(--task-card-accent-dashdotted-width, 4px);
     background-color: transparent;
     background-image: repeating-linear-gradient(to bottom,
@@ -392,29 +403,59 @@
    6. MODIFIERS (--variant)
    ========================================================================== */
 
-/* --- Split (cross-day boundary) --- */
+/* --- Split (cross-day boundary) ---
+   Cut 辺は border ではなく conic-gradient mask で sawtooth に切り抜く
+   (ticket-stub 風)。mask は `.task-card__shape` にだけ当て、host 直下の
+   handle や drag-preview/ghost overlay は mask の対象外にする。
+   base rules は vertical cut (timeline grid 同日内 split) を担当し、
+   horizontal cut (allday / calendar の日跨ぎ) は view-specific ファイルで
+   override する。zig = ノコ歯の深さ。
+   padding は host 側で content を cut から逃がし、border-radius / mask は
+   __shape で視覚を担う。 */
 .task-card--split {
     border-style: none;
     border-width: 0;
 }
 
 .task-card--split-continues-after {
-    border-bottom: 2px dashed var(--file-accent, var(--tv-accent));
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
+    padding-bottom: calc(2px + var(--task-card-split-zig));
 }
 
-.task-card--split-continues-after::before {
+.task-card--split-continues-after .task-card__shape {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    -webkit-mask:
+        conic-gradient(from 135deg at 50% calc(100% - var(--task-card-split-zig)),
+            #0000 0 90deg, #000 0)
+        0 0 / calc(2 * var(--task-card-split-zig)) 100% repeat-x;
+            mask:
+        conic-gradient(from 135deg at 50% calc(100% - var(--task-card-split-zig)),
+            #0000 0 90deg, #000 0)
+        0 0 / calc(2 * var(--task-card-split-zig)) 100% repeat-x;
+}
+
+.task-card--split-continues-after .task-card__shape::before {
     border-bottom-left-radius: 0;
 }
 
 .task-card--split-continues-before {
-    border-top: 2px dashed var(--file-accent, var(--tv-accent));
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
+    padding-top: calc(2px + var(--task-card-split-zig));
 }
 
-.task-card--split-continues-before::before {
+.task-card--split-continues-before .task-card__shape {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    -webkit-mask:
+        conic-gradient(from 315deg at 50% var(--task-card-split-zig),
+            #0000 0 90deg, #000 0)
+        0 0 / calc(2 * var(--task-card-split-zig)) 100% repeat-x;
+            mask:
+        conic-gradient(from 315deg at 50% var(--task-card-split-zig),
+            #0000 0 90deg, #000 0)
+        0 0 / calc(2 * var(--task-card-split-zig)) 100% repeat-x;
+}
+
+.task-card--split-continues-before .task-card__shape::before {
     border-top-left-radius: 0;
 }
 
@@ -447,9 +488,14 @@
     z-index: var(--z-task-card-drag-ghost);
     pointer-events: none;
     opacity: 0.8;
-    box-shadow: 0 4px 12px var(--tv-ghost-shadow);
     border-radius: var(--tv-radius-s);
     transition: opacity 0.15s ease;
+}
+
+/* Ghost-specific shadow goes on __shape so visual coincides with the
+   actual painted card (host carries no bg/shadow). */
+.task-card--drag-ghost .task-card__shape {
+    box-shadow: 0 4px 12px var(--tv-ghost-shadow);
 }
 
 .task-card--drag-ghost .task-card__handle {
@@ -469,30 +515,17 @@
     cursor: grabbing;
 }
 
-/* Selection Border using ::after */
-.task-card.is-selected::after {
+/* Selection Border using __shape::after.
+   __shape に mask が当たっている場合は selection 枠も自動的に sawtooth
+   形状に追従する (mask が ::after の painted output も clip するため)。
+   そのため split 用の border-side: none / radius:0 上書きは不要。 */
+.task-card.is-selected .task-card__shape::after {
     content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    inset: 0;
     border: 2px solid var(--file-accent, var(--tv-accent));
-    border-radius: var(--task-card-border-radius);
+    border-radius: inherit;
     pointer-events: none;
-    z-index: 5;
-}
-
-.task-card--split-continues-after.is-selected::after {
-    border-bottom: none;
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-}
-
-.task-card--split-continues-before.is-selected::after {
-    border-top: none;
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
 }
 
 /* ==========================================================================
