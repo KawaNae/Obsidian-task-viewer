@@ -36,6 +36,8 @@ export function createGhostElement(
         ghost.innerHTML = el.innerHTML;
     }
 
+    // Selection は ghost には不要 (selection 枠が ghost 上で描かれるのを防ぐ)
+    ghost.classList.remove('is-selected', 'is-dragging');
     ghost.addClass('task-card--drag-ghost');
 
     // サイズ取得
@@ -53,28 +55,38 @@ export function createGhostElement(
     ghost.style.overflow = 'hidden';
     ghost.style.display = 'block';
 
-    // 視覚スタイル（元要素からコピー or フォールバック）
+    // 視覚スタイル: task-card は `.task-card__shape` 子要素が bg / border-radius
+    // / box-shadow / mask を持つため host 側に inline で重ねる必要はない。
+    // 非 task-card な要素 (legacy / 他用途) には fallback を残す。
     const computedStyle = el.ownerDocument.defaultView?.getComputedStyle(el);
-    const bg = computedStyle?.backgroundColor;
-
-    if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent' && bg !== '') {
-        ghost.style.backgroundColor = bg;
-        ghost.style.color = computedStyle?.color || '';
-        ghost.style.border = computedStyle?.border || '';
-        ghost.style.borderRadius = computedStyle?.borderRadius || '4px';
-        ghost.style.padding = computedStyle?.padding || '4px';
+    const hasShape = !!ghost.querySelector('.task-card__shape');
+    if (!hasShape) {
+        const bg = computedStyle?.backgroundColor;
+        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent' && bg !== '') {
+            ghost.style.backgroundColor = bg;
+            ghost.style.color = computedStyle?.color || '';
+            ghost.style.border = computedStyle?.border || '';
+            ghost.style.borderRadius = computedStyle?.borderRadius || '4px';
+            ghost.style.padding = computedStyle?.padding || '4px';
+            ghost.style.fontSize = computedStyle?.fontSize || '';
+            ghost.style.fontFamily = computedStyle?.fontFamily || '';
+        } else {
+            // 透明な要素の場合はフォールバック色を適用
+            ghost.style.backgroundColor = 'var(--background-secondary, #333)';
+            ghost.style.border = '1px solid var(--interactive-accent, #7c3aed)';
+            ghost.style.color = 'var(--text-normal, #eee)';
+            ghost.style.padding = '8px';
+        }
+        // 影効果
+        ghost.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.5)';
+    } else {
+        // task-card ghost: layout 用の padding/font だけ host から継承する
+        // (新 div の場合 .task-card 自体の CSS 規則が適用されないため)
+        ghost.style.padding = computedStyle?.padding || '';
         ghost.style.fontSize = computedStyle?.fontSize || '';
         ghost.style.fontFamily = computedStyle?.fontFamily || '';
-    } else {
-        // 透明な要素の場合はフォールバック色を適用
-        ghost.style.backgroundColor = 'var(--background-secondary, #333)';
-        ghost.style.border = '1px solid var(--interactive-accent, #7c3aed)';
-        ghost.style.color = 'var(--text-normal, #eee)';
-        ghost.style.padding = '8px';
+        ghost.style.color = computedStyle?.color || '';
     }
-
-    // 影効果
-    ghost.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.5)';
 
     // 初期位置（画面外）
     ghost.style.left = '-9999px';

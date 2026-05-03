@@ -71,42 +71,25 @@ export class GhostManager {
                 ghost.classList.remove('is-drag-hidden');
                 ghost.style.display = 'block';
 
-                // --- Manage Split Classes and Inline Styles Dynamically ---
-                // Remove relevant classes inherited from sourceEl
+                // --- Manage Split Classes Dynamically ---
+                // Remove relevant classes inherited from sourceEl, then re-add
+                // based on this segment's position. CSS rules on `.task-card__shape`
+                // (cloned inside the ghost) handle the sawtooth mask + radius.
                 ghost.classList.remove('task-card--split', 'task-card--split-continues-before', 'task-card--split-continues-after');
-
-                // Reset split-related inline styles (GhostFactory sets these, which override CSS classes)
-                ghost.style.borderTop = '';
-                ghost.style.borderBottom = '';
-                ghost.style.borderTopLeftRadius = '';
-                ghost.style.borderTopRightRadius = '';
-                ghost.style.borderBottomLeftRadius = '';
-                ghost.style.borderBottomRightRadius = '';
 
                 if (segments.length > 1) {
                     ghost.classList.add('task-card--split');
-
-                    // Get accent color for dashed border
-                    const accentColor = getComputedStyle(sourceEl).getPropertyValue('--file-accent').trim()
-                        || getComputedStyle(document.documentElement).getPropertyValue('--interactive-accent').trim()
-                        || '#7c3aed';
 
                     const isFirst = index === 0;
                     const isLast = index === segments.length - 1;
 
                     if (!isFirst) {
-                        // Continues before (top cut)
+                        // Continues before (top cut) — sawtooth mask via CSS
                         ghost.classList.add('task-card--split-continues-before');
-                        ghost.style.borderTop = `2px dashed ${accentColor}`;
-                        ghost.style.borderTopLeftRadius = '0';
-                        ghost.style.borderTopRightRadius = '0';
                     }
                     if (!isLast) {
-                        // Continues after (bottom cut)
+                        // Continues after (bottom cut) — sawtooth mask via CSS
                         ghost.classList.add('task-card--split-continues-after');
-                        ghost.style.borderBottom = `2px dashed ${accentColor}`;
-                        ghost.style.borderBottomLeftRadius = '0';
-                        ghost.style.borderBottomRightRadius = '0';
                     }
                 }
             } else {

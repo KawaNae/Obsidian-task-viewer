@@ -57,6 +57,8 @@
    mask に追従するため、cut 辺の border 除去 override は不要。 */
 
 .calendar-view .task-card--split-continues-after {
+    padding-top: 2px;
+    padding-bottom: 2px;
     padding-right: calc(2px + var(--task-card-split-zig));
     margin-right: 0;
 }
@@ -75,6 +77,8 @@
 }
 
 .calendar-view .task-card--split-continues-before {
+    padding-top: 2px;
+    padding-bottom: 2px;
     padding-left: calc(8px + var(--task-card-split-zig));
     margin-left: 0;
 }
@@ -97,6 +101,8 @@
 }
 
 .calendar-view .task-card--split-continues-before.task-card--split-continues-after {
+    padding-top: 2px;
+    padding-bottom: 2px;
     padding-left: calc(8px + var(--task-card-split-zig));
     padding-right: calc(2px + var(--task-card-split-zig));
     margin-left: 0;

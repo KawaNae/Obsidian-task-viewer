@@ -466,6 +466,93 @@
     border-top-left-radius: 0;
 }
 
+/* --- Horizontal split (multi-day カード = allday / calendar) ---
+   `.task-card--multi-day` を持つカードは横方向レイアウトなので mask を
+   左右辺に切り替える。view ancestor (.calendar-view / .timeline-view)
+   ではなく class predicate にしているのは drag ghost が body 直下に
+   detach されても規則が適用されるようにするため。 */
+.task-card--multi-day.task-card--split-continues-after {
+    padding-top: 2px;
+    padding-bottom: 2px;
+    padding-right: calc(2px + var(--task-card-split-zig));
+}
+
+.task-card--multi-day.task-card--split-continues-after .task-card__shape {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    /* base が vertical 用に bottom-left-radius:0 にしているのを復活 */
+    border-bottom-left-radius: var(--task-card-border-radius);
+    -webkit-mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+}
+
+.task-card--multi-day.task-card--split-continues-after .task-card__shape::before {
+    border-bottom-left-radius: inherit;
+}
+
+.task-card--multi-day.task-card--split-continues-before {
+    padding-top: 2px;
+    padding-bottom: 2px;
+    padding-left: calc(8px + var(--task-card-split-zig));
+}
+
+.task-card--multi-day.task-card--split-continues-before .task-card__shape {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    /* base が vertical 用に top-left-radius:0 にしているのを復活 */
+    border-top-right-radius: var(--task-card-border-radius);
+    -webkit-mask:
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask:
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+}
+
+.task-card--multi-day.task-card--split-continues-before .task-card__shape::before {
+    left: var(--task-card-split-zig);
+}
+
+.task-card--multi-day.task-card--split-continues-before.task-card--split-continues-after {
+    padding-top: 2px;
+    padding-bottom: 2px;
+    padding-left: calc(8px + var(--task-card-split-zig));
+    padding-right: calc(2px + var(--task-card-split-zig));
+}
+
+.task-card--multi-day.task-card--split-continues-before.task-card--split-continues-after .task-card__shape {
+    border-radius: 0;
+    -webkit-mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y,
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+    -webkit-mask-composite: source-in;
+            mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y,
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask-composite: intersect;
+}
+
+/* horizontal cut では time-label は元位置 (左/右が cut なので影響なし) */
+.task-card--multi-day.task-card--split-continues-before .task-card__time {
+    top: 2px;
+}
+
 /* --- Drag Preview --- */
 .task-card--drag-preview {
     pointer-events: none !important;
