@@ -34,7 +34,7 @@ export class HabitTrackerRenderer {
         axisCell.setAttribute('tabindex', '0');
         axisCell.setAttribute('aria-label', t('habits.toggleHabits'));
 
-        const toggleBtn = axisCell.createEl('button', { cls: 'section-toggle-btn' });
+        const toggleBtn = axisCell.createEl('button', { cls: 'tv-section-toggle tv-section-toggle--axis' });
         toggleBtn.tabIndex = -1;
 
         axisCell.createEl('span', { cls: 'habits-section__label', text: t('habits.habits') });

@@ -58,7 +58,7 @@
     outline-offset: -2px;
 }
 
-.allday-section__axis:hover .section-toggle-btn {
+.allday-section__axis:hover .tv-section-toggle {
     background-color: var(--tv-bg-hover);
     border-color: var(--tv-border);
     color: var(--tv-text);

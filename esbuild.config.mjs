@@ -83,6 +83,7 @@ const copyStaticFiles = {
           '_editor-task-menu.css',
           '_menu.css',
           '_toolbar.css',
+          '_section-toggle.css',
           '_timeline-toolbar.css',
           '_timer-view.css',
           '_template-creator.css',

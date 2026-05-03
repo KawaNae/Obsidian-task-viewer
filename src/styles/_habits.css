@@ -36,7 +36,7 @@
     outline-offset: -2px;
 }
 
-.habits-section__axis:hover .section-toggle-btn {
+.habits-section__axis:hover .tv-section-toggle {
     background-color: var(--tv-bg-hover);
     border-color: var(--tv-border);
     color: var(--tv-text);

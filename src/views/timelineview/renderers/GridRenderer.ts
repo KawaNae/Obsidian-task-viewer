@@ -165,7 +165,7 @@ export class GridRenderer {
         axisCell.setAttribute('aria-label', t('allDaySection.toggleAllDay'));
 
         // Toggle button
-        const toggleBtn = axisCell.createEl('button', { cls: 'section-toggle-btn' });
+        const toggleBtn = axisCell.createEl('button', { cls: 'tv-section-toggle tv-section-toggle--axis' });
         toggleBtn.tabIndex = -1;
 
         // Label

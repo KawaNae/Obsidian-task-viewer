@@ -1,0 +1,43 @@
+/* =============================================================================
+   tv-section-toggle (shared primitive)
+   Used by: timeline allday axis, schedule allday axis, habits axis (--axis),
+            schedule h4 collapsible header (--header).
+============================================================================= */
+
+button.tv-section-toggle {
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 2px;
+    padding: 0 !important;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 1px solid transparent !important;
+    border-radius: var(--tv-radius-s);
+    background: transparent !important;
+    color: var(--tv-text-muted);
+    box-shadow: none;
+    cursor: pointer;
+    transition:
+        background-color 120ms ease,
+        border-color 120ms ease,
+        color 120ms ease;
+}
+
+button.tv-section-toggle svg {
+    width: 12px;
+    height: 12px;
+}
+
+button.tv-section-toggle:hover {
+    background-color: var(--tv-bg-hover);
+    border-color: var(--tv-border);
+    color: var(--tv-text);
+}
+
+button.tv-section-toggle:focus-visible {
+    outline: 2px solid rgba(var(--tv-accent-rgb), 0.35);
+    outline-offset: 1px;
+}
