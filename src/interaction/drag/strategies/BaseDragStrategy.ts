@@ -78,11 +78,28 @@ export abstract class BaseDragStrategy implements DragStrategy {
     }
 
     /**
+     * pointerup 直後にブラウザが合成する click event を 1 回だけ握り潰す。
+     * drag で card が移動すると click の release target が元 handle ではなく
+     * 着地位置の要素になり、TimelineView/CalendarView の background-click
+     * handler が「カード外 click」と判定して selection を null にしてしまう
+     * (allday の 1 day 移動でも頻繁に発火)。capture phase で stopPropagation
+     * する。
+     */
+    private killNextClick = (e: Event): void => {
+        e.stopPropagation();
+        e.preventDefault();
+    };
+
+    /**
      * ドラッグ状態をクリーンアップする
      */
     protected cleanup(): void {
         this.clearHighlight();
         document.body.style.cursor = '';
+
+        if (this.hasMoved) {
+            document.addEventListener('click', this.killNextClick, { once: true, capture: true });
+        }
 
         if (this.dragEl) {
             this.dragEl.removeClass('is-dragging');
