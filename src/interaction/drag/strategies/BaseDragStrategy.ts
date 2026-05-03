@@ -1,8 +1,9 @@
 import { DragStrategy, DragContext } from '../DragStrategy';
 import { Task } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
-import { NO_TASK_LOOKUP, toDisplayTask } from '../../../services/display/DisplayTaskConverter';
+import { materializeRawDates, NO_TASK_LOOKUP, toDisplayTask } from '../../../services/display/DisplayTaskConverter';
 import { getTaskDateRange } from '../../../services/display/VisualDateRange';
+import type { DragPlan } from '../DragPlan';
 
 export interface CalendarPointerTarget {
     weekRow: HTMLElement;
@@ -75,6 +76,45 @@ export abstract class BaseDragStrategy implements DragStrategy {
      */
     protected restoreSelection(context: DragContext, taskId: string): void {
         context.onTaskClick(taskId);
+    }
+
+    /**
+     * 1 回の drag 完了で生じる write-back を 1 経路に集約。
+     *
+     * - `plan === null` → 変更なし、early return
+     * - そうでなければ visual edits を `materializeRawDates` で raw に変換し、
+     *   baseTask との diff だけを `updateTask` に渡す
+     * - 書き戻しの後に selection を復元する（segment id が drag で再生成
+     *   されるため、再 render 後にも同じ task が selected であるよう保証）
+     *
+     * 各 finish は visual edits の組み立てに専念し、raw `Partial<Task>` を
+     * 直接作らない。これにより endDate inclusive/exclusive の dual semantic を
+     * 1 箇所（materializeRawDates）に閉じ込める。
+     */
+    protected async commitPlan(context: DragContext, plan: DragPlan | null, taskId: string): Promise<void> {
+        if (!plan) return;
+        const { edits, baseTask } = plan;
+        const startHour = context.plugin.settings.startHour;
+        const updates = this.diffUpdates(materializeRawDates(edits, baseTask, startHour), baseTask);
+        if (Object.keys(updates).length === 0) return;
+        await context.writeService.updateTask(taskId, updates);
+        this.restoreSelection(context, taskId);
+    }
+
+    /**
+     * baseTask と既に同じ値のキーを除外する。drag 完了時に「掴んだだけで
+     * 値は変わっていない」フィールドを送らないための薄いヘルパー。
+     */
+    private diffUpdates(updates: Partial<Task>, baseTask: Task): Partial<Task> {
+        const result: Partial<Task> = {};
+        const u = updates as unknown as Record<string, unknown>;
+        const b = baseTask as unknown as Record<string, unknown>;
+        for (const key of Object.keys(u)) {
+            if (u[key] !== b[key]) {
+                (result as unknown as Record<string, unknown>)[key] = u[key];
+            }
+        }
+        return result;
     }
 
     /**

@@ -11,9 +11,9 @@ import {
 import {
     DisplayDateEdits,
     getOriginalTaskId,
-    materializeRawDates,
     toDisplayTask,
 } from '../../../services/display/DisplayTaskConverter';
+import type { DragPlan } from '../DragPlan';
 
 /**
  * リサイズ操作を処理するドラッグストラテジー。
@@ -368,12 +368,18 @@ export class ResizeStrategy extends BaseDragStrategy {
             return;
         }
 
-        const startHour = context.plugin.settings.startHour;
-        const baseTask = this.baseTask;
+        await this.commitPlan(context, this.buildCalendarResizePlan(targetDate), this.dragTask.id);
+        this.cleanup();
+    }
 
-        // Build inclusive-visual edits, then funnel through materializeRawDates
-        // so the inclusive/exclusive endDate semantic is decided in one place
-        // (based on baseTask.endTime), eliminating the +1-day drift bug.
+    /**
+     * Calendar resize の DragPlan ビルダ。target.targetDate（visual）から
+     * direction 別に edits を組み立て、`materializeRawDates` で endDate
+     * dual-semantic を判定させる。
+     */
+    private buildCalendarResizePlan(targetDate: string): DragPlan | null {
+        if (!this.baseTask) return null;
+
         let edits: DisplayDateEdits | null = null;
         if (this.resizeDirection === 'right') {
             const newEnd = targetDate < this.initialCalendarVisualStart
@@ -383,39 +389,13 @@ export class ResizeStrategy extends BaseDragStrategy {
             const newStart = targetDate > this.initialCalendarVisualEnd
                 ? this.initialCalendarVisualEnd : targetDate;
             edits = { effectiveStartDate: newStart };
-            if (!baseTask.endDate) {
+            if (!this.baseTask.endDate) {
                 // 元の右端 (visual) を固定して endDate を明示化
                 edits.effectiveEndDate = this.initialCalendarVisualEnd;
             }
         }
 
-        const updates: Partial<Task> = edits
-            ? this.diffUpdates(materializeRawDates(edits, baseTask, startHour), baseTask)
-            : {};
-
-        if (Object.keys(updates).length === 0) {
-            this.cleanup();
-            return;
-        }
-
-        const taskIdToRestore = this.dragTask.id;
-        await context.writeService.updateTask(this.dragTask.id, updates);
-        this.restoreSelection(context, taskIdToRestore);
-        this.cleanup();
-    }
-
-    /**
-     * Strip update keys whose value already matches baseTask. Prevents no-op
-     * writes when the user grabs a handle and releases without movement.
-     */
-    private diffUpdates(updates: Partial<Task>, baseTask: Task): Partial<Task> {
-        const result: Partial<Task> = {};
-        for (const key of Object.keys(updates) as (keyof Task)[]) {
-            if ((updates as any)[key] !== (baseTask as any)[key]) {
-                (result as any)[key] = (updates as any)[key];
-            }
-        }
-        return result;
+        return edits ? { edits, baseTask: this.baseTask } : null;
     }
 
     // ========== AllDay Resize ==========
@@ -480,29 +460,30 @@ export class ResizeStrategy extends BaseDragStrategy {
             return;
         }
 
-        // gridColumnから現在のスパンを取得
+        // gridColumn から現在のスパンを取得して plan を組み立て、commitPlan に流す
         const gridCol = this.dragEl.style.gridColumn;
         const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
         if (!colMatch) {
             this.cleanup();
             return;
         }
-
         const currentStartCol = parseInt(colMatch[1]);
         const currentSpan = parseInt(colMatch[2]);
 
-        // 変更がない場合は終了
-        if (currentStartCol === this.startCol && currentSpan === this.initialSpan) {
-            this.cleanup();
-            return;
-        }
+        await this.commitPlan(context, this.buildAllDayResizePlan(currentStartCol, currentSpan), this.dragTask.id);
+        this.cleanup();
+    }
 
-        const startHour = context.plugin.settings.startHour;
-        const baseTask = this.baseTask;
+    /**
+     * AllDay resize の DragPlan ビルダ。grid column の差分から visual 範囲を
+     * 計算し、calendar resize と同じく left 方向で endDate 明示化を行う。
+     */
+    private buildAllDayResizePlan(currentStartCol: number, currentSpan: number): DragPlan | null {
+        if (!this.baseTask) return null;
+        // span 不変・startCol 不変 → 変更なし
+        if (currentStartCol === this.startCol && currentSpan === this.initialSpan) return null;
 
-        // visual ベースで edits を組み立て、materializeRawDates で raw に正規化
         let edits: DisplayDateEdits | null = null;
-
         if (this.resizeDirection === 'right') {
             const spanDelta = currentSpan - this.initialSpan;
             const newVisualEnd = DateUtils.addDays(this.initialCalendarVisualEnd, spanDelta);
@@ -514,24 +495,13 @@ export class ResizeStrategy extends BaseDragStrategy {
             const newVisualStart = DateUtils.addDays(this.initialCalendarVisualStart, startColDelta);
             if (newVisualStart <= this.initialCalendarVisualEnd) {
                 edits = { effectiveStartDate: newVisualStart };
-                if (!baseTask.endDate) {
-                    // 元の右端を visual で固定して endDate を明示化
+                if (!this.baseTask.endDate) {
                     edits.effectiveEndDate = this.initialCalendarVisualEnd;
                 }
             }
         }
 
-        const updates: Partial<Task> = edits
-            ? this.diffUpdates(materializeRawDates(edits, baseTask, startHour), baseTask)
-            : {};
-
-        if (Object.keys(updates).length > 0) {
-            const taskIdToRestore = this.dragTask.id;
-            await context.writeService.updateTask(this.dragTask.id, updates);
-            this.restoreSelection(context, taskIdToRestore);
-        }
-
-        this.cleanup();
+        return edits ? { edits, baseTask: this.baseTask } : null;
     }
 
     // ========== ヘルパー ==========

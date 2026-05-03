@@ -4,7 +4,8 @@ import { Task } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
 import { GhostManager, GhostSegment } from '../ghost/GhostManager';
 import { createGhostElement, removeGhostElement } from '../ghost/GhostFactory';
-import { getOriginalTaskId } from '../../../services/display/DisplayTaskConverter';
+import { DisplayDateEdits, getOriginalTaskId } from '../../../services/display/DisplayTaskConverter';
+import type { DragPlan } from '../DragPlan';
 
 /**
  * 移動操作を処理するドラッグストラテジー。
@@ -31,14 +32,15 @@ export class MoveStrategy extends BaseDragStrategy {
     private startCol: number = 0;
     private grabCol: number = 0;
     private initialSpan: number = 0;
-    private initialCalendarDate: string = '';
-    private initialCalendarEndDate: string = '';
     private initialCalendarVisualStart: string = '';
     private initialCalendarVisualEnd: string = '';
     private initialGridColumn: string = '';
     private container: HTMLElement | null = null;
     private isOutsideSection: boolean = false;
     private refHeaderCell: HTMLElement | null = null;
+    /** Original (pre-split) raw task. Cached at drag start so commitPlan
+     *  has access for materializeRawDates' endDate-semantic decision. */
+    private baseTask: Task | null = null;
 
     // オートスクロール
     private autoScrollTimer: number | null = null;
@@ -330,12 +332,14 @@ export class MoveStrategy extends BaseDragStrategy {
         this.refHeaderCell = headerCell;
         this.colWidth = this.getCalendarDayColumnWidth(weekRow);
 
-        const viewStartDate = context.getViewStartDate();
-        this.initialCalendarDate = task.startDate || viewStartDate || DateUtils.getToday();
-        this.initialCalendarEndDate = task.endDate || this.initialCalendarDate;
+        // Resolve original (pre-split) raw task. dragTask may be a split
+        // segment whose dates differ from the source.
+        const originalId = getOriginalTaskId(task);
+        this.baseTask = context.readService.getTask(originalId) ?? task;
+
         // Visual dates (inclusive) for ghost rendering — matches task card renderer
         const startHour = context.plugin.settings.startHour;
-        const visual = this.getVisualDateRange(task, startHour);
+        const visual = this.getVisualDateRange(this.baseTask, startHour);
         this.initialCalendarVisualStart = visual.start;
         this.initialCalendarVisualEnd = visual.end;
         this.initialSpan = DateUtils.getDiffDays(visual.start, visual.end) + 1;
@@ -363,7 +367,6 @@ export class MoveStrategy extends BaseDragStrategy {
         this.ghostEl = createGhostElement(el, doc);
         this.clearPreviewGhosts();
 
-        const originalId = getOriginalTaskId(task);
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         context.container.querySelectorAll(selector).forEach(segment => {
             if (segment instanceof HTMLElement && !segment.closest('.tv-sidebar__pinned-lists')) {
@@ -413,22 +416,7 @@ export class MoveStrategy extends BaseDragStrategy {
             dayDelta = DateUtils.getDiffDays(sourceWeekStart, target.weekStart) + target.col - this.grabCol;
         }
 
-        if (dayDelta === 0) {
-            this.cleanup();
-            return;
-        }
-
-        const newStart = DateUtils.addDays(this.initialCalendarDate, dayDelta);
-        const duration = DateUtils.getDiffDays(this.initialCalendarDate, this.initialCalendarEndDate);
-        const newEnd = DateUtils.addDays(newStart, duration);
-
-        const updates: Partial<Task> = this.buildAllDayMoveUpdates(newStart, newEnd);
-        if (Object.keys(updates).length > 0) {
-            const taskIdToRestore = this.dragTask.id;
-            await context.writeService.updateTask(this.dragTask.id, updates);
-            this.restoreSelection(context, taskIdToRestore);
-        }
-
+        await this.commitPlan(context, this.buildMoveDayShiftPlan(dayDelta), this.dragTask.id);
         this.cleanup();
     }
 
@@ -442,12 +430,13 @@ export class MoveStrategy extends BaseDragStrategy {
         this.refHeaderCell = headerCell;
         this.colWidth = headerCell?.getBoundingClientRect().width || 100;
 
-        const viewStartDate = context.getViewStartDate();
-        this.initialCalendarDate = task.startDate || viewStartDate || DateUtils.getToday();
-        this.initialCalendarEndDate = task.endDate || this.initialCalendarDate;
+        // Resolve original (pre-split) raw task — used by commitPlan for endDate semantic.
+        const originalId = getOriginalTaskId(task);
+        this.baseTask = context.readService.getTask(originalId) ?? task;
+
         // Visual dates (inclusive) for ghost rendering — matches task card renderer
         const startHour = context.plugin.settings.startHour;
-        const visual = this.getVisualDateRange(task, startHour);
+        const visual = this.getVisualDateRange(this.baseTask, startHour);
         this.initialCalendarVisualStart = visual.start;
         this.initialCalendarVisualEnd = visual.end;
         this.initialSpan = DateUtils.getDiffDays(visual.start, visual.end) + 1;
@@ -467,7 +456,6 @@ export class MoveStrategy extends BaseDragStrategy {
 
         // 同一 originalId の split segments を hide する (calendar と同じパターン)。
         // preview ghost で正本を出すため、source 側はすべて消しておく。
-        const originalId = getOriginalTaskId(task);
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         context.container.querySelectorAll(selector).forEach(segment => {
             if (segment instanceof HTMLElement && !segment.closest('.tv-sidebar__pinned-lists')) {
@@ -548,7 +536,7 @@ export class MoveStrategy extends BaseDragStrategy {
         removeGhostElement(this.ghostEl);
         this.ghostEl = null;
 
-        if (!this.dragTask || !this.dragEl) {
+        if (!this.dragTask || !this.dragEl || !this.baseTask) {
             this.cleanup();
             return;
         }
@@ -559,37 +547,10 @@ export class MoveStrategy extends BaseDragStrategy {
         const timelineSection = elBelow?.closest('.timeline-scroll-area__day-column') as HTMLElement;
 
         if (timelineSection) {
-            const targetDate = timelineSection.dataset.date;
-            if (targetDate) {
-                const rect = timelineSection.getBoundingClientRect();
-                const yInContainer = e.clientY - rect.top;
-
-                const zoomLevel = context.getZoomLevel();
-                const snapPixels = 15 * zoomLevel;
-                const snappedTop = Math.round(yInContainer / snapPixels) * snapPixels;
-
-                const startHour = context.plugin.settings.startHour;
-                const startHourMinutes = startHour * 60;
-                const minutesFromStart = snappedTop / zoomLevel;
-                const totalMinutes = startHourMinutes + minutesFromStart;
-                const totalEndMinutes = totalMinutes + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
-
-                const startDayOffset = Math.floor(totalMinutes / 1440);
-                const endDayOffset = Math.floor(totalEndMinutes / 1440);
-
-                const updates: Partial<Task> = {
-                    startDate: DateUtils.addDays(targetDate, startDayOffset),
-                    startTime: DateUtils.minutesToTime(totalMinutes),
-                    endTime: DateUtils.minutesToTime(totalEndMinutes),
-                    endDate: DateUtils.addDays(targetDate, endDayOffset)
-                };
-
-                const taskIdToRestore = this.dragTask.id;
-                await context.writeService.updateTask(this.dragTask.id, updates);
-                this.restoreSelection(context, taskIdToRestore);
-                this.cleanup();
-                return;
-            }
+            const plan = this.buildTimelineDropPlan(timelineSection, e.clientY, context);
+            await this.commitPlan(context, plan, this.dragTask.id);
+            this.cleanup();
+            return;
         }
 
         // 通常のAllDay内移動。process と同じ clamp を適用して task が view と
@@ -597,58 +558,72 @@ export class MoveStrategy extends BaseDragStrategy {
         const deltaX = e.clientX - this.initialX;
         const dayDelta = this.clampAllDayDayDelta(Math.round(deltaX / this.colWidth), context);
 
-        if (dayDelta === 0) {
-            this.cleanup();
-            return;
-        }
-
-        const newStart = DateUtils.addDays(this.initialCalendarDate, dayDelta);
-        const duration = DateUtils.getDiffDays(this.initialCalendarDate, this.initialCalendarEndDate);
-        const newEnd = DateUtils.addDays(newStart, duration);
-
-        const updates: Partial<Task> = this.buildAllDayMoveUpdates(newStart, newEnd);
-
-        if (Object.keys(updates).length > 0) {
-            const taskIdToRestore = this.dragTask.id;
-            await context.writeService.updateTask(this.dragTask.id, updates);
-            this.restoreSelection(context, taskIdToRestore);
-        }
-
+        await this.commitPlan(context, this.buildMoveDayShiftPlan(dayDelta), this.dragTask.id);
         this.cleanup();
     }
 
-    private buildAllDayMoveUpdates(newStart: string, newEnd: string): Partial<Task> {
-        if (!this.dragTask) return {};
+    /**
+     * AllDay → Timeline cross-view drop の DragPlan ビルダ。
+     *
+     * targetDate（drop 先 day-column の日付）と clientY を起点に、startTime ＝
+     * 15 分単位 snap、endTime ＝ start + DEFAULT_TIMED_DURATION_MINUTES。
+     * day boundary を跨ぐ場合は startDate / endDate も day オフセットで補正。
+     *
+     * 結果は visual edits 4 つ（effectiveStart/End × Date/Time）。allday から
+     * timed への切替は edits.effectiveEndTime ありなので materializeRawDates 側で
+     * `willHaveEndTime=true` の inclusive semantic に切り替わる。
+     */
+    private buildTimelineDropPlan(timelineSection: HTMLElement, clientY: number, context: DragContext): DragPlan | null {
+        if (!this.baseTask) return null;
+        const targetDate = timelineSection.dataset.date;
+        if (!targetDate) return null;
 
-        const updates: Partial<Task> = {};
-        const hasExplicitStart = !!this.dragTask.startDate;
-        const hasExplicitEnd = !!this.dragTask.endDate || !!this.dragTask.endTime;
-        const hasDue = !!this.dragTask.due;
+        const rect = timelineSection.getBoundingClientRect();
+        const yInContainer = clientY - rect.top;
+        const zoomLevel = context.getZoomLevel();
+        const snapPixels = 15 * zoomLevel;
+        const snappedTop = Math.round(yInContainer / snapPixels) * snapPixels;
 
-        if (hasExplicitStart && hasExplicitEnd) {
-            updates.startDate = newStart;
-            updates.endDate = newEnd;
-        } else if (hasExplicitStart && !hasExplicitEnd && hasDue) {
-            updates.startDate = newStart;
-            updates.endDate = newEnd;
-        } else if (!hasExplicitStart && hasExplicitEnd && hasDue) {
-            updates.startDate = newStart;
-            updates.endDate = newEnd;
-        } else if (!hasExplicitStart && hasExplicitEnd && !hasDue) {
-            updates.startDate = newStart;
-            updates.endDate = newEnd;
-        } else if (!hasExplicitStart && !hasExplicitEnd && hasDue) {
-            updates.startDate = newStart;
-        } else if (hasExplicitStart && !hasExplicitEnd && !hasDue) {
-            updates.startDate = newStart;
-        } else {
-            updates.startDate = newStart;
-            if (this.dragTask.endDate || this.dragTask.endTime) {
-                updates.endDate = newEnd;
-            }
+        const startHour = context.plugin.settings.startHour;
+        const startHourMinutes = startHour * 60;
+        const minutesFromStart = snappedTop / zoomLevel;
+        const totalMinutes = startHourMinutes + minutesFromStart;
+        const totalEndMinutes = totalMinutes + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
+
+        const startDayOffset = Math.floor(totalMinutes / 1440);
+        const endDayOffset = Math.floor(totalEndMinutes / 1440);
+
+        const edits: DisplayDateEdits = {
+            effectiveStartDate: DateUtils.addDays(targetDate, startDayOffset),
+            effectiveStartTime: DateUtils.minutesToTime(totalMinutes),
+            effectiveEndDate: DateUtils.addDays(targetDate, endDayOffset),
+            effectiveEndTime: DateUtils.minutesToTime(totalEndMinutes),
+        };
+        return { edits, baseTask: this.baseTask };
+    }
+
+    /**
+     * Calendar/AllDay 共通の Move 用 DragPlan ビルダ。
+     *
+     * Move は visual 範囲を `dayDelta` だけ平行移動するだけなので、edits は
+     * 単純な start/end shift。`baseTask.endDate || baseTask.endTime` がある
+     * ときだけ effectiveEndDate も入れる。これは旧 buildAllDayMoveUpdates の
+     * 8 分岐を「endDate 系の値があれば一緒に動かす、なければ start のみ」と
+     * いう本質ルールに圧縮したもの。
+     *
+     * - dayDelta=0: null（変更なし、commitPlan が早期 return）
+     * - baseTask 未設定: null（drag 初期化が失敗していた等の防御）
+     */
+    private buildMoveDayShiftPlan(dayDelta: number): DragPlan | null {
+        if (dayDelta === 0) return null;
+        if (!this.baseTask) return null;
+        const movedStart = DateUtils.addDays(this.initialCalendarVisualStart, dayDelta);
+        const movedEnd = DateUtils.addDays(this.initialCalendarVisualEnd, dayDelta);
+        const edits: DisplayDateEdits = { effectiveStartDate: movedStart };
+        if (this.baseTask.endDate || this.baseTask.endTime) {
+            edits.effectiveEndDate = movedEnd;
         }
-
-        return updates;
+        return { edits, baseTask: this.baseTask };
     }
 
     // ========== ヘルパー ==========
@@ -744,5 +719,6 @@ export class MoveStrategy extends BaseDragStrategy {
         this.lastDragResult = null;
         this.currentDayDate = null;
         this.container = null;
+        this.baseTask = null;
     }
 }
