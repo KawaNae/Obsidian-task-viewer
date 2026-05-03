@@ -149,13 +149,13 @@ export class PinnedListRenderer {
     ): void {
         this.taskRenderer.disposeInside(container);
         container.empty();
-        container.addClass('pinned-lists-container');
+        container.addClass('tv-sidebar__pinned-lists');
         // Preserve paging state across renders for lists that still exist
         // (collapsedState keys are caller-prefixed, so use list.id directly here).
         const currentListIds = new Set(lists.map(l => l.id));
         this.paging.pruneRemovedLists(currentListIds);
         if (lists.length === 0) {
-            container.createDiv('pinned-lists-container__empty')
+            container.createDiv('tv-sidebar__pinned-lists--empty')
                 .setText(t('pinnedList.noPinnedLists'));
             return;
         }

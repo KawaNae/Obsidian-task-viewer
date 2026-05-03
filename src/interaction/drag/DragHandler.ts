@@ -93,7 +93,7 @@ export class DragHandler implements DragContext {
         // pinnedLists 内のカードクリックは selection/drag の対象外。
         // pinnedLists は selection 状態を持たない閲覧専用 UI であり、
         // ここで早期 return しないと main grid の同 id カードに .selected が漏れる。
-        if (target.closest('.pinned-lists-container')) {
+        if (target.closest('.tv-sidebar__pinned-lists')) {
             return;
         }
 

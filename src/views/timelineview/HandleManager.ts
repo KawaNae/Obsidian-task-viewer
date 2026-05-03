@@ -22,7 +22,7 @@ export class HandleManager {
 
     /** Returns task cards scoped to the main content area (excludes pinned lists in sidebar). */
     private getMainTaskCards(): NodeListOf<Element> {
-        const main = this.container.querySelector('.view-sidebar-main');
+        const main = this.container.querySelector('.tv-sidebar__main');
         return (main ?? this.container).querySelectorAll('.task-card');
     }
 

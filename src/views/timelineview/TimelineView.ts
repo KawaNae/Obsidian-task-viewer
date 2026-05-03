@@ -877,9 +877,9 @@ export class TimelineView extends ItemView {
         const { main, sidebarHeader, sidebarBody } = this.sidebarManager.buildLayout(this.container);
 
         // Sidebar header content
-        sidebarHeader.createEl('p', { cls: 'view-sidebar__title', text: t('pinnedList.pinnedLists') });
+        sidebarHeader.createEl('p', { cls: 'tv-sidebar__panel-title', text: t('pinnedList.pinnedLists') });
 
-        const addListBtn = sidebarHeader.createEl('button', { cls: 'view-sidebar__add-btn' });
+        const addListBtn = sidebarHeader.createEl('button', { cls: 'tv-sidebar__panel-add-btn' });
         setIcon(addListBtn, 'plus');
         addListBtn.appendText(t('pinnedList.addList'));
         addListBtn.addEventListener('click', () => {
@@ -979,7 +979,7 @@ export class TimelineView extends ItemView {
     }
 
     private assertNoDuplicateCardIds(): void {
-        const main = this.container.querySelector('.view-sidebar-main') ?? this.container;
+        const main = this.container.querySelector('.tv-sidebar__main') ?? this.container;
         const counts = new Map<string, number>();
         main.querySelectorAll<HTMLElement>('.task-card[data-id]').forEach(el => {
             const id = el.dataset.id;

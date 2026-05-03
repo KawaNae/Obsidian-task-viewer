@@ -64,7 +64,7 @@
 }
 
 /* Mobile: disable sticky so allday scrolls with timeline */
-.view-sidebar-layout--mobile .timeline-scroll-area > .allday-section {
+.tv-sidebar--mobile .timeline-scroll-area > .allday-section {
     position: relative;
     top: auto;
 }

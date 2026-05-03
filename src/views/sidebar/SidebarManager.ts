@@ -78,13 +78,13 @@ export class SidebarManager {
         sidebarHeader: HTMLElement;
         sidebarBody: HTMLElement;
     } {
-        const layout = parent.createDiv('view-sidebar-layout');
+        const layout = parent.createDiv('tv-sidebar');
         this.layoutEl = layout;
 
-        const main = layout.createDiv('view-sidebar-main');
+        const main = layout.createDiv('tv-sidebar__main');
         this.mainEl = main;
 
-        const backdrop = layout.createDiv('view-sidebar-backdrop');
+        const backdrop = layout.createDiv('tv-sidebar__backdrop');
         backdrop.addEventListener('click', () => {
             if (this.config.getIsOpen()) {
                 this.config.onRequestClose();
@@ -92,11 +92,11 @@ export class SidebarManager {
         });
         this.backdropEl = backdrop;
 
-        const sidebar = layout.createDiv('view-sidebar-panel');
+        const sidebar = layout.createDiv('tv-sidebar__panel');
         this.sidebarEl = sidebar;
 
-        const sidebarHeader = sidebar.createDiv('view-sidebar__header');
-        const sidebarBody = sidebar.createDiv('view-sidebar__body');
+        const sidebarHeader = sidebar.createDiv('tv-sidebar__panel-header');
+        const sidebarBody = sidebar.createDiv('tv-sidebar__panel-body');
 
         // Apply current open/closed state to freshly created elements
         this.syncPresentation(this.config.getIsOpen(), { animate: false });
@@ -128,16 +128,16 @@ export class SidebarManager {
         this.applyResponsiveLayout();
 
         if (this.layoutEl) {
-            this.layoutEl.classList.toggle('view-sidebar-layout--animate', options.animate);
+            this.layoutEl.classList.toggle('tv-sidebar--animate', options.animate);
         }
         if (this.sidebarEl) {
-            this.sidebarEl.classList.toggle('view-sidebar-panel--hidden', !isOpen);
+            this.sidebarEl.classList.toggle('tv-sidebar__panel--hidden', !isOpen);
         }
         if (this.mainEl) {
-            this.mainEl.classList.toggle('view-sidebar-main--open', isOpen);
+            this.mainEl.classList.toggle('tv-sidebar__main--open', isOpen);
         }
         if (this.backdropEl) {
-            this.backdropEl.classList.toggle('view-sidebar-backdrop--visible', isOpen);
+            this.backdropEl.classList.toggle('tv-sidebar__backdrop--visible', isOpen);
         }
         this.config.onSyncToggleButton?.();
     }
@@ -158,6 +158,6 @@ export class SidebarManager {
         if (width <= 0) return; // Hidden tabs can report 0
 
         const isNarrow = width <= this.config.mobileBreakpointPx;
-        this.layoutEl?.classList.toggle('view-sidebar-layout--mobile', isNarrow);
+        this.layoutEl?.classList.toggle('tv-sidebar--mobile', isNarrow);
     }
 }
