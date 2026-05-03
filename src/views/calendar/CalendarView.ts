@@ -35,6 +35,7 @@ import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
 import { HandleManager } from '../timelineview/HandleManager';
+import { SelectionController } from '../../interaction/selection/SelectionController';
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
@@ -75,6 +76,7 @@ export class CalendarView extends ItemView {
     private menuHandler: MenuHandler;
     private dragHandler: DragHandler | null = null;
     private handleManager: HandleManager | null = null;
+    private selectionController: SelectionController | null = null;
     private sidebarManager: SidebarManager;
     private pinnedListRenderer: PinnedListRenderer;
     /**
@@ -308,11 +310,13 @@ export class CalendarView extends ItemView {
             getTask: (id) => this.readService.getTask(id),
             getStartHour: () => this.plugin.settings.startHour,
         });
+        this.selectionController = new SelectionController(this.handleManager);
         this.dragHandler = new DragHandler(
             this.container,
             this.readService,
             this.writeService,
             this.plugin,
+            this.selectionController,
             (taskId: string) => {
                 // Store base task id so split segments all share one selection and
                 // the selection survives a drag-move that regenerates segment ids.
@@ -331,24 +335,12 @@ export class CalendarView extends ItemView {
             }
         };
 
-        this.container.addEventListener('click', (event: MouseEvent) => {
-            const target = event.target as HTMLElement;
-            if (target.closest('.task-card__handle-btn')) {
-                return;
-            }
-            if (!target.closest('.task-card')) {
-                this.handleManager?.selectTask(null);
-            }
-        });
+        this.selectionController.attachBackgroundClick(this.container);
 
         await this.performRender();
 
         // Clear selection when the selected task is deleted via the UI.
-        this.unsubscribeDelete = this.writeService.onTaskDeleted((deletedId) => {
-            if (this.handleManager?.getSelectedTaskId() === deletedId) {
-                this.handleManager.selectTask(null);
-            }
-        });
+        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.writeService);
 
         // Initialize render dispatch controller. CalendarView は partial 未対応のため
         // tryPartial は常に false（→ 必ず full render に降格）。

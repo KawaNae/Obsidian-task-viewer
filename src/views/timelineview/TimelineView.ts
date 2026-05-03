@@ -17,6 +17,7 @@ import TaskViewerPlugin from '../../main';
 import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
 
 import { HandleManager } from './HandleManager';
+import { SelectionController } from '../../interaction/selection/SelectionController';
 import { TimelineToolbar } from './TimelineToolbar';
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 
@@ -69,6 +70,7 @@ export class TimelineView extends ItemView {
     private dragHandler: DragHandler;
     private menuHandler: MenuHandler;
     private handleManager: HandleManager;
+    private selectionController!: SelectionController;
     private toolbar: TimelineToolbar | undefined;
     private sidebarManager: SidebarManager;
 
@@ -303,6 +305,7 @@ export class TimelineView extends ItemView {
             getTask: (id) => this.readService.getTask(id),
             getStartHour: () => this.plugin.settings.startHour,
         });
+        this.selectionController = new SelectionController(this.handleManager);
 
         // Construct the toolbar once for the lifetime of this view. performRender()
         // calls toolbar.detach() before container.empty() and toolbar.mount(host)
@@ -369,6 +372,7 @@ export class TimelineView extends ItemView {
 
         // Initialize DragHandler with selection callback, move callback, and view start date provider
         this.dragHandler = new DragHandler(this.container, this.readService, this.writeService, this.plugin,
+            this.selectionController,
             (taskId: string) => {
                 // Store base task id so split segments all share one selection and
                 // the selection survives a drag-move that regenerates segment ids.
@@ -388,30 +392,12 @@ export class TimelineView extends ItemView {
             }
         };
 
-        // Background click to deselect
-        this.container.addEventListener('click', (e) => {
-            const target = e.target as HTMLElement;
-
-            // If clicking handle, do nothing (handled by DragHandler or button click)
-            if (target.closest('.task-card__handle-btn')) return;
-
-            const cardEl = target.closest('.task-card') as HTMLElement | null;
-            if (!cardEl) {
-                if (this.handleManager.getSelectedTaskId()) {
-                    this.handleManager.selectTask(null);
-                }
-            }
-        });
-
-        // Clear selection when the selected task is deleted via the UI.
+        // Background click → deselect、UI 経由 delete → deselect。両方 SelectionController に集約。
         // External-editor deletions are not tracked here by design — if that
         // case causes a visual glitch (line-shifted task inherits `.is-selected`),
         // user can click to re-select.
-        this.unsubscribeDelete = this.writeService.onTaskDeleted((deletedId) => {
-            if (this.handleManager.getSelectedTaskId() === deletedId) {
-                this.handleManager.selectTask(null);
-            }
-        });
+        this.selectionController.attachBackgroundClick(this.container);
+        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.writeService);
 
         // Initialize render dispatch controller (rAF coalesce + partial/full 判定)
         this.renderController = new RenderController({

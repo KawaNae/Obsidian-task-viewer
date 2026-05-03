@@ -5,6 +5,7 @@ import TaskViewerPlugin from '../../main';
 import { DragStrategy, DragContext } from './DragStrategy';
 import { MoveStrategy } from './strategies/MoveStrategy';
 import { ResizeStrategy } from './strategies/ResizeStrategy';
+import type { SelectionController } from '../selection/SelectionController';
 
 
 export class DragHandler implements DragContext {
@@ -12,6 +13,7 @@ export class DragHandler implements DragContext {
     readService: TaskReadService;
     writeService: TaskWriteService;
     plugin: TaskViewerPlugin;
+    selectionController: SelectionController;
     onTaskMove: () => void;
     public onTaskClick: (taskId: string) => void;
     public onDetailClick: ((taskId: string) => void) | null = null;
@@ -29,11 +31,12 @@ export class DragHandler implements DragContext {
     private boundTouchStart: (e: TouchEvent) => void;
     private boundTouchMove: (e: TouchEvent) => void;
 
-    constructor(container: HTMLElement, readService: TaskReadService, writeService: TaskWriteService, plugin: TaskViewerPlugin, onTaskClick: (taskId: string) => void, onTaskMove: () => void, getViewStartDate: () => string, getViewEndDate: () => string, getZoomLevel: () => number) {
+    constructor(container: HTMLElement, readService: TaskReadService, writeService: TaskWriteService, plugin: TaskViewerPlugin, selectionController: SelectionController, onTaskClick: (taskId: string) => void, onTaskMove: () => void, getViewStartDate: () => string, getViewEndDate: () => string, getZoomLevel: () => number) {
         this.container = container;
         this.readService = readService;
         this.writeService = writeService;
         this.plugin = plugin;
+        this.selectionController = selectionController;
         this.onTaskClick = onTaskClick;
         this.onTaskMove = onTaskMove;
         this.getViewStartDateProvider = getViewStartDate;
@@ -183,7 +186,7 @@ export class DragHandler implements DragContext {
             // kill-listener synchronously so it's in place when that synthetic
             // click fires; otherwise it slips through and the listener instead
             // consumes the user's next real click.
-            this.currentStrategy.armSyntheticClickKill();
+            this.selectionController.armSyntheticClickKill();
 
             await this.currentStrategy.onUp(e, this);
 
