@@ -105,22 +105,25 @@ export class MenuHandler {
             // 0. Validation warning (if any)
             this.validationMenuBuilder.addValidationWarning(menu, task);
 
-            // G1: 自身のデータ操作 — status / properties / switch to / track self
+            // G1: 自身のデータ操作 — status / switch to / properties
             this.propertiesMenuBuilder.addStatusSubmenu(menu, task);
-            this.propertiesMenuBuilder.buildPropertiesSubmenu(menu, displayTask, this.viewStartDate);
             this.taskActionsMenuBuilder.addOwnDataActions(menu, task);
-            this.timerMenuBuilder.addTimerSubmenu(menu, task);
+            this.propertiesMenuBuilder.buildPropertiesSubmenu(menu, displayTask, this.viewStartDate);
             menu.addSeparator();
 
-            // G2: 子のデータ操作 — record as child / add child task
+            // G2: 自身を記録 — countup / pomodoro / countdown
+            this.timerMenuBuilder.addTrackSelfItems(menu, task);
+            menu.addSeparator();
+
+            // G3: 子のデータ操作 — record as child / add child task
             this.taskActionsMenuBuilder.addChildActions(menu, task);
             menu.addSeparator();
 
-            // G3: 複製 — duplicate
+            // G4: 複製 — duplicate
             this.taskActionsMenuBuilder.addDuplicateActions(menu, task);
             menu.addSeparator();
 
-            // G4: 破壊的変更 — open in editor / convert to file / delete (closes detail-modal)
+            // G5: 破壊的変更 — open in editor / convert to file / delete (closes detail-modal)
             this.taskActionsMenuBuilder.addDestructiveActions(menu, task, hooks?.onDestructiveAction);
         }, { kind: 'position', x, y });
     }
