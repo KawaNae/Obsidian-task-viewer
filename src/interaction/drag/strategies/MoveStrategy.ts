@@ -6,6 +6,9 @@ import { GhostManager, GhostSegment } from '../ghost/GhostManager';
 import { createGhostElement, removeGhostElement } from '../ghost/GhostFactory';
 import { DisplayDateEdits, getOriginalTaskId } from '../../../services/display/DisplayTaskConverter';
 import type { DragPlan } from '../DragPlan';
+import type { GridSurface } from '../grid/GridSurface';
+import { CalendarGridSurface } from '../grid/CalendarGridSurface';
+import { AllDayGridSurface } from '../grid/AllDayGridSurface';
 
 /**
  * 移動操作を処理するドラッグストラテジー。
@@ -41,6 +44,8 @@ export class MoveStrategy extends BaseDragStrategy {
     /** Original (pre-split) raw task. Cached at drag start so commitPlan
      *  has access for materializeRawDates' endDate-semantic decision. */
     private baseTask: Task | null = null;
+    /** Calendar/AllDay 共通の grid 操作を委譲する surface。Timeline では未使用。 */
+    private gridSurface: GridSurface | null = null;
 
     // オートスクロール
     private autoScrollTimer: number | null = null;
@@ -330,7 +335,8 @@ export class MoveStrategy extends BaseDragStrategy {
 
         const headerCell = weekRow.querySelector('.cal-day-cell') as HTMLElement;
         this.refHeaderCell = headerCell;
-        this.colWidth = this.getCalendarDayColumnWidth(weekRow);
+        this.gridSurface = new CalendarGridSurface(context.container, () => this.colWidth || 100);
+        this.colWidth = this.gridSurface.getColWidth();
 
         // Resolve original (pre-split) raw task. dragTask may be a split
         // segment whose dates differ from the source.
@@ -376,16 +382,9 @@ export class MoveStrategy extends BaseDragStrategy {
     }
 
     private processCalendarMove(e: PointerEvent, context: DragContext) {
-        if (!this.dragTask || !this.dragEl) return;
+        if (!this.dragTask || !this.dragEl || !this.gridSurface) return;
 
-        const sourceWeekRow = this.container as HTMLElement;
-        const target = this.resolveCalendarPointerTarget(e.clientX, e.clientY, context);
-        const sourceWeekStart = sourceWeekRow?.dataset.weekStart || context.getViewStartDate();
-
-        let dayDelta = Math.round((e.clientX - this.initialX) / this.colWidth);
-        if (target) {
-            dayDelta = DateUtils.getDiffDays(sourceWeekStart, target.weekStart) + target.col - this.grabCol;
-        }
+        const dayDelta = this.computeCalendarMoveDayDelta(e, context);
 
         if (this.ghostEl) {
             this.ghostEl.classList.add('is-drag-hidden');
@@ -394,7 +393,8 @@ export class MoveStrategy extends BaseDragStrategy {
 
         const movedStart = DateUtils.addDays(this.initialCalendarVisualStart, dayDelta);
         const movedEnd = DateUtils.addDays(this.initialCalendarVisualEnd, dayDelta);
-        this.updateSplitPreview(this.planCalendarSegments(context, movedStart, movedEnd));
+        const trackIndex = Number.parseInt(this.dragEl.dataset.trackIndex || '0', 10);
+        this.updateSplitPreview(this.gridSurface.planSegments({ rangeStart: movedStart, rangeEnd: movedEnd, trackIndex }));
         this.dragEl.style.transform = '';
     }
 
@@ -402,22 +402,29 @@ export class MoveStrategy extends BaseDragStrategy {
         removeGhostElement(this.ghostEl);
         this.ghostEl = null;
 
-        if (!this.dragTask || !this.dragEl) {
+        if (!this.dragTask || !this.dragEl || !this.gridSurface) {
             this.cleanup();
             return;
         }
 
-        const sourceWeekRow = this.container as HTMLElement;
-        const sourceWeekStart = sourceWeekRow?.dataset.weekStart || context.getViewStartDate();
-        const target = this.resolveCalendarPointerTarget(e.clientX, e.clientY, context);
-
-        let dayDelta = Math.round((e.clientX - this.initialX) / this.colWidth);
-        if (target) {
-            dayDelta = DateUtils.getDiffDays(sourceWeekStart, target.weekStart) + target.col - this.grabCol;
-        }
-
+        const dayDelta = this.computeCalendarMoveDayDelta(e, context);
         await this.commitPlan(context, this.buildMoveDayShiftPlan(dayDelta), this.dragTask.id);
         this.cleanup();
+    }
+
+    /**
+     * Calendar move の dayDelta を pointer 位置から計算する。
+     * GridSurface 経由の locatePointer を第 1 候補、X 軸絶対値を fallback とする。
+     */
+    private computeCalendarMoveDayDelta(e: PointerEvent, context: DragContext): number {
+        if (!this.gridSurface) return 0;
+        const sourceWeekRow = this.container as HTMLElement;
+        const sourceWeekStart = sourceWeekRow?.dataset.weekStart || context.getViewStartDate();
+        const target = this.gridSurface.locatePointer(e.clientX, e.clientY, { suppressEl: this.dragEl });
+        if (target && target.weekStart) {
+            return DateUtils.getDiffDays(sourceWeekStart, target.weekStart) + target.col - this.grabCol;
+        }
+        return Math.round((e.clientX - this.initialX) / this.colWidth);
     }
 
     // ========== AllDay Move ==========
@@ -428,7 +435,8 @@ export class MoveStrategy extends BaseDragStrategy {
         const grid = el.closest('.timeline-grid');
         const headerCell = grid?.querySelector('.date-header__cell:nth-child(2)') as HTMLElement;
         this.refHeaderCell = headerCell;
-        this.colWidth = headerCell?.getBoundingClientRect().width || 100;
+        this.gridSurface = new AllDayGridSurface(context.container, () => context.getViewStartDate(), () => context.getViewEndDate());
+        this.colWidth = this.gridSurface.getColWidth();
 
         // Resolve original (pre-split) raw task — used by commitPlan for endDate semantic.
         const originalId = getOriginalTaskId(task);
@@ -464,29 +472,16 @@ export class MoveStrategy extends BaseDragStrategy {
         });
     }
 
-    /**
-     * Allday は単一 view (week 切替の cal-week-row 相当が無い) なので、task が
-     * view 範囲と完全に切り離れる drag を許すと「card が消える」=「selection が
-     * 失われる」体感バグになる。task が view と少なくとも 1 日重なるよう dayDelta
-     * を clamp する。
-     */
-    private clampAllDayDayDelta(dayDelta: number, context: DragContext): number {
-        const viewStart = context.getViewStartDate();
-        const viewEnd = context.getViewEndDate();
-        if (!viewStart || !viewEnd) return dayDelta;
-        // movedEnd >= viewStart  → dayDelta >= viewStart - initialEnd
-        const minDelta = DateUtils.getDiffDays(this.initialCalendarVisualEnd, viewStart);
-        // movedStart <= viewEnd  → dayDelta <= viewEnd - initialStart
-        const maxDelta = DateUtils.getDiffDays(this.initialCalendarVisualStart, viewEnd);
-        return Math.max(minDelta, Math.min(maxDelta, dayDelta));
-    }
-
     private processAllDayMove(e: PointerEvent, context: DragContext) {
-        if (!this.dragTask || !this.dragEl) return;
+        if (!this.dragTask || !this.dragEl || !this.gridSurface) return;
 
         const deltaX = e.clientX - this.initialX;
         const snapPixels = this.colWidth;
-        const dayDelta = this.clampAllDayDayDelta(Math.round(deltaX / snapPixels), context);
+        const dayDelta = this.gridSurface.clampDayDelta(
+            Math.round(deltaX / snapPixels),
+            this.initialCalendarVisualStart,
+            this.initialCalendarVisualEnd,
+        );
 
         // セクション外判定 (timeline 列にホバー)
         const doc = context.container.ownerDocument || document;
@@ -523,7 +518,8 @@ export class MoveStrategy extends BaseDragStrategy {
 
             const movedStart = DateUtils.addDays(this.initialCalendarVisualStart, dayDelta);
             const movedEnd = DateUtils.addDays(this.initialCalendarVisualEnd, dayDelta);
-            this.updateSplitPreview(this.planAllDaySegments(context, movedStart, movedEnd));
+            const trackIndex = Number.parseInt(this.dragEl.dataset.trackIndex || '0', 10);
+            this.updateSplitPreview(this.gridSurface.planSegments({ rangeStart: movedStart, rangeEnd: movedEnd, trackIndex }));
 
             const newTaskEndLine = this.startCol + this.initialSpan + dayDelta;
             this.updateArrowPosition(newTaskEndLine);
@@ -556,7 +552,10 @@ export class MoveStrategy extends BaseDragStrategy {
         // 通常のAllDay内移動。process と同じ clamp を適用して task が view と
         // 完全に切り離れるドロップを防ぐ (selection-loss 体感バグの根本対処)。
         const deltaX = e.clientX - this.initialX;
-        const dayDelta = this.clampAllDayDayDelta(Math.round(deltaX / this.colWidth), context);
+        const rawDayDelta = Math.round(deltaX / this.colWidth);
+        const dayDelta = this.gridSurface
+            ? this.gridSurface.clampDayDelta(rawDayDelta, this.initialCalendarVisualStart, this.initialCalendarVisualEnd)
+            : rawDayDelta;
 
         await this.commitPlan(context, this.buildMoveDayShiftPlan(dayDelta), this.dragTask.id);
         this.cleanup();
@@ -720,5 +719,6 @@ export class MoveStrategy extends BaseDragStrategy {
         this.currentDayDate = null;
         this.container = null;
         this.baseTask = null;
+        this.gridSurface = null;
     }
 }

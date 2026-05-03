@@ -14,6 +14,9 @@ import {
     toDisplayTask,
 } from '../../../services/display/DisplayTaskConverter';
 import type { DragPlan } from '../DragPlan';
+import type { GridSurface } from '../grid/GridSurface';
+import { CalendarGridSurface } from '../grid/CalendarGridSurface';
+import { AllDayGridSurface } from '../grid/AllDayGridSurface';
 
 /**
  * リサイズ操作を処理するドラッグストラテジー。
@@ -47,6 +50,8 @@ export class ResizeStrategy extends BaseDragStrategy {
     private refHeaderCell: HTMLElement | null = null;
     private hiddenElements: HTMLElement[] = [];
     private calendarPreviewTargetDate: string | null = null;
+    /** Calendar/AllDay 共通の grid 操作を委譲する surface。Timeline では未使用。 */
+    private gridSurface: GridSurface | null = null;
 
     onDown(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext) {
         this.dragTask = task;
@@ -88,10 +93,9 @@ export class ResizeStrategy extends BaseDragStrategy {
             } else {
                 this.resizeDirection = 'right';
             }
-            // resolveCalendarPointerTarget のヒステリシスを有効化。
-            // ハンドル位置がセル境界線にあるため、これがないと 5px move
-            // しただけで判定セルが flip し +1 day ドリフトを生む。
-            this.activeResizeDirection = this.resizeDirection;
+            // hysteresis は GridSurface.locatePointer の opts.resizeDirection で
+            // 有効化される (this.resizeDirection を渡すだけ)。Strategy 側で別途
+            // フラグを持つ必要はない。
             this.initCalendarResize(e, task, el, context);
         } else {
             if (target.closest('.task-card__handle--resize-left')) {
@@ -266,7 +270,8 @@ export class ResizeStrategy extends BaseDragStrategy {
 
         const headerCell = weekRow.querySelector('.cal-day-cell') as HTMLElement;
         this.refHeaderCell = headerCell;
-        this.colWidth = this.getCalendarDayColumnWidth(weekRow);
+        this.gridSurface = new CalendarGridSurface(context.container, () => this.colWidth || 100);
+        this.colWidth = this.gridSurface.getColWidth();
 
         // Resolve the original (pre-split) raw task. dragTask may be a split
         // segment whose endTime/endDate differ from the source. Write-back
@@ -301,17 +306,22 @@ export class ResizeStrategy extends BaseDragStrategy {
     }
 
     private processCalendarResize(e: PointerEvent, context: DragContext) {
-        if (!this.dragEl) return;
+        if (!this.dragEl || !this.gridSurface) return;
 
         const sourceWeekRow = this.container as HTMLElement;
-        const colOffset = this.getCalendarColumnOffset(sourceWeekRow);
+        // colOffset は cal-week-row 直下の has-week-numbers class で決まる単純な
+        // 値で、planSegments 戻り値の gridColumn には既に適用済。dragEl の grid-
+        // column を直接書き換える same-week パス用にだけここでローカル計算する。
+        const colOffset = sourceWeekRow.classList.contains('has-week-numbers') ? 1 : 0;
         const sourceWeekStart = sourceWeekRow?.dataset.weekStart || context.getViewStartDate();
-        const target = this.resolveCalendarPointerTarget(e.clientX, e.clientY, context);
-        if (!target) {
-            return;
-        }
+        const target = this.gridSurface.locatePointer(e.clientX, e.clientY, {
+            resizeDirection: this.resizeDirection as 'left' | 'right',
+            suppressEl: this.dragEl,
+        });
+        if (!target) return;
 
         const crossWeek = target.weekStart !== sourceWeekStart;
+        const trackIndex = Number.parseInt(this.dragEl.dataset.trackIndex || '0', 10);
 
         if (this.resizeDirection === 'right') {
             // クランプは visual 座標で行う (target.targetDate も visual)。raw startDate と
@@ -323,7 +333,9 @@ export class ResizeStrategy extends BaseDragStrategy {
             if (crossWeek) {
                 this.hiddenElements.forEach(el => el.classList.add('is-drag-hidden'));
                 this.dragEl.classList.add('is-drag-source-faint');
-                this.updateSplitPreview(this.planCalendarSegments(context, this.initialCalendarVisualStart, boundedEnd));
+                this.updateSplitPreview(this.gridSurface.planSegments({
+                    rangeStart: this.initialCalendarVisualStart, rangeEnd: boundedEnd, trackIndex,
+                }));
                 return;
             }
 
@@ -339,7 +351,9 @@ export class ResizeStrategy extends BaseDragStrategy {
             if (crossWeek) {
                 this.hiddenElements.forEach(el => el.classList.add('is-drag-hidden'));
                 this.dragEl.classList.add('is-drag-source-faint');
-                this.updateSplitPreview(this.planCalendarSegments(context, boundedStart, this.initialCalendarVisualEnd));
+                this.updateSplitPreview(this.gridSurface.planSegments({
+                    rangeStart: boundedStart, rangeEnd: this.initialCalendarVisualEnd, trackIndex,
+                }));
                 return;
             }
 
@@ -356,12 +370,15 @@ export class ResizeStrategy extends BaseDragStrategy {
     }
 
     private async finishCalendarResize(e: PointerEvent, context: DragContext) {
-        if (!this.dragTask || !this.dragEl || !this.baseTask) {
+        if (!this.dragTask || !this.dragEl || !this.baseTask || !this.gridSurface) {
             this.cleanup();
             return;
         }
 
-        const target = this.resolveCalendarPointerTarget(e.clientX, e.clientY, context);
+        const target = this.gridSurface.locatePointer(e.clientX, e.clientY, {
+            resizeDirection: this.resizeDirection as 'left' | 'right',
+            suppressEl: this.dragEl,
+        });
         const targetDate = this.calendarPreviewTargetDate || target?.targetDate;
         if (!targetDate) {
             this.cleanup();
@@ -406,7 +423,8 @@ export class ResizeStrategy extends BaseDragStrategy {
         const grid = el.closest('.timeline-grid');
         const headerCell = grid?.querySelector('.date-header__cell:nth-child(2)') as HTMLElement;
         this.refHeaderCell = headerCell;
-        this.colWidth = headerCell?.getBoundingClientRect().width || 100;
+        this.gridSurface = new AllDayGridSurface(context.container, () => context.getViewStartDate(), () => context.getViewEndDate());
+        this.colWidth = this.gridSurface.getColWidth();
 
         // Resolve original task (split segment safety, see initCalendarResize).
         const originalId = getOriginalTaskId(task);
@@ -531,5 +549,6 @@ export class ResizeStrategy extends BaseDragStrategy {
         this.hiddenElements = [];
         this.calendarPreviewTargetDate = null;
         this.baseTask = null;
+        this.gridSurface = null;
     }
 }
