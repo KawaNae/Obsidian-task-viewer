@@ -208,10 +208,42 @@ export class TimelineMoveGesture extends BaseDragStrategy {
             endTime: DateUtils.minutesToTime(normEnd),
         };
 
-        // -1 / 0 / +1 day window で task と重なる部分を AbsoluteGhostPlan に変換。
-        // 各 segment は対応する day-column の DOM 位置 (offsetLeft + offsetTop) を
-        // 起点に絶対配置する。複数 segments がある場合は隣接ペアに sawtooth split
-        // class を付ける (cascade 表示)。
+        // 2-stage:
+        //   stage 1 (pure)  : computeOverlappingDays が -1/0/+1 day window と
+        //                      task の overlap から { date, top, height } を計算
+        //   stage 2 (DOM I/O): planTimelineSegments が day-column を querySelector
+        //                      して absolute coords を解決し GhostPlan[] にする
+        //   stage 3 (副作用) : ghostRenderer.render が DOM に反映
+        const candidates = TimelineMoveGesture.computeOverlappingDays(
+            totalStartMinutes,
+            totalEndMinutes,
+            startHourMinutes,
+            zoomLevel,
+            this.currentDayDate!,
+        );
+        const plans = TimelineMoveGesture.planTimelineSegments(
+            candidates,
+            this.scrollContainer!,
+            this.ghostContainer,
+            this.dragEl,
+        );
+        this.ghostRenderer.render(plans);
+    }
+
+    /**
+     * pure helper: -1/0/+1 day window と task の overlap を計算し、各重なり区間を
+     * { date, top(logical px), height(logical px) } として返す。Day boundary を
+     * 跨がない短い task は単一 candidate、跨ぐ task は 2-3 candidates。
+     *
+     * 完全に pure (DateUtils.addDays / minutesToTime / 算術のみ)、unit test 可能。
+     */
+    static computeOverlappingDays(
+        totalStartMinutes: number,
+        totalEndMinutes: number,
+        startHourMinutes: number,
+        zoomLevel: number,
+        currentDayDate: string,
+    ): { date: string; top: number; height: number }[] {
         const candidates: { date: string; top: number; height: number }[] = [];
         for (const offsetDays of [-1, 0, 1]) {
             const windowStart = startHourMinutes + (offsetDays * 1440);
@@ -220,16 +252,32 @@ export class TimelineMoveGesture extends BaseDragStrategy {
             const overlapEnd = Math.min(totalEndMinutes, windowEnd);
             if (overlapStart < overlapEnd) {
                 candidates.push({
-                    date: DateUtils.addDays(this.currentDayDate!, offsetDays),
+                    date: DateUtils.addDays(currentDayDate, offsetDays),
                     top: (overlapStart - windowStart) * zoomLevel,
                     height: (overlapEnd - overlapStart) * zoomLevel,
                 });
             }
         }
+        return candidates;
+    }
 
+    /**
+     * stage 2: candidates → AbsoluteGhostPlan[]。
+     * scrollContainer から date 一致の day-column を querySelector し、
+     * `dayCol.offsetLeft/Top + sourceEl.offsetLeft/Width` で cascade 位置に揃える。
+     * 複数 candidates がある場合は隣接ペアに sawtooth split class を付与。
+     *
+     * DOM I/O はあるが state-free (引数のみ)、Surface 経由で testable。
+     */
+    static planTimelineSegments(
+        candidates: { date: string; top: number; height: number }[],
+        scrollContainer: HTMLElement,
+        ghostContainer: HTMLElement,
+        sourceEl: HTMLElement,
+    ): GhostPlan[] {
         const plans: GhostPlan[] = [];
         candidates.forEach((seg, index) => {
-            const dayCol = this.scrollContainer?.querySelector(
+            const dayCol = scrollContainer.querySelector(
                 `.timeline-scroll-area__day-column[data-date="${seg.date}"]`,
             ) as HTMLElement | null;
             if (!dayCol) return;
@@ -245,16 +293,15 @@ export class TimelineMoveGesture extends BaseDragStrategy {
             // (sourceEl.offsetLeft/Width は is-drag-hidden 中でも layout 値を返す)
             plans.push({
                 layout: 'absolute',
-                parent: this.ghostContainer!,
-                left: dayCol.offsetLeft + this.dragEl!.offsetLeft,
+                parent: ghostContainer,
+                left: dayCol.offsetLeft + sourceEl.offsetLeft,
                 top: dayCol.offsetTop + borderTop + toDisplayTopPx(seg.top),
-                width: this.dragEl!.offsetWidth,
+                width: sourceEl.offsetWidth,
                 height: toDisplayHeightPx(seg.height),
                 splitClasses,
             });
         });
-
-        this.ghostRenderer.render(plans);
+        return plans;
     }
 
     private async finishMove(context: DragContext): Promise<void> {
