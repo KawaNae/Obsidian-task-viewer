@@ -146,6 +146,51 @@ src/
 
 ---
 
+## DOM Class Taxonomy
+
+CSS / DOM クラス名の付け方を 4 層 + state/modifier 規則で固定する。新規追加時はこの規約に必ず従う。
+
+### Block prefix layers
+
+| 層 | prefix | 例 | 対象 |
+|---|---|---|---|
+| **Shared primitive** | `tv-` | `tv-sidebar`, `tv-grid-row`, `tv-section-toggle` | 複数 view が利用する layout / widget |
+| **View shell** | `<view>-view` | `timeline-view`, `schedule-view`, `kanban-view` | view ルート (Obsidian 慣例) |
+| **View-specific block** | `<view>-` | `schedule-grid`, `calendar-week-row`, `kanban-view__cell` | その view 内でのみ使う |
+| **Domain block** | `<domain>-` | `task-card`, `pinned-list`, `habits-section`, `allday-section`, `cal-week-row` | view を跨ぐドメイン要素 |
+
+迷ったとき: その class 名を **2 つ以上の view で生成** するなら shared primitive (`tv-*`) または domain block。**1 view 専用**なら view-specific (`<view>-*`)。view shell に `__*` element をぶら下げるのは妥当だが、層を跨いで参照される素材は domain block に切り出す。
+
+### Element / modifier / state
+
+- **Element**: `<block>__<element>` (BEM 二重アンダースコア)
+- **Modifier (`--*`)**: 永続 variant — data-driven、render 時点で決まる
+  - 例: `task-card--allday`, `task-card--multi-day`, `tv-sidebar--mobile`, `cal-week-row--mini`
+- **State (`is-*` / `has-*`)**: 動的 state — JS の `classList.toggle` で出し入れする ephemeral な印
+  - 例: `is-today`, `is-selected`, `is-current-week`, `is-dragging`, `has-overdue`
+
+判別: ある属性が **タスクの不変 attribute** なら `--*`、ユーザー操作や時間で変わるなら `is-*` / `has-*`。
+
+### Frozen names (歴史的に taxonomy 違反だが据置)
+
+外部 API / 公開 CLI / Obsidian 提供のため rename しない:
+
+- Obsidian 提供 (絶対に触らない): `view-content`, `internal-link`, `task-list-item`, `task-list-item-checkbox`, `is-checked`, `contains-task-list`
+- プラグイン提供だが据置: `task-card` (ドメイン block、各 view から大量参照されるため stable な API として扱う)
+- toolbar 周り: `view-toolbar` (shared primitive 相当だが歴史的に `tv-` 接頭辞なし。新規追加なら `tv-toolbar` 推奨)
+
+### 参考: 過去のリファクタ
+
+`memory/project_dom_naming_audit.md` (2026-05-03) に統合リファクタ前の負債列挙。代表的な解消:
+
+- `view-sidebar-{layout, main, backdrop, panel}` 5 ブロック分裂 → `tv-sidebar` 1 ブロックに統合
+- `section-toggle-btn` + `schedule-section__toggle` 二系統 → `tv-section-toggle` + `--axis`/`--header` modifier
+- `timeline-row` (timeline と schedule で共有) → `tv-grid-row` (shared primitive)
+- `selected` (unscoped state) → `is-selected`
+- `mini-calendar-*` 独自再実装 → `cal-*` + `--mini` modifier で共有化
+
+---
+
 ## Subsystem Responsibility Map
 
 Quick reference for locating the right layer when implementing a feature.

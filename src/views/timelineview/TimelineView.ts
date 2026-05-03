@@ -48,14 +48,6 @@ const COLLAPSE_KEY_PREFIX = `${VIEW_ID}::`;
 
 /**
  * Timeline View - Displays tasks on a time-based grid layout.
- * 
- * Structure:
- * - Lifecycle: constructor, onOpen, onClose, refresh
- * - Core Rendering: render, renderCurrentTimeIndicator
- * - Grid & Layout: renderGrid, getDatesToShow, renderTimeLabels
- * - Section Renderers: renderFutureSection, renderLongTermTasks, renderTimedTasks
- * - Color & Styling: applyTaskColor
- * - Task Creation: addCreateTaskListeners, handleCreateTaskTrigger
  */
 interface TimelineViewState {
     daysToShow?: number;

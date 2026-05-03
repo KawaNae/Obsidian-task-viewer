@@ -22,15 +22,6 @@
     box-shadow: inset 0 0 10px var(--tv-drop-glow-light);
 }
 
-/* Future Section Drag Over */
-.future-section.drag-over,
-.future-section__content.drag-over,
-.future-section__list.drag-over {
-    outline: 2px dashed var(--tv-drop-outline);
-    outline-offset: -2px;
-    box-shadow: inset 0 0 10px var(--tv-drop-glow-light);
-}
-
 /* ─── Drag opacity states ─── */
 .drag-hidden {
     opacity: 0 !important;
