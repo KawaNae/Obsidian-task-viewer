@@ -294,7 +294,7 @@ export class ResizeStrategy extends BaseDragStrategy {
 
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         context.container.querySelectorAll(selector).forEach(segment => {
-            if (segment instanceof HTMLElement && !segment.closest('.pinned-list')) {
+            if (segment instanceof HTMLElement && !segment.closest('.tv-sidebar__pinned-lists')) {
                 this.hiddenElements.push(segment);
             }
         });
@@ -357,8 +357,6 @@ export class ResizeStrategy extends BaseDragStrategy {
 
     private async finishCalendarResize(e: PointerEvent, context: DragContext) {
         if (!this.dragTask || !this.dragEl || !this.baseTask) {
-            this.clearPreviewGhosts();
-            this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
             this.cleanup();
             return;
         }
@@ -366,9 +364,6 @@ export class ResizeStrategy extends BaseDragStrategy {
         const target = this.resolveCalendarPointerTarget(e.clientX, e.clientY, context);
         const targetDate = this.calendarPreviewTargetDate || target?.targetDate;
         if (!targetDate) {
-            this.clearPreviewGhosts();
-            this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
-            if (this.dragEl) this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
             this.cleanup();
             return;
         }
@@ -399,16 +394,13 @@ export class ResizeStrategy extends BaseDragStrategy {
             : {};
 
         if (Object.keys(updates).length === 0) {
-            this.clearPreviewGhosts();
-            this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
-            if (this.dragEl) this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
             this.cleanup();
             return;
         }
 
+        const taskIdToRestore = this.dragTask.id;
         await context.writeService.updateTask(this.dragTask.id, updates);
-        this.clearPreviewGhosts();
-
+        this.restoreSelection(context, taskIdToRestore);
         this.cleanup();
     }
 
@@ -534,7 +526,9 @@ export class ResizeStrategy extends BaseDragStrategy {
             : {};
 
         if (Object.keys(updates).length > 0) {
+            const taskIdToRestore = this.dragTask.id;
             await context.writeService.updateTask(this.dragTask.id, updates);
+            this.restoreSelection(context, taskIdToRestore);
         }
 
         this.cleanup();
@@ -555,6 +549,12 @@ export class ResizeStrategy extends BaseDragStrategy {
     }
 
     protected cleanup(): void {
+        // hiddenElements は drag 中に `is-drag-*` 等を付与した DOM 要素群。
+        // super.cleanup() は dragEl のみ class 除去するため、関連 segments を
+        // ここで一括 remove する (MoveStrategy.cleanup と対称)。
+        for (const el of this.hiddenElements) {
+            el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
+        }
         super.cleanup();
         this.currentDayDate = null;
         this.container = null;

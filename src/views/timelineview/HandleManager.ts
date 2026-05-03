@@ -39,22 +39,6 @@ export class HandleManager {
      * segments of the same task get `.is-selected` via `dataset.splitOriginalId`.
      */
     selectTask(taskId: string | null): void {
-        const prev = this.selectedTaskId;
-        // 選択が実際に変わったときだけ記録（誤選択バグ調査用）。
-        // taskId に紐づく Task の content/file/line を載せて、視覚的にどのタスクが
-        // 選ばれたかを後から特定できるようにする。caller stack で呼び出し経路も追跡。
-        if (prev !== taskId) {
-            const info = taskId ? this.deps.getTask(taskId) : undefined;
-            console.log('[task-select] selectTask change', JSON.stringify({
-                t: Math.round(performance.now()),
-                prev,
-                next: taskId,
-                file: info?.file,
-                line: info?.line,
-                content: info?.content?.slice(0, 40),
-                stack: new Error().stack?.split('\n').slice(2, 6).join(' | '),
-            }));
-        }
         // Remove handles from previously selected task and restore z-index.
         if (this.selectedTaskId) {
             this.removeHandles(this.selectedTaskId);

@@ -39,7 +39,7 @@ export class GhostManager {
                 ghost = createGhostElement(
                     sourceEl,
                     doc,
-                    { useCloneNode: true, initiallyVisible: true },
+                    { initiallyVisible: true },
                     this.container
                 );
                 this.ghosts.set(key, ghost);

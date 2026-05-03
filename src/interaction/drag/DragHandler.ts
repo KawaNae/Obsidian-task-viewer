@@ -135,42 +135,6 @@ export class DragHandler implements DragContext {
             }
         }
 
-        // 「クリック位置にないはずのカードが選択される」低頻度バグ調査用。
-        // 通常クリック（ハンドルなし）で taskEl が解決されたとき、本当にその taskEl が
-        // クリック位置にあるか検証する:
-        //   1. e.target.closest('.task-card') = taskEl （DOM 親子関係）
-        //   2. elementFromPoint(X, Y).closest('.task-card') = taskEl （ピクセル位置）
-        //   3. clickInResolvedRect: クリック点が taskEl の bounding rect 内にあるか
-        // どれかが false なら mismatch=true で warn を出す。バグ条件と完全一致。
-        if (taskEl && !isFromHandle) {
-            const elFromPoint = this.currentDoc.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-            const cardAtPoint = elFromPoint?.closest('.task-card') as HTMLElement | null;
-            const rect = taskEl.getBoundingClientRect();
-            const clickInResolvedRect =
-                e.clientX >= rect.left && e.clientX <= rect.right &&
-                e.clientY >= rect.top && e.clientY <= rect.bottom;
-            const mismatch = !clickInResolvedRect || (cardAtPoint !== null && cardAtPoint !== taskEl);
-            const payload = {
-                t: Math.round(performance.now()),
-                clickX: Math.round(e.clientX),
-                clickY: Math.round(e.clientY),
-                pointerType: e.pointerType,
-                resolvedId: taskEl.dataset.id,
-                resolvedSplitId: taskEl.dataset.splitOriginalId,
-                resolvedRect: { x: Math.round(rect.left), y: Math.round(rect.top), w: Math.round(rect.width), h: Math.round(rect.height) },
-                clickInResolvedRect,
-                cardAtPointId: cardAtPoint?.dataset.id,
-                cardAtPointSplitId: cardAtPoint?.dataset.splitOriginalId,
-                eTargetTag: target.tagName,
-                eTargetCls: target.className,
-            };
-            if (mismatch) {
-                console.warn('[task-select] click MISMATCH', JSON.stringify(payload));
-            } else {
-                console.log('[task-select] click', JSON.stringify(payload));
-            }
-        }
-
         if (!taskEl || !taskId) return;
 
         const task = this.readService.getTask(taskId);

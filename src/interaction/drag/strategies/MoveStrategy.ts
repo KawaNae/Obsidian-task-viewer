@@ -196,7 +196,7 @@ export class MoveStrategy extends BaseDragStrategy {
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         const allSegments = context.container.querySelectorAll(selector);
         allSegments.forEach(segment => {
-            if (segment instanceof HTMLElement && !segment.closest('.pinned-list')) {
+            if (segment instanceof HTMLElement && !segment.closest('.tv-sidebar__pinned-lists')) {
                 this.hiddenElements.push(segment);
             }
         });
@@ -360,13 +360,13 @@ export class MoveStrategy extends BaseDragStrategy {
         el.style.zIndex = '1000';
 
         const doc = context.container.ownerDocument || document;
-        this.ghostEl = createGhostElement(el, doc, { useCloneNode: true });
+        this.ghostEl = createGhostElement(el, doc);
         this.clearPreviewGhosts();
 
         const originalId = getOriginalTaskId(task);
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         context.container.querySelectorAll(selector).forEach(segment => {
-            if (segment instanceof HTMLElement && !segment.closest('.pinned-list')) {
+            if (segment instanceof HTMLElement && !segment.closest('.tv-sidebar__pinned-lists')) {
                 this.hiddenElements.push(segment);
             }
         });
@@ -400,8 +400,6 @@ export class MoveStrategy extends BaseDragStrategy {
         this.ghostEl = null;
 
         if (!this.dragTask || !this.dragEl) {
-            this.clearPreviewGhosts();
-            this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
             this.cleanup();
             return;
         }
@@ -416,8 +414,6 @@ export class MoveStrategy extends BaseDragStrategy {
         }
 
         if (dayDelta === 0) {
-            this.clearPreviewGhosts();
-            this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
             this.cleanup();
             return;
         }
@@ -428,9 +424,10 @@ export class MoveStrategy extends BaseDragStrategy {
 
         const updates: Partial<Task> = this.buildAllDayMoveUpdates(newStart, newEnd);
         if (Object.keys(updates).length > 0) {
+            const taskIdToRestore = this.dragTask.id;
             await context.writeService.updateTask(this.dragTask.id, updates);
+            this.restoreSelection(context, taskIdToRestore);
         }
-        this.clearPreviewGhosts();
 
         this.cleanup();
     }
@@ -466,14 +463,14 @@ export class MoveStrategy extends BaseDragStrategy {
         el.style.zIndex = '1000';
 
         const doc = context.container.ownerDocument || document;
-        this.ghostEl = createGhostElement(el, doc, { useCloneNode: true });
+        this.ghostEl = createGhostElement(el, doc);
 
         // 同一 originalId の split segments を hide する (calendar と同じパターン)。
         // preview ghost で正本を出すため、source 側はすべて消しておく。
         const originalId = getOriginalTaskId(task);
         const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         context.container.querySelectorAll(selector).forEach(segment => {
-            if (segment instanceof HTMLElement && !segment.closest('.pinned-list')) {
+            if (segment instanceof HTMLElement && !segment.closest('.tv-sidebar__pinned-lists')) {
                 this.hiddenElements.push(segment);
             }
         });
@@ -587,7 +584,9 @@ export class MoveStrategy extends BaseDragStrategy {
                     endDate: DateUtils.addDays(targetDate, endDayOffset)
                 };
 
+                const taskIdToRestore = this.dragTask.id;
                 await context.writeService.updateTask(this.dragTask.id, updates);
+                this.restoreSelection(context, taskIdToRestore);
                 this.cleanup();
                 return;
             }
@@ -610,7 +609,9 @@ export class MoveStrategy extends BaseDragStrategy {
         const updates: Partial<Task> = this.buildAllDayMoveUpdates(newStart, newEnd);
 
         if (Object.keys(updates).length > 0) {
+            const taskIdToRestore = this.dragTask.id;
             await context.writeService.updateTask(this.dragTask.id, updates);
+            this.restoreSelection(context, taskIdToRestore);
         }
 
         this.cleanup();
