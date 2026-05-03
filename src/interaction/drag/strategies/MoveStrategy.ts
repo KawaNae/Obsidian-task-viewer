@@ -479,12 +479,29 @@ export class MoveStrategy extends BaseDragStrategy {
         });
     }
 
+    /**
+     * Allday は単一 view (week 切替の cal-week-row 相当が無い) なので、task が
+     * view 範囲と完全に切り離れる drag を許すと「card が消える」=「selection が
+     * 失われる」体感バグになる。task が view と少なくとも 1 日重なるよう dayDelta
+     * を clamp する。
+     */
+    private clampAllDayDayDelta(dayDelta: number, context: DragContext): number {
+        const viewStart = context.getViewStartDate();
+        const viewEnd = context.getViewEndDate();
+        if (!viewStart || !viewEnd) return dayDelta;
+        // movedEnd >= viewStart  → dayDelta >= viewStart - initialEnd
+        const minDelta = DateUtils.getDiffDays(this.initialCalendarVisualEnd, viewStart);
+        // movedStart <= viewEnd  → dayDelta <= viewEnd - initialStart
+        const maxDelta = DateUtils.getDiffDays(this.initialCalendarVisualStart, viewEnd);
+        return Math.max(minDelta, Math.min(maxDelta, dayDelta));
+    }
+
     private processAllDayMove(e: PointerEvent, context: DragContext) {
         if (!this.dragTask || !this.dragEl) return;
 
         const deltaX = e.clientX - this.initialX;
         const snapPixels = this.colWidth;
-        const dayDelta = Math.round(deltaX / snapPixels);
+        const dayDelta = this.clampAllDayDayDelta(Math.round(deltaX / snapPixels), context);
 
         // セクション外判定 (timeline 列にホバー)
         const doc = context.container.ownerDocument || document;
@@ -576,9 +593,10 @@ export class MoveStrategy extends BaseDragStrategy {
             }
         }
 
-        // 通常のAllDay内移動
+        // 通常のAllDay内移動。process と同じ clamp を適用して task が view と
+        // 完全に切り離れるドロップを防ぐ (selection-loss 体感バグの根本対処)。
         const deltaX = e.clientX - this.initialX;
-        const dayDelta = Math.round(deltaX / this.colWidth);
+        const dayDelta = this.clampAllDayDayDelta(Math.round(deltaX / this.colWidth), context);
 
         if (dayDelta === 0) {
             this.cleanup();
