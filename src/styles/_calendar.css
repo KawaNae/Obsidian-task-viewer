@@ -126,6 +126,41 @@
             mask-composite: intersect;
 }
 
+/* Horizontal cut: cut 辺は左/右なので、base の `border-bottom:none` /
+   `border-top:none` (vertical 用) を打ち消し、left/right を除去して
+   3 辺枠にする。 */
+.calendar-view .task-card.is-selected.task-card--split-continues-after .task-card__shape::after {
+    border-top: 2px solid var(--file-accent, var(--tv-accent));
+    border-bottom: 2px solid var(--file-accent, var(--tv-accent));
+    border-right: none;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: var(--task-card-border-radius);
+}
+
+.calendar-view .task-card.is-selected.task-card--split-continues-before .task-card__shape::after {
+    border-top: 2px solid var(--file-accent, var(--tv-accent));
+    border-bottom: 2px solid var(--file-accent, var(--tv-accent));
+    border-left: none;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-top-right-radius: var(--task-card-border-radius);
+}
+
+.calendar-view .task-card.is-selected.task-card--split-continues-before.task-card--split-continues-after .task-card__shape::after {
+    border-top: 2px solid var(--file-accent, var(--tv-accent));
+    border-bottom: 2px solid var(--file-accent, var(--tv-accent));
+    border-left: none;
+    border-right: none;
+    border-radius: 0;
+}
+
+/* time-label は calendar では使わないが、念のため base の push down を
+   打ち消す。 */
+.calendar-view .task-card--split-continues-before .task-card__time {
+    top: 2px;
+}
+
 /* --- Calendar modal --- */
 .calendar-task-modal {
     padding: 12px;

@@ -191,3 +191,38 @@
         0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
             mask-composite: intersect;
 }
+
+/* Horizontal cut: cut 辺は左/右なので、base の `border-bottom:none` /
+   `border-top:none` (vertical 用) を打ち消し、left/right を除去して
+   3 辺枠にする。 */
+.timeline-view .allday-section .task-card.is-selected.task-card--split-continues-after .task-card__shape::after {
+    border-top: 2px solid var(--file-accent, var(--tv-accent));
+    border-bottom: 2px solid var(--file-accent, var(--tv-accent));
+    border-right: none;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: var(--task-card-border-radius);
+}
+
+.timeline-view .allday-section .task-card.is-selected.task-card--split-continues-before .task-card__shape::after {
+    border-top: 2px solid var(--file-accent, var(--tv-accent));
+    border-bottom: 2px solid var(--file-accent, var(--tv-accent));
+    border-left: none;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-top-right-radius: var(--task-card-border-radius);
+}
+
+.timeline-view .allday-section .task-card.is-selected.task-card--split-continues-before.task-card--split-continues-after .task-card__shape::after {
+    border-top: 2px solid var(--file-accent, var(--tv-accent));
+    border-bottom: 2px solid var(--file-accent, var(--tv-accent));
+    border-left: none;
+    border-right: none;
+    border-radius: 0;
+}
+
+/* time-label は cut が左/右なので元位置 (top:2px) のまま使う。
+   base の vertical 用 push down を打ち消す。 */
+.timeline-view .allday-section .task-card--split-continues-before .task-card__time {
+    top: 2px;
+}

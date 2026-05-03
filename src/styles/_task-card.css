@@ -170,6 +170,13 @@
     text-align: right;
 }
 
+/* Vertical top cut (timeline grid 同日内 split) では time-label を sawtooth
+   分だけ下げる。horizontal layout (allday/calendar) は view 別ファイルで
+   元位置に戻す。 */
+.task-card--split-continues-before .task-card__time {
+    top: calc(2px + var(--task-card-split-zig));
+}
+
 /* --- Children Toggle --- */
 .task-card__children-toggle {
     cursor: pointer;
@@ -515,10 +522,7 @@
     cursor: grabbing;
 }
 
-/* Selection Border using __shape::after.
-   __shape に mask が当たっている場合は selection 枠も自動的に sawtooth
-   形状に追従する (mask が ::after の painted output も clip するため)。
-   そのため split 用の border-side: none / radius:0 上書きは不要。 */
+/* Selection Border using __shape::after. */
 .task-card.is-selected .task-card__shape::after {
     content: '';
     position: absolute;
@@ -526,6 +530,22 @@
     border: 2px solid var(--file-accent, var(--tv-accent));
     border-radius: inherit;
     pointer-events: none;
+}
+
+/* Cut 辺の border を完全除去。mask に追従させると border が sawtooth
+   形状に切り刻まれて散在するため、整然とした 3 辺枠にする。
+   base は vertical cut (timeline grid) を担当、horizontal cut は view
+   別ファイルで上書き。 */
+.task-card.is-selected.task-card--split-continues-after .task-card__shape::after {
+    border-bottom: none;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.task-card.is-selected.task-card--split-continues-before .task-card__shape::after {
+    border-top: none;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
 }
 
 /* ==========================================================================
