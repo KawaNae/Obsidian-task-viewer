@@ -22,7 +22,7 @@ export class ScheduleSectionRenderer {
     }
 
     async renderAllDaySection(container: HTMLElement, tasks: DisplayTask[]): Promise<void> {
-        const row = container.createDiv('timeline-row allday-section');
+        const row = container.createDiv('tv-grid-row allday-section');
         row.style.gridTemplateColumns = this.getScheduleRowColumns();
 
         const axisCell = row.createDiv('allday-section__cell allday-section__axis');

@@ -84,7 +84,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
         if (el.closest('.calendar-week-row')) {
             return 'calendar';
         }
-        if (el.closest('.day-timeline-column')) {
+        if (el.closest('.timeline-scroll-area__day-column')) {
             return 'timeline';
         }
         if (el.closest('.allday-section')) {

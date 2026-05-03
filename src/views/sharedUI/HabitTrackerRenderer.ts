@@ -17,7 +17,7 @@ export class HabitTrackerRenderer {
 
     /**
      * Render the Habits grid row.
-     * @param container The `timeline-row habits-section` div created by GridRenderer.
+     * @param container The `tv-grid-row habits-section` div created by GridRenderer.
      * @param dates Visible date columns (YYYY-MM-DD[]).
      */
     public render(container: HTMLElement, dates: string[]): void {

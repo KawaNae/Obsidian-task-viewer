@@ -142,7 +142,7 @@ export class ResizeStrategy extends BaseDragStrategy {
 
         this.initialBottom = this.initialTop + this.initialHeight;
 
-        const dayCol = el.closest('.day-timeline-column') as HTMLElement;
+        const dayCol = el.closest('.timeline-scroll-area__day-column') as HTMLElement;
         this.currentDayDate = dayCol?.dataset.date || task.startDate || null;
     }
 
@@ -155,7 +155,7 @@ export class ResizeStrategy extends BaseDragStrategy {
 
         const doc = context.container.ownerDocument || document;
         const elBelow = doc.elementFromPoint(clientX, clientY);
-        const dayCol = elBelow?.closest('.day-timeline-column') as HTMLElement;
+        const dayCol = elBelow?.closest('.timeline-scroll-area__day-column') as HTMLElement;
 
         if (!dayCol) return;
 

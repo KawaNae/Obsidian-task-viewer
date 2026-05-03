@@ -637,7 +637,7 @@ export class TimelineView extends ItemView {
     private scrollToCurrentTime(): void {
         const scrollArea = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (!scrollArea) return;
-        if (!scrollArea.querySelector('.time-axis-column')) return;
+        if (!scrollArea.querySelector('.timeline-scroll-area__axis')) return;
         const indicator = scrollArea.querySelector('.current-time-indicator') as HTMLElement | null;
         if (!indicator) return;
         indicator.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' as ScrollBehavior });

@@ -1,8 +1,8 @@
 /* =============================================================================
    Timeline Grid Core
-   Contains: timeline-grid, timeline-row, timeline-scroll-area, 
-             time-axis, day-timeline-column, current-time-indicator,
-             toolbar, handle-overlay, zoom-controls
+   Contains: timeline-grid, tv-grid-row, timeline-scroll-area,
+             timeline-scroll-area__{axis,time-label,day-column},
+             current-time-indicator, toolbar, handle-overlay, zoom-controls
 ============================================================================= */
 
 /* Timeline View Container */
@@ -42,8 +42,8 @@
     background-color: var(--tv-bg-timeline);
 }
 
-/* Common Row Style */
-.timeline-row {
+/* Common Row Style — shared layout primitive used by timeline + schedule */
+.tv-grid-row {
     display: grid;
     width: 100%;
 }
@@ -83,7 +83,7 @@
 }
 
 /* Time Axis Column */
-.time-axis-column {
+.timeline-scroll-area__axis {
     background-color: var(--tv-bg-axis);
     border-top: 1px solid var(--tv-border);
     border-left: 1px solid var(--tv-border);
@@ -93,7 +93,7 @@
     height: calc(24 * var(--hour-height));
 }
 
-.time-label {
+.timeline-scroll-area__time-label {
     position: absolute;
     top: calc(var(--label-hour, 0) * var(--hour-height));
     width: 100%;
@@ -105,7 +105,7 @@
 }
 
 /* Day Column (Timeline) */
-.day-timeline-column {
+.timeline-scroll-area__day-column {
     position: relative;
     border-top: 1px solid var(--tv-border);
     border-right: 1px solid var(--tv-border);

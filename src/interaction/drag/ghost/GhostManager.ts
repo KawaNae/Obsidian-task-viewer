@@ -47,11 +47,11 @@ export class GhostManager {
 
             // Find the day column to position against
             // We need to find the column for 'seg.date'
-            // This relies on the DOM structure: .day-timeline-column[data-date="YYYY-MM-DD"]
-            const dayCol = this.container.querySelector(`.day-timeline-column[data-date="${seg.date}"]`) as HTMLElement;
+            // This relies on the DOM structure: .timeline-scroll-area__day-column[data-date="YYYY-MM-DD"]
+            const dayCol = this.container.querySelector(`.timeline-scroll-area__day-column[data-date="${seg.date}"]`) as HTMLElement;
 
             if (dayCol) {
-                // Account for border-top of day-timeline-column
+                // Account for border-top of timeline-scroll-area__day-column
                 // For absolute-positioned ghosts in .timeline-grid (the scroll container),
                 // use container-relative offsets.
                 const computedStyle = window.getComputedStyle(dayCol);

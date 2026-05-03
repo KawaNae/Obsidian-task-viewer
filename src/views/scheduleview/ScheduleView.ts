@@ -364,7 +364,7 @@ export class ScheduleView extends ItemView {
     }
 
     private renderDateHeader(container: HTMLElement, date: string): void {
-        const row = container.createDiv('timeline-row date-header');
+        const row = container.createDiv('tv-grid-row date-header');
         row.style.gridTemplateColumns = this.getScheduleRowColumns();
         row.createDiv('date-header__cell').setText(' ');
 
@@ -416,7 +416,7 @@ export class ScheduleView extends ItemView {
     }
 
     private renderHabitsSection(container: HTMLElement, date: string): void {
-        const row = container.createDiv('timeline-row habits-section');
+        const row = container.createDiv('tv-grid-row habits-section');
         row.style.gridTemplateColumns = this.getScheduleRowColumns();
         this.habitRenderer.render(row, [date]);
     }

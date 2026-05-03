@@ -64,7 +64,7 @@ export class GridRenderer {
         const startHour = this.plugin.settings.startHour;
 
         // 1. Date Header Row
-        const headerRow = grid.createDiv('timeline-row date-header');
+        const headerRow = grid.createDiv('tv-grid-row date-header');
         headerRow.style.gridTemplateColumns = colTemplate;
 
         // Time Axis Header
@@ -147,7 +147,7 @@ export class GridRenderer {
         this.applyDateHeaderCompactBehavior(headerCells);
 
         // 2. Habits Row (fixed, outside scroll area — always visible)
-        const habitsRow = grid.createDiv('timeline-row habits-section');
+        const habitsRow = grid.createDiv('tv-grid-row habits-section');
         habitsRow.style.gridTemplateColumns = colTemplate;
         habitRenderer.render(habitsRow, dates);
 
@@ -155,7 +155,7 @@ export class GridRenderer {
         const scrollArea = grid.createDiv('timeline-scroll-area');
 
         // 3.1. All-Day Row (sticky on PC, scrolls on mobile via CSS)
-        const allDayRow = scrollArea.createDiv('timeline-row allday-section');
+        const allDayRow = scrollArea.createDiv('tv-grid-row allday-section');
         allDayRow.style.gridTemplateColumns = colTemplate;
 
         // Time Axis All-Day (with toggle button)
@@ -229,11 +229,11 @@ export class GridRenderer {
         allDayRenderer.render(allDayRow, dates, buckets.allday);
 
         // 3.2. Timeline Grid (time axis + day columns)
-        const timelineGrid = scrollArea.createDiv('timeline-row timeline-scroll-area__grid');
+        const timelineGrid = scrollArea.createDiv('tv-grid-row timeline-scroll-area__grid');
         timelineGrid.style.gridTemplateColumns = colTemplate;
 
         // Time Axis Column
-        const timeCol = timelineGrid.createDiv('time-axis-column');
+        const timeCol = timelineGrid.createDiv('timeline-scroll-area__axis');
         this.renderTimeLabels(timeCol);
 
         // Day Columns — timed + dueOnly のみ。split で segment を生成してから日付分類。
@@ -241,7 +241,7 @@ export class GridRenderer {
         const splitResult = splitTasks(timelineInput, { type: 'visual-date', startHour });
         const categorizedByDate = categorizeTasksByDate(splitResult, dates, startHour);
         dates.forEach(date => {
-            const col = timelineGrid.createDiv('day-timeline-column');
+            const col = timelineGrid.createDiv('timeline-scroll-area__day-column');
             col.dataset.date = date;
             const timedTasks = categorizedByDate.get(date)?.timed ?? [];
             timelineRenderer.render(col, date, timedTasks);
@@ -259,7 +259,7 @@ export class GridRenderer {
         const startHour = this.plugin.settings.startHour;
 
         for (let i = 0; i < 24; i++) {
-            const label = container.createDiv('time-label');
+            const label = container.createDiv('timeline-scroll-area__time-label');
             label.style.setProperty('--label-hour', String(i));
 
             // Display hour adjusted by startHour
@@ -331,7 +331,7 @@ export class GridRenderer {
         const visualDateString = DateUtils.getVisualDateOfNow(startHour);
 
         // Find the column for this visual date
-        const dayCol = this.container.querySelector(`.day-timeline-column[data-date="${visualDateString}"]`) as HTMLElement;
+        const dayCol = this.container.querySelector(`.timeline-scroll-area__day-column[data-date="${visualDateString}"]`) as HTMLElement;
 
         if (dayCol) {
             const indicator = dayCol.createDiv({ cls: 'current-time-indicator' });

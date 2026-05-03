@@ -504,7 +504,7 @@
     position: absolute;
 }
 
-.timeline-view .day-timeline-column > .task-card {
+.timeline-view .timeline-scroll-area__day-column > .task-card {
     top: calc(var(--start-minutes, 0) * var(--hour-height) / 60 + 1px);
     height: max(0px, calc(var(--duration-minutes, 0) * var(--hour-height) / 60 - 3px));
     container-type: size;

@@ -131,7 +131,7 @@ export class MoveStrategy extends BaseDragStrategy {
         this.initialTop = Number.isFinite(startMinutes) ? startMinutes * zoomLevel : 0;
         this.initialHeight = Number.isFinite(durationMinutes) ? durationMinutes * zoomLevel : 0;
 
-        const dayCol = el.closest('.day-timeline-column') as HTMLElement;
+        const dayCol = el.closest('.timeline-scroll-area__day-column') as HTMLElement;
         this.currentDayDate = dayCol ? dayCol.dataset.date || null : (task.startDate || null);
 
         const startHour = context.plugin.settings.startHour;
@@ -213,9 +213,9 @@ export class MoveStrategy extends BaseDragStrategy {
 
         const doc = context.container.ownerDocument || document;
         const elBelow = doc.elementFromPoint(clientX, clientY);
-        let dayCol = elBelow?.closest('.day-timeline-column') as HTMLElement;
+        let dayCol = elBelow?.closest('.timeline-scroll-area__day-column') as HTMLElement;
 
-        if (!dayCol && this.dragEl.parentElement?.classList.contains('day-timeline-column')) {
+        if (!dayCol && this.dragEl.parentElement?.classList.contains('timeline-scroll-area__day-column')) {
             dayCol = this.dragEl.parentElement as HTMLElement;
         }
 
@@ -476,7 +476,7 @@ export class MoveStrategy extends BaseDragStrategy {
         // セクション外判定
         const doc = context.container.ownerDocument || document;
         const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
-        const timelineSection = elBelow?.closest('.day-timeline-column');
+        const timelineSection = elBelow?.closest('.timeline-scroll-area__day-column');
         this.isOutsideSection = !!timelineSection;
 
         if (this.isOutsideSection && this.ghostEl) {
@@ -514,7 +514,7 @@ export class MoveStrategy extends BaseDragStrategy {
         // タイムラインへのドロップ判定
         const doc = context.container.ownerDocument || document;
         const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
-        const timelineSection = elBelow?.closest('.day-timeline-column') as HTMLElement;
+        const timelineSection = elBelow?.closest('.timeline-scroll-area__day-column') as HTMLElement;
 
         if (timelineSection) {
             const targetDate = timelineSection.dataset.date;
@@ -627,7 +627,7 @@ export class MoveStrategy extends BaseDragStrategy {
 
         this.clearHighlight();
 
-        const timelineCol = elBelow?.closest('.day-timeline-column') as HTMLElement;
+        const timelineCol = elBelow?.closest('.timeline-scroll-area__day-column') as HTMLElement;
         if (timelineCol) {
             timelineCol.addClass('drag-over');
             this.lastHighlighted = timelineCol;
