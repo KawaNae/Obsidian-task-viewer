@@ -170,15 +170,28 @@ export class HandleManager {
                     this.createResizeHandle(taskEl, taskId, 'right', '↔');
                 }
             } else if (isAllDay) {
-                // Left Resize Handle
-                this.createResizeHandle(taskEl, taskId, 'left', '↔');
-                // Right Resize Handle
-                this.createResizeHandle(taskEl, taskId, 'right', '↔');
-                // Move Handles moved to bottom edges (was top-right).
-                this.createMoveHandle(taskEl, taskId, 'bottom-left');
-                this.createMoveHandle(taskEl, taskId, 'bottom-right');
-                // detail-handle on top-left.
-                this.createDetailHandle(taskEl, taskId);
+                // Allday は horizontal split。sawtooth 辺(continues-before の左 /
+                // continues-after の右)には handle を出さない。calendar と同じ
+                // 設計で、両端 sawtooth (中央 segment) の場合は handles 全部抑制。
+                const continuesBefore = isSplitTail;
+                const continuesAfter = isSplitHead;
+                if (continuesBefore && continuesAfter) {
+                    return; // middle segment: no handles
+                }
+
+                // Left edge = start. detail-handle は起点 segment にだけ出す
+                // (split 跨ぎでの重複を避ける)。
+                if (!continuesBefore) {
+                    this.createDetailHandle(taskEl, taskId);
+                    this.createResizeHandle(taskEl, taskId, 'left', '↔');
+                    this.createMoveHandle(taskEl, taskId, 'bottom-left');
+                }
+
+                // Right edge = end.
+                if (!continuesAfter) {
+                    this.createResizeHandle(taskEl, taskId, 'right', '↔');
+                    this.createMoveHandle(taskEl, taskId, 'bottom-right');
+                }
             } else {
                 // Timed tasks: Top/Bottom resize + Top-Right/Bottom-Right Move
                 // + detail-handle at top-left (when not touching top boundary).
