@@ -95,15 +95,6 @@ export abstract class BaseDragStrategy implements DragStrategy {
         this.clearHighlight();
         document.body.style.cursor = '';
 
-        // hasMoved=true: synthetic click fires and SelectionController's
-        // once-listener consumes itself — disarm is a no-op.
-        // hasMoved=false: synthetic click was suppressed because
-        // `onPointerDown` called `preventDefault()` (blocks compat mouse
-        // events). Disarm so the listener doesn't trap the next real click.
-        if (!this.hasMoved) {
-            this.currentContext?.selectionController.disarm();
-        }
-
         if (this.dragEl) {
             this.dragEl.removeClass('is-dragging');
             this.dragEl.style.zIndex = '';

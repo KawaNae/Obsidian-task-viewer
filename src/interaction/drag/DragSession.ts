@@ -47,19 +47,18 @@ export class DragSession {
     /**
      * pointerup の lifecycle を完了させる。
      *
-     * 1. 合成 click を armSyntheticClickKill で 1 回だけ握り潰すよう仕掛ける
-     *    （browser の合成 click は `await onUp` の yield 中に発火するため、
-     *    arm は await の **前** に同期的に行う必要がある）
-     * 2. Strategy の onUp を await（finish*Move/Resize 内部で commitPlan）
-     * 3. notifyImmediate で onChange の coalesce/partial に乗せる
-     * 4. draggingFile を 1 frame 遅延で解除（metadataCache.changed の遅延
+     * 1. Strategy の onUp を await（finish*Move/Resize 内部で commitPlan）
+     * 2. notifyImmediate で onChange の coalesce/partial に乗せる
+     * 3. draggingFile を 1 frame 遅延で解除（metadataCache.changed の遅延
      *    イベントで自分自身の書き戻しを除外するため）
+     *
+     * drag 完了時の合成 click による誤 deselect は SelectionController が
+     * `pointerdown` で deselect するように設計されているため構造的に発生
+     * しない（合成 click は pointerdown を発火しない）。旧 kill 機構は撤廃。
      */
     async handleUp(e: PointerEvent): Promise<void> {
         if (!this.currentStrategy) return;
         const taskId = this.currentDragTaskId;
-
-        this.context.selectionController.armSyntheticClickKill();
 
         await this.currentStrategy.onUp(e, this.context);
 

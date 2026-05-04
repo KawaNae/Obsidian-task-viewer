@@ -5,11 +5,8 @@ import type { HandleManager } from '../../views/timelineview/HandleManager';
  * View 横断の selection lifecycle を集約する controller。
  *
  * 責務:
- *   1. background-click でタスク以外をクリックしたときの selection 解除
+ *   1. background-tap でタスク以外をタッチしたときの selection 解除
  *   2. UI 経由のタスク削除に追従した selection クリア
- *   3. drag pointerup 直後にブラウザが合成する click を 1 回だけ握り潰す
- *      (drag が card の release target を変えてしまうため、放置すると
- *      background-click handler が selection を null にしてしまう)
  *
  * selection state 自体は HandleManager が引き続き持つ — 本 controller は
  * その薄いファサード兼イベント窓口に徹する。HandleManager の責務分離は
@@ -19,11 +16,26 @@ export class SelectionController {
     constructor(private readonly handleManager: HandleManager) {}
 
     /**
-     * container 上の click を監視し、タスクカード外への click で selection を解除する。
-     * `.task-card__handle-btn` 上の click は drag handler が処理するためスキップする。
+     * container 上の `pointerdown` を監視し、タスクカード外への入力で selection
+     * を解除する。`.task-card__handle-btn` 上の入力は drag handler が処理する
+     * のでスキップ。
+     *
+     * `click` event ではなく `pointerdown` を聞く理由:
+     *   1. drag 完了時にブラウザが発火する合成 click は **発火する保証が無い**。
+     *      drag 開始時の pointerdown.preventDefault によって iOS WebKit など
+     *      では合成 click が抑制される。click ベースだと合成 click 抑制を
+     *      検知できず、別途 kill 機構（旧 armSyntheticClickKill）が必要に
+     *      なるが leak リスクを抱える。
+     *   2. iOS Safari は cursor:pointer を持たない要素への 1 回目の tap で
+     *      click を発火させない仕様がある（hover/focus simulation として
+     *      消費される）。pointerdown は touch から直接発火するのでこの
+     *      影響を受けない。
+     *   3. drag 後の合成 click は **pointerdown を発火しない**（合成
+     *      mouseevent のみ）。よって drag 完了の release target が背景でも
+     *      synthetic click による誤 deselect は構造的に発生しない。
      */
     attachBackgroundClick(container: HTMLElement): void {
-        container.addEventListener('click', this.onContainerClick);
+        container.addEventListener('pointerdown', this.onContainerClick);
     }
 
     /**
@@ -38,24 +50,7 @@ export class SelectionController {
         });
     }
 
-    /**
-     * `DragHandler.onPointerUp` から `await onUp()` の前に同期的に呼び出す。
-     * 直後にブラウザが発火する合成 click を capture phase で 1 回だけ握り潰すことで、
-     * background-click handler に selection 解除されてしまうのを防ぐ。
-     *
-     * 合成 click が発火しない場合（drag せず handle を tap した等で
-     * pointerdown.preventDefault が click を抑制したケース）は、`disarm` を
-     * 明示的に呼ぶことで listener が次の本物 click に持ち越されるのを避ける。
-     */
-    armSyntheticClickKill(): void {
-        document.addEventListener('click', this.killNextClick, { once: true, capture: true });
-    }
-
-    disarm(): void {
-        document.removeEventListener('click', this.killNextClick, { capture: true });
-    }
-
-    private readonly onContainerClick = (e: MouseEvent): void => {
+    private readonly onContainerClick = (e: PointerEvent): void => {
         const target = e.target as HTMLElement;
         if (target.closest('.task-card__handle-btn')) return;
         if (!target.closest('.task-card')) {
@@ -63,10 +58,5 @@ export class SelectionController {
                 this.handleManager.selectTask(null);
             }
         }
-    };
-
-    private readonly killNextClick = (e: Event): void => {
-        e.stopPropagation();
-        e.preventDefault();
     };
 }
