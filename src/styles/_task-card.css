@@ -52,33 +52,54 @@
     border-radius: var(--task-card-border-radius);
 }
 
-/* === Filter composition via CSS custom properties ===
-
-   Drop-shadow を host (.task-card) に置く理由: mask は CSS 仕様上 filter の
-   後段で適用され、Chromium は __shape の mask painting area (= host bbox)
-   で filter 結果をクリップしてしまう。結果として __shape に直接 filter を
-   置くと、sawtooth 直下に伸びるはずの shadow が host bbox の縁で切り捨て
-   られ、split カードの接合面に「破れた紙」の影が立たない。
-   host に置くと filter は子孫の合成出力 (= masked __shape の sawtooth +
-   content + handles) に対して計算されるので、sawtooth 形状を辿った影が
-   host bbox の外まで自然に伸びる。
-   ※ box-shadow だと mask 透明領域で影が切り取られて split カードの接合
-   面で陰影が消えるため依然採用不可。filter:drop-shadow が唯一の解。
-   blur:10px は box-shadow でいう blur:10px + spread:3px 相当の太さを狙った値。
-   全 task-card に単一 rule で当てることで、split×split / split+非split /
-   非split×非split のいずれの重なりでも 1 重 + 1 重 = 2 重と密度が統一される
-   (旧 inverse rule は split のみ 2 重 → 重なりで 4 重になり濃度が浮いた)。
-
-   filter は単一プロパティで全ルールが上書きしあうので、CSS 変数の連結で
-   合成する。`--tv-card-shadow` (drop-shadow スロット) と `--tv-card-tone`
-   (brightness/opacity 等の色調スロット) を直交させ、各 rule が自分の関心
-   ごとだけ更新する。例: hover は tone を更新するだけで shadow は base の
-   ものが維持される。空 CSS 変数 (`--tv-card-tone: ;`) は no-op として
-   合法。 */
 .task-card {
-    --tv-card-shadow: drop-shadow(0 4px 10px var(--tv-shadow-strong));
-    --tv-card-tone: ;
-    filter: var(--tv-card-shadow) var(--tv-card-tone);
+    border-radius: var(--task-card-border-radius);
+}
+
+/* === Cascade outline halo (Timeline only) ===
+
+   timeline view の cascade で左にずれていない card (leftmost) は通常表示。
+   左にずれた card (level >= 2) には ::before で host の外側にタイムライン
+   背景色 (--tv-bg-primary) の halo を出して、背面 card との間にスペーサー
+   を挟んだように見せる（前面 card が背面 card に被さる際の境界を明確化）。
+   halo の太さは上下 3px、左 4px、右 0（右辺は前面 card の下に隠れる前提）。
+   背景色なので column の bg と溶けて空白として知覚され、cascade card の
+   左辺で背面 card を「掘り出している」効果になる。
+   `data-cascade-offset` は TimelineSectionRenderer が `taskLayout.left > 0`
+   のとき "1" を立てる。CSS は「存在チェック」だけで動作する。
+
+   split の cut 辺 (sawtooth) では halo を抑止する:
+     continues-after → 下辺の halo 抑止 (bottom: 0)
+     continues-before → 上辺の halo 抑止 (top: 0)
+     both → 上下辺の halo 抑止
+   抑止しないと、sawtooth の山頂点と平行に背景色帯が出てしまう。 */
+.timeline-view .task-card[data-cascade-offset]::before {
+    content: '';
+    position: absolute;
+    inset: -3px 0 -3px -4px;
+    background: var(--tv-bg-primary);
+    border-radius:
+        calc(var(--task-card-border-radius) + 4px)
+        calc(var(--task-card-border-radius) + 3px)
+        calc(var(--task-card-border-radius) + 3px)
+        calc(var(--task-card-border-radius) + 4px);
+    z-index: -2;
+    pointer-events: none;
+}
+.timeline-view .task-card[data-cascade-offset].task-card--split-continues-after::before {
+    bottom: 0;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+.timeline-view .task-card[data-cascade-offset].task-card--split-continues-before::before {
+    top: 0;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+.timeline-view .task-card[data-cascade-offset].task-card--split-continues-before.task-card--split-continues-after::before {
+    top: 0;
+    bottom: 0;
+    border-radius: 0;
 }
 
 /* --- Accent border (linestyle bar) --- */
@@ -635,29 +656,14 @@
    layout 軸を表す `--ghost-grid` (Calendar/AllDay の grid item として配置) /
    `--ghost-positioned` (Timeline の absolute / cross-view の fixed) のいずれかが
    追加される。inline style は layout 値 (grid-area / position+top+left+w+h)
-   のみで、視覚スタイル・spacing は cascade に任せる。 */
-/* iPad/WebKit: filter:drop-shadow を持つ要素を inline style で動かすと、shadow の
-   bbox 外領域が repaint されず DOM 更新まで残像 trail が残る。GPU compositor layer
-   に promote する `will-change` で repaint 範囲が layer 全体に広がり trail を防ぐ。
-   ghost は `transform: translate(...)` で動かす設計（GhostRenderer:applyPlan）。
-   top/left を毎フレーム更新する旧方式は layout reflow が走るうえ will-change hint
-   とも不整合で、browser が GPU layer を維持できずに handle trail が残っていた。
-   transform-based movement にすることで hint と実挙動が一致し、layer が安定する。
-   ghost 内の handle は `top: -12px` 等で bbox 外に置かれており、2D transform
-   (translateX(-50%) 等) を持つため iPad WebKit で独立 paint surface 化されること
-   がある。その場合 ghost layer の paint bounds から漏れて handle 形状の trail が
-   残るので、drag 中の ghost の handle にだけ個別 promote を当てる（drag 1 件あたり
-   ~6 個 / drag 中だけ なので GPU 予算は問題にならない。drag 終了で promotion 解除）。
-   source (.is-dragging) は opacity が一度切り替わるだけで位置は動かないので opacity
-   のみ hint。 */
+   のみで、視覚スタイル・spacing は cascade に任せる。
+
+   ghost は `transform: translate(...)` で動かす（GhostRenderer.applyPlan）。
+   top/left を毎フレーム更新する旧方式は layout reflow が走るうえ will-change
+   hint とも不整合で、browser が GPU layer を維持できずに残像が残っていた。
+   transform-based movement で hint と実挙動が一致し layer が安定する。 */
 .task-card--ghost {
     will-change: transform;
-}
-.task-card--ghost .task-card__handle {
-    will-change: transform;
-}
-.task-card.is-dragging {
-    will-change: opacity;
 }
 
 .task-card--ghost {
@@ -680,23 +686,13 @@
     z-index: var(--z-task-card-drag-ghost);
 }
 
-/* shadow は浮いている positioned ghost にだけ強める。grid item は周囲カードと
-   同じ平面に並ぶので base shadow のみ。filter プロパティ自体ではなく
-   `--tv-card-shadow` 変数だけを更新することで、tone (hover brightness 等)
-   と直交させる。 */
-.task-card--ghost-positioned {
-    --tv-card-shadow: drop-shadow(0 4px 12px var(--tv-ghost-shadow));
-}
 
 /* ==========================================================================
    7. STATES (:hover, .is-selected, .is-dragging)
    ========================================================================== */
 
-/* hover は tone スロットだけ更新。shadow は base の drop-shadow が維持される
-   (旧実装では filter プロパティを直接上書きしていたため drop-shadow が消失
-   していた)。 */
 .task-card:hover {
-    --tv-card-tone: brightness(0.95);
+    filter: brightness(0.95);
 }
 
 .task-card.is-dragging {

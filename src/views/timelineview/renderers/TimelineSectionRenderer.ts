@@ -107,6 +107,11 @@ export class TimelineSectionRenderer {
             el.style.width = `calc((100% - 8px) * ${widthFraction})`;
             el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
             el.style.zIndex = String(Math.min(index * Z_GAP + taskLayout.zIndex, Z_MAX));
+            // cascade level: leftmost = 1 (left:0), 重なって右にずれた card は >= 2。
+            // CSS 側で level >= 2 の card に「上 / 左 / 下」3 辺枠を出すために属性化する。
+            if (taskLayout.left > 0) {
+                el.dataset.cascadeOffset = '1';
+            }
 
             this.taskRenderer.render(el, task, this.plugin.settings, {
                 cardInstanceId: `${this.viewId}::lane-${date}::${task.id}`,
