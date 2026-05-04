@@ -21,6 +21,13 @@ export class TaskDetailModal extends Modal {
     }
 
     async onOpen(): Promise<void> {
+        // Obsidian の Modal.open() は最初の focusable 子要素 (= タスクカード
+        // 内の checkbox) へ自動フォーカスする。modalEl 自身は既定では
+        // tabindex 属性を持たず programmatic に focus 不可なので、tabindex="-1"
+        // を付与した上で、Obsidian の auto-focus 後に rAF で focus を奪い返す。
+        this.modalEl.setAttribute('tabindex', '-1');
+        requestAnimationFrame(() => this.modalEl.focus());
+
         await this.renderCard();
 
         this.unsubscribe = this.readService.onChange(() => {
