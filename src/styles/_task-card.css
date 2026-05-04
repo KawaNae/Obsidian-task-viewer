@@ -52,6 +52,17 @@
     border-radius: var(--task-card-border-radius);
 }
 
+/* Light mode: tint the card surface with the task's --file-accent so cards
+   pop against the pure-white view background. Fallback to --tv-accent so
+   colorless cards still tint with the theme's interactive-accent. */
+body.theme-light .task-card__shape {
+    background-color: color-mix(
+        in srgb,
+        var(--tv-bg-card) 90%,
+        var(--file-accent, var(--tv-accent)) 10%
+    );
+}
+
 .task-card {
     border-radius: var(--task-card-border-radius);
 }
@@ -656,16 +667,7 @@
    layout 軸を表す `--ghost-grid` (Calendar/AllDay の grid item として配置) /
    `--ghost-positioned` (Timeline の absolute / cross-view の fixed) のいずれかが
    追加される。inline style は layout 値 (grid-area / position+top+left+w+h)
-   のみで、視覚スタイル・spacing は cascade に任せる。
-
-   ghost は `transform: translate(...)` で動かす（GhostRenderer.applyPlan）。
-   top/left を毎フレーム更新する旧方式は layout reflow が走るうえ will-change
-   hint とも不整合で、browser が GPU layer を維持できずに残像が残っていた。
-   transform-based movement で hint と実挙動が一致し layer が安定する。 */
-.task-card--ghost {
-    will-change: transform;
-}
-
+   のみで、視覚スタイル・spacing は cascade に任せる。 */
 .task-card--ghost {
     pointer-events: none;
     opacity: 0.5;
@@ -692,7 +694,21 @@
    ========================================================================== */
 
 .task-card:hover {
-    filter: brightness(0.95);
+    filter: brightness(1.1);
+}
+
+/* Light mode: bg is already file-accent tinted at rest. brightness(>1)
+   would clip the tinted near-white bg to pure white, so disable the host
+   filter and signal hover only with a 1px file-accent border on the shape
+   (selection border is 2px on __shape::after, so this is visibly thinner).
+   box-sizing keeps the border inside inset:0. */
+body.theme-light .task-card:hover {
+    filter: none;
+}
+
+body.theme-light .task-card:hover .task-card__shape {
+    border: 1px solid var(--file-accent, var(--tv-accent));
+    box-sizing: border-box;
 }
 
 .task-card.is-dragging {
