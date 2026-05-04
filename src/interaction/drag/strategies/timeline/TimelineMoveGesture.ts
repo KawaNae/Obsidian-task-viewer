@@ -267,6 +267,12 @@ export class TimelineMoveGesture extends BaseDragStrategy {
      * `dayCol.offsetLeft/Top + sourceEl.offsetLeft/Width` で cascade 位置に揃える。
      * 複数 candidates がある場合は隣接ペアに sawtooth split class を付与。
      *
+     * left/width は source の cascade レイアウト値 (offsetLeft/Width は
+     * is-drag-hidden 中でも layout 値を返す) を全 segment に踏襲する。これは
+     * 「task は cascade 内で同じ幅を保持する」という前提による。day-2 列の
+     * cascade 状況を都度解決する手もあるが、ghost はあくまで source 側の
+     * 配置を視覚化する preview なので source 値の踏襲が妥当。
+     *
      * DOM I/O はあるが state-free (引数のみ)、Surface 経由で testable。
      */
     static planTimelineSegments(
@@ -289,8 +295,6 @@ export class TimelineMoveGesture extends BaseDragStrategy {
                 if (index > 0) splitClasses.push('task-card--split-continues-before');
                 if (index < candidates.length - 1) splitClasses.push('task-card--split-continues-after');
             }
-            // left/width はソースカードの cascade レイアウト位置に合わせる
-            // (sourceEl.offsetLeft/Width は is-drag-hidden 中でも layout 値を返す)
             plans.push({
                 layout: 'absolute',
                 parent: ghostContainer,

@@ -65,27 +65,24 @@ export class GhostRenderer {
     }
 
     /**
-     * sourceEl から ghost を派生。handle / selection state は除去し、size/font の
-     * inline copy のみ保持。layout 固有の class や positioning は applyPlan で。
+     * sourceEl から ghost を派生。inline style は一切注入せず、source 由来の
+     * transient state class のみ剥がす。視覚スタイル (opacity / shadow / handle
+     * 抑止 / 選択枠 / split sawtooth padding / margin / display) はすべて
+     * `task-card--ghost` 系クラス経由の CSS cascade に委ねる。
+     *
+     * `is-selected` は意図的に残す: clone が source の選択状態を継いで
+     * `__shape::after` の選択枠を自動描画するため。`is-dragging` /
+     * `is-drag-hidden` / `is-drag-source-*` は source 側の transient state
+     * なので ghost には不要。
      */
     private createGhost(): HTMLElement {
         const ghost = this.sourceEl.cloneNode(true) as HTMLElement;
-        ghost.querySelectorAll('.task-card__handle').forEach(h => h.remove());
-        ghost.classList.remove('is-selected', 'is-dragging');
-        ghost.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
-        ghost.style.boxSizing = 'border-box';
-        ghost.style.margin = '0';
-        ghost.style.overflow = 'hidden';
-        ghost.style.display = 'block';
-        ghost.style.pointerEvents = 'none';
-
-        // layout 用の padding/font だけ source から継承する
-        const computedStyle = this.sourceEl.ownerDocument.defaultView?.getComputedStyle(this.sourceEl);
-        ghost.style.padding = computedStyle?.padding || '';
-        ghost.style.fontSize = computedStyle?.fontSize || '';
-        ghost.style.fontFamily = computedStyle?.fontFamily || '';
-        ghost.style.color = computedStyle?.color || '';
-
+        ghost.classList.remove(
+            'is-dragging',
+            'is-drag-hidden',
+            'is-drag-source-dimmed',
+            'is-drag-source-faint',
+        );
         return ghost;
     }
 
@@ -100,50 +97,41 @@ export class GhostRenderer {
         }
     }
 
-    /** plan に従って position/size class を反映。 */
+    /**
+     * plan に従って position/size と layout 軸クラスを反映。視覚スタイルは
+     * CSS の `.task-card--ghost` / `.task-card--ghost-grid` /
+     * `.task-card--ghost-positioned` に委ねる。z-index も CSS 側に置くため
+     * inline では設定しない。
+     */
     private applyPlan(ghost: HTMLElement, plan: GhostPlan): void {
-        // split-continues class を一旦剥がしてから plan の指定を適用
-        ghost.classList.remove('task-card--split-continues-before', 'task-card--split-continues-after');
+        ghost.classList.remove(
+            'task-card--split-continues-before',
+            'task-card--split-continues-after',
+        );
         for (const cls of plan.splitClasses) ghost.classList.add(cls);
 
-        switch (plan.layout) {
-            case 'grid':
-                ghost.classList.add('task-card--drag-preview');
-                ghost.classList.remove('task-card--drag-ghost');
-                ghost.style.position = '';
-                ghost.style.gridColumn = plan.gridColumn;
-                ghost.style.gridRow = plan.gridRow;
-                ghost.style.left = '';
-                ghost.style.top = '';
-                ghost.style.width = '';
-                ghost.style.height = '';
-                ghost.style.zIndex = '1001';
-                ghost.style.transform = '';
-                break;
-            case 'absolute':
-                ghost.classList.add('task-card--drag-ghost');
-                ghost.classList.remove('task-card--drag-preview');
-                ghost.style.position = 'absolute';
-                ghost.style.gridColumn = '';
-                ghost.style.gridRow = '';
-                ghost.style.left = `${plan.left}px`;
-                ghost.style.top = `${plan.top}px`;
-                ghost.style.width = `${plan.width}px`;
-                ghost.style.height = `${plan.height}px`;
-                ghost.style.zIndex = 'var(--z-task-card-drag-ghost, 9999)';
-                break;
-            case 'fixed':
-                ghost.classList.add('task-card--drag-ghost');
-                ghost.classList.remove('task-card--drag-preview');
-                ghost.style.position = 'fixed';
-                ghost.style.gridColumn = '';
-                ghost.style.gridRow = '';
-                ghost.style.left = `${plan.left}px`;
-                ghost.style.top = `${plan.top}px`;
-                ghost.style.width = `${plan.width}px`;
-                ghost.style.height = `${plan.height}px`;
-                ghost.style.zIndex = 'var(--z-task-card-drag-ghost, 9999)';
-                break;
+        ghost.classList.add('task-card--ghost');
+
+        if (plan.layout === 'grid') {
+            ghost.classList.add('task-card--ghost-grid');
+            ghost.classList.remove('task-card--ghost-positioned');
+            ghost.style.position = '';
+            ghost.style.left = '';
+            ghost.style.top = '';
+            ghost.style.width = '';
+            ghost.style.height = '';
+            ghost.style.gridColumn = plan.gridColumn;
+            ghost.style.gridRow = plan.gridRow;
+        } else {
+            ghost.classList.add('task-card--ghost-positioned');
+            ghost.classList.remove('task-card--ghost-grid');
+            ghost.style.gridColumn = '';
+            ghost.style.gridRow = '';
+            ghost.style.position = plan.layout;
+            ghost.style.left = `${plan.left}px`;
+            ghost.style.top = `${plan.top}px`;
+            ghost.style.width = `${plan.width}px`;
+            ghost.style.height = `${plan.height}px`;
         }
     }
 

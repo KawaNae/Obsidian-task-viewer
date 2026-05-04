@@ -30,10 +30,17 @@
 /* ==========================================================================
    2. SHAPE LAYER (bg + linestyle + selection + sawtooth mask)
 
-   Visual 系 (背景色/角丸/影/linestyle/選択枠/split mask) は host ではなく
+   Visual 系 (背景色/角丸/linestyle/選択枠/split mask) は host ではなく
    `.task-card__shape` 子要素に集約する。これにより handle 等の host 直下
    absolute 子要素は mask の対象外になる (CSS Masking 仕様: mask は適用
    要素の subtree にのみ作用するため、sibling である handle は escape)。
+
+   Design intent (重要): __shape 内の装飾 (`__shape::before` linestyle bar /
+   `__shape::after` 選択枠) は **意図的に** mask の sawtooth に追従して切られる。
+   これにより selection border が「破れた紙の枠」として split 接合面で
+   ジグザグに切られる視覚効果が出る。装飾を mask 外 (host 直下) に置くと
+   border が直線になり、デザイン上の整合性を失う。
+   新しい sawtooth-clipped 装飾を足すなら __shape の子孫として配置する。
    ========================================================================== */
 
 .task-card__shape {
@@ -43,11 +50,35 @@
     pointer-events: none;
     background-color: var(--tv-bg-card);
     border-radius: var(--task-card-border-radius);
-    /* drop-shadow は box-shadow と違い post-mask で適用されるため、
-       split mask の sawtooth 輪郭を辿った影が出る。box-shadow だと
-       mask 透明領域では影も切り取られて split カード同士が密接した
-       際に陰影が消える。 */
-    filter: drop-shadow(0 4px 8px var(--tv-shadow-strong));
+}
+
+/* === Filter composition via CSS custom properties ===
+
+   Drop-shadow を host (.task-card) に置く理由: mask は CSS 仕様上 filter の
+   後段で適用され、Chromium は __shape の mask painting area (= host bbox)
+   で filter 結果をクリップしてしまう。結果として __shape に直接 filter を
+   置くと、sawtooth 直下に伸びるはずの shadow が host bbox の縁で切り捨て
+   られ、split カードの接合面に「破れた紙」の影が立たない。
+   host に置くと filter は子孫の合成出力 (= masked __shape の sawtooth +
+   content + handles) に対して計算されるので、sawtooth 形状を辿った影が
+   host bbox の外まで自然に伸びる。
+   ※ box-shadow だと mask 透明領域で影が切り取られて split カードの接合
+   面で陰影が消えるため依然採用不可。filter:drop-shadow が唯一の解。
+   blur:10px は box-shadow でいう blur:10px + spread:3px 相当の太さを狙った値。
+   全 task-card に単一 rule で当てることで、split×split / split+非split /
+   非split×非split のいずれの重なりでも 1 重 + 1 重 = 2 重と密度が統一される
+   (旧 inverse rule は split のみ 2 重 → 重なりで 4 重になり濃度が浮いた)。
+
+   filter は単一プロパティで全ルールが上書きしあうので、CSS 変数の連結で
+   合成する。`--tv-card-shadow` (drop-shadow スロット) と `--tv-card-tone`
+   (brightness/opacity 等の色調スロット) を直交させ、各 rule が自分の関心
+   ごとだけ更新する。例: hover は tone を更新するだけで shadow は base の
+   ものが維持される。空 CSS 変数 (`--tv-card-tone: ;`) は no-op として
+   合法。 */
+.task-card {
+    --tv-card-shadow: drop-shadow(0 4px 10px var(--tv-shadow-strong));
+    --tv-card-tone: ;
+    filter: var(--tv-card-shadow) var(--tv-card-tone);
 }
 
 /* --- Accent border (linestyle bar) --- */
@@ -560,44 +591,75 @@
     top: 2px;
 }
 
-/* --- Drag Preview --- */
-.task-card--drag-preview {
-    pointer-events: none !important;
-    opacity: 0.82;
+/* --- Cut 辺のハンドル非表示 ---
+   sawtooth で切れている辺には resize / move ハンドルを置かない。Ghost は
+   source カードを clone してから segment ごとに split-continues-* class
+   を書き換える設計のため、source の handle 配置 (un-cut 辺) と segment の
+   cut 辺が一致しないケースがある (例: source=split-after で handle が top
+   に並ぶ → day-2 ghost に split-before が付くと top が cut 辺になり、
+   handle が sawtooth の上に乗る)。CSS で cut 辺 handle を抑止することで
+   clone の整合性を JS なしに吸収する。
+   detail handle はタスク同定 / open-modal の入口として cut 辺でも残す。 */
+.task-card--split-continues-before:not(.task-card--multi-day) .task-card__handle--resize-top,
+.task-card--split-continues-before:not(.task-card--multi-day) .task-card__handle--move-top-left,
+.task-card--split-continues-before:not(.task-card--multi-day) .task-card__handle--move-top-right,
+.task-card--split-continues-after:not(.task-card--multi-day) .task-card__handle--resize-bottom,
+.task-card--split-continues-after:not(.task-card--multi-day) .task-card__handle--move-bottom-left,
+.task-card--split-continues-after:not(.task-card--multi-day) .task-card__handle--move-bottom-right,
+.task-card--multi-day.task-card--split-continues-before .task-card__handle--resize-left,
+.task-card--multi-day.task-card--split-continues-before .task-card__handle--move-top-left,
+.task-card--multi-day.task-card--split-continues-before .task-card__handle--move-bottom-left,
+.task-card--multi-day.task-card--split-continues-after .task-card__handle--resize-right,
+.task-card--multi-day.task-card--split-continues-after .task-card__handle--move-top-right,
+.task-card--multi-day.task-card--split-continues-after .task-card__handle--move-bottom-right {
+    display: none;
+}
+
+/* --- Drag Ghost ---
+   Ghost は source card の clone に `task-card--ghost` 共通クラスと、
+   layout 軸を表す `--ghost-grid` (Calendar/AllDay の grid item として配置) /
+   `--ghost-positioned` (Timeline の absolute / cross-view の fixed) のいずれかが
+   追加される。inline style は layout 値 (grid-area / position+top+left+w+h)
+   のみで、視覚スタイル・spacing は cascade に任せる。 */
+.task-card--ghost {
+    pointer-events: none;
+    /* resize gesture では source 自体に `.is-dragging` の opacity:0.5 が
+       かかるため、move の ghost も 0.5 に揃えて両者の半透明度を統一する。 */
+    opacity: 0.5;
+}
+
+/* Host の pointer-events:none は `.task-card__handle { pointer-events: auto }`
+   (前掲) で再有効化されるため、ghost 内の handle 階層を明示的に無効化する。 */
+.task-card--ghost .task-card__handle,
+.task-card--ghost .task-card__handle-btn {
+    pointer-events: none;
+}
+
+.task-card--ghost-grid {
     z-index: 10;
 }
 
-.task-card--drag-preview .task-card__handle {
-    display: none !important;
-}
-
-/* --- Drag Ghost --- */
-.task-card--drag-ghost {
-    position: fixed;
+.task-card--ghost-positioned {
     z-index: var(--z-task-card-drag-ghost);
-    pointer-events: none;
-    opacity: 0.8;
-    border-radius: var(--tv-radius-s);
-    transition: opacity 0.15s ease;
 }
 
-/* Ghost-specific shadow goes on __shape so visual coincides with the
-   actual painted card (host carries no bg/shadow). drop-shadow は base
-   の `__shape { filter }` を上書き。 */
-.task-card--drag-ghost .task-card__shape {
-    filter: drop-shadow(0 4px 12px var(--tv-ghost-shadow));
-}
-
-.task-card--drag-ghost .task-card__handle {
-    display: none;
+/* shadow は浮いている positioned ghost にだけ強める。grid item は周囲カードと
+   同じ平面に並ぶので base shadow のみ。filter プロパティ自体ではなく
+   `--tv-card-shadow` 変数だけを更新することで、tone (hover brightness 等)
+   と直交させる。 */
+.task-card--ghost-positioned {
+    --tv-card-shadow: drop-shadow(0 4px 12px var(--tv-ghost-shadow));
 }
 
 /* ==========================================================================
    7. STATES (:hover, .is-selected, .is-dragging)
    ========================================================================== */
 
+/* hover は tone スロットだけ更新。shadow は base の drop-shadow が維持される
+   (旧実装では filter プロパティを直接上書きしていたため drop-shadow が消失
+   していた)。 */
 .task-card:hover {
-    filter: brightness(0.95);
+    --tv-card-tone: brightness(0.95);
 }
 
 .task-card.is-dragging {
@@ -605,11 +667,11 @@
     cursor: grabbing;
 }
 
-/* Selection / drag-preview 枠は同形状で、どちらも __shape::after に置く。
-   __shape の mask が当たっていれば sawtooth に追従するため、cut 辺の
-   border は下の override で除去する。 */
-.task-card.is-selected .task-card__shape::after,
-.task-card--drag-preview .task-card__shape::after {
+/* Selection 枠は __shape::after に置く。Ghost (drag 中の card clone) も
+   `is-selected` を継いだまま clone されるので同じルールで自動的に枠が出る
+   (旧 `--drag-preview` 列挙は撤廃)。__shape の mask が sawtooth に追従する
+   ため、cut 辺の border は下の override で除去する。 */
+.task-card.is-selected .task-card__shape::after {
     content: '';
     position: absolute;
     inset: 0;
@@ -622,15 +684,13 @@
    形状に切り刻まれて散在するため、整然とした 3 辺枠にする。
    base は vertical cut (timeline grid) を担当、horizontal cut は view
    別ファイルで上書き。 */
-.task-card.is-selected.task-card--split-continues-after .task-card__shape::after,
-.task-card--drag-preview.task-card--split-continues-after .task-card__shape::after {
+.task-card.is-selected.task-card--split-continues-after .task-card__shape::after {
     border-bottom: none;
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
 }
 
-.task-card.is-selected.task-card--split-continues-before .task-card__shape::after,
-.task-card--drag-preview.task-card--split-continues-before .task-card__shape::after {
+.task-card.is-selected.task-card--split-continues-before .task-card__shape::after {
     border-top: none;
     border-top-left-radius: 0;
     border-top-right-radius: 0;
