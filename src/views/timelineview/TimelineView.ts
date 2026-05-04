@@ -2,7 +2,7 @@ import { ItemView, WorkspaceLeaf, setIcon, type Workspace, type ViewStateResult 
 import { t } from '../../i18n';
 import { ViewUriBuilder } from '../sharedLogic/ViewUriBuilder';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import { ViewState, PinnedListDefinition } from '../../types';
+import { Task, ViewState, PinnedListDefinition } from '../../types';
 import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
@@ -17,6 +17,7 @@ import TaskViewerPlugin from '../../main';
 import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
 
 import { HandleManager } from './HandleManager';
+import { SelectionController } from '../../interaction/selection/SelectionController';
 import { TimelineToolbar } from './TimelineToolbar';
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 
@@ -48,14 +49,6 @@ const COLLAPSE_KEY_PREFIX = `${VIEW_ID}::`;
 
 /**
  * Timeline View - Displays tasks on a time-based grid layout.
- * 
- * Structure:
- * - Lifecycle: constructor, onOpen, onClose, refresh
- * - Core Rendering: render, renderCurrentTimeIndicator
- * - Grid & Layout: renderGrid, getDatesToShow, renderTimeLabels
- * - Section Renderers: renderFutureSection, renderLongTermTasks, renderTimedTasks
- * - Color & Styling: applyTaskColor
- * - Task Creation: addCreateTaskListeners, handleCreateTaskTrigger
  */
 interface TimelineViewState {
     daysToShow?: number;
@@ -77,6 +70,7 @@ export class TimelineView extends ItemView {
     private dragHandler: DragHandler;
     private menuHandler: MenuHandler;
     private handleManager: HandleManager;
+    private selectionController!: SelectionController;
     private toolbar: TimelineToolbar | undefined;
     private sidebarManager: SidebarManager;
 
@@ -302,15 +296,14 @@ export class TimelineView extends ItemView {
         this.taskRenderer.setChildLineEditCallback((parentTask, line, bodyLine, x, y) => {
             childLineMenuBuilder.showMenu(parentTask, line, bodyLine, x, y);
         });
-        this.taskRenderer.setDetailCallback((task) => {
-            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
-        });
+        this.taskRenderer.setDetailCallback((task) => this.openDetailModal(task));
 
         // Initialize HandleManager
         this.handleManager = new HandleManager(this.container, {
             getTask: (id) => this.readService.getTask(id),
             getStartHour: () => this.plugin.settings.startHour,
         });
+        this.selectionController = new SelectionController(this.handleManager);
 
         // Construct the toolbar once for the lifetime of this view. performRender()
         // calls toolbar.detach() before container.empty() and toolbar.mount(host)
@@ -377,6 +370,7 @@ export class TimelineView extends ItemView {
 
         // Initialize DragHandler with selection callback, move callback, and view start date provider
         this.dragHandler = new DragHandler(this.container, this.readService, this.writeService, this.plugin,
+            this.selectionController,
             (taskId: string) => {
                 // Store base task id so split segments all share one selection and
                 // the selection survives a drag-move that regenerates segment ids.
@@ -386,39 +380,20 @@ export class TimelineView extends ItemView {
             },
             () => { /* no-op: handles are inside task cards */ },
             () => this.viewState.startDate,
+            () => DateUtils.addDays(this.viewState.startDate, this.viewState.daysToShow - 1),
             () => this.getEffectiveZoomLevel()
         );
         this.dragHandler.onDetailClick = (taskId: string) => {
             const task = this.readService.getTask(taskId);
-            if (task) {
-                new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
-            }
+            if (task) this.openDetailModal(task);
         };
 
-        // Background click to deselect
-        this.container.addEventListener('click', (e) => {
-            const target = e.target as HTMLElement;
-
-            // If clicking handle, do nothing (handled by DragHandler or button click)
-            if (target.closest('.task-card__handle-btn')) return;
-
-            const cardEl = target.closest('.task-card') as HTMLElement | null;
-            if (!cardEl) {
-                if (this.handleManager.getSelectedTaskId()) {
-                    this.handleManager.selectTask(null);
-                }
-            }
-        });
-
-        // Clear selection when the selected task is deleted via the UI.
+        // Background click → deselect、UI 経由 delete → deselect。両方 SelectionController に集約。
         // External-editor deletions are not tracked here by design — if that
-        // case causes a visual glitch (line-shifted task inherits `.selected`),
+        // case causes a visual glitch (line-shifted task inherits `.is-selected`),
         // user can click to re-select.
-        this.unsubscribeDelete = this.writeService.onTaskDeleted((deletedId) => {
-            if (this.handleManager.getSelectedTaskId() === deletedId) {
-                this.handleManager.selectTask(null);
-            }
-        });
+        this.selectionController.attachBackgroundClick(this.container);
+        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.writeService);
 
         // Initialize render dispatch controller (rAF coalesce + partial/full 判定)
         this.renderController = new RenderController({
@@ -573,6 +548,15 @@ export class TimelineView extends ItemView {
     }
 
     /**
+     * Detail modal を開く 2 経路 (dblclick / detail handle) の共通エントリ。
+     * modal が出た時点で card の選択状態は不要なので解除する。
+     */
+    private openDetailModal(task: Task): void {
+        this.handleManager.selectTask(null);
+        new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
+    }
+
+    /**
      * Compute the initial startDate from the restored filterState + tasks +
      * settings. Called once via the init barrier.
      */
@@ -645,7 +629,7 @@ export class TimelineView extends ItemView {
     private scrollToCurrentTime(): void {
         const scrollArea = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (!scrollArea) return;
-        if (!scrollArea.querySelector('.time-axis-column')) return;
+        if (!scrollArea.querySelector('.timeline-scroll-area__axis')) return;
         const indicator = scrollArea.querySelector('.current-time-indicator') as HTMLElement | null;
         if (!indicator) return;
         indicator.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' as ScrollBehavior });
@@ -885,9 +869,9 @@ export class TimelineView extends ItemView {
         const { main, sidebarHeader, sidebarBody } = this.sidebarManager.buildLayout(this.container);
 
         // Sidebar header content
-        sidebarHeader.createEl('p', { cls: 'view-sidebar__title', text: t('pinnedList.pinnedLists') });
+        sidebarHeader.createEl('p', { cls: 'tv-sidebar__panel-title', text: t('pinnedList.pinnedLists') });
 
-        const addListBtn = sidebarHeader.createEl('button', { cls: 'view-sidebar__add-btn' });
+        const addListBtn = sidebarHeader.createEl('button', { cls: 'tv-sidebar__panel-add-btn' });
         setIcon(addListBtn, 'plus');
         addListBtn.appendText(t('pinnedList.addList'));
         addListBtn.addEventListener('click', () => {
@@ -968,7 +952,7 @@ export class TimelineView extends ItemView {
         }
 
         // Attach handles to the selected card after scroll restoration.
-        // Section renderers already tagged cards with `.selected` during render;
+        // Section renderers already tagged cards with `.is-selected` during render;
         // reapplySelectionClass is idempotent and ensures handles are attached
         // and z-index is raised on the fresh DOM.
         // 同期実行することで、最初の paint からハンドル + SELECTED_Z_INDEX が
@@ -987,7 +971,7 @@ export class TimelineView extends ItemView {
     }
 
     private assertNoDuplicateCardIds(): void {
-        const main = this.container.querySelector('.view-sidebar-main') ?? this.container;
+        const main = this.container.querySelector('.tv-sidebar__main') ?? this.container;
         const counts = new Map<string, number>();
         main.querySelectorAll<HTMLElement>('.task-card[data-id]').forEach(el => {
             const id = el.dataset.id;

@@ -2,7 +2,7 @@
    Pinned Lists — Sidebar list sections with independent filters
    ========================================================================== */
 
-.pinned-lists-container {
+.tv-sidebar__pinned-lists {
     padding: 0 4px;
 }
 
@@ -48,9 +48,9 @@
 }
 
 /* Shared icon button base for sort-btn, filter-btn, and more-btn */
-.view-sidebar-panel .pinned-list__sort-btn,
-.view-sidebar-panel .pinned-list__filter-btn,
-.view-sidebar-panel .pinned-list__more-btn {
+.tv-sidebar__panel .pinned-list__sort-btn,
+.tv-sidebar__panel .pinned-list__filter-btn,
+.tv-sidebar__panel .pinned-list__more-btn {
     width: 22px;
     height: 22px;
     display: inline-flex;
@@ -72,21 +72,21 @@
         color 120ms ease;
 }
 
-.view-sidebar-panel .pinned-list__sort-btn:hover,
-.view-sidebar-panel .pinned-list__filter-btn:hover,
-.view-sidebar-panel .pinned-list__more-btn:hover {
+.tv-sidebar__panel .pinned-list__sort-btn:hover,
+.tv-sidebar__panel .pinned-list__filter-btn:hover,
+.tv-sidebar__panel .pinned-list__more-btn:hover {
     background-color: var(--tv-bg-hover);
     border-color: var(--tv-border);
     color: var(--tv-text);
 }
 
 /* Filter active: accent color */
-.view-sidebar-panel .pinned-list__filter-btn.is-filtered {
+.tv-sidebar__panel .pinned-list__filter-btn.is-filtered {
     color: var(--tv-text-accent);
 }
 
 /* Sort active: accent color */
-.view-sidebar-panel .pinned-list__sort-btn.is-sorted {
+.tv-sidebar__panel .pinned-list__sort-btn.is-sorted {
     color: var(--tv-text-accent);
 }
 
@@ -125,7 +125,7 @@
 }
 
 /* Empty state */
-.pinned-lists-container__empty {
+.tv-sidebar__pinned-lists--empty {
     padding: 16px;
     text-align: center;
     color: var(--tv-text-muted);

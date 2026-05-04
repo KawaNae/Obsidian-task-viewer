@@ -12,6 +12,19 @@ export interface TaskDateRange {
 
 /**
  * A task placed on the grid with all positional metadata computed.
+ *
+ * Flag semantics (重要 — 過去のバグ温床なので明確に分離している):
+ *   - `isMultiDay`     : 幾何的事実。`effectiveEnd > effectiveStart` のとき true。
+ *   - `continuesBefore`: この segment より前に同 task の連続部分がある（pre-split flag
+ *                        または internal clip 由来）。
+ *   - `continuesAfter` : 同上、後ろ側。
+ *   - `useBarVariant`  : **描画契約**。CSS class `task-card--multi-day`
+ *                        （= 横軸 bar variant）を付けるべきかどうかを表す派生値。
+ *                        `isMultiDay || continuesBefore || continuesAfter`。
+ *                        view 端で 1 日に clip された split segment（isMultiDay=false
+ *                        だが continuesBefore/After=true）でも bar として描かせるため、
+ *                        OR を 1 箇所に集約してある。calendar / allday の両 renderer は
+ *                        この field のみを参照すること（条件再構築は drift の元）。
  */
 export interface GridTaskEntry {
     task: DisplayTask;
@@ -27,8 +40,14 @@ export interface GridTaskEntry {
     continuesBefore: boolean;
     /** Task extends after the visible date range */
     continuesAfter: boolean;
-    /** Whether this task spans more than one column */
+    /** Whether this task spans more than one column (geometric fact) */
     isMultiDay: boolean;
+    /**
+     * 横軸 bar variant として描画すべきかの派生 flag。
+     * `isMultiDay || continuesBefore || continuesAfter`。
+     * 詳細は interface の docstring 参照。
+     */
+    useBarVariant: boolean;
     /** Due arrow metadata, null if no arrow */
     dueArrow: DueArrowInfo | null;
 }
@@ -68,6 +87,7 @@ interface RawEntry {
     continuesBefore: boolean;
     continuesAfter: boolean;
     isMultiDay: boolean;
+    useBarVariant: boolean;
     dueArrow: DueArrowInfo | null;
 }
 
@@ -149,9 +169,11 @@ export function computeGridLayout(
             }
         }
 
+        const useBarVariant = isMultiDay || continuesBefore || continuesAfter;
+
         rawEntries.push({
             task, colStart, span, segmentId,
-            continuesBefore, continuesAfter, isMultiDay,
+            continuesBefore, continuesAfter, isMultiDay, useBarVariant,
             dueArrow,
         });
     }
@@ -166,9 +188,16 @@ export function computeGridLayout(
         return a.task.id.localeCompare(b.task.id);
     });
 
-    // 4. Assign tracks (greedy first-fit)
-    // Each track stores the rightmost occupied column (including due arrow footprint)
+    // 4. Assign tracks (greedy first-fit, with same-task lock)
+    // Each track stores the rightmost occupied column (including due arrow footprint).
+    // 同じ originalTaskId を持つ segments (per-week / visual-date split で複数生まれる)
+    // は、最初の segment が乗った track に後続 segment も乗せることを優先する。
+    // これがないと、間に他 task の segment が割り込んだとき後続 segment が空き track に
+    // 飛び、視覚的に 1 task が複数行に分散して "上下にずれた連続バー" になる。
+    // ロックした track が後続 segment 側で他 task に占有されている場合のみ通常 first-fit
+    // にフォールバックする。
     const tracks: number[] = [];
+    const trackByOriginalId = new Map<string, number>();
     const result: GridTaskEntry[] = [];
 
     for (const entry of rawEntries) {
@@ -176,11 +205,18 @@ export function computeGridLayout(
             ? entry.dueArrow.arrowEndCol - 1
             : entry.colStart + entry.span - 1;
 
+        const originalId = (entry.task as DisplayTask).originalTaskId ?? entry.task.id;
+        const lockedTrack = trackByOriginalId.get(originalId);
+
         let trackIndex = -1;
-        for (let i = 0; i < tracks.length; i++) {
-            if (entry.colStart > tracks[i]) {
-                trackIndex = i;
-                break;
+        if (lockedTrack !== undefined && entry.colStart > tracks[lockedTrack]) {
+            trackIndex = lockedTrack;
+        } else {
+            for (let i = 0; i < tracks.length; i++) {
+                if (entry.colStart > tracks[i]) {
+                    trackIndex = i;
+                    break;
+                }
             }
         }
 
@@ -189,6 +225,10 @@ export function computeGridLayout(
             tracks.push(footprintEnd);
         } else {
             tracks[trackIndex] = footprintEnd;
+        }
+
+        if (!trackByOriginalId.has(originalId)) {
+            trackByOriginalId.set(originalId, trackIndex);
         }
 
         result.push({ ...entry, trackIndex });

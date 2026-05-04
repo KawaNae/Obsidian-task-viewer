@@ -22,7 +22,7 @@ export class ScheduleSectionRenderer {
     }
 
     async renderAllDaySection(container: HTMLElement, tasks: DisplayTask[]): Promise<void> {
-        const row = container.createDiv('timeline-row allday-section');
+        const row = container.createDiv('tv-grid-row allday-section');
         row.style.gridTemplateColumns = this.getScheduleRowColumns();
 
         const axisCell = row.createDiv('allday-section__cell allday-section__axis');
@@ -30,7 +30,7 @@ export class ScheduleSectionRenderer {
         axisCell.setAttribute('tabindex', '0');
         axisCell.setAttribute('aria-label', t('allDaySection.toggleAllDay'));
 
-        const toggleBtn = axisCell.createEl('button', { cls: 'schedule-section__toggle' });
+        const toggleBtn = axisCell.createEl('button', { cls: 'tv-section-toggle tv-section-toggle--axis' });
         toggleBtn.tabIndex = -1;
         toggleBtn.setAttribute('aria-hidden', 'true');
 
@@ -84,7 +84,7 @@ export class ScheduleSectionRenderer {
         header.setAttribute('tabindex', '0');
         header.setAttribute('aria-label', `Toggle ${title} section`);
 
-        const icon = header.createEl('button', { cls: 'schedule-section__toggle schedule-section__collapse-btn' });
+        const icon = header.createEl('button', { cls: 'tv-section-toggle tv-section-toggle--header' });
         icon.tabIndex = -1;
         icon.setAttribute('aria-hidden', 'true');
         header.createSpan({ text: title });

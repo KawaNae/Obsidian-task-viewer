@@ -146,6 +146,51 @@ src/
 
 ---
 
+## DOM Class Taxonomy
+
+CSS / DOM クラス名の付け方を 4 層 + state/modifier 規則で固定する。新規追加時はこの規約に必ず従う。
+
+### Block prefix layers
+
+| 層 | prefix | 例 | 対象 |
+|---|---|---|---|
+| **Shared primitive** | `tv-` | `tv-sidebar`, `tv-grid-row`, `tv-section-toggle` | 複数 view が利用する layout / widget |
+| **View shell** | `<view>-view` | `timeline-view`, `schedule-view`, `kanban-view` | view ルート (Obsidian 慣例) |
+| **View-specific block** | `<view>-` | `schedule-grid`, `calendar-week-row`, `kanban-view__cell` | その view 内でのみ使う |
+| **Domain block** | `<domain>-` | `task-card`, `pinned-list`, `habits-section`, `allday-section`, `cal-week-row` | view を跨ぐドメイン要素 |
+
+迷ったとき: その class 名を **2 つ以上の view で生成** するなら shared primitive (`tv-*`) または domain block。**1 view 専用**なら view-specific (`<view>-*`)。view shell に `__*` element をぶら下げるのは妥当だが、層を跨いで参照される素材は domain block に切り出す。
+
+### Element / modifier / state
+
+- **Element**: `<block>__<element>` (BEM 二重アンダースコア)
+- **Modifier (`--*`)**: 永続 variant — data-driven、render 時点で決まる
+  - 例: `task-card--allday`, `task-card--multi-day`, `tv-sidebar--mobile`, `cal-week-row--mini`
+- **State (`is-*` / `has-*`)**: 動的 state — JS の `classList.toggle` で出し入れする ephemeral な印
+  - 例: `is-today`, `is-selected`, `is-current-week`, `is-dragging`, `has-overdue`
+
+判別: ある属性が **タスクの不変 attribute** なら `--*`、ユーザー操作や時間で変わるなら `is-*` / `has-*`。
+
+### Frozen names (歴史的に taxonomy 違反だが据置)
+
+外部 API / 公開 CLI / Obsidian 提供のため rename しない:
+
+- Obsidian 提供 (絶対に触らない): `view-content`, `internal-link`, `task-list-item`, `task-list-item-checkbox`, `is-checked`, `contains-task-list`
+- プラグイン提供だが据置: `task-card` (ドメイン block、各 view から大量参照されるため stable な API として扱う)
+- toolbar 周り: `view-toolbar` (shared primitive 相当だが歴史的に `tv-` 接頭辞なし。新規追加なら `tv-toolbar` 推奨)
+
+### 参考: 過去のリファクタ
+
+`memory/project_dom_naming_audit.md` (2026-05-03) に統合リファクタ前の負債列挙。代表的な解消:
+
+- `view-sidebar-{layout, main, backdrop, panel}` 5 ブロック分裂 → `tv-sidebar` 1 ブロックに統合
+- `section-toggle-btn` + `schedule-section__toggle` 二系統 → `tv-section-toggle` + `--axis`/`--header` modifier
+- `timeline-row` (timeline と schedule で共有) → `tv-grid-row` (shared primitive)
+- `selected` (unscoped state) → `is-selected`
+- `mini-calendar-*` 独自再実装 → `cal-*` + `--mini` modifier で共有化
+
+---
+
 ## Subsystem Responsibility Map
 
 Quick reference for locating the right layer when implementing a feature.
@@ -947,20 +992,32 @@ In TaskConverter (inline→frontmatter), task comes from parser with parsed star
 - `DateUtils.getToday()`, `DateUtils.addDays()` operate on **calendarDate**
 - `startHour` is the boundary between two visual days (default: 5:00 AM)
 
-### @notation endDate semantics
+### @notation endDate semantics — **dual semantic at raw layer**
 
-`task.endDate` is stored as a **calendarDate** and is **exclusive** in visual terms.
+`task.endDate` is a **calendarDate** with a **dual semantic** that depends on whether `endTime` is present:
+
+| `endTime` | `endDate` semantic | Why |
+|-----------|--------------------|-----|
+| **absent** (pure all-day) | **exclusive** (one day past last covered day) | Matches `@2026-03-24>2026-03-29` notation: 5 visual days, 03-24 ~ 03-28 inclusive. |
+| **present** | **inclusive** (the day on which `endTime` occurs) | Matches `@2026-05-13T07:30>2026-05-19T09:45` notation: the task literally ends on 05-19 at 09:45. |
+
+This duality is preserved at the raw layer for round-trip with the external @notation. The display layer **collapses the duality** so that `DisplayTask.effectiveEndDate` is always the inclusive visual end:
 
 ```
-@2026-03-24>2026-03-29  →  startDate='2026-03-24', endDate='2026-03-29'
+@2026-03-24>2026-03-29  (endTime absent → exclusive raw)
 toDisplayTask() resolves:  effectiveEndTime = '04:59' (startHour−1)
-toVisualDate('2026-03-29', '04:59', 5)  →  '2026-03-28'
-Visual span: 03-24 ~ 03-28 = 5 visual days
+toVisualDate('2026-03-29', '04:59', 5) → '2026-03-28'  ← inclusive visual
+
+@2026-05-13T07:30>2026-05-19T09:45  (endTime present → inclusive raw)
+toDisplayTask():           effectiveEndTime = '09:45'
+toVisualDate('2026-05-19', '09:45', 5) → '2026-05-19'  ← inclusive visual
 ```
 
-The mechanism: `toDisplayTask()` sets `effectiveEndTime = (startHour−1):59` for tasks without explicit endTime. Since this time is before `startHour`, `toVisualDate` shifts back by 1 day. The resulting visualDate is the **last inclusive visual day** of the task.
+**Mechanism**: For all-day tasks, `toDisplayTask()` injects `effectiveEndTime = (startHour−1):59`. Since this time is before `startHour`, `toVisualDate` shifts back by 1 day, producing the inclusive last visual day. For timed tasks, `effectiveEndTime` is the real time, and `toVisualDate` shifts only when that time is before `startHour`.
 
-**Rule: always use `toVisualDate()` to convert both start and end dates to visual dates. There is no separate `getVisualEndDate()` — the same function handles both because the shift direction depends solely on whether the time is before startHour.**
+**Rule**: always use `toVisualDate()` to convert both start and end dates to visual dates. There is no separate `getVisualEndDate()` — the same function handles both because the shift direction depends solely on whether the time is before startHour.
+
+**Drag write-back rule**: never write `Task.endDate` directly with `addDays(visualEnd, 1)` — that pattern is correct only for the all-day branch and silently corrupts timed tasks. Funnel updates through `materializeRawDates(edits, baseTask, startHour)` (`services/display/DisplayTaskConverter.ts`), the single boundary that converts inclusive visual edits to raw based on `baseTask.endTime`.
 
 ### Visual date pipeline
 
@@ -981,15 +1038,16 @@ DisplayTask (effectiveStartDate/Time, effectiveEndDate/Time)
 { effectiveStart: visualDate, effectiveEnd: visualDate }  ← inclusive range
 ```
 
-### Pitfall: raw endDate ≠ visual end
+### Pitfall: raw endDate ≠ visual end (and the gap is conditional)
 
-`task.endDate` (raw, exclusive) and the inclusive visual end date are different by 1 day for allDay tasks.
-Any code that converts between the two must do so explicitly:
+`task.endDate` and the inclusive visual end date differ by 1 day **only for all-day tasks** (no `endTime`). For timed tasks they coincide. Any code that converts between the two must do so explicitly via the canonical helpers:
 
 | Direction | Method |
 |-----------|--------|
 | raw → visual (for rendering/ghost) | `getTaskDateRange(toDisplayTask(task, startHour), startHour).effectiveEnd` |
-| visual → raw (for write-back) | `DateUtils.addDays(visualEndDate, 1)` |
+| visual → raw (for write-back) | `materializeRawDates(edits, baseTask, startHour)` (`services/display/DisplayTaskConverter.ts`) |
+
+`materializeRawDates` reads `baseTask.endTime` to pick the correct branch (no +1 for timed, +1 for all-day). Direct `addDays(visualEnd, 1)` is the bug pattern this helper eliminates — see Bug fix in commit history (Calendar end-handle 1-day drift on timed multi-day tasks).
 
 **Never mix raw and visual dates in the same calculation** (e.g., comparing `task.endDate` with a grid column date, or computing span from `getDiffDays(startDate, endDate)` using raw values).
 

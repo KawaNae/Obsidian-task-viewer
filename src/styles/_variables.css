@@ -36,6 +36,9 @@
     --task-card-accent-dashdotted-line2: 4px;
     --task-card-accent-dashdotted-gap2: 6px;
 
+    /* Split (cross-day boundary) sawtooth depth */
+    --task-card-split-zig: 8px;
+
     --task-card-font-size: 0.9em;
     --task-card-gap: 5px;
 

@@ -12,8 +12,6 @@ import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
 import type { TaskCardLinkRuntime } from './types';
 
 export class TaskCardRenderer extends Component {
-    private static readonly COLLAPSE_THRESHOLD = 3;
-
     private expandedTaskIds: Set<string> = new Set();
     private childItemBuilder: ChildItemBuilder;
     private childSectionRenderer: ChildSectionRenderer;
@@ -70,16 +68,29 @@ export class TaskCardRenderer extends Component {
         container: HTMLElement,
         task: DisplayTask,
         settings: TaskViewerSettings,
-        options: { cardInstanceId: string; topRight?: 'time' | 'due' | 'none'; compact?: boolean; forceExpand?: boolean }
+        options: {
+            cardInstanceId: string;
+            context?: 'inline' | 'detail-modal';
+            topRight?: 'time' | 'due' | 'none';
+            compact?: boolean;
+            hooks?: { onNavigate?: () => void };
+        }
     ): Promise<void> {
         const cardInstanceId = options.cardInstanceId;
         const topRight = options.topRight ?? 'time';
         const compact = options.compact ?? false;
-        const forceExpand = options.forceExpand ?? false;
+        const isDetailModal = options.context === 'detail-modal';
+        const forceExpand = isDetailModal;
+        const enableLinks = isDetailModal || settings.enableCardFileLink;
+        const onNavigate = options.hooks?.onNavigate;
 
         // Tag the card with its instance id so partial-update paths
         // (e.g. TimelineView.tryPartialUpdate) can reuse the same key.
         container.dataset.cardInstanceId = cardInstanceId;
+
+        if (isDetailModal) {
+            container.addClass('task-card--in-detail-modal');
+        }
 
         const prev = this.cardComponents.get(container);
         if (prev) this.removeChild(prev);
@@ -88,7 +99,9 @@ export class TaskCardRenderer extends Component {
         this.cardComponents.set(container, cardComp);
 
         this.renderTopRightMeta(container, task, settings, topRight);
-        this.bindDetailDoubleClick(container, task);
+        if (!isDetailModal) {
+            this.bindDetailDoubleClick(container, task);
+        }
 
         const contentContainer = container.createDiv('task-card__content');
         const parentMarkdown = this.buildParentMarkdown(task, settings);
@@ -122,7 +135,7 @@ export class TaskCardRenderer extends Component {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
         }
 
-        this.bindInternalLinks(contentContainer, task.file, settings.enableCardFileLink);
+        this.bindInternalLinks(contentContainer, task.file, enableLinks, onNavigate);
         this.bindParentCheckbox(contentContainer, task.originalTaskId ?? task.id, settings, task.isReadOnly);
     }
 
@@ -276,7 +289,7 @@ export class TaskCardRenderer extends Component {
         forceExpand = false
     ): Promise<void> {
         const items = this.childItemBuilder.buildChildItems(task, '');
-        if (!forceExpand && items.length >= TaskCardRenderer.COLLAPSE_THRESHOLD) {
+        if (!forceExpand && items.length >= settings.childCollapseThreshold) {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
             await this.childSectionRenderer.renderCollapsed(
                 contentContainer,
@@ -320,7 +333,7 @@ export class TaskCardRenderer extends Component {
             return;
         }
 
-        const shouldCollapse = !forceExpand && items.length >= TaskCardRenderer.COLLAPSE_THRESHOLD;
+        const shouldCollapse = !forceExpand && items.length >= settings.childCollapseThreshold;
         if (shouldCollapse) {
             await this.childSectionRenderer.renderCollapsed(
                 contentContainer,
@@ -345,12 +358,12 @@ export class TaskCardRenderer extends Component {
         );
     }
 
-    private bindInternalLinks(contentContainer: HTMLElement, sourcePath: string, enableClick: boolean): void {
+    private bindInternalLinks(contentContainer: HTMLElement, sourcePath: string, enableClick: boolean, onNavigate?: () => void): void {
         this.linkInteractionManager.bind(contentContainer, {
             sourcePath,
             hoverSource: this.linkRuntime.hoverSource,
             hoverParent: this.linkRuntime.getHoverParent(),
-        }, { bindClick: enableClick });
+        }, { bindClick: enableClick, onNavigate });
     }
 
     private bindParentCheckbox(

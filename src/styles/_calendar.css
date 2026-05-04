@@ -1,5 +1,11 @@
 /* ==========================================================================
-   Calendar View
+   Calendar View — full-size monthly grid.
+   Base cal-* styles live in _cal-base.css; this file only contains:
+     - .calendar-view shell + toolbar host
+     - task-card placement scoped to cal-week-row
+     - split-direction rules (horizontal for week rows)
+     - calendar modal
+     - responsive overrides
    ========================================================================== */
 
 .calendar-view {
@@ -10,121 +16,12 @@
     padding: 0 !important;
 }
 
-.calendar-grid {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    background: var(--tv-bg-primary);
-}
-
-.calendar-weekday-header {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-    background: var(--tv-bg-date-header);
-    border-bottom: 1px solid var(--tv-border);
-    position: sticky;
-    top: 0;
-    z-index: 2;
-}
-
-.calendar-weekday-header.has-week-numbers {
-    grid-template-columns: var(--calendar-wk-col-width, 32px) repeat(7, minmax(0, 1fr));
-}
-
-.calendar-weekday-cell {
-    padding: 6px 4px;
-    text-align: center;
-    font-size: 0.8em;
-    font-weight: 700;
-    color: var(--tv-text-muted);
-}
-
-.calendar-grid__body {
-    flex: 1;
-    overflow: auto;
-    display: flex;
-    flex-direction: column;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-}
-
-.calendar-grid__body::-webkit-scrollbar {
-    display: none;
-}
-
-.calendar-week-row {
-    --calendar-header-height: 28px;
-    --calendar-track-height: 44px;
-    position: relative;
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-    grid-template-rows: var(--calendar-header-height);
-    grid-auto-rows: minmax(var(--calendar-track-height), auto);
-    min-height: 140px;
+.calendar-view__toolbar-host {
     flex-shrink: 0;
-    border-bottom: 1px solid var(--tv-border);
-}
-
-.calendar-week-row.has-week-numbers {
-    grid-template-columns: var(--calendar-wk-col-width, 32px) repeat(7, minmax(0, 1fr));
-}
-
-.calendar-week-number {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.72em;
-    font-weight: 600;
-    color: var(--tv-text-muted);
-    grid-column: 1;
-    grid-row: 1;
-    padding: 2px;
-    cursor: pointer;
-}
-
-.calendar-week-number .internal-link {
-    color: inherit;
-    text-decoration: none;
-}
-
-.calendar-week-number.is-current-week {
-    position: relative;
-    z-index: var(--z-task-card);
-    color: var(--tv-text-on-accent);
-}
-
-.calendar-week-number.is-current-week::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: var(--tv-accent);
-    opacity: 0.9;
-    z-index: var(--z-negative);
-    pointer-events: none;
-}
-
-.calendar-week-number:hover {
-    color: var(--tv-text);
-    background: var(--tv-bg-hover);
-    border-radius: var(--tv-radius-s);
-}
-
-.calendar-col-separator {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 1px;
-    background: var(--tv-border);
-    pointer-events: none;
-    z-index: 0;
 }
 
 /* --- Calendar task card (grid positioned, scoped to week-row) --- */
-.calendar-week-row > .task-card {
+.cal-week-row > .task-card {
     box-sizing: border-box;
     min-height: 0;
     margin: 2px;
@@ -132,119 +29,146 @@
     overflow: visible;
 }
 
-.calendar-week-row > .task-card .task-card__content {
+.cal-week-row > .task-card .task-card__content {
     margin-top: 0;
     overflow: hidden;
 }
 
-.calendar-week-row > .task-card .task-card__content ul,
-.calendar-week-row > .task-card .task-card__content ol {
+.cal-week-row > .task-card .task-card__content ul,
+.cal-week-row > .task-card .task-card__content ol {
     margin-block-start: 0.1em;
     margin-block-end: 0.1em;
 }
 
-.calendar-week-row > .task-card--multi-day {
+.cal-week-row > .task-card--multi-day {
     min-height: 20px;
     cursor: pointer;
 }
 
-/* --- Split direction (horizontal for calendar) --- */
-.calendar-view .task-card--split-continues-after {
-    border-bottom: none;
-    border-right: 2px dashed var(--file-accent, var(--tv-accent));
-    border-top-right-radius: 0 !important;
-    border-bottom-right-radius: 0 !important;
-    margin-right: 0;
-}
-
-.calendar-view .task-card--split-continues-before.task-card--split-continues-after {
-    border-left: 2px dashed var(--file-accent, var(--tv-accent));
-    border-right: 2px dashed var(--file-accent, var(--tv-accent));
-    border-top-left-radius: 0 !important;
-    border-bottom-left-radius: 0 !important;
-    border-top-right-radius: 0 !important;
-    border-bottom-right-radius: 0 !important;
-    margin-left: 0;
-    margin-right: 0;
-}
-
-.calendar-view .task-card--split-continues-before {
-    border-top: none;
-    border-left: 2px dashed var(--file-accent, var(--tv-accent));
-    border-top-left-radius: 0 !important;
-    border-bottom-left-radius: 0 !important;
-    margin-left: 0;
-}
-
-.calendar-view .task-card--split-continues-before.task-card--split-continues-after::before,
-.calendar-view .task-card--split-continues-before::before {
-    display: none;
-}
-
-/* Selection border direction for horizontal split */
-.calendar-view .task-card--split-continues-after.selected::after {
-    border-bottom: 2px solid var(--file-accent, var(--tv-accent));
-    border-bottom-left-radius: var(--task-card-border-radius);
-    border-right: none;
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-}
-
-.calendar-view .task-card--split-continues-before.selected::after {
-    border-top: 2px solid var(--file-accent, var(--tv-accent));
-    border-top-right-radius: var(--task-card-border-radius);
-    border-left: none;
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-}
-
-.calendar-week-row .due-arrow {
+.cal-week-row .due-arrow {
     z-index: 5;
 }
 
-.calendar-date-header {
-    display: flex;
-    justify-content: flex-end;
-    align-items: flex-start;
-    min-height: var(--calendar-header-height, 28px);
-    padding: 4px;
-    font-size: 0.82em;
-    font-weight: 700;
-    color: var(--tv-text-muted);
-    background: var(--tv-bg-primary);
+/* --- Split direction (horizontal for calendar) ---
+   conic-gradient mask を `.task-card__shape` に当てて左右辺を sawtooth に
+   切り抜く。host は無 mask なので handle / drag overlay は影響を受けない。
+   linestyle ::before バーは continues-before 側で zig 分右にシフトして
+   sawtooth に切られないよう保護する。selection 枠は __shape::after 側で
+   mask に追従するため、cut 辺の border 除去 override は不要。 */
+
+.calendar-view .task-card--split-continues-after {
+    padding-top: 2px;
+    padding-bottom: 2px;
+    padding-right: calc(2px + var(--task-card-split-zig));
+    margin-right: 0;
 }
 
-.calendar-date-header.is-outside-month {
-    background: var(--tv-bg-secondary);
-    opacity: 0.72;
+.calendar-view .task-card--split-continues-after .task-card__shape {
+    border-top-right-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    -webkit-mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
 }
 
-.calendar-date-header.is-today {
-    position: relative;
-    z-index: var(--z-task-card);
-    color: var(--tv-text-on-accent);
+.calendar-view .task-card--split-continues-before {
+    padding-top: 2px;
+    padding-bottom: 2px;
+    margin-left: 0;
 }
 
-.calendar-date-header.is-today::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: var(--tv-accent);
-    opacity: 0.9;
-    z-index: var(--z-negative);
-    pointer-events: none;
+.calendar-view .task-card--split-continues-before .task-card__shape {
+    border-top-left-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+    -webkit-mask:
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask:
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
 }
 
-.calendar-date-header .internal-link {
-    color: inherit;
-    text-decoration: none;
+.calendar-view .task-card--split-continues-before .task-card__shape::before {
+    left: var(--task-card-split-zig);
 }
 
-.calendar-date-header .internal-link:hover {
-    text-decoration: underline;
+.calendar-view .task-card--split-continues-before.task-card--split-continues-after {
+    padding-top: 2px;
+    padding-bottom: 2px;
+    padding-left: calc(8px + var(--task-card-split-zig));
+    padding-right: calc(2px + var(--task-card-split-zig));
+    margin-left: 0;
+    margin-right: 0;
+}
+
+.calendar-view .task-card--split-continues-before.task-card--split-continues-after .task-card__shape {
+    border-top-left-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+    border-top-right-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    -webkit-mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y,
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+    -webkit-mask-composite: source-in;
+            mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y,
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask-composite: intersect;
+}
+
+/* Horizontal cut: cut 辺は左/右なので、base の `border-bottom:none` /
+   `border-top:none` (vertical 用) を打ち消し、left/right を除去して
+   3 辺枠にする。線幅は --task-card-frame-width で hover (1px) / selected (2px)
+   を共有。Ghost も `is-selected` を継承して clone されるため
+   `--drag-preview` の列挙は不要 (旧列挙は撤廃済み)。 */
+.calendar-view .task-card:where(:not(.task-card--in-detail-modal)).task-card--split-continues-after:hover .task-card__shape::after,
+.calendar-view .task-card.is-selected.task-card--split-continues-after .task-card__shape::after {
+    border-top: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
+    border-bottom: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
+    border-right: none;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: var(--task-card-border-radius);
+}
+
+.calendar-view .task-card:where(:not(.task-card--in-detail-modal)).task-card--split-continues-before:hover .task-card__shape::after,
+.calendar-view .task-card.is-selected.task-card--split-continues-before .task-card__shape::after {
+    border-top: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
+    border-bottom: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
+    border-left: none;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-top-right-radius: var(--task-card-border-radius);
+}
+
+.calendar-view .task-card:where(:not(.task-card--in-detail-modal)).task-card--split-continues-before.task-card--split-continues-after:hover .task-card__shape::after,
+.calendar-view .task-card.is-selected.task-card--split-continues-before.task-card--split-continues-after .task-card__shape::after {
+    border-top: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
+    border-bottom: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
+    border-left: none;
+    border-right: none;
+    border-radius: 0;
+}
+
+/* time-label は calendar では使わないが、念のため base の push down を
+   打ち消す。 */
+.calendar-view .task-card--split-continues-before .task-card__time {
+    top: 2px;
 }
 
 /* --- Calendar modal --- */
@@ -266,21 +190,17 @@
 }
 
 @media (max-width: 900px) {
-    .calendar-week-row {
+    .cal-week-row {
         --calendar-track-height: 36px;
         min-height: 112px;
     }
 
-    .calendar-week-row > .task-card--multi-day {
+    .cal-week-row > .task-card--multi-day {
         min-height: 18px;
     }
 
-    .calendar-week-row > .task-card {
+    .cal-week-row > .task-card {
         font-size: 0.72em;
         padding: 3px 2px 3px 6px;
     }
-}
-
-.calendar-view__toolbar-host {
-    flex-shrink: 0;
 }

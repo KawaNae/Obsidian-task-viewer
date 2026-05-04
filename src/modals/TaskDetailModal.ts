@@ -21,6 +21,13 @@ export class TaskDetailModal extends Modal {
     }
 
     async onOpen(): Promise<void> {
+        // Obsidian の Modal.open() は最初の focusable 子要素 (= タスクカード
+        // 内の checkbox) へ自動フォーカスする。modalEl 自身は既定では
+        // tabindex 属性を持たず programmatic に focus 不可なので、tabindex="-1"
+        // を付与した上で、Obsidian の auto-focus 後に rAF で focus を奪い返す。
+        this.modalEl.setAttribute('tabindex', '-1');
+        requestAnimationFrame(() => this.modalEl.focus());
+
         await this.renderCard();
 
         this.unsubscribe = this.readService.onChange(() => {
@@ -39,15 +46,18 @@ export class TaskDetailModal extends Modal {
         contentEl.addClass('task-detail-modal');
 
         const card = contentEl.createDiv('task-card');
+        card.createDiv('task-card__shape');
         TaskStyling.applyTaskColor(card, this.task.color ?? null);
         TaskStyling.applyTaskLinestyle(card, this.task.linestyle ?? null);
         TaskStyling.applyReadOnly(card, this.task);
-        this.menuHandler.addTaskContextMenu(card, this.task);
+        const closeModal = () => this.close();
+        this.menuHandler.addTaskContextMenu(card, this.task, { onDestructiveAction: closeModal });
 
         const dt = toDisplayTask(this.task, this.settings.startHour, (id) => this.readService.getTask(id));
         await this.taskRenderer.render(card, dt, this.settings, {
             cardInstanceId: `modal::detail::${dt.id}`,
-            forceExpand: true,
+            context: 'detail-modal',
+            hooks: { onNavigate: closeModal },
         });
     }
 

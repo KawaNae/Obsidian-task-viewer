@@ -12,6 +12,66 @@ import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 
 /**
+ * Persistent toolbar root with mount/detach lifecycle.
+ *
+ * Subclasses implement `buildDom(rootEl)` to create button DOM and may override
+ * `update()` for dynamic refreshes. The view calls `mount(host)` after creating
+ * its toolbar host, and `detach()` before container.empty() so the rootEl + any
+ * child components (filter popover anchors, etc.) survive the re-render.
+ *
+ * Pass `{ dynamicContent: true }` to the constructor for toolbars whose inner
+ * DOM depends on state that changes between renders (e.g. month labels in
+ * mini-calendar, timer-mode controls). Such toolbars rebuild their content on
+ * every mount; static toolbars rebuild only on first mount.
+ */
+export abstract class ViewToolbarBase {
+    protected host: HTMLElement | null = null;
+    protected rootEl: HTMLElement | null = null;
+    private readonly dynamicContent: boolean;
+
+    constructor(options: { dynamicContent?: boolean } = {}) {
+        this.dynamicContent = options.dynamicContent ?? false;
+    }
+
+    /** Returns the toolbar root element (after first mount) for callers that
+     * need to read/write data attributes or measure the DOM. */
+    getRootEl(): HTMLElement | null {
+        return this.rootEl;
+    }
+
+    mount(host: HTMLElement): void {
+        if (this.rootEl) {
+            if (this.host !== host || this.rootEl.parentElement !== host) {
+                host.appendChild(this.rootEl);
+                this.host = host;
+            }
+            if (this.dynamicContent) {
+                this.rootEl.empty();
+                this.buildDom(this.rootEl);
+            }
+            this.update();
+            return;
+        }
+        this.host = host;
+        this.rootEl = host.createDiv('view-toolbar');
+        this.buildDom(this.rootEl);
+        this.update();
+    }
+
+    detach(): void {
+        if (this.rootEl?.parentElement) {
+            this.rootEl.parentElement.removeChild(this.rootEl);
+        }
+        this.host = null;
+    }
+
+    /** Refresh dynamic UI without rebuilding DOM. Override in subclasses. */
+    update(): void {}
+
+    protected abstract buildDom(rootEl: HTMLElement): void;
+}
+
+/**
  * Date navigation component with prev/next/today buttons.
  */
 export class DateNavigator {

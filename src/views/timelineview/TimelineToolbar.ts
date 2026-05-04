@@ -6,7 +6,7 @@ import { TaskReadService } from '../../services/data/TaskReadService';
 import { DateUtils } from '../../utils/DateUtils';
 import type { LeafPosition } from '../sharedLogic/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
-import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu } from '../sharedUI/ViewToolbar';
+import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu, ViewToolbarBase } from '../sharedUI/ViewToolbar';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { TimelineExportStrategy } from '../../services/export/TimelineExportStrategy';
@@ -30,23 +30,14 @@ export interface ToolbarCallbacks {
 /**
  * Manages the toolbar UI for TimelineView.
  *
- * Lifecycle:
- *   - constructor — dependency injection only, no DOM work
- *   - mount(host) — build DOM under a persistent rootEl on first call;
- *                   re-attach existing rootEl to a new host on subsequent calls
- *   - detach()   — remove rootEl from its host but keep DOM + child components alive
- *   - update()   — refresh dynamic UI (filter button active class, sidebar toggle)
- *
  * Why mount/update instead of render-from-scratch:
  *   The owning view calls performRender() on every data change, which used to
  *   construct a fresh TimelineToolbar (and a fresh FilterMenuComponent). That
  *   meant the filter popover could not stay open across renders. By preserving
  *   the toolbar instance and its child components, the popover survives.
  */
-export class TimelineToolbar {
+export class TimelineToolbar extends ViewToolbarBase {
     private readonly filterMenu = new FilterMenuComponent();
-    private host: HTMLElement | null = null;
-    private rootEl: HTMLElement | null = null;
     private filterBtn: HTMLElement | null = null;
     private sidebarToggleBtn: HTMLElement | null = null;
     private viewModeHandle: { update: () => void } | null = null;
@@ -59,6 +50,7 @@ export class TimelineToolbar {
         private readService: TaskReadService,
         private callbacks: ToolbarCallbacks
     ) {
+        super();
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
@@ -108,54 +100,13 @@ export class TimelineToolbar {
     }
 
     /**
-     * Mounts the toolbar into `host`.
-     *
-     * - First call: builds the rootEl + child DOM, hydrates filter state from
-     *   viewState, runs an update().
-     * - Subsequent calls (typical: every performRender after container.empty()):
-     *   re-attaches the existing rootEl to `host` and runs update(). DOM and
-     *   child components are preserved so the filter popover survives.
-     */
-    mount(host: HTMLElement): void {
-        if (this.rootEl) {
-            // Already built: just (re-)attach to the new host and refresh
-            // dynamic state. Skip filter-state hydration so an open popover's
-            // in-progress edits are not clobbered.
-            if (this.host !== host || this.rootEl.parentElement !== host) {
-                host.appendChild(this.rootEl);
-                this.host = host;
-            }
-            this.update();
-            return;
-        }
-
-        this.host = host;
-        this.rootEl = host.createDiv('view-toolbar');
-        this.buildDom(this.rootEl);
-        this.update();
-    }
-
-    /**
-     * Detaches the rootEl from its current host, preserving DOM and child
-     * components. Call this immediately before container.empty() so the
-     * empty() does not destroy the toolbar DOM; then call mount() again on
-     * the fresh host.
-     */
-    detach(): void {
-        if (this.rootEl?.parentElement) {
-            this.rootEl.parentElement.removeChild(this.rootEl);
-        }
-        this.host = null;
-    }
-
-    /**
      * Refreshes dynamic UI bits driven by viewState. Does NOT rebuild DOM.
      *
      * Re-hydrates the filter state from viewState only when the filter
      * popover is closed — reflecting external mutations from setState /
      * template-apply / reset paths without clobbering an in-progress edit.
      */
-    update(): void {
+    override update(): void {
         if (!this.rootEl) return;
         this.maybeRehydrateFilterState();
         // View-mode and zoom labels are built once in buildDom; refresh them
@@ -185,7 +136,7 @@ export class TimelineToolbar {
         }
     }
 
-    private buildDom(toolbar: HTMLElement): void {
+    protected override buildDom(toolbar: HTMLElement): void {
         // Date Navigation
         this.renderDateNavigation(toolbar);
 

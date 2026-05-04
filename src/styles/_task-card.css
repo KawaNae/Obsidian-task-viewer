@@ -23,20 +23,94 @@
     font-size: var(--task-card-font-size);
     color: var(--tv-text);
 
-    /* Visual */
-    background-color: var(--tv-bg-card);
-    border-radius: var(--task-card-border-radius);
-    box-shadow: 0 4px 10px 3px var(--tv-shadow-strong);
-
     /* Misc */
     scrollbar-width: none;
 }
 
 /* ==========================================================================
-   2. ACCENT BORDER (::before linestyle variants)
+   2. SHAPE LAYER (bg + linestyle + selection + sawtooth mask)
+
+   Visual 系 (背景色/角丸/linestyle/選択枠/split mask) は host ではなく
+   `.task-card__shape` 子要素に集約する。これにより handle 等の host 直下
+   absolute 子要素は mask の対象外になる (CSS Masking 仕様: mask は適用
+   要素の subtree にのみ作用するため、sibling である handle は escape)。
+
+   Design intent (重要): __shape 内の装飾 (`__shape::before` linestyle bar /
+   `__shape::after` 選択枠) は **意図的に** mask の sawtooth に追従して切られる。
+   これにより selection border が「破れた紙の枠」として split 接合面で
+   ジグザグに切られる視覚効果が出る。装飾を mask 外 (host 直下) に置くと
+   border が直線になり、デザイン上の整合性を失う。
+   新しい sawtooth-clipped 装飾を足すなら __shape の子孫として配置する。
    ========================================================================== */
 
-.task-card::before {
+/* Tint the card surface with the task's --file-accent so cards carry a
+   per-task hue against the view bg. Fallback to --tv-accent so colorless
+   cards still tint with the theme's interactive-accent. */
+.task-card__shape {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-color: color-mix(
+        in srgb,
+        var(--tv-bg-card) 90%,
+        var(--file-accent, var(--tv-accent)) 10%
+    );
+    border-radius: var(--task-card-border-radius);
+}
+
+.task-card {
+    border-radius: var(--task-card-border-radius);
+}
+
+/* === Cascade outline halo (Timeline only) ===
+
+   timeline view の cascade で左にずれていない card (leftmost) は通常表示。
+   左にずれた card (level >= 2) には ::before で host の外側にタイムライン
+   背景色 (--tv-bg-primary) の halo を出して、背面 card との間にスペーサー
+   を挟んだように見せる（前面 card が背面 card に被さる際の境界を明確化）。
+   halo の太さは上下 3px、左 4px、右 0（右辺は前面 card の下に隠れる前提）。
+   背景色なので column の bg と溶けて空白として知覚され、cascade card の
+   左辺で背面 card を「掘り出している」効果になる。
+   `data-cascade-offset` は TimelineSectionRenderer が `taskLayout.left > 0`
+   のとき "1" を立てる。CSS は「存在チェック」だけで動作する。
+
+   split の cut 辺 (sawtooth) では halo を抑止する:
+     continues-after → 下辺の halo 抑止 (bottom: 0)
+     continues-before → 上辺の halo 抑止 (top: 0)
+     both → 上下辺の halo 抑止
+   抑止しないと、sawtooth の山頂点と平行に背景色帯が出てしまう。 */
+.timeline-view .task-card[data-cascade-offset]::before {
+    content: '';
+    position: absolute;
+    inset: -3px 0 -3px -4px;
+    background: var(--tv-bg-primary);
+    border-radius:
+        calc(var(--task-card-border-radius) + 4px)
+        calc(var(--task-card-border-radius) + 3px)
+        calc(var(--task-card-border-radius) + 3px)
+        calc(var(--task-card-border-radius) + 4px);
+    z-index: -2;
+    pointer-events: none;
+}
+.timeline-view .task-card[data-cascade-offset].task-card--split-continues-after::before {
+    bottom: 0;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+.timeline-view .task-card[data-cascade-offset].task-card--split-continues-before::before {
+    top: 0;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+.timeline-view .task-card[data-cascade-offset].task-card--split-continues-before.task-card--split-continues-after::before {
+    top: 0;
+    bottom: 0;
+    border-radius: 0;
+}
+
+/* --- Accent border (linestyle bar) --- */
+.task-card__shape::before {
     content: '';
     position: absolute;
     top: 0;
@@ -48,13 +122,13 @@
     border-radius: 4px 0 0 4px;
 }
 
-.task-card[data-file-linestyle='solid']::before {
+.task-card[data-file-linestyle='solid'] .task-card__shape::before {
     width: var(--task-card-accent-solid-width, 4px);
     background-color: var(--file-accent, var(--tv-accent));
     background-image: none;
 }
 
-.task-card[data-file-linestyle='dashed']::before {
+.task-card[data-file-linestyle='dashed'] .task-card__shape::before {
     width: var(--task-card-accent-dashed-width, 4px);
     background-color: transparent;
     background-image: repeating-linear-gradient(to bottom,
@@ -64,7 +138,7 @@
     background-repeat: repeat-y;
 }
 
-.task-card[data-file-linestyle='dotted']::before {
+.task-card[data-file-linestyle='dotted'] .task-card__shape::before {
     width: var(--task-card-accent-dotted-width, 4px);
     background-color: transparent;
     background-image: repeating-linear-gradient(to bottom,
@@ -74,7 +148,7 @@
     background-repeat: repeat-y;
 }
 
-.task-card[data-file-linestyle='double']::before {
+.task-card[data-file-linestyle='double'] .task-card__shape::before {
     width: calc(
         var(--task-card-accent-double-left-width, 1px) +
         var(--task-card-accent-double-gap, 2px) +
@@ -89,7 +163,7 @@
     background-repeat: no-repeat;
 }
 
-.task-card[data-file-linestyle='dashdotted']::before {
+.task-card[data-file-linestyle='dashdotted'] .task-card__shape::before {
     width: var(--task-card-accent-dashdotted-width, 4px);
     background-color: transparent;
     background-image: repeating-linear-gradient(to bottom,
@@ -157,6 +231,13 @@
     opacity: 0.8;
     pointer-events: none;
     text-align: right;
+}
+
+/* Vertical top cut (timeline grid 同日内 split) では time-label を sawtooth
+   分だけ下げる。horizontal layout (allday/calendar) は view 別ファイルで
+   元位置に戻す。 */
+.task-card--split-continues-before .task-card__time {
+    top: calc(2px + var(--task-card-split-zig));
 }
 
 /* --- Children Toggle --- */
@@ -392,76 +473,242 @@
    6. MODIFIERS (--variant)
    ========================================================================== */
 
-/* --- Split (cross-day boundary) --- */
+/* --- Split (cross-day boundary) ---
+   Cut 辺は border ではなく conic-gradient mask で sawtooth に切り抜く
+   (ticket-stub 風)。mask は `.task-card__shape` にだけ当て、host 直下の
+   handle や drag-preview/ghost overlay は mask の対象外にする。
+   base rules は vertical cut (timeline grid 同日内 split) を担当し、
+   horizontal cut (allday / calendar の日跨ぎ) は view-specific ファイルで
+   override する。zig = ノコ歯の深さ。
+   padding は host 側で content を cut から逃がし、border-radius / mask は
+   __shape で視覚を担う。 */
 .task-card--split {
     border-style: none;
     border-width: 0;
 }
 
 .task-card--split-continues-after {
-    border-bottom: 2px dashed var(--file-accent, var(--tv-accent));
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
+    padding-bottom: calc(2px + var(--task-card-split-zig));
 }
 
-.task-card--split-continues-after::before {
+.task-card--split-continues-after .task-card__shape {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    -webkit-mask:
+        conic-gradient(from 135deg at 50% calc(100% - var(--task-card-split-zig)),
+            #0000 0 90deg, #000 0)
+        0 0 / calc(2 * var(--task-card-split-zig)) 100% repeat-x;
+            mask:
+        conic-gradient(from 135deg at 50% calc(100% - var(--task-card-split-zig)),
+            #0000 0 90deg, #000 0)
+        0 0 / calc(2 * var(--task-card-split-zig)) 100% repeat-x;
+}
+
+.task-card--split-continues-after .task-card__shape::before {
     border-bottom-left-radius: 0;
 }
 
 .task-card--split-continues-before {
-    border-top: 2px dashed var(--file-accent, var(--tv-accent));
+    padding-top: calc(2px + var(--task-card-split-zig));
+}
+
+.task-card--split-continues-before .task-card__shape {
     border-top-left-radius: 0;
     border-top-right-radius: 0;
+    -webkit-mask:
+        conic-gradient(from 315deg at 50% var(--task-card-split-zig),
+            #0000 0 90deg, #000 0)
+        0 0 / calc(2 * var(--task-card-split-zig)) 100% repeat-x;
+            mask:
+        conic-gradient(from 315deg at 50% var(--task-card-split-zig),
+            #0000 0 90deg, #000 0)
+        0 0 / calc(2 * var(--task-card-split-zig)) 100% repeat-x;
 }
 
-.task-card--split-continues-before::before {
+.task-card--split-continues-before .task-card__shape::before {
     border-top-left-radius: 0;
 }
 
-/* --- Drag Preview --- */
-.task-card--drag-preview {
-    pointer-events: none !important;
-    opacity: 0.82;
-    z-index: 10;
+/* --- Horizontal split (multi-day カード = allday / calendar) ---
+   `.task-card--multi-day` を持つカードは横方向レイアウトなので mask を
+   左右辺に切り替える。view ancestor (.calendar-view / .timeline-view)
+   ではなく class predicate にしているのは drag ghost が body 直下に
+   detach されても規則が適用されるようにするため。
+
+   セマンティクス（重要）: `.task-card--multi-day` は **「横軸 bar variant」**
+   を意味する。「effective range が複数日」だけでなく view 端で 1 日に clip
+   された split segment（continuesBefore || continuesAfter）にも必ず付く。
+   下の `:not(.task-card--multi-day)` ルール群（cut 辺ハンドル抑止）は
+   class が層別 layout 軸の唯一の指標である前提で書かれているため、
+   付与漏れが起きると縦カット規則が誤動作する（過去にこれが原因で allday
+   left-1day で左アクセントバー残存 / right-1day で move ハンドル消失）。
+   付与判定は `GridTaskEntry.useBarVariant`（`GridTaskLayout.ts`）が単一
+   ソース。`isMultiDay` 単独 gate は使わないこと。 */
+.task-card--multi-day.task-card--split-continues-after {
+    padding-top: 2px;
+    padding-bottom: 2px;
+    padding-right: calc(2px + var(--task-card-split-zig));
 }
 
-.task-card--drag-preview::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border: 2px solid var(--file-accent, var(--tv-accent));
-    border-radius: var(--task-card-border-radius);
-    pointer-events: none;
+.task-card--multi-day.task-card--split-continues-after .task-card__shape {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    /* base が vertical 用に bottom-left-radius:0 にしているのを復活 */
+    border-bottom-left-radius: var(--task-card-border-radius);
+    -webkit-mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
 }
 
-.task-card--drag-preview .task-card__handle {
-    display: none !important;
+.task-card--multi-day.task-card--split-continues-after .task-card__shape::before {
+    border-bottom-left-radius: inherit;
 }
 
-/* --- Drag Ghost --- */
-.task-card--drag-ghost {
-    position: fixed;
-    z-index: var(--z-task-card-drag-ghost);
-    pointer-events: none;
-    opacity: 0.8;
-    box-shadow: 0 4px 12px var(--tv-ghost-shadow);
-    border-radius: var(--tv-radius-s);
-    transition: opacity 0.15s ease;
+/* continues-before 単独では padding-left に zig を足し込まない。
+   sawtooth は __shape の mask なので content (checkbox/text) は base の
+   8px から描き始めても sawtooth と重ならず、allday lane と calendar bar の
+   見た目が揃う（旧 16px 指定は allday lane の上書きで実質 8px だったが
+   calendar に上書きが無く 16px のまま漏れていた）。both-cut では下の
+   ルールで zig を加え、左右のシンメトリを保つ。 */
+.task-card--multi-day.task-card--split-continues-before {
+    padding-top: 2px;
+    padding-bottom: 2px;
 }
 
-.task-card--drag-ghost .task-card__handle {
+.task-card--multi-day.task-card--split-continues-before .task-card__shape {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    /* base が vertical 用に top-left-radius:0 にしているのを復活 */
+    border-top-right-radius: var(--task-card-border-radius);
+    -webkit-mask:
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask:
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+}
+
+/* horizontal cut の continues-before 側は sawtooth 自体が「続きカード」
+   のシグナルなので linestyle bar を出さない。アクセントバーは「タスク
+   起点」のサインに意味を絞る。 */
+.task-card--multi-day.task-card--split-continues-before .task-card__shape::before {
     display: none;
 }
 
+.task-card--multi-day.task-card--split-continues-before.task-card--split-continues-after {
+    padding-top: 2px;
+    padding-bottom: 2px;
+    padding-left: calc(8px + var(--task-card-split-zig));
+    padding-right: calc(2px + var(--task-card-split-zig));
+}
+
+.task-card--multi-day.task-card--split-continues-before.task-card--split-continues-after .task-card__shape {
+    border-radius: 0;
+    -webkit-mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y,
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+    -webkit-mask-composite: source-in;
+            mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y,
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask-composite: intersect;
+}
+
+/* horizontal cut では time-label は元位置 (左/右が cut なので影響なし) */
+.task-card--multi-day.task-card--split-continues-before .task-card__time {
+    top: 2px;
+}
+
+/* --- Cut 辺のハンドル非表示 ---
+   sawtooth で切れている辺には resize / move ハンドルを置かない。Ghost は
+   source カードを clone してから segment ごとに split-continues-* class
+   を書き換える設計のため、source の handle 配置 (un-cut 辺) と segment の
+   cut 辺が一致しないケースがある (例: source=split-after で handle が top
+   に並ぶ → day-2 ghost に split-before が付くと top が cut 辺になり、
+   handle が sawtooth の上に乗る)。CSS で cut 辺 handle を抑止することで
+   clone の整合性を JS なしに吸収する。
+   detail handle はタスク同定 / open-modal の入口として cut 辺でも残す。 */
+.task-card--split-continues-before:not(.task-card--multi-day) .task-card__handle--resize-top,
+.task-card--split-continues-before:not(.task-card--multi-day) .task-card__handle--move-top-left,
+.task-card--split-continues-before:not(.task-card--multi-day) .task-card__handle--move-top-right,
+.task-card--split-continues-after:not(.task-card--multi-day) .task-card__handle--resize-bottom,
+.task-card--split-continues-after:not(.task-card--multi-day) .task-card__handle--move-bottom-left,
+.task-card--split-continues-after:not(.task-card--multi-day) .task-card__handle--move-bottom-right,
+.task-card--multi-day.task-card--split-continues-before .task-card__handle--resize-left,
+.task-card--multi-day.task-card--split-continues-before .task-card__handle--move-top-left,
+.task-card--multi-day.task-card--split-continues-before .task-card__handle--move-bottom-left,
+.task-card--multi-day.task-card--split-continues-after .task-card__handle--resize-right,
+.task-card--multi-day.task-card--split-continues-after .task-card__handle--move-top-right,
+.task-card--multi-day.task-card--split-continues-after .task-card__handle--move-bottom-right {
+    display: none;
+}
+
+/* --- Drag Ghost ---
+   Ghost は source card の clone に `task-card--ghost` 共通クラスと、
+   layout 軸を表す `--ghost-grid` (Calendar/AllDay の grid item として配置) /
+   `--ghost-positioned` (Timeline の absolute / cross-view の fixed) のいずれかが
+   追加される。inline style は layout 値 (grid-area / position+top+left+w+h)
+   のみで、視覚スタイル・spacing は cascade に任せる。 */
+.task-card--ghost {
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+/* Host の pointer-events:none は `.task-card__handle { pointer-events: auto }`
+   (前掲) で再有効化されるため、ghost 内の handle 階層を明示的に無効化する。 */
+.task-card--ghost .task-card__handle,
+.task-card--ghost .task-card__handle-btn {
+    pointer-events: none;
+}
+
+.task-card--ghost-grid {
+    z-index: 10;
+}
+
+.task-card--ghost-positioned {
+    z-index: var(--z-task-card-drag-ghost);
+}
+
+
 /* ==========================================================================
-   7. STATES (:hover, .selected, .is-dragging)
+   7. STATES (:hover, .is-selected, .is-dragging)
    ========================================================================== */
 
-.task-card:hover {
-    filter: brightness(0.95);
+/* Hover / Selection 枠は同じ __shape::after overlay に集約する。両者の
+   違いは線幅だけ (hover=1px, selected=2px) で、線幅は --task-card-frame-width
+   カスタムプロパティで切り替える。Ghost (drag 中の card clone) も
+   `is-selected` を継いだまま clone されるので同じルールで自動的に枠が出る
+   (旧 `--drag-preview` 列挙は撤廃)。__shape の mask が sawtooth に追従する
+   ため、cut 辺の border は下の override で除去する。
+   `.task-card--in-detail-modal` は presentational なので :where() で
+   hover 側のみ除外（詳細度はそのまま）。 */
+.task-card:where(:not(.task-card--in-detail-modal)):hover .task-card__shape::after,
+.task-card.is-selected .task-card__shape::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
+    border-radius: inherit;
+    pointer-events: none;
+}
+
+.task-card.is-selected .task-card__shape::after {
+    --task-card-frame-width: 2px;
 }
 
 .task-card.is-dragging {
@@ -469,27 +716,20 @@
     cursor: grabbing;
 }
 
-/* Selection Border using ::after */
-.task-card.selected::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border: 2px solid var(--file-accent, var(--tv-accent));
-    border-radius: var(--task-card-border-radius);
-    pointer-events: none;
-    z-index: 5;
-}
-
-.task-card--split-continues-after.selected::after {
+/* Cut 辺の border を完全除去。mask に追従させると border が sawtooth
+   形状に切り刻まれて散在するため、整然とした 3 辺枠にする。
+   base は vertical cut (timeline grid) を担当、horizontal cut は view
+   別ファイルで上書き。hover と selected で同じ cut 辺除去が要るので
+   セレクタを comma で束ねる。 */
+.task-card:where(:not(.task-card--in-detail-modal)).task-card--split-continues-after:hover .task-card__shape::after,
+.task-card.is-selected.task-card--split-continues-after .task-card__shape::after {
     border-bottom: none;
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
 }
 
-.task-card--split-continues-before.selected::after {
+.task-card:where(:not(.task-card--in-detail-modal)).task-card--split-continues-before:hover .task-card__shape::after,
+.task-card.is-selected.task-card--split-continues-before .task-card__shape::after {
     border-top: none;
     border-top-left-radius: 0;
     border-top-right-radius: 0;
@@ -504,7 +744,7 @@
     position: absolute;
 }
 
-.timeline-view .day-timeline-column > .task-card {
+.timeline-view .timeline-scroll-area__day-column > .task-card {
     top: calc(var(--start-minutes, 0) * var(--hour-height) / 60 + 1px);
     height: max(0px, calc(var(--duration-minutes, 0) * var(--hour-height) / 60 - 3px));
     container-type: size;

@@ -24,23 +24,22 @@ import {
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import TaskViewerPlugin from '../../main';
 import { TaskStyling } from '../sharedUI/TaskStyling';
-import { DateNavigator, ViewSettingsMenu } from '../sharedUI/ViewToolbar';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
+import { CalendarToolbar } from './CalendarToolbar';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
 import { HandleManager } from '../timelineview/HandleManager';
+import { SelectionController } from '../../interaction/selection/SelectionController';
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
 import { RenderController } from '../sharedUI/RenderController';
-import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
-import { CalendarExportStrategy } from '../../services/export/CalendarExportStrategy';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
@@ -77,6 +76,7 @@ export class CalendarView extends ItemView {
     private menuHandler: MenuHandler;
     private dragHandler: DragHandler | null = null;
     private handleManager: HandleManager | null = null;
+    private selectionController: SelectionController | null = null;
     private sidebarManager: SidebarManager;
     private pinnedListRenderer: PinnedListRenderer;
     /**
@@ -88,7 +88,7 @@ export class CalendarView extends ItemView {
      */
     private pinnedHost: HTMLElement;
     private sidebarFilterMenu = new FilterMenuComponent();
-    private syncSidebarToggleBtn: (() => void) | null = null;
+    private toolbar: CalendarToolbar;
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private unsubscribeDelete: (() => void) | null = null;
@@ -113,14 +113,12 @@ export class CalendarView extends ItemView {
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings);
         this.addChild(this.taskRenderer);
-        this.taskRenderer.setDetailCallback((task) => {
-            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
-        });
+        this.taskRenderer.setDetailCallback((task) => this.openDetailModal(task));
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.sidebarManager = new SidebarManager({
             mobileBreakpointPx: MOBILE_BREAKPOINT_PX,
             onPersist: () => this.app.workspace.requestSaveLayout(),
-            onSyncToggleButton: () => this.syncSidebarToggleBtn?.(),
+            onSyncToggleButton: () => this.toolbar?.syncSidebarToggleState(),
             onRequestClose: () => {
                 this.showSidebar = false;
                 this.sidebarManager.applyOpen(false, { animate: true, persist: true });
@@ -137,6 +135,70 @@ export class CalendarView extends ItemView {
         this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.sidebarFilterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.sidebarFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
+
+        this.toolbar = new CalendarToolbar({
+            app: this.app,
+            leaf: this.leaf,
+            plugin: this.plugin,
+            readService: this.readService,
+            filterMenu: this.filterMenu,
+            container: this.containerEl,
+            onNavigateWeek: (days) => this.navigateWeek(days),
+            onNavigateMonth: (direction) => this.navigateMonth(direction),
+            onJumpToCurrentMonth: () => {
+                const today = new Date();
+                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
+                this.windowStart = DateUtils.getLocalDateString(weekStart);
+                void this.app.workspace.requestSaveLayout();
+                this.render();
+            },
+            onFilterChange: () => {
+                void this.app.workspace.requestSaveLayout();
+                this.render();
+                this.pinnedListRenderer?.refresh();
+            },
+            getCustomName: () => this.customName,
+            onRename: (newName) => {
+                this.customName = newName;
+                this.leaf.updateHeader();
+                this.app.workspace.requestSaveLayout();
+            },
+            getPinnedLists: () => this.pinnedLists,
+            setPinnedLists: (lists) => { this.pinnedLists = lists; },
+            getShowSidebar: () => this.showSidebar,
+            setShowSidebar: (open, opts) => {
+                if (open) this.sidebarOpenedThisSession = true;
+                this.showSidebar = open;
+                this.sidebarManager.applyOpen(open, opts);
+            },
+            onApplyTemplate: (template) => {
+                if (template.pinnedLists) this.pinnedLists = template.pinnedLists;
+                if (template.showSidebar != null) {
+                    if (template.showSidebar) this.sidebarOpenedThisSession = true;
+                    this.showSidebar = template.showSidebar;
+                    this.sidebarManager.applyOpen(template.showSidebar, { persist: true });
+                }
+                if (template.name) {
+                    this.customName = template.name;
+                    this.leaf.updateHeader();
+                }
+                this.app.workspace.requestSaveLayout();
+                this.render();
+                this.pinnedListRenderer?.refresh();
+            },
+            onReset: () => {
+                this.pinnedLists = [];
+                this.sidebarOpenedThisSession = true;
+                this.showSidebar = true;
+                this.sidebarManager.applyOpen(true, { persist: true });
+                this.customName = undefined;
+                this.leaf.updateHeader();
+                this.app.workspace.requestSaveLayout();
+                this.render();
+                this.pinnedListRenderer?.refresh();
+            },
+        });
     }
 
     getViewType(): string {
@@ -246,11 +308,13 @@ export class CalendarView extends ItemView {
             getTask: (id) => this.readService.getTask(id),
             getStartHour: () => this.plugin.settings.startHour,
         });
+        this.selectionController = new SelectionController(this.handleManager);
         this.dragHandler = new DragHandler(
             this.container,
             this.readService,
             this.writeService,
             this.plugin,
+            this.selectionController,
             (taskId: string) => {
                 // Store base task id so split segments all share one selection and
                 // the selection survives a drag-move that regenerates segment ids.
@@ -259,33 +323,20 @@ export class CalendarView extends ItemView {
             },
             () => { /* no-op: handles are inside task cards */ },
             () => this.getViewStartDateString(),
+            () => this.getViewEndDateString(),
             () => this.plugin.settings.zoomLevel
         );
         this.dragHandler.onDetailClick = (taskId: string) => {
             const task = this.readService.getTask(taskId);
-            if (task) {
-                new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
-            }
+            if (task) this.openDetailModal(task);
         };
 
-        this.container.addEventListener('click', (event: MouseEvent) => {
-            const target = event.target as HTMLElement;
-            if (target.closest('.task-card__handle-btn')) {
-                return;
-            }
-            if (!target.closest('.task-card')) {
-                this.handleManager?.selectTask(null);
-            }
-        });
+        this.selectionController.attachBackgroundClick(this.container);
 
         await this.performRender();
 
         // Clear selection when the selected task is deleted via the UI.
-        this.unsubscribeDelete = this.writeService.onTaskDeleted((deletedId) => {
-            if (this.handleManager?.getSelectedTaskId() === deletedId) {
-                this.handleManager.selectTask(null);
-            }
-        });
+        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.writeService);
 
         // Initialize render dispatch controller. CalendarView は partial 未対応のため
         // tryPartial は常に false（→ 必ず full render に降格）。
@@ -326,9 +377,18 @@ export class CalendarView extends ItemView {
         this.render();
     }
 
+    /**
+     * Detail modal を開く 2 経路 (dblclick / detail handle) の共通エントリ。
+     * modal が出た時点で card の選択状態は不要なので解除する。
+     */
+    private openDetailModal(task: Task): void {
+        this.handleManager?.selectTask(null);
+        new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
+    }
+
     private render(): void {
         if (!this.scrollRestorePending) {
-            const oldMain = this.container?.querySelector('.calendar-grid__body') as HTMLElement | null;
+            const oldMain = this.container?.querySelector('.cal-grid__body') as HTMLElement | null;
             if (oldMain) {
                 this.savedScrollTop = oldMain.scrollTop;
             }
@@ -351,6 +411,7 @@ export class CalendarView extends ItemView {
             this.showSidebar = false;
         }
         this.sidebarManager.syncPresentation(this.showSidebar, { animate: false });
+        this.toolbar.detach();
         this.taskRenderer.disposeInside(this.container);
         // Detach the persistent pinnedHost so its DOM (and PinnedListRenderer's
         // internal subscription / paging / collapse state) survives the empty().
@@ -360,12 +421,13 @@ export class CalendarView extends ItemView {
         }
         this.container.empty();
 
-        const toolbar = this.renderToolbar();
+        const toolbarHost = this.container.createDiv('calendar-view__toolbar-host');
+        this.toolbar.mount(toolbarHost);
         const { main, sidebarHeader, sidebarBody } = this.sidebarManager.buildLayout(this.container);
 
         this.renderSidebarContent(sidebarHeader, sidebarBody);
 
-        const calendarHost = main.createDiv('calendar-grid');
+        const calendarHost = main.createDiv('cal-grid');
 
         const { startDate, endDate } = this.getCalendarDateRange();
         const rangeStartStr = DateUtils.getLocalDateString(startDate);
@@ -373,14 +435,14 @@ export class CalendarView extends ItemView {
         this.menuHandler.setViewStartDate(rangeStartStr);
 
         const allVisibleTasks = this.getVisibleTasksInRange(rangeStartStr, rangeEndStr);
-        const body = calendarHost.createDiv('calendar-grid__body');
+        const body = calendarHost.createDiv('cal-grid__body');
         this.renderWeekdayHeader(body);
         const referenceMonth = this.getReferenceMonth();
         const showWeekNumbers = this.shouldShowWeekNumbers();
 
         let cursor = new Date(startDate);
         while (cursor <= endDate) {
-            const weekRow = body.createDiv('calendar-week-row');
+            const weekRow = body.createDiv('cal-week-row');
             if (showWeekNumbers) {
                 weekRow.addClass('has-week-numbers');
             }
@@ -405,7 +467,7 @@ export class CalendarView extends ItemView {
             // Add column separators (skip the outer-right edge).
             const separatorCount = showWeekNumbers ? 7 : 6;
             for (let i = 1; i <= separatorCount; i++) {
-                const separator = weekRow.createDiv('calendar-col-separator');
+                const separator = weekRow.createDiv('cal-col-separator');
                 if (showWeekNumbers) {
                     if (i === 1) {
                         separator.style.left = 'var(--calendar-wk-col-width, 32px)';
@@ -421,10 +483,13 @@ export class CalendarView extends ItemView {
             await this.renderWeekTasks(weekRow, weekDates, allVisibleTasks);
         }
 
-        toolbar.dataset.range = `${rangeStartStr}:${rangeEndStr}`;
+        const toolbarRootEl = this.toolbar.getRootEl();
+        if (toolbarRootEl) {
+            toolbarRootEl.dataset.range = `${rangeStartStr}:${rangeEndStr}`;
+        }
 
         // Attach handles to the selected card. Section renderers already
-        // tagged cards with `.selected` during render; reapplySelectionClass is
+        // tagged cards with `.is-selected` during render; reapplySelectionClass is
         // idempotent and ensures handles are attached on the fresh DOM.
         if (this.handleManager?.getSelectedTaskId()) {
             this.handleManager.reapplySelectionClass();
@@ -435,7 +500,7 @@ export class CalendarView extends ItemView {
             const scrollTarget = this.savedScrollTop;
             requestAnimationFrame(() => {
                 this.scrollRestorePending = false;
-                const newMain = this.container.querySelector('.calendar-grid__body') as HTMLElement | null;
+                const newMain = this.container.querySelector('.cal-grid__body') as HTMLElement | null;
                 if (newMain) {
                     newMain.scrollTop = scrollTarget;
                 }
@@ -443,129 +508,10 @@ export class CalendarView extends ItemView {
         }
     }
 
-    private renderToolbar(): HTMLElement {
-        const toolbarHost = this.container.createDiv('calendar-view__toolbar-host');
-        const toolbar = toolbarHost.createDiv('view-toolbar');
-        DateNavigator.render(
-            toolbar,
-            (days) => this.navigateWeek(days),
-            () => {
-                const today = new Date();
-                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
-                this.windowStart = DateUtils.getLocalDateString(weekStart);
-                void this.app.workspace.requestSaveLayout();
-                this.render();
-            },
-            {
-                vertical: true,
-                onNavigateFast: (direction) => this.navigateMonth(direction),
-            }
-        );
-
-        toolbar.createDiv('view-toolbar__spacer');
-
-        const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(filterBtn, 'filter');
-        filterBtn.setAttribute('aria-label', t('toolbar.filter'));
-        filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
-        filterBtn.addEventListener('click', (event: MouseEvent) => {
-            this.filterMenu.showMenu(event, {
-                onFilterChange: () => {
-                    void this.app.workspace.requestSaveLayout();
-                    this.render();
-                    // View filter affects pinned lists with applyViewFilter:true;
-                    // PinnedList does not see view filter state via onChange, so
-                    // refresh explicitly here.
-                    this.pinnedListRenderer?.refresh();
-                    filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
-                },
-                getTasks: () => this.readService.getTasks(),
-                getStartHour: () => this.plugin.settings.startHour,
-            });
-        });
-
-        // View Settings
-        ViewSettingsMenu.renderButton(toolbar, {
-            app: this.app,
-            leaf: this.leaf,
-            getCustomName: () => this.customName,
-            getDefaultName: () => VIEW_META_CALENDAR.displayText,
-            onRename: (newName) => {
-                this.customName = newName;
-                this.leaf.updateHeader();
-                this.app.workspace.requestSaveLayout();
-            },
-            buildUri: () => ({
-                filterState: this.filterMenu.getFilterState(),
-                pinnedLists: this.pinnedLists,
-                showSidebar: this.showSidebar,
-            }),
-            viewType: VIEW_META_CALENDAR.type,
-            getViewTemplateFolder: () => this.plugin.settings.viewTemplateFolder,
-            getViewTemplate: () => ({
-                filePath: '',
-                name: this.customName || VIEW_META_CALENDAR.displayText,
-                viewType: 'calendar',
-                showSidebar: this.showSidebar,
-                filterState: this.filterMenu.getFilterState(),
-                pinnedLists: this.pinnedLists,
-            }),
-            getExportContainer: () => this.container.querySelector<HTMLElement>('.calendar-grid'),
-            getReadService: () => this.readService,
-            getExportStrategy: () => new CalendarExportStrategy(),
-            onApplyTemplate: (template) => {
-                if (template.filterState) {
-                    this.filterMenu.setFilterState(template.filterState);
-                }
-                if (template.pinnedLists) this.pinnedLists = template.pinnedLists;
-                if (template.showSidebar != null) {
-                    if (template.showSidebar) this.sidebarOpenedThisSession = true;
-                    this.showSidebar = template.showSidebar;
-                    this.sidebarManager.applyOpen(template.showSidebar, { persist: true });
-                }
-                if (template.name) {
-                    this.customName = template.name;
-                    this.leaf.updateHeader();
-                }
-                this.app.workspace.requestSaveLayout();
-                this.render();
-                this.pinnedListRenderer?.refresh();
-            },
-            onReset: () => {
-                this.filterMenu.setFilterState(createEmptyFilterState());
-                this.pinnedLists = [];
-                this.sidebarOpenedThisSession = true;
-                this.showSidebar = true;
-                this.sidebarManager.applyOpen(true, { persist: true });
-                this.customName = undefined;
-                this.leaf.updateHeader();
-                this.app.workspace.requestSaveLayout();
-                this.render();
-                this.pinnedListRenderer?.refresh();
-            },
-            menuPresenter: this.plugin.menuPresenter,
-        });
-
-        const toggleBtn = toolbar.createEl('button', {
-            cls: 'view-toolbar__btn--icon sidebar-toggle-button-icon',
-        });
-        updateSidebarToggleButton(toggleBtn, this.showSidebar);
-        this.syncSidebarToggleBtn = () => updateSidebarToggleButton(toggleBtn, this.showSidebar);
-        toggleBtn.onclick = () => {
-            const nextOpen = !this.showSidebar;
-            if (nextOpen) this.sidebarOpenedThisSession = true;
-            this.showSidebar = nextOpen;
-            this.sidebarManager.applyOpen(nextOpen, { animate: true, persist: true });
-        };
-
-        return toolbar;
-    }
-
     private renderSidebarContent(header: HTMLElement, body: HTMLElement): void {
-        header.createEl('p', { cls: 'view-sidebar__title', text: t('pinnedList.pinnedLists') });
+        header.createEl('p', { cls: 'tv-sidebar__panel-title', text: t('pinnedList.pinnedLists') });
 
-        const addBtn = header.createEl('button', { cls: 'view-sidebar__add-btn' });
+        const addBtn = header.createEl('button', { cls: 'tv-sidebar__panel-add-btn' });
         setIcon(addBtn, 'plus');
         addBtn.appendText(t('pinnedList.addList'));
         addBtn.addEventListener('click', () => {
@@ -697,22 +643,22 @@ export class CalendarView extends ItemView {
     }
 
     private renderWeekdayHeader(container: HTMLElement): void {
-        const header = container.createDiv('calendar-weekday-header');
+        const header = container.createDiv('cal-weekday-header');
         const showWeekNumbers = this.shouldShowWeekNumbers();
         if (showWeekNumbers) {
             header.addClass('has-week-numbers');
-            header.createEl('div', { cls: 'calendar-weekday-cell', text: t('calendar.wk') });
+            header.createEl('div', { cls: 'cal-weekday-cell', text: t('calendar.wk') });
         }
 
         const weekdays = this.getWeekdayNames();
         weekdays.forEach((label) => {
-            header.createEl('div', { cls: 'calendar-weekday-cell', text: label });
+            header.createEl('div', { cls: 'cal-weekday-cell', text: label });
         });
 
         // Add column separators matching week rows (align vertical grid lines exactly)
         const separatorCount = showWeekNumbers ? 7 : 6;
         for (let i = 1; i <= separatorCount; i++) {
-            const separator = header.createDiv('calendar-col-separator');
+            const separator = header.createDiv('cal-col-separator');
             if (showWeekNumbers) {
                 if (i === 1) {
                     separator.style.left = 'var(--calendar-wk-col-width, 32px)';
@@ -727,7 +673,7 @@ export class CalendarView extends ItemView {
     }
 
     private renderDateHeader(weekRow: HTMLElement, date: Date, colIndex: number, referenceMonth: { year: number; month: number }): void {
-        const header = weekRow.createDiv('calendar-date-header');
+        const header = weekRow.createDiv('cal-day-cell');
         const dateKey = DateUtils.getLocalDateString(date);
         const todayKey = DateUtils.getLocalDateString(new Date());
         const isFirstOfMonth = date.getDate() === 1;
@@ -769,9 +715,11 @@ export class CalendarView extends ItemView {
 
     private async renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: DisplayTask[]): Promise<void> {
         const startHour = this.plugin.settings.startHour;
-        // Pre-split: visual-date (startHour boundary) + date-range (week boundary)
-        const visualSplit = splitTasks(allTasks, { type: 'visual-date', startHour });
-        const weekSplit = splitTasks(visualSplit, { type: 'date-range', start: weekDates[0], end: weekDates[weekDates.length - 1], startHour });
+        // Calendar 月セルは calendar day ベースで 1 セル = 1 日。startHour 境界
+        // (visual-date split) を視覚化する意味はなく、入れると view 内部に
+        // 不要な dashed boundary が現れる。週行が物理的に分かれることによる
+        // per-week split (date-range) のみ適用する。
+        const weekSplit = splitTasks(allTasks, { type: 'date-range', start: weekDates[0], end: weekDates[weekDates.length - 1], startHour });
         const entries = computeGridLayout(weekSplit, {
             dates: weekDates,
             getDateRange: (task) => {
@@ -824,8 +772,9 @@ export class CalendarView extends ItemView {
             el.dataset.trackIndex = `${entry.trackIndex}`;
         };
 
-        if (entry.isMultiDay || entry.continuesBefore || entry.continuesAfter) {
+        if (entry.useBarVariant) {
             const barEl = weekRow.createDiv('task-card task-card--multi-day');
+            barEl.createDiv('task-card__shape');
             barEl.dataset.id = entry.segmentId;
             if (entry.continuesBefore || entry.continuesAfter) {
                 barEl.dataset.splitOriginalId = (entry.task as DisplayTask).originalTaskId || entry.task.id;
@@ -849,6 +798,7 @@ export class CalendarView extends ItemView {
         }
 
         const card = weekRow.createDiv('task-card');
+        card.createDiv('task-card__shape');
         card.dataset.id = entry.task.id;
         applyGridPosition(card);
 
@@ -869,6 +819,11 @@ export class CalendarView extends ItemView {
     private getViewStartDateString(): string {
         const { startDate } = this.getCalendarDateRange();
         return DateUtils.getLocalDateString(startDate);
+    }
+
+    private getViewEndDateString(): string {
+        const { endDate } = this.getCalendarDateRange();
+        return DateUtils.getLocalDateString(endDate);
     }
 
     private getCalendarDateRange(): { startDate: Date; endDate: Date } {
@@ -900,7 +855,7 @@ export class CalendarView extends ItemView {
     }
 
     private renderWeekNumberCell(weekRow: HTMLElement, weekStartDate: Date): void {
-        const weekNumberEl = weekRow.createDiv('calendar-week-number');
+        const weekNumberEl = weekRow.createDiv('cal-week-number');
         const weekNumber = DateUtils.getISOWeekNumber(weekStartDate);
 
         const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.calendarWeekStartDay);

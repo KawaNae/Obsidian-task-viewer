@@ -16,31 +16,22 @@
 }
 
 /* Timeline Column Drag Over */
-.day-timeline-column.drag-over {
-    outline: 2px dashed var(--tv-drop-outline);
-    outline-offset: -2px;
-    box-shadow: inset 0 0 10px var(--tv-drop-glow-light);
-}
-
-/* Future Section Drag Over */
-.future-section.drag-over,
-.future-section__content.drag-over,
-.future-section__list.drag-over {
+.timeline-scroll-area__day-column.drag-over {
     outline: 2px dashed var(--tv-drop-outline);
     outline-offset: -2px;
     box-shadow: inset 0 0 10px var(--tv-drop-glow-light);
 }
 
 /* ─── Drag opacity states ─── */
-.drag-hidden {
+.is-drag-hidden {
     opacity: 0 !important;
 }
 
-.drag-source-dimmed {
+.is-drag-source-dimmed {
     opacity: 0.3;
 }
 
-.drag-source-faint {
+.is-drag-source-faint {
     opacity: 0.15;
 }
 

@@ -289,13 +289,23 @@ export default class TaskViewerPlugin extends Plugin {
 
                 menu.addSeparator();
                 editorValidationBuilder.addValidationWarning(menu, task);
-                editorPropertiesBuilder.addStatusSubmenu(menu, task);
                 const dt = toDisplayTask(task, this.settings.startHour, (id) => this.taskIndex.getTask(id));
+                // G1: 自身のデータ操作
+                editorPropertiesBuilder.addStatusSubmenu(menu, task);
+                editorActionsBuilder.addOwnDataActions(menu, task);
                 editorPropertiesBuilder.buildPropertiesSubmenu(menu, dt, null);
                 menu.addSeparator();
-                editorTimerBuilder.addTimerSubmenu(menu, task);
+                // G2: 自身を記録
+                editorTimerBuilder.addTrackSelfItems(menu, task);
                 menu.addSeparator();
-                editorActionsBuilder.addTaskActions(menu, task);
+                // G3: 子のデータ操作
+                editorActionsBuilder.addChildActions(menu, task);
+                menu.addSeparator();
+                // G4: 複製
+                editorActionsBuilder.addDuplicateActions(menu, task);
+                menu.addSeparator();
+                // G5: 破壊的変更
+                editorActionsBuilder.addDestructiveActions(menu, task);
             })
         );
 

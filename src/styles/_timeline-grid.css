@@ -1,8 +1,8 @@
 /* =============================================================================
    Timeline Grid Core
-   Contains: timeline-grid, timeline-row, timeline-scroll-area, 
-             time-axis, day-timeline-column, current-time-indicator,
-             toolbar, handle-overlay, zoom-controls
+   Contains: timeline-grid, tv-grid-row, timeline-scroll-area,
+             timeline-scroll-area__{axis,time-label,day-column},
+             current-time-indicator, toolbar, handle-overlay, zoom-controls
 ============================================================================= */
 
 /* Timeline View Container */
@@ -42,8 +42,8 @@
     background-color: var(--tv-bg-timeline);
 }
 
-/* Common Row Style */
-.timeline-row {
+/* Common Row Style — shared layout primitive used by timeline + schedule */
+.tv-grid-row {
     display: grid;
     width: 100%;
 }
@@ -64,7 +64,7 @@
 }
 
 /* Mobile: disable sticky so allday scrolls with timeline */
-.view-sidebar-layout--mobile .timeline-scroll-area > .allday-section {
+.tv-sidebar--mobile .timeline-scroll-area > .allday-section {
     position: relative;
     top: auto;
 }
@@ -83,7 +83,7 @@
 }
 
 /* Time Axis Column */
-.time-axis-column {
+.timeline-scroll-area__axis {
     background-color: var(--tv-bg-axis);
     border-top: 1px solid var(--tv-border);
     border-left: 1px solid var(--tv-border);
@@ -93,7 +93,7 @@
     height: calc(24 * var(--hour-height));
 }
 
-.time-label {
+.timeline-scroll-area__time-label {
     position: absolute;
     top: calc(var(--label-hour, 0) * var(--hour-height));
     width: 100%;
@@ -105,7 +105,7 @@
 }
 
 /* Day Column (Timeline) */
-.day-timeline-column {
+.timeline-scroll-area__day-column {
     position: relative;
     border-top: 1px solid var(--tv-border);
     border-right: 1px solid var(--tv-border);
@@ -130,41 +130,4 @@
     pointer-events: none;
 }
 
-/* Section Toggle Button (Shared) */
-.timeline-view button.section-toggle-btn {
-    width: 22px;
-    height: 22px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin: 2px;
-    padding: 0 !important;
-    appearance: none;
-    -webkit-appearance: none;
-    border: 1px solid transparent !important;
-    border-radius: var(--tv-radius-s);
-    background: transparent !important;
-    color: var(--tv-text-muted);
-    box-shadow: none;
-    cursor: pointer;
-    transition:
-        background-color 120ms ease,
-        border-color 120ms ease,
-        color 120ms ease;
-}
-
-.timeline-view button.section-toggle-btn svg {
-    width: 12px;
-    height: 12px;
-}
-
-.timeline-view button.section-toggle-btn:hover {
-    background-color: var(--tv-bg-hover);
-    border-color: var(--tv-border);
-    color: var(--tv-text);
-}
-
-.timeline-view button.section-toggle-btn:focus-visible {
-    outline: 2px solid rgba(var(--tv-accent-rgb), 0.35);
-    outline-offset: 1px;
-}
+/* Section toggle button styles moved to _section-toggle.css (tv-section-toggle). */

@@ -85,6 +85,18 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
                 await plugin.saveSettings();
             }));
 
+    new Setting(el)
+        .setName(t('settings.views.childCollapseThreshold'))
+        .setDesc(t('settings.views.childCollapseThresholdDesc'))
+        .addSlider(slider => slider
+            .setLimits(1, 5, 1)
+            .setValue(plugin.settings.childCollapseThreshold)
+            .setDynamicTooltip()
+            .onChange(async (value) => {
+                plugin.settings.childCollapseThreshold = value;
+                await plugin.saveSettings();
+            }));
+
     // Default Open Position
     el.createEl('h3', { text: t('settings.views.defaultOpenPosition'), cls: 'setting-section-header' });
 

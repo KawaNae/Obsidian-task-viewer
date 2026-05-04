@@ -1,5 +1,10 @@
 /* ==========================================================================
-   Mini Calendar View
+   Mini Calendar View — compact variant of cal-* primitives.
+   Base cal-* styles live in _cal-base.css. This file contains:
+     - .mini-calendar-view shell + toolbar elements
+     - --mini modifier overrides for cal-grid / cal-week-row / cal-week-number /
+       cal-weekday-header / cal-weekday-cell / cal-day-cell
+     - mini-only sub-elements (date-link, date-label, indicators)
    ========================================================================== */
 
 .mini-calendar-view {
@@ -11,7 +16,11 @@
     padding: 12px !important;
 }
 
-.mini-calendar-view .mini-calendar-toolbar {
+.mini-calendar-view__toolbar-host {
+    flex-shrink: 0;
+}
+
+.mini-calendar-view .view-toolbar {
     justify-content: space-between;
     padding: 0 0 7px;
     border-bottom: none;
@@ -57,91 +66,107 @@
     gap: 2px;
 }
 
-.mini-calendar-grid {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
+/* --- --mini modifier overrides ------------------------------------------ */
+
+.cal-grid--mini {
+    background: none;
 }
 
-.mini-calendar-weekday-header {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-}
-
-.mini-calendar-weekday-header.has-week-numbers {
-    grid-template-columns: var(--mini-cal-wk-col-width, 24px) repeat(7, minmax(0, 1fr));
-}
-
-.mini-calendar-weekday-cell {
-    text-align: center;
-    font-size: 0.72em;
-    font-weight: 700;
-    color: var(--tv-text-muted);
-    padding: 4px 2px;
-}
-
-.mini-calendar-body {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
+.cal-grid__body--mini {
     overflow: hidden;
 }
 
-.mini-calendar-body__track {
+.cal-grid__body-track {
     display: flex;
     flex-direction: column;
     flex: 1;
     min-height: 0;
 }
 
-.mini-calendar-week {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-    min-height: 0;
-    flex: 1;
+.cal-weekday-header--mini {
+    background: none;
+    border-bottom: none;
+    position: static;
 }
 
-.mini-calendar-week.has-week-numbers {
+.cal-weekday-header--mini.has-week-numbers {
     grid-template-columns: var(--mini-cal-wk-col-width, 24px) repeat(7, minmax(0, 1fr));
 }
 
-.mini-calendar-week-number {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.62em;
-    color: var(--tv-text-muted);
-    cursor: pointer;
+.cal-weekday-cell--mini {
+    padding: 4px 2px;
+    font-size: 0.72em;
 }
 
-.mini-calendar-week-number .internal-link {
-    color: inherit;
-    text-decoration: none;
-}
-
-.mini-calendar-week-number.is-current-week {
-    color: var(--tv-text-accent);
-}
-
-.mini-calendar-week-number:hover {
-    color: var(--tv-text);
-}
-
-.mini-calendar-week:last-child {
+.cal-week-row--mini {
+    grid-template-rows: none;
+    grid-auto-rows: auto;
+    min-height: 0;
+    flex: 1;
     border-bottom: none;
 }
 
-.mini-calendar-cell {
-    min-width: 0;
+.cal-week-row--mini.has-week-numbers {
+    grid-template-columns: var(--mini-cal-wk-col-width, 24px) repeat(7, minmax(0, 1fr));
 }
 
-.mini-calendar-cell:last-child {
+.cal-week-row--mini:last-child {
+    border-bottom: none;
+}
+
+.cal-week-number--mini {
+    font-size: 0.62em;
+    font-weight: normal;
+}
+
+.cal-week-number--mini.is-current-week {
+    color: var(--tv-text-accent);
+    z-index: auto;
+}
+
+.cal-week-number--mini.is-current-week::after {
+    display: none;
+}
+
+.cal-week-number--mini:hover {
+    background: none;
+    color: var(--tv-text);
+}
+
+.cal-day-cell--mini {
+    display: block;
+    min-height: 0;
+    min-width: 0;
+    padding: 0;
+    background: none;
+    font-weight: normal;
+    color: var(--tv-text);
+}
+
+.cal-day-cell--mini:last-child {
     border-right: none;
 }
 
-.mini-calendar-cell__link {
+.cal-day-cell--mini.is-outside-month {
+    background: none;
+}
+
+.cal-day-cell--mini.is-outside-month .cal-day-cell__date-link {
+    opacity: 0.56;
+}
+
+.cal-day-cell--mini.is-today::after {
+    display: none;
+}
+
+.cal-day-cell--mini.is-today .cal-day-cell__date-link {
+    background: rgba(var(--tv-accent-rgb), 0.16);
+    color: var(--tv-text-accent);
+}
+
+/* --- mini-only sub-elements --------------------------------------------- */
+
+.cal-day-cell--mini .cal-day-cell__date-link {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -156,16 +181,16 @@
     padding: 4px 2px;
 }
 
-.mini-calendar-cell__link:hover {
+.cal-day-cell--mini .cal-day-cell__date-link:hover {
     background: var(--tv-bg-hover);
 }
 
-.mini-calendar-cell__date {
+.cal-day-cell--mini .cal-day-cell__date-label {
     font-size: 0.82em;
     line-height: 1;
 }
 
-.mini-calendar-cell__indicators {
+.cal-day-cell--mini .cal-day-cell__indicators {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -173,32 +198,19 @@
     min-height: 6px;
 }
 
-.mini-calendar-cell.is-outside-month .mini-calendar-cell__link {
-    opacity: 0.56;
-}
-
-.mini-calendar-cell.is-today .mini-calendar-cell__link {
-    background: rgba(var(--tv-accent-rgb), 0.16);
-    color: var(--tv-text-accent);
-}
-
-.mini-calendar-cell__indicator {
+.cal-day-cell--mini .cal-day-cell__indicator {
     width: 6px;
     height: 6px;
     border-radius: 999px;
     box-sizing: border-box;
 }
 
-.mini-calendar-cell__indicator--incomplete {
+.cal-day-cell--mini .cal-day-cell__indicator--incomplete {
     border: 1.5px solid var(--tv-text);
     background: transparent;
 }
 
-.mini-calendar-cell__indicator--complete {
+.cal-day-cell--mini .cal-day-cell__indicator--complete {
     border: 1px solid var(--tv-text);
     background: var(--tv-text);
-}
-
-.mini-calendar-view__toolbar-host {
-    flex-shrink: 0;
 }

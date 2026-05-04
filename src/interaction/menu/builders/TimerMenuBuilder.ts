@@ -13,68 +13,63 @@ export class TimerMenuBuilder {
     constructor(private plugin: TaskViewerPlugin) { }
 
     /**
-     * Adds a "Track" submenu with Countup, Pomodoro, and Countdown options.
+     * Adds Countup / Pomodoro / Countdown items directly to the root menu (G2: 自身を記録).
+     * Countdown is shown only when both startTime and endTime are set.
      */
-    addTimerSubmenu(menu: Menu, task: Task): void {
+    addTrackSelfItems(menu: Menu, task: Task): void {
         // 非オープンかつコマンド付きタスクではselfモードを提供しない（startDate変更でコマンド再発火するため）
         if (TaskParser.isTriggerableStatus(task) && task.commands && task.commands.length > 0) {
             return;
         }
+
+        const displayName = getTaskDisplayName(task);
+        const baseParams = {
+            taskId: task.id,
+            taskName: displayName,
+            taskOriginalText: task.originalText,
+            taskFile: task.file,
+            taskColor: task.color ?? '',
+            recordMode: 'self' as const,
+            parserId: task.parserId,
+            timerTargetId: task.timerTargetId ?? task.blockId,
+            autoStart: true,
+        };
+
+        // Countup
         menu.addItem((item) => {
-            const subMenu = item
-                .setTitle(t('menu.trackSelf'))
+            item.setTitle(t('menu.startCountup'))
                 .setIcon('play')
-                .setSubmenu();
+                .onClick(() => {
+                    menu.close();
+                    const widget = this.plugin.getTimerWidget();
+                    widget.startTimer({ ...baseParams, timerType: 'countup' });
+                });
+        });
 
-            const displayName = getTaskDisplayName(task);
-            const baseParams = {
-                taskId: task.id,
-                taskName: displayName,
-                taskOriginalText: task.originalText,
-                taskFile: task.file,
-                taskColor: task.color ?? '',
-                recordMode: 'self' as const,
-                parserId: task.parserId,
-                timerTargetId: task.timerTargetId ?? task.blockId,
-                autoStart: true,
-            };
+        // Pomodoro
+        menu.addItem((item) => {
+            item.setTitle(t('menu.startPomodoro'))
+                .setIcon('timer')
+                .onClick(() => {
+                    menu.close();
+                    const widget = this.plugin.getTimerWidget();
+                    widget.startTimer({ ...baseParams, timerType: 'pomodoro' });
+                });
+        });
 
-            // Countup
-            subMenu.addItem((sub) => {
-                sub.setTitle(t('menu.startCountup'))
-                    .setIcon('play')
-                    .onClick(() => {
-                        menu.close();
-                        const widget = this.plugin.getTimerWidget();
-                        widget.startTimer({ ...baseParams, timerType: 'countup' });
-                    });
-            });
-
-            // Pomodoro
-            subMenu.addItem((sub) => {
-                sub.setTitle(t('menu.startPomodoro'))
+        // Countdown (conditional)
+        const countdownSeconds = this.calculateCountdownSeconds(task);
+        if (countdownSeconds !== null) {
+            menu.addItem((item) => {
+                item.setTitle(t('menu.startCountdown'))
                     .setIcon('timer')
                     .onClick(() => {
                         menu.close();
                         const widget = this.plugin.getTimerWidget();
-                        widget.startTimer({ ...baseParams, timerType: 'pomodoro' });
+                        widget.startTimer({ ...baseParams, timerType: 'countdown', countdownSeconds });
                     });
             });
-
-            // Countdown (conditional)
-            const countdownSeconds = this.calculateCountdownSeconds(task);
-            if (countdownSeconds !== null) {
-                subMenu.addItem((sub) => {
-                    sub.setTitle(t('menu.startCountdown'))
-                        .setIcon('timer')
-                        .onClick(() => {
-                            menu.close();
-                            const widget = this.plugin.getTimerWidget();
-                            widget.startTimer({ ...baseParams, timerType: 'countdown', countdownSeconds });
-                        });
-                });
-            }
-        });
+        }
     }
 
     private calculateCountdownSeconds(task: Task): number | null {

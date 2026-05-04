@@ -11,6 +11,7 @@ import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout'
 import { renderDueArrow } from './DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { getTaskDateRange } from '../../services/display/VisualDateRange';
+import { getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 
 export class AllDaySectionRenderer {
     constructor(
@@ -37,8 +38,13 @@ export class AllDaySectionRenderer {
             return visualStart <= viewEnd && tEnd >= viewStart;
         });
 
-        // Pre-split at view boundaries (allDay tasks only need date-range split)
-        const splitResult = splitTasks(tasks, { type: 'date-range', start: viewStart, end: viewEnd, startHour });
+        // AllDay lane は 1 行が連続しており、week 境界は **物理的に分かれない**。
+        // そのため task は view 全体に対して 1 つの DOM (gridColumn span N) で
+        // 表現されるべきで、内部 split は必要ない。view 端を跨ぐ場合のみ
+        // continues-before/after の clip が立つ。
+        const splitResult = splitTasks(tasks, {
+            type: 'date-range', start: viewStart, end: viewEnd, startHour,
+        });
 
         // Use shared layout engine
         const entries = computeGridLayout(splitResult, {
@@ -81,15 +87,25 @@ export class AllDaySectionRenderer {
         const { task } = entry;
 
         const el = container.createDiv('task-card task-card--allday');
-        if (entry.isMultiDay) {
+        el.createDiv('task-card__shape');
+        if (entry.useBarVariant) {
             el.addClass('task-card--multi-day');
         }
         if (entry.continuesBefore) el.addClass('task-card--split-continues-before');
         if (entry.continuesAfter) el.addClass('task-card--split-continues-after');
-        if (task.id === this.handleManager.getSelectedTaskId()) {
-            el.addClass('selected');
-        }
+
+        // split segment は base task の id とは別の segment id を持つため、
+        // selection 照合 (HandleManager) には base id (`originalTaskId`) を
+        // `dataset.splitOriginalId` として併せて公開する。これがないと
+        // segment cards に `.is-selected` も handles も attach されない。
+        const originalTaskId = getOriginalTaskId(task);
         el.dataset.id = task.id;
+        if (entry.continuesBefore || entry.continuesAfter) {
+            el.dataset.splitOriginalId = originalTaskId;
+        }
+        if (originalTaskId === this.handleManager.getSelectedTaskId()) {
+            el.addClass('is-selected');
+        }
 
         TaskStyling.applyTaskColor(el, task.color ?? null);
         TaskStyling.applyTaskLinestyle(el, task.linestyle ?? null);
@@ -103,6 +119,15 @@ export class AllDaySectionRenderer {
             compact: true,
         });
         this.menuHandler.addTaskContextMenu(el, task);
+
+        // Grid 座標を dataset で公開し、drag move/resize が style.gridColumn の
+        // regex parse を経ずに済むようにする。calendar card と命名対称。
+        // colStart は dates 配列内 0-based (calendar は week-row 内 1-based) で
+        // 意味は parent コンテキスト依存。drag 側は parent ごとに colOffset を
+        // 加算する設計に閉じ込めることで衝突しない。
+        el.dataset.colStart = String(entry.colStart);
+        el.dataset.span = String(entry.span);
+        el.dataset.trackIndex = String(entry.trackIndex);
 
         el.style.gridColumn = `${entry.colStart + gridColOffset} / span ${entry.span}`;
         el.style.gridRow = `${entry.trackIndex + gridRowOffset}`;

@@ -58,7 +58,7 @@
     outline-offset: -2px;
 }
 
-.allday-section__axis:hover .section-toggle-btn {
+.allday-section__axis:hover .tv-section-toggle {
     background-color: var(--tv-bg-hover);
     border-color: var(--tv-border);
     color: var(--tv-text);
@@ -118,54 +118,116 @@
     pointer-events: none;
 }
 
-/* --- Split direction override (allday cards span horizontally) --- */
+/* --- Split direction override (allday cards span horizontally) ---
+   base の vertical mask を horizontal (左右辺) に置き換える。mask は
+   `.task-card__shape` のみに当て、host 直下の handle / drag overlay は
+   mask の対象外にする。selection 枠は __shape::after が mask に追従する
+   ため、cut 辺の border 除去 override は不要。 */
 .timeline-view .allday-section .task-card--split-continues-after {
-    border-bottom: none;
-    border-right: 2px dashed var(--file-accent, var(--tv-accent));
-    border-bottom-left-radius: var(--task-card-border-radius);
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
+    padding-right: calc(2px + var(--task-card-split-zig));
 }
 
-.timeline-view .allday-section .task-card--split-continues-after::before {
+.timeline-view .allday-section .task-card--split-continues-after .task-card__shape {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: var(--task-card-border-radius);
+    -webkit-mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+}
+
+.timeline-view .allday-section .task-card--split-continues-after .task-card__shape::before {
     border-bottom-left-radius: inherit;
 }
 
 .timeline-view .allday-section .task-card--split-continues-before {
-    border-top: none;
-    border-left: 2px dashed var(--file-accent, var(--tv-accent));
+    padding-left: calc(8px + var(--task-card-split-zig));
+}
+
+.timeline-view .allday-section .task-card--split-continues-before .task-card__shape {
     border-top-right-radius: var(--task-card-border-radius);
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
+    -webkit-mask:
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask:
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
 }
 
-.timeline-view .allday-section .task-card--split-continues-before::before {
-    display: none;
+.timeline-view .allday-section .task-card--split-continues-before .task-card__shape::before {
+    left: var(--task-card-split-zig);
 }
 
 .timeline-view .allday-section .task-card--split-continues-before.task-card--split-continues-after {
-    border-left: 2px dashed var(--file-accent, var(--tv-accent));
-    border-right: 2px dashed var(--file-accent, var(--tv-accent));
+    padding-left: calc(8px + var(--task-card-split-zig));
+    padding-right: calc(2px + var(--task-card-split-zig));
+}
+
+.timeline-view .allday-section .task-card--split-continues-before.task-card--split-continues-after .task-card__shape {
     border-radius: 0;
+    -webkit-mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y,
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+    -webkit-mask-composite: source-in;
+            mask:
+        conic-gradient(from 45deg at calc(100% - var(--task-card-split-zig)) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y,
+        conic-gradient(from 225deg at var(--task-card-split-zig) 50%,
+            #0000 0 90deg, #000 0)
+        0 0 / 100% calc(2 * var(--task-card-split-zig)) repeat-y;
+            mask-composite: intersect;
 }
 
-.timeline-view .allday-section .task-card--split-continues-before.task-card--split-continues-after::before {
-    display: none;
-}
-
-/* Selection border direction for horizontal split */
-.timeline-view .allday-section .task-card--split-continues-after.selected::after {
-    border-bottom: 2px solid var(--file-accent, var(--tv-accent));
-    border-bottom-left-radius: var(--task-card-border-radius);
+/* Horizontal cut: cut 辺は左/右なので、base の `border-bottom:none` /
+   `border-top:none` (vertical 用) を打ち消し、left/right を除去して
+   3 辺枠にする。線幅は --task-card-frame-width で hover (1px) / selected (2px)
+   を共有。Ghost も `is-selected` を継承して clone されるためここに
+   `--drag-preview` を列挙する必要は無い (旧列挙は撤廃済み)。 */
+.timeline-view .allday-section .task-card:where(:not(.task-card--in-detail-modal)).task-card--split-continues-after:hover .task-card__shape::after,
+.timeline-view .allday-section .task-card.is-selected.task-card--split-continues-after .task-card__shape::after {
+    border-top: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
+    border-bottom: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
     border-right: none;
     border-top-right-radius: 0;
     border-bottom-right-radius: 0;
+    border-bottom-left-radius: var(--task-card-border-radius);
 }
 
-.timeline-view .allday-section .task-card--split-continues-before.selected::after {
-    border-top: 2px solid var(--file-accent, var(--tv-accent));
-    border-top-right-radius: var(--task-card-border-radius);
+.timeline-view .allday-section .task-card:where(:not(.task-card--in-detail-modal)).task-card--split-continues-before:hover .task-card__shape::after,
+.timeline-view .allday-section .task-card.is-selected.task-card--split-continues-before .task-card__shape::after {
+    border-top: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
+    border-bottom: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
     border-left: none;
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
+    border-top-right-radius: var(--task-card-border-radius);
+}
+
+.timeline-view .allday-section .task-card:where(:not(.task-card--in-detail-modal)).task-card--split-continues-before.task-card--split-continues-after:hover .task-card__shape::after,
+.timeline-view .allday-section .task-card.is-selected.task-card--split-continues-before.task-card--split-continues-after .task-card__shape::after {
+    border-top: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
+    border-bottom: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
+    border-left: none;
+    border-right: none;
+    border-radius: 0;
+}
+
+/* time-label は cut が左/右なので元位置 (top:2px) のまま使う。
+   base の vertical 用 push down を打ち消す。 */
+.timeline-view .allday-section .task-card--split-continues-before .task-card__time {
+    top: 2px;
 }

@@ -30,7 +30,7 @@
 }
 
 /* PC: allday stays fixed at top via sticky */
-.schedule-body-scroll > .allday-section {
+.schedule-view__body-scroll > .allday-section {
     position: sticky;
     top: 0;
     z-index: 30;
@@ -38,7 +38,7 @@
 
 /* Mobile: disable sticky so allday scrolls with timeline */
 @container (max-width: 768px) {
-    .schedule-body-scroll > .allday-section {
+    .schedule-view__body-scroll > .allday-section {
         position: relative;
         top: auto;
     }
@@ -49,17 +49,10 @@
     background-color: transparent;
 }
 
-.schedule-view__container {
+.schedule-view__fixed-rows,
+.schedule-view__scroll-content {
     margin: 0 auto;
     width: 100%;
-}
-
-.schedule-view__fixed-rows {
-    display: flex;
-    flex-direction: column;
-}
-
-.schedule-view__scroll-content {
     display: flex;
     flex-direction: column;
 }
@@ -91,47 +84,7 @@
     text-decoration: none;
 }
 
-.schedule-view button.schedule-section__toggle,
-.schedule-view button.section-toggle-btn {
-    width: 22px;
-    height: 22px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin: 2px;
-    padding: 0 !important;
-    appearance: none;
-    -webkit-appearance: none;
-    border: 1px solid transparent !important;
-    border-radius: var(--tv-radius-s);
-    background: transparent !important;
-    color: var(--tv-text-muted);
-    box-shadow: none;
-    cursor: pointer;
-    transition:
-        background-color 120ms ease,
-        border-color 120ms ease,
-        color 120ms ease;
-}
-
-.schedule-view button.schedule-section__toggle svg,
-.schedule-view button.section-toggle-btn svg {
-    width: 12px;
-    height: 12px;
-}
-
-.schedule-view button.schedule-section__toggle:hover,
-.schedule-view button.section-toggle-btn:hover {
-    background-color: var(--tv-bg-hover);
-    border-color: var(--tv-border);
-    color: var(--tv-text);
-}
-
-.schedule-view button.schedule-section__toggle:focus-visible,
-.schedule-view button.section-toggle-btn:focus-visible {
-    outline: 2px solid rgba(var(--tv-accent-rgb), 0.35);
-    outline-offset: 1px;
-}
+/* Section toggle button styles moved to _section-toggle.css (tv-section-toggle). */
 
 .schedule-section {
     padding: 12px;
@@ -157,18 +110,8 @@
     color: var(--tv-text);
 }
 
-.schedule-section__collapse-icon {
-    display: inline-block;
-    width: 1em;
-    transition: transform 0.2s;
-}
-
-.schedule-section__collapse-btn {
+.schedule-section__header .tv-section-toggle--header {
     flex-shrink: 0;
-}
-
-.schedule-section--collapsible.schedule-section--collapsed .schedule-section__collapse-icon {
-    transform: rotate(-90deg);
 }
 
 .schedule-section--collapsed > *:not(.schedule-section__header) {
