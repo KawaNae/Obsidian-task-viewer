@@ -113,9 +113,7 @@ export class CalendarView extends ItemView {
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings);
         this.addChild(this.taskRenderer);
-        this.taskRenderer.setDetailCallback((task) => {
-            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
-        });
+        this.taskRenderer.setDetailCallback((task) => this.openDetailModal(task));
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.sidebarManager = new SidebarManager({
             mobileBreakpointPx: MOBILE_BREAKPOINT_PX,
@@ -330,9 +328,7 @@ export class CalendarView extends ItemView {
         );
         this.dragHandler.onDetailClick = (taskId: string) => {
             const task = this.readService.getTask(taskId);
-            if (task) {
-                new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
-            }
+            if (task) this.openDetailModal(task);
         };
 
         this.selectionController.attachBackgroundClick(this.container);
@@ -379,6 +375,15 @@ export class CalendarView extends ItemView {
 
     public refresh(): void {
         this.render();
+    }
+
+    /**
+     * Detail modal を開く 2 経路 (dblclick / detail handle) の共通エントリ。
+     * modal が出た時点で card の選択状態は不要なので解除する。
+     */
+    private openDetailModal(task: Task): void {
+        this.handleManager?.selectTask(null);
+        new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
     }
 
     private render(): void {

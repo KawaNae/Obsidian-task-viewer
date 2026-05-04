@@ -2,7 +2,7 @@ import { ItemView, WorkspaceLeaf, setIcon, type Workspace, type ViewStateResult 
 import { t } from '../../i18n';
 import { ViewUriBuilder } from '../sharedLogic/ViewUriBuilder';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import { ViewState, PinnedListDefinition } from '../../types';
+import { Task, ViewState, PinnedListDefinition } from '../../types';
 import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
@@ -296,9 +296,7 @@ export class TimelineView extends ItemView {
         this.taskRenderer.setChildLineEditCallback((parentTask, line, bodyLine, x, y) => {
             childLineMenuBuilder.showMenu(parentTask, line, bodyLine, x, y);
         });
-        this.taskRenderer.setDetailCallback((task) => {
-            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
-        });
+        this.taskRenderer.setDetailCallback((task) => this.openDetailModal(task));
 
         // Initialize HandleManager
         this.handleManager = new HandleManager(this.container, {
@@ -387,9 +385,7 @@ export class TimelineView extends ItemView {
         );
         this.dragHandler.onDetailClick = (taskId: string) => {
             const task = this.readService.getTask(taskId);
-            if (task) {
-                new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
-            }
+            if (task) this.openDetailModal(task);
         };
 
         // Background click → deselect、UI 経由 delete → deselect。両方 SelectionController に集約。
@@ -549,6 +545,15 @@ export class TimelineView extends ItemView {
 
         this.initializeStartDate();
         // Future viewState-dependent init goes here.
+    }
+
+    /**
+     * Detail modal を開く 2 経路 (dblclick / detail handle) の共通エントリ。
+     * modal が出た時点で card の選択状態は不要なので解除する。
+     */
+    private openDetailModal(task: Task): void {
+        this.handleManager.selectTask(null);
+        new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
     }
 
     /**
