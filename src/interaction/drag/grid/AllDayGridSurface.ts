@@ -1,6 +1,7 @@
 import { DateUtils } from '../../../utils/DateUtils';
 import type { GhostPlan } from '../ghost/GhostPlan';
 import type { GridSurface, GridSurfaceTarget, LocatePointerOpts, PlanSegmentsInput } from './GridSurface';
+import { HANDLE_HYSTERESIS_PX } from './GridSurface';
 
 /**
  * Timeline view 内の `.allday-section` (1 section + N-col grid) 用の
@@ -21,8 +22,21 @@ export class AllDayGridSurface implements GridSurface {
     /**
      * AllDay の locatePointer。Calendar と違い row は単一なので、X 軸を colWidth で
      * 等分してダイレクトに col を計算する。
+     *
+     * `opts.resizeDirection` 指定時は handle CSS offset (`-12px`) と subpixel rounding
+     * の合成で発生する境界 drift を `HANDLE_HYSTERESIS_PX` で吸収する。
+     *   - dir='right': handle 中心が `card.right` (= 表示最終セルの右端 = 次セルの左端)
+     *     に乗るため、naive `floor(x/W)` だと境界丁度で次セル idx を返してしまう。
+     *     `floor((x - HYST)/W)` でセル右端から HYST 以内を前セル扱いにして吸収。
+     *   - dir='left' : handle 中心が `card.left` (= 開始セルの左端 = 前セルの右端) に
+     *     乗るが、uniform grid 上で naive floor は境界丁度で開始セル idx を返すため
+     *     drift は subpixel `clientX = card.left - ε` の場合のみ発生し commit 経路の
+     *     `boundedStart` clamp で 1 日分を吸収できる。AllDay では追加のヒステリシスを
+     *     入れない（入れると shrink 方向で boundary 手前 HYST から早期にスナップして
+     *     しまう）。calendar の findIndex 版は非 uniform DOMRect 用の補正で、
+     *     uniform grid 上では同 strict が naive と差を生まないため対称性は維持される。
      */
-    locatePointer(clientX: number, _clientY: number, _opts: LocatePointerOpts = {}): GridSurfaceTarget | null {
+    locatePointer(clientX: number, _clientY: number, opts: LocatePointerOpts = {}): GridSurfaceTarget | null {
         const section = this.getSection();
         if (!section) return null;
         const headerCell = this.getReferenceHeaderCell();
@@ -31,7 +45,13 @@ export class AllDayGridSurface implements GridSurface {
         const viewStart = this.getViewStartDate();
         if (!viewStart) return null;
 
-        const idx = Math.floor((clientX - baseLeft) / colWidth);
+        const xInArea = clientX - baseLeft;
+        const dir = opts.resizeDirection ?? null;
+
+        const idx = dir === 'right'
+            ? Math.floor((xInArea - HANDLE_HYSTERESIS_PX) / colWidth)
+            : Math.floor(xInArea / colWidth);
+
         const col = Math.max(1, idx + 1); // 1-based
         const targetDate = DateUtils.addDays(viewStart, col - 1);
 

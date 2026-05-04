@@ -1,8 +1,7 @@
 import { DateUtils } from '../../../utils/DateUtils';
 import type { GhostPlan } from '../ghost/GhostPlan';
 import type { GridSurface, GridSurfaceTarget, LocatePointerOpts, PlanSegmentsInput } from './GridSurface';
-
-const HANDLE_HYSTERESIS_PX = 8;
+import { HANDLE_HYSTERESIS_PX } from './GridSurface';
 
 /**
  * Calendar (cal-week-row × N + 7-col grid) 用の {@link GridSurface} 実装。

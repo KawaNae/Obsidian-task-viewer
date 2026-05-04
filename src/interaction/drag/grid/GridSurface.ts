@@ -1,6 +1,19 @@
 import type { GhostPlan } from '../ghost/GhostPlan';
 
 /**
+ * Resize ハンドルの CSS 配置に起因する +1 day drift を吸収するためのヒステリシス幅 (px)。
+ *
+ * 右ハンドルは CSS で `card.right` から +12px 外側 (translate -12px) に置かれており、
+ * ハンドル中心は次セルの左端付近に乗る。同位置 release ですらセル境界を踏み越えて
+ * `+1 day` を返してしまうのを抑えるため、`resizeDirection: 'right'` 指定時は
+ * セル右端 HYSTERESIS_PX 内を「前セル扱い」にする (左ハンドル側はミラー)。
+ *
+ * 値は Calendar / AllDay の両 surface で同一にすること。Strategy 側は drift を
+ * 認識しない契約にしてあり、補正の責務は surface 実装に閉じる。
+ */
+export const HANDLE_HYSTERESIS_PX = 8;
+
+/**
  * locatePointer が返す target 情報。Calendar は週単位の row、AllDay は単一の
  * `.allday-section` を `rowEl` に詰める。`weekStart` は Calendar 用 (週開始日)。
  */
@@ -52,6 +65,11 @@ export interface GridSurface {
     /**
      * pointer (clientX, clientY) からこの surface 上の target row/col/date を解決。
      * surface 範囲外なら null。
+     *
+     * **契約**: `opts.resizeDirection` が指定された場合、Surface 実装は CSS
+     * handle offset 起因の端境界 drift を `HANDLE_HYSTERESIS_PX` で吸収する責務を
+     * 負う。Strategy は補正済み targetDate を得る前提で commit する (delta 演算なし、
+     * 絶対日付直接書き込み)。
      */
     locatePointer(clientX: number, clientY: number, opts?: LocatePointerOpts): GridSurfaceTarget | null;
 

@@ -1,7 +1,6 @@
 import { BaseDragStrategy } from '../BaseDragStrategy';
 import type { DragContext } from '../../DragStrategy';
 import type { Task } from '../../../../types';
-import { DateUtils } from '../../../../utils/DateUtils';
 import { DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
 import type { DragPlan } from '../../DragPlan';
 import type { GridSurface } from '../../grid/GridSurface';
@@ -23,7 +22,14 @@ export class GridResizeGesture extends BaseDragStrategy {
     private resizeDirection: 'left' | 'right' = 'right';
     private gridSurface: GridSurface | null = null;
     private colWidth: number = 0;
+    /** 1-based date col index (calendar: 週 row 内 1-7、allday: dates[] 内 1..N)。renderer の dataset.colStart に対応。 */
     private startCol: number = 0;
+    /**
+     * gridColumn 書き込み時の軸オフセット。Calendar: 週番号列ありなら 1、無しなら 0。
+     * AllDay: 常に 1 (左端に axis col)。`startCol + colOffset` で gridColumn col に変換。
+     */
+    private colOffset: number = 0;
+    /** 表示値由来 (`dataset.span`)。commit には参照しない (= calendar/allday 共通契約)。 */
     private initialSpan: number = 0;
     private initialVisualStart: string = '';
     private initialVisualEnd: string = '';
@@ -32,7 +38,8 @@ export class GridResizeGesture extends BaseDragStrategy {
     private refHeaderCell: HTMLElement | null = null;
     private baseTask: Task | null = null;
     private hiddenElements: HTMLElement[] = [];
-    private calendarPreviewTargetDate: string | null = null;
+    /** Resize 中の preview target date。`onUp` で commit に渡す絶対日付 (両 surface 共用)。 */
+    private previewTargetDate: string | null = null;
     private isAllDay: boolean = false;
     private ghostRenderer: GhostRenderer | null = null;
 
@@ -74,19 +81,23 @@ export class GridResizeGesture extends BaseDragStrategy {
         const visual = this.getVisualDateRange(this.baseTask, startHour);
         this.initialVisualStart = visual.start;
         this.initialVisualEnd = visual.end;
-        this.initialSpan = DateUtils.getDiffDays(visual.start, visual.end) + 1;
         this.colWidth = this.gridSurface.getColWidth();
 
+        // startCol / initialSpan は **表示値** から取り直す。両 surface とも renderer で
+        // dataset に出力済 (calendar: CalendarView.ts、allday: AllDaySectionRenderer.ts)。
+        // 旧実装では allday だけ visual range 由来で initialSpan を計算しており、view 端
+        // clip された split segment (visualSpan > displaySpan) で commit が delta ずれを
+        // 起こす reference frame バグの根本だった。表示値統一で対称化。
+        this.startCol = Number.parseInt(el.dataset.colStart || '1', 10);
+        this.initialSpan = Number.parseInt(el.dataset.span || '1', 10);
         if (isCalendar) {
-            this.startCol = Number.parseInt(el.dataset.colStart || '1', 10);
-            this.initialSpan = Number.parseInt(el.dataset.span || '1', 10);
+            const weekRow = el.closest('.cal-week-row') as HTMLElement | null;
+            this.colOffset = weekRow?.classList.contains('has-week-numbers') ? 1 : 0;
         } else {
-            const gridCol = el.style.gridColumn;
-            const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
-            this.startCol = colMatch ? parseInt(colMatch[1]) : 2;
+            this.colOffset = 1; // axis col 固定
         }
         this.initialGridColumn = el.style.gridColumn;
-        this.calendarPreviewTargetDate = null;
+        this.previewTargetDate = null;
         this.hiddenElements = [];
         const doc = context.container.ownerDocument || document;
         this.ghostRenderer = new GhostRenderer(el, doc);
@@ -112,14 +123,10 @@ export class GridResizeGesture extends BaseDragStrategy {
         const deltaY = e.clientY - this.initialY;
         if (!this.checkMoveThreshold(deltaX, deltaY)) return;
 
-        if (this.isAllDay) {
-            this.processAllDayResize(e);
-        } else {
-            this.processCalendarResize(e, context);
-        }
+        this.processResize(e, context);
     }
 
-    async onUp(e: PointerEvent, context: DragContext): Promise<void> {
+    async onUp(_e: PointerEvent, context: DragContext): Promise<void> {
         if (!this.dragTask || !this.dragEl) return;
         this.clearHighlight();
 
@@ -129,33 +136,33 @@ export class GridResizeGesture extends BaseDragStrategy {
             return;
         }
 
-        if (this.isAllDay) {
-            await this.finishAllDayResize(context);
-        } else {
-            await this.finishCalendarResize(e, context);
-        }
+        await this.finishResize(context);
     }
 
-    // ========== Calendar resize ==========
+    // ========== Resize 経路 (calendar / allday 共通) ==========
 
-    private processCalendarResize(e: PointerEvent, context: DragContext): void {
+    /**
+     * pointermove 中の display 更新と previewTargetDate の保存。
+     * Surface 差分は cross-week ghost preview (calendar 限定) のみで、commit に
+     * 流れる targetDate と display gridColumn 更新は両 surface 共通の流れ。
+     */
+    private processResize(e: PointerEvent, context: DragContext): void {
         if (!this.dragEl || !this.gridSurface) return;
-        const sourceWeekRow = this.container as HTMLElement;
-        const colOffset = sourceWeekRow.classList.contains('has-week-numbers') ? 1 : 0;
-        const sourceWeekStart = sourceWeekRow?.dataset.weekStart || context.getViewStartDate();
         const target = this.gridSurface.locatePointer(e.clientX, e.clientY, {
             resizeDirection: this.resizeDirection,
             suppressEl: this.dragEl,
         });
         if (!target) return;
 
-        const crossWeek = target.weekStart !== sourceWeekStart;
         const trackIndex = Number.parseInt(this.dragEl.dataset.trackIndex || '0', 10);
+        const sourceWeekRow = this.isAllDay ? null : (this.container as HTMLElement | null);
+        const sourceWeekStart = sourceWeekRow?.dataset.weekStart ?? context.getViewStartDate();
+        const crossWeek = !this.isAllDay && target.weekStart !== sourceWeekStart;
 
         if (this.resizeDirection === 'right') {
             const boundedEnd = target.targetDate < this.initialVisualStart
                 ? this.initialVisualStart : target.targetDate;
-            this.calendarPreviewTargetDate = boundedEnd;
+            this.previewTargetDate = boundedEnd;
 
             if (crossWeek) {
                 this.hiddenElements.forEach(el => el.classList.add('is-drag-hidden'));
@@ -166,14 +173,14 @@ export class GridResizeGesture extends BaseDragStrategy {
                 return;
             }
 
-            this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
-            this.ghostRenderer?.clear();
-            this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
+            this.clearCrossWeekPreview();
             const newSpan = Math.max(1, target.col - this.startCol + 1);
-            this.dragEl.style.gridColumn = `${this.startCol + colOffset} / span ${newSpan}`;
+            this.dragEl.style.gridColumn = `${this.startCol + this.colOffset} / span ${newSpan}`;
+            if (this.isAllDay) this.updateArrowPosition(this.startCol + this.colOffset + newSpan);
         } else {
-            const boundedStart = target.targetDate > this.initialVisualEnd ? this.initialVisualEnd : target.targetDate;
-            this.calendarPreviewTargetDate = boundedStart;
+            const boundedStart = target.targetDate > this.initialVisualEnd
+                ? this.initialVisualEnd : target.targetDate;
+            this.previewTargetDate = boundedStart;
 
             if (crossWeek) {
                 this.hiddenElements.forEach(el => el.classList.add('is-drag-hidden'));
@@ -184,39 +191,35 @@ export class GridResizeGesture extends BaseDragStrategy {
                 return;
             }
 
-            this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
-            this.ghostRenderer?.clear();
-            this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
+            this.clearCrossWeekPreview();
             const currentEndCol = this.startCol + this.initialSpan - 1;
-            let targetStartCol = target.col;
-            targetStartCol = Math.min(targetStartCol, currentEndCol);
+            let targetStartCol = Math.min(target.col, currentEndCol);
             targetStartCol = Math.max(targetStartCol, 1);
             const newSpan = Math.max(1, currentEndCol - targetStartCol + 1);
-            this.dragEl.style.gridColumn = `${targetStartCol + colOffset} / span ${newSpan}`;
+            this.dragEl.style.gridColumn = `${targetStartCol + this.colOffset} / span ${newSpan}`;
         }
     }
 
-    private async finishCalendarResize(e: PointerEvent, context: DragContext): Promise<void> {
-        if (!this.dragTask || !this.dragEl || !this.baseTask || !this.gridSurface) {
+    private async finishResize(context: DragContext): Promise<void> {
+        if (!this.dragTask || !this.dragEl || !this.baseTask) {
             this.cleanup();
             return;
         }
-
-        const target = this.gridSurface.locatePointer(e.clientX, e.clientY, {
-            resizeDirection: this.resizeDirection,
-            suppressEl: this.dragEl,
-        });
-        const targetDate = this.calendarPreviewTargetDate || target?.targetDate;
+        const targetDate = this.previewTargetDate;
         if (!targetDate) {
             this.cleanup();
             return;
         }
-
-        await this.commitPlan(context, this.buildCalendarResizePlan(targetDate), this.dragTask.id);
+        await this.commitPlan(context, this.buildResizePlan(targetDate), this.dragTask.id);
         this.cleanup();
     }
 
-    private buildCalendarResizePlan(targetDate: string): DragPlan | null {
+    /**
+     * Resize の commit プラン。targetDate (絶対日付) を受け取って effectiveStartDate /
+     * effectiveEndDate を絶対値で書き出す。calendar / allday で完全共通、surface 由来の
+     * delta / span は登場しない (= 過去 reference frame 不整合バグの再発防止)。
+     */
+    private buildResizePlan(targetDate: string): DragPlan | null {
         if (!this.baseTask) return null;
         let edits: DisplayDateEdits | null = null;
         if (this.resizeDirection === 'right') {
@@ -232,67 +235,11 @@ export class GridResizeGesture extends BaseDragStrategy {
         return edits ? { edits, baseTask: this.baseTask } : null;
     }
 
-    // ========== AllDay resize ==========
-
-    private processAllDayResize(e: PointerEvent): void {
-        if (!this.dragEl || !this.refHeaderCell) return;
-        const baseX = this.refHeaderCell.getBoundingClientRect().left;
-
-        if (this.resizeDirection === 'right') {
-            const taskLeft = baseX + (this.startCol - 2) * this.colWidth;
-            const widthPx = e.clientX - taskLeft;
-            const newSpan = Math.max(1, Math.ceil(widthPx / this.colWidth));
-            this.dragEl.style.gridColumn = `${this.startCol} / span ${newSpan}`;
-            this.updateArrowPosition(this.startCol + newSpan);
-        } else {
-            const colIndex = Math.floor((e.clientX - baseX) / this.colWidth);
-            let targetStartCol = colIndex + 2;
-            const currentEndCol = this.startCol + this.initialSpan - 1;
-            targetStartCol = Math.min(targetStartCol, currentEndCol);
-            const newSpan = Math.max(1, currentEndCol - targetStartCol + 1);
-            this.dragEl.style.gridColumn = `${targetStartCol} / span ${newSpan}`;
-        }
-    }
-
-    private async finishAllDayResize(context: DragContext): Promise<void> {
-        if (!this.dragTask || !this.dragEl || !this.baseTask) {
-            this.cleanup();
-            return;
-        }
-        const gridCol = this.dragEl.style.gridColumn;
-        const colMatch = gridCol.match(/^(\d+)\s*\/\s*span\s+(\d+)$/);
-        if (!colMatch) {
-            this.cleanup();
-            return;
-        }
-        const currentStartCol = parseInt(colMatch[1]);
-        const currentSpan = parseInt(colMatch[2]);
-        await this.commitPlan(context, this.buildAllDayResizePlan(currentStartCol, currentSpan), this.dragTask.id);
-        this.cleanup();
-    }
-
-    private buildAllDayResizePlan(currentStartCol: number, currentSpan: number): DragPlan | null {
-        if (!this.baseTask) return null;
-        if (currentStartCol === this.startCol && currentSpan === this.initialSpan) return null;
-
-        let edits: DisplayDateEdits | null = null;
-        if (this.resizeDirection === 'right') {
-            const spanDelta = currentSpan - this.initialSpan;
-            const newVisualEnd = DateUtils.addDays(this.initialVisualEnd, spanDelta);
-            if (newVisualEnd >= this.initialVisualStart) {
-                edits = { effectiveEndDate: newVisualEnd };
-            }
-        } else {
-            const startColDelta = currentStartCol - this.startCol;
-            const newVisualStart = DateUtils.addDays(this.initialVisualStart, startColDelta);
-            if (newVisualStart <= this.initialVisualEnd) {
-                edits = { effectiveStartDate: newVisualStart };
-                if (!this.baseTask.endDate) {
-                    edits.effectiveEndDate = this.initialVisualEnd;
-                }
-            }
-        }
-        return edits ? { edits, baseTask: this.baseTask } : null;
+    private clearCrossWeekPreview(): void {
+        if (!this.dragEl) return;
+        this.hiddenElements.forEach(el => el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint'));
+        this.ghostRenderer?.clear();
+        this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
     }
 
     // ========== ヘルパー ==========
@@ -318,7 +265,7 @@ export class GridResizeGesture extends BaseDragStrategy {
         super.cleanup();
         this.container = null;
         this.hiddenElements = [];
-        this.calendarPreviewTargetDate = null;
+        this.previewTargetDate = null;
         this.baseTask = null;
         this.gridSurface = null;
     }
