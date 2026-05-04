@@ -689,14 +689,26 @@
    7. STATES (:hover, .is-selected, .is-dragging)
    ========================================================================== */
 
-/* Hover: paint a 1px file-accent border on __shape (thinner than the 2px
-   selection border on __shape::after). bg stays as-is (cards already carry
-   a per-task tint at rest). box-sizing keeps the border inside inset:0.
-   `.task-card--in-detail-modal` opts out of all interactive states because
-   the modal is a presentational surface. */
-.task-card:not(.task-card--in-detail-modal):hover .task-card__shape {
-    border: 1px solid var(--file-accent, var(--tv-accent));
-    box-sizing: border-box;
+/* Hover / Selection 枠は同じ __shape::after overlay に集約する。両者の
+   違いは線幅だけ (hover=1px, selected=2px) で、線幅は --task-card-frame-width
+   カスタムプロパティで切り替える。Ghost (drag 中の card clone) も
+   `is-selected` を継いだまま clone されるので同じルールで自動的に枠が出る
+   (旧 `--drag-preview` 列挙は撤廃)。__shape の mask が sawtooth に追従する
+   ため、cut 辺の border は下の override で除去する。
+   `.task-card--in-detail-modal` は presentational なので :where() で
+   hover 側のみ除外（詳細度はそのまま）。 */
+.task-card:where(:not(.task-card--in-detail-modal)):hover .task-card__shape::after,
+.task-card.is-selected .task-card__shape::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
+    border-radius: inherit;
+    pointer-events: none;
+}
+
+.task-card.is-selected .task-card__shape::after {
+    --task-card-frame-width: 2px;
 }
 
 .task-card.is-dragging {
@@ -704,29 +716,19 @@
     cursor: grabbing;
 }
 
-/* Selection 枠は __shape::after に置く。Ghost (drag 中の card clone) も
-   `is-selected` を継いだまま clone されるので同じルールで自動的に枠が出る
-   (旧 `--drag-preview` 列挙は撤廃)。__shape の mask が sawtooth に追従する
-   ため、cut 辺の border は下の override で除去する。 */
-.task-card.is-selected .task-card__shape::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border: 2px solid var(--file-accent, var(--tv-accent));
-    border-radius: inherit;
-    pointer-events: none;
-}
-
 /* Cut 辺の border を完全除去。mask に追従させると border が sawtooth
    形状に切り刻まれて散在するため、整然とした 3 辺枠にする。
    base は vertical cut (timeline grid) を担当、horizontal cut は view
-   別ファイルで上書き。 */
+   別ファイルで上書き。hover と selected で同じ cut 辺除去が要るので
+   セレクタを comma で束ねる。 */
+.task-card:where(:not(.task-card--in-detail-modal)).task-card--split-continues-after:hover .task-card__shape::after,
 .task-card.is-selected.task-card--split-continues-after .task-card__shape::after {
     border-bottom: none;
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
 }
 
+.task-card:where(:not(.task-card--in-detail-modal)).task-card--split-continues-before:hover .task-card__shape::after,
 .task-card.is-selected.task-card--split-continues-before .task-card__shape::after {
     border-top: none;
     border-top-left-radius: 0;
