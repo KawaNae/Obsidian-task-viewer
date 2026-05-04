@@ -88,6 +88,10 @@ export class TaskCardRenderer extends Component {
         // (e.g. TimelineView.tryPartialUpdate) can reuse the same key.
         container.dataset.cardInstanceId = cardInstanceId;
 
+        if (isDetailModal) {
+            container.addClass('task-card--in-detail-modal');
+        }
+
         const prev = this.cardComponents.get(container);
         if (prev) this.removeChild(prev);
         const cardComp = new Component();

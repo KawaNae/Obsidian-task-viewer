@@ -691,8 +691,10 @@
 
 /* Hover: paint a 1px file-accent border on __shape (thinner than the 2px
    selection border on __shape::after). bg stays as-is (cards already carry
-   a per-task tint at rest). box-sizing keeps the border inside inset:0. */
-.task-card:hover .task-card__shape {
+   a per-task tint at rest). box-sizing keeps the border inside inset:0.
+   `.task-card--in-detail-modal` opts out of all interactive states because
+   the modal is a presentational surface. */
+.task-card:not(.task-card--in-detail-modal):hover .task-card__shape {
     border: 1px solid var(--file-accent, var(--tv-accent));
     box-sizing: border-box;
 }

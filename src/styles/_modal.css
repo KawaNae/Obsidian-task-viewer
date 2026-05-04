@@ -274,7 +274,12 @@
     font-size: var(--task-card-font-size);
 }
 
-.task-detail-modal .task-card .task-card__shape {
+/* `.task-card--in-detail-modal` modifier: applied by TaskCardRenderer when
+   the card is rendered inside the detail modal. The modal is a
+   presentational surface, so we suppress all interactive visual treatments
+   here in one place. Hover is opted-out via `:not(...)` on the hover rule
+   itself in _task-card.css. */
+.task-card--in-detail-modal .task-card__shape {
     box-shadow: none;
     filter: none;
 }
