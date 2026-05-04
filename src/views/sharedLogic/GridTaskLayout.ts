@@ -12,6 +12,19 @@ export interface TaskDateRange {
 
 /**
  * A task placed on the grid with all positional metadata computed.
+ *
+ * Flag semantics (重要 — 過去のバグ温床なので明確に分離している):
+ *   - `isMultiDay`     : 幾何的事実。`effectiveEnd > effectiveStart` のとき true。
+ *   - `continuesBefore`: この segment より前に同 task の連続部分がある（pre-split flag
+ *                        または internal clip 由来）。
+ *   - `continuesAfter` : 同上、後ろ側。
+ *   - `useBarVariant`  : **描画契約**。CSS class `task-card--multi-day`
+ *                        （= 横軸 bar variant）を付けるべきかどうかを表す派生値。
+ *                        `isMultiDay || continuesBefore || continuesAfter`。
+ *                        view 端で 1 日に clip された split segment（isMultiDay=false
+ *                        だが continuesBefore/After=true）でも bar として描かせるため、
+ *                        OR を 1 箇所に集約してある。calendar / allday の両 renderer は
+ *                        この field のみを参照すること（条件再構築は drift の元）。
  */
 export interface GridTaskEntry {
     task: DisplayTask;
@@ -27,8 +40,14 @@ export interface GridTaskEntry {
     continuesBefore: boolean;
     /** Task extends after the visible date range */
     continuesAfter: boolean;
-    /** Whether this task spans more than one column */
+    /** Whether this task spans more than one column (geometric fact) */
     isMultiDay: boolean;
+    /**
+     * 横軸 bar variant として描画すべきかの派生 flag。
+     * `isMultiDay || continuesBefore || continuesAfter`。
+     * 詳細は interface の docstring 参照。
+     */
+    useBarVariant: boolean;
     /** Due arrow metadata, null if no arrow */
     dueArrow: DueArrowInfo | null;
 }
@@ -68,6 +87,7 @@ interface RawEntry {
     continuesBefore: boolean;
     continuesAfter: boolean;
     isMultiDay: boolean;
+    useBarVariant: boolean;
     dueArrow: DueArrowInfo | null;
 }
 
@@ -149,9 +169,11 @@ export function computeGridLayout(
             }
         }
 
+        const useBarVariant = isMultiDay || continuesBefore || continuesAfter;
+
         rawEntries.push({
             task, colStart, span, segmentId,
-            continuesBefore, continuesAfter, isMultiDay,
+            continuesBefore, continuesAfter, isMultiDay, useBarVariant,
             dueArrow,
         });
     }

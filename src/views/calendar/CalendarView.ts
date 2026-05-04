@@ -767,7 +767,7 @@ export class CalendarView extends ItemView {
             el.dataset.trackIndex = `${entry.trackIndex}`;
         };
 
-        if (entry.isMultiDay || entry.continuesBefore || entry.continuesAfter) {
+        if (entry.useBarVariant) {
             const barEl = weekRow.createDiv('task-card task-card--multi-day');
             barEl.createDiv('task-card__shape');
             barEl.dataset.id = entry.segmentId;

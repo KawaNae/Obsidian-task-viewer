@@ -88,7 +88,7 @@ export class AllDaySectionRenderer {
 
         const el = container.createDiv('task-card task-card--allday');
         el.createDiv('task-card__shape');
-        if (entry.isMultiDay) {
+        if (entry.useBarVariant) {
             el.addClass('task-card--multi-day');
         }
         if (entry.continuesBefore) el.addClass('task-card--split-continues-before');

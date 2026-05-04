@@ -505,7 +505,17 @@
    `.task-card--multi-day` を持つカードは横方向レイアウトなので mask を
    左右辺に切り替える。view ancestor (.calendar-view / .timeline-view)
    ではなく class predicate にしているのは drag ghost が body 直下に
-   detach されても規則が適用されるようにするため。 */
+   detach されても規則が適用されるようにするため。
+
+   セマンティクス（重要）: `.task-card--multi-day` は **「横軸 bar variant」**
+   を意味する。「effective range が複数日」だけでなく view 端で 1 日に clip
+   された split segment（continuesBefore || continuesAfter）にも必ず付く。
+   下の `:not(.task-card--multi-day)` ルール群（cut 辺ハンドル抑止）は
+   class が層別 layout 軸の唯一の指標である前提で書かれているため、
+   付与漏れが起きると縦カット規則が誤動作する（過去にこれが原因で allday
+   left-1day で左アクセントバー残存 / right-1day で move ハンドル消失）。
+   付与判定は `GridTaskEntry.useBarVariant`（`GridTaskLayout.ts`）が単一
+   ソース。`isMultiDay` 単独 gate は使わないこと。 */
 .task-card--multi-day.task-card--split-continues-after {
     padding-top: 2px;
     padding-bottom: 2px;
@@ -531,10 +541,15 @@
     border-bottom-left-radius: inherit;
 }
 
+/* continues-before 単独では padding-left に zig を足し込まない。
+   sawtooth は __shape の mask なので content (checkbox/text) は base の
+   8px から描き始めても sawtooth と重ならず、allday lane と calendar bar の
+   見た目が揃う（旧 16px 指定は allday lane の上書きで実質 8px だったが
+   calendar に上書きが無く 16px のまま漏れていた）。both-cut では下の
+   ルールで zig を加え、左右のシンメトリを保つ。 */
 .task-card--multi-day.task-card--split-continues-before {
     padding-top: 2px;
     padding-bottom: 2px;
-    padding-left: calc(8px + var(--task-card-split-zig));
 }
 
 .task-card--multi-day.task-card--split-continues-before .task-card__shape {
