@@ -118,6 +118,7 @@ export class GhostRenderer {
             ghost.style.position = '';
             ghost.style.left = '';
             ghost.style.top = '';
+            ghost.style.transform = '';
             ghost.style.width = '';
             ghost.style.height = '';
             ghost.style.gridColumn = plan.gridColumn;
@@ -128,8 +129,15 @@ export class GhostRenderer {
             ghost.style.gridColumn = '';
             ghost.style.gridRow = '';
             ghost.style.position = plan.layout;
-            ghost.style.left = `${plan.left}px`;
-            ghost.style.top = `${plan.top}px`;
+            // Position via transform: translate ではなく top/left を使うと、
+            // top/left の更新は layout reflow を毎フレーム発生させ、will-change
+            // hint と挙動も不整合になる（hint が transform でも実際は layout
+            // animation）。anchor を 0,0 に固定し offset を transform で与える
+            // ことで GPU compositor layer を維持し、iPad WebKit の handle trail
+            // 現象を防ぐ。
+            ghost.style.left = '0px';
+            ghost.style.top = '0px';
+            ghost.style.transform = `translate(${plan.left}px, ${plan.top}px)`;
             ghost.style.width = `${plan.width}px`;
             ghost.style.height = `${plan.height}px`;
         }

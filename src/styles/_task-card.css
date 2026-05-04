@@ -636,11 +636,33 @@
    `--ghost-positioned` (Timeline の absolute / cross-view の fixed) のいずれかが
    追加される。inline style は layout 値 (grid-area / position+top+left+w+h)
    のみで、視覚スタイル・spacing は cascade に任せる。 */
+/* iPad/WebKit: filter:drop-shadow を持つ要素を inline style で動かすと、shadow の
+   bbox 外領域が repaint されず DOM 更新まで残像 trail が残る。GPU compositor layer
+   に promote する `will-change` で repaint 範囲が layer 全体に広がり trail を防ぐ。
+   ghost は `transform: translate(...)` で動かす設計（GhostRenderer:applyPlan）。
+   top/left を毎フレーム更新する旧方式は layout reflow が走るうえ will-change hint
+   とも不整合で、browser が GPU layer を維持できずに handle trail が残っていた。
+   transform-based movement にすることで hint と実挙動が一致し、layer が安定する。
+   ghost 内の handle は `top: -12px` 等で bbox 外に置かれており、2D transform
+   (translateX(-50%) 等) を持つため iPad WebKit で独立 paint surface 化されること
+   がある。その場合 ghost layer の paint bounds から漏れて handle 形状の trail が
+   残るので、drag 中の ghost の handle にだけ個別 promote を当てる（drag 1 件あたり
+   ~6 個 / drag 中だけ なので GPU 予算は問題にならない。drag 終了で promotion 解除）。
+   source (.is-dragging) は opacity が一度切り替わるだけで位置は動かないので opacity
+   のみ hint。 */
+.task-card--ghost {
+    will-change: transform;
+}
+.task-card--ghost .task-card__handle {
+    will-change: transform;
+}
+.task-card.is-dragging {
+    will-change: opacity;
+}
+
 .task-card--ghost {
     pointer-events: none;
-    /* Source (`.is-dragging`) は 0.5 に薄れ、ghost は 0.75 で目立たせる非対称設計。
-       drop 先のプレビューを source の残像より優先して認知させる狙い。 */
-    opacity: 0.75;
+    opacity: 0.5;
 }
 
 /* Host の pointer-events:none は `.task-card__handle { pointer-events: auto }`
