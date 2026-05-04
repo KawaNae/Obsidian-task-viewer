@@ -1,16 +1,24 @@
-node_modules/
-.DS_Store
-.obsidian/
-dist/
-*.log
-main.js
-styles.css
-log.md
-.agent
-.claude/
-.plan/
-build/
-tmp_legacy
-debug_tasks.md
-agents.md
-.vscode
+# Whitelist mode: deny everything by default, then re-include explicit paths.
+# 追跡したい新規ファイル/ディレクトリは下のリストに追加すること。
+
+# 1. Default-deny: ignore all files. `!*/` でディレクトリ traversal は許可
+#    (未許可ディレクトリ配下のファイルは依然として無視される)。
+*
+!*/
+
+# 2. Root-level config / metadata
+!/.gitignore
+!/DEVELOPER.md
+!/esbuild.config.mjs
+!/manifest.json
+!/package.json
+!/package-lock.json
+!/readme.md
+!/tsconfig.json
+!/vitest.config.e2e.ts
+!/vitest.config.ts
+
+# 3. Source / docs / tests trees (recursive)
+!/src/**
+!/docs/**
+!/tests/**

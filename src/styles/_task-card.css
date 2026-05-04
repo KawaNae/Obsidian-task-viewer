@@ -638,9 +638,9 @@
    のみで、視覚スタイル・spacing は cascade に任せる。 */
 .task-card--ghost {
     pointer-events: none;
-    /* resize gesture では source 自体に `.is-dragging` の opacity:0.5 が
-       かかるため、move の ghost も 0.5 に揃えて両者の半透明度を統一する。 */
-    opacity: 0.5;
+    /* Source (`.is-dragging`) は 0.5 に薄れ、ghost は 0.75 で目立たせる非対称設計。
+       drop 先のプレビューを source の残像より優先して認知させる狙い。 */
+    opacity: 0.75;
 }
 
 /* Host の pointer-events:none は `.task-card__handle { pointer-events: auto }`
