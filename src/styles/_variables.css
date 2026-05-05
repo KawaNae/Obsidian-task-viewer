@@ -62,15 +62,19 @@
     --z-current-time-indicator: 200;
     --z-task-card-handle: 20;
     --z-task-card-allday: 25;
-    --z-timeline-habits-section: 45;
-    /* Above habits-section (45) so the topmost allday card's handles —
-       which extend -12px above the section bounds — render over habits
-       instead of being clipped by its stacking context. Still below
-       date-header (50). */
-    --z-timeline-allday-sticky: 46;
-    --z-timeline-date-header: 50;
-    /* Periodic header sits above date-header in the sticky stack. */
-    --z-timeline-periodic-header: 55;
+    /* Sticky header stack — kept in the 200+ band so high-priority
+       in-scroll elements (selected task card 200, current-time-indicator
+       200, allday-handle 100) cannot bleed through the sticky layers
+       when their natural y-position falls inside a sticky region. The
+       internal ordering below mirrors the visual top-to-bottom order
+       (periodic > date > allday > habits) plus the +1 offset on
+       allday-sticky so the topmost allday card's handles (which extend
+       -12px above the section bounds) render over habits instead of
+       being clipped by its stacking context. */
+    --z-timeline-habits-section: 245;
+    --z-timeline-allday-sticky: 246;
+    --z-timeline-date-header: 250;
+    --z-timeline-periodic-header: 255;
     --z-allday-cell-drag-over: 50;
     --z-timer-widget: 65;
     --z-task-card-allday-handle: 100;
