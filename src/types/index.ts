@@ -323,6 +323,7 @@ export interface ViewState {
     pinnedListCollapsed?: Record<string, boolean>;
     pinnedLists?: PinnedListDefinition[];
     customName?: string;
+    periodicHeaderCollapsed?: boolean;
 }
 
 export interface PinnedListDefinition {

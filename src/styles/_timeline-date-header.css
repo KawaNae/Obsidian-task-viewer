@@ -4,14 +4,16 @@
 ============================================================================= */
 
 /* Date Header Row
-   Sticky at top of .timeline-grid scroll viewport. z-index above
-   habits-section (45) and allday-section (30) so it always stays on top. */
+   Sticky below the periodic-header (or at top: 0 when periodic is collapsed
+   to 0 height). --date-header-sticky-top is set from JS each render based on
+   the periodic-header's actual offsetHeight so the stack stays correct when
+   the periodic header is expanded/collapsed. */
 .date-header {
     background-color: var(--tv-bg-date-header);
     flex-shrink: 0;
     overflow-y: hidden;
     position: sticky;
-    top: 0;
+    top: var(--date-header-sticky-top, 0);
     z-index: var(--z-timeline-date-header);
 }
 

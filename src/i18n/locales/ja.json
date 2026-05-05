@@ -560,6 +560,10 @@
     "expandAllDay": "終日欄を展開",
     "collapseAllDay": "終日欄を折りたたむ"
   },
+  "periodicHeader": {
+    "expand": "期間ヘッダーを展開",
+    "collapse": "期間ヘッダーを折りたたむ"
+  },
   "cli": {
     "title": "Task Viewer CLIリファレンス",
     "commands": "コマンド",

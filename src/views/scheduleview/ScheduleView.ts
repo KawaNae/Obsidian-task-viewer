@@ -18,6 +18,8 @@ import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
+import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
+import { PeriodicHeaderRenderer } from '../sharedUI/PeriodicHeaderRenderer';
 import type { CollapsibleSectionKey, TimedDisplayTask } from './ScheduleTypes';
 import { ScheduleGridCalculator } from './utils/ScheduleGridCalculator';
 import { ScheduleTaskCategorizer } from './utils/ScheduleTaskCategorizer';
@@ -37,6 +39,7 @@ interface ScheduleViewState {
     currentDate?: string;
     filterState?: FilterState;
     customName?: string;
+    periodicHeaderCollapsed?: boolean;
 }
 
 export class ScheduleView extends ItemView {
@@ -51,6 +54,8 @@ export class ScheduleView extends ItemView {
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly habitRenderer: HabitTrackerRenderer;
+    private readonly dateHeaderRenderer: DateHeaderRenderer;
+    private readonly periodicHeaderRenderer: PeriodicHeaderRenderer;
     private readonly filterMenu = new FilterMenuComponent();
     private readonly toolbar: ScheduleToolbar;
     private readonly menuHandler: MenuHandler;
@@ -68,6 +73,7 @@ export class ScheduleView extends ItemView {
     private scrollRestorePending = false;
     private savedScrollTop: number | null = null;
     private customName: string | undefined;
+    private periodicHeaderCollapsed: boolean = true;
     private collapsedSections: Record<CollapsibleSectionKey, boolean> = {
         allDay: false,
         dueOnly: false,
@@ -87,6 +93,18 @@ export class ScheduleView extends ItemView {
         this.addChild(this.taskRenderer);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
+        this.dateHeaderRenderer = new DateHeaderRenderer({
+            app: this.app,
+            plugin: this.plugin,
+            hoverParent: this.hoverParent,
+            linkInteractionManager: this.linkInteractionManager,
+        });
+        this.periodicHeaderRenderer = new PeriodicHeaderRenderer({
+            app: this.app,
+            plugin: this.plugin,
+            hoverParent: this.hoverParent,
+            linkInteractionManager: this.linkInteractionManager,
+        });
         this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.writeService, this.plugin);
@@ -190,6 +208,10 @@ export class ScheduleView extends ItemView {
             this.customName = undefined;
         }
 
+        if (typeof state?.periodicHeaderCollapsed === 'boolean') {
+            this.periodicHeaderCollapsed = state.periodicHeaderCollapsed;
+        }
+
         await super.setState(state, result);
         if (this.container) {
             await this.performRender();
@@ -206,6 +228,10 @@ export class ScheduleView extends ItemView {
         }
         if (this.customName) {
             result.customName = this.customName;
+        }
+        if (this.periodicHeaderCollapsed === false) {
+            // Persist only when expanded (default true → no persistence needed for collapsed state)
+            result.periodicHeaderCollapsed = false;
         }
         return result;
     }
@@ -231,6 +257,7 @@ export class ScheduleView extends ItemView {
     async onClose(): Promise<void> {
         this.hoverParent.dispose();
         this.filterMenu.close();
+        this.dateHeaderRenderer.dispose();
         if (this.unsubscribe) {
             this.unsubscribe();
             this.unsubscribe = null;
@@ -329,7 +356,14 @@ export class ScheduleView extends ItemView {
     ): Promise<void> {
         const categorized = this.taskCategorizer.toScheduleFormat(baseCategorized);
 
-        this.renderDateHeader(fixedContainer, date);
+        const { toggleButton } = this.periodicHeaderRenderer.render(fixedContainer, {
+            dates: [date],
+            gridTemplateColumns: this.getScheduleRowColumns(),
+            collapsed: this.periodicHeaderCollapsed,
+            onToggle: () => this.togglePeriodicHeader(),
+        });
+
+        this.renderDateHeader(fixedContainer, date, toggleButton);
 
         // Habits in fixed area (always visible), allday in scroll body (sticky on PC)
         this.renderHabitsSection(fixedContainer, date);
@@ -363,56 +397,31 @@ export class ScheduleView extends ItemView {
         }
     }
 
-    private renderDateHeader(container: HTMLElement, date: string): void {
-        const row = container.createDiv('tv-grid-row date-header');
-        row.style.gridTemplateColumns = this.getScheduleRowColumns();
-        row.createDiv('date-header__cell').setText(' ');
-
-        const dateCell = row.createDiv('date-header__cell');
-        dateCell.dataset.date = date;
-
-        const dateObj = this.parseLocalDate(date);
-        const weekdays = t('calendar.weekdaysShort').split(',');
-        const dayName = weekdays[new Date(date + 'T00:00:00Z').getUTCDay()];
-        const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(this.app, dateObj);
-        const linkLabel = DailyNoteUtils.getDailyNoteLabelForDate(this.app, dateObj);
-        const fullLabel = `${linkLabel} ${dayName}`;
-        const linkEl = dateCell.createEl('a', { cls: 'internal-link date-header__date-link', text: fullLabel });
-        linkEl.dataset.href = linkTarget;
-        linkEl.setAttribute('href', linkTarget);
-        linkEl.setAttribute('aria-label', `Open daily note: ${fullLabel}`);
-        linkEl.addEventListener('click', (event: MouseEvent) => {
-            event.preventDefault();
-        });
-
+    private renderDateHeader(container: HTMLElement, date: string, toggleButton: HTMLElement): void {
         const todayVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-        if (date === todayVisualDate) {
-            dateCell.addClass('is-today');
-        }
-        if (date < todayVisualDate) {
-            const filterState = this.filterMenu.getFilterState();
-            const tasksOnDate = this.readService.getTasksForDateRange(date, date, filterState);
-            const hasOverdueTasks = tasksOnDate.some(dt =>
+        const isOverdue = (d: string): boolean => {
+            if (d >= todayVisualDate) return false;
+            const tasksOnDate = this.readService.getTasksForDateRange(d, d, this.filterMenu.getFilterState());
+            return tasksOnDate.some(dt =>
                 !isCompleteStatusChar(dt.statusChar, this.plugin.settings.statusDefinitions)
             );
-            if (hasOverdueTasks) {
-                dateCell.addClass('has-overdue');
-            }
-        }
+        };
 
-        this.linkInteractionManager.bind(
-            dateCell,
-            {
-                sourcePath: '',
-                hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-                hoverParent: this.hoverParent,
-            },
-            { bindClick: false }
-        );
-
-        dateCell.addEventListener('click', () => {
-            void this.openOrCreateDailyNote(dateObj);
+        const { axisCell } = this.dateHeaderRenderer.render(container, {
+            dates: [date],
+            gridTemplateColumns: this.getScheduleRowColumns(),
+            isOverdue,
+            enableCompactBehavior: false,
+            forceShortLabel: !this.periodicHeaderCollapsed,
         });
+
+        axisCell.appendChild(toggleButton);
+    }
+
+    private togglePeriodicHeader(): void {
+        this.periodicHeaderCollapsed = !this.periodicHeaderCollapsed;
+        void this.app.workspace.requestSaveLayout();
+        this.render();
     }
 
     private renderHabitsSection(container: HTMLElement, date: string): void {

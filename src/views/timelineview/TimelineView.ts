@@ -23,6 +23,9 @@ import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 
 import { GridRenderer } from './renderers/GridRenderer';
 import { AllDaySectionRenderer } from '../sharedUI/AllDaySectionRenderer';
+import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
+import { PeriodicHeaderRenderer } from '../sharedUI/PeriodicHeaderRenderer';
+import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
 import { PinnedListRenderer, type PinnedListCallbacks } from '../sharedUI/PinnedListRenderer';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
@@ -59,6 +62,7 @@ interface TimelineViewState {
     pinnedListCollapsed?: Record<string, boolean>;
     pinnedLists?: PinnedListDefinition[];
     customName?: string;
+    periodicHeaderCollapsed?: boolean;
 }
 
 export class TimelineView extends ItemView {
@@ -82,6 +86,9 @@ export class TimelineView extends ItemView {
     private sidebarFilterMenu = new FilterMenuComponent();
     private sidebarSortMenu = new SortMenuComponent();
     private habitRenderer: HabitTrackerRenderer;
+    private dateHeaderRenderer: DateHeaderRenderer;
+    private periodicHeaderRenderer: PeriodicHeaderRenderer;
+    private linkInteractionManager: TaskLinkInteractionManager;
 
     // ==================== State ====================
     private container: HTMLElement;
@@ -236,6 +243,9 @@ export class TimelineView extends ItemView {
             } else {
                 this.viewState.customName = undefined;
             }
+            if (typeof state.periodicHeaderCollapsed === 'boolean') {
+                this.viewState.periodicHeaderCollapsed = state.periodicHeaderCollapsed;
+            }
             // Note: startDate is not restored - always use "Today" logic on reload
         }
         await super.setState(state, result);
@@ -273,6 +283,9 @@ export class TimelineView extends ItemView {
         }
         if (this.viewState.customName) {
             state.customName = this.viewState.customName;
+        }
+        if (typeof this.viewState.periodicHeaderCollapsed === 'boolean') {
+            state.periodicHeaderCollapsed = this.viewState.periodicHeaderCollapsed;
         }
         return state;
     }
@@ -349,7 +362,29 @@ export class TimelineView extends ItemView {
         // Initialize Renderers
         this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow, VIEW_ID);
         this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel(), VIEW_ID);
-        this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler, this.hoverParent);
+        this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
+        this.dateHeaderRenderer = new DateHeaderRenderer({
+            app: this.app,
+            plugin: this.plugin,
+            hoverParent: this.hoverParent,
+            linkInteractionManager: this.linkInteractionManager,
+        });
+        this.periodicHeaderRenderer = new PeriodicHeaderRenderer({
+            app: this.app,
+            plugin: this.plugin,
+            hoverParent: this.hoverParent,
+            linkInteractionManager: this.linkInteractionManager,
+        });
+        this.gridRenderer = new GridRenderer(
+            this.container,
+            this.viewState,
+            this.plugin,
+            this.menuHandler,
+            this.hoverParent,
+            this.dateHeaderRenderer,
+            this.periodicHeaderRenderer,
+            () => this.togglePeriodicHeader(),
+        );
         this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.menuHandler, this.readService);
         // Persistent host for pinned lists. Lives outside the empty() target
         // (we explicitly detach it before container.empty() in performRender,
@@ -550,10 +585,20 @@ export class TimelineView extends ItemView {
     /**
      * Detail modal を開く 2 経路 (dblclick / detail handle) の共通エントリ。
      * modal が出た時点で card の選択状態は不要なので解除する。
+     *
+     * `selectTask(null)` は handle DOM ごと除去する破壊的操作なので、トリガと
+     * なった pointerdown の touch sequence が **完全に終わってから** 走らせる。
+     * pointerdown handler 内で同期に呼ぶと、元 touch target (handle 内 SVG path)
+     * が detached → 後続 pointerup/click が `.modal-bg` にリターゲットされ、
+     * Obsidian Modal の outside-click で modal が即閉じる (Android Chromium で
+     * 観測。CDP 実機トレース確認済み)。`setTimeout(0)` の macrotask 境界で
+     * touchend / pointerup / click の dispatch をすべて消化させてから DOM を
+     * 触る。modal は selection ring を視覚的に覆い隠すので、close 後に ring が
+     * 残らないという元 commit (7c43222) の意図はそのまま満たされる。
      */
     private openDetailModal(task: Task): void {
-        this.handleManager.selectTask(null);
         new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
+        setTimeout(() => this.handleManager.selectTask(null), 0);
     }
 
     /**
@@ -590,6 +635,7 @@ export class TimelineView extends ItemView {
             this.stickyAnchorObserver.disconnect();
             this.stickyAnchorObserver = null;
         }
+        this.dateHeaderRenderer?.dispose();
         this.renderController?.dispose();
     }
 
@@ -691,13 +737,28 @@ export class TimelineView extends ItemView {
      *  call from the resize observer callback (does NOT rebind the observer here —
      *  doing so re-arms the initial-observation callback per observe() call and
      *  causes an infinite ping-pong loop). */
+    /** Compute the sticky-top of every layer in the header stack
+     *  (periodic / date-header / habits / allday) from actual rendered
+     *  heights and write them as CSS variables on .timeline-grid. The CSS
+     *  side reads these variables for `position: sticky; top: ...`, so the
+     *  stack stays correct under any combination of: periodic expanded /
+     *  collapsed, date-header compact reflow, habits collapsed.
+     *  Idempotent on size; safe to call from the resize observer callback
+     *  (does NOT rebind the observer here — see rebindStickyAnchorObserver
+     *  for the rationale). */
     private updateAlldayStickyTop(): void {
         const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (!grid) return;
+        const periodic = grid.querySelector('.periodic-header') as HTMLElement | null;
         const dateHeader = grid.querySelector('.date-header') as HTMLElement | null;
         const habits = grid.querySelector('.habits-section') as HTMLElement | null;
-        const top = (dateHeader?.offsetHeight ?? 0) + (habits?.offsetHeight ?? 0);
-        grid.style.setProperty('--allday-sticky-top', `${top}px`);
+        const periodicH = periodic?.offsetHeight ?? 0;
+        const dateH = dateHeader?.offsetHeight ?? 0;
+        const habitsH = habits?.offsetHeight ?? 0;
+        grid.style.setProperty('--periodic-header-sticky-top', `0px`);
+        grid.style.setProperty('--date-header-sticky-top', `${periodicH}px`);
+        grid.style.setProperty('--habits-section-sticky-top', `${periodicH + dateH}px`);
+        grid.style.setProperty('--allday-sticky-top', `${periodicH + dateH + habitsH}px`);
     }
 
     /** Rebind the resize observer to the freshly-rendered anchor elements.
@@ -706,11 +767,20 @@ export class TimelineView extends ItemView {
         if (!this.stickyAnchorObserver) return;
         const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (!grid) return;
+        const periodic = grid.querySelector('.periodic-header') as HTMLElement | null;
         const dateHeader = grid.querySelector('.date-header') as HTMLElement | null;
         const habits = grid.querySelector('.habits-section') as HTMLElement | null;
         this.stickyAnchorObserver.disconnect();
+        if (periodic) this.stickyAnchorObserver.observe(periodic);
         if (dateHeader) this.stickyAnchorObserver.observe(dateHeader);
         if (habits) this.stickyAnchorObserver.observe(habits);
+    }
+
+    private togglePeriodicHeader(): void {
+        const current = this.viewState.periodicHeaderCollapsed ?? true;
+        this.viewState.periodicHeaderCollapsed = !current;
+        this.app.workspace.requestSaveLayout();
+        this.render();
     }
 
     private getPinnedListCallbacks(): PinnedListCallbacks {
