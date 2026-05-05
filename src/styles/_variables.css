@@ -65,14 +65,13 @@
     /* Sticky header stack — kept in the 200+ band so high-priority
        in-scroll elements (selected task card 200, current-time-indicator
        200, allday-handle 100) cannot bleed through the sticky layers
-       when their natural y-position falls inside a sticky region. The
-       internal ordering below mirrors the visual top-to-bottom order
-       (periodic > date > allday > habits) plus the +1 offset on
-       allday-sticky so the topmost allday card's handles (which extend
-       -12px above the section bounds) render over habits instead of
-       being clipped by its stacking context. */
+       when their natural y-position falls inside a sticky region.
+       Internal ordering: periodic > date-header > habits > allday.
+       habits + date-header form the always-on-top pair; allday is sticky
+       too but sits beneath habits so that on scroll it slides under the
+       habits row rather than overlapping it. */
+    --z-timeline-allday-sticky: 240;
     --z-timeline-habits-section: 245;
-    --z-timeline-allday-sticky: 246;
     --z-timeline-date-header: 250;
     --z-timeline-periodic-header: 255;
     --z-allday-cell-drag-over: 50;
