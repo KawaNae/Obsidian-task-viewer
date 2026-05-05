@@ -69,6 +69,8 @@
        date-header (50). */
     --z-timeline-allday-sticky: 46;
     --z-timeline-date-header: 50;
+    /* Periodic header sits above date-header in the sticky stack. */
+    --z-timeline-periodic-header: 55;
     --z-allday-cell-drag-over: 50;
     --z-timer-widget: 65;
     --z-task-card-allday-handle: 100;

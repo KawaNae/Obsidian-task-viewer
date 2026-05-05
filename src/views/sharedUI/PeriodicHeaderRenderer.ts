@@ -55,6 +55,17 @@ export class PeriodicHeaderRenderer {
             this.appendWeekSegment(wRow, seg);
         }
 
+        // Bind hover-link emission once after DOM is fully built. The
+        // manager queries `a.internal-link[data-href]` descendants, so a
+        // single bind on the container picks up every year/month/week link.
+        // (Binding on each <a> directly is a no-op because querySelectorAll
+        // doesn't include the element itself.)
+        this.deps.linkInteractionManager.bind(container, {
+            sourcePath: '',
+            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+            hoverParent: this.deps.hoverParent,
+        }, { bindClick: false });
+
         const toggleButton = this.buildToggleButton(collapsed, onToggle);
 
         return { container, toggleButton };
@@ -133,12 +144,8 @@ export class PeriodicHeaderRenderer {
             event.stopPropagation();
             void this.openOrCreatePeriodicNote(opts.kind, opts.date);
         });
-
-        this.deps.linkInteractionManager.bind(link, {
-            sourcePath: '',
-            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            hoverParent: this.deps.hoverParent,
-        }, { bindClick: false });
+        // hover-link binding happens once at the end of render() on the
+        // container, so the link itself doesn't need to bind individually.
     }
 
     private async openOrCreatePeriodicNote(kind: 'yearly' | 'monthly' | 'weekly', date: Date): Promise<void> {

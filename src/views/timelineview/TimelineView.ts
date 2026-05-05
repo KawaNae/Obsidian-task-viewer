@@ -585,10 +585,20 @@ export class TimelineView extends ItemView {
     /**
      * Detail modal を開く 2 経路 (dblclick / detail handle) の共通エントリ。
      * modal が出た時点で card の選択状態は不要なので解除する。
+     *
+     * `selectTask(null)` は handle DOM ごと除去する破壊的操作なので、トリガと
+     * なった pointerdown の touch sequence が **完全に終わってから** 走らせる。
+     * pointerdown handler 内で同期に呼ぶと、元 touch target (handle 内 SVG path)
+     * が detached → 後続 pointerup/click が `.modal-bg` にリターゲットされ、
+     * Obsidian Modal の outside-click で modal が即閉じる (Android Chromium で
+     * 観測。CDP 実機トレース確認済み)。`setTimeout(0)` の macrotask 境界で
+     * touchend / pointerup / click の dispatch をすべて消化させてから DOM を
+     * 触る。modal は selection ring を視覚的に覆い隠すので、close 後に ring が
+     * 残らないという元 commit (7c43222) の意図はそのまま満たされる。
      */
     private openDetailModal(task: Task): void {
-        this.handleManager.selectTask(null);
         new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
+        setTimeout(() => this.handleManager.selectTask(null), 0);
     }
 
     /**
@@ -727,16 +737,28 @@ export class TimelineView extends ItemView {
      *  call from the resize observer callback (does NOT rebind the observer here —
      *  doing so re-arms the initial-observation callback per observe() call and
      *  causes an infinite ping-pong loop). */
+    /** Compute the sticky-top of every layer in the header stack
+     *  (periodic / date-header / habits / allday) from actual rendered
+     *  heights and write them as CSS variables on .timeline-grid. The CSS
+     *  side reads these variables for `position: sticky; top: ...`, so the
+     *  stack stays correct under any combination of: periodic expanded /
+     *  collapsed, date-header compact reflow, habits collapsed.
+     *  Idempotent on size; safe to call from the resize observer callback
+     *  (does NOT rebind the observer here — see rebindStickyAnchorObserver
+     *  for the rationale). */
     private updateAlldayStickyTop(): void {
         const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (!grid) return;
         const periodic = grid.querySelector('.periodic-header') as HTMLElement | null;
         const dateHeader = grid.querySelector('.date-header') as HTMLElement | null;
         const habits = grid.querySelector('.habits-section') as HTMLElement | null;
-        const top = (periodic?.offsetHeight ?? 0)
-            + (dateHeader?.offsetHeight ?? 0)
-            + (habits?.offsetHeight ?? 0);
-        grid.style.setProperty('--allday-sticky-top', `${top}px`);
+        const periodicH = periodic?.offsetHeight ?? 0;
+        const dateH = dateHeader?.offsetHeight ?? 0;
+        const habitsH = habits?.offsetHeight ?? 0;
+        grid.style.setProperty('--periodic-header-sticky-top', `0px`);
+        grid.style.setProperty('--date-header-sticky-top', `${periodicH}px`);
+        grid.style.setProperty('--habits-section-sticky-top', `${periodicH + dateH}px`);
+        grid.style.setProperty('--allday-sticky-top', `${periodicH + dateH + habitsH}px`);
     }
 
     /** Rebind the resize observer to the freshly-rendered anchor elements.
