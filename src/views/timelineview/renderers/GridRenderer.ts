@@ -1,13 +1,10 @@
-import { Component, setIcon } from 'obsidian';
+import { setIcon } from 'obsidian';
 import type { HoverParent } from 'obsidian';
 import { ViewState, isCompleteStatusChar } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
 import { HandleManager } from '../HandleManager';
-import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
-import { TaskLinkInteractionManager } from '../../taskcard/TaskLinkInteractionManager';
-import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../../constants/hover';
 import { t } from '../../../i18n';
 
 import { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
@@ -18,19 +15,10 @@ import { HabitTrackerRenderer } from '../../sharedUI/HabitTrackerRenderer';
 import { splitTasks } from '../../../services/display/TaskSplitter';
 import { categorizeTasksByDate } from '../../../services/display/TaskDateCategorizer';
 import { bucketBySection } from '../../../services/display/SectionClassifier';
-
-type DateHeaderDisplayEntry = {
-    cell: HTMLElement;
-    linkEl: HTMLElement;
-    fullLabel: string;
-    mediumLabel: string;
-    shortLabel: string;
-};
+import { DateHeaderRenderer } from '../../sharedUI/DateHeaderRenderer';
 
 export class GridRenderer {
     private isAllDayCollapsed: boolean = false;
-    private headerResizeObserver: ResizeObserver | null = null;
-    private dateLinkInteractionManager: TaskLinkInteractionManager;
 
     constructor(
         private container: HTMLElement,
@@ -38,11 +26,8 @@ export class GridRenderer {
         private plugin: TaskViewerPlugin,
         private menuHandler: MenuHandler,
         private hoverParent: HoverParent,
-    ) {
-        this.dateLinkInteractionManager = new TaskLinkInteractionManager(
-            this.plugin.app, () => this.plugin.settings
-        );
-    }
+        private dateHeaderRenderer: DateHeaderRenderer,
+    ) {}
 
     public render(
         parentContainer: HTMLElement,
@@ -63,16 +48,8 @@ export class GridRenderer {
 
         const startHour = this.plugin.settings.startHour;
 
-        // 1. Date Header Row
-        const headerRow = grid.createDiv('tv-grid-row date-header');
-        headerRow.style.gridTemplateColumns = colTemplate;
-
-        // Time Axis Header
-        headerRow.createDiv('date-header__cell').setText(' ');
-        // Get today's visual date for highlighting
-        const todayVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-
-        // Pre-compute overdue dates set
+        // 1. Date Header Row — pre-compute overdue dates and delegate to shared renderer
+        const todayVisualDate = DateUtils.getVisualDateOfNow(startHour);
         const completeChars = this.plugin.settings.statusDefinitions;
         const overdueDates = new Set<string>();
         for (const dt of filteredTasks) {
@@ -85,66 +62,13 @@ export class GridRenderer {
             }
         }
 
-        // Day Headers
-        const headerCells: DateHeaderDisplayEntry[] = [];
-        dates.forEach(date => {
-            const cell = headerRow.createDiv('date-header__cell');
-            const weekdays = t('calendar.weekdaysShort').split(',');
-            const dayName = weekdays[new Date(date + 'T00:00:00Z').getUTCDay()];
-
-            const dateObj = this.parseLocalDate(date);
-            const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(this.plugin.app, dateObj);
-            const linkLabel = DailyNoteUtils.getDailyNoteLabelForDate(this.plugin.app, dateObj);
-            const fullLabel = `${linkLabel} ${dayName}`;
-            const mediumLabel = linkLabel;
-            const shortLabel = date.slice(5);
-
-            const linkEl = cell.createEl('a', { cls: 'internal-link date-header__date-link', text: fullLabel });
-            linkEl.dataset.href = linkTarget;
-            linkEl.setAttribute('href', linkTarget);
-            linkEl.setAttribute('aria-label', `Open daily note: ${fullLabel}`);
-            linkEl.addEventListener('click', (event: MouseEvent) => {
-                event.preventDefault();
-            });
-
-            this.dateLinkInteractionManager.bind(cell, {
-                sourcePath: '',
-                hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-                hoverParent: this.hoverParent,
-            }, { bindClick: false });
-
-            headerCells.push({
-                cell,
-                linkEl,
-                fullLabel,
-                mediumLabel,
-                shortLabel,
-            });
-
-            // Highlight today's date
-            if (date === todayVisualDate) {
-                cell.addClass('is-today');
-            }
-
-            // Mark overdue dates
-            if (overdueDates.has(date)) {
-                cell.addClass('has-overdue');
-            }
-
-            cell.dataset.date = date;
-
-            // Add click listener to open daily note
-            cell.addEventListener('click', async () => {
-                let file = DailyNoteUtils.getDailyNote(this.plugin.app, dateObj);
-                if (!file) {
-                    file = await DailyNoteUtils.createDailyNote(this.plugin.app, dateObj);
-                }
-                if (file) {
-                    await this.plugin.app.workspace.getLeaf(false).openFile(file);
-                }
-            });
+        this.dateHeaderRenderer.render(grid, {
+            dates,
+            gridTemplateColumns: colTemplate,
+            isOverdue: (date) => overdueDates.has(date),
+            enableCompactBehavior: true,
+            forceShortLabel: false,
         });
-        this.applyDateHeaderCompactBehavior(headerCells);
 
         // 2. Habits Row (fixed, outside scroll area — always visible)
         const habitsRow = grid.createDiv('tv-grid-row habits-section');
@@ -268,46 +192,6 @@ export class GridRenderer {
 
             label.setText(`${displayHour}`);
         }
-    }
-
-    private applyDateHeaderCompactBehavior(entries: DateHeaderDisplayEntry[]) {
-        this.headerResizeObserver?.disconnect();
-
-        const compactThresholdPx = 120;
-        const narrowThresholdPx = 90;
-        const entryMap = new Map<HTMLElement, DateHeaderDisplayEntry>();
-        entries.forEach((entry) => entryMap.set(entry.cell, entry));
-
-        this.headerResizeObserver = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                const cell = entry.target as HTMLElement;
-                const displayEntry = entryMap.get(cell);
-                if (!displayEntry) {
-                    continue;
-                }
-
-                const isCompact = entry.contentRect.width < compactThresholdPx;
-                const isNarrow = entry.contentRect.width < narrowThresholdPx;
-                cell.toggleClass('is-compact', isCompact);
-                cell.toggleClass('is-narrow', isNarrow);
-
-                const nextLabel = isNarrow
-                    ? displayEntry.shortLabel
-                    : isCompact
-                        ? displayEntry.mediumLabel
-                        : displayEntry.fullLabel;
-
-                if (displayEntry.linkEl.textContent !== nextLabel) {
-                    displayEntry.linkEl.textContent = nextLabel;
-                }
-            }
-        });
-        entries.forEach((entry) => this.headerResizeObserver!.observe(entry.cell));
-    }
-
-    private parseLocalDate(date: string): Date {
-        const [year, month, day] = date.split('-').map(Number);
-        return new Date(year, month - 1, day, 0, 0, 0, 0);
     }
 
     public renderCurrentTimeIndicator() {

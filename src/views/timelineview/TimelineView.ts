@@ -23,6 +23,8 @@ import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 
 import { GridRenderer } from './renderers/GridRenderer';
 import { AllDaySectionRenderer } from '../sharedUI/AllDaySectionRenderer';
+import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
+import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
 import { PinnedListRenderer, type PinnedListCallbacks } from '../sharedUI/PinnedListRenderer';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
@@ -82,6 +84,8 @@ export class TimelineView extends ItemView {
     private sidebarFilterMenu = new FilterMenuComponent();
     private sidebarSortMenu = new SortMenuComponent();
     private habitRenderer: HabitTrackerRenderer;
+    private dateHeaderRenderer: DateHeaderRenderer;
+    private linkInteractionManager: TaskLinkInteractionManager;
 
     // ==================== State ====================
     private container: HTMLElement;
@@ -349,7 +353,14 @@ export class TimelineView extends ItemView {
         // Initialize Renderers
         this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow, VIEW_ID);
         this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel(), VIEW_ID);
-        this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler, this.hoverParent);
+        this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
+        this.dateHeaderRenderer = new DateHeaderRenderer({
+            app: this.app,
+            plugin: this.plugin,
+            hoverParent: this.hoverParent,
+            linkInteractionManager: this.linkInteractionManager,
+        });
+        this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler, this.hoverParent, this.dateHeaderRenderer);
         this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.menuHandler, this.readService);
         // Persistent host for pinned lists. Lives outside the empty() target
         // (we explicitly detach it before container.empty() in performRender,
@@ -590,6 +601,7 @@ export class TimelineView extends ItemView {
             this.stickyAnchorObserver.disconnect();
             this.stickyAnchorObserver = null;
         }
+        this.dateHeaderRenderer?.dispose();
         this.renderController?.dispose();
     }
 
