@@ -1,0 +1,75 @@
+/* =============================================================================
+   Periodic Header (Year+Month / Week)
+   Sits above .date-header in TimelineView and ScheduleView. Toggle button is
+   installed into the date-header axis cell so it remains reachable when
+   collapsed. Container collapses to 0 height so sticky-top math (allday)
+   self-heals via ResizeObserver without explicit notification.
+============================================================================= */
+
+.periodic-header {
+    background-color: var(--tv-bg-date-header);
+    flex-shrink: 0;
+}
+
+.periodic-header__row {
+    width: 100%;
+    border-bottom: 1px solid var(--tv-border);
+}
+
+.periodic-header__row--year-month {
+    /* Year+month tier — slightly emphasized */
+}
+
+.periodic-header__row--week {
+    /* Week tier — sits between month and date-header */
+}
+
+.periodic-header__axis {
+    /* Empty axis cell, occupies grid column 1 */
+    border-right: 1px solid var(--tv-border);
+    border-left: 1px solid var(--tv-border);
+}
+
+.periodic-header__segment {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 1px 4px;
+    min-width: 0;
+    border-right: 1px solid var(--tv-border);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: var(--font-ui-smaller);
+    color: var(--text-muted);
+}
+
+.periodic-header__link {
+    color: var(--text-muted);
+    text-decoration: none;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.periodic-header__link:hover {
+    color: var(--text-normal);
+    text-decoration: underline;
+}
+
+.periodic-header__separator {
+    color: var(--text-faint);
+}
+
+/* Collapsed state — hide both rows so offsetHeight is 0 (sticky-top self-heals) */
+.periodic-header--collapsed > .periodic-header__row {
+    display: none;
+}
+
+/* Toggle button installed into date-header axis cell — keep it small and
+   centered. Inherits .tv-section-toggle base from _section-toggle.css. */
+.date-header__cell > .periodic-header__toggle {
+    margin: 0 auto;
+}

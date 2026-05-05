@@ -24,6 +24,7 @@ import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 import { GridRenderer } from './renderers/GridRenderer';
 import { AllDaySectionRenderer } from '../sharedUI/AllDaySectionRenderer';
 import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
+import { PeriodicHeaderRenderer } from '../sharedUI/PeriodicHeaderRenderer';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
 import { PinnedListRenderer, type PinnedListCallbacks } from '../sharedUI/PinnedListRenderer';
@@ -61,6 +62,7 @@ interface TimelineViewState {
     pinnedListCollapsed?: Record<string, boolean>;
     pinnedLists?: PinnedListDefinition[];
     customName?: string;
+    periodicHeaderCollapsed?: boolean;
 }
 
 export class TimelineView extends ItemView {
@@ -85,6 +87,7 @@ export class TimelineView extends ItemView {
     private sidebarSortMenu = new SortMenuComponent();
     private habitRenderer: HabitTrackerRenderer;
     private dateHeaderRenderer: DateHeaderRenderer;
+    private periodicHeaderRenderer: PeriodicHeaderRenderer;
     private linkInteractionManager: TaskLinkInteractionManager;
 
     // ==================== State ====================
@@ -240,6 +243,9 @@ export class TimelineView extends ItemView {
             } else {
                 this.viewState.customName = undefined;
             }
+            if (typeof state.periodicHeaderCollapsed === 'boolean') {
+                this.viewState.periodicHeaderCollapsed = state.periodicHeaderCollapsed;
+            }
             // Note: startDate is not restored - always use "Today" logic on reload
         }
         await super.setState(state, result);
@@ -277,6 +283,9 @@ export class TimelineView extends ItemView {
         }
         if (this.viewState.customName) {
             state.customName = this.viewState.customName;
+        }
+        if (typeof this.viewState.periodicHeaderCollapsed === 'boolean') {
+            state.periodicHeaderCollapsed = this.viewState.periodicHeaderCollapsed;
         }
         return state;
     }
@@ -360,7 +369,22 @@ export class TimelineView extends ItemView {
             hoverParent: this.hoverParent,
             linkInteractionManager: this.linkInteractionManager,
         });
-        this.gridRenderer = new GridRenderer(this.container, this.viewState, this.plugin, this.menuHandler, this.hoverParent, this.dateHeaderRenderer);
+        this.periodicHeaderRenderer = new PeriodicHeaderRenderer({
+            app: this.app,
+            plugin: this.plugin,
+            hoverParent: this.hoverParent,
+            linkInteractionManager: this.linkInteractionManager,
+        });
+        this.gridRenderer = new GridRenderer(
+            this.container,
+            this.viewState,
+            this.plugin,
+            this.menuHandler,
+            this.hoverParent,
+            this.dateHeaderRenderer,
+            this.periodicHeaderRenderer,
+            () => this.togglePeriodicHeader(),
+        );
         this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.menuHandler, this.readService);
         // Persistent host for pinned lists. Lives outside the empty() target
         // (we explicitly detach it before container.empty() in performRender,
@@ -706,9 +730,12 @@ export class TimelineView extends ItemView {
     private updateAlldayStickyTop(): void {
         const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (!grid) return;
+        const periodic = grid.querySelector('.periodic-header') as HTMLElement | null;
         const dateHeader = grid.querySelector('.date-header') as HTMLElement | null;
         const habits = grid.querySelector('.habits-section') as HTMLElement | null;
-        const top = (dateHeader?.offsetHeight ?? 0) + (habits?.offsetHeight ?? 0);
+        const top = (periodic?.offsetHeight ?? 0)
+            + (dateHeader?.offsetHeight ?? 0)
+            + (habits?.offsetHeight ?? 0);
         grid.style.setProperty('--allday-sticky-top', `${top}px`);
     }
 
@@ -718,11 +745,20 @@ export class TimelineView extends ItemView {
         if (!this.stickyAnchorObserver) return;
         const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (!grid) return;
+        const periodic = grid.querySelector('.periodic-header') as HTMLElement | null;
         const dateHeader = grid.querySelector('.date-header') as HTMLElement | null;
         const habits = grid.querySelector('.habits-section') as HTMLElement | null;
         this.stickyAnchorObserver.disconnect();
+        if (periodic) this.stickyAnchorObserver.observe(periodic);
         if (dateHeader) this.stickyAnchorObserver.observe(dateHeader);
         if (habits) this.stickyAnchorObserver.observe(habits);
+    }
+
+    private togglePeriodicHeader(): void {
+        const current = this.viewState.periodicHeaderCollapsed ?? true;
+        this.viewState.periodicHeaderCollapsed = !current;
+        this.app.workspace.requestSaveLayout();
+        this.render();
     }
 
     private getPinnedListCallbacks(): PinnedListCallbacks {

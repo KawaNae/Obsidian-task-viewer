@@ -67,7 +67,7 @@ export class DateHeaderRenderer {
             const linkLabel = DailyNoteUtils.getDailyNoteLabelForDate(app, dateObj);
             const fullLabel = `${linkLabel} ${dayName}`;
             const mediumLabel = linkLabel;
-            const shortLabel = date.slice(5);
+            const shortLabel = `${date.slice(5)} ${dayName}`;
 
             const initialLabel = forceShortLabel ? shortLabel : fullLabel;
             const linkEl = cell.createEl('a', { cls: 'internal-link date-header__date-link', text: initialLabel });

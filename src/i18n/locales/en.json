@@ -560,6 +560,10 @@
     "expandAllDay": "Expand All Day",
     "collapseAllDay": "Collapse All Day"
   },
+  "periodicHeader": {
+    "expand": "Expand periodic header",
+    "collapse": "Collapse periodic header"
+  },
   "cli": {
     "title": "Task Viewer CLI Reference",
     "commands": "Commands",

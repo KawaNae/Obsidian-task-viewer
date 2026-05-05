@@ -16,6 +16,7 @@ import { splitTasks } from '../../../services/display/TaskSplitter';
 import { categorizeTasksByDate } from '../../../services/display/TaskDateCategorizer';
 import { bucketBySection } from '../../../services/display/SectionClassifier';
 import { DateHeaderRenderer } from '../../sharedUI/DateHeaderRenderer';
+import { PeriodicHeaderRenderer } from '../../sharedUI/PeriodicHeaderRenderer';
 
 export class GridRenderer {
     private isAllDayCollapsed: boolean = false;
@@ -27,6 +28,8 @@ export class GridRenderer {
         private menuHandler: MenuHandler,
         private hoverParent: HoverParent,
         private dateHeaderRenderer: DateHeaderRenderer,
+        private periodicHeaderRenderer: PeriodicHeaderRenderer,
+        private onPeriodicHeaderToggle: () => void,
     ) {}
 
     public render(
@@ -62,13 +65,24 @@ export class GridRenderer {
             }
         }
 
-        this.dateHeaderRenderer.render(grid, {
+        const periodicCollapsed = this.viewState.periodicHeaderCollapsed ?? true;
+
+        const { toggleButton } = this.periodicHeaderRenderer.render(grid, {
+            dates,
+            gridTemplateColumns: colTemplate,
+            collapsed: periodicCollapsed,
+            onToggle: this.onPeriodicHeaderToggle,
+        });
+
+        const dateHeaderResult = this.dateHeaderRenderer.render(grid, {
             dates,
             gridTemplateColumns: colTemplate,
             isOverdue: (date) => overdueDates.has(date),
             enableCompactBehavior: true,
-            forceShortLabel: false,
+            forceShortLabel: !periodicCollapsed,
         });
+
+        dateHeaderResult.axisCell.appendChild(toggleButton);
 
         // 2. Habits Row (fixed, outside scroll area — always visible)
         const habitsRow = grid.createDiv('tv-grid-row habits-section');
