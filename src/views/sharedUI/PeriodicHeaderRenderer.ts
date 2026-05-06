@@ -2,6 +2,7 @@ import { TFile, moment, setIcon } from 'obsidian';
 import type { App, HoverParent } from 'obsidian';
 import TaskViewerPlugin from '../../main';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import { DateUtils } from '../../utils/DateUtils';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { t } from '../../i18n';
@@ -22,7 +23,13 @@ export interface PeriodicHeaderRenderParams {
 
 export interface PeriodicHeaderRenderResult {
     container: HTMLElement;
-    toggleButton: HTMLElement;
+    /**
+     * Wires the date-header axis cell as the focus-stop / primary toggle target,
+     * installs the chevron button, and aria-syncs the cell. The YM/W axis cells
+     * (built inside render) are already click-wired internally to the same
+     * onToggle handler so the three axis cells behave as one toggle region.
+     */
+    mountInAxisCell(dateHeaderAxis: HTMLElement): void;
 }
 
 type Tier = 'YM' | 'W';
@@ -32,6 +39,7 @@ interface Segment {
     startIdx: number;
     span: number;
     anchorDate: string;
+    isCurrent: boolean;
 }
 
 export class PeriodicHeaderRenderer {
@@ -40,17 +48,42 @@ export class PeriodicHeaderRenderer {
     render(parent: HTMLElement, params: PeriodicHeaderRenderParams): PeriodicHeaderRenderResult {
         const { dates, gridTemplateColumns, collapsed, onToggle } = params;
 
+        const todayVisualDate = DateUtils.getVisualDateOfNow(this.deps.plugin.settings.startHour);
+        const todayMoment = moment(todayVisualDate, 'YYYY-MM-DD');
+
         const container = parent.createDiv('periodic-header');
         if (collapsed) container.addClass('periodic-header--collapsed');
 
-        const ymRow = this.buildRow(container, 'periodic-header__row--year-month', gridTemplateColumns);
-        const ymSegments = this.computeSegments(dates, 'YM');
+        // Three axis cells (YM-axis, W-axis, date-header axis) form one fused
+        // hover region. Each binds mouseenter/mouseleave that toggles the
+        // is-fused-hover class on all three together; mouseleave inside the
+        // region (cursor moving between fused cells) is suppressed via
+        // relatedTarget so the highlight doesn't flicker.
+        const fusedCells: HTMLElement[] = [];
+        const setFused = (on: boolean) => {
+            for (const c of fusedCells) c.toggleClass('is-fused-hover', on);
+        };
+        const wireFusedHover = (cell: HTMLElement) => {
+            cell.addEventListener('mouseenter', () => setFused(true));
+            cell.addEventListener('mouseleave', (e: MouseEvent) => {
+                const next = e.relatedTarget as Node | null;
+                if (next && fusedCells.some(c => c === next || c.contains(next))) return;
+                setFused(false);
+            });
+        };
+
+        const { row: ymRow, axis: ymAxis } = this.buildRow(container, 'periodic-header__row--year-month', gridTemplateColumns, onToggle);
+        fusedCells.push(ymAxis);
+        wireFusedHover(ymAxis);
+        const ymSegments = this.computeSegments(dates, 'YM', todayMoment);
         for (const seg of ymSegments) {
             this.appendYearMonthSegment(ymRow, seg);
         }
 
-        const wRow = this.buildRow(container, 'periodic-header__row--week', gridTemplateColumns);
-        const wSegments = this.computeSegments(dates, 'W');
+        const { row: wRow, axis: wAxis } = this.buildRow(container, 'periodic-header__row--week', gridTemplateColumns, onToggle);
+        fusedCells.push(wAxis);
+        wireFusedHover(wAxis);
+        const wSegments = this.computeSegments(dates, 'W', todayMoment);
         for (const seg of wSegments) {
             this.appendWeekSegment(wRow, seg);
         }
@@ -66,22 +99,58 @@ export class PeriodicHeaderRenderer {
             hoverParent: this.deps.hoverParent,
         }, { bindClick: false });
 
-        const toggleButton = this.buildToggleButton(collapsed, onToggle);
+        const mountInAxisCell = (dateHeaderAxis: HTMLElement): void => {
+            const chevron = document.createElement('button');
+            chevron.className = 'tv-section-toggle tv-section-toggle--axis periodic-header__toggle';
+            chevron.tabIndex = -1;
+            dateHeaderAxis.appendChild(chevron);
 
-        return { container, toggleButton };
+            this.wireAxisToggleCell(dateHeaderAxis, onToggle, /*isPrimary*/ true);
+            fusedCells.push(dateHeaderAxis);
+            wireFusedHover(dateHeaderAxis);
+            this.applyToggleState(dateHeaderAxis, chevron, collapsed);
+        };
+
+        return { container, mountInAxisCell };
     }
 
-    private buildRow(container: HTMLElement, modifier: string, gridTemplateColumns: string): HTMLElement {
+    private buildRow(container: HTMLElement, modifier: string, gridTemplateColumns: string, onToggle: () => void): { row: HTMLElement; axis: HTMLElement } {
         const row = container.createDiv(`tv-grid-row periodic-header__row ${modifier}`);
         row.style.gridTemplateColumns = gridTemplateColumns;
         const axis = row.createDiv('periodic-header__axis');
         axis.style.gridColumn = '1';
-        return row;
+        this.wireAxisToggleCell(axis, onToggle, /*isPrimary*/ false);
+        return { row, axis };
+    }
+
+    private wireAxisToggleCell(cell: HTMLElement, onToggle: () => void, isPrimary: boolean): void {
+        cell.setAttribute('role', 'button');
+        cell.tabIndex = isPrimary ? 0 : -1;
+        cell.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onToggle();
+        });
+        cell.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                onToggle();
+            }
+        });
+    }
+
+    private applyToggleState(primaryCell: HTMLElement, chevron: HTMLElement, collapsed: boolean): void {
+        setIcon(chevron, collapsed ? 'chevron-down' : 'chevron-up');
+        const ariaLabel = collapsed ? t('periodicHeader.expand') : t('periodicHeader.collapse');
+        primaryCell.setAttribute('aria-expanded', String(!collapsed));
+        primaryCell.setAttribute('aria-label', ariaLabel);
     }
 
     private appendYearMonthSegment(row: HTMLElement, seg: Segment): void {
         const segEl = row.createDiv('periodic-header__segment periodic-header__segment--year-month');
         segEl.style.gridColumn = `${seg.startIdx + 2} / span ${seg.span}`;
+        if (seg.isCurrent) segEl.addClass('is-current');
 
         const dateObj = this.parseLocalDate(seg.anchorDate);
         const m = moment(dateObj);
@@ -110,6 +179,7 @@ export class PeriodicHeaderRenderer {
     private appendWeekSegment(row: HTMLElement, seg: Segment): void {
         const segEl = row.createDiv('periodic-header__segment periodic-header__segment--week');
         segEl.style.gridColumn = `${seg.startIdx + 2} / span ${seg.span}`;
+        if (seg.isCurrent) segEl.addClass('is-current');
 
         const dateObj = this.parseLocalDate(seg.anchorDate);
         const m = moment(dateObj);
@@ -170,37 +240,7 @@ export class PeriodicHeaderRenderer {
         }
     }
 
-    private buildToggleButton(collapsed: boolean, onToggle: () => void): HTMLElement {
-        const btn = document.createElement('button');
-        btn.className = 'tv-section-toggle tv-section-toggle--axis periodic-header__toggle';
-        btn.tabIndex = 0;
-        btn.setAttribute('role', 'button');
-        this.applyToggleState(btn, collapsed);
-
-        btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onToggle();
-        });
-        btn.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                e.stopPropagation();
-                onToggle();
-            }
-        });
-        return btn;
-    }
-
-    private applyToggleState(btn: HTMLElement, collapsed: boolean): void {
-        setIcon(btn, collapsed ? 'chevron-down' : 'chevron-up');
-        btn.setAttribute('aria-expanded', String(!collapsed));
-        btn.setAttribute('aria-label', collapsed
-            ? t('periodicHeader.expand')
-            : t('periodicHeader.collapse'));
-    }
-
-    private computeSegments(dates: string[], tier: Tier): Segment[] {
+    private computeSegments(dates: string[], tier: Tier, todayMoment: moment.Moment): Segment[] {
         const segments: Segment[] = [];
         let current: Segment | null = null;
         for (let i = 0; i < dates.length; i++) {
@@ -210,7 +250,11 @@ export class PeriodicHeaderRenderer {
                 current.span++;
             } else {
                 if (current) segments.push(current);
-                current = { key: k, startIdx: i, span: 1, anchorDate: d };
+                const anchor = moment(this.parseLocalDate(d));
+                const isCurrent = tier === 'YM'
+                    ? anchor.isSame(todayMoment, 'month')
+                    : anchor.isSame(todayMoment, 'isoWeek');
+                current = { key: k, startIdx: i, span: 1, anchorDate: d, isCurrent };
             }
         }
         if (current) segments.push(current);

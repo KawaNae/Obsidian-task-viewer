@@ -268,6 +268,48 @@
     padding: 20px 0 0 0;
 }
 
+/* Phone close-animation correction (fade-out + slide-down combination).
+
+   Obsidian は close 時にモーダルの inline style へ
+   `transition: transform 100ms ...; transform: translateY(<modal-height>px);`
+   を当てて slide-down する。slide 距離はモーダル自身の高さに固定されている
+   ため、`modal.height < viewport.height / 3` の比較的小さいモーダル (= 詳細
+   ダイアログ、確認ダイアログ、入力ダイアログ等) では距離が足りず、画面中央
+   付近で transition が終了して DOM が削除される ── 結果「途中で消える」
+   見え方になる。Obsidian の `mod-confirmation` 等は `align-items: flex-end`
+   で bottom-anchor することで距離問題を回避しているが、中央配置を維持した
+   コンパクト modal では別の手を打つ必要がある。
+
+   ここでは slide-down に **opacity fade-out を重ねる** ことで以下の不変条件を
+   作る:
+
+       「DOM 削除時点で modal は (位置に関わらず) opacity ≈ 0」
+
+   これで slide が viewport を抜けきれなくても、ユーザは modal が消える
+   タイミングで既に透明度ゼロを見ているため、画面中央で途切れる視覚不連続が
+   生じない。tall modal (slide で off-screen まで抜けるもの) でも fade が
+   重なるだけで挙動を壊さない。
+
+   実装:
+   - close detection: inline style に `transition: transform` 文字列が現れる
+     のは close 時のみ (open は `transform: translateY(...)` 単独 → 後から
+     `transition-property: transform` のみへ切替えるシーケンスで `transition:
+     transform <ms>` 形は出ない)。attribute selector で close 限定で発火。
+   - slide はそのまま inline 値を尊重 (CSS 側で transform を上書きしない)。
+   - fade は CSS animation で付与。transition と independent に走るので
+     Obsidian の動的 transition-duration (modal-height 比例) と衝突しない。
+   - duration 100ms は Obsidian の最小 transition-duration と同じ。tall
+     modal の slide が 200ms 以上かかる場合でも、最初の 100ms で modal は
+     完全に透明になり、残り時間は既に invisible のまま slide off-screen して
+     DOM 削除される。 */
+@keyframes tv-modal-close-fade {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+}
+.is-phone .modal-container.mod-tv-modal .modal[style*="transition: transform"] {
+    animation: tv-modal-close-fade 100ms cubic-bezier(0.33, 1, 0.68, 1) forwards;
+}
+
 .task-detail-modal .task-card {
     position: relative;
     margin: 0;

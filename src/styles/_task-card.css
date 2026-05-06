@@ -23,6 +23,14 @@
     font-size: var(--task-card-font-size);
     color: var(--tv-text);
 
+    /* iOS Safari は cursor:pointer の無い要素では 1st tap で click を
+       発火しないことがある (background-tap deselect の history を参照)。
+       TapIntent (click counter dbltap) の入口として click 発火を保証する
+       ためカード本体に cursor: pointer を付ける。mobile では cursor は
+       描画されないため UX 影響なし、desktop では dblclick で modal が
+       開くアフォーダンスとも整合する。 */
+    cursor: pointer;
+
     /* Misc */
     scrollbar-width: none;
 }

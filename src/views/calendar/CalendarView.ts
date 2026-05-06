@@ -380,10 +380,11 @@ export class CalendarView extends ItemView {
     /**
      * Detail modal を開く 2 経路 (dblclick / detail handle) の共通エントリ。
      * modal が出た時点で card の選択状態は不要なので解除する。
+     * defer の理由は TimelineView.openDetailModal を参照。
      */
     private openDetailModal(task: Task): void {
-        this.handleManager?.selectTask(null);
         new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
+        setTimeout(() => this.handleManager?.selectTask(null), 0);
     }
 
     private render(): void {

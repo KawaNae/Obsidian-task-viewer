@@ -28,6 +28,14 @@ export class TaskDetailModal extends Modal {
         this.modalEl.setAttribute('tabindex', '-1');
         requestAnimationFrame(() => this.modalEl.focus());
 
+        // CSS hook for the shared close-animation fix (`mod-tv-modal`).
+        // 中央配置で `modal.height < viewport / 3` の小さいモーダルは Obsidian の
+        // slide-down (距離 = modal.height 固定) では viewport を抜けきれず画面
+        // 中央で DOM 削除される。`_modal.css` の `.mod-tv-modal` rule で
+        // close 時に opacity fade を重ね、DOM 削除時点で必ず opacity ≈ 0 に
+        // する不変条件を保証する。
+        this.containerEl.addClass('mod-tv-modal');
+
         await this.renderCard();
 
         this.unsubscribe = this.readService.onChange(() => {

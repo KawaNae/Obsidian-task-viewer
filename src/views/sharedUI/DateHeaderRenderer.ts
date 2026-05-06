@@ -34,8 +34,12 @@ type DateHeaderDisplayEntry = {
     shortLabel: string;
 };
 
-const COMPACT_THRESHOLD_PX = 120;
-const NARROW_THRESHOLD_PX = 90;
+// Compaction stages: full "yyyy-mm-dd ddd" → medium "mm-dd ddd" → short "dd ddd".
+// Day + weekday are always present; only the year (then month) drop as the cell
+// shrinks. Thresholds picked so each label has ~10-15px of breathing room over
+// its measured ink width at the default 15px bold font.
+const COMPACT_THRESHOLD_PX = 110;
+const NARROW_THRESHOLD_PX = 70;
 
 export class DateHeaderRenderer {
     private resizeObserver: ResizeObserver | null = null;
@@ -65,15 +69,19 @@ export class DateHeaderRenderer {
             const dateObj = this.parseLocalDate(date);
             const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(app, dateObj);
             const linkLabel = DailyNoteUtils.getDailyNoteLabelForDate(app, dateObj);
-            const fullLabel = `${linkLabel} ${dayName}`;
-            const mediumLabel = linkLabel;
-            const shortLabel = `${date.slice(5)} ${dayName}`;
+            // Display labels follow ISO chunks so the compaction is consistent —
+            // weekday and day are always shown; only year, then month, drop. The
+            // aria-label still uses linkLabel to preserve the daily-note format
+            // hint for screen readers.
+            const fullLabel = `${date} ${dayName}`;
+            const mediumLabel = `${date.slice(5)} ${dayName}`;
+            const shortLabel = `${date.slice(8)} ${dayName}`;
 
             const initialLabel = forceShortLabel ? shortLabel : fullLabel;
             const linkEl = cell.createEl('a', { cls: 'internal-link date-header__date-link', text: initialLabel });
             linkEl.dataset.href = linkTarget;
             linkEl.setAttribute('href', linkTarget);
-            linkEl.setAttribute('aria-label', `Open daily note: ${fullLabel}`);
+            linkEl.setAttribute('aria-label', `Open daily note: ${linkLabel} ${dayName}`);
             linkEl.addEventListener('click', (event: MouseEvent) => {
                 event.preventDefault();
             });

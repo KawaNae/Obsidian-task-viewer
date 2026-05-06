@@ -48,6 +48,25 @@
     width: 100%;
 }
 
+/* Outer-frame nullification (tv-grid-row invariant)
+   Each row's cells own their inter-cell separators via border-left on the
+   axis cell (col 1) and border-right on every cell. The leftmost (axis) and
+   rightmost (last data) cell would otherwise also paint 1px outer borders
+   that visually duplicate Obsidian's leaf / sidebar dividers. Calendar avoids
+   this by not having axis cells; we enforce the same end-state structurally
+   here so timeline + schedule both inherit it.
+
+   !important: per-cell rules in _timeline-date-header.css / _periodic-header
+   .css / _timeline-allday.css / _habits.css load AFTER this file and several
+   use (0,0,2,0) specificity, so source-order would otherwise let them
+   re-introduce the outer borders. Single source of truth wins via important. */
+.tv-grid-row > :first-child {
+    border-left: none !important;
+}
+.tv-grid-row > :last-child {
+    border-right: none !important;
+}
+
 /* Transparent passthrough box (was the scroll container previously).
    Keeps class name for export / ghost / downstream queries; no scrolling. */
 .timeline-scroll-area {
