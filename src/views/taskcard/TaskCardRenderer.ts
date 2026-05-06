@@ -9,6 +9,7 @@ import { ChildSectionRenderer, ChildMenuCallback, ChildLineEditCallback } from '
 import { CheckboxWiring } from './CheckboxWiring';
 import { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
+import { bindTapIntents } from '../../interaction/tap/TapIntent';
 import type { TaskCardLinkRuntime } from './types';
 
 export class TaskCardRenderer extends Component {
@@ -100,7 +101,18 @@ export class TaskCardRenderer extends Component {
 
         this.renderTopRightMeta(container, task, settings, topRight);
         if (!isDetailModal) {
-            this.bindDetailDoubleClick(container, task);
+            bindTapIntents(container, {
+                onDoubleTap: () => this.onDetailClick?.(task),
+            }, {
+                // Skip dbltap on handles / checkboxes / links — these have their
+                // own activation. Inline children's checkboxes are nested inside
+                // .task-card so the filter must look up the ancestor chain.
+                targetFilter: (t) =>
+                    !t.closest('.task-card__handle') &&
+                    !t.closest('input[type="checkbox"]') &&
+                    !t.closest('a'),
+                component: cardComp,
+            });
         }
 
         const contentContainer = container.createDiv('task-card__content');
@@ -186,41 +198,6 @@ export class TaskCardRenderer extends Component {
             if (t === baseName || t === fullPath || t === c.file) return c;
         }
         return undefined;
-    }
-
-    private bindDetailDoubleClick(container: HTMLElement, task: DisplayTask): void {
-        // Native dblclick covers mouse and most touch environments.
-        // Touch on iOS sometimes routes to dblclick; for environments where
-        // it does not, the pointer-based fallback below also fires detail.
-        const fireDetail = (e: Event) => {
-            const t = e.target as HTMLElement;
-            // Ignore double-clicks on handles, checkboxes, links — these have their own behavior.
-            if (t.closest('.task-card__handle')) return;
-            if (t.closest('input[type="checkbox"]')) return;
-            if (t.closest('a')) return;
-            e.stopPropagation();
-            this.onDetailClick?.(task);
-        };
-        container.addEventListener('dblclick', fireDetail);
-
-        // Touch fallback: detect double-tap manually using pointerup events.
-        // 400ms threshold matches existing convention in DragHandler.
-        let lastTapTime = 0;
-        container.addEventListener('pointerup', (e) => {
-            if (e.pointerType !== 'touch') return;
-            const t = e.target as HTMLElement;
-            if (t.closest('.task-card__handle')) return;
-            if (t.closest('input[type="checkbox"]')) return;
-            if (t.closest('a')) return;
-            const now = Date.now();
-            if (now - lastTapTime < 400) {
-                lastTapTime = 0;
-                e.stopPropagation();
-                this.onDetailClick?.(task);
-            } else {
-                lastTapTime = now;
-            }
-        });
     }
 
     private renderTopRightMeta(
