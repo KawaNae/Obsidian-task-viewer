@@ -18,12 +18,16 @@
     z-index: var(--z-timeline-periodic-header);
 }
 
-/* Row layout — match .date-header__cell rhythm for visual continuity with
-   the daily date header below. The bottom divider is owned by segments (not
-   the row) so the axis column has no horizontal cuts between YM/W/date-header
-   axis cells. */
+/* Row layout — slimmer than the daily date-header below (30px vs 40px) so
+   the year-month / week rows read as secondary context, not equal weight to
+   the day labels. The bottom divider is owned by segments (not the row) so
+   the axis column has no horizontal cuts between YM / W / date-header axis
+   cells. grid-template-rows is explicit because the row's auto-track
+   otherwise resolves to the date-header rhythm (40px) and ignores the
+   declared cell height. */
 .periodic-header__row {
     width: 100%;
+    grid-template-rows: 30px;
 }
 
 .periodic-header__axis {
@@ -34,7 +38,7 @@
        up together — see PeriodicHeaderRenderer.wireFusedHover. */
     border-right: 1px solid var(--tv-border);
     border-left: 1px solid var(--tv-border);
-    height: var(--header-height);
+    min-height: 0;
     cursor: pointer;
     transition: background-color 120ms ease;
 }
@@ -51,7 +55,7 @@
     gap: 4px;
     padding: 2px;
     min-width: 0;
-    height: var(--header-height);
+    min-height: 0;
     border-right: 1px solid var(--tv-border);
     border-bottom: 1px solid var(--tv-border);
     overflow: hidden;
