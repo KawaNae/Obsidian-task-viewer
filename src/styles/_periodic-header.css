@@ -73,6 +73,10 @@
 .periodic-header__link {
     color: inherit;
     text-decoration: none;
+    /* Inherit the segment's bold weight; Obsidian's .internal-link default
+       (400) would otherwise win the cascade and make the link text lighter
+       than the date-header link below, breaking the visual rhythm. */
+    font: inherit;
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;
