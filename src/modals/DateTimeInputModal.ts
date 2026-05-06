@@ -38,6 +38,9 @@ export class DateTimeInputModal extends Modal {
     }
 
     onOpen() {
+        // CSS hook for the shared close-animation fix; see _modal.css
+        // `.mod-tv-modal` rule.
+        this.containerEl.addClass('mod-tv-modal');
         const { contentEl } = this;
         contentEl.empty();
         contentEl.addClass('datetime-input-modal');

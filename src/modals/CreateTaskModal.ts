@@ -76,6 +76,9 @@ export class CreateTaskModal extends Modal {
     }
 
     onOpen() {
+        // CSS hook for the shared close-animation fix; see _modal.css
+        // `.mod-tv-modal` rule.
+        this.containerEl.addClass('mod-tv-modal');
         const { contentEl } = this;
 
         contentEl.createEl('h2', { text: this.options.title ?? t('modal.createTask') });
