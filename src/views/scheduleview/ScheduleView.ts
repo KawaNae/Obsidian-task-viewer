@@ -19,7 +19,7 @@ import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
 import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
-import { PeriodicHeaderRenderer } from '../sharedUI/PeriodicHeaderRenderer';
+import { PeriodicHeaderRenderer, type PeriodicHeaderRenderResult } from '../sharedUI/PeriodicHeaderRenderer';
 import type { CollapsibleSectionKey, TimedDisplayTask } from './ScheduleTypes';
 import { ScheduleGridCalculator } from './utils/ScheduleGridCalculator';
 import { ScheduleTaskCategorizer } from './utils/ScheduleTaskCategorizer';
@@ -356,14 +356,14 @@ export class ScheduleView extends ItemView {
     ): Promise<void> {
         const categorized = this.taskCategorizer.toScheduleFormat(baseCategorized);
 
-        const { toggleButton } = this.periodicHeaderRenderer.render(fixedContainer, {
+        const periodicHeader = this.periodicHeaderRenderer.render(fixedContainer, {
             dates: [date],
             gridTemplateColumns: this.getScheduleRowColumns(),
             collapsed: this.periodicHeaderCollapsed,
             onToggle: () => this.togglePeriodicHeader(),
         });
 
-        this.renderDateHeader(fixedContainer, date, toggleButton);
+        this.renderDateHeader(fixedContainer, date, periodicHeader);
 
         // Habits in fixed area (always visible), allday in scroll body (sticky on PC)
         this.renderHabitsSection(fixedContainer, date);
@@ -397,7 +397,7 @@ export class ScheduleView extends ItemView {
         }
     }
 
-    private renderDateHeader(container: HTMLElement, date: string, toggleButton: HTMLElement): void {
+    private renderDateHeader(container: HTMLElement, date: string, periodicHeader: PeriodicHeaderRenderResult): void {
         const todayVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
         const isOverdue = (d: string): boolean => {
             if (d >= todayVisualDate) return false;
@@ -415,7 +415,7 @@ export class ScheduleView extends ItemView {
             forceShortLabel: !this.periodicHeaderCollapsed,
         });
 
-        axisCell.appendChild(toggleButton);
+        periodicHeader.mountInAxisCell(axisCell);
     }
 
     private togglePeriodicHeader(): void {

@@ -67,7 +67,7 @@ export class GridRenderer {
 
         const periodicCollapsed = this.viewState.periodicHeaderCollapsed ?? true;
 
-        const { toggleButton } = this.periodicHeaderRenderer.render(grid, {
+        const periodicHeader = this.periodicHeaderRenderer.render(grid, {
             dates,
             gridTemplateColumns: colTemplate,
             collapsed: periodicCollapsed,
@@ -82,7 +82,7 @@ export class GridRenderer {
             forceShortLabel: !periodicCollapsed,
         });
 
-        dateHeaderResult.axisCell.appendChild(toggleButton);
+        periodicHeader.mountInAxisCell(dateHeaderResult.axisCell);
 
         // 2. Habits Row (fixed, outside scroll area — always visible)
         const habitsRow = grid.createDiv('tv-grid-row habits-section');

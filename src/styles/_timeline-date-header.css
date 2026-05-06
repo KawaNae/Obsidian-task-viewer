@@ -43,7 +43,17 @@
 .date-header__cell:hover {
     background-color: var(--tv-bg-hover);
     color: var(--tv-text);
+}
+
+.date-header__cell:not(:first-child):hover {
     text-decoration: underline;
+}
+
+/* The axis (first) cell is wired as the primary toggle for the periodic
+   header — show a keyboard focus ring there. */
+.date-header__cell:first-child:focus-visible {
+    outline: 2px solid rgba(var(--tv-accent-rgb), 0.35);
+    outline-offset: -2px;
 }
 
 .date-header__date-link {
