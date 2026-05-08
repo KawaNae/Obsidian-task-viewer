@@ -8,6 +8,13 @@ import type { ScheduleGridCalculator } from '../utils/ScheduleGridCalculator';
 import type { ScheduleOverlapLayout } from '../utils/ScheduleOverlapLayout';
 import { toDisplayHeightPx, toDisplayTopPx } from '../../sharedLogic/TimelineCardPosition';
 import type { DisplayTask } from '../../../types';
+import type { CardReconciler } from '../../sharedUI/CardReconciler';
+
+const SCHEDULE_VARIANT_CLASSES = [
+    'task-card--split',
+    'task-card--split-continues-before',
+    'task-card--split-continues-after',
+];
 
 export interface ScheduleTaskRendererOptions {
     app: App;
@@ -41,7 +48,8 @@ export class ScheduleTaskRenderer {
     async renderTaskCards(
         container: HTMLElement,
         placements: TaskPlacement[],
-        timelineHeight: number
+        timelineHeight: number,
+        reconciler: CardReconciler,
     ): Promise<void> {
         const tasksContainer = container.createDiv('schedule-tasks');
         tasksContainer.style.height = `${timelineHeight}px`;
@@ -61,7 +69,7 @@ export class ScheduleTaskRenderer {
             wrapper.style.width = `${widthPct}%`;
             wrapper.style.left = `${placement.column * widthPct}%`;
 
-            await this.renderTaskCard(wrapper, placement.task, true);
+            await this.renderTaskCard(wrapper, placement.task, true, reconciler);
         }
     }
 
@@ -96,26 +104,39 @@ export class ScheduleTaskRenderer {
         });
     }
 
-    async renderTaskCard(container: HTMLElement, task: DisplayTask, flowCard: boolean): Promise<void> {
+    async renderTaskCard(container: HTMLElement, task: DisplayTask, flowCard: boolean, reconciler: CardReconciler): Promise<void> {
         const wrapper = container.createDiv(flowCard ? 'schedule-tasks__card-wrap' : 'schedule-section__task-wrap');
-        const card = wrapper.createDiv('task-card');
-        card.dataset.id = task.id;
 
+        const scope = flowCard ? 'flow' : 'section';
+        const cardInstanceId = `schedule::${scope}::${task.id}`;
+        const reused = reconciler.acquire(cardInstanceId);
+        const card = reused ?? wrapper.createDiv('task-card');
+        if (reused) wrapper.appendChild(reused);
+
+        this.decorateScheduleCard(card, task);
+        const options = flowCard
+            ? { cardInstanceId }
+            : { cardInstanceId, compact: true };
+        await this.taskRenderer.render(card, task, this.getSettings(), options);
+        if (!reused) this.menuHandler.addTaskContextMenu(card, task);
+    }
+
+    /**
+     * Idempotent decoration for schedule cards. Variant classes reset before
+     * applying current task split state.
+     */
+    private decorateScheduleCard(card: HTMLElement, task: DisplayTask): void {
+        SCHEDULE_VARIANT_CLASSES.forEach(cls => card.removeClass(cls));
         if (task.isSplit) {
             card.addClass('task-card--split');
             if (task.splitContinuesBefore) card.addClass('task-card--split-continues-before');
             if (task.splitContinuesAfter) card.addClass('task-card--split-continues-after');
         }
 
+        card.dataset.id = task.id;
+
         TaskStyling.applyTaskColor(card, task.color ?? null);
         TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
         TaskStyling.applyReadOnly(card, task);
-        const scope = flowCard ? 'flow' : 'section';
-        const cardInstanceId = `schedule::${scope}::${task.id}`;
-        const options = flowCard
-            ? { cardInstanceId }
-            : { cardInstanceId, compact: true };
-        await this.taskRenderer.render(card, task, this.getSettings(), options);
-        this.menuHandler.addTaskContextMenu(card, task);
     }
 }

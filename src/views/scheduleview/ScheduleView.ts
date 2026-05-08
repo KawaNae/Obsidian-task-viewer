@@ -1,6 +1,7 @@
 import { ItemView, WorkspaceLeaf, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
+import { CardReconciler } from '../sharedUI/CardReconciler';
 import { isCompleteStatusChar } from '../../types';
 import type { DisplayTask } from '../../types';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
@@ -305,8 +306,14 @@ export class ScheduleView extends ItemView {
             return;
         }
 
+        // Keyed reconciliation: lift surviving cards before tearing down the
+        // day-timeline scaffolding. They will be re-parented + re-decorated as
+        // their cardInstanceId turns up in the new render; unmatched ones are
+        // disposed at the end.
+        const reconciler = new CardReconciler();
+        reconciler.detach(this.container);
+
         this.toolbar.detach();
-        this.taskRenderer.disposeInside(this.container);
         this.container.empty();
         const toolbarHost = this.container.createDiv('schedule-view__toolbar-host');
         this.toolbar.mount(toolbarHost);
@@ -326,7 +333,10 @@ export class ScheduleView extends ItemView {
         const bodyScroll = this.container.createDiv('schedule-view__body-scroll');
         const bodyContainer = bodyScroll.createDiv('schedule-view__scroll-content');
 
-        await this.renderDayTimeline(fixedContainer, bodyContainer, this.currentVisualDate, baseCategorized);
+        await this.renderDayTimeline(fixedContainer, bodyContainer, this.currentVisualDate, baseCategorized, reconciler);
+
+        // Dispose any cards that did not turn up in the new render.
+        reconciler.forEachStale(card => this.taskRenderer.dispose(card));
 
         if (this.scrollToNowOnNextRender) {
             this.scrollToNowOnNextRender = false;
@@ -353,6 +363,7 @@ export class ScheduleView extends ItemView {
         bodyContainer: HTMLElement,
         date: string,
         baseCategorized: BaseCategorizedTasks,
+        reconciler: CardReconciler,
     ): Promise<void> {
         const categorized = this.taskCategorizer.toScheduleFormat(baseCategorized);
 
@@ -367,9 +378,9 @@ export class ScheduleView extends ItemView {
 
         // Habits in fixed area (always visible), allday in scroll body (sticky on PC)
         this.renderHabitsSection(fixedContainer, date);
-        await this.sectionRenderer.renderAllDaySection(bodyContainer, categorized.allDay);
+        await this.sectionRenderer.renderAllDaySection(bodyContainer, categorized.allDay, reconciler);
 
-        await this.renderTimelineMain(bodyContainer, categorized.timed);
+        await this.renderTimelineMain(bodyContainer, categorized.timed, reconciler);
 
         if (categorized.dueOnly.length > 0) {
             await this.sectionRenderer.renderCollapsibleTaskSection(
@@ -377,12 +388,13 @@ export class ScheduleView extends ItemView {
                 'schedule-due-section',
                 t('calendar.due'),
                 categorized.dueOnly,
-                'dueOnly'
+                'dueOnly',
+                reconciler,
             );
         }
     }
 
-    private async renderTimelineMain(container: HTMLElement, tasks: TimedDisplayTask[]): Promise<void> {
+    private async renderTimelineMain(container: HTMLElement, tasks: TimedDisplayTask[], reconciler: CardReconciler): Promise<void> {
         const main = container.createDiv('schedule-grid');
         const layout = this.gridCalculator.buildAdaptiveGrid(tasks);
         const timelineHeight = layout.totalHeight + ScheduleView.TIMELINE_TOP_PADDING_PX + ScheduleView.TIMELINE_BOTTOM_PADDING_PX;
@@ -390,7 +402,7 @@ export class ScheduleView extends ItemView {
 
         this.gridRenderer.renderTimeMarkers(main, layout.rows, tasks);
         const placements = this.scheduleTaskRenderer.placeTasksOnGrid(tasks, layout.rows);
-        await this.scheduleTaskRenderer.renderTaskCards(main, placements, timelineHeight);
+        await this.scheduleTaskRenderer.renderTaskCards(main, placements, timelineHeight, reconciler);
 
         if (this.isCurrentVisualDate(this.currentVisualDate)) {
             this.gridRenderer.renderNowLine(main, layout.rows, timelineHeight);
