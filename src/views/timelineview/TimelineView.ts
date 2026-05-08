@@ -37,7 +37,7 @@ import { SidebarManager } from '../sidebar/SidebarManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
-import { RenderController } from '../sharedUI/RenderController';
+import { RenderScheduler } from '../sharedUI/RenderScheduler';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 
 export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
@@ -156,8 +156,8 @@ export class TimelineView extends ItemView {
     private hasRunInitialLogic = false;
 
     // Render coalescing (frame-level): 同一 frame 内に複数の onChange が来ても render は 1 回
-    // 実装は RenderController に委譲。
-    private renderController: RenderController;
+    // 実装は RenderScheduler に委譲。
+    private renderScheduler: RenderScheduler;
 
     // ==================== Pinch zoom state ====================
     private pinchInitialDistance: number = 0;
@@ -432,7 +432,7 @@ export class TimelineView extends ItemView {
 
         // Initialize render dispatch controller (rAF coalesce only — partial
         // update was retired in favour of keyed reconciliation in performRender).
-        this.renderController = new RenderController({
+        this.renderScheduler = new RenderScheduler({
             performFull: () => {
                 this.saveScrollPosition();
                 this.performRender();
@@ -445,7 +445,7 @@ export class TimelineView extends ItemView {
             // (DOM + state + tasks). No auto-scroll here: user-driven scroll
             // only via Now button / refresh / onOpen.
             this.tryRunInitialStateLogic();
-            this.renderController.handleChange(taskId, changes);
+            this.renderScheduler.handleChange(taskId, changes);
         });
 
         // Ctrl+wheel zoom
@@ -632,7 +632,7 @@ export class TimelineView extends ItemView {
             this.stickyAnchorObserver = null;
         }
         this.dateHeaderRenderer?.dispose();
-        this.renderController?.dispose();
+        this.renderScheduler?.dispose();
     }
 
     getEffectiveZoomLevel(): number {
@@ -685,7 +685,7 @@ export class TimelineView extends ItemView {
     private render(): void {
         // 保留中の coalesce 済み render をキャンセル（同 frame 内で同期 render が呼ばれたら
         // 二重描画しない）
-        this.renderController?.cancelPending();
+        this.renderScheduler?.cancelPending();
         this.saveScrollPosition();
         this.performRender();
     }
@@ -696,7 +696,7 @@ export class TimelineView extends ItemView {
      * トールバー / sidebar / pinch zoom 等の即時反映が必要な経路は render() を直呼び。
      */
     private scheduleRender(): void {
-        this.renderController.scheduleRender();
+        this.renderScheduler.scheduleRender();
     }
 
     private saveScrollPosition(): void {

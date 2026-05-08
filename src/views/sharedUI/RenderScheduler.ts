@@ -1,32 +1,32 @@
 /**
- * Handlers a view supplies to the render controller.
- *
- * Note: classification (`tryPartial` / `refreshPinned`) was retired in favour
- * of keyed reconciliation inside `performFull` itself. The controller is now
- * a small rAF coalescer; the view re-uses card elements per render via
- * `CardReconciler`. A dedicated rename to `RenderScheduler` is tracked for a
- * later cleanup pass — keeping `RenderController` here for now to limit the
- * blast radius of this change.
+ * Handlers a view supplies to the render scheduler.
  */
-export interface RenderControllerHandlers {
+export interface RenderSchedulerHandlers {
     /** Re-render the whole view. The view internally reconciles card DOM. */
     performFull: () => void;
 }
 
 /**
- * View-shared render dispatcher. Exposes:
- *   - `handleChange(taskId, changes)` — on data change, schedule a render.
- *     `blockId` / `timerTargetId` flips have no visual effect and are skipped.
- *   - `scheduleRender()` — request a render any time (filter change etc.),
- *     coalesced via rAF.
+ * View-shared render scheduler. Coalesces redraw requests through rAF so
+ * bursts of `readService.onChange` events collapse into a single render.
+ *
+ * The renderer no longer makes a partial-vs-full decision: keyed
+ * reconciliation inside `performFull` reuses surviving card elements by
+ * `data-card-instance-id`, so a "full" render is cheap when most cards are
+ * unchanged. `blockId` / `timerTargetId` flips have no visual effect at all
+ * and are short-circuited here.
+ *
+ * Exposes:
+ *   - `handleChange(taskId, changes)` — `readService.onChange` entry point.
+ *   - `scheduleRender()` — request a render any time (filter change etc.).
  *   - `performImmediate()` — bypass the rAF, render synchronously now.
  *   - `cancelPending()` — drop a pending rAF without rendering.
  */
-export class RenderController {
+export class RenderScheduler {
     private rafId: number | null = null;
     private dirty = false;
 
-    constructor(private handlers: RenderControllerHandlers) {}
+    constructor(private handlers: RenderSchedulerHandlers) {}
 
     /**
      * `readService.onChange` entry point. Skips the render entirely if every
@@ -40,7 +40,7 @@ export class RenderController {
         this.scheduleRender();
     }
 
-    /** Request a full render. rAF-coalesced. */
+    /** Request a render. rAF-coalesced. */
     scheduleRender(): void {
         this.dirty = true;
         if (this.rafId !== null) return;

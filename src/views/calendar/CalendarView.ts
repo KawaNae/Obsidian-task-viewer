@@ -39,7 +39,7 @@ import { SelectionController } from '../../interaction/selection/SelectionContro
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
-import { RenderController } from '../sharedUI/RenderController';
+import { RenderScheduler } from '../sharedUI/RenderScheduler';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
@@ -102,7 +102,7 @@ export class CalendarView extends ItemView {
     private savedScrollTop: number | null = null;
     private sidebarOpenedThisSession = false;
     private readonly hoverParent = new TaskViewHoverParent();
-    private renderController: RenderController;
+    private renderScheduler: RenderScheduler;
 
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
@@ -342,12 +342,12 @@ export class CalendarView extends ItemView {
         // Initialize render dispatch controller (rAF coalesce only).
         // Calendar still always full-renders today; reconciliation arrives in
         // a follow-up phase.
-        this.renderController = new RenderController({
+        this.renderScheduler = new RenderScheduler({
             performFull: () => this.render(),
         });
 
         this.unsubscribe = this.readService.onChange((taskId, changes) => {
-            this.renderController.handleChange(taskId, changes);
+            this.renderScheduler.handleChange(taskId, changes);
         });
     }
 
@@ -370,7 +370,7 @@ export class CalendarView extends ItemView {
             this.unsubscribeDelete();
             this.unsubscribeDelete = null;
         }
-        this.renderController?.dispose();
+        this.renderScheduler?.dispose();
     }
 
     public refresh(): void {

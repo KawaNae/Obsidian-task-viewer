@@ -4,8 +4,8 @@
  * Pattern (1 instance per render call):
  *   1. `detach(scope)` — index every existing card in `scope` by its
  *      `data-card-instance-id` and remove it from the DOM tree. The element
- *      itself stays alive (with its TaskCardRenderer cardComponents/cardOpts
- *      WeakMap entries, listeners, and inner markdown DOM intact).
+ *      itself stays alive (with its TaskCardRenderer cardComponents WeakMap
+ *      entry, bound listeners, and inner markdown DOM intact).
  *   2. The view rebuilds its scaffolding (week rows / day columns / sections)
  *      and, for each intended card, calls `acquire(key)` to get back the
  *      existing element if one survived. Otherwise the view creates a fresh

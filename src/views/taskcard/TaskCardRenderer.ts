@@ -46,7 +46,6 @@ export class TaskCardRenderer extends Component {
     private linkInteractionManager: TaskLinkInteractionManager;
     private onDetailClick: ((task: Task) => void) | null = null;
     private cardComponents: WeakMap<HTMLElement, Component> = new WeakMap();
-    private cardOpts: WeakMap<HTMLElement, RenderOptions> = new WeakMap();
     private unsubscribeTaskDeleted: (() => void) | null = null;
 
     constructor(private app: App, readService: TaskReadService, writeService: TaskWriteService, menuPresenter: MenuPresenter, private linkRuntime: TaskCardLinkRuntime, getSettings: () => TaskViewerSettings) {
@@ -106,12 +105,10 @@ export class TaskCardRenderer extends Component {
         const enableLinks = isDetailModal || settings.enableCardFileLink;
         const onNavigate = options.hooks?.onNavigate;
 
-        // Tag the card with its instance id so partial-update paths
-        // (e.g. TimelineView.tryPartialUpdate) can reuse the same key.
+        // Tag the card with its instance id. `CardReconciler` indexes by this
+        // attribute when the view tears down its scaffolding so the same card
+        // element is re-acquired and re-decorated in the next render.
         container.dataset.cardInstanceId = cardInstanceId;
-        // Stash full opts so rerender() can re-invoke render() with the same
-        // contract. WeakMap keeps DOM the source of identity but not state.
-        this.cardOpts.set(container, options);
 
         if (isDetailModal) {
             container.addClass('task-card--in-detail-modal');
@@ -190,24 +187,12 @@ export class TaskCardRenderer extends Component {
         this.bindParentCheckbox(contentContainer, task.originalTaskId ?? task.id, settings, task.isReadOnly);
     }
 
-    /**
-     * 既に render() を経た container に対して、保存された opts で再描画する。
-     * partial refresh の核。render() が冪等なので二重化は起きない。
-     * render() を経ていない container には no-op。
-     */
-    async rerender(container: HTMLElement, task: DisplayTask, settings: TaskViewerSettings): Promise<void> {
-        const opts = this.cardOpts.get(container);
-        if (!opts) return;
-        return this.render(container, task, settings, opts);
-    }
-
     dispose(container: HTMLElement): void {
         const comp = this.cardComponents.get(container);
         if (comp) {
             this.removeChild(comp);
             this.cardComponents.delete(container);
         }
-        this.cardOpts.delete(container);
     }
 
     disposeInside(root: HTMLElement): void {
