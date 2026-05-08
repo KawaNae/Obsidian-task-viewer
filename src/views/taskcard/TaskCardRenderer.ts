@@ -11,15 +11,21 @@ interface RenderOptions {
 
 /**
  * render() が直下に作る要素のクラス一覧。冪等再描画のため render() 冒頭で
- * `:scope >` 修飾でこの set のみを除去する。view 層が pre/post-inject する
- * `task-card__shape` / `task-card__handle*` は対象外なので保護される。
- * `__content` 内部の `__children` 等は子孫なので `:scope >` で誤爆しない。
+ * `:scope >` 修飾でこの set のみを除去する。view 層が post-inject する
+ * `task-card__handle*` は対象外なので保護される。`__content` 内部の
+ * `__children` 等は子孫なので `:scope >` で誤爆しない。
+ *
+ * `task-card__shape` は装飾オーバーレイ（CSS で split-continues を表現する
+ * 純表示要素）であり、view 側で重複生成されやすい温床だったため renderer に
+ * 取り込んだ。delete + recreate ではなく「無ければ作る」運用で安定させる。
  */
 const RENDERER_OWNED_CHILD_CLASSES = [
     'task-card__time',
     'task-card__content',
     'task-card__child-count',
 ] as const;
+
+const SHAPE_CLASS = 'task-card__shape';
 import { TaskReadService } from '../../services/data/TaskReadService';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
 import { DateUtils } from '../../utils/DateUtils';
@@ -112,11 +118,19 @@ export class TaskCardRenderer extends Component {
         }
 
         // Idempotent re-render: remove only the renderer-owned direct children
-        // before rebuilding. View-injected `__shape` (pre) and `__handle*`
-        // (post, by HandleManager) sit outside this set and are preserved.
+        // before rebuilding. View-injected `__handle*` (post, by HandleManager)
+        // sits outside this set and is preserved.
         const ownedSelector = RENDERER_OWNED_CHILD_CLASSES
             .map(c => `:scope > .${c}`).join(', ');
         container.querySelectorAll(ownedSelector).forEach(el => el.remove());
+
+        // `__shape` is renderer-owned but persistent (not torn down between
+        // renders) — purely decorative, no per-render state to refresh.
+        // Ensure exactly one exists at the head of the card.
+        if (!container.querySelector(`:scope > .${SHAPE_CLASS}`)) {
+            const shape = container.createDiv(SHAPE_CLASS);
+            container.insertBefore(shape, container.firstChild);
+        }
 
         const prev = this.cardComponents.get(container);
         if (prev) this.removeChild(prev);
