@@ -13,7 +13,14 @@ import { hasSortRules } from '../../services/sort/SortTypes';
 import TaskViewerPlugin from '../../main';
 import { TaskStyling } from './TaskStyling';
 import { TaskPagingController } from './TaskPagingController';
+import { CardReconciler } from './CardReconciler';
 import type { TaskReadService } from '../../services/data/TaskReadService';
+
+const PINNED_VARIANT_CLASSES = [
+    'task-card--split',
+    'task-card--split-continues-before',
+    'task-card--split-continues-after',
+];
 
 export interface PinnedListCallbacks {
     onCollapsedChange: (listId: string, collapsed: boolean) => void;
@@ -56,6 +63,8 @@ export class PinnedListRenderer {
     // ID of list to start renaming immediately after render
     private pendingRenameId: string | null = null;
     private readonly paging: TaskPagingController;
+    /** Reconciler for the in-flight `render()` call. Consumed by `renderTaskCards`. */
+    private currentReconciler: CardReconciler | null = null;
 
     // attach state — set by attach(), cleared by detach()
     private host: HTMLElement | null = null;
@@ -147,7 +156,14 @@ export class PinnedListRenderer {
         callbacks: PinnedListCallbacks,
         viewFilterState?: FilterState,
     ): void {
-        this.taskRenderer.disposeInside(container);
+        // Keyed reconciliation: lift surviving cards across all lists before
+        // tearing down the container. They will be re-parented + re-decorated
+        // when their cardInstanceId turns up in the new render. Lists added /
+        // removed / reordered all reuse cards by key — no markdown reflow.
+        const reconciler = new CardReconciler();
+        reconciler.detach(container);
+        this.currentReconciler = reconciler;
+
         container.empty();
         container.addClass('tv-sidebar__pinned-lists');
         // Preserve paging state across renders for lists that still exist
@@ -157,6 +173,8 @@ export class PinnedListRenderer {
         if (lists.length === 0) {
             container.createDiv('tv-sidebar__pinned-lists--empty')
                 .setText(t('pinnedList.noPinnedLists'));
+            reconciler.forEachStale(card => this.taskRenderer.dispose(card));
+            this.currentReconciler = null;
             return;
         }
 
@@ -169,6 +187,10 @@ export class PinnedListRenderer {
 
             this.renderList(container, listDef, tasks, collapsedState, callbacks, i, lists.length);
         }
+
+        // Dispose any cards that did not turn up in the new render.
+        reconciler.forEachStale(card => this.taskRenderer.dispose(card));
+        this.currentReconciler = null;
     }
 
     private renderList(
@@ -370,18 +392,37 @@ export class PinnedListRenderer {
     private renderTaskCards(body: HTMLElement, tasks: DisplayTask[], listId: string): void {
         const settings = this.plugin.settings;
         const viewId = this.viewId ?? 'unknown';
+        const reconciler = this.currentReconciler;
         tasks.forEach(task => {
-            const card = body.createDiv('task-card');
-            card.dataset.id = task.id;
+            const cardInstanceId = `${viewId}::pl-${listId}::${task.id}`;
+            const reused = reconciler?.acquire(cardInstanceId);
+            const card = reused ?? body.createDiv('task-card');
+            if (reused) body.appendChild(reused);
 
-            TaskStyling.applyTaskColor(card, task.color ?? null);
-            TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
-            TaskStyling.applyReadOnly(card, task);
-
+            this.decoratePinnedCard(card, task);
             this.taskRenderer.render(card, task, settings, {
-                cardInstanceId: `${viewId}::pl-${listId}::${task.id}`,
+                cardInstanceId,
             });
-            this.menuHandler.addTaskContextMenu(card, task);
+            if (!reused) this.menuHandler.addTaskContextMenu(card, task);
         });
+    }
+
+    /**
+     * Idempotent decoration for pinned-list cards. Variant classes are reset
+     * before applying the current task's split state.
+     */
+    private decoratePinnedCard(card: HTMLElement, task: DisplayTask): void {
+        PINNED_VARIANT_CLASSES.forEach(cls => card.removeClass(cls));
+        if (task.isSplit) {
+            card.addClass('task-card--split');
+            if (task.splitContinuesBefore) card.addClass('task-card--split-continues-before');
+            if (task.splitContinuesAfter) card.addClass('task-card--split-continues-after');
+        }
+
+        card.dataset.id = task.id;
+
+        TaskStyling.applyTaskColor(card, task.color ?? null);
+        TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
+        TaskStyling.applyReadOnly(card, task);
     }
 }
