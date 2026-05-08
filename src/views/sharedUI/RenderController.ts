@@ -1,32 +1,26 @@
 /**
- * View に注入される handler 群。
- * View 側の具体的な render 実装を controller から呼び出すため。
+ * Handlers a view supplies to the render controller.
+ *
+ * Note: classification (`tryPartial` / `refreshPinned`) was retired in favour
+ * of keyed reconciliation inside `performFull` itself. The controller is now
+ * a small rAF coalescer; the view re-uses card elements per render via
+ * `CardReconciler`. A dedicated rename to `RenderScheduler` is tracked for a
+ * later cleanup pass — keeping `RenderController` here for now to limit the
+ * blast radius of this change.
  */
 export interface RenderControllerHandlers {
-    /** 1 タスクの partial update を試みる。成功すれば true。失敗時は full render に降格 */
-    tryPartial: (taskId: string, changes: string[]) => boolean;
-    /** ビュー全体の full render */
+    /** Re-render the whole view. The view internally reconciles card DOM. */
     performFull: () => void;
-    /** pinned list 部分のみリフレッシュ（partial 後に必要なら呼ぶ） */
-    refreshPinned: () => void;
 }
 
-export type ChangeKeyClassification = 'no-render' | 'layout' | 'safe' | 'other';
-
 /**
- * Keys that change task position on the grid → full render.
- * Source of truth — moved from TimelineView.ts.
- */
-const LAYOUT_KEYS = new Set(['startDate', 'startTime', 'endDate', 'endTime', 'due']);
-/** Keys safe for partial DOM update (no position change). */
-const SAFE_KEYS = new Set(['status', 'statusChar', 'content', 'childLines']);
-/** Keys with zero visual effect → skip render entirely. */
-const NO_RENDER_KEYS = new Set(['blockId', 'timerTargetId']);
-
-/**
- * View 横断の render ディスパッチコントローラー。
- * onChange イベント → 適切な render 戦略（partial / full / skip）を選択。
- * rAF で full render を coalesce。
+ * View-shared render dispatcher. Exposes:
+ *   - `handleChange(taskId, changes)` — on data change, schedule a render.
+ *     `blockId` / `timerTargetId` flips have no visual effect and are skipped.
+ *   - `scheduleRender()` — request a render any time (filter change etc.),
+ *     coalesced via rAF.
+ *   - `performImmediate()` — bypass the rAF, render synchronously now.
+ *   - `cancelPending()` — drop a pending rAF without rendering.
  */
 export class RenderController {
     private rafId: number | null = null;
@@ -35,29 +29,18 @@ export class RenderController {
     constructor(private handlers: RenderControllerHandlers) {}
 
     /**
-     * TaskIndex の onChange に対応するエントリポイント。
-     * taskId / changes に応じて partial or full を判定。
+     * `readService.onChange` entry point. Skips the render entirely if every
+     * key in `changes` is purely internal (`blockId`, `timerTargetId`); those
+     * flips do not affect any rendered card.
      */
     handleChange(taskId: string | undefined, changes: string[] | undefined): void {
-        if (taskId && changes) {
-            const classification = this.classifyChanges(changes);
-
-            if (classification === 'no-render') return;
-
-            if (classification === 'safe') {
-                const ok = this.handlers.tryPartial(taskId, changes);
-                if (ok) {
-                    this.handlers.refreshPinned();
-                    return;
-                }
-            }
-            // layout / other / partial 失敗 → full render（scheduleRender で coalesce）
+        if (changes && changes.length > 0 && changes.every(c => NO_RENDER_KEYS.has(c))) {
+            return;
         }
-
         this.scheduleRender();
     }
 
-    /** 任意のタイミングで full render を要求（フィルタ変更など）。rAF で coalesce する。 */
+    /** Request a full render. rAF-coalesced. */
     scheduleRender(): void {
         this.dirty = true;
         if (this.rafId !== null) return;
@@ -69,7 +52,7 @@ export class RenderController {
         });
     }
 
-    /** rAF をスキップして即座に full render（同 frame 内の二重描画を防ぐため保留中の rAF はキャンセル） */
+    /** Cancel any pending rAF, then render synchronously. */
     performImmediate(): void {
         if (this.rafId !== null) {
             cancelAnimationFrame(this.rafId);
@@ -79,10 +62,7 @@ export class RenderController {
         this.handlers.performFull();
     }
 
-    /**
-     * 保留中の rAF をキャンセルするだけ（同期 render が呼ばれる直前の用途）。
-     * full render 自体は呼び出さない。
-     */
+    /** Drop a pending rAF without rendering (used right before a sync render). */
     cancelPending(): void {
         if (this.rafId !== null) {
             cancelAnimationFrame(this.rafId);
@@ -91,7 +71,7 @@ export class RenderController {
         }
     }
 
-    /** unload 時に呼ぶ */
+    /** Tear down on view unload. */
     dispose(): void {
         if (this.rafId !== null) {
             cancelAnimationFrame(this.rafId);
@@ -99,19 +79,7 @@ export class RenderController {
         }
         this.dirty = false;
     }
-
-    private classifyChanges(changes: string[]): ChangeKeyClassification {
-        if (changes.length === 0) return 'other';
-
-        const allNoRender = changes.every(c => NO_RENDER_KEYS.has(c));
-        if (allNoRender) return 'no-render';
-
-        const anyLayout = changes.some(c => LAYOUT_KEYS.has(c));
-        if (anyLayout) return 'layout';
-
-        const allSafe = changes.every(c => SAFE_KEYS.has(c));
-        if (allSafe) return 'safe';
-
-        return 'other';
-    }
 }
+
+/** Keys with zero visual effect — render is skipped entirely. */
+const NO_RENDER_KEYS = new Set(['blockId', 'timerTargetId']);

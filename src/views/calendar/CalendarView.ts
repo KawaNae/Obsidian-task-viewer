@@ -338,12 +338,11 @@ export class CalendarView extends ItemView {
         // Clear selection when the selected task is deleted via the UI.
         this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.writeService);
 
-        // Initialize render dispatch controller. CalendarView は partial 未対応のため
-        // tryPartial は常に false（→ 必ず full render に降格）。
+        // Initialize render dispatch controller (rAF coalesce only).
+        // Calendar still always full-renders today; reconciliation arrives in
+        // a follow-up phase.
         this.renderController = new RenderController({
-            tryPartial: () => false,
             performFull: () => this.render(),
-            refreshPinned: () => { /* partial 未対応なので呼ばれない */ },
         });
 
         this.unsubscribe = this.readService.onChange((taskId, changes) => {

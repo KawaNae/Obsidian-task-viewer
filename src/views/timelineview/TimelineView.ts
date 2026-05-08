@@ -38,7 +38,7 @@ import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 import { RenderController } from '../sharedUI/RenderController';
-import { refreshCardsForTask } from '../sharedUI/CardPartialRefresh';
+import { CardReconciler } from '../sharedUI/CardReconciler';
 
 export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
 
@@ -430,17 +430,13 @@ export class TimelineView extends ItemView {
         this.selectionController.attachBackgroundClick(this.container);
         this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.writeService);
 
-        // Initialize render dispatch controller (rAF coalesce + partial/full 判定)
+        // Initialize render dispatch controller (rAF coalesce only — partial
+        // update was retired in favour of keyed reconciliation in performRender).
         this.renderController = new RenderController({
-            tryPartial: (taskId) => this.tryPartialUpdate(taskId),
             performFull: () => {
                 this.saveScrollPosition();
                 this.performRender();
             },
-            // PinnedListRenderer subscribes to readService.onChange itself
-            // (Phase 7), so the controller no longer needs to nudge it after
-            // a partial update. Kept as a no-op to preserve the handler shape.
-            refreshPinned: () => { /* no-op: PinnedList self-subscribes */ },
         });
 
         // Subscribe to data changes
@@ -876,20 +872,6 @@ export class TimelineView extends ItemView {
         return migrated;
     }
 
-    private tryPartialUpdate(taskId: string): boolean {
-        // 共有ヘルパに委譲。data-id / data-split-original-id の OR 検索で
-        // split segment も網羅する（旧実装は data-id 一致のみで split は full
-        // にフォールバックしていた）。renderer-owned 子の二重化は render() の
-        // 冪等化により発生しない。
-        return refreshCardsForTask(
-            this.container,
-            taskId,
-            this.readService,
-            this.taskRenderer,
-            this.plugin.settings,
-        );
-    }
-
     private performRender() {
         // On narrow/mobile, force sidebar closed unless user explicitly opened it this session
         if (this.sidebarManager.isNarrow() && !this.sidebarOpenedThisSession) {
@@ -897,7 +879,14 @@ export class TimelineView extends ItemView {
         }
         this.sidebarManager.syncPresentation(this.viewState.showSidebar, { animate: false });
 
-        this.taskRenderer.disposeInside(this.container);
+        // Keyed reconciliation: lift surviving cards into a key→element map
+        // before tearing down the scaffolding. Cards retain their inner DOM /
+        // markdown / Component lifecycle, and will be re-parented + re-decorated
+        // when their key turns up in the new render. Stale survivors are
+        // disposed at the end.
+        const reconciler = new CardReconciler();
+        reconciler.detach(this.container);
+
         // Detach the toolbar before empty() so its DOM (and the FilterMenuComponent
         // bound to it) survives. We re-attach it via mount() below.
         this.toolbar?.detach();
@@ -968,7 +957,13 @@ export class TimelineView extends ItemView {
             this.handleManager,
             dates,
             filteredTasks,
+            reconciler,
         );
+
+        // Dispose any cards that did not turn up in the new render (filter
+        // dropped, segments collapsed, etc). Their elements are already
+        // detached from the DOM by reconciler.detach().
+        reconciler.forEachStale(card => this.taskRenderer.dispose(card));
 
         this.renderCurrentTimeIndicator();
 
