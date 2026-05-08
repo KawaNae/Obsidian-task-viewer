@@ -13,6 +13,13 @@ import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState, hasSortRules } from '../../services/sort/SortTypes';
 import { TaskStyling } from '../sharedUI/TaskStyling';
 import { TaskPagingController } from '../sharedUI/TaskPagingController';
+import { CardReconciler } from '../sharedUI/CardReconciler';
+
+const KANBAN_VARIANT_CLASSES = [
+    'task-card--split',
+    'task-card--split-continues-before',
+    'task-card--split-continues-after',
+];
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
@@ -51,6 +58,12 @@ export class KanbanView extends ItemView {
     private gridCollapsed: Record<string, boolean> = {};
     private readonly hoverParent = new TaskViewHoverParent();
     private readonly paging: TaskPagingController;
+    /**
+     * Reconciler for the in-flight `render()` call. Set at the top of
+     * `render()` and consumed by `renderTaskCards` (which is called both
+     * directly and via `paging.render`'s callback). Null between renders.
+     */
+    private currentReconciler: CardReconciler | null = null;
 
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
@@ -217,9 +230,19 @@ export class KanbanView extends ItemView {
 
     private render(): void {
         this.toolbar.detach();
-        this.taskRenderer.disposeInside(this.container);
+
+        // Keyed reconciliation: lift surviving cards before tearing down the
+        // grid. They will be re-parented + re-decorated as their
+        // cardInstanceId turns up in the new render; unmatched ones (filter
+        // dropped, deleted, etc.) are disposed at the end.
+        const reconciler = new CardReconciler();
+        reconciler.detach(this.container);
+        this.currentReconciler = reconciler;
+
         this.container.empty();
-        this.paging.clear();
+        // paging.clear() is intentionally not called: page positions outlive
+        // a render now that cards are reconciled rather than reconstructed.
+        // pruneRemovedLists() handles list deletions further down.
 
         // Toolbar
         const toolbarHost = this.container.createDiv('kanban-view__toolbar-host');
@@ -231,13 +254,19 @@ export class KanbanView extends ItemView {
         const gridEl = gridHost.createDiv('kanban-view__grid');
         gridEl.style.gridTemplateColumns = `repeat(${cols}, minmax(250px, 1fr))`;
 
+        const currentListIds = new Set<string>();
         for (let r = 0; r < this.grid.length; r++) {
             for (let c = 0; c < this.grid[r].length; c++) {
                 const listDef = this.grid[r][c];
+                currentListIds.add(listDef.id);
                 this.renderCell(gridEl, listDef, r, c);
             }
         }
+        this.paging.pruneRemovedLists(currentListIds);
 
+        // Dispose any cards that did not turn up in the new render.
+        reconciler.forEachStale(card => this.taskRenderer.dispose(card));
+        this.currentReconciler = null;
     }
 
     private renderCell(gridEl: HTMLElement, listDef: PinnedListDefinition, row: number, col: number): void {
@@ -335,17 +364,38 @@ export class KanbanView extends ItemView {
 
     private renderTaskCards(body: HTMLElement, tasks: import('../../types').DisplayTask[], listId: string): void {
         const settings = this.plugin.settings;
+        const reconciler = this.currentReconciler;
         for (const task of tasks) {
-            const card = body.createDiv('task-card');
-            card.dataset.id = task.id;
-            TaskStyling.applyTaskColor(card, task.color ?? null);
-            TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
-            TaskStyling.applyReadOnly(card, task);
+            const cardInstanceId = `kanban::cell-${listId}::${task.id}`;
+            const reused = reconciler?.acquire(cardInstanceId);
+            const card = reused ?? body.createDiv('task-card');
+            if (reused) body.appendChild(reused);
+
+            this.decorateKanbanCard(card, task);
             this.taskRenderer.render(card, task, settings, {
-                cardInstanceId: `kanban::cell-${listId}::${task.id}`,
+                cardInstanceId,
             });
-            this.menuHandler.addTaskContextMenu(card, task);
+            if (!reused) this.menuHandler.addTaskContextMenu(card, task);
         }
+    }
+
+    /**
+     * Idempotent decoration for kanban cards. Variant classes are reset
+     * before applying current task split state.
+     */
+    private decorateKanbanCard(card: HTMLElement, task: import('../../types').DisplayTask): void {
+        KANBAN_VARIANT_CLASSES.forEach(cls => card.removeClass(cls));
+        if (task.isSplit) {
+            card.addClass('task-card--split');
+            if (task.splitContinuesBefore) card.addClass('task-card--split-continues-before');
+            if (task.splitContinuesAfter) card.addClass('task-card--split-continues-after');
+        }
+
+        card.dataset.id = task.id;
+
+        TaskStyling.applyTaskColor(card, task.color ?? null);
+        TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
+        TaskStyling.applyReadOnly(card, task);
     }
 
     // ─── Cell Context Menu ────────────────────────────────────
