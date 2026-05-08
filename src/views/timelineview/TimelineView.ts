@@ -34,11 +34,11 @@ import { createEmptyFilterState, type FilterState } from '../../services/filter/
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
-import { TaskStyling } from '../sharedUI/TaskStyling';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 import { RenderController } from '../sharedUI/RenderController';
+import { refreshCardsForTask } from '../sharedUI/CardPartialRefresh';
 
 export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
 
@@ -877,32 +877,17 @@ export class TimelineView extends ItemView {
     }
 
     private tryPartialUpdate(taskId: string): boolean {
-        const card = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
-        const dt = this.readService.getDisplayTask(taskId);
-        if (!card) return false;
-        if (!dt) return false;
-
-        const contentContainer = card.querySelector('.task-card__content');
-        if (contentContainer) contentContainer.remove();
-        const timeEl = card.querySelector('.task-card__time');
-        if (timeEl) timeEl.remove();
-        const expandBar = card.querySelector('.task-card__expand-bar');
-        if (expandBar) expandBar.remove();
-
-        const isAllDay = card.classList.contains('task-card--allday');
-        // Reuse the cardInstanceId stamped on the element by the original
-        // render so collapse state survives the partial update. Fall back to
-        // a deterministic id for older DOM that may have been built before
-        // this code path was introduced.
-        const reusedCardInstanceId = card.dataset.cardInstanceId
-            ?? `${VIEW_ID}::${isAllDay ? 'allday' : 'lane'}::${dt.id}`;
-        const opts = isAllDay
-            ? { cardInstanceId: reusedCardInstanceId, topRight: 'none' as const, compact: true }
-            : { cardInstanceId: reusedCardInstanceId };
-        this.taskRenderer.render(card, dt, this.plugin.settings, opts);
-        TaskStyling.applyTaskColor(card, dt.color ?? null);
-        TaskStyling.applyTaskLinestyle(card, dt.linestyle ?? null);
-        return true;
+        // 共有ヘルパに委譲。data-id / data-split-original-id の OR 検索で
+        // split segment も網羅する（旧実装は data-id 一致のみで split は full
+        // にフォールバックしていた）。renderer-owned 子の二重化は render() の
+        // 冪等化により発生しない。
+        return refreshCardsForTask(
+            this.container,
+            taskId,
+            this.readService,
+            this.taskRenderer,
+            this.plugin.settings,
+        );
     }
 
     private performRender() {

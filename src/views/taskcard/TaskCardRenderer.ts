@@ -1,5 +1,25 @@
 import { App, MarkdownRenderer, Component } from 'obsidian';
 import { Task, DisplayTask, TaskViewerSettings, isCompleteStatusChar, isTvFile } from '../../types';
+
+interface RenderOptions {
+    cardInstanceId: string;
+    context?: 'inline' | 'detail-modal';
+    topRight?: 'time' | 'due' | 'none';
+    compact?: boolean;
+    hooks?: { onNavigate?: () => void };
+}
+
+/**
+ * render() が直下に作る要素のクラス一覧。冪等再描画のため render() 冒頭で
+ * `:scope >` 修飾でこの set のみを除去する。view 層が pre/post-inject する
+ * `task-card__shape` / `task-card__handle*` は対象外なので保護される。
+ * `__content` 内部の `__children` 等は子孫なので `:scope >` で誤爆しない。
+ */
+const RENDERER_OWNED_CHILD_CLASSES = [
+    'task-card__time',
+    'task-card__content',
+    'task-card__child-count',
+] as const;
 import { TaskReadService } from '../../services/data/TaskReadService';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
 import { DateUtils } from '../../utils/DateUtils';
@@ -20,6 +40,7 @@ export class TaskCardRenderer extends Component {
     private linkInteractionManager: TaskLinkInteractionManager;
     private onDetailClick: ((task: Task) => void) | null = null;
     private cardComponents: WeakMap<HTMLElement, Component> = new WeakMap();
+    private cardOpts: WeakMap<HTMLElement, RenderOptions> = new WeakMap();
     private unsubscribeTaskDeleted: (() => void) | null = null;
 
     constructor(private app: App, readService: TaskReadService, writeService: TaskWriteService, menuPresenter: MenuPresenter, private linkRuntime: TaskCardLinkRuntime, getSettings: () => TaskViewerSettings) {
@@ -69,13 +90,7 @@ export class TaskCardRenderer extends Component {
         container: HTMLElement,
         task: DisplayTask,
         settings: TaskViewerSettings,
-        options: {
-            cardInstanceId: string;
-            context?: 'inline' | 'detail-modal';
-            topRight?: 'time' | 'due' | 'none';
-            compact?: boolean;
-            hooks?: { onNavigate?: () => void };
-        }
+        options: RenderOptions
     ): Promise<void> {
         const cardInstanceId = options.cardInstanceId;
         const topRight = options.topRight ?? 'time';
@@ -88,10 +103,20 @@ export class TaskCardRenderer extends Component {
         // Tag the card with its instance id so partial-update paths
         // (e.g. TimelineView.tryPartialUpdate) can reuse the same key.
         container.dataset.cardInstanceId = cardInstanceId;
+        // Stash full opts so rerender() can re-invoke render() with the same
+        // contract. WeakMap keeps DOM the source of identity but not state.
+        this.cardOpts.set(container, options);
 
         if (isDetailModal) {
             container.addClass('task-card--in-detail-modal');
         }
+
+        // Idempotent re-render: remove only the renderer-owned direct children
+        // before rebuilding. View-injected `__shape` (pre) and `__handle*`
+        // (post, by HandleManager) sit outside this set and are preserved.
+        const ownedSelector = RENDERER_OWNED_CHILD_CLASSES
+            .map(c => `:scope > .${c}`).join(', ');
+        container.querySelectorAll(ownedSelector).forEach(el => el.remove());
 
         const prev = this.cardComponents.get(container);
         if (prev) this.removeChild(prev);
@@ -151,12 +176,24 @@ export class TaskCardRenderer extends Component {
         this.bindParentCheckbox(contentContainer, task.originalTaskId ?? task.id, settings, task.isReadOnly);
     }
 
+    /**
+     * 既に render() を経た container に対して、保存された opts で再描画する。
+     * partial refresh の核。render() が冪等なので二重化は起きない。
+     * render() を経ていない container には no-op。
+     */
+    async rerender(container: HTMLElement, task: DisplayTask, settings: TaskViewerSettings): Promise<void> {
+        const opts = this.cardOpts.get(container);
+        if (!opts) return;
+        return this.render(container, task, settings, opts);
+    }
+
     dispose(container: HTMLElement): void {
         const comp = this.cardComponents.get(container);
         if (comp) {
             this.removeChild(comp);
             this.cardComponents.delete(container);
         }
+        this.cardOpts.delete(container);
     }
 
     disposeInside(root: HTMLElement): void {
