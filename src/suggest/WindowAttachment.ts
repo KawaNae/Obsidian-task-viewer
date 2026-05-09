@@ -3,7 +3,7 @@ import type { TaskViewerSettings } from '../types';
 import TaskViewerPlugin from '../main';
 import { PropertyColorSuggest } from './color/PropertyColorSuggest';
 import { PropertyLineStyleSuggest } from './line/PropertyLineStyleSuggest';
-import { normalizeColor } from '../utils/ColorUtils';
+import { normalizeColor, cssColorToHex } from '../utils/ColorUtils';
 
 export interface AttachmentContext {
     app: App;
@@ -32,7 +32,12 @@ export class WindowAttachment {
     attach(): void {
         const MutationObserverCtor = (this.win as Window & typeof globalThis).MutationObserver;
         this.observer = new MutationObserverCtor(() => this.syncAttach());
-        this.observer.observe(this.doc.body, { childList: true, subtree: true });
+        // characterData: contenteditable の文字編集も拾い、colorInput の不変条件を維持する。
+        this.observer.observe(this.doc.body, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+        });
         this.syncAttach();
     }
 
@@ -67,19 +72,34 @@ export class WindowAttachment {
             const valueDiv = propertyContainer.querySelector(
                 '.metadata-input-longtext[contenteditable="true"]'
             ) as HTMLDivElement | null;
-            if (!valueDiv || this.ctx.attachedInputs.has(valueDiv)) return;
+            if (!valueDiv) return;
 
             if (isColorKey && settings.suggestColor) {
-                new PropertyColorSuggest(this.ctx.app, valueDiv, this.ctx.suggestHost);
-                this.addColorPickerIcon(propertyContainer as HTMLElement, valueDiv);
-                this.suppressNativePropertySuggest(colorKey);
-                this.ctx.attachedInputs.add(valueDiv);
+                if (!this.ctx.attachedInputs.has(valueDiv)) {
+                    new PropertyColorSuggest(this.ctx.app, valueDiv, this.ctx.suggestHost);
+                    this.addColorPickerIcon(propertyContainer as HTMLElement);
+                    this.suppressNativePropertySuggest(colorKey);
+                    this.ctx.attachedInputs.add(valueDiv);
+                }
+                // valueDiv は Obsidian の再描画で別要素に置き換わりうる。
+                // closure に閉じ込めず毎 sync で fresh な textContent を反映する。
+                this.syncColorInputValue(propertyContainer as HTMLElement, valueDiv);
             } else if (isLineStyleKey && settings.suggestLinestyle) {
+                if (this.ctx.attachedInputs.has(valueDiv)) return;
                 new PropertyLineStyleSuggest(this.ctx.app, valueDiv, this.ctx.suggestHost);
                 this.suppressNativePropertySuggest(linestyleKey);
                 this.ctx.attachedInputs.add(valueDiv);
             }
         });
+    }
+
+    private syncColorInputValue(container: HTMLElement, valueDiv: HTMLDivElement): void {
+        const colorInput = container.querySelector(
+            '.task-viewer-color-picker-icon input[type="color"]'
+        ) as HTMLInputElement | null;
+        if (!colorInput) return;
+        const next = cssColorToHex(valueDiv.textContent?.trim() ?? '', this.doc);
+        if (colorInput.value !== next) colorInput.value = next;
     }
 
     private suppressNativePropertySuggest(propertyKey: string): void {
@@ -110,7 +130,7 @@ export class WindowAttachment {
         this.nativeSuggestStyles.delete(propertyKey);
     }
 
-    private addColorPickerIcon(container: HTMLElement, valueDiv: HTMLDivElement): void {
+    private addColorPickerIcon(container: HTMLElement): void {
         if (container.querySelector('.task-viewer-color-picker-icon')) return;
 
         const iconBtn = container.createDiv({ cls: 'task-viewer-color-picker-icon clickable-icon' });
@@ -142,39 +162,20 @@ export class WindowAttachment {
             const activeFile = this.ctx.app.workspace.getActiveFile();
             if (!activeFile) return;
 
+            const hex = normalizeColor(colorInput.value);
             const colorKey = this.ctx.getSettings().tvFileKeys.color;
             await this.ctx.app.fileManager.processFrontMatter(
                 activeFile,
                 (frontmatter: Record<string, unknown>) => {
-                    frontmatter[colorKey] = normalizeColor(colorInput.value);
+                    frontmatter[colorKey] = hex;
                 }
             );
 
-            valueDiv.textContent = normalizeColor(colorInput.value);
-        });
-
-        iconBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const currentValue = valueDiv.textContent?.trim() || '';
-
-            let hexValue = currentValue;
-            if (currentValue && !currentValue.startsWith('#')) {
-                const tempEl = this.doc.createElement('div');
-                tempEl.style.color = currentValue;
-                this.doc.body.appendChild(tempEl);
-                const computedColor = this.win.getComputedStyle(tempEl).color;
-                this.doc.body.removeChild(tempEl);
-
-                const rgbMatch = computedColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-                if (rgbMatch) {
-                    const r = parseInt(rgbMatch[1]).toString(16).padStart(2, '0');
-                    const g = parseInt(rgbMatch[2]).toString(16).padStart(2, '0');
-                    const b = parseInt(rgbMatch[3]).toString(16).padStart(2, '0');
-                    hexValue = `${r}${g}${b}`;
-                }
-            }
-
-            colorInput.value = (hexValue && !hexValue.startsWith('#') ? '#' + hexValue : hexValue) || '#000000';
+            // valueDiv は再描画で別要素に置き換わりうるので closure ではなく都度解決する。
+            const currentValueDiv = container.querySelector(
+                '.metadata-input-longtext'
+            ) as HTMLDivElement | null;
+            if (currentValueDiv) currentValueDiv.textContent = hex;
         });
     }
 }
