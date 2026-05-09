@@ -8,12 +8,19 @@ import { TaskStyling } from '../../sharedUI/TaskStyling';
 import { TaskLayout } from '../TaskLayout';
 import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { HandleManager } from '../HandleManager';
+import { CardReconciler } from '../../sharedUI/CardReconciler';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 
 
 const Z_GAP = 10;
 const SELECTED_Z_INDEX = 200;
 const Z_MAX = SELECTED_Z_INDEX - Z_GAP;
+
+const SPLIT_VARIANT_CLASSES = [
+    'task-card--split',
+    'task-card--split-continues-before',
+    'task-card--split-continues-after',
+];
 
 export class TimelineSectionRenderer {
     constructor(
@@ -25,7 +32,7 @@ export class TimelineSectionRenderer {
         private viewId: string
     ) { }
 
-    public render(container: HTMLElement, date: string, timedTasks: DisplayTask[]) {
+    public render(container: HTMLElement, date: string, timedTasks: DisplayTask[], reconciler: CardReconciler) {
         const startHour = this.plugin.settings.startHour;
 
         // Calculate layout for overlapping tasks
@@ -34,90 +41,105 @@ export class TimelineSectionRenderer {
         timedTasks.forEach((task, index) => {
             if (!task.effectiveStartTime) return;
 
-            const el = container.createDiv('task-card');
-            el.createDiv('task-card__shape');
-            if (task.id === this.handleManager.getSelectedTaskId()) {
-                el.addClass('is-selected');
-            }
+            const cardInstanceId = `${this.viewId}::lane-${date}::${task.id}`;
+            const reused = reconciler.acquire(cardInstanceId);
+            const el = reused ?? container.createDiv('task-card');
+            if (reused) container.appendChild(reused);
 
-            // Add split segment classes if applicable
-            if (task.isSplit) {
-                el.addClass('task-card--split');
-                if (task.splitContinuesBefore) el.addClass('task-card--split-continues-before');
-                if (task.splitContinuesAfter) el.addClass('task-card--split-continues-after');
-                if (task.originalTaskId) {
-                    el.dataset.splitOriginalId = task.originalTaskId;
-                }
-            }
-
-            el.dataset.id = task.id;
-
-            // Apply Color
-            TaskStyling.applyTaskColor(el, task.color ?? null);
-            TaskStyling.applyTaskLinestyle(el, task.linestyle ?? null);
-            TaskStyling.applyReadOnly(el, task);
-
-            // Calculate position
-            let startMinutes = DateUtils.timeToMinutes(task.effectiveStartTime);
-            let endMinutes: number;
-
-            if (task.effectiveEndTime) {
-                if (task.effectiveEndTime.includes('T')) {
-                    // Full ISO: Calculate minutes relative to task.date's 00:00
-                    // But wait, we need minutes relative to visual day start for rendering?
-                    // No, render logic below uses (startMinutes - startHourMinutes).
-                    // startMinutes is relative to 00:00 of the task's date (which is 'date' here).
-
-                    // If endTime is next day, we need total minutes from start of 'date'.
-                    const startDate = new Date(`${date}T00:00:00`);
-                    const endDate = new Date(task.effectiveEndTime);
-                    const diffMs = endDate.getTime() - startDate.getTime();
-                    endMinutes = Math.floor(diffMs / 60000);
-                } else {
-                    endMinutes = DateUtils.timeToMinutes(task.effectiveEndTime);
-                    // Handle wrap around midnight if needed (simple case)
-                    if (endMinutes < startMinutes) {
-                        endMinutes += 24 * 60;
-                    }
-                }
-            } else {
-                endMinutes = startMinutes + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
-            }
-
-            // Adjust for startHour
-            const startHourMinutes = startHour * 60;
-
-            // If task is from next day (e.g. 02:00), add 24h
-            if (startMinutes < startHourMinutes) {
-                startMinutes += 24 * 60;
-                endMinutes += 24 * 60;
-            }
-
-            // Calculate relative to visual start
-            const relativeStart = startMinutes - startHourMinutes;
-            const duration = endMinutes - startMinutes;
-
-            // Apply layout
-            const taskLayout = layout.get(task.id) || { width: 100, left: 0, zIndex: 1 };
-            const widthFraction = taskLayout.width / 100;
-            const leftFraction = taskLayout.left / 100;
-
-            el.style.setProperty('--start-minutes', String(relativeStart));
-            el.style.setProperty('--duration-minutes', String(duration));
-            el.style.width = `calc((100% - 8px) * ${widthFraction})`;
-            el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
-            el.style.zIndex = String(Math.min(index * Z_GAP + taskLayout.zIndex, Z_MAX));
-            // cascade level: leftmost = 1 (left:0), 重なって右にずれた card は >= 2。
-            // CSS 側で level >= 2 の card に「上 / 左 / 下」3 辺枠を出すために属性化する。
-            if (taskLayout.left > 0) {
-                el.dataset.cascadeOffset = '1';
-            }
+            this.decorateLane(el, task, date, index, layout, startHour);
 
             this.taskRenderer.render(el, task, this.plugin.settings, {
-                cardInstanceId: `${this.viewId}::lane-${date}::${task.id}`,
+                cardInstanceId,
             });
-            this.menuHandler.addTaskContextMenu(el, task);
+            // addTaskContextMenu is idempotent (WeakSet-guarded) so re-calling
+            // on a reused element is a no-op, but skip the call to keep the
+            // hot path tight.
+            if (!reused) this.menuHandler.addTaskContextMenu(el, task);
         });
+    }
+
+    /**
+     * View-owned decoration for timed lane cards. Idempotent: every variant
+     * class is cleared first, every dataset/style key is unconditionally
+     * rewritten, so reuse cannot leave a stale value.
+     */
+    private decorateLane(
+        el: HTMLElement,
+        task: DisplayTask,
+        date: string,
+        index: number,
+        layout: ReturnType<typeof TaskLayout.calculateTaskLayout>,
+        startHour: number,
+    ): void {
+        // Selection class is owned by HandleManager; sync it from authoritative state.
+        el.toggleClass('is-selected', task.id === this.handleManager.getSelectedTaskId());
+
+        // Reset variant classes before applying the current task's state.
+        SPLIT_VARIANT_CLASSES.forEach(cls => el.removeClass(cls));
+        if (task.isSplit) {
+            el.addClass('task-card--split');
+            if (task.splitContinuesBefore) el.addClass('task-card--split-continues-before');
+            if (task.splitContinuesAfter) el.addClass('task-card--split-continues-after');
+        }
+
+        if (task.isSplit && task.originalTaskId) {
+            el.dataset.splitOriginalId = task.originalTaskId;
+        } else {
+            delete el.dataset.splitOriginalId;
+        }
+
+        el.dataset.id = task.id;
+
+        TaskStyling.applyTaskColor(el, task.color ?? null);
+        TaskStyling.applyTaskLinestyle(el, task.linestyle ?? null);
+        TaskStyling.applyReadOnly(el, task);
+
+        // Position math (mirrors the previous in-line code; isolated here for
+        // tidy reuse on reconciled elements).
+        let startMinutes = DateUtils.timeToMinutes(task.effectiveStartTime!);
+        let endMinutes: number;
+
+        if (task.effectiveEndTime) {
+            if (task.effectiveEndTime.includes('T')) {
+                const startDate = new Date(`${date}T00:00:00`);
+                const endDate = new Date(task.effectiveEndTime);
+                const diffMs = endDate.getTime() - startDate.getTime();
+                endMinutes = Math.floor(diffMs / 60000);
+            } else {
+                endMinutes = DateUtils.timeToMinutes(task.effectiveEndTime);
+                if (endMinutes < startMinutes) {
+                    endMinutes += 24 * 60;
+                }
+            }
+        } else {
+            endMinutes = startMinutes + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
+        }
+
+        const startHourMinutes = startHour * 60;
+        if (startMinutes < startHourMinutes) {
+            startMinutes += 24 * 60;
+            endMinutes += 24 * 60;
+        }
+
+        const relativeStart = startMinutes - startHourMinutes;
+        const duration = endMinutes - startMinutes;
+
+        const taskLayout = layout.get(task.id) || { width: 100, left: 0, zIndex: 1 };
+        const widthFraction = taskLayout.width / 100;
+        const leftFraction = taskLayout.left / 100;
+
+        el.style.setProperty('--start-minutes', String(relativeStart));
+        el.style.setProperty('--duration-minutes', String(duration));
+        el.style.width = `calc((100% - 8px) * ${widthFraction})`;
+        el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
+        el.style.zIndex = String(Math.min(index * Z_GAP + taskLayout.zIndex, Z_MAX));
+
+        // cascade-offset: leftmost = unset, 重なって右にずれた card に '1'。
+        if (taskLayout.left > 0) {
+            el.dataset.cascadeOffset = '1';
+        } else {
+            delete el.dataset.cascadeOffset;
+        }
     }
 
     /** Adds click/context listeners for creating new tasks. */

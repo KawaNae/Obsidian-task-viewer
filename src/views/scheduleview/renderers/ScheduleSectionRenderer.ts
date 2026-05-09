@@ -3,6 +3,7 @@ import { t } from '../../../i18n';
 import type { DisplayTask } from '../../../types';
 import type { CollapsibleSectionKey } from '../ScheduleTypes';
 import type { ScheduleTaskRenderer } from './ScheduleTaskRenderer';
+import type { CardReconciler } from '../../sharedUI/CardReconciler';
 
 export interface ScheduleSectionRendererOptions {
     taskRenderer: ScheduleTaskRenderer;
@@ -21,7 +22,7 @@ export class ScheduleSectionRenderer {
         this.currentVisualDateProvider = options.currentVisualDateProvider;
     }
 
-    async renderAllDaySection(container: HTMLElement, tasks: DisplayTask[]): Promise<void> {
+    async renderAllDaySection(container: HTMLElement, tasks: DisplayTask[], reconciler: CardReconciler): Promise<void> {
         const row = container.createDiv('tv-grid-row allday-section');
         row.style.gridTemplateColumns = this.getScheduleRowColumns();
 
@@ -67,7 +68,7 @@ export class ScheduleSectionRenderer {
         applyCollapsedState();
 
         for (const task of tasks) {
-            await this.taskRenderer.renderTaskCard(taskCell, task, false);
+            await this.taskRenderer.renderTaskCard(taskCell, task, false, reconciler);
         }
     }
 
@@ -76,7 +77,8 @@ export class ScheduleSectionRenderer {
         sectionClass: string,
         title: string,
         tasks: DisplayTask[],
-        sectionKey: CollapsibleSectionKey
+        sectionKey: CollapsibleSectionKey,
+        reconciler: CardReconciler,
     ): Promise<void> {
         const section = container.createDiv(`schedule-section schedule-section--collapsible ${sectionClass}`);
         const header = section.createEl('h4', { cls: 'schedule-section__header' });
@@ -117,7 +119,7 @@ export class ScheduleSectionRenderer {
 
         const tasksContainer = section.createDiv('schedule-section__tasks');
         for (const task of tasks) {
-            await this.taskRenderer.renderTaskCard(tasksContainer, task, false);
+            await this.taskRenderer.renderTaskCard(tasksContainer, task, false, reconciler);
         }
     }
 

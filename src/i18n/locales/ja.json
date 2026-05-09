@@ -539,7 +539,7 @@
     "pinnedLists": "ピン留めリスト",
     "addList": "リストを追加",
     "newList": "新しいリスト",
-    "showMore": "もっと表示（残り{{remaining}}件）"
+    "showMore": "さらに表示（残り{{remaining}}件）"
   },
   "calendar": {
     "weekdaysShort": "日,月,火,水,木,金,土",

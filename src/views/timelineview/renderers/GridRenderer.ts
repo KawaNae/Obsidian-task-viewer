@@ -17,6 +17,7 @@ import { categorizeTasksByDate } from '../../../services/display/TaskDateCategor
 import { bucketBySection } from '../../../services/display/SectionClassifier';
 import { DateHeaderRenderer } from '../../sharedUI/DateHeaderRenderer';
 import { PeriodicHeaderRenderer } from '../../sharedUI/PeriodicHeaderRenderer';
+import { CardReconciler } from '../../sharedUI/CardReconciler';
 
 export class GridRenderer {
     private isAllDayCollapsed: boolean = false;
@@ -40,6 +41,7 @@ export class GridRenderer {
         handleManager: HandleManager,
         dates: string[],
         filteredTasks: DisplayTask[],
+        reconciler: CardReconciler,
     ) {
         // Use parentContainer for rendering the grid
         const grid = parentContainer.createDiv('timeline-grid');
@@ -164,7 +166,7 @@ export class GridRenderer {
         const buckets = bucketBySection(filteredTasks, startHour);
 
         // Render Tasks (Overlaid) — allday バケツのみ渡す
-        allDayRenderer.render(allDayRow, dates, buckets.allday);
+        allDayRenderer.render(allDayRow, dates, buckets.allday, reconciler);
 
         // 3.2. Timeline Grid (time axis + day columns)
         const timelineGrid = scrollArea.createDiv('tv-grid-row timeline-scroll-area__grid');
@@ -182,7 +184,7 @@ export class GridRenderer {
             const col = timelineGrid.createDiv('timeline-scroll-area__day-column');
             col.dataset.date = date;
             const timedTasks = categorizedByDate.get(date)?.timed ?? [];
-            timelineRenderer.render(col, date, timedTasks);
+            timelineRenderer.render(col, date, timedTasks, reconciler);
 
             // Add interaction listeners for creating tasks
             timelineRenderer.addCreateTaskListeners(col, date);

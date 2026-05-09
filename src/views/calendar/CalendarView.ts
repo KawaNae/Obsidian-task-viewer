@@ -39,7 +39,8 @@ import { SelectionController } from '../../interaction/selection/SelectionContro
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
-import { RenderController } from '../sharedUI/RenderController';
+import { RenderScheduler } from '../sharedUI/RenderScheduler';
+import { CardReconciler } from '../sharedUI/CardReconciler';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
@@ -101,7 +102,7 @@ export class CalendarView extends ItemView {
     private savedScrollTop: number | null = null;
     private sidebarOpenedThisSession = false;
     private readonly hoverParent = new TaskViewHoverParent();
-    private renderController: RenderController;
+    private renderScheduler: RenderScheduler;
 
     constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
         super(leaf);
@@ -338,16 +339,15 @@ export class CalendarView extends ItemView {
         // Clear selection when the selected task is deleted via the UI.
         this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.writeService);
 
-        // Initialize render dispatch controller. CalendarView は partial 未対応のため
-        // tryPartial は常に false（→ 必ず full render に降格）。
-        this.renderController = new RenderController({
-            tryPartial: () => false,
+        // Initialize render dispatch controller (rAF coalesce only).
+        // Calendar still always full-renders today; reconciliation arrives in
+        // a follow-up phase.
+        this.renderScheduler = new RenderScheduler({
             performFull: () => this.render(),
-            refreshPinned: () => { /* partial 未対応なので呼ばれない */ },
         });
 
         this.unsubscribe = this.readService.onChange((taskId, changes) => {
-            this.renderController.handleChange(taskId, changes);
+            this.renderScheduler.handleChange(taskId, changes);
         });
     }
 
@@ -370,7 +370,7 @@ export class CalendarView extends ItemView {
             this.unsubscribeDelete();
             this.unsubscribeDelete = null;
         }
-        this.renderController?.dispose();
+        this.renderScheduler?.dispose();
     }
 
     public refresh(): void {
@@ -412,14 +412,28 @@ export class CalendarView extends ItemView {
             this.showSidebar = false;
         }
         this.sidebarManager.syncPresentation(this.showSidebar, { animate: false });
+
         this.toolbar.detach();
-        this.taskRenderer.disposeInside(this.container);
         // Detach the persistent pinnedHost so its DOM (and PinnedListRenderer's
         // internal subscription / paging / collapse state) survives the empty().
         // Re-appended into the freshly-built sidebarBody by renderSidebarContent.
+        // IMPORTANT: must run before our `reconciler.detach(this.container)` —
+        // otherwise the calendar reconciler scoops up the pinned-list cards
+        // (they live inside `this.container` until detached here), classifies
+        // them as stale, and disposes them while PinnedListRenderer is none the
+        // wiser.
         if (this.pinnedHost?.parentElement) {
             this.pinnedHost.parentElement.removeChild(this.pinnedHost);
         }
+
+        // Keyed reconciliation: lift surviving cards into a key→element map
+        // before tearing down the month grid. Survivors are re-parented and
+        // re-decorated when their cardInstanceId turns up in the new render;
+        // unmatched ones are disposed at the end. Cards keep their inner DOM
+        // (markdown, focus, expand state) intact across renders.
+        const reconciler = new CardReconciler();
+        reconciler.detach(this.container);
+
         this.container.empty();
 
         const toolbarHost = this.container.createDiv('calendar-view__toolbar-host');
@@ -481,8 +495,13 @@ export class CalendarView extends ItemView {
                 }
             }
 
-            await this.renderWeekTasks(weekRow, weekDates, allVisibleTasks);
+            await this.renderWeekTasks(weekRow, weekDates, allVisibleTasks, reconciler);
         }
+
+        // Dispose any cards that did not turn up in the new render (filter
+        // dropped, segments collapsed, etc). Their elements are already
+        // detached from the DOM by reconciler.detach().
+        reconciler.forEachStale(card => this.taskRenderer.dispose(card));
 
         const toolbarRootEl = this.toolbar.getRootEl();
         if (toolbarRootEl) {
@@ -714,7 +733,7 @@ export class CalendarView extends ItemView {
         }, { bindClick: false });
     }
 
-    private async renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: DisplayTask[]): Promise<void> {
+    private async renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: DisplayTask[], reconciler: CardReconciler): Promise<void> {
         const startHour = this.plugin.settings.startHour;
         // Calendar 月セルは calendar day ベースで 1 セル = 1 日。startHour 境界
         // (visual-date split) を視覚化する意味はなく、入れると view 内部に
@@ -744,7 +763,7 @@ export class CalendarView extends ItemView {
         const colOffset = getColumnOffset(this.shouldShowWeekNumbers());
 
         await Promise.all(entries.map(async (entry) => {
-            await this.renderGridTask(weekRow, entry, colOffset);
+            await this.renderGridTask(weekRow, entry, colOffset, reconciler);
 
             if (entry.dueArrow) {
                 renderDueArrow(weekRow, entry, {
@@ -764,53 +783,82 @@ export class CalendarView extends ItemView {
         weekRow: HTMLElement,
         entry: GridTaskEntry,
         colOffset: number,
+        reconciler: CardReconciler,
     ): Promise<void> {
-        const applyGridPosition = (el: HTMLElement) => {
-            el.style.gridColumn = `${entry.colStart + colOffset} / span ${entry.span}`;
-            el.style.gridRow = `${entry.trackIndex + 2}`;
-            el.dataset.colStart = `${entry.colStart}`;
-            el.dataset.span = `${entry.span}`;
-            el.dataset.trackIndex = `${entry.trackIndex}`;
-        };
-
         if (entry.useBarVariant) {
-            const barEl = weekRow.createDiv('task-card task-card--multi-day');
-            barEl.createDiv('task-card__shape');
-            barEl.dataset.id = entry.segmentId;
-            if (entry.continuesBefore || entry.continuesAfter) {
-                barEl.dataset.splitOriginalId = (entry.task as DisplayTask).originalTaskId || entry.task.id;
-            }
-            applyGridPosition(barEl);
+            const cardInstanceId = `${VIEW_ID}::lane-multi::${entry.segmentId}`;
+            const reused = reconciler.acquire(cardInstanceId);
+            const barEl = reused ?? weekRow.createDiv('task-card task-card--multi-day');
+            if (reused) weekRow.appendChild(reused);
 
-            if (entry.continuesBefore) barEl.addClass('task-card--split-continues-before');
-            if (entry.continuesAfter) barEl.addClass('task-card--split-continues-after');
-
-            TaskStyling.applyTaskColor(barEl, entry.task.color ?? null);
-            TaskStyling.applyTaskLinestyle(barEl, entry.task.linestyle ?? null);
-            TaskStyling.applyReadOnly(barEl, entry.task);
-
-            this.menuHandler.addTaskContextMenu(barEl, entry.task);
-            await this.taskRenderer.render(barEl, entry.task, this.plugin.settings, {
-                cardInstanceId: `${VIEW_ID}::lane-multi::${entry.segmentId}`,
+            this.decorateCalendarBar(barEl, entry, colOffset);
+            await this.taskRenderer.render(barEl, entry.task as DisplayTask, this.plugin.settings, {
+                cardInstanceId,
                 topRight: 'none',
                 compact: true,
             });
+            if (!reused) this.menuHandler.addTaskContextMenu(barEl, entry.task);
             return;
         }
 
-        const card = weekRow.createDiv('task-card');
-        card.createDiv('task-card__shape');
-        card.dataset.id = entry.task.id;
-        applyGridPosition(card);
+        const cardInstanceId = `${VIEW_ID}::lane::${entry.task.id}`;
+        const reused = reconciler.acquire(cardInstanceId);
+        const card = reused ?? weekRow.createDiv('task-card');
+        if (reused) weekRow.appendChild(reused);
 
-        TaskStyling.applyTaskColor(card, entry.task.color ?? null);
-        TaskStyling.applyTaskLinestyle(card, entry.task.linestyle ?? null);
-        TaskStyling.applyReadOnly(card, entry.task);
-        this.menuHandler.addTaskContextMenu(card, entry.task);
-        await this.taskRenderer.render(card, entry.task, this.plugin.settings, {
-            cardInstanceId: `${VIEW_ID}::lane::${entry.task.id}`,
+        this.decorateCalendarCell(card, entry, colOffset);
+        await this.taskRenderer.render(card, entry.task as DisplayTask, this.plugin.settings, {
+            cardInstanceId,
             compact: true,
         });
+        if (!reused) this.menuHandler.addTaskContextMenu(card, entry.task);
+    }
+
+    /**
+     * Idempotent decoration for calendar multi-day bar cards. Variant classes
+     * are reset before applying the current entry's split state.
+     */
+    private decorateCalendarBar(el: HTMLElement, entry: GridTaskEntry, colOffset: number): void {
+        // task-card--multi-day is the bar's defining class and stays.
+        el.removeClass('task-card--split-continues-before');
+        el.removeClass('task-card--split-continues-after');
+        if (entry.continuesBefore) el.addClass('task-card--split-continues-before');
+        if (entry.continuesAfter) el.addClass('task-card--split-continues-after');
+
+        el.dataset.id = entry.segmentId;
+        if (entry.continuesBefore || entry.continuesAfter) {
+            el.dataset.splitOriginalId = (entry.task as DisplayTask).originalTaskId || entry.task.id;
+        } else {
+            delete el.dataset.splitOriginalId;
+        }
+
+        this.applyCalendarGridPosition(el, entry, colOffset);
+
+        TaskStyling.applyTaskColor(el, entry.task.color ?? null);
+        TaskStyling.applyTaskLinestyle(el, entry.task.linestyle ?? null);
+        TaskStyling.applyReadOnly(el, entry.task);
+    }
+
+    /**
+     * Idempotent decoration for single-cell calendar cards (no multi-day span).
+     */
+    private decorateCalendarCell(el: HTMLElement, entry: GridTaskEntry, colOffset: number): void {
+        el.dataset.id = entry.task.id;
+        delete el.dataset.splitOriginalId;
+
+        this.applyCalendarGridPosition(el, entry, colOffset);
+
+        TaskStyling.applyTaskColor(el, entry.task.color ?? null);
+        TaskStyling.applyTaskLinestyle(el, entry.task.linestyle ?? null);
+        TaskStyling.applyReadOnly(el, entry.task);
+    }
+
+    private applyCalendarGridPosition(el: HTMLElement, entry: GridTaskEntry, colOffset: number): void {
+        el.style.gridColumn = `${entry.colStart + colOffset} / span ${entry.span}`;
+        el.style.gridRow = `${entry.trackIndex + 2}`;
+        el.dataset.colStart = `${entry.colStart}`;
+        el.dataset.span = `${entry.span}`;
+        el.dataset.trackIndex = `${entry.trackIndex}`;
     }
 
     private isTaskCompleted(task: DisplayTask): boolean {

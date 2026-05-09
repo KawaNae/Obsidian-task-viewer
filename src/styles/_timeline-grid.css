@@ -56,15 +56,30 @@
    this by not having axis cells; we enforce the same end-state structurally
    here so timeline + schedule both inherit it.
 
+   We use `transparent` instead of `none` so the 1px reserved space is kept.
+   With border-box sizing, dropping the border to `none` would expand the
+   cell's content area by 1px and stretch any % / `calc(100% - N)` children
+   only on the outer cell, which produced a visibly-wider rightmost-column
+   card (and a 1px wider drag ghost vs. its now-shrunk source when the ghost
+   was appended into the row mid-drag). Keeping the 1px transparent border
+   makes every cell's content box uniform; the visual outer divider stays
+   absent.
+
+   `(1 of :not(.task-card))` excludes both drag-preview ghosts (appended to
+   the row during drag) and regular all-day task cards (placed via
+   grid-column on the same DOM level as cells). Both would otherwise be
+   matched as `:last-child` and rob the rightmost real cell of its no-outer-
+   border treatment.
+
    !important: per-cell rules in _timeline-date-header.css / _periodic-header
    .css / _timeline-allday.css / _habits.css load AFTER this file and several
    use (0,0,2,0) specificity, so source-order would otherwise let them
    re-introduce the outer borders. Single source of truth wins via important. */
-.tv-grid-row > :first-child {
-    border-left: none !important;
+.tv-grid-row > :nth-child(1 of :not(.task-card)) {
+    border-left-color: transparent !important;
 }
-.tv-grid-row > :last-child {
-    border-right: none !important;
+.tv-grid-row > :nth-last-child(1 of :not(.task-card)) {
+    border-right-color: transparent !important;
 }
 
 /* Transparent passthrough box (was the scroll container previously).

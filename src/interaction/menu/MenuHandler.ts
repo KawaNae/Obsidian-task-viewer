@@ -31,6 +31,12 @@ export class MenuHandler {
 
     private viewStartDate: string | null = null;
 
+    // 同じ要素に二度 bind しない (TouchLongPressBinder は dispose を返すが
+    // call site が 1-shot 想定で受け取らないため、reconcile で要素を再利用
+    // するときに listener 二重化が起きる)。要素 reuse 時は context menu の
+    // 振る舞いが変わらないので最初の bind だけ生かせば十分。
+    private boundCards: WeakSet<HTMLElement> = new WeakSet();
+
     constructor(
         private app: App,
         private readService: TaskReadService,
@@ -65,6 +71,8 @@ export class MenuHandler {
      * Add context menu to task element
      */
     addTaskContextMenu(el: HTMLElement, task: Task, hooks?: TaskMenuHooks) {
+        if (this.boundCards.has(el)) return;
+        this.boundCards.add(el);
         TouchLongPressBinder.bind(el, {
             getThreshold: () => this.plugin.settings.longPressThreshold,
             onLongPress: (x, y) => this.showContextMenu(x, y, task, hooks),

@@ -34,11 +34,11 @@ import { createEmptyFilterState, type FilterState } from '../../services/filter/
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
-import { TaskStyling } from '../sharedUI/TaskStyling';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
-import { RenderController } from '../sharedUI/RenderController';
+import { RenderScheduler } from '../sharedUI/RenderScheduler';
+import { CardReconciler } from '../sharedUI/CardReconciler';
 
 export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
 
@@ -156,8 +156,8 @@ export class TimelineView extends ItemView {
     private hasRunInitialLogic = false;
 
     // Render coalescing (frame-level): 同一 frame 内に複数の onChange が来ても render は 1 回
-    // 実装は RenderController に委譲。
-    private renderController: RenderController;
+    // 実装は RenderScheduler に委譲。
+    private renderScheduler: RenderScheduler;
 
     // ==================== Pinch zoom state ====================
     private pinchInitialDistance: number = 0;
@@ -430,17 +430,13 @@ export class TimelineView extends ItemView {
         this.selectionController.attachBackgroundClick(this.container);
         this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.writeService);
 
-        // Initialize render dispatch controller (rAF coalesce + partial/full 判定)
-        this.renderController = new RenderController({
-            tryPartial: (taskId) => this.tryPartialUpdate(taskId),
+        // Initialize render dispatch controller (rAF coalesce only — partial
+        // update was retired in favour of keyed reconciliation in performRender).
+        this.renderScheduler = new RenderScheduler({
             performFull: () => {
                 this.saveScrollPosition();
                 this.performRender();
             },
-            // PinnedListRenderer subscribes to readService.onChange itself
-            // (Phase 7), so the controller no longer needs to nudge it after
-            // a partial update. Kept as a no-op to preserve the handler shape.
-            refreshPinned: () => { /* no-op: PinnedList self-subscribes */ },
         });
 
         // Subscribe to data changes
@@ -449,7 +445,7 @@ export class TimelineView extends ItemView {
             // (DOM + state + tasks). No auto-scroll here: user-driven scroll
             // only via Now button / refresh / onOpen.
             this.tryRunInitialStateLogic();
-            this.renderController.handleChange(taskId, changes);
+            this.renderScheduler.handleChange(taskId, changes);
         });
 
         // Ctrl+wheel zoom
@@ -636,7 +632,7 @@ export class TimelineView extends ItemView {
             this.stickyAnchorObserver = null;
         }
         this.dateHeaderRenderer?.dispose();
-        this.renderController?.dispose();
+        this.renderScheduler?.dispose();
     }
 
     getEffectiveZoomLevel(): number {
@@ -689,7 +685,7 @@ export class TimelineView extends ItemView {
     private render(): void {
         // 保留中の coalesce 済み render をキャンセル（同 frame 内で同期 render が呼ばれたら
         // 二重描画しない）
-        this.renderController?.cancelPending();
+        this.renderScheduler?.cancelPending();
         this.saveScrollPosition();
         this.performRender();
     }
@@ -700,7 +696,7 @@ export class TimelineView extends ItemView {
      * トールバー / sidebar / pinch zoom 等の即時反映が必要な経路は render() を直呼び。
      */
     private scheduleRender(): void {
-        this.renderController.scheduleRender();
+        this.renderScheduler.scheduleRender();
     }
 
     private saveScrollPosition(): void {
@@ -876,35 +872,6 @@ export class TimelineView extends ItemView {
         return migrated;
     }
 
-    private tryPartialUpdate(taskId: string): boolean {
-        const card = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
-        const dt = this.readService.getDisplayTask(taskId);
-        if (!card) return false;
-        if (!dt) return false;
-
-        const contentContainer = card.querySelector('.task-card__content');
-        if (contentContainer) contentContainer.remove();
-        const timeEl = card.querySelector('.task-card__time');
-        if (timeEl) timeEl.remove();
-        const expandBar = card.querySelector('.task-card__expand-bar');
-        if (expandBar) expandBar.remove();
-
-        const isAllDay = card.classList.contains('task-card--allday');
-        // Reuse the cardInstanceId stamped on the element by the original
-        // render so collapse state survives the partial update. Fall back to
-        // a deterministic id for older DOM that may have been built before
-        // this code path was introduced.
-        const reusedCardInstanceId = card.dataset.cardInstanceId
-            ?? `${VIEW_ID}::${isAllDay ? 'allday' : 'lane'}::${dt.id}`;
-        const opts = isAllDay
-            ? { cardInstanceId: reusedCardInstanceId, topRight: 'none' as const, compact: true }
-            : { cardInstanceId: reusedCardInstanceId };
-        this.taskRenderer.render(card, dt, this.plugin.settings, opts);
-        TaskStyling.applyTaskColor(card, dt.color ?? null);
-        TaskStyling.applyTaskLinestyle(card, dt.linestyle ?? null);
-        return true;
-    }
-
     private performRender() {
         // On narrow/mobile, force sidebar closed unless user explicitly opened it this session
         if (this.sidebarManager.isNarrow() && !this.sidebarOpenedThisSession) {
@@ -912,16 +879,30 @@ export class TimelineView extends ItemView {
         }
         this.sidebarManager.syncPresentation(this.viewState.showSidebar, { animate: false });
 
-        this.taskRenderer.disposeInside(this.container);
         // Detach the toolbar before empty() so its DOM (and the FilterMenuComponent
         // bound to it) survives. We re-attach it via mount() below.
         this.toolbar?.detach();
         // Detach the persistent pinnedHost so its DOM (and PinnedListRenderer's
         // internal subscription / paging / collapse state) survives the empty().
         // Re-appended into the freshly-built sidebarBody below.
+        // IMPORTANT: must run before our `reconciler.detach(this.container)` —
+        // otherwise the timeline reconciler scoops up the pinned-list cards
+        // (they live inside `this.container` until detached here), classifies
+        // them as stale, and disposes them. The PinnedListRenderer never gets
+        // told its DOM was emptied and only the show-more button stays in the
+        // body.
         if (this.pinnedHost?.parentElement) {
             this.pinnedHost.parentElement.removeChild(this.pinnedHost);
         }
+
+        // Keyed reconciliation: lift surviving cards into a key→element map
+        // before tearing down the scaffolding. Cards retain their inner DOM /
+        // markdown / Component lifecycle, and will be re-parented + re-decorated
+        // when their key turns up in the new render. Stale survivors are
+        // disposed at the end.
+        const reconciler = new CardReconciler();
+        reconciler.detach(this.container);
+
         this.container.empty();
 
         // Apply Zoom Level
@@ -983,7 +964,13 @@ export class TimelineView extends ItemView {
             this.handleManager,
             dates,
             filteredTasks,
+            reconciler,
         );
+
+        // Dispose any cards that did not turn up in the new render (filter
+        // dropped, segments collapsed, etc). Their elements are already
+        // detached from the DOM by reconciler.detach().
+        reconciler.forEachStale(card => this.taskRenderer.dispose(card));
 
         this.renderCurrentTimeIndicator();
 

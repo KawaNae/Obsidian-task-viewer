@@ -12,6 +12,13 @@ import { renderDueArrow } from './DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { getTaskDateRange } from '../../services/display/VisualDateRange';
 import { getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
+import { CardReconciler } from './CardReconciler';
+
+const ALLDAY_VARIANT_CLASSES = [
+    'task-card--multi-day',
+    'task-card--split-continues-before',
+    'task-card--split-continues-after',
+];
 
 export class AllDaySectionRenderer {
     constructor(
@@ -23,7 +30,7 @@ export class AllDaySectionRenderer {
         private viewId: string
     ) { }
 
-    public render(container: HTMLElement, dates: string[], displayTasks: DisplayTask[]) {
+    public render(container: HTMLElement, dates: string[], displayTasks: DisplayTask[], reconciler: CardReconciler) {
         const viewStart = dates[0];
         const viewEnd = dates[dates.length - 1];
         const startHour = this.plugin.settings.startHour;
@@ -67,7 +74,7 @@ export class AllDaySectionRenderer {
         const gridRowOffset = 2;
 
         for (const entry of entries) {
-            this.renderTaskCard(container, entry, gridColOffset, gridRowOffset);
+            this.renderTaskCard(container, entry, gridColOffset, gridRowOffset, reconciler);
 
             if (entry.dueArrow) {
                 renderDueArrow(container, entry, {
@@ -82,15 +89,43 @@ export class AllDaySectionRenderer {
         container: HTMLElement,
         entry: GridTaskEntry,
         gridColOffset: number,
-        gridRowOffset: number
+        gridRowOffset: number,
+        reconciler: CardReconciler,
     ): void {
         const { task } = entry;
+        const cardInstanceId = `${this.viewId}::allday::${entry.segmentId}`;
+        const reused = reconciler.acquire(cardInstanceId);
+        const el = reused ?? container.createDiv('task-card task-card--allday');
+        if (reused) container.appendChild(reused);
 
-        const el = container.createDiv('task-card task-card--allday');
-        el.createDiv('task-card__shape');
-        if (entry.useBarVariant) {
-            el.addClass('task-card--multi-day');
-        }
+        this.decorateAllDay(el, entry, gridColOffset, gridRowOffset);
+
+        // Each split segment gets its own cardInstanceId via segmentId so a
+        // task spanning multiple days can be expanded independently per row.
+        this.taskRenderer.render(el, task as DisplayTask, this.plugin.settings, {
+            cardInstanceId,
+            topRight: 'none',
+            compact: true,
+        });
+        if (!reused) this.menuHandler.addTaskContextMenu(el, task);
+    }
+
+    /**
+     * Idempotent allday-card decoration. Variant classes are reset before
+     * applying. Dataset and grid-position style are unconditionally rewritten.
+     */
+    private decorateAllDay(
+        el: HTMLElement,
+        entry: GridTaskEntry,
+        gridColOffset: number,
+        gridRowOffset: number,
+    ): void {
+        const { task } = entry;
+        const dt = task as DisplayTask;
+
+        // Reset variant classes; --allday is constant for this lane and stays.
+        ALLDAY_VARIANT_CLASSES.forEach(cls => el.removeClass(cls));
+        if (entry.useBarVariant) el.addClass('task-card--multi-day');
         if (entry.continuesBefore) el.addClass('task-card--split-continues-before');
         if (entry.continuesAfter) el.addClass('task-card--split-continues-after');
 
@@ -102,29 +137,17 @@ export class AllDaySectionRenderer {
         el.dataset.id = task.id;
         if (entry.continuesBefore || entry.continuesAfter) {
             el.dataset.splitOriginalId = originalTaskId;
+        } else {
+            delete el.dataset.splitOriginalId;
         }
-        if (originalTaskId === this.handleManager.getSelectedTaskId()) {
-            el.addClass('is-selected');
-        }
+        el.toggleClass('is-selected', originalTaskId === this.handleManager.getSelectedTaskId());
 
-        TaskStyling.applyTaskColor(el, task.color ?? null);
-        TaskStyling.applyTaskLinestyle(el, task.linestyle ?? null);
-        TaskStyling.applyReadOnly(el, task);
-
-        // Each split segment gets its own cardInstanceId via segmentId so a
-        // task spanning multiple days can be expanded independently per row.
-        this.taskRenderer.render(el, task, this.plugin.settings, {
-            cardInstanceId: `${this.viewId}::allday::${entry.segmentId}`,
-            topRight: 'none',
-            compact: true,
-        });
-        this.menuHandler.addTaskContextMenu(el, task);
+        TaskStyling.applyTaskColor(el, dt.color ?? null);
+        TaskStyling.applyTaskLinestyle(el, dt.linestyle ?? null);
+        TaskStyling.applyReadOnly(el, dt);
 
         // Grid 座標を dataset で公開し、drag move/resize が style.gridColumn の
         // regex parse を経ずに済むようにする。calendar card と命名対称。
-        // colStart は dates 配列内 0-based (calendar は week-row 内 1-based) で
-        // 意味は parent コンテキスト依存。drag 側は parent ごとに colOffset を
-        // 加算する設計に閉じ込めることで衝突しない。
         el.dataset.colStart = String(entry.colStart);
         el.dataset.span = String(entry.span);
         el.dataset.trackIndex = String(entry.trackIndex);
