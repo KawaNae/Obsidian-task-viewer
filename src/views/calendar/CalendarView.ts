@@ -413,6 +413,19 @@ export class CalendarView extends ItemView {
         }
         this.sidebarManager.syncPresentation(this.showSidebar, { animate: false });
 
+        this.toolbar.detach();
+        // Detach the persistent pinnedHost so its DOM (and PinnedListRenderer's
+        // internal subscription / paging / collapse state) survives the empty().
+        // Re-appended into the freshly-built sidebarBody by renderSidebarContent.
+        // IMPORTANT: must run before our `reconciler.detach(this.container)` —
+        // otherwise the calendar reconciler scoops up the pinned-list cards
+        // (they live inside `this.container` until detached here), classifies
+        // them as stale, and disposes them while PinnedListRenderer is none the
+        // wiser.
+        if (this.pinnedHost?.parentElement) {
+            this.pinnedHost.parentElement.removeChild(this.pinnedHost);
+        }
+
         // Keyed reconciliation: lift surviving cards into a key→element map
         // before tearing down the month grid. Survivors are re-parented and
         // re-decorated when their cardInstanceId turns up in the new render;
@@ -421,13 +434,6 @@ export class CalendarView extends ItemView {
         const reconciler = new CardReconciler();
         reconciler.detach(this.container);
 
-        this.toolbar.detach();
-        // Detach the persistent pinnedHost so its DOM (and PinnedListRenderer's
-        // internal subscription / paging / collapse state) survives the empty().
-        // Re-appended into the freshly-built sidebarBody by renderSidebarContent.
-        if (this.pinnedHost?.parentElement) {
-            this.pinnedHost.parentElement.removeChild(this.pinnedHost);
-        }
         this.container.empty();
 
         const toolbarHost = this.container.createDiv('calendar-view__toolbar-host');

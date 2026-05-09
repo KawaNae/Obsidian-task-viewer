@@ -879,6 +879,22 @@ export class TimelineView extends ItemView {
         }
         this.sidebarManager.syncPresentation(this.viewState.showSidebar, { animate: false });
 
+        // Detach the toolbar before empty() so its DOM (and the FilterMenuComponent
+        // bound to it) survives. We re-attach it via mount() below.
+        this.toolbar?.detach();
+        // Detach the persistent pinnedHost so its DOM (and PinnedListRenderer's
+        // internal subscription / paging / collapse state) survives the empty().
+        // Re-appended into the freshly-built sidebarBody below.
+        // IMPORTANT: must run before our `reconciler.detach(this.container)` —
+        // otherwise the timeline reconciler scoops up the pinned-list cards
+        // (they live inside `this.container` until detached here), classifies
+        // them as stale, and disposes them. The PinnedListRenderer never gets
+        // told its DOM was emptied and only the show-more button stays in the
+        // body.
+        if (this.pinnedHost?.parentElement) {
+            this.pinnedHost.parentElement.removeChild(this.pinnedHost);
+        }
+
         // Keyed reconciliation: lift surviving cards into a key→element map
         // before tearing down the scaffolding. Cards retain their inner DOM /
         // markdown / Component lifecycle, and will be re-parented + re-decorated
@@ -887,15 +903,6 @@ export class TimelineView extends ItemView {
         const reconciler = new CardReconciler();
         reconciler.detach(this.container);
 
-        // Detach the toolbar before empty() so its DOM (and the FilterMenuComponent
-        // bound to it) survives. We re-attach it via mount() below.
-        this.toolbar?.detach();
-        // Detach the persistent pinnedHost so its DOM (and PinnedListRenderer's
-        // internal subscription / paging / collapse state) survives the empty().
-        // Re-appended into the freshly-built sidebarBody below.
-        if (this.pinnedHost?.parentElement) {
-            this.pinnedHost.parentElement.removeChild(this.pinnedHost);
-        }
         this.container.empty();
 
         // Apply Zoom Level
