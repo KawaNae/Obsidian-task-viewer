@@ -125,10 +125,10 @@ export class TimelineToolbar extends ViewToolbarBase {
     private maybeRehydrateFilterState(): void {
         // Skip while the popover is open: setFilterState() replaces the
         // FilterMenuComponent's internal state object, which would orphan any
-        // DOM bindings the open popover holds. We use the body-level popover
-        // DOM presence as the open-ness signal — FilterMenuComponent appends
-        // `.filter-popover` to document.body when shown and removes it on close.
-        if (document.querySelector('.filter-popover')) return;
+        // DOM bindings the open popover holds. Ask the component directly
+        // (popout-aware, scoped to this view's instance — global DOM lookups
+        // would mis-fire across views/windows).
+        if (this.filterMenu.isOpen()) return;
         if (this.viewState.filterState) {
             this.filterMenu.setFilterState(FilterSerializer.fromJSON(this.viewState.filterState));
         } else {

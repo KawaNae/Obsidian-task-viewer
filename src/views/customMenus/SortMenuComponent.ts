@@ -10,6 +10,8 @@ import {
     getSortDirectionLabel,
 } from '../../services/sort/SortTypes';
 import { t } from '../../i18n';
+import { PopoverStack } from '../sharedUI/PopoverStack';
+import type { PopoverShell } from '../sharedUI/PopoverShell';
 
 export interface SortMenuCallbacks {
     onSortChange: () => void;
@@ -29,10 +31,9 @@ interface SelectItem {
  */
 export class SortMenuComponent {
     private state: SortState = createEmptySortState();
-    private popoverEl: HTMLElement | null = null;
-    private childPopoverEl: HTMLElement | null = null;
-    private childPopoverCleanup: (() => void) | null = null;
-    private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
+    private stack = new PopoverStack();
+    private rootEl: HTMLElement | null = null;
+    private childShell: PopoverShell | null = null;
     private lastCallbacks: SortMenuCallbacks | null = null;
 
     // Drag state
@@ -51,83 +52,62 @@ export class SortMenuComponent {
         this.state = structuredClone(state);
     }
 
+    isOpen(): boolean {
+        return this.stack.isOpen();
+    }
+
     showMenuAtElement(anchorEl: HTMLElement, callbacks: SortMenuCallbacks): void {
-        const rect = anchorEl.getBoundingClientRect();
-        const syntheticEvent = new MouseEvent('click', { clientX: rect.left, clientY: rect.bottom });
-        Object.defineProperty(syntheticEvent, 'pageX', { value: rect.left + window.scrollX });
-        Object.defineProperty(syntheticEvent, 'pageY', { value: rect.bottom + window.scrollY });
-        this.showMenu(syntheticEvent, callbacks);
+        this.openWith({ kind: 'element', element: anchorEl }, callbacks);
     }
 
     showMenu(event: MouseEvent, callbacks: SortMenuCallbacks): void {
-        this.close();
+        this.openWith({ kind: 'event', event }, callbacks);
+    }
 
+    private openWith(
+        anchor: { kind: 'element'; element: HTMLElement } | { kind: 'event'; event: MouseEvent },
+        callbacks: SortMenuCallbacks,
+    ): void {
         this.lastCallbacks = callbacks;
-
-        this.popoverEl = document.createElement('div');
-        this.popoverEl.className = 'sort-popover';
-
-        this.renderContent();
-
-        document.body.appendChild(this.popoverEl);
-        this.positionPopover(event);
-
-        setTimeout(() => {
-            this.outsideClickHandler = (e: MouseEvent) => {
-                const target = e.target as Node;
-                if (!this.popoverEl) return;
-                if (this.popoverEl.contains(target)) return;
-                if ((target as HTMLElement).closest?.('.filter-child-popover')) return;
-                this.close();
-            };
-            document.addEventListener('pointerdown', this.outsideClickHandler, true);
-        }, 0);
+        this.stack.openRoot({
+            anchor,
+            className: 'sort-popover',
+            build: (el) => {
+                this.rootEl = el;
+                this.renderContent();
+            },
+            onClose: () => {
+                this.rootEl = null;
+                this.childShell = null;
+            },
+        });
     }
 
     close(): void {
-        this.closeChildPopover();
-        if (this.popoverEl) {
-            this.popoverEl.remove();
-            this.popoverEl = null;
-        }
-        if (this.outsideClickHandler) {
-            document.removeEventListener('pointerdown', this.outsideClickHandler, true);
-            this.outsideClickHandler = null;
-        }
-    }
-
-    private closeChildPopover(): void {
-        if (this.childPopoverEl) {
-            this.childPopoverEl.remove();
-            this.childPopoverEl = null;
-        }
-        if (this.childPopoverCleanup) {
-            this.childPopoverCleanup();
-            this.childPopoverCleanup = null;
-        }
+        this.stack.closeAll();
     }
 
     // ── Render ──
 
     private renderContent(): void {
-        if (!this.popoverEl) return;
-        this.popoverEl.empty();
+        if (!this.rootEl) return;
+        this.rootEl.empty();
 
         const { rules } = this.state;
 
         if (rules.length === 0) {
-            this.popoverEl.createDiv('sort-popover__empty').setText(t('sort.noSorts'));
+            this.rootEl.createDiv('sort-popover__empty').setText(t('sort.noSorts'));
         } else {
             for (let i = 0; i < rules.length; i++) {
-                this.renderRuleRow(this.popoverEl, rules[i], i);
+                this.renderRuleRow(this.rootEl, rules[i], i);
             }
         }
 
-        this.renderFooter(this.popoverEl);
+        this.renderFooter(this.rootEl);
     }
 
     private refreshPopover(): void {
-        if (!this.popoverEl) return;
+        if (!this.rootEl) return;
         this.renderContent();
         this.lastCallbacks?.onSortChange();
     }
@@ -245,70 +225,48 @@ export class SortMenuComponent {
         items: SelectItem[],
         onSelect: (value: string) => void,
     ): void {
-        this.closeChildPopover();
+        this.childShell = this.stack.openChild({
+            anchor: { kind: 'element', element: anchorEl },
+            className: 'filter-child-popover',
+            build: (popover) => {
+                for (const item of items) {
+                    const row = popover.createDiv(
+                        `filter-child-popover__item${item.checked ? ' filter-child-popover__item--selected' : ''}`,
+                    );
 
-        const popover = document.createElement('div');
-        popover.className = 'filter-child-popover';
+                    if (item.cls) row.classList.add(item.cls);
 
-        for (const item of items) {
-            const row = popover.createDiv(
-                `filter-child-popover__item${item.checked ? ' filter-child-popover__item--selected' : ''}`,
-            );
+                    if (item.icon) {
+                        const iconEl = row.createSpan('filter-child-popover__icon');
+                        setIcon(iconEl, item.icon);
+                    }
 
-            if (item.cls) row.classList.add(item.cls);
+                    row.createSpan('filter-child-popover__label').setText(item.label);
 
-            if (item.icon) {
-                const iconEl = row.createSpan('filter-child-popover__icon');
-                setIcon(iconEl, item.icon);
-            }
-
-            row.createSpan('filter-child-popover__label').setText(item.label);
-
-            row.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.closeChildPopover();
-                onSelect(item.value);
-            });
-        }
-
-        document.body.appendChild(popover);
-        this.childPopoverEl = popover;
-
-        // Position below anchor
-        const anchorRect = anchorEl.getBoundingClientRect();
-        let x = anchorRect.left;
-        let y = anchorRect.bottom + 4;
-        const popRect = popover.getBoundingClientRect();
-        if (x + popRect.width > window.innerWidth) {
-            x = window.innerWidth - popRect.width - 8;
-        }
-        if (y + popRect.height > window.innerHeight) {
-            y = anchorRect.top - popRect.height - 4;
-        }
-        popover.style.left = `${Math.max(8, x)}px`;
-        popover.style.top = `${Math.max(8, y)}px`;
-
-        const handler = (e: MouseEvent) => {
-            const target = e.target as Node;
-            if (popover.contains(target)) return;
-            this.closeChildPopover();
-        };
-        setTimeout(() => {
-            document.addEventListener('pointerdown', handler, true);
-        }, 0);
-        this.childPopoverCleanup = () => {
-            document.removeEventListener('pointerdown', handler, true);
-        };
+                    row.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (this.childShell) this.stack.close(this.childShell);
+                        onSelect(item.value);
+                    });
+                }
+            },
+            onClose: () => {
+                this.childShell = null;
+            },
+        });
     }
 
     // ── Drag Reorder ──
 
     private startDrag(e: PointerEvent, index: number, rowEl: HTMLElement): void {
-        this.closeChildPopover();
+        if (this.childShell) this.stack.close(this.childShell);
         this.dragIndex = index;
         this.dragStartY = e.clientY;
         this.dragRowEl = rowEl;
         rowEl.classList.add('is-dragging');
+
+        // Use the row's host document so drag works inside popout windows.
+        const hostDoc = rowEl.ownerDocument;
 
         // Create ghost
         const rect = rowEl.getBoundingClientRect();
@@ -317,16 +275,16 @@ export class SortMenuComponent {
         ghost.style.width = `${rect.width}px`;
         ghost.style.left = `${rect.left}px`;
         ghost.style.top = `${rect.top}px`;
-        document.body.appendChild(ghost);
+        hostDoc.body.appendChild(ghost);
         this.dragGhostEl = ghost;
 
         const onMove = (ev: PointerEvent) => this.onDragMove(ev);
         const onUp = () => this.endDrag();
-        document.addEventListener('pointermove', onMove, true);
-        document.addEventListener('pointerup', onUp, true);
+        hostDoc.addEventListener('pointermove', onMove, true);
+        hostDoc.addEventListener('pointerup', onUp, true);
         this.dragCleanup = () => {
-            document.removeEventListener('pointermove', onMove, true);
-            document.removeEventListener('pointerup', onUp, true);
+            hostDoc.removeEventListener('pointermove', onMove, true);
+            hostDoc.removeEventListener('pointerup', onUp, true);
         };
     }
 
@@ -337,8 +295,8 @@ export class SortMenuComponent {
             this.dragGhostEl.style.top = `${rect.top + deltaY}px`;
         }
 
-        if (!this.popoverEl) return;
-        const rows = this.popoverEl.querySelectorAll<HTMLElement>('.sort-popover__row');
+        if (!this.rootEl) return;
+        const rows = this.rootEl.querySelectorAll<HTMLElement>('.sort-popover__row');
 
         // Clear previous indicators
         rows.forEach(r => {
@@ -395,8 +353,8 @@ export class SortMenuComponent {
             if (this.dragRowEl) {
                 this.dragRowEl.classList.remove('is-dragging');
             }
-            if (this.popoverEl) {
-                this.popoverEl.querySelectorAll('.sort-popover__row').forEach(r => {
+            if (this.rootEl) {
+                this.rootEl.querySelectorAll('.sort-popover__row').forEach(r => {
                     r.classList.remove('is-drag-over-above', 'is-drag-over-below');
                 });
             }
@@ -420,22 +378,4 @@ export class SortMenuComponent {
         this.dragStartY = 0;
     }
 
-    // ── Positioning ──
-
-    private positionPopover(event: MouseEvent): void {
-        if (!this.popoverEl) return;
-        const rect = this.popoverEl.getBoundingClientRect();
-        let x = event.pageX;
-        let y = event.pageY;
-
-        if (x + rect.width > window.innerWidth) {
-            x = window.innerWidth - rect.width - 8;
-        }
-        if (y + rect.height > window.innerHeight) {
-            y = window.innerHeight - rect.height - 8;
-        }
-
-        this.popoverEl.style.left = `${Math.max(8, x)}px`;
-        this.popoverEl.style.top = `${Math.max(8, y)}px`;
-    }
 }

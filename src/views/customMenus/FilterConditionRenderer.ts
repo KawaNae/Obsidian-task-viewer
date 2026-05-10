@@ -13,6 +13,8 @@ import {
 } from './FilterValueHelpers';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 import { t } from '../../i18n';
+import type { PopoverStack } from '../sharedUI/PopoverStack';
+import type { PopoverShell } from '../sharedUI/PopoverShell';
 
 export class FilterConditionRenderer {
     constructor(
@@ -22,6 +24,7 @@ export class FilterConditionRenderer {
         private getStatusDefs: () => StatusDefinition[],
         private getLastTasks: () => Task[],
         private getOnFilterChange: () => (() => void) | undefined,
+        private getStack: () => PopoverStack,
     ) {}
 
     renderValueSelector(row: HTMLElement, condition: FilterCondition): void {
@@ -135,22 +138,16 @@ export class FilterConditionRenderer {
         });
         input.value = opts.initialValue;
 
-        let suggestEl: HTMLElement | null = null;
+        const stack = this.getStack();
+        let shell: PopoverShell | null = null;
         let selectedIdx = -1;
         let suggestItems: { el: HTMLElement; value: string }[] = [];
-        let outsideHandler: ((e: MouseEvent) => void) | null = null;
 
         const closeSuggest = () => {
-            if (suggestEl) {
-                suggestEl.remove();
-                suggestEl = null;
-            }
+            if (shell) stack.close(shell);
+            shell = null;
             suggestItems = [];
             selectedIdx = -1;
-            if (outsideHandler) {
-                document.removeEventListener('pointerdown', outsideHandler, true);
-                outsideHandler = null;
-            }
         };
 
         const updateHighlight = () => {
@@ -163,56 +160,44 @@ export class FilterConditionRenderer {
         };
 
         const showSuggest = (query: string, showAll: boolean) => {
-            closeSuggest();
             const all = opts.getCandidates();
             const q = query.toLowerCase();
             const filtered = all.filter(v => {
                 if (showAll || !q) return true;
                 return v.toLowerCase().includes(q);
             });
-            if (filtered.length === 0) return;
-
-            suggestEl = document.createElement('div');
-            suggestEl.className = `filter-popover__tag-suggest ${opts.suggestClass}`;
-            suggestItems = [];
-            selectedIdx = -1;
-
-            for (const val of filtered) {
-                const item = suggestEl.createDiv('filter-popover__tag-suggest-item');
-                item.createSpan().setText(val);
-                item.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    input.value = val;
-                    closeSuggest();
-                    opts.onCommit(val);
-                });
-                suggestItems.push({ el: item, value: val });
-            }
-
-            document.body.appendChild(suggestEl);
-
-            const rect = inputWrap.getBoundingClientRect();
-            let x = rect.left;
-            let y = rect.bottom + 2;
-            const suggestRect = suggestEl.getBoundingClientRect();
-            if (x + suggestRect.width > window.innerWidth) {
-                x = window.innerWidth - suggestRect.width - 8;
-            }
-            if (y + suggestRect.height > window.innerHeight) {
-                y = rect.top - suggestRect.height - 2;
-            }
-            suggestEl.style.left = `${Math.max(8, x)}px`;
-            suggestEl.style.top = `${Math.max(8, y)}px`;
-            suggestEl.style.minWidth = `${rect.width}px`;
-
-            outsideHandler = (e: MouseEvent) => {
-                const target = e.target as Node;
-                if (suggestEl?.contains(target) || inputWrap.contains(target)) return;
+            if (filtered.length === 0) {
                 closeSuggest();
-            };
-            setTimeout(() => {
-                document.addEventListener('pointerdown', outsideHandler!, true);
-            }, 0);
+                return;
+            }
+
+            const newItems: { el: HTMLElement; value: string }[] = [];
+            shell = stack.openChild({
+                anchor: { kind: 'element', element: inputWrap },
+                className: `filter-popover__tag-suggest ${opts.suggestClass}`,
+                extraContains: [inputWrap],
+                build: (suggestEl) => {
+                    suggestEl.style.minWidth = `${inputWrap.getBoundingClientRect().width}px`;
+                    for (const val of filtered) {
+                        const item = suggestEl.createDiv('filter-popover__tag-suggest-item');
+                        item.createSpan().setText(val);
+                        item.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            input.value = val;
+                            closeSuggest();
+                            opts.onCommit(val);
+                        });
+                        newItems.push({ el: item, value: val });
+                    }
+                },
+                onClose: () => {
+                    shell = null;
+                    suggestItems = [];
+                    selectedIdx = -1;
+                },
+            });
+            suggestItems = newItems;
+            selectedIdx = -1;
         };
 
         input.addEventListener('input', () => {
@@ -221,7 +206,7 @@ export class FilterConditionRenderer {
         input.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                if (!suggestEl) {
+                if (!shell) {
                     showSuggest(input.value, !input.value);
                 } else if (suggestItems.length > 0) {
                     selectedIdx = (selectedIdx + 1) % suggestItems.length;
@@ -276,22 +261,16 @@ export class FilterConditionRenderer {
         });
 
         // Suggest state
-        let suggestEl: HTMLElement | null = null;
+        const stack = this.getStack();
+        let shell: PopoverShell | null = null;
         let selectedIdx = -1;
         let suggestItems: { el: HTMLElement; value: string }[] = [];
-        let outsideHandler: ((e: MouseEvent) => void) | null = null;
 
         const closeSuggest = () => {
-            if (suggestEl) {
-                suggestEl.remove();
-                suggestEl = null;
-            }
+            if (shell) stack.close(shell);
+            shell = null;
             suggestItems = [];
             selectedIdx = -1;
-            if (outsideHandler) {
-                document.removeEventListener('pointerdown', outsideHandler, true);
-                outsideHandler = null;
-            }
         };
 
         const statusDefs = this.getStatusDefs();
@@ -311,7 +290,6 @@ export class FilterConditionRenderer {
         };
 
         const showSuggest = (query: string, showAll: boolean) => {
-            closeSuggest();
             const available = getAvailableValues(prop, tasks);
             const selected = new Set(Array.isArray(condition.value) ? condition.value as string[] : []);
             const q = prop === 'tag' ? query.toLowerCase().replace(/^#/, '') : query.toLowerCase();
@@ -321,59 +299,47 @@ export class FilterConditionRenderer {
                 if (showAll || !q) return true;
                 return getValueDisplay(prop, v, statusDefs).toLowerCase().includes(q) || v.toLowerCase().includes(q);
             });
-            if (filtered.length === 0) return;
-
-            suggestEl = document.createElement('div');
-            suggestEl.className = 'filter-popover__tag-suggest';
-            suggestItems = [];
-            selectedIdx = -1;
-
-            for (const val of filtered) {
-                const item = suggestEl.createDiv('filter-popover__tag-suggest-item');
-                if (prop === 'color') {
-                    const swatch = item.createSpan('filter-popover__color-swatch');
-                    swatch.style.backgroundColor = val;
-                } else if (prop === 'status') {
-                    const checkbox = item.createEl('input', { cls: 'task-list-item-checkbox filter-popover__status-checkbox' });
-                    checkbox.type = 'checkbox';
-                    checkbox.checked = val !== ' ';
-                    checkbox.readOnly = true;
-                    checkbox.tabIndex = -1;
-                    if (val !== ' ') checkbox.dataset.task = val;
-                }
-                item.createSpan().setText(getValueDisplay(prop, val, statusDefs));
-                item.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    addValue(val);
-                });
-                suggestItems.push({ el: item, value: val });
-            }
-
-            document.body.appendChild(suggestEl);
-
-            // Position below input
-            const rect = inputWrap.getBoundingClientRect();
-            let x = rect.left;
-            let y = rect.bottom + 2;
-            const suggestRect = suggestEl.getBoundingClientRect();
-            if (x + suggestRect.width > window.innerWidth) {
-                x = window.innerWidth - suggestRect.width - 8;
-            }
-            if (y + suggestRect.height > window.innerHeight) {
-                y = rect.top - suggestRect.height - 2;
-            }
-            suggestEl.style.left = `${Math.max(8, x)}px`;
-            suggestEl.style.top = `${Math.max(8, y)}px`;
-            suggestEl.style.width = `${rect.width}px`;
-
-            outsideHandler = (e: MouseEvent) => {
-                const target = e.target as Node;
-                if (suggestEl?.contains(target) || inputWrap.contains(target)) return;
+            if (filtered.length === 0) {
                 closeSuggest();
-            };
-            setTimeout(() => {
-                document.addEventListener('pointerdown', outsideHandler!, true);
-            }, 0);
+                return;
+            }
+
+            const newItems: { el: HTMLElement; value: string }[] = [];
+            shell = stack.openChild({
+                anchor: { kind: 'element', element: inputWrap },
+                className: 'filter-popover__tag-suggest',
+                extraContains: [inputWrap],
+                build: (suggestEl) => {
+                    suggestEl.style.width = `${inputWrap.getBoundingClientRect().width}px`;
+                    for (const val of filtered) {
+                        const item = suggestEl.createDiv('filter-popover__tag-suggest-item');
+                        if (prop === 'color') {
+                            const swatch = item.createSpan('filter-popover__color-swatch');
+                            swatch.style.backgroundColor = val;
+                        } else if (prop === 'status') {
+                            const checkbox = item.createEl('input', { cls: 'task-list-item-checkbox filter-popover__status-checkbox' });
+                            checkbox.type = 'checkbox';
+                            checkbox.checked = val !== ' ';
+                            checkbox.readOnly = true;
+                            checkbox.tabIndex = -1;
+                            if (val !== ' ') checkbox.dataset.task = val;
+                        }
+                        item.createSpan().setText(getValueDisplay(prop, val, statusDefs));
+                        item.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            addValue(val);
+                        });
+                        newItems.push({ el: item, value: val });
+                    }
+                },
+                onClose: () => {
+                    shell = null;
+                    suggestItems = [];
+                    selectedIdx = -1;
+                },
+            });
+            suggestItems = newItems;
+            selectedIdx = -1;
         };
 
         const updateHighlight = () => {
@@ -393,7 +359,7 @@ export class FilterConditionRenderer {
         input.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                if (!suggestEl) {
+                if (!shell) {
                     showSuggest(input.value, !input.value);
                 } else if (suggestItems.length > 0) {
                     selectedIdx = (selectedIdx + 1) % suggestItems.length;

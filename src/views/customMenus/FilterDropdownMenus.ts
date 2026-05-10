@@ -16,6 +16,8 @@ import {
 import type { StatusDefinition, Task } from '../../types';
 import { getAvailableValues, getValueDisplay } from './FilterValueHelpers';
 import { t } from '../../i18n';
+import type { PopoverStack } from '../sharedUI/PopoverStack';
+import type { PopoverShell } from '../sharedUI/PopoverShell';
 
 export interface SelectItem {
     label: string;
@@ -26,8 +28,7 @@ export interface SelectItem {
 }
 
 export class FilterDropdownMenus {
-    private childPopoverEl: HTMLElement | null = null;
-    private childPopoverCleanup: (() => void) | null = null;
+    private childShell: PopoverShell | null = null;
 
     constructor(
         private refreshPopover: () => void,
@@ -35,18 +36,8 @@ export class FilterDropdownMenus {
         private getStatusDefs: () => StatusDefinition[],
         private getLastTasks: () => Task[],
         private getOnFilterChange: () => (() => void) | undefined,
+        private getStack: () => PopoverStack,
     ) {}
-
-    closeChildPopover(): void {
-        if (this.childPopoverEl) {
-            this.childPopoverEl.remove();
-            this.childPopoverEl = null;
-        }
-        if (this.childPopoverCleanup) {
-            this.childPopoverCleanup();
-            this.childPopoverCleanup = null;
-        }
-    }
 
     showSelectPopover(
         anchorEl: HTMLElement,
@@ -54,80 +45,57 @@ export class FilterDropdownMenus {
         onSelect: (value: string) => void,
         multiSelect = false,
     ): void {
-        this.closeChildPopover();
-
-        const popover = document.createElement('div');
-        popover.className = 'filter-child-popover';
-
-        if (items.length === 0) {
-            popover.createDiv('filter-child-popover__empty').setText(t('filter.noOptions'));
-        } else {
-            for (const item of items) {
-                const row = popover.createDiv(
-                    `filter-child-popover__item${item.checked && !multiSelect ? ' filter-child-popover__item--selected' : ''}`,
-                );
-
-                if (multiSelect) {
-                    const checkbox = row.createEl('input', { type: 'checkbox' });
-                    checkbox.checked = item.checked;
-                    checkbox.classList.add('filter-child-popover__checkbox');
+        const stack = this.getStack();
+        this.childShell = stack.openChild({
+            anchor: { kind: 'element', element: anchorEl },
+            className: 'filter-child-popover',
+            build: (popover) => {
+                if (items.length === 0) {
+                    popover.createDiv('filter-child-popover__empty').setText(t('filter.noOptions'));
+                    return;
                 }
+                for (const item of items) {
+                    const row = popover.createDiv(
+                        `filter-child-popover__item${item.checked && !multiSelect ? ' filter-child-popover__item--selected' : ''}`,
+                    );
 
-                if (item.cls) row.classList.add(item.cls);
-
-                if (item.icon) {
-                    const iconEl = row.createSpan('filter-child-popover__icon');
-                    setIcon(iconEl, item.icon);
-                }
-
-                row.createSpan('filter-child-popover__label').setText(item.label);
-
-                row.addEventListener('click', (e) => {
-                    e.stopPropagation();
                     if (multiSelect) {
-                        item.checked = !item.checked;
-                        const cb = row.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
-                        if (cb) cb.checked = item.checked;
-                        onSelect(item.value);
-                    } else {
-                        this.closeChildPopover();
-                        onSelect(item.value);
+                        const checkbox = row.createEl('input', { type: 'checkbox' });
+                        checkbox.checked = item.checked;
+                        checkbox.classList.add('filter-child-popover__checkbox');
                     }
-                });
-            }
-        }
 
-        document.body.appendChild(popover);
-        this.childPopoverEl = popover;
+                    if (item.cls) row.classList.add(item.cls);
 
-        // Position below the anchor element
-        const anchorRect = anchorEl.getBoundingClientRect();
-        let x = anchorRect.left;
-        let y = anchorRect.bottom + 4;
-        const popRect = popover.getBoundingClientRect();
-        if (x + popRect.width > window.innerWidth) {
-            x = window.innerWidth - popRect.width - 8;
-        }
-        if (y + popRect.height > window.innerHeight) {
-            y = anchorRect.top - popRect.height - 4;
-        }
-        popover.style.left = `${Math.max(8, x)}px`;
-        popover.style.top = `${Math.max(8, y)}px`;
+                    if (item.icon) {
+                        const iconEl = row.createSpan('filter-child-popover__icon');
+                        setIcon(iconEl, item.icon);
+                    }
 
-        const handler = (e: MouseEvent) => {
-            const target = e.target as Node;
-            if (popover.contains(target)) return;
-            this.closeChildPopover();
-            if (multiSelect) {
-                this.renderContent();
-            }
-        };
-        setTimeout(() => {
-            document.addEventListener('pointerdown', handler, true);
-        }, 0);
-        this.childPopoverCleanup = () => {
-            document.removeEventListener('pointerdown', handler, true);
-        };
+                    row.createSpan('filter-child-popover__label').setText(item.label);
+
+                    row.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (multiSelect) {
+                            item.checked = !item.checked;
+                            const cb = row.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+                            if (cb) cb.checked = item.checked;
+                            onSelect(item.value);
+                        } else {
+                            // Single-select: close child popover then commit.
+                            if (this.childShell) stack.close(this.childShell);
+                            onSelect(item.value);
+                        }
+                    });
+                }
+            },
+            onClose: () => {
+                this.childShell = null;
+                if (multiSelect) {
+                    this.renderContent();
+                }
+            },
+        });
     }
 
     showPropertyMenu(anchorEl: HTMLElement, condition: FilterCondition): void {
