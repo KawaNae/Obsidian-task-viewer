@@ -90,8 +90,14 @@ export default class TaskViewerPlugin extends Plugin {
         // Register CLI handlers
         registerCliHandlers(this);
 
-        // Initialize Timer Widget
+        // Initialize Timer Widget. Construction is cheap (no DOM ops, no
+        // storage read). Window observer attach + restore happens in
+        // onLayoutReady below so the active window is known.
         this.timerWidget = new TimerWidget(this.app, this);
+
+        this.app.workspace.onLayoutReady(() => {
+            this.timerWidget?.activate();
+        });
 
         this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
             if (!(file instanceof TFile) || file.extension !== 'md') return;

@@ -515,7 +515,9 @@
     "breakDuration": "Break Duration",
     "custom": "Custom...",
     "minSuffix": "min",
-    "alreadyActive": "This task already has an active timer"
+    "alreadyActive": "This task already has an active timer",
+    "pinPinned": "Pinned to this window — click to release",
+    "pinPending": "Release pending — click another window to move there"
   },
   "notice": {
     "uriCopied": "URI copied to clipboard",

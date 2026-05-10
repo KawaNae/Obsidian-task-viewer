@@ -21,6 +21,7 @@ import { TimerLifecycle } from './TimerLifecycle';
 import { TimerRenderer } from './TimerRenderer';
 import { TimerPersistence } from './TimerPersistence';
 import { TimerTargetManager } from './TimerTargetManager';
+import { TimerWidgetWindowObserver, PinState } from './TimerWidgetWindowObserver';
 import {
     TimerContext,
     IDLE_TIMER_ID,
@@ -38,6 +39,7 @@ export class TimerWidget implements TimerContext {
     private renderer: TimerRenderer;
     private persistence: TimerPersistence;
     private targetManager: TimerTargetManager;
+    private observer: TimerWidgetWindowObserver | null = null;
 
     constructor(app: App, plugin: TaskViewerPlugin) {
         this.app = app;
@@ -47,8 +49,19 @@ export class TimerWidget implements TimerContext {
         this.creator = new TimerCreator(this, this.storageUtils);
         this.lifecycle = new TimerLifecycle(this, this.creator);
         this.renderer = new TimerRenderer(this, this.lifecycle, this.creator);
-        this.persistence = new TimerPersistence(this, this.creator, this.lifecycle, this.renderer, this.storageUtils);
+        this.persistence = new TimerPersistence(this, this.creator, this.lifecycle, this.storageUtils);
         this.targetManager = new TimerTargetManager(this, this.storageUtils);
+    }
+
+    /**
+     * Wire up window observation and restore persisted timers. Must be called
+     * after `workspace.onLayoutReady` so the observer can resolve which window
+     * currently holds the active leaf.
+     */
+    activate(): void {
+        if (this.observer) return;
+        this.observer = new TimerWidgetWindowObserver(this.app, this.plugin, this);
+        this.observer.start();
         this.persistence.restoreTimersFromStorage((timerId) => {
             if (!this.lifecycle.isIdleTimer(timerId)) {
                 const timer = this.timers.get(timerId);
@@ -59,14 +72,35 @@ export class TimerWidget implements TimerContext {
         });
     }
 
+    // ─── TimerContext: container delegation to observer ───────
+
+    ensureContainer(): HTMLElement {
+        if (!this.observer) {
+            // Defensive: fall back to immediate observer creation. activate()
+            // should have run already; this only happens if a timer is
+            // started before layout-ready, which is uncommon.
+            this.observer = new TimerWidgetWindowObserver(this.app, this.plugin, this);
+            this.observer.start();
+        }
+        return this.observer.ensureContainer();
+    }
+
+    destroyContainer(): void {
+        this.observer?.destroyContainer();
+    }
+
+    getPinState(): PinState {
+        return this.observer?.getPinState() ?? 'pinned';
+    }
+
+    togglePin(): void {
+        this.observer?.togglePin();
+    }
+
     /**
      * Unified timer start API for all timer types.
      */
     startTimer(config: TimerStartConfig): void {
-        if (!this.renderer.hasContainer()) {
-            this.renderer.createContainer();
-        }
-
         const taskId = config.timerType === 'idle' ? IDLE_TIMER_ID : config.taskId;
         const timerTargetId = config.timerTargetId;
         if (config.timerType !== 'idle' && this.lifecycle.hasActiveTimerForTask(taskId, timerTargetId)) {
@@ -159,6 +193,6 @@ export class TimerWidget implements TimerContext {
         }
         this.intervalPrepareBaseElapsed.clear();
         this.timers.clear();
-        this.renderer.destroyContainer();
+        this.renderer.destroy();
     }
 }

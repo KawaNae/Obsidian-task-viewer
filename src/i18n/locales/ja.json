@@ -515,7 +515,9 @@
     "breakDuration": "休憩時間",
     "custom": "カスタム...",
     "minSuffix": "分",
-    "alreadyActive": "このタスクにはすでにアクティブなタイマーがあります"
+    "alreadyActive": "このタスクにはすでにアクティブなタイマーがあります",
+    "pinPinned": "このウィンドウにピン留め中（クリックで解除）",
+    "pinPending": "解除中 — 移動先のウィンドウをクリック"
   },
   "notice": {
     "uriCopied": "URIをクリップボードにコピーしました",

@@ -13,7 +13,6 @@ import {
 import { TimerContext, STORAGE_VERSION } from './TimerContext';
 import { TimerCreator } from './TimerCreator';
 import { TimerLifecycle } from './TimerLifecycle';
-import { TimerRenderer } from './TimerRenderer';
 import { TimerStorageUtils } from './TimerStorageUtils';
 import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
 import TaskViewerPlugin from '../main';
@@ -90,7 +89,6 @@ export class TimerPersistence {
         private ctx: TimerContext,
         private creator: TimerCreator,
         private lifecycle: TimerLifecycle,
-        private renderer: TimerRenderer,
         private storageUtils: TimerStorageUtils,
     ) {}
 
@@ -152,10 +150,6 @@ export class TimerPersistence {
             if (this.ctx.timers.size === 0) {
                 this.persistTimersToStorage();
                 return;
-            }
-
-            if (!this.renderer.hasContainer()) {
-                this.renderer.createContainer();
             }
 
             for (const [timerId, timer] of this.ctx.timers) {
