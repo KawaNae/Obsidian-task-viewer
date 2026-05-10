@@ -51,7 +51,19 @@ export class TimerWidgetWindowObserver {
             this.app.workspace.on('active-leaf-change', (leaf) => this.handleActiveLeafChange(leaf)),
         );
         this.plugin.registerEvent(
-            this.app.workspace.on('window-close', (ww: WorkspaceWindow) => this.handleWindowClose(ww)),
+            this.app.workspace.on('window-open', () => {
+                // floatingSplit.children is updated synchronously *after* this
+                // handler returns, so defer the render to the next microtask
+                // when the count reflects the newly-opened popout.
+                Promise.resolve().then(() => this.widget.render());
+            }),
+        );
+        this.plugin.registerEvent(
+            this.app.workspace.on('window-close', (ww: WorkspaceWindow) => {
+                this.handleWindowClose(ww);
+                // Same deferral so the count reflects the closed popout.
+                Promise.resolve().then(() => this.widget.render());
+            }),
         );
     }
 
@@ -91,6 +103,21 @@ export class TimerWidgetWindowObserver {
     togglePin(): void {
         this.pinned = !this.pinned;
         this.widget.render();
+    }
+
+    /**
+     * Pin badge is only meaningful when more than one window exists. On
+     * mobile the popout API is absent (`floatingSplit` empty), so the badge
+     * stays hidden. On desktop it appears the moment the user opens a popout
+     * and disappears when the last popout closes.
+     */
+    shouldShowPinBadge(): boolean {
+        // floatingSplit is the undocumented popout container; cast since it
+        // isn't part of the public Workspace type. Mobile builds don't have
+        // it, so the count is 0 and the badge stays hidden.
+        const fs = (this.app.workspace as unknown as { floatingSplit?: { children?: unknown[] } }).floatingSplit;
+        const popoutCount = fs?.children?.length ?? 0;
+        return popoutCount > 0;
     }
 
     private handleActiveLeafChange(leaf: WorkspaceLeaf | null): void {

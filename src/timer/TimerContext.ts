@@ -49,4 +49,11 @@ export interface TimerContext {
 
     /** Toggle pinned/pending — invoked by the pin badge click handler. */
     togglePin(): void;
+
+    /**
+     * Whether the pin badge has any meaning right now. False when only one
+     * window exists (mobile, or desktop with no popouts) — badge would have
+     * nowhere to migrate to, so hide it entirely.
+     */
+    shouldShowPinBadge(): boolean;
 }

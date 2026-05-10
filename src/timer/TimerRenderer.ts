@@ -205,15 +205,21 @@ export class TimerRenderer {
     // ─── Pin badge ───────────────────────────────────────────
 
     private renderPinBadge(container: HTMLElement): void {
+        const existing = container.querySelector(':scope > .timer-widget__pin-badge') as HTMLButtonElement | null;
+        if (!this.ctx.shouldShowPinBadge()) {
+            // No second window to migrate to — pin would be a no-op control.
+            existing?.remove();
+            return;
+        }
         const state = this.ctx.getPinState();
-        let badge = container.querySelector(':scope > .timer-widget__pin-badge') as HTMLButtonElement | null;
-        if (!badge) {
-            badge = container.createEl('button', { cls: 'timer-widget__pin-badge' });
-            badge.addEventListener('click', (e) => {
+        const badge = existing ?? (() => {
+            const b = container.createEl('button', { cls: 'timer-widget__pin-badge' });
+            b.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.ctx.togglePin();
             });
-        }
+            return b;
+        })();
         badge.classList.toggle('timer-widget__pin-badge--pinned', state === 'pinned');
         badge.classList.toggle('timer-widget__pin-badge--pending', state === 'pending');
         badge.empty();

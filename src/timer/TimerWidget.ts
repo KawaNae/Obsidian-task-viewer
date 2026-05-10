@@ -97,6 +97,10 @@ export class TimerWidget implements TimerContext {
         this.observer?.togglePin();
     }
 
+    shouldShowPinBadge(): boolean {
+        return this.observer?.shouldShowPinBadge() ?? false;
+    }
+
     /**
      * Unified timer start API for all timer types.
      */
