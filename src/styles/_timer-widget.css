@@ -100,7 +100,9 @@
     color: var(--tv-text-muted);
 }
 
-.timer-widget__item:last-child {
+/* Use :*-of-type rather than :*-child so the pin badge (a <button> sibling)
+   doesn't displace the first-/last-/only-child match for items (<div>). */
+.timer-widget__item:last-of-type {
     border-bottom: none;
 }
 
@@ -114,15 +116,15 @@
     cursor: grab;
 }
 
-.timer-widget__item:first-child .timer-widget__header {
+.timer-widget__item:first-of-type .timer-widget__header {
     border-radius: 8px 8px 0 0;
 }
 
-.timer-widget__item:last-child .timer-widget__header {
+.timer-widget__item:last-of-type .timer-widget__header {
     border-radius: 0 0 8px 8px;
 }
 
-.timer-widget__item:only-child .timer-widget__header {
+.timer-widget__item:only-of-type .timer-widget__header {
     border-radius: 8px;
 }
 
