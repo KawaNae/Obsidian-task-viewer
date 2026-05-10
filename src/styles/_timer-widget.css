@@ -236,6 +236,20 @@
     background: var(--tv-bg-widget);
 }
 
+/* When the last item is expanded, its content is the widget's bottom edge.
+   Round it so the square content bg doesn't protrude past the widget's
+   rounded border (overflow:visible is required for the pin badge). */
+.timer-widget__item:last-of-type .timer-widget__content {
+    border-radius: 0 0 8px 8px;
+}
+
+/* When the only item is expanded, the header keeps its top radius via
+   :only-of-type, but the bottom radius shifts to the content. Override
+   the only-of-type rule so the header is not bottom-rounded too. */
+.timer-widget__item:only-of-type:has(.timer-widget__content) .timer-widget__header {
+    border-radius: 8px 8px 0 0;
+}
+
 /* Title Input (child mode: inline label in header) */
 .timer-widget .timer-widget__title-input {
     display: block;
