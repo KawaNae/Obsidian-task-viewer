@@ -1,9 +1,9 @@
 /**
  * IntervalTemplateCreator
  *
- * Popover UI for creating interval timer templates.
- * Follows the FilterMenuComponent popover pattern: position: fixed,
- * appended to document.body, outside-click to close.
+ * Popover UI for creating interval timer templates. Uses PopoverStack so the
+ * root popover and the child icon-picker behave correctly across popout
+ * windows (host doc/win resolved from the anchor) and follow window resize.
  */
 
 import { App, Notice, setIcon, getIconIds } from 'obsidian';
@@ -11,6 +11,8 @@ import { t } from '../../i18n';
 import { IntervalTemplateWriter } from '../../timer/IntervalTemplateWriter';
 import type { IntervalGroup } from '../../timer/TimerInstance';
 import type { IntervalTemplate } from '../../timer/IntervalTemplateLoader';
+import { PopoverStack } from '../sharedUI/PopoverStack';
+import type { PopoverShell } from '../sharedUI/PopoverShell';
 
 export interface TemplateCreatorCallbacks {
     onSaved: (filePath: string) => void;
@@ -36,10 +38,9 @@ interface FormState {
 }
 
 export class IntervalTemplateCreator {
-    private popoverEl: HTMLElement | null = null;
-    private iconPopoverEl: HTMLElement | null = null;
-    private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
-    private iconOutsideClickHandler: ((e: MouseEvent) => void) | null = null;
+    private stack = new PopoverStack();
+    private rootEl: HTMLElement | null = null;
+    private iconShell: PopoverShell | null = null;
     private state: FormState = this.createDefaultState();
     private callbacks: TemplateCreatorCallbacks | null = null;
     private folderPath = '';
@@ -47,8 +48,11 @@ export class IntervalTemplateCreator {
 
     constructor(private app: App) {}
 
+    isOpen(): boolean {
+        return this.stack.isOpen();
+    }
+
     show(anchorEl: HTMLElement, folderPath: string, callbacks: TemplateCreatorCallbacks): void {
-        this.close();
         this.folderPath = folderPath;
         this.callbacks = callbacks;
         this.editingFilePath = null;
@@ -57,7 +61,6 @@ export class IntervalTemplateCreator {
     }
 
     showEdit(anchorEl: HTMLElement, folderPath: string, template: IntervalTemplate, callbacks: TemplateCreatorCallbacks): void {
-        this.close();
         this.folderPath = folderPath;
         this.callbacks = callbacks;
         this.editingFilePath = template.filePath;
@@ -66,64 +69,40 @@ export class IntervalTemplateCreator {
     }
 
     private openPopover(anchorEl: HTMLElement): void {
-        this.popoverEl = document.createElement('div');
-        this.popoverEl.className = 'template-creator';
-
-        this.renderContent();
-        document.body.appendChild(this.popoverEl);
-        this.positionPopover(anchorEl);
-
-        setTimeout(() => {
-            this.outsideClickHandler = (e: MouseEvent) => {
-                const target = e.target as Node;
-                if (!this.popoverEl) return;
-                if (this.popoverEl.contains(target)) return;
-                if (this.iconPopoverEl?.contains(target)) return;
-                this.close();
-            };
-            document.addEventListener('pointerdown', this.outsideClickHandler, true);
-        }, 0);
+        this.stack.openRoot({
+            anchor: { kind: 'element', element: anchorEl },
+            className: 'template-creator',
+            build: (el) => {
+                this.rootEl = el;
+                this.renderContent();
+            },
+            onClose: () => {
+                this.rootEl = null;
+                this.iconShell = null;
+            },
+        });
     }
 
     close(): void {
-        this.closeIconPopover();
-        if (this.popoverEl) {
-            this.popoverEl.remove();
-            this.popoverEl = null;
-        }
-        if (this.outsideClickHandler) {
-            document.removeEventListener('pointerdown', this.outsideClickHandler, true);
-            this.outsideClickHandler = null;
-        }
-    }
-
-    private closeIconPopover(): void {
-        if (this.iconPopoverEl) {
-            this.iconPopoverEl.remove();
-            this.iconPopoverEl = null;
-        }
-        if (this.iconOutsideClickHandler) {
-            document.removeEventListener('pointerdown', this.iconOutsideClickHandler, true);
-            this.iconOutsideClickHandler = null;
-        }
+        this.stack.closeAll();
     }
 
     // ── Render ──
 
     private renderContent(): void {
-        if (!this.popoverEl) return;
-        this.popoverEl.empty();
+        if (!this.rootEl) return;
+        this.rootEl.empty();
 
-        this.renderHeader(this.popoverEl);
-        const body = this.popoverEl.createDiv('template-creator__body');
+        this.renderHeader(this.rootEl);
+        const body = this.rootEl.createDiv('template-creator__body');
         this.renderNameField(body);
         this.renderIconField(body);
         this.renderGroups(body);
-        this.renderFooter(this.popoverEl);
+        this.renderFooter(this.rootEl);
     }
 
     private refreshContent(): void {
-        if (!this.popoverEl) return;
+        if (!this.rootEl) return;
         this.renderContent();
     }
 
@@ -191,71 +170,47 @@ export class IntervalTemplateCreator {
     }
 
     private showIconPopover(anchorEl: HTMLElement, onSelect: (iconName: string) => void): void {
-        this.closeIconPopover();
-
         const allIcons = getIconIds()
             .filter(id => id.startsWith('lucide-'))
             .map(id => id.slice(7)); // remove 'lucide-' prefix
 
-        this.iconPopoverEl = document.createElement('div');
-        this.iconPopoverEl.className = 'template-creator__icon-popover';
-
-        // Search input
-        const searchInput = this.iconPopoverEl.createEl('input', {
-            cls: 'template-creator__icon-search',
-            type: 'text',
-            placeholder: 'Search icons...',
-        });
-
-        // Icon grid
-        const grid = this.iconPopoverEl.createDiv('template-creator__icon-grid');
-
-        const renderIcons = (filter: string) => {
-            grid.empty();
-            const filtered = filter
-                ? allIcons.filter(name => name.includes(filter.toLowerCase()))
-                : allIcons;
-            const limited = filtered.slice(0, 200); // limit for performance
-
-            for (const name of limited) {
-                const btn = grid.createEl('button', { cls: 'template-creator__icon-option' });
-                btn.setAttribute('aria-label', name);
-                setIcon(btn.createSpan(), name);
-                btn.addEventListener('click', () => {
-                    onSelect(name);
-                    this.closeIconPopover();
+        this.iconShell = this.stack.openChild({
+            anchor: { kind: 'element', element: anchorEl },
+            className: 'template-creator__icon-popover',
+            build: (popover) => {
+                const searchInput = popover.createEl('input', {
+                    cls: 'template-creator__icon-search',
+                    type: 'text',
+                    placeholder: 'Search icons...',
                 });
-            }
-        };
 
-        renderIcons('');
-        searchInput.addEventListener('input', () => renderIcons(searchInput.value));
+                const grid = popover.createDiv('template-creator__icon-grid');
 
-        document.body.appendChild(this.iconPopoverEl);
+                const renderIcons = (filter: string) => {
+                    grid.empty();
+                    const filtered = filter
+                        ? allIcons.filter(name => name.includes(filter.toLowerCase()))
+                        : allIcons;
+                    const limited = filtered.slice(0, 200); // limit for performance
 
-        // Position below anchor
-        const anchorRect = anchorEl.getBoundingClientRect();
-        const popRect = this.iconPopoverEl.getBoundingClientRect();
-        let x = anchorRect.left;
-        let y = anchorRect.bottom + 4;
-        if (x + popRect.width > window.innerWidth) {
-            x = window.innerWidth - popRect.width - 8;
-        }
-        if (y + popRect.height > window.innerHeight) {
-            y = anchorRect.top - popRect.height - 4;
-        }
-        this.iconPopoverEl.style.left = `${Math.max(8, x)}px`;
-        this.iconPopoverEl.style.top = `${Math.max(8, y)}px`;
+                    for (const name of limited) {
+                        const btn = grid.createEl('button', { cls: 'template-creator__icon-option' });
+                        btn.setAttribute('aria-label', name);
+                        setIcon(btn.createSpan(), name);
+                        btn.addEventListener('click', () => {
+                            onSelect(name);
+                            if (this.iconShell) this.stack.close(this.iconShell);
+                        });
+                    }
+                };
 
-        // Outside click closes icon popover only
-        setTimeout(() => {
-            this.iconOutsideClickHandler = (e: MouseEvent) => {
-                const target = e.target as Node;
-                if (this.iconPopoverEl?.contains(target)) return;
-                this.closeIconPopover();
-            };
-            document.addEventListener('pointerdown', this.iconOutsideClickHandler, true);
-        }, 0);
+                renderIcons('');
+                searchInput.addEventListener('input', () => renderIcons(searchInput.value));
+            },
+            onClose: () => {
+                this.iconShell = null;
+            },
+        });
     }
 
     private renderGroups(parent: HTMLElement): void {
@@ -496,22 +451,4 @@ export class IntervalTemplateCreator {
         return null;
     }
 
-    private positionPopover(anchorEl: HTMLElement): void {
-        if (!this.popoverEl) return;
-        const anchorRect = anchorEl.getBoundingClientRect();
-        const popRect = this.popoverEl.getBoundingClientRect();
-
-        let x = anchorRect.left;
-        let y = anchorRect.bottom + 4;
-
-        if (x + popRect.width > window.innerWidth) {
-            x = window.innerWidth - popRect.width - 8;
-        }
-        if (y + popRect.height > window.innerHeight) {
-            y = anchorRect.top - popRect.height - 4;
-        }
-
-        this.popoverEl.style.left = `${Math.max(8, x)}px`;
-        this.popoverEl.style.top = `${Math.max(8, y)}px`;
-    }
 }

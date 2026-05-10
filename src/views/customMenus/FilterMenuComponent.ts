@@ -24,6 +24,7 @@ import { resolveGlue } from './FilterValueHelpers';
 import { FilterDropdownMenus } from './FilterDropdownMenus';
 import type { SelectItem } from './FilterDropdownMenus';
 import { FilterConditionRenderer } from './FilterConditionRenderer';
+import { PopoverStack } from '../sharedUI/PopoverStack';
 
 export interface FilterMenuCallbacks {
     onFilterChange: () => void;
@@ -37,8 +38,8 @@ export interface FilterMenuCallbacks {
  */
 export class FilterMenuComponent {
     private state: FilterState = createEmptyFilterState();
-    private popoverEl: HTMLElement | null = null;
-    private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
+    private stack = new PopoverStack();
+    private rootEl: HTMLElement | null = null;
     private lastTasks: Task[] = [];
     private lastCallbacks: FilterMenuCallbacks | null = null;
     private startHourProvider: (() => number) | null = null;
@@ -54,6 +55,7 @@ export class FilterMenuComponent {
         const getStatusDefs = () => this.statusDefs;
         const getLastTasks = () => this.lastTasks;
         const getOnFilterChange = () => this.lastCallbacks?.onFilterChange;
+        const getStack = () => this.stack;
 
         this.dropdowns = new FilterDropdownMenus(
             refreshPopover,
@@ -61,6 +63,7 @@ export class FilterMenuComponent {
             getStatusDefs,
             getLastTasks,
             getOnFilterChange,
+            getStack,
         );
         this.conditionRenderer = new FilterConditionRenderer(
             refreshPopover,
@@ -69,6 +72,7 @@ export class FilterMenuComponent {
             getStatusDefs,
             getLastTasks,
             getOnFilterChange,
+            getStack,
         );
     }
 
@@ -96,70 +100,61 @@ export class FilterMenuComponent {
         return hasConditions(this.state);
     }
 
+    isOpen(): boolean {
+        return this.stack.isOpen();
+    }
+
     showMenuAtElement(anchorEl: HTMLElement, callbacks: FilterMenuCallbacks): void {
-        const rect = anchorEl.getBoundingClientRect();
-        const syntheticEvent = new MouseEvent('click', { clientX: rect.left, clientY: rect.bottom });
-        Object.defineProperty(syntheticEvent, 'pageX', { value: rect.left + window.scrollX });
-        Object.defineProperty(syntheticEvent, 'pageY', { value: rect.bottom + window.scrollY });
-        this.showMenu(syntheticEvent, callbacks);
+        this.openWith({ kind: 'element', element: anchorEl }, callbacks);
     }
 
     showMenu(event: MouseEvent, callbacks: FilterMenuCallbacks): void {
-        this.close();
+        this.openWith({ kind: 'event', event }, callbacks);
+    }
 
+    private openWith(
+        anchor: { kind: 'element'; element: HTMLElement } | { kind: 'event'; event: MouseEvent },
+        callbacks: FilterMenuCallbacks,
+    ): void {
         this.lastTasks = callbacks.getTasks();
         this.lastCallbacks = callbacks;
 
-        this.popoverEl = document.createElement('div');
-        this.popoverEl.className = 'filter-popover';
-
-        this.renderContent();
-
-        document.body.appendChild(this.popoverEl);
-        this.positionPopover(event);
-
-        setTimeout(() => {
-            this.outsideClickHandler = (e: MouseEvent) => {
-                const target = e.target as Node;
-                if (!this.popoverEl) return;
-                if (this.popoverEl.contains(target)) return;
-                if ((target as HTMLElement).closest?.('.filter-child-popover')) return;
-                if ((target as HTMLElement).closest?.('.filter-popover__tag-suggest')) return;
-                this.close();
-            };
-            document.addEventListener('pointerdown', this.outsideClickHandler, true);
-        }, 0);
+        const shell = this.stack.openRoot({
+            anchor,
+            className: 'filter-popover',
+            build: (el) => {
+                this.rootEl = el;
+                this.renderContent();
+            },
+            onClose: () => {
+                this.rootEl = null;
+            },
+        });
+        // shell return is unused; root tracking is done via build/onClose.
+        void shell;
     }
 
     close(): void {
-        this.dropdowns.closeChildPopover();
-        if (this.popoverEl) {
-            this.popoverEl.remove();
-            this.popoverEl = null;
-        }
-        if (this.outsideClickHandler) {
-            document.removeEventListener('pointerdown', this.outsideClickHandler, true);
-            this.outsideClickHandler = null;
-        }
+        this.stack.closeAll();
     }
 
     // ── Render ──
 
     private renderContent(): void {
-        if (!this.popoverEl) return;
-        this.popoverEl.empty();
+        if (!this.rootEl) return;
+        this.rootEl.empty();
 
         if (this.state.filters.length === 0) {
-            this.popoverEl.createDiv('filter-popover__empty').setText(t('filter.noFilters'));
+            this.rootEl.createDiv('filter-popover__empty').setText(t('filter.noFilters'));
         } else {
-            this.renderChildren(this.popoverEl, this.state, 0);
+            this.renderChildren(this.rootEl, this.state, 0);
         }
 
-        this.renderFooterButtons(this.popoverEl, this.state, 0);
+        this.renderFooterButtons(this.rootEl, this.state, 0);
     }
 
     private refreshPopover(): void {
-        if (!this.popoverEl) return;
+        if (!this.rootEl) return;
         this.renderContent();
         this.lastCallbacks?.onFilterChange();
     }
@@ -415,22 +410,4 @@ export class FilterMenuComponent {
         }
     }
 
-    // ── Positioning ──
-
-    private positionPopover(event: MouseEvent): void {
-        if (!this.popoverEl) return;
-        const rect = this.popoverEl.getBoundingClientRect();
-        let x = event.pageX;
-        let y = event.pageY;
-
-        if (x + rect.width > window.innerWidth) {
-            x = window.innerWidth - rect.width - 8;
-        }
-        if (y + rect.height > window.innerHeight) {
-            y = window.innerHeight - rect.height - 8;
-        }
-
-        this.popoverEl.style.left = `${Math.max(8, x)}px`;
-        this.popoverEl.style.top = `${Math.max(8, y)}px`;
-    }
 }

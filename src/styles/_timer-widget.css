@@ -2,13 +2,14 @@
 
 .timer-widget {
     position: fixed;
-    right: 20px;
-    bottom: 20px;
+    right: 24px;
+    bottom: 24px;
     z-index: var(--z-timer-widget);
     background: var(--tv-bg-widget);
     border: 1px solid var(--tv-border);
     border-radius: 8px;
-    overflow: hidden;
+    /* visible: pin badge sticks out at the top-left corner */
+    overflow: visible;
     box-shadow: 0 4px 10px var(--tv-shadow-strong);
     min-width: 220px;
     max-width: 280px;
@@ -16,6 +17,68 @@
     user-select: none;
     touch-action: none;
     /* Enable PointerEvent handling on touch devices */
+}
+
+/* Pin badge — corner overlay indicating which window the widget is pinned to.
+   Mono color scheme: state is conveyed by icon shape + scale pulse, not hue,
+   so it never collides with file-accent colors that drive item titles. */
+.timer-widget__pin-badge {
+    position: absolute;
+    top: -9px;
+    left: -9px;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border-radius: 50%;
+    background: var(--tv-bg-widget-header);
+    border: 1px solid var(--tv-border);
+    color: var(--tv-text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px var(--tv-shadow-medium);
+    z-index: 2;
+    transition: color 120ms ease, transform 120ms ease, border-color 120ms ease;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.timer-widget__pin-badge:hover {
+    color: var(--tv-text);
+    transform: scale(1.08);
+}
+
+.timer-widget__pin-badge svg {
+    width: 11px;
+    height: 11px;
+}
+
+.timer-widget__pin-badge--pending {
+    border-color: var(--tv-text-muted);
+    color: var(--tv-text);
+    animation: timer-widget-pin-pulse 1.0s ease-in-out infinite;
+}
+
+@keyframes timer-widget-pin-pulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 0.7;
+    }
+    50% {
+        transform: scale(1.15);
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .timer-widget__pin-badge--pending {
+        animation: timer-widget-pin-fade 1.6s ease-in-out infinite;
+    }
+    @keyframes timer-widget-pin-fade {
+        0%, 100% { opacity: 0.6; }
+        50%      { opacity: 1; }
+    }
 }
 
 .timer-widget:active {
@@ -37,7 +100,9 @@
     color: var(--tv-text-muted);
 }
 
-.timer-widget__item:last-child {
+/* Use :*-of-type rather than :*-child so the pin badge (a <button> sibling)
+   doesn't displace the first-/last-/only-child match for items (<div>). */
+.timer-widget__item:last-of-type {
     border-bottom: none;
 }
 
@@ -51,15 +116,15 @@
     cursor: grab;
 }
 
-.timer-widget__item:first-child .timer-widget__header {
+.timer-widget__item:first-of-type .timer-widget__header {
     border-radius: 8px 8px 0 0;
 }
 
-.timer-widget__item:last-child .timer-widget__header {
+.timer-widget__item:last-of-type .timer-widget__header {
     border-radius: 0 0 8px 8px;
 }
 
-.timer-widget__item:only-child .timer-widget__header {
+.timer-widget__item:only-of-type .timer-widget__header {
     border-radius: 8px;
 }
 
@@ -169,6 +234,20 @@
 .timer-widget__content {
     padding: 12px;
     background: var(--tv-bg-widget);
+}
+
+/* When the last item is expanded, its content is the widget's bottom edge.
+   Round it so the square content bg doesn't protrude past the widget's
+   rounded border (overflow:visible is required for the pin badge). */
+.timer-widget__item:last-of-type .timer-widget__content {
+    border-radius: 0 0 8px 8px;
+}
+
+/* When the only item is expanded, the header keeps its top radius via
+   :only-of-type, but the bottom radius shifts to the content. Override
+   the only-of-type rule so the header is not bottom-rounded too. */
+.timer-widget__item:only-of-type:has(.timer-widget__content) .timer-widget__header {
+    border-radius: 8px 8px 0 0;
 }
 
 /* Title Input (child mode: inline label in header) */

@@ -1,5 +1,11 @@
 /**
- * Timer DOM rendering: container, drag, controls, progress ring.
+ * Timer DOM rendering: pin badge, item headers, controls, progress ring.
+ *
+ * The actual container element + drag handling + viewport clamp + window
+ * migration live in FloatingOverlayHost / TimerWidgetWindowObserver, which
+ * the renderer reaches through TimerContext.ensureContainer/destroyContainer.
+ * This separation lets the same item DOM be rebuilt in any window without
+ * the renderer caring which document it lives in.
  */
 
 import { setIcon } from 'obsidian';
@@ -19,11 +25,9 @@ import { TimerProgressUI } from './TimerProgressUI';
 import { TimerSettingsMenu } from './TimerSettingsMenu';
 import { AudioUtils } from './AudioUtils';
 import { TimeFormatter } from '../utils/TimeFormatter';
+import { t } from '../i18n';
 
 export class TimerRenderer {
-    private container: HTMLElement | null = null;
-    private isDragging = false;
-    private dragOffset = { x: 0, y: 0 };
     private closeConfirmTimers = new Map<string, number>();
 
     constructor(
@@ -32,95 +36,32 @@ export class TimerRenderer {
         private creator: TimerCreator,
     ) {}
 
-    // ─── Container ───────────────────────────────────────────
-
-    hasContainer(): boolean {
-        return this.container !== null;
-    }
-
-    createContainer(): void {
-        this.container = document.body.createDiv('timer-widget');
-        this.container.style.position = 'fixed';
-        this.container.style.right = '20px';
-        this.container.style.bottom = '20px';
-        this.setupDrag();
-    }
-
-    private setupDrag(): void {
-        if (!this.container) return;
-
-        const header = this.container;
-
-        header.addEventListener('pointerdown', (e) => {
-            if ((e.target as HTMLElement).closest('.timer-widget__item')) {
-                if ((e.target as HTMLElement).closest('button, input')) return;
-            }
-
-            this.isDragging = true;
-            const rect = this.container!.getBoundingClientRect();
-            this.dragOffset.x = e.clientX - rect.left;
-            this.dragOffset.y = e.clientY - rect.top;
-            this.container!.style.cursor = 'grabbing';
-            header.setPointerCapture(e.pointerId);
-        });
-
-        header.addEventListener('pointermove', (e) => {
-            if (!this.isDragging || !this.container) return;
-
-            const x = e.clientX - this.dragOffset.x;
-            const y = e.clientY - this.dragOffset.y;
-
-            this.container.style.left = `${x}px`;
-            this.container.style.top = `${y}px`;
-            this.container.style.right = 'auto';
-            this.container.style.bottom = 'auto';
-        });
-
-        header.addEventListener('pointerup', (e) => {
-            this.isDragging = false;
-            if (this.container) {
-                this.container.style.cursor = 'grab';
-            }
-            header.releasePointerCapture(e.pointerId);
-        });
-
-        header.addEventListener('pointercancel', (e) => {
-            this.isDragging = false;
-            if (this.container) {
-                this.container.style.cursor = 'grab';
-            }
-            header.releasePointerCapture(e.pointerId);
-        });
-    }
-
     // ─── Render ──────────────────────────────────────────────
 
     render(): void {
-        if (!this.container) return;
-        this.container.empty();
-
         if (this.ctx.timers.size === 0) {
-            this.container.remove();
-            this.container = null;
+            this.ctx.destroyContainer();
             return;
         }
-
+        const container = this.ctx.ensureContainer();
+        container.empty();
+        this.renderPinBadge(container);
         for (const [taskId] of this.ctx.timers) {
             this.renderTimerItem(taskId);
         }
     }
 
     renderTimerItem(taskId: string): void {
-        if (!this.container) return;
+        const container = this.ctx.ensureContainer();
 
         const timer = this.ctx.timers.get(taskId);
         if (!timer) return;
 
-        let itemEl = this.container.querySelector(`[data-task-id="${taskId}"]`) as HTMLElement;
+        let itemEl = container.querySelector(`[data-task-id="${taskId}"]`) as HTMLElement;
         const isNewItem = !itemEl;
 
         if (isNewItem) {
-            itemEl = this.container.createDiv('timer-widget__item');
+            itemEl = container.createDiv('timer-widget__item');
             itemEl.dataset.taskId = taskId;
             if (timer.taskColor) {
                 TaskStyling.applyTaskColor(itemEl, timer.taskColor);
@@ -253,15 +194,41 @@ export class TimerRenderer {
 
     // ─── Destroy ─────────────────────────────────────────────
 
-    destroyContainer(): void {
+    destroy(): void {
         for (const id of this.closeConfirmTimers.values()) {
             clearTimeout(id);
         }
         this.closeConfirmTimers.clear();
-        if (this.container) {
-            this.container.remove();
-            this.container = null;
+        this.ctx.destroyContainer();
+    }
+
+    // ─── Pin badge ───────────────────────────────────────────
+
+    private renderPinBadge(container: HTMLElement): void {
+        const existing = container.querySelector(':scope > .timer-widget__pin-badge') as HTMLButtonElement | null;
+        if (!this.ctx.shouldShowPinBadge()) {
+            // No second window to migrate to — pin would be a no-op control.
+            existing?.remove();
+            return;
         }
+        const state = this.ctx.getPinState();
+        const badge = existing ?? (() => {
+            const b = container.createEl('button', { cls: 'timer-widget__pin-badge' });
+            b.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.ctx.togglePin();
+            });
+            return b;
+        })();
+        badge.classList.toggle('timer-widget__pin-badge--pinned', state === 'pinned');
+        badge.classList.toggle('timer-widget__pin-badge--pending', state === 'pending');
+        badge.empty();
+        const iconHost = badge.createSpan();
+        setIcon(iconHost, state === 'pinned' ? 'pin' : 'pin-off');
+        badge.setAttribute(
+            'aria-label',
+            state === 'pinned' ? t('timer.pinPinned') : t('timer.pinPending'),
+        );
     }
 
     // ─── Private ─────────────────────────────────────────────

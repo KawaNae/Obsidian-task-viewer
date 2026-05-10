@@ -37,4 +37,23 @@ export interface TimerContext {
 
     /** Called after a non-idle timer is closed (for target ID cleanup). */
     onTimerClosed(timer: TimerInstance): void;
+
+    /** Acquire the floating overlay container (creates it on first call). */
+    ensureContainer(): HTMLElement;
+
+    /** Tear down the floating overlay container (called when timers reach 0). */
+    destroyContainer(): void;
+
+    /** Pin badge state for the floating overlay. */
+    getPinState(): 'pinned' | 'pending';
+
+    /** Toggle pinned/pending — invoked by the pin badge click handler. */
+    togglePin(): void;
+
+    /**
+     * Whether the pin badge has any meaning right now. False when only one
+     * window exists (mobile, or desktop with no popouts) — badge would have
+     * nowhere to migrate to, so hide it entirely.
+     */
+    shouldShowPinBadge(): boolean;
 }
