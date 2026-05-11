@@ -87,11 +87,24 @@ export class GhostRenderer {
     }
 
     /**
-     * 既存 ghost の親が plan.parent と異なる場合に reparent する (grid/absolute のみ)。
-     * fixed は body 直下なので reparent 不要。
+     * 既存 ghost の親が現プランと食い違う場合に reparent する。
+     *
+     * fixed の場合は **必ず doc.body 直下** に居なくてはならない。Obsidian の
+     * workspace-leaf は `contain: strict` (= `contain: paint` 含む) で固定位置
+     * 子孫の containing block を viewport から workspace-leaf に切り替えて
+     * しまうため、ghost が allday-section 等の workspace-leaf 内に残ると
+     * `clientX/Y` ベースの transform が leaf offset 分ずれて表示される。
+     *
+     * 遷移経路（grid 経由で生成 → 後で fixed に切替）が典型ケース。初回 attach
+     * は body だが、reuse 時に親が grid 系の祖先のままだとずれる。
      */
     private relocate(ghost: HTMLElement, plan: GhostPlan): void {
-        if (plan.layout === 'fixed') return;
+        if (plan.layout === 'fixed') {
+            if (ghost.parentElement !== this.doc.body) {
+                this.doc.body.appendChild(ghost);
+            }
+            return;
+        }
         if (ghost.parentElement !== plan.parent) {
             plan.parent.appendChild(ghost);
         }

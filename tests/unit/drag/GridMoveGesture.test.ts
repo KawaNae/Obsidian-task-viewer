@@ -111,3 +111,28 @@ describe('GridMoveGesture.buildTimelineDropEdits', () => {
         expect(edits?.effectiveEndTime).toBe('06:00');
     });
 });
+
+describe('GridMoveGesture.computeFloatingGhostPos', () => {
+    // cross-view drop で ghost を pointer に追従させつつ、card 内の掴み位置が
+    // pointer と一致するよう offset を保つ。旧実装の +10/+10 固定オフセットで
+    // ghost が pointer の右下にジャンプするバグを防ぐ pure helper。
+
+    it('returns ghost top-left so pointer sits at the original grab point', () => {
+        // pointer (1047, 800)、card 左下端 (relX=0, relY=58) を掴んだ場合
+        // ghost top-left は (1047 - 0, 800 - 58) = (1047, 742)
+        expect(GridMoveGesture.computeFloatingGhostPos(1047, 800, 0, 58)).toEqual({ x: 1047, y: 742 });
+    });
+
+    it('centers ghost on pointer when grabbed at card center', () => {
+        // card 中央 (relX=100, relY=30) を掴んだ場合、ghost 中心が pointer
+        expect(GridMoveGesture.computeFloatingGhostPos(500, 400, 100, 30)).toEqual({ x: 400, y: 370 });
+    });
+
+    it('grab at top-left puts ghost top-left at pointer', () => {
+        expect(GridMoveGesture.computeFloatingGhostPos(200, 300, 0, 0)).toEqual({ x: 200, y: 300 });
+    });
+
+    it('handles negative pointer movement (drag to upper-left)', () => {
+        expect(GridMoveGesture.computeFloatingGhostPos(50, 50, 100, 80)).toEqual({ x: -50, y: -30 });
+    });
+});

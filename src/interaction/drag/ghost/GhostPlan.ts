@@ -33,6 +33,21 @@ export interface AbsoluteGhostPlan {
     splitClasses: string[];
 }
 
+/**
+ * Viewport 固定配置の ghost (cross-view drop で pointer 追従する floating ghost
+ * 用)。`left` / `top` は viewport 座標 (px)。
+ *
+ * 重要: GhostPlan は **位置の最終値** だけを持つ。pointer 追従と grab offset の
+ * 保持は **caller の責任**。typical な使い方:
+ *
+ *     left: clientX - grabOffsetX,
+ *     top:  clientY - grabOffsetY,
+ *
+ * これにより ghost 内の掴み位置と pointer の相対関係が drag 開始時と同じに
+ * 保たれる。`clientX + 10` のような pointer 無関係オフセットは ghost を
+ * pointer から飛び離して見せるので避ける (履歴 issue: timeline 移動ハンドル
+ * ずれ 2026-05-11)。
+ */
 export interface FixedGhostPlan {
     layout: 'fixed';
     left: number;

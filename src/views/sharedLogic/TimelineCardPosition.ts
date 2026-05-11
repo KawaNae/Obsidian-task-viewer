@@ -23,10 +23,6 @@ export function toDisplayHeightPx(logicalHeightPx: number): number {
     return Math.max(0, logicalHeightPx - DISPLAY_HEIGHT_SHRINK_PX);
 }
 
-export function toLogicalTopPx(displayTopPx: number): number {
-    return displayTopPx - DISPLAY_TOP_OFFSET_PX;
-}
-
 export function toLogicalHeightPx(displayHeightPx: number): number {
     return displayHeightPx + DISPLAY_HEIGHT_SHRINK_PX;
 }
