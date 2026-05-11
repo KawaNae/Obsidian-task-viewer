@@ -2,24 +2,25 @@ import { BaseDragStrategy } from '../BaseDragStrategy';
 import type { DragContext } from '../../DragStrategy';
 import type { Task } from '../../../../types';
 import { DateUtils } from '../../../../utils/DateUtils';
-import {
-    toDisplayHeightPx,
-    toDisplayTopPx,
-    toLogicalHeightPx,
-    toLogicalTopPx,
-} from '../../../../views/sharedLogic/TimelineCardPosition';
 import { DisplayDateEdits, getOriginalTaskId, toDisplayTask } from '../../../../services/display/DisplayTaskConverter';
 import type { DragPlan } from '../../DragPlan';
 
 /**
- * Timeline (timed タスク) の Resize Gesture。
- * resize 方向は top / bottom のみ。
+ * Timeline (timed タスク) の Resize Gesture。resize 方向は top / bottom のみ。
+ *
+ * Ownership 契約: drag 中の visual feedback は `--start-minutes` /
+ * `--duration-minutes` CSS 変数を上書きすることで行う。これは
+ * {@link TimelineSectionRenderer.decorateLane} が毎 render 上書きする
+ * **同じキー** であり、commit 後の re-render で必ず authoritative な値で
+ * リセットされる（自己修復）。inline `top` / `height` (px) には書かない
+ * — CSS calc が override されて stale 化する温床になる。
  */
 export class TimelineResizeGesture extends BaseDragStrategy {
     name = 'TimelineResize';
 
     private resizeDirection: 'top' | 'bottom' = 'bottom';
     private currentDayDate: string | null = null;
+    /** logical px (= minutes * zoomLevel) で保持。computeResizeDeltas が同単位で動く。 */
     private initialTop: number = 0;
     private initialHeight: number = 0;
     private initialBottom: number = 0;
@@ -91,7 +92,6 @@ export class TimelineResizeGesture extends BaseDragStrategy {
         const context = this.currentContext;
 
         const zoomLevel = context.getZoomLevel();
-        const snapPixels = 15 * zoomLevel;
 
         const doc = context.container.ownerDocument || document;
         const elBelow = doc.elementFromPoint(clientX, clientY);
@@ -100,21 +100,47 @@ export class TimelineResizeGesture extends BaseDragStrategy {
 
         const rect = dayCol.getBoundingClientRect();
         const yInContainer = clientY - rect.top;
-        const snappedMouseY = Math.round(yInContainer / snapPixels) * snapPixels;
+        // 分単位で 15 分 snap。旧実装の px snap (Math.round(y/(15*zoom))*(15*zoom)) と
+        // 数学的に等価だが、CSS 変数所有モデルに合わせて分基準で表現。
+        const rawMinutes = yInContainer / zoomLevel;
+        const snappedMinutes = Math.round(rawMinutes / 15) * 15;
+        const snappedLogicalY = snappedMinutes * zoomLevel;
 
-        if (this.resizeDirection === 'bottom') {
-            const logicalTop = this.initialTop;
-            const newLogicalHeight = Math.max(snapPixels, snappedMouseY - logicalTop);
-            this.dragEl.style.height = `${toDisplayHeightPx(newLogicalHeight)}px`;
-        } else {
-            const currentBottom = this.initialBottom;
-            const newTop = snappedMouseY;
-            const clampedLogicalHeight = Math.max(snapPixels, currentBottom - newTop);
-            const finalLogicalTop = currentBottom - clampedLogicalHeight;
+        const { logicalTop, logicalHeight } = TimelineResizeGesture.computeResizeDeltas(
+            snappedLogicalY,
+            this.initialTop,
+            this.initialBottom,
+            this.resizeDirection,
+            zoomLevel,
+        );
 
-            this.dragEl.style.top = `${toDisplayTopPx(finalLogicalTop)}px`;
-            this.dragEl.style.height = `${toDisplayHeightPx(clampedLogicalHeight)}px`;
+        // renderer が所有する CSS 変数に書く。CSS calc が px 換算するので、
+        // inline top/height を書く必要はない (= stale 化の温床を作らない)。
+        this.dragEl.style.setProperty('--start-minutes', String(logicalTop / zoomLevel));
+        this.dragEl.style.setProperty('--duration-minutes', String(logicalHeight / zoomLevel));
+    }
+
+    /**
+     * pure helper: snapped logical Y と initial state から resize 帰結値を計算。
+     *  - direction='bottom': top 固定で height 伸縮
+     *  - direction='top'   : bottom 固定で top と height 連動
+     *  - 最小高 15 分 (= 15 * zoomLevel px)
+     */
+    static computeResizeDeltas(
+        snappedLogicalY: number,
+        initialTop: number,
+        initialBottom: number,
+        direction: 'top' | 'bottom',
+        zoomLevel: number,
+    ): { logicalTop: number; logicalHeight: number } {
+        const minHeight = 15 * zoomLevel;
+        if (direction === 'bottom') {
+            const newHeight = Math.max(minHeight, snappedLogicalY - initialTop);
+            return { logicalTop: initialTop, logicalHeight: newHeight };
         }
+        const clampedHeight = Math.max(minHeight, initialBottom - snappedLogicalY);
+        const newTop = initialBottom - clampedHeight;
+        return { logicalTop: newTop, logicalHeight: clampedHeight };
     }
 
     private async finishResize(context: DragContext): Promise<void> {
@@ -130,18 +156,17 @@ export class TimelineResizeGesture extends BaseDragStrategy {
             return;
         }
 
-        const zoomLevel = context.getZoomLevel();
         const startHour = context.plugin.settings.startHour;
         const displayTask = toDisplayTask(originalTask, startHour, (id) => context.readService.getTask(id));
         const startHourMinutes = startHour * 60;
 
-        const hasInlineTop = this.dragEl.style.top.length > 0;
-        const logicalTop = hasInlineTop ? toLogicalTopPx(parseFloat(this.dragEl.style.top)) : this.initialTop;
-        const hasInlineHeight = this.dragEl.style.height.length > 0;
-        const logicalHeight = hasInlineHeight ? toLogicalHeightPx(parseFloat(this.dragEl.style.height)) : this.initialHeight;
+        // 現状は CSS 変数が single source of truth。processResize が更新した
+        // 最新値 (or 早期 return が連続した場合は onDown 時の初期値) を読む。
+        const startMinutes = Number.parseFloat(this.dragEl.style.getPropertyValue('--start-minutes') || '0');
+        const durationMinutes = Number.parseFloat(this.dragEl.style.getPropertyValue('--duration-minutes') || '0');
 
-        const totalStartMin = startHourMinutes + (logicalTop / zoomLevel);
-        const totalEndMin = totalStartMin + (logicalHeight / zoomLevel);
+        const totalStartMin = startHourMinutes + startMinutes;
+        const totalEndMin = totalStartMin + durationMinutes;
         const roundedStart = Math.round(totalStartMin);
         const roundedEnd = Math.round(totalEndMin);
         const startDayOffset = Math.floor(roundedStart / 1440);

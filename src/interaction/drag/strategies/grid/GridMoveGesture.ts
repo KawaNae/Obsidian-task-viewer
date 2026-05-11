@@ -69,6 +69,10 @@ export class GridMoveGesture extends BaseDragStrategy {
     /** Calendar / AllDay どちらの Surface か。一部の機能 (due-arrow, cross-view drop)
      *  が AllDay 限定なのでフラグで分岐する。 */
     private isAllDay: boolean = false;
+    /** Pointer がカード内のどこを掴んだかの相対オフセット (px)。cross-view drop の
+     *  fixed ghost を pointer 追従しつつ「掴んだ位置」を維持するため。 */
+    private grabOffsetX: number = 0;
+    private grabOffsetY: number = 0;
 
     onDown(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext): void {
         this.dragTask = task;
@@ -77,6 +81,14 @@ export class GridMoveGesture extends BaseDragStrategy {
         this.hasMoved = false;
         this.initialX = e.clientX;
         this.initialY = e.clientY;
+
+        // Pointer がカード内のどこを掴んだかを保存。cross-view drop で fixed ghost を
+        // 配置する際、ghost top-left = pointer - grabOffset とすることで掴んだ
+        // 相対位置が保たれる。getBoundingClientRect は viewport 座標を返すので
+        // clientX/Y との差し引きで pure に相対オフセットが取れる。
+        const elRect = el.getBoundingClientRect();
+        this.grabOffsetX = e.clientX - elRect.left;
+        this.grabOffsetY = e.clientY - elRect.top;
 
         const isCalendar = !!el.closest('.cal-week-row');
         this.isAllDay = !isCalendar;
@@ -226,7 +238,9 @@ export class GridMoveGesture extends BaseDragStrategy {
             return {
                 render: {
                     mode: 'cross-view-drop',
-                    floatingGhostPos: { x: e.clientX + 10, y: e.clientY + 10 },
+                    floatingGhostPos: GridMoveGesture.computeFloatingGhostPos(
+                        e.clientX, e.clientY, this.grabOffsetX, this.grabOffsetY,
+                    ),
                     arrowEndLine: this.startCol + this.initialSpan,
                 },
                 commit: edits ? { edits, baseTask: this.baseTask } : null,
@@ -303,6 +317,21 @@ export class GridMoveGesture extends BaseDragStrategy {
     }
 
     // ========== Pure helpers (unit-testable) ==========
+
+    /**
+     * Cross-view drop の fixed ghost top-left を計算する pure helper。
+     * Pointer から grabOffset を引くことで、ghost 内の掴み位置が常に pointer に
+     * 一致する (= 掴んだ相対位置を保ったまま追従)。grabOffset 無視の +10/+10
+     * オフセットは ghost が pointer の右下にジャンプする旧バグの根因だった。
+     */
+    static computeFloatingGhostPos(
+        clientX: number,
+        clientY: number,
+        grabOffsetX: number,
+        grabOffsetY: number,
+    ): { x: number; y: number } {
+        return { x: clientX - grabOffsetX, y: clientY - grabOffsetY };
+    }
 
     /**
      * Calendar/AllDay 共通の Move 用 edits ビルダ。endDate 系の値があれば
