@@ -70,6 +70,8 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
     });
 
     // Weekly
+    el.createEl('h4', { text: t('settings.notes.weeklySubsection') });
+
     new Setting(el)
         .setName(t('settings.notes.weeklyNoteFormat'))
         .setDesc(t('settings.notes.weeklyNoteFormatDesc'))
@@ -107,6 +109,8 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
         });
 
     // Monthly
+    el.createEl('h4', { text: t('settings.notes.monthlySubsection') });
+
     new Setting(el)
         .setName(t('settings.notes.monthlyNoteFormat'))
         .setDesc(t('settings.notes.monthlyNoteFormatDesc'))
@@ -144,6 +148,8 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
         });
 
     // Yearly
+    el.createEl('h4', { text: t('settings.notes.yearlySubsection') });
+
     new Setting(el)
         .setName(t('settings.notes.yearlyNoteFormat'))
         .setDesc(t('settings.notes.yearlyNoteFormatDesc'))
