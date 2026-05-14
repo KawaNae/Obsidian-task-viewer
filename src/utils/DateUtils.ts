@@ -67,6 +67,15 @@ export class DateUtils {
     }
 
     /**
+     * Returns a canonical YYYY-MM-DD identifier for the visual week containing `date`,
+     * honoring the user's weekStartDay. Two dates yield the same key iff they belong
+     * to the same visual week. Used by views that need to group/compare dates by week.
+     */
+    static getVisualWeekKey(date: Date, weekStartDay: 0 | 1): string {
+        return this.getLocalDateString(this.getWeekStart(date, weekStartDay));
+    }
+
+    /**
      * Returns ISO-8601 week number (1-53) for the given date.
      */
     static getISOWeekNumber(date: Date): number {
