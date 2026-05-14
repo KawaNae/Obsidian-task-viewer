@@ -173,10 +173,35 @@ describe('DateUtils', () => {
         });
     });
 
-    describe('getISOWeekNumber', () => {
-        it('returns correct week number', () => {
-            // 2026-01-01 is Thursday → week 1
-            expect(DateUtils.getISOWeekNumber(new Date(2026, 0, 1))).toBe(1);
+    describe('getVisualWeekKey', () => {
+        // 2026-05-13 is Wednesday. Week containing it:
+        // - weekStartDay=1 (Monday): starts 2026-05-11
+        // - weekStartDay=0 (Sunday): starts 2026-05-10
+        it('Wednesday + weekStartDay=1 → previous Monday', () => {
+            expect(DateUtils.getVisualWeekKey(new Date(2026, 4, 13), 1)).toBe('2026-05-11');
+        });
+
+        it('Wednesday + weekStartDay=0 → previous Sunday', () => {
+            expect(DateUtils.getVisualWeekKey(new Date(2026, 4, 13), 0)).toBe('2026-05-10');
+        });
+
+        it('Monday + weekStartDay=1 → same day', () => {
+            expect(DateUtils.getVisualWeekKey(new Date(2026, 4, 11), 1)).toBe('2026-05-11');
+        });
+
+        it('Sunday + weekStartDay=0 → same day', () => {
+            expect(DateUtils.getVisualWeekKey(new Date(2026, 4, 10), 0)).toBe('2026-05-10');
+        });
+
+        it('Sunday + weekStartDay=1 → previous Monday (not same day)', () => {
+            // Sunday 2026-05-10 with Monday-start: belongs to week starting 2026-05-04
+            expect(DateUtils.getVisualWeekKey(new Date(2026, 4, 10), 1)).toBe('2026-05-04');
+        });
+
+        it('two dates in same visual week return same key', () => {
+            const tue = DateUtils.getVisualWeekKey(new Date(2026, 4, 12), 1);
+            const fri = DateUtils.getVisualWeekKey(new Date(2026, 4, 15), 1);
+            expect(tue).toBe(fri);
         });
     });
 });

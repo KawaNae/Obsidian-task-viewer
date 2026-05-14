@@ -3,6 +3,7 @@ import type { App, HoverParent } from 'obsidian';
 import TaskViewerPlugin from '../../main';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { DateUtils } from '../../utils/DateUtils';
+import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { t } from '../../i18n';
@@ -50,6 +51,11 @@ export class PeriodicHeaderRenderer {
 
         const todayVisualDate = DateUtils.getVisualDateOfNow(this.deps.plugin.settings.startHour);
         const todayMoment = moment(todayVisualDate, 'YYYY-MM-DD');
+        const weekStartDay = this.deps.plugin.settings.weekStartDay;
+        const todayVisualWeekKey = DateUtils.getVisualWeekKey(
+            this.parseLocalDate(todayVisualDate),
+            weekStartDay,
+        );
 
         const container = parent.createDiv('periodic-header');
         if (collapsed) container.addClass('periodic-header--collapsed');
@@ -75,7 +81,7 @@ export class PeriodicHeaderRenderer {
         const { row: ymRow, axis: ymAxis } = this.buildRow(container, 'periodic-header__row--year-month', gridTemplateColumns, onToggle);
         fusedCells.push(ymAxis);
         wireFusedHover(ymAxis);
-        const ymSegments = this.computeSegments(dates, 'YM', todayMoment);
+        const ymSegments = this.computeSegments(dates, 'YM', todayMoment, weekStartDay, todayVisualWeekKey);
         for (const seg of ymSegments) {
             this.appendYearMonthSegment(ymRow, seg);
         }
@@ -83,7 +89,7 @@ export class PeriodicHeaderRenderer {
         const { row: wRow, axis: wAxis } = this.buildRow(container, 'periodic-header__row--week', gridTemplateColumns, onToggle);
         fusedCells.push(wAxis);
         wireFusedHover(wAxis);
-        const wSegments = this.computeSegments(dates, 'W', todayMoment);
+        const wSegments = this.computeSegments(dates, 'W', todayMoment, weekStartDay, todayVisualWeekKey);
         for (const seg of wSegments) {
             this.appendWeekSegment(wRow, seg);
         }
@@ -182,12 +188,12 @@ export class PeriodicHeaderRenderer {
         if (seg.isCurrent) segEl.addClass('is-current');
 
         const dateObj = this.parseLocalDate(seg.anchorDate);
-        const m = moment(dateObj);
+        const m = withWeekStartDay(dateObj, this.deps.plugin.settings.weekStartDay);
 
         this.appendPeriodicLink(segEl, {
-            text: m.format('[W]WW'),
+            text: m.format('[W]ww'),
             target: DailyNoteUtils.getWeeklyNoteLinkTarget(this.deps.plugin.settings, dateObj),
-            ariaLabel: `Open weekly note: ${m.format('GGGG-[W]WW')}`,
+            ariaLabel: `Open weekly note: ${m.format('gggg-[W]ww')}`,
             extraClass: 'periodic-header__link--week',
             kind: 'weekly',
             date: dateObj,
@@ -240,33 +246,39 @@ export class PeriodicHeaderRenderer {
         }
     }
 
-    private computeSegments(dates: string[], tier: Tier, todayMoment: moment.Moment): Segment[] {
+    private computeSegments(
+        dates: string[],
+        tier: Tier,
+        todayMoment: moment.Moment,
+        weekStartDay: 0 | 1,
+        todayVisualWeekKey: string,
+    ): Segment[] {
         const segments: Segment[] = [];
         let current: Segment | null = null;
         for (let i = 0; i < dates.length; i++) {
             const d = dates[i];
-            const k = this.tierKey(d, tier);
+            const dateObj = this.parseLocalDate(d);
+            // W tier groups by the visual-week-start date so weekStartDay is honored.
+            // YM tier is unaffected by week-start choice.
+            const k = tier === 'YM'
+                ? moment(dateObj).format('YYYY-MM')
+                : DateUtils.getVisualWeekKey(dateObj, weekStartDay);
             if (current && current.key === k) {
                 current.span++;
             } else {
                 if (current) segments.push(current);
-                const anchor = moment(this.parseLocalDate(d));
-                const isCurrent = tier === 'YM'
-                    ? anchor.isSame(todayMoment, 'month')
-                    : anchor.isSame(todayMoment, 'isoWeek');
-                current = { key: k, startIdx: i, span: 1, anchorDate: d, isCurrent };
+                const isCurrent: boolean = tier === 'YM'
+                    ? moment(dateObj).isSame(todayMoment, 'month')
+                    : k === todayVisualWeekKey;
+                // For W tier the anchor is the visual week start (= key), so all
+                // downstream renderers (label, aria, weekly link target, click date)
+                // operate on the canonical anchor — symmetric with CalendarView.
+                const anchorDate: string = tier === 'W' ? k : d;
+                current = { key: k, startIdx: i, span: 1, anchorDate, isCurrent };
             }
         }
         if (current) segments.push(current);
         return segments;
-    }
-
-    private tierKey(date: string, tier: Tier): string {
-        const d = this.parseLocalDate(date);
-        switch (tier) {
-            case 'YM': return moment(d).format('YYYY-MM');
-            case 'W':  return moment(d).format('GGGG-[W]WW');
-        }
     }
 
     private parseLocalDate(date: string): Date {

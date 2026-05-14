@@ -57,13 +57,22 @@ export class DateUtils {
     }
 
     /**
-     * Returns ISO-8601 week number (1-53) for the given date.
+     * Returns the start-of-week date for the given date, with the configured first-day-of-week.
+     * weekStartDay: 0 = Sunday, 1 = Monday. Time component is normalized to local midnight.
      */
-    static getISOWeekNumber(date: Date): number {
-        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-        return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+    static getWeekStart(date: Date, weekStartDay: 0 | 1): Date {
+        const day = date.getDay();
+        const diff = (day - weekStartDay + 7) % 7;
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate() - diff);
+    }
+
+    /**
+     * Returns a canonical YYYY-MM-DD identifier for the visual week containing `date`,
+     * honoring the user's weekStartDay. Two dates yield the same key iff they belong
+     * to the same visual week. Used by views that need to group/compare dates by week.
+     */
+    static getVisualWeekKey(date: Date, weekStartDay: 0 | 1): string {
+        return this.getLocalDateString(this.getWeekStart(date, weekStartDay));
     }
 
     /**

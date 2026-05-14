@@ -3,6 +3,7 @@ import type { MenuItem } from 'obsidian';
 import { t } from '../../i18n';
 import { DisplayTask, Task } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
+import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import {
@@ -72,7 +73,7 @@ export class MiniCalendarView extends ItemView {
 
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
+        const weekStart = this.getWeekStart(monthStart, this.plugin.settings.weekStartDay);
         this.windowStart = DateUtils.getLocalDateString(weekStart);
 
         this.toolbar = new MiniCalendarToolbar({
@@ -88,7 +89,7 @@ export class MiniCalendarView extends ItemView {
                 if (this.isAnimating) return;
                 const today = new Date();
                 const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
+                const weekStart = this.getWeekStart(monthStart, this.plugin.settings.weekStartDay);
                 this.windowStart = DateUtils.getLocalDateString(weekStart);
                 void this.app.workspace.requestSaveLayout();
                 void this.render();
@@ -114,7 +115,7 @@ export class MiniCalendarView extends ItemView {
         if (state && typeof state.windowStart === 'string') {
             const parsedWindowStart = this.parseLocalDateString(state.windowStart);
             if (parsedWindowStart) {
-                const weekStart = this.getWeekStart(parsedWindowStart, this.plugin.settings.calendarWeekStartDay);
+                const weekStart = this.getWeekStart(parsedWindowStart, this.plugin.settings.weekStartDay);
                 this.windowStart = DateUtils.getLocalDateString(weekStart);
             }
         }
@@ -341,7 +342,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     private getCalendarDateRange(): { startDate: Date; endDate: Date } {
-        return getCalendarDateRange(this.windowStart, this.plugin.settings.calendarWeekStartDay);
+        return getCalendarDateRange(this.windowStart, this.plugin.settings.weekStartDay);
     }
 
     private getWeekStart(date: Date, weekStartDay: 0 | 1): Date {
@@ -350,7 +351,7 @@ export class MiniCalendarView extends ItemView {
 
     private getWeekdayNames(): string[] {
         const labels = t('calendar.weekdaysNarrow').split(',');
-        if (this.plugin.settings.calendarWeekStartDay === 1) {
+        if (this.plugin.settings.weekStartDay === 1) {
             return [...labels.slice(1), labels[0]];
         }
         return labels;
@@ -370,9 +371,9 @@ export class MiniCalendarView extends ItemView {
 
     private renderWeekNumberCell(weekEl: HTMLElement, weekStartDate: Date): void {
         const weekNumberEl = weekEl.createDiv('cal-week-number cal-week-number--mini');
-        const weekNumber = DateUtils.getISOWeekNumber(weekStartDate);
+        const weekNumber = withWeekStartDay(weekStartDate, this.plugin.settings.weekStartDay).week();
 
-        const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.calendarWeekStartDay);
+        const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.weekStartDay);
         if (DateUtils.getLocalDateString(weekStartDate) === DateUtils.getLocalDateString(todayWeekStart)) {
             weekNumberEl.addClass('is-current-week');
         }
@@ -442,7 +443,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     private getNormalizedWindowStart(value: string): string {
-        return getNormalizedWindowStart(value, this.plugin.settings.calendarWeekStartDay);
+        return getNormalizedWindowStart(value, this.plugin.settings.weekStartDay);
     }
 
     private updateToolbarMonthLabel(): void {
