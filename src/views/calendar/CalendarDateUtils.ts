@@ -81,11 +81,7 @@ export function getCalendarDateRange(
     return { startDate, endDate };
 }
 
-export function getWeekStart(date: Date, weekStartDay: 0 | 1): Date {
-    const day = date.getDay();
-    const diff = (day - weekStartDay + 7) % 7;
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate() - diff);
-}
+export const getWeekStart = DateUtils.getWeekStart;
 
 export function getNormalizedWindowStart(value: string, weekStartDay: 0 | 1): string {
     const parsed = parseLocalDateString(value);

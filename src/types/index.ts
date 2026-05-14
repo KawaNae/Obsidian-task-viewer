@@ -28,6 +28,8 @@ export function isCompleteStatusChar(statusChar: string, defs: StatusDefinition[
 
 export type HabitType = 'boolean' | 'number' | 'string';
 
+export type NoteType = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
 export interface HabitDefinition {
     // Frontmatter key name used to store habit value.
     name: string;
@@ -463,14 +465,17 @@ export interface TaskViewerSettings {
     editorMenuForTasks: boolean;
     editorMenuForCheckboxes: boolean;
     fileMenuForTvFile: boolean;
-    calendarWeekStartDay: 0 | 1;
+    weekStartDay: 0 | 1;
     calendarShowWeekNumbers: boolean;
     weeklyNoteFormat: string;
     weeklyNoteFolder: string;
+    weeklyNoteTemplate: string;
     monthlyNoteFormat: string;
     monthlyNoteFolder: string;
+    monthlyNoteTemplate: string;
     yearlyNoteFormat: string;
     yearlyNoteFolder: string;
+    yearlyNoteTemplate: string;
     intervalTemplateFolder: string;
     viewTemplateFolder: string;
     pinnedListPageSize: number;
@@ -530,14 +535,17 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     editorMenuForTasks: true,
     editorMenuForCheckboxes: true,
     fileMenuForTvFile: true,
-    calendarWeekStartDay: 0,
+    weekStartDay: 0,
     calendarShowWeekNumbers: false,
     weeklyNoteFormat: 'gggg-[W]ww',
     weeklyNoteFolder: '',
+    weeklyNoteTemplate: '',
     monthlyNoteFormat: 'YYYY-MM',
     monthlyNoteFolder: '',
+    monthlyNoteTemplate: '',
     yearlyNoteFormat: 'YYYY',
     yearlyNoteFolder: '',
+    yearlyNoteTemplate: '',
     intervalTemplateFolder: '',
     viewTemplateFolder: '',
     pinnedListPageSize: 10,

@@ -57,6 +57,16 @@ export class DateUtils {
     }
 
     /**
+     * Returns the start-of-week date for the given date, with the configured first-day-of-week.
+     * weekStartDay: 0 = Sunday, 1 = Monday. Time component is normalized to local midnight.
+     */
+    static getWeekStart(date: Date, weekStartDay: 0 | 1): Date {
+        const day = date.getDay();
+        const diff = (day - weekStartDay + 7) % 7;
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate() - diff);
+    }
+
+    /**
      * Returns ISO-8601 week number (1-53) for the given date.
      */
     static getISOWeekNumber(date: Date): number {

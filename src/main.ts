@@ -454,6 +454,7 @@ export default class TaskViewerPlugin extends Plugin {
         migrate('frontmatterTaskHeader', 'tvFileChildHeader');
         migrate('frontmatterTaskHeaderLevel', 'tvFileChildHeaderLevel');
         migrate('fileMenuForFrontmatterTasks', 'fileMenuForTvFile');
+        migrate('calendarWeekStartDay', 'weekStartDay');
 
         const merged = Object.assign({}, DEFAULT_SETTINGS, rawObject) as TaskViewerSettings;
         const normalizedKeys = normalizeTvFileKeys(merged.tvFileKeys);

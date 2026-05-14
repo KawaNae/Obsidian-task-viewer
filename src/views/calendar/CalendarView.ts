@@ -128,7 +128,7 @@ export class CalendarView extends ItemView {
         });
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
+        const weekStart = this.getWeekStart(monthStart, this.plugin.settings.weekStartDay);
         this.windowStart = DateUtils.getLocalDateString(weekStart);
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
@@ -149,7 +149,7 @@ export class CalendarView extends ItemView {
             onJumpToCurrentMonth: () => {
                 const today = new Date();
                 const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
+                const weekStart = this.getWeekStart(monthStart, this.plugin.settings.weekStartDay);
                 this.windowStart = DateUtils.getLocalDateString(weekStart);
                 void this.app.workspace.requestSaveLayout();
                 this.render();
@@ -218,7 +218,7 @@ export class CalendarView extends ItemView {
         if (state && typeof state.windowStart === 'string') {
             const parsedWindowStart = this.parseLocalDateString(state.windowStart);
             if (parsedWindowStart) {
-                const weekStart = this.getWeekStart(parsedWindowStart, this.plugin.settings.calendarWeekStartDay);
+                const weekStart = this.getWeekStart(parsedWindowStart, this.plugin.settings.weekStartDay);
                 this.windowStart = DateUtils.getLocalDateString(weekStart);
             }
         }
@@ -876,7 +876,7 @@ export class CalendarView extends ItemView {
     }
 
     private getCalendarDateRange(): { startDate: Date; endDate: Date } {
-        return getCalendarDateRange(this.windowStart, this.plugin.settings.calendarWeekStartDay);
+        return getCalendarDateRange(this.windowStart, this.plugin.settings.weekStartDay);
     }
 
     private getWeekStart(date: Date, weekStartDay: 0 | 1): Date {
@@ -885,7 +885,7 @@ export class CalendarView extends ItemView {
 
     private getWeekdayNames(): string[] {
         const labels = t('calendar.weekdaysShort').split(',');
-        if (this.plugin.settings.calendarWeekStartDay === 1) {
+        if (this.plugin.settings.weekStartDay === 1) {
             return [...labels.slice(1), labels[0]];
         }
         return labels;
@@ -907,7 +907,7 @@ export class CalendarView extends ItemView {
         const weekNumberEl = weekRow.createDiv('cal-week-number');
         const weekNumber = DateUtils.getISOWeekNumber(weekStartDate);
 
-        const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.calendarWeekStartDay);
+        const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.weekStartDay);
         if (DateUtils.getLocalDateString(weekStartDate) === DateUtils.getLocalDateString(todayWeekStart)) {
             weekNumberEl.addClass('is-current-week');
         }
@@ -945,7 +945,7 @@ export class CalendarView extends ItemView {
     private navigateMonth(offset: number): void {
         const ref = this.getReferenceMonth();
         const monthStart = new Date(ref.year, ref.month + offset, 1);
-        const weekStart = this.getWeekStart(monthStart, this.plugin.settings.calendarWeekStartDay);
+        const weekStart = this.getWeekStart(monthStart, this.plugin.settings.weekStartDay);
         this.windowStart = DateUtils.getLocalDateString(weekStart);
         void this.app.workspace.requestSaveLayout();
         this.render();
@@ -956,7 +956,7 @@ export class CalendarView extends ItemView {
     }
 
     private getNormalizedWindowStart(value: string): string {
-        return getNormalizedWindowStart(value, this.plugin.settings.calendarWeekStartDay);
+        return getNormalizedWindowStart(value, this.plugin.settings.weekStartDay);
     }
 
     private async openOrCreateDailyNote(date: Date): Promise<void> {

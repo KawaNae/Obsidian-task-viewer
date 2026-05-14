@@ -1,10 +1,16 @@
 import { Setting } from 'obsidian';
 import TaskViewerPlugin from '../main';
 import { t } from '../i18n';
+import { FileSuggest } from '../suggest/FileSuggest';
 
 export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
     // Daily Notes
     el.createEl('h3', { text: t('settings.notes.dailyNotes'), cls: 'setting-section-header' });
+
+    el.createEl('div', {
+        text: t('settings.notes.dailyNotesCoreInfo'),
+        cls: 'setting-item-description',
+    });
 
     new Setting(el)
         .setName(t('settings.notes.dailyNoteHeader'))
@@ -58,6 +64,12 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
     // Periodic Notes
     el.createEl('h3', { text: t('settings.notes.periodicNotes'), cls: 'setting-section-header' });
 
+    el.createEl('div', {
+        text: t('settings.notes.weekStartDayHint'),
+        cls: 'setting-item-description',
+    });
+
+    // Weekly
     new Setting(el)
         .setName(t('settings.notes.weeklyNoteFormat'))
         .setDesc(t('settings.notes.weeklyNoteFormatDesc'))
@@ -81,6 +93,21 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
             }));
 
     new Setting(el)
+        .setName(t('settings.notes.weeklyNoteTemplate'))
+        .setDesc(t('settings.notes.weeklyNoteTemplateDesc'))
+        .addText(text => {
+            text
+                .setPlaceholder('Templates/Weekly.md')
+                .setValue(plugin.settings.weeklyNoteTemplate)
+                .onChange(async (value) => {
+                    plugin.settings.weeklyNoteTemplate = value;
+                    await plugin.saveSettings();
+                });
+            new FileSuggest(plugin.app, text.inputEl);
+        });
+
+    // Monthly
+    new Setting(el)
         .setName(t('settings.notes.monthlyNoteFormat'))
         .setDesc(t('settings.notes.monthlyNoteFormatDesc'))
         .addText(text => text
@@ -103,6 +130,21 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
             }));
 
     new Setting(el)
+        .setName(t('settings.notes.monthlyNoteTemplate'))
+        .setDesc(t('settings.notes.monthlyNoteTemplateDesc'))
+        .addText(text => {
+            text
+                .setPlaceholder('Templates/Monthly.md')
+                .setValue(plugin.settings.monthlyNoteTemplate)
+                .onChange(async (value) => {
+                    plugin.settings.monthlyNoteTemplate = value;
+                    await plugin.saveSettings();
+                });
+            new FileSuggest(plugin.app, text.inputEl);
+        });
+
+    // Yearly
+    new Setting(el)
         .setName(t('settings.notes.yearlyNoteFormat'))
         .setDesc(t('settings.notes.yearlyNoteFormatDesc'))
         .addText(text => text
@@ -123,4 +165,18 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
                 plugin.settings.yearlyNoteFolder = value;
                 await plugin.saveSettings();
             }));
+
+    new Setting(el)
+        .setName(t('settings.notes.yearlyNoteTemplate'))
+        .setDesc(t('settings.notes.yearlyNoteTemplateDesc'))
+        .addText(text => {
+            text
+                .setPlaceholder('Templates/Yearly.md')
+                .setValue(plugin.settings.yearlyNoteTemplate)
+                .onChange(async (value) => {
+                    plugin.settings.yearlyNoteTemplate = value;
+                    await plugin.saveSettings();
+                });
+            new FileSuggest(plugin.app, text.inputEl);
+        });
 }

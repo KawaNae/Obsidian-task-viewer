@@ -67,18 +67,6 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
     el.createEl('h3', { text: t('settings.views.calendarMiniCalendar'), cls: 'setting-section-header' });
 
     new Setting(el)
-        .setName(t('settings.views.weekStartsOn'))
-        .setDesc(t('settings.views.weekStartsOnDesc'))
-        .addDropdown(dropdown => dropdown
-            .addOption('0', t('settings.views.sunday'))
-            .addOption('1', t('settings.views.monday'))
-            .setValue(String(plugin.settings.calendarWeekStartDay))
-            .onChange(async (value) => {
-                plugin.settings.calendarWeekStartDay = value === '1' ? 1 : 0;
-                await plugin.saveSettings();
-            }));
-
-    new Setting(el)
         .setName(t('settings.views.showWeekNumbers'))
         .setDesc(t('settings.views.showWeekNumbersDesc'))
         .addToggle(toggle => toggle
