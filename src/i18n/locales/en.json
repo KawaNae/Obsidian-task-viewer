@@ -62,7 +62,7 @@
       "sunday": "Sunday",
       "monday": "Monday",
       "showWeekNumbers": "Show Week Numbers",
-      "showWeekNumbersDesc": "Show ISO week numbers in Calendar and Mini Calendar views.",
+      "showWeekNumbersDesc": "Show week numbers in Calendar and Mini Calendar views. The number matches the week-number token of the weekly note filename format.",
       "timer": "Timer",
       "customWorkMinutes": "Custom Pomodoro Work Minutes",
       "customWorkMinutesDesc": "Custom Work duration in minutes for the Pomodoro timer.",

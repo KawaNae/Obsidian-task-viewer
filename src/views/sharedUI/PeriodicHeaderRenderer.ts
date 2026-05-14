@@ -190,9 +190,9 @@ export class PeriodicHeaderRenderer {
         const m = moment(dateObj);
 
         this.appendPeriodicLink(segEl, {
-            text: m.format('[W]WW'),
+            text: m.format('[W]ww'),
             target: DailyNoteUtils.getWeeklyNoteLinkTarget(this.deps.plugin.settings, dateObj),
-            ariaLabel: `Open weekly note: ${m.format('GGGG-[W]WW')}`,
+            ariaLabel: `Open weekly note: ${m.format('gggg-[W]ww')}`,
             extraClass: 'periodic-header__link--week',
             kind: 'weekly',
             date: dateObj,

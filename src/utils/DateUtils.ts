@@ -1,3 +1,5 @@
+import { moment } from 'obsidian';
+
 export class DateUtils {
     /** Default duration in minutes for single-sided timed tasks (S-Timed / E-Timed). */
     static readonly DEFAULT_TIMED_DURATION_MINUTES = 60;
@@ -76,13 +78,16 @@ export class DateUtils {
     }
 
     /**
-     * Returns ISO-8601 week number (1-53) for the given date.
+     * Returns the locale week number for the given date. Matches the `ww` token
+     * of `weeklyNoteFormat` (default `gggg-[W]ww`), so that displayed week numbers
+     * stay consistent with the filename of the weekly note that opens on click.
+     *
+     * Note: this respects moment's locale firstDayOfWeek, not the user's
+     * `weekStartDay` setting. The two usually agree; when they don't, the
+     * displayed number tracks the filename rather than the visual grid boundary.
      */
-    static getISOWeekNumber(date: Date): number {
-        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-        return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+    static getLocaleWeekNumber(date: Date): number {
+        return moment(date).week();
     }
 
     /**

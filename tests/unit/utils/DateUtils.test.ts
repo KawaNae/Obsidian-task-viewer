@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import realMoment from 'moment';
 import { DateUtils } from '../../../src/utils/DateUtils';
+
+// Real moment so that DateUtils.getLocaleWeekNumber (which calls moment.week())
+// returns realistic values. The default obsidian mock has a no-op `format` and
+// no `week()` method.
+vi.mock('obsidian', async () => {
+    const actual = await vi.importActual<typeof import('../mocks/obsidian')>('../mocks/obsidian');
+    return { ...actual, moment: realMoment };
+});
 
 describe('DateUtils', () => {
     describe('getLocalDateString', () => {
@@ -173,10 +182,23 @@ describe('DateUtils', () => {
         });
     });
 
-    describe('getISOWeekNumber', () => {
-        it('returns correct week number', () => {
-            // 2026-01-01 is Thursday → week 1
-            expect(DateUtils.getISOWeekNumber(new Date(2026, 0, 1))).toBe(1);
+    describe('getLocaleWeekNumber', () => {
+        // The contract is "same number as moment(date).week()" so the displayed
+        // week stays aligned with what `gggg-[W]ww` puts in the filename.
+        // moment's default locale in test env is 'en' (firstDayOfWeek=0).
+        it('delegates to moment(date).week()', () => {
+            const d = new Date(2026, 4, 13);
+            expect(DateUtils.getLocaleWeekNumber(d)).toBe(realMoment(d).week());
+        });
+
+        it('Sunday 2026-05-10 in en locale → week 20 (Sunday starts new locale week)', () => {
+            expect(DateUtils.getLocaleWeekNumber(new Date(2026, 4, 10))).toBe(20);
+        });
+
+        it('two dates in the same locale week return the same number', () => {
+            const sun = DateUtils.getLocaleWeekNumber(new Date(2026, 4, 10));
+            const sat = DateUtils.getLocaleWeekNumber(new Date(2026, 4, 16));
+            expect(sun).toBe(sat);
         });
     });
 

@@ -905,7 +905,7 @@ export class CalendarView extends ItemView {
 
     private renderWeekNumberCell(weekRow: HTMLElement, weekStartDate: Date): void {
         const weekNumberEl = weekRow.createDiv('cal-week-number');
-        const weekNumber = DateUtils.getISOWeekNumber(weekStartDate);
+        const weekNumber = DateUtils.getLocaleWeekNumber(weekStartDate);
 
         const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.weekStartDay);
         if (DateUtils.getLocalDateString(weekStartDate) === DateUtils.getLocalDateString(todayWeekStart)) {

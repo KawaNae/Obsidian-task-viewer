@@ -370,7 +370,7 @@ export class MiniCalendarView extends ItemView {
 
     private renderWeekNumberCell(weekEl: HTMLElement, weekStartDate: Date): void {
         const weekNumberEl = weekEl.createDiv('cal-week-number cal-week-number--mini');
-        const weekNumber = DateUtils.getISOWeekNumber(weekStartDate);
+        const weekNumber = DateUtils.getLocaleWeekNumber(weekStartDate);
 
         const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.weekStartDay);
         if (DateUtils.getLocalDateString(weekStartDate) === DateUtils.getLocalDateString(todayWeekStart)) {

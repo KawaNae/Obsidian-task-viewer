@@ -62,7 +62,7 @@
       "sunday": "日曜日",
       "monday": "月曜日",
       "showWeekNumbers": "週番号を表示",
-      "showWeekNumbersDesc": "カレンダーおよびミニカレンダービューでISO週番号を表示します。",
+      "showWeekNumbersDesc": "カレンダーおよびミニカレンダービューに週番号を表示します。番号は週次ノートのファイル名フォーマットに合わせます。",
       "timer": "タイマー",
       "customWorkMinutes": "ポモドーロ作業時間",
       "customWorkMinutesDesc": "ポモドーロタイマーのカスタム作業時間（分）。",
