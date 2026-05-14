@@ -21,6 +21,7 @@ import { ColorSuggest } from './suggest/color/ColorSuggest';
 import { LineStyleSuggest } from './suggest/line/LineStyleSuggest';
 import { PropertySuggestObserver } from './suggest/PropertySuggestObserver';
 import { DateUtils } from './utils/DateUtils';
+import { registerWeekStartLocales } from './utils/momentWeekLocale';
 import { AudioUtils } from './timer/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
 import { getViewMeta } from './constants/viewRegistry';
@@ -70,6 +71,11 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Initialize i18n
         initI18n();
+
+        // Register custom moment locales so weekStartDay drives all week-aware
+        // moment computations (filename / label / week number) regardless of
+        // the user's Obsidian locale firstDayOfWeek.
+        registerWeekStartLocales();
 
         // Load Settings
         await this.loadSettings();

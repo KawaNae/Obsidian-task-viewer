@@ -3,6 +3,7 @@ import type { App, HoverParent } from 'obsidian';
 import TaskViewerPlugin from '../../main';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { DateUtils } from '../../utils/DateUtils';
+import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { t } from '../../i18n';
@@ -187,7 +188,7 @@ export class PeriodicHeaderRenderer {
         if (seg.isCurrent) segEl.addClass('is-current');
 
         const dateObj = this.parseLocalDate(seg.anchorDate);
-        const m = moment(dateObj);
+        const m = withWeekStartDay(dateObj, this.deps.plugin.settings.weekStartDay);
 
         this.appendPeriodicLink(segEl, {
             text: m.format('[W]ww'),

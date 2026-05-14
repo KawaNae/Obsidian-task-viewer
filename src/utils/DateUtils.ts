@@ -1,5 +1,3 @@
-import { moment } from 'obsidian';
-
 export class DateUtils {
     /** Default duration in minutes for single-sided timed tasks (S-Timed / E-Timed). */
     static readonly DEFAULT_TIMED_DURATION_MINUTES = 60;
@@ -75,19 +73,6 @@ export class DateUtils {
      */
     static getVisualWeekKey(date: Date, weekStartDay: 0 | 1): string {
         return this.getLocalDateString(this.getWeekStart(date, weekStartDay));
-    }
-
-    /**
-     * Returns the locale week number for the given date. Matches the `ww` token
-     * of `weeklyNoteFormat` (default `gggg-[W]ww`), so that displayed week numbers
-     * stay consistent with the filename of the weekly note that opens on click.
-     *
-     * Note: this respects moment's locale firstDayOfWeek, not the user's
-     * `weekStartDay` setting. The two usually agree; when they don't, the
-     * displayed number tracks the filename rather than the visual grid boundary.
-     */
-    static getLocaleWeekNumber(date: Date): number {
-        return moment(date).week();
     }
 
     /**

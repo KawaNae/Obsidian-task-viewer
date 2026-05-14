@@ -3,6 +3,7 @@ import type { MenuItem } from 'obsidian';
 import { t } from '../../i18n';
 import { DisplayTask, Task } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
+import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import {
@@ -370,7 +371,7 @@ export class MiniCalendarView extends ItemView {
 
     private renderWeekNumberCell(weekEl: HTMLElement, weekStartDate: Date): void {
         const weekNumberEl = weekEl.createDiv('cal-week-number cal-week-number--mini');
-        const weekNumber = DateUtils.getLocaleWeekNumber(weekStartDate);
+        const weekNumber = withWeekStartDay(weekStartDate, this.plugin.settings.weekStartDay).week();
 
         const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.weekStartDay);
         if (DateUtils.getLocalDateString(weekStartDate) === DateUtils.getLocalDateString(todayWeekStart)) {

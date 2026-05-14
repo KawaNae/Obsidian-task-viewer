@@ -1,16 +1,23 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import realMoment from 'moment';
 import {
     processTemplate,
     normalizeTrailingNewline,
     type TemplateContext,
 } from '../../../src/utils/NoteTemplateProcessor';
+import { registerWeekStartLocales } from '../../../src/utils/momentWeekLocale';
 
 // Replace the obsidian mock's moment stub with the real library so format() returns
 // realistic values. This is scoped per-test-file via vi.mock hoisting.
 vi.mock('obsidian', async () => {
     const actual = await vi.importActual<typeof import('../mocks/obsidian')>('../mocks/obsidian');
     return { ...actual, moment: realMoment };
+});
+
+// processTemplate now routes its anchorMoment through withWeekStartDay, which
+// requires the tv-week-N locales to exist on the (real) moment instance.
+beforeAll(() => {
+    registerWeekStartLocales();
 });
 
 const baseCtx = (overrides: Partial<TemplateContext>): TemplateContext => ({

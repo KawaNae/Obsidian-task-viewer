@@ -1,5 +1,6 @@
 import { moment } from 'obsidian';
 import { DateUtils } from './DateUtils';
+import { withWeekStartDay } from './momentWeekLocale';
 import type { NoteType } from '../types';
 
 export interface TemplateContext {
@@ -16,7 +17,7 @@ const PLACEHOLDER_RE = /\{\{(date|time|title)(:.*?)?\}\}/g;
 
 export function processTemplate(content: string, ctx: TemplateContext): string {
     const anchor = resolveAnchorDate(ctx);
-    const anchorMoment = moment(anchor);
+    const anchorMoment = withWeekStartDay(anchor, ctx.weekStartDay);
     return content.replace(PLACEHOLDER_RE, (match, type, fmt) => {
         const format = fmt ? fmt.substring(1) : null;
         if (type === 'date') return anchorMoment.format(format ?? 'YYYY-MM-DD');

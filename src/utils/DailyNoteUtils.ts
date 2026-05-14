@@ -2,6 +2,7 @@ import { App, TFile, moment } from 'obsidian';
 import { HeadingInserter } from './HeadingInserter';
 import { TaskViewerSettings, NoteType } from '../types';
 import { processTemplate, normalizeTrailingNewline } from './NoteTemplateProcessor';
+import { withWeekStartDay } from './momentWeekLocale';
 
 export class DailyNoteUtils {
     static getDailyNoteSettings(app: App) {
@@ -126,18 +127,18 @@ export class DailyNoteUtils {
 
     // --- Periodic Note helpers (Weekly / Monthly / Yearly) ---
 
-    private static getPeriodicNotePath(date: Date, format: string, folder: string): string {
-        const dateStr = moment(date).format(format);
+    private static getPeriodicNotePath(date: Date, format: string, folder: string, weekStartDay: 0 | 1): string {
+        const dateStr = withWeekStartDay(date, weekStartDay).format(format);
         const prefix = folder ? `${folder}/` : '';
         return `${prefix}${dateStr}.md`;
     }
 
-    private static getPeriodicNoteLinkTarget(date: Date, format: string, folder: string): string {
-        return this.getPeriodicNotePath(date, format, folder).replace(/\.md$/, '');
+    private static getPeriodicNoteLinkTarget(date: Date, format: string, folder: string, weekStartDay: 0 | 1): string {
+        return this.getPeriodicNotePath(date, format, folder, weekStartDay).replace(/\.md$/, '');
     }
 
-    private static getPeriodicNote(app: App, date: Date, format: string, folder: string): TFile | null {
-        const path = this.getPeriodicNotePath(date, format, folder);
+    private static getPeriodicNote(app: App, date: Date, format: string, folder: string, weekStartDay: 0 | 1): TFile | null {
+        const path = this.getPeriodicNotePath(date, format, folder, weekStartDay);
         const file = app.vault.getAbstractFileByPath(path);
         return file instanceof TFile ? file : null;
     }
@@ -151,7 +152,7 @@ export class DailyNoteUtils {
         noteType: NoteType,
         weekStartDay: 0 | 1
     ): Promise<TFile> {
-        const path = this.getPeriodicNotePath(date, format, folder);
+        const path = this.getPeriodicNotePath(date, format, folder, weekStartDay);
         const dir = path.substring(0, path.lastIndexOf('/'));
         if (dir) {
             const exists = await app.vault.adapter.exists(dir);
@@ -170,10 +171,10 @@ export class DailyNoteUtils {
 
     // Weekly
     static getWeeklyNoteLinkTarget(settings: TaskViewerSettings, date: Date): string {
-        return this.getPeriodicNoteLinkTarget(date, settings.weeklyNoteFormat, settings.weeklyNoteFolder);
+        return this.getPeriodicNoteLinkTarget(date, settings.weeklyNoteFormat, settings.weeklyNoteFolder, settings.weekStartDay);
     }
     static getWeeklyNote(app: App, settings: TaskViewerSettings, date: Date): TFile | null {
-        return this.getPeriodicNote(app, date, settings.weeklyNoteFormat, settings.weeklyNoteFolder);
+        return this.getPeriodicNote(app, date, settings.weeklyNoteFormat, settings.weeklyNoteFolder, settings.weekStartDay);
     }
     static async createWeeklyNote(app: App, settings: TaskViewerSettings, date: Date): Promise<TFile> {
         return this.createPeriodicNote(
@@ -185,10 +186,10 @@ export class DailyNoteUtils {
 
     // Monthly
     static getMonthlyNoteLinkTarget(settings: TaskViewerSettings, date: Date): string {
-        return this.getPeriodicNoteLinkTarget(date, settings.monthlyNoteFormat, settings.monthlyNoteFolder);
+        return this.getPeriodicNoteLinkTarget(date, settings.monthlyNoteFormat, settings.monthlyNoteFolder, settings.weekStartDay);
     }
     static getMonthlyNote(app: App, settings: TaskViewerSettings, date: Date): TFile | null {
-        return this.getPeriodicNote(app, date, settings.monthlyNoteFormat, settings.monthlyNoteFolder);
+        return this.getPeriodicNote(app, date, settings.monthlyNoteFormat, settings.monthlyNoteFolder, settings.weekStartDay);
     }
     static async createMonthlyNote(app: App, settings: TaskViewerSettings, date: Date): Promise<TFile> {
         return this.createPeriodicNote(
@@ -200,10 +201,10 @@ export class DailyNoteUtils {
 
     // Yearly
     static getYearlyNoteLinkTarget(settings: TaskViewerSettings, date: Date): string {
-        return this.getPeriodicNoteLinkTarget(date, settings.yearlyNoteFormat, settings.yearlyNoteFolder);
+        return this.getPeriodicNoteLinkTarget(date, settings.yearlyNoteFormat, settings.yearlyNoteFolder, settings.weekStartDay);
     }
     static getYearlyNote(app: App, settings: TaskViewerSettings, date: Date): TFile | null {
-        return this.getPeriodicNote(app, date, settings.yearlyNoteFormat, settings.yearlyNoteFolder);
+        return this.getPeriodicNote(app, date, settings.yearlyNoteFormat, settings.yearlyNoteFolder, settings.weekStartDay);
     }
     static async createYearlyNote(app: App, settings: TaskViewerSettings, date: Date): Promise<TFile> {
         return this.createPeriodicNote(

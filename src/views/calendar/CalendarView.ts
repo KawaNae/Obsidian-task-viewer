@@ -4,6 +4,7 @@ import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { Task, DisplayTask, PinnedListDefinition } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
+import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import { TaskReadService } from '../../services/data/TaskReadService';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
@@ -905,7 +906,7 @@ export class CalendarView extends ItemView {
 
     private renderWeekNumberCell(weekRow: HTMLElement, weekStartDate: Date): void {
         const weekNumberEl = weekRow.createDiv('cal-week-number');
-        const weekNumber = DateUtils.getLocaleWeekNumber(weekStartDate);
+        const weekNumber = withWeekStartDay(weekStartDate, this.plugin.settings.weekStartDay).week();
 
         const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.weekStartDay);
         if (DateUtils.getLocalDateString(weekStartDate) === DateUtils.getLocalDateString(todayWeekStart)) {
