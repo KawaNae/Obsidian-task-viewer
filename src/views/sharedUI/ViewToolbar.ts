@@ -208,7 +208,7 @@ export class ZoomSelector {
         const button = toolbar.createEl('button', { cls: 'timeline-toolbar__btn--range timeline-toolbar__btn--zoom' });
         const iconEl = button.createSpan('timeline-toolbar__btn-icon');
         const labelEl = button.createSpan({ cls: 'timeline-toolbar__btn-label' });
-        setIcon(iconEl, 'search');
+        setIcon(iconEl, 'chevrons-up-down');
 
         const update = () => {
             const pct = `${Math.round(getZoom() * 100)}%`;

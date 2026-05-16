@@ -7,8 +7,8 @@
     height: 28px;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 0 10px !important;
+    gap: 4px;
+    padding: 0 5px !important;
     color: var(--tv-text);
     font-size: 0.9em;
     font-weight: 600;
