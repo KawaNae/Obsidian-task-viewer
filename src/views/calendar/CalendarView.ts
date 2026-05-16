@@ -64,6 +64,7 @@ interface CalendarViewState {
     pinnedListCollapsed?: Record<string, boolean>;
     pinnedLists?: PinnedListDefinition[];
     customName?: string;
+    maskMode?: boolean;
 }
 
 export class CalendarView extends ItemView {
@@ -99,6 +100,7 @@ export class CalendarView extends ItemView {
     private pinnedListCollapsed: Record<string, boolean> = {};
     private pinnedLists: PinnedListDefinition[] = [];
     private customName: string | undefined;
+    private maskMode: boolean = false;
     private scrollRestorePending = false;
     private savedScrollTop: number | null = null;
     private sidebarOpenedThisSession = false;
@@ -113,7 +115,7 @@ export class CalendarView extends ItemView {
         this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
-        }, () => this.plugin.settings);
+        }, () => this.plugin.settings, () => this.maskMode);
         this.addChild(this.taskRenderer);
         this.taskRenderer.setDetailCallback((task) => this.openDetailModal(task));
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
@@ -195,9 +197,18 @@ export class CalendarView extends ItemView {
                 this.showSidebar = true;
                 this.sidebarManager.applyOpen(true, { persist: true });
                 this.customName = undefined;
+                this.maskMode = false;
                 this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
                 this.render();
+                this.pinnedListRenderer?.refresh();
+            },
+            getMaskMode: () => this.maskMode,
+            setMaskMode: (next) => {
+                this.maskMode = next;
+                this.app.workspace.requestSaveLayout();
+                this.render();
+                this.toolbar.update();
                 this.pinnedListRenderer?.refresh();
             },
         });
@@ -247,6 +258,7 @@ export class CalendarView extends ItemView {
         } else {
             this.customName = undefined;
         }
+        this.maskMode = state?.maskMode === true;
         await super.setState(state, result);
         await this.performRender();
         // setState may have changed filterState / pinnedLists / collapse — none
@@ -273,6 +285,9 @@ export class CalendarView extends ItemView {
         }
         if (this.customName) {
             result.customName = this.customName;
+        }
+        if (this.maskMode) {
+            result.maskMode = true;
         }
         return result;
     }

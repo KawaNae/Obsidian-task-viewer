@@ -7,8 +7,7 @@ import type { ViewTemplate } from '../../types';
 import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
 import { ViewTemplateWriter } from '../../services/template/ViewTemplateWriter';
 import { ViewExporter } from '../../services/export/ViewExporter';
-import type { ExportStrategy } from '../../services/export/ExportTypes';
-import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { ExportTargetSpec } from '../../services/export/ExportTypes';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 
 /**
@@ -209,7 +208,7 @@ export class ZoomSelector {
         const button = toolbar.createEl('button', { cls: 'timeline-toolbar__btn--range timeline-toolbar__btn--zoom' });
         const iconEl = button.createSpan('timeline-toolbar__btn-icon');
         const labelEl = button.createSpan({ cls: 'timeline-toolbar__btn-label' });
-        setIcon(iconEl, 'search');
+        setIcon(iconEl, 'chevrons-up-down');
 
         const update = () => {
             const pct = `${Math.round(getZoom() * 100)}%`;
@@ -234,6 +233,43 @@ export class ZoomSelector {
                     });
                 }
             }, { kind: 'position', x: e.pageX, y: e.pageY });
+        };
+
+        return { update };
+    }
+}
+
+/**
+ * Toolbar toggle for the per-view "mask mode" — when enabled, every task card
+ * rendered through TaskCardRenderer substitutes its content with the task's
+ * `tv-mask` value. State lives on each view (persisted via setState/getState
+ * and ViewTemplate), this helper only knows how to draw and dispatch toggles.
+ *
+ * Visual contract: icon swaps `eye` ↔ `eye-off` to mirror state. `is-active`
+ * class doubles the cue so theme authors can style it independently.
+ */
+export class MaskToggleButton {
+    static render(
+        toolbar: HTMLElement,
+        options: { getMaskMode: () => boolean; setMaskMode: (next: boolean) => void }
+    ): { update: () => void } {
+        const btn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+
+        const update = () => {
+            const on = options.getMaskMode();
+            // Clear previous icon before swapping; setIcon does not strip the
+            // previous SVG, and we toggle this on the same element repeatedly.
+            btn.empty();
+            setIcon(btn, on ? 'eye-off' : 'eye');
+            btn.classList.toggle('is-active', on);
+            btn.setAttribute('aria-label', t('toolbar.maskMode'));
+            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        };
+        update();
+
+        btn.onclick = () => {
+            options.setMaskMode(!options.getMaskMode());
+            update();
         };
 
         return { update };
@@ -268,8 +304,7 @@ export interface ViewSettingsOptions {
     onReset: () => void;
     menuPresenter: MenuPresenter;
     getExportContainer?: () => HTMLElement | null;
-    getReadService?: () => TaskReadService;
-    getExportStrategy?: () => ExportStrategy;
+    getExportSpec?: () => ExportTargetSpec;
 }
 
 /**
@@ -407,43 +442,34 @@ export class ViewSettingsMenu {
                 });
         });
 
-        // Export as image
-        if (options.getExportContainer && options.getReadService && options.getExportStrategy) {
+        // Export as image — single "full content" entry. The viewport-only mode
+        // is gone; OS screenshot is the right tool for that.
+        if (options.getExportContainer && options.getExportSpec) {
             menu.addSeparator();
             const getContainer = options.getExportContainer;
-            const getReadService = options.getReadService;
-            const getStrategy = options.getExportStrategy;
-
-            const doExport = async (expandScrollAreas: boolean) => {
-                const container = getContainer();
-                if (!container) {
-                    new Notice(t('notice.noContentToExport'));
-                    return;
-                }
-                const shortType = ViewSettingsMenu.toShortViewType(viewType);
-                const date = new Date().toISOString().slice(0, 10);
-                const name = getCustomName();
-                const filename = name
-                    ? `${name}_${date}.png`
-                    : `${shortType}_${date}.png`;
-                await ViewExporter.exportAsPng({
-                    app: options.app,
-                    container,
-                    readService: getReadService(),
-                    filename,
-                    expandScrollAreas,
-                }, getStrategy());
-            };
+            const getSpec = options.getExportSpec;
 
             menu.addItem((item) => {
-                item.setTitle(t('toolbar.exportVisibleAsImage'))
+                item.setTitle(t('toolbar.exportAsImage'))
                     .setIcon('image')
-                    .onClick(() => doExport(false));
-            });
-            menu.addItem((item) => {
-                item.setTitle(t('toolbar.exportFullAsImage'))
-                    .setIcon('maximize')
-                    .onClick(() => doExport(true));
+                    .onClick(async () => {
+                        const container = getContainer();
+                        if (!container) {
+                            new Notice(t('notice.noContentToExport'));
+                            return;
+                        }
+                        const shortType = ViewSettingsMenu.toShortViewType(viewType);
+                        const date = new Date().toISOString().slice(0, 10);
+                        const name = getCustomName();
+                        const filename = name
+                            ? `${name}_${date}.png`
+                            : `${shortType}_${date}.png`;
+                        await ViewExporter.exportAsPng({
+                            app: options.app,
+                            container,
+                            filename,
+                        }, getSpec());
+                    });
             });
         }
 

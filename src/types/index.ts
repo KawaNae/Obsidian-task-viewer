@@ -326,6 +326,9 @@ export interface ViewState {
     pinnedLists?: PinnedListDefinition[];
     customName?: string;
     periodicHeaderCollapsed?: boolean;
+    /** Per-leaf "mask mode" toggle. When true, the renderer substitutes each
+     * card's content with the task's `tv-mask` value (live, not export-only). */
+    maskMode?: boolean;
 }
 
 export interface PinnedListDefinition {
@@ -349,6 +352,9 @@ export interface ViewTemplate extends ViewTemplateSummary {
     filterState?: FilterState;
     pinnedLists?: PinnedListDefinition[];
     grid?: PinnedListDefinition[][];
+    /** Snapshot of the view's mask-mode toggle. Loading a template with
+     * `maskMode: true` flips the receiving view into masked rendering. */
+    maskMode?: boolean;
 }
 
 export interface TvFileKeys {

@@ -2,11 +2,10 @@ import { setIcon, type App, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import type TaskViewerPlugin from '../../main';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import { CalendarExportStrategy } from '../../services/export/CalendarExportStrategy';
 import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import type { ViewTemplate, PinnedListDefinition } from '../../types';
 import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
-import { DateNavigator, ViewSettingsMenu, ViewToolbarBase } from '../sharedUI/ViewToolbar';
+import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 
@@ -31,6 +30,9 @@ export interface CalendarToolbarDeps {
     setShowSidebar: (open: boolean, opts: { animate: boolean; persist: boolean }) => void;
     onApplyTemplate: (template: ViewTemplate) => void;
     onReset: () => void;
+
+    getMaskMode: () => boolean;
+    setMaskMode: (next: boolean) => void;
 }
 
 /**
@@ -39,6 +41,7 @@ export interface CalendarToolbarDeps {
 export class CalendarToolbar extends ViewToolbarBase {
     private filterBtn: HTMLButtonElement | null = null;
     private sidebarToggleBtn: HTMLButtonElement | null = null;
+    private maskHandle: { update: () => void } | null = null;
 
     constructor(private deps: CalendarToolbarDeps) {
         super();
@@ -80,6 +83,11 @@ export class CalendarToolbar extends ViewToolbarBase {
         });
         this.filterBtn = filterBtn;
 
+        this.maskHandle = MaskToggleButton.render(toolbar, {
+            getMaskMode: () => deps.getMaskMode(),
+            setMaskMode: (next) => deps.setMaskMode(next),
+        });
+
         ViewSettingsMenu.renderButton(toolbar, {
             app: deps.app,
             leaf: deps.leaf,
@@ -100,13 +108,19 @@ export class CalendarToolbar extends ViewToolbarBase {
                 showSidebar: deps.getShowSidebar(),
                 filterState: deps.filterMenu.getFilterState(),
                 pinnedLists: deps.getPinnedLists(),
+                maskMode: deps.getMaskMode(),
             }),
             getExportContainer: () => deps.container.querySelector<HTMLElement>('.cal-grid'),
-            getReadService: () => deps.readService,
-            getExportStrategy: () => new CalendarExportStrategy(),
+            getExportSpec: () => ({
+                scrollAreas: ['.cal-grid__body'],
+                overflowParents: '.calendar-view, .cal-grid',
+            }),
             onApplyTemplate: (template) => {
                 if (template.filterState) {
                     deps.filterMenu.setFilterState(template.filterState);
+                }
+                if (template.maskMode != null) {
+                    deps.setMaskMode(template.maskMode);
                 }
                 deps.onApplyTemplate(template);
             },
@@ -132,6 +146,7 @@ export class CalendarToolbar extends ViewToolbarBase {
         if (this.filterBtn) {
             this.filterBtn.classList.toggle('is-filtered', this.deps.filterMenu.hasActiveFilters());
         }
+        this.maskHandle?.update();
         this.syncSidebarToggleState();
     }
 }

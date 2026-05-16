@@ -63,6 +63,7 @@ interface TimelineViewState {
     pinnedLists?: PinnedListDefinition[];
     customName?: string;
     periodicHeaderCollapsed?: boolean;
+    maskMode?: boolean;
 }
 
 export class TimelineView extends ItemView {
@@ -194,7 +195,7 @@ export class TimelineView extends ItemView {
         this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
-        }, () => this.plugin.settings);
+        }, () => this.plugin.settings, () => this.viewState.maskMode ?? false);
         this.addChild(this.taskRenderer);
     }
 
@@ -246,6 +247,7 @@ export class TimelineView extends ItemView {
             if (typeof state.periodicHeaderCollapsed === 'boolean') {
                 this.viewState.periodicHeaderCollapsed = state.periodicHeaderCollapsed;
             }
+            this.viewState.maskMode = state.maskMode === true;
             // Note: startDate is not restored - always use "Today" logic on reload
         }
         await super.setState(state, result);
@@ -286,6 +288,9 @@ export class TimelineView extends ItemView {
         }
         if (typeof this.viewState.periodicHeaderCollapsed === 'boolean') {
             state.periodicHeaderCollapsed = this.viewState.periodicHeaderCollapsed;
+        }
+        if (this.viewState.maskMode) {
+            state.maskMode = true;
         }
         return state;
     }

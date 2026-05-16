@@ -6,10 +6,9 @@ import { TaskReadService } from '../../services/data/TaskReadService';
 import { DateUtils } from '../../utils/DateUtils';
 import type { LeafPosition } from '../sharedLogic/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
-import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu, ViewToolbarBase } from '../sharedUI/ViewToolbar';
+import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
-import { TimelineExportStrategy } from '../../services/export/TimelineExportStrategy';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
@@ -42,6 +41,7 @@ export class TimelineToolbar extends ViewToolbarBase {
     private sidebarToggleBtn: HTMLElement | null = null;
     private viewModeHandle: { update: () => void } | null = null;
     private zoomHandle: { update: () => void } | null = null;
+    private maskHandle: { update: () => void } | null = null;
 
     constructor(
         private app: App,
@@ -114,6 +114,7 @@ export class TimelineToolbar extends ViewToolbarBase {
         // apply) reflect in the persistent toolbar DOM.
         this.viewModeHandle?.update();
         this.zoomHandle?.update();
+        this.maskHandle?.update();
         if (this.filterBtn) {
             this.filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
         }
@@ -152,6 +153,16 @@ export class TimelineToolbar extends ViewToolbarBase {
         // Filter Button
         this.renderFilterButton(toolbar);
 
+        // Mask Mode Toggle
+        this.maskHandle = MaskToggleButton.render(toolbar, {
+            getMaskMode: () => this.viewState.maskMode ?? false,
+            setMaskMode: (next) => {
+                this.viewState.maskMode = next;
+                this.callbacks.onRender();
+                this.app.workspace.requestSaveLayout();
+            },
+        });
+
         // View Settings
         ViewSettingsMenu.renderButton(toolbar, {
             app: this.app,
@@ -177,6 +188,7 @@ export class TimelineToolbar extends ViewToolbarBase {
                 showSidebar: this.viewState.showSidebar,
                 filterState: this.filterMenu.getFilterState(),
                 pinnedLists: this.viewState.pinnedLists,
+                maskMode: this.viewState.maskMode,
             }),
             onApplyTemplate: (template) => {
                 if (template.days != null) this.viewState.daysToShow = template.days;
@@ -187,13 +199,20 @@ export class TimelineToolbar extends ViewToolbarBase {
                     this.viewState.filterState = template.filterState;
                 }
                 if (template.pinnedLists) this.viewState.pinnedLists = template.pinnedLists;
+                if (template.maskMode != null) this.viewState.maskMode = template.maskMode;
                 if (template.name) this.callbacks.onRename(template.name);
                 this.callbacks.onRender();
                 this.app.workspace.requestSaveLayout();
             },
-            getExportContainer: () => this.rootEl?.closest('.timeline-view')?.querySelector<HTMLElement>('.timeline-grid') ?? null,
-            getReadService: () => this.readService,
-            getExportStrategy: () => new TimelineExportStrategy(),
+            // Export container is the .timeline-view wrapper, not the
+            // .timeline-grid scroll area itself, so the scroll-area selector
+            // resolves as a proper descendant (matches the contract used by
+            // the other three views and removes the self-vs-descendant trap).
+            getExportContainer: () => this.rootEl?.closest<HTMLElement>('.timeline-view') ?? null,
+            getExportSpec: () => ({
+                scrollAreas: ['.timeline-grid'],
+                overflowParents: '.timeline-view',
+            }),
             onReset: () => {
                 this.viewState.daysToShow = 3;
                 this.viewState.zoomLevel = 1.0;
@@ -201,6 +220,7 @@ export class TimelineToolbar extends ViewToolbarBase {
                 this.viewState.filterState = undefined;
                 this.viewState.pinnedLists = undefined;
                 this.viewState.pinnedListCollapsed = undefined;
+                this.viewState.maskMode = false;
                 this.filterMenu.setFilterState(createEmptyFilterState());
                 this.callbacks.onRename(undefined);
                 this.callbacks.onRender();

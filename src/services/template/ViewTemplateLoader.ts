@@ -126,6 +126,9 @@ export class ViewTemplateLoader {
             template.grid = this.parseGrid(data.grid);
         }
 
+        if (typeof data.maskMode === 'boolean') {
+            template.maskMode = data.maskMode;
+        }
     }
 
     private parsePinnedLists(raw: unknown[]): PinnedListDefinition[] {

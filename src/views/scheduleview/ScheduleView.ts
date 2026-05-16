@@ -41,6 +41,7 @@ interface ScheduleViewState {
     filterState?: FilterState;
     customName?: string;
     periodicHeaderCollapsed?: boolean;
+    maskMode?: boolean;
 }
 
 export class ScheduleView extends ItemView {
@@ -75,6 +76,7 @@ export class ScheduleView extends ItemView {
     private savedScrollTop: number | null = null;
     private customName: string | undefined;
     private periodicHeaderCollapsed: boolean = true;
+    private maskMode: boolean = false;
     private collapsedSections: Record<CollapsibleSectionKey, boolean> = {
         allDay: false,
         dueOnly: false,
@@ -90,7 +92,7 @@ export class ScheduleView extends ItemView {
         this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
-        }, () => this.plugin.settings);
+        }, () => this.plugin.settings, () => this.maskMode);
         this.addChild(this.taskRenderer);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
@@ -174,8 +176,16 @@ export class ScheduleView extends ItemView {
                 this.render();
             },
             onReset: () => {
+                this.maskMode = false;
                 this.app.workspace.requestSaveLayout();
                 this.render();
+            },
+            getMaskMode: () => this.maskMode,
+            setMaskMode: (next) => {
+                this.maskMode = next;
+                this.app.workspace.requestSaveLayout();
+                this.render();
+                this.toolbar.update();
             },
         });
     }
@@ -213,6 +223,8 @@ export class ScheduleView extends ItemView {
             this.periodicHeaderCollapsed = state.periodicHeaderCollapsed;
         }
 
+        this.maskMode = state?.maskMode === true;
+
         await super.setState(state, result);
         if (this.container) {
             await this.performRender();
@@ -233,6 +245,9 @@ export class ScheduleView extends ItemView {
         if (this.periodicHeaderCollapsed === false) {
             // Persist only when expanded (default true → no persistence needed for collapsed state)
             result.periodicHeaderCollapsed = false;
+        }
+        if (this.maskMode) {
+            result.maskMode = true;
         }
         return result;
     }

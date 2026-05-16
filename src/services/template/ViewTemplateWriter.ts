@@ -55,6 +55,9 @@ export class ViewTemplateWriter {
         if (template.grid && template.grid.length > 0) {
             data.grid = template.grid.map(row => row.map(pl => this.serializePinnedList(pl)));
         }
+        if (template.maskMode) {
+            data.maskMode = true;
+        }
         if (Object.keys(data).length > 0) {
             lines.push('```json');
             lines.push(JSON.stringify(data, null, 2));
