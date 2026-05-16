@@ -36,6 +36,7 @@ interface KanbanViewState {
     gridCollapsed?: Record<string, boolean>;
     customName?: string;
     filterState?: FilterState;
+    maskMode?: boolean;
 }
 
 export class KanbanView extends ItemView {
@@ -56,6 +57,7 @@ export class KanbanView extends ItemView {
     private viewFilterState: FilterState | undefined;
     private grid: PinnedListDefinition[][] = [];
     private gridCollapsed: Record<string, boolean> = {};
+    private maskMode: boolean = false;
     private readonly hoverParent = new TaskViewHoverParent();
     private readonly paging: TaskPagingController;
     /**
@@ -73,7 +75,7 @@ export class KanbanView extends ItemView {
         this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
-        }, () => this.plugin.settings);
+        }, () => this.plugin.settings, () => this.maskMode);
         this.addChild(this.taskRenderer);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
@@ -130,8 +132,16 @@ export class KanbanView extends ItemView {
                 this.gridCollapsed = {};
                 this.customName = undefined;
                 this.viewFilterState = undefined;
+                this.maskMode = false;
                 this.requestSaveLayout();
                 this.render();
+            },
+            getMaskMode: () => this.maskMode,
+            setMaskMode: (next) => {
+                this.maskMode = next;
+                this.requestSaveLayout();
+                this.render();
+                this.toolbar.update();
             },
         });
     }
@@ -163,6 +173,7 @@ export class KanbanView extends ItemView {
             this.viewFilterState = fs;
             this.viewFilterMenu.setFilterState(fs);
         }
+        this.maskMode = state?.maskMode === true;
 
         await super.setState(state, result);
 
@@ -193,6 +204,10 @@ export class KanbanView extends ItemView {
 
         if (this.viewFilterState && hasConditions(this.viewFilterState)) {
             result.filterState = FilterSerializer.toJSON(this.viewFilterState);
+        }
+
+        if (this.maskMode) {
+            result.maskMode = true;
         }
 
         return result;

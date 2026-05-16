@@ -48,7 +48,22 @@ export class TaskCardRenderer extends Component {
     private cardComponents: WeakMap<HTMLElement, Component> = new WeakMap();
     private unsubscribeTaskDeleted: (() => void) | null = null;
 
-    constructor(private app: App, readService: TaskReadService, writeService: TaskWriteService, menuPresenter: MenuPresenter, private linkRuntime: TaskCardLinkRuntime, getSettings: () => TaskViewerSettings) {
+    constructor(
+        private app: App,
+        readService: TaskReadService,
+        writeService: TaskWriteService,
+        menuPresenter: MenuPresenter,
+        private linkRuntime: TaskCardLinkRuntime,
+        getSettings: () => TaskViewerSettings,
+        /**
+         * Lazy reader for the owning view's mask-mode toggle. When it returns
+         * true, every card rendered through this renderer substitutes its
+         * content with the task's `tv-mask` value (see `applyMaskToContent`).
+         * Default returns false so the renderer keeps working uninstrumented
+         * in tests and lightweight call sites.
+         */
+        private getMaskMode: () => boolean = () => false
+    ) {
         super();
         this.checkboxWiring = new CheckboxWiring(writeService, menuPresenter);
         this.childItemBuilder = new ChildItemBuilder(readService);
@@ -185,6 +200,12 @@ export class TaskCardRenderer extends Component {
 
         this.bindInternalLinks(contentContainer, task.file, enableLinks, onNavigate);
         this.bindParentCheckbox(contentContainer, task.originalTaskId ?? task.id, settings, task.isReadOnly);
+
+        // Apply mask last so it overlays whatever child/inline renderer produced.
+        // Detail modal opts out — the user explicitly asked to inspect this task.
+        if (!isDetailModal && this.getMaskMode() && task.mask) {
+            TaskCardRenderer.applyMaskToContent(contentContainer, task.mask);
+        }
     }
 
     dispose(container: HTMLElement): void {
@@ -388,6 +409,56 @@ export class TaskCardRenderer extends Component {
         const mainCheckbox = contentContainer.querySelector(':scope > ul > li > input[type="checkbox"]');
         if (mainCheckbox) {
             this.checkboxWiring.wireParentCheckbox(mainCheckbox, taskId, settings, readOnly);
+        }
+    }
+
+    /**
+     * Replace card-visible text with the mask string and hide any wikilinks /
+     * internal links so the file name itself does not leak. Operates on the
+     * `.task-card__content` subtree only (other card chrome — time, child
+     * count, checkbox — stays legible). Idempotent: every render starts from
+     * a freshly built content subtree, so no restore is necessary.
+     *
+     * Mirrors the old ExportUtils.applyMasking logic but as a forward-only
+     * render-time transform — masking is now a live visual mode, not an
+     * export-time DOM walk-and-restore.
+     */
+    private static applyMaskToContent(contentEl: HTMLElement, maskText: string): void {
+        const listItem = contentEl.querySelector('.task-list-item');
+        if (!listItem) return;
+
+        // Walk the visible text nodes: replace the first run with the mask,
+        // strip the rest. Skip time / child-notation / checkbox / link texts
+        // so the structural cues stay readable.
+        let replaced = false;
+        const walker = document.createTreeWalker(listItem, NodeFilter.SHOW_TEXT);
+        const textNodes: Text[] = [];
+        let n: Text | null;
+        while ((n = walker.nextNode() as Text | null)) textNodes.push(n);
+
+        for (const textNode of textNodes) {
+            const parent = textNode.parentElement;
+            if (parent?.closest('.task-card__time, .task-card__child-notation, input')) continue;
+            if (parent?.closest('.internal-link')) continue;
+            if (!textNode.textContent?.trim()) continue;
+
+            if (!replaced) {
+                textNode.textContent = maskText;
+                replaced = true;
+            } else {
+                textNode.textContent = '';
+            }
+        }
+
+        // Hide internal links entirely and clear any preceding " : " separator
+        // so the line doesn't end with a dangling colon.
+        const links = Array.from(listItem.querySelectorAll<HTMLElement>('.internal-link'));
+        for (const link of links) {
+            link.style.display = 'none';
+            const prev = link.previousSibling;
+            if (prev?.nodeType === Node.TEXT_NODE && prev.textContent?.includes(':')) {
+                prev.textContent = '';
+            }
         }
     }
 }

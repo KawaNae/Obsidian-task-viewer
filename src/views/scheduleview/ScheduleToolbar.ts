@@ -2,10 +2,9 @@ import { setIcon, type App, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import type TaskViewerPlugin from '../../main';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import { ScheduleExportStrategy } from '../../services/export/ScheduleExportStrategy';
 import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
-import { DateNavigator, ViewSettingsMenu, ViewToolbarBase } from '../sharedUI/ViewToolbar';
+import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 
 export interface ScheduleToolbarDeps {
@@ -24,6 +23,9 @@ export interface ScheduleToolbarDeps {
     onRename: (newName: string | undefined) => void;
     onApplyFilterTemplate: (filterState: ReturnType<FilterMenuComponent['getFilterState']>) => void;
     onReset: () => void;
+
+    getMaskMode: () => boolean;
+    setMaskMode: (next: boolean) => void;
 }
 
 /**
@@ -32,6 +34,7 @@ export interface ScheduleToolbarDeps {
  */
 export class ScheduleToolbar extends ViewToolbarBase {
     private filterBtn: HTMLButtonElement | null = null;
+    private maskHandle: { update: () => void } | null = null;
 
     constructor(private deps: ScheduleToolbarDeps) {
         super();
@@ -64,6 +67,11 @@ export class ScheduleToolbar extends ViewToolbarBase {
         });
         this.filterBtn = filterBtn;
 
+        this.maskHandle = MaskToggleButton.render(toolbar, {
+            getMaskMode: () => deps.getMaskMode(),
+            setMaskMode: (next) => deps.setMaskMode(next),
+        });
+
         ViewSettingsMenu.renderButton(toolbar, {
             app: deps.app,
             leaf: deps.leaf,
@@ -80,14 +88,20 @@ export class ScheduleToolbar extends ViewToolbarBase {
                 name: deps.getCustomName() || VIEW_META_SCHEDULE.displayText,
                 viewType: 'schedule',
                 filterState: deps.filterMenu.getFilterState(),
+                maskMode: deps.getMaskMode(),
             }),
             getExportContainer: () => deps.container,
-            getReadService: () => deps.readService,
-            getExportStrategy: () => new ScheduleExportStrategy(),
+            getExportSpec: () => ({
+                scrollAreas: ['.schedule-view__body-scroll'],
+                overflowParents: '.schedule-view, .schedule-view__body-scroll',
+            }),
             onApplyTemplate: (template) => {
                 if (template.filterState) {
                     deps.filterMenu.setFilterState(template.filterState);
                     deps.onApplyFilterTemplate(template.filterState);
+                }
+                if (template.maskMode != null) {
+                    deps.setMaskMode(template.maskMode);
                 }
                 if (template.name) {
                     deps.onRename(template.name);
@@ -106,5 +120,6 @@ export class ScheduleToolbar extends ViewToolbarBase {
         if (this.filterBtn) {
             this.filterBtn.classList.toggle('is-filtered', this.deps.filterMenu.hasActiveFilters());
         }
+        this.maskHandle?.update();
     }
 }

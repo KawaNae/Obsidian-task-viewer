@@ -1,15 +1,26 @@
 import { Notice } from 'obsidian';
-import type { ViewExportOptions, ExportStrategy } from './ExportTypes';
+import type { ViewExportOptions, ExportTargetSpec } from './ExportTypes';
 import { ExportUtils } from './ExportUtils';
 
+/**
+ * One-shot view-to-PNG export. Always captures the **full content** (the entire
+ * scrollHeight), not just the visible viewport — the "visible area" mode lived
+ * here historically but produced unreliable results because html-to-image
+ * cannot honor scrollTop/clip through its foreignObject pipeline. Users wanting
+ * a viewport-accurate image should use the OS screenshot tool instead.
+ *
+ * Masking is **not** applied here. It is a render-time visual mode of the live
+ * view (`TaskCardRenderer.applyMaskToContent`), so the clone inherits whichever
+ * masked/unmasked state the live DOM has.
+ */
 export class ViewExporter {
-    static async exportAsPng(options: ViewExportOptions, strategy: ExportStrategy): Promise<void> {
-        const { app, container, readService, filename, expandScrollAreas = true } = options;
+    static async exportAsPng(options: ViewExportOptions, spec: ExportTargetSpec): Promise<void> {
+        const { app, container, filename } = options;
 
         const progress = new Notice('Exporting image…', 0);
 
         try {
-            // Clone the container off-screen so the original DOM is never modified
+            // Clone the container off-screen so the original DOM is never modified.
             const clone = container.cloneNode(true) as HTMLElement;
             clone.style.position = 'absolute';
             clone.style.left = '-99999px';
@@ -18,19 +29,23 @@ export class ViewExporter {
             clone.style.height = `${container.offsetHeight}px`;
             container.parentElement!.appendChild(clone);
 
-            // Transfer scrollTop values (cloneNode doesn't copy them)
-            for (const selector of strategy.getScrollAreaSelectors()) {
-                ExportUtils.transferScrollPositions(container, clone, selector);
-            }
-
             try {
                 const restoreFns: (() => void)[] = [];
-                if (expandScrollAreas) {
-                    strategy.expandScrollAreas(clone, restoreFns);
-                } else {
-                    strategy.simulateScrollPosition(clone, restoreFns);
+
+                // Expand each declared scroll area to its full scrollHeight.
+                // expandScrollAreaSelf(true) so a selector matching the
+                // container itself (Timeline's historical contract) still works.
+                for (const sel of spec.scrollAreas) {
+                    const matches = clone.matches(sel) ? [clone] : [];
+                    const descendants = Array.from(clone.querySelectorAll<HTMLElement>(sel));
+                    for (const area of [...matches, ...descendants]) {
+                        ExportUtils.expandScrollArea(area, restoreFns);
+                    }
                 }
-                ExportUtils.applyMasking(clone, readService, restoreFns);
+
+                ExportUtils.expandOverflowParents(clone, spec.overflowParents, restoreFns);
+                ExportUtils.expandContainer(clone, restoreFns);
+                spec.extraExpand?.(clone, restoreFns);
 
                 const blob = await ExportUtils.captureToBlob(clone);
                 await ExportUtils.downloadBlob(blob, filename, app);

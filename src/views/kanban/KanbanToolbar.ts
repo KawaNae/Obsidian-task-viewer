@@ -2,11 +2,10 @@ import { setIcon, type App, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import type TaskViewerPlugin from '../../main';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import { KanbanExportStrategy } from '../../services/export/KanbanExportStrategy';
 import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import type { ViewTemplate } from '../../types';
 import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
-import { ViewSettingsMenu, ViewToolbarBase } from '../sharedUI/ViewToolbar';
+import { ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 
 export interface KanbanToolbarDeps {
@@ -24,6 +23,9 @@ export interface KanbanToolbarDeps {
     getGrid: () => ViewTemplate['grid'];
     onApplyTemplate: (template: ViewTemplate) => void;
     onReset: () => void;
+
+    getMaskMode: () => boolean;
+    setMaskMode: (next: boolean) => void;
 }
 
 /**
@@ -31,6 +33,7 @@ export interface KanbanToolbarDeps {
  */
 export class KanbanToolbar extends ViewToolbarBase {
     private filterBtn: HTMLButtonElement | null = null;
+    private maskHandle: { update: () => void } | null = null;
 
     constructor(private deps: KanbanToolbarDeps) {
         super();
@@ -56,6 +59,11 @@ export class KanbanToolbar extends ViewToolbarBase {
         };
         this.filterBtn = filterBtn;
 
+        this.maskHandle = MaskToggleButton.render(toolbar, {
+            getMaskMode: () => deps.getMaskMode(),
+            setMaskMode: (next) => deps.setMaskMode(next),
+        });
+
         ViewSettingsMenu.renderButton(toolbar, {
             app: deps.app,
             leaf: deps.leaf,
@@ -74,13 +82,35 @@ export class KanbanToolbar extends ViewToolbarBase {
                 viewType: 'kanban',
                 grid: deps.getGrid(),
                 filterState: deps.filterMenu.getFilterState(),
+                maskMode: deps.getMaskMode(),
             }),
             getExportContainer: () => deps.container,
-            getReadService: () => deps.readService,
-            getExportStrategy: () => new KanbanExportStrategy(),
+            // Kanban needs an extra pass: each cell has its own overflow/minHeight
+            // constraint plus a per-column scroll body. expand them all so the
+            // full grid is captured.
+            getExportSpec: () => ({
+                scrollAreas: ['.kanban-view__grid-host', '.kanban-view__cell-body'],
+                overflowParents: '.kanban-view, .kanban-view__grid-host',
+                extraExpand: (container, restoreFns) => {
+                    const cells = Array.from(container.querySelectorAll<HTMLElement>('.kanban-view__cell'));
+                    for (const cell of cells) {
+                        const origOverflow = cell.style.overflow;
+                        const origMinHeight = cell.style.minHeight;
+                        cell.style.overflow = 'visible';
+                        cell.style.minHeight = 'auto';
+                        restoreFns.push(() => {
+                            cell.style.overflow = origOverflow;
+                            cell.style.minHeight = origMinHeight;
+                        });
+                    }
+                },
+            }),
             onApplyTemplate: (template) => {
                 if (template.filterState) {
                     deps.filterMenu.setFilterState(template.filterState);
+                }
+                if (template.maskMode != null) {
+                    deps.setMaskMode(template.maskMode);
                 }
                 deps.onApplyTemplate(template);
             },
@@ -96,5 +126,6 @@ export class KanbanToolbar extends ViewToolbarBase {
         if (this.filterBtn) {
             this.filterBtn.classList.toggle('is-filtered', this.deps.filterMenu.hasActiveFilters());
         }
+        this.maskHandle?.update();
     }
 }
