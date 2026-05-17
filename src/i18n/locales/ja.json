@@ -597,6 +597,10 @@
     "expandHabits": "習慣欄を展開",
     "collapseHabits": "習慣欄を折りたたむ"
   },
+  "astronomy": {
+    "sunrise": "日の出",
+    "sunset": "日の入り"
+  },
   "moonPhase": {
     "label": "月",
     "newMoon": "新月",

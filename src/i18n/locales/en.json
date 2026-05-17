@@ -597,6 +597,10 @@
     "expandHabits": "Expand Habits",
     "collapseHabits": "Collapse Habits"
   },
+  "astronomy": {
+    "sunrise": "Sunrise",
+    "sunset": "Sunset"
+  },
   "moonPhase": {
     "label": "Moon",
     "newMoon": "New moon",

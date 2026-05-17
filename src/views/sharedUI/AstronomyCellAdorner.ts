@@ -1,4 +1,4 @@
-import { setTooltip } from 'obsidian';
+import { setIcon, setTooltip } from 'obsidian';
 import {
     buildMoonPhaseSvg,
     getMoonIllumination,
@@ -109,6 +109,69 @@ export function attachSunIndicators(
             el.style.setProperty('--indicator-minutes', String(minutesFromStart));
         }
         el.setAttribute('aria-hidden', 'true');
+        return true;
+    };
+
+    let count = 0;
+    if (append(sunrise, 'sunrise')) count++;
+    if (append(sunset, 'sunset')) count++;
+    return count;
+}
+
+/**
+ * Attach small sunrise/sunset Lucide icons to a time-axis container. The
+ * icons land at the same vertical position as the horizontal sun lines and
+ * give the lines a recognizable anchor in the axis column (which otherwise
+ * shows only hour numbers).
+ *
+ * Positioning contract is identical to `attachSunIndicators`: `minutesToTopPx`
+ * is honored when provided (for adaptive grids), otherwise the helper falls
+ * back to setting the `--indicator-minutes` CSS variable and lets the stylesheet
+ * compute `top: calc(... * --hour-height / 60)`.
+ *
+ * Returns the count of attached icons. Polar latitudes that yield Invalid
+ * Date are skipped silently.
+ */
+export function attachSunAxisIcons(
+    container: HTMLElement,
+    date: string,
+    options: AttachSunIndicatorsOptions,
+): number {
+    const { startHour, latitude, longitude, minutesToTopPx } = options;
+    const referenceDate = new Date(`${date}T12:00:00`);
+    const { sunrise, sunset } = getSunTimes(referenceDate, latitude, longitude);
+
+    const append = (sunDate: Date | null, variant: 'sunrise' | 'sunset'): boolean => {
+        if (!sunDate) return false;
+        const clockMinutes = sunDate.getHours() * 60 + sunDate.getMinutes();
+        let minutesFromStart = clockMinutes - startHour * 60;
+        if (minutesFromStart < 0) minutesFromStart += 24 * 60;
+
+        let absoluteTopPx: number | null = null;
+        if (minutesToTopPx) {
+            absoluteTopPx = minutesToTopPx(minutesFromStart);
+            if (absoluteTopPx === null) return false;
+        }
+
+        const el = container.createDiv(`sun-axis-icon sun-axis-icon--${variant}`);
+        setIcon(el, variant);
+        if (absoluteTopPx !== null) {
+            el.style.top = `${absoluteTopPx}px`;
+        } else {
+            el.style.setProperty('--indicator-minutes', String(minutesFromStart));
+        }
+
+        // Vertical offset: shift the icon away from the nearest hour-boundary
+        // so it doesn't sit on top of the hour-number text. The line itself
+        // stays at the exact event time; the icon hovers ~14px above or below
+        // it depending on which half of the hour the event falls in.
+        const minuteInHour = minutesFromStart % 60;
+        const AXIS_ICON_SHIFT_PX = 14;
+        const shiftPx = (minuteInHour < 30 ? +1 : -1) * AXIS_ICON_SHIFT_PX;
+        el.style.setProperty('--axis-icon-shift', `${shiftPx}px`);
+
+        const timeLabel = `${String(sunDate.getHours()).padStart(2, '0')}:${String(sunDate.getMinutes()).padStart(2, '0')}`;
+        setTooltip(el, `${t(`astronomy.${variant}`)} ${timeLabel}`);
         return true;
     };
 
