@@ -28,7 +28,7 @@
 /* AllDay Cell */
 .allday-section__cell {
     border-right: 1px solid var(--tv-border);
-    border-bottom: 2px solid var(--tv-border);
+    border-bottom: 1px solid var(--tv-border);
     min-height: var(--allday-min-height);
     position: relative;
     padding: 3px 0 2px 0;
@@ -49,7 +49,7 @@
     padding-top: 4px;
     border-left: 1px solid var(--tv-border);
     border-right: 1px solid var(--tv-border);
-    border-bottom: 2px solid var(--tv-border);
+    border-bottom: 1px solid var(--tv-border);
     background-color: var(--tv-bg-axis);
 }
 

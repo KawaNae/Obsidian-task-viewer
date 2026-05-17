@@ -1,6 +1,6 @@
 {
   "name": "task-viewer",
-  "version": "0.39.0",
+  "version": "0.40.0",
   "description": "Obsidian plugin for task calendar and timeline views",
   "main": "main.js",
   "scripts": {
@@ -16,6 +16,7 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.10.0",
+    "@types/suncalc": "^1.9.2",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
     "builtin-modules": "^3.3.0",
@@ -28,6 +29,7 @@
   },
   "dependencies": {
     "date-fns": "^3.0.0",
-    "html-to-image": "^1.11.13"
+    "html-to-image": "^1.11.13",
+    "suncalc": "^1.9.0"
   }
 }

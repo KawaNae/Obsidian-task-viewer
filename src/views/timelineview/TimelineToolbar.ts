@@ -7,6 +7,7 @@ import { DateUtils } from '../../utils/DateUtils';
 import type { LeafPosition } from '../sharedLogic/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
 import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
+import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import type { FilterState } from '../../services/filter/FilterTypes';
@@ -189,6 +190,7 @@ export class TimelineToolbar extends ViewToolbarBase {
                 filterState: this.filterMenu.getFilterState(),
                 pinnedLists: this.viewState.pinnedLists,
                 maskMode: this.viewState.maskMode,
+                astronomyDisplay: this.viewState.astronomyDisplay,
             }),
             onApplyTemplate: (template) => {
                 if (template.days != null) this.viewState.daysToShow = template.days;
@@ -200,6 +202,9 @@ export class TimelineToolbar extends ViewToolbarBase {
                 }
                 if (template.pinnedLists) this.viewState.pinnedLists = template.pinnedLists;
                 if (template.maskMode != null) this.viewState.maskMode = template.maskMode;
+                this.viewState.astronomyDisplay = template.astronomyDisplay
+                    ? { ...template.astronomyDisplay }
+                    : undefined;
                 if (template.name) this.callbacks.onRename(template.name);
                 this.callbacks.onRender();
                 this.app.workspace.requestSaveLayout();
@@ -221,12 +226,25 @@ export class TimelineToolbar extends ViewToolbarBase {
                 this.viewState.pinnedLists = undefined;
                 this.viewState.pinnedListCollapsed = undefined;
                 this.viewState.maskMode = false;
+                this.viewState.astronomyDisplay = undefined;
                 this.filterMenu.setFilterState(createEmptyFilterState());
                 this.callbacks.onRename(undefined);
                 this.callbacks.onRender();
                 this.app.workspace.requestSaveLayout();
             },
             menuPresenter: this.plugin.menuPresenter,
+            appendCustomItems: (menu) => {
+                appendAstronomyMenuSection(menu, {
+                    overlays: ['sunTimes', 'moonPhase'],
+                    settings: this.plugin.settings.astronomy,
+                    instance: this.viewState.astronomyDisplay,
+                    onChange: (next) => {
+                        this.viewState.astronomyDisplay = next;
+                        this.callbacks.onRender();
+                        this.app.workspace.requestSaveLayout();
+                    },
+                });
+            },
         });
 
         // Sidebar Toggle

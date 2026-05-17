@@ -30,6 +30,7 @@ import { hasConditions } from './services/filter/FilterTypes';
 import { FilterSerializer } from './services/filter/FilterSerializer';
 import { unicodeAtob } from './utils/base64';
 import { ViewTemplateLoader } from './services/template/ViewTemplateLoader';
+import { migrateAstronomySettings } from './services/settings/migration';
 import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
 import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
 import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
@@ -461,6 +462,10 @@ export default class TaskViewerPlugin extends Plugin {
         migrate('frontmatterTaskHeaderLevel', 'tvFileChildHeaderLevel');
         migrate('fileMenuForFrontmatterTasks', 'fileMenuForTvFile');
         migrate('calendarWeekStartDay', 'weekStartDay');
+
+        // Astronomy migration (v0.39 → v0.40): flat showSunTimes / showMoonPhase
+        // / homeLatitude / homeLongitude → nested astronomy.{display,location}.
+        migrateAstronomySettings(rawObject);
 
         const merged = Object.assign({}, DEFAULT_SETTINGS, rawObject) as TaskViewerSettings;
         const normalizedKeys = normalizeTvFileKeys(merged.tvFileKeys);

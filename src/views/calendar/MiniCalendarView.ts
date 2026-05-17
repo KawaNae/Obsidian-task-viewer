@@ -1,7 +1,10 @@
 import { ItemView, WorkspaceLeaf, TFile, Notice, setIcon, type ViewStateResult } from 'obsidian';
 import type { MenuItem } from 'obsidian';
 import { t } from '../../i18n';
-import { DisplayTask, Task } from '../../types';
+import { DisplayTask, Task, AstronomyDisplay } from '../../types';
+import { attachMoonPhase } from '../sharedUI/AstronomyCellAdorner';
+import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
+import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { DateUtils } from '../../utils/DateUtils';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import type { TaskReadService } from '../../services/data/TaskReadService';
@@ -43,6 +46,7 @@ interface MiniCalendarViewState {
     monthKey?: string;
     filterState?: unknown;
     customName?: string;
+    astronomyDisplay?: Partial<AstronomyDisplay>;
 }
 
 export class MiniCalendarView extends ItemView {
@@ -56,6 +60,7 @@ export class MiniCalendarView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private windowStart: string;
     private customName: string | undefined;
+    private astronomyDisplay: Partial<AstronomyDisplay> | undefined = undefined;
     private isAnimating: boolean = false;
     private navigateWeekDebounceTimer: number | null = null;
     private pendingWeekOffset: number = 0;
@@ -129,6 +134,10 @@ export class MiniCalendarView extends ItemView {
             this.customName = state.customName;
         }
 
+        this.astronomyDisplay = state?.astronomyDisplay && Object.keys(state.astronomyDisplay).length > 0
+            ? { ...state.astronomyDisplay }
+            : undefined;
+
         await super.setState(state, result);
         await this.render();
     }
@@ -143,6 +152,9 @@ export class MiniCalendarView extends ItemView {
         }
         if (this.customName) {
             result.customName = this.customName;
+        }
+        if (this.astronomyDisplay && Object.keys(this.astronomyDisplay).length > 0) {
+            result.astronomyDisplay = { ...this.astronomyDisplay };
         }
         return result;
     }
@@ -288,15 +300,28 @@ export class MiniCalendarView extends ItemView {
         });
 
         const indicatorRow = link.createDiv({ cls: 'cal-day-cell__indicators' });
-        if (indicatorState.hasIncomplete) {
-            indicatorRow.createSpan({
-                cls: 'cal-day-cell__indicator cal-day-cell__indicator--incomplete'
+        // When the moon overlay is on, it fully replaces task indicator dots
+        // at the same spot (per user choice — single visual slot, no overlap).
+        const astronomyDisplay = getEffectiveAstronomyDisplay(
+            this.astronomyDisplay,
+            this.plugin.settings.astronomy,
+        );
+        if (astronomyDisplay.moonPhase) {
+            attachMoonPhase(indicatorRow, DateUtils.getLocalDateString(date), {
+                size: 12,
+                modifier: 'moon-phase-inline--mini',
             });
-        }
-        if (indicatorState.hasComplete) {
-            indicatorRow.createSpan({
-                cls: 'cal-day-cell__indicator cal-day-cell__indicator--complete'
-            });
+        } else {
+            if (indicatorState.hasIncomplete) {
+                indicatorRow.createSpan({
+                    cls: 'cal-day-cell__indicator cal-day-cell__indicator--incomplete'
+                });
+            }
+            if (indicatorState.hasComplete) {
+                indicatorRow.createSpan({
+                    cls: 'cal-day-cell__indicator cal-day-cell__indicator--complete'
+                });
+            }
         }
 
         this.linkInteractionManager.bind(cell, {
@@ -379,8 +404,9 @@ export class MiniCalendarView extends ItemView {
         }
 
         const weekLinkTarget = DailyNoteUtils.getWeeklyNoteLinkTarget(this.plugin.settings, weekStartDate);
-        const weekLink = weekNumberEl.createEl('a', {
-            cls: 'internal-link',
+        const weekLink = weekNumberEl.createEl('a', { cls: 'internal-link' });
+        weekLink.createSpan({
+            cls: 'cal-week-number__label',
             text: `W${String(weekNumber).padStart(2, '0')}`,
         });
         weekLink.dataset.href = weekLinkTarget;
@@ -599,6 +625,20 @@ export class MiniCalendarView extends ItemView {
 
     private showSettingsMenu(e: MouseEvent, moreBtn: HTMLElement): void {
         this.plugin.menuPresenter.present((menu) => {
+        // Astronomy overlay toggles (moon only — Mini has no time axis)
+        appendAstronomyMenuSection(menu, {
+            overlays: ['moonPhase'],
+            settings: this.plugin.settings.astronomy,
+            instance: this.astronomyDisplay,
+            onChange: (next) => {
+                this.astronomyDisplay = next;
+                void this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
+        });
+
+        menu.addSeparator();
+
         // Filter
         menu.addItem((item: MenuItem) => {
             const title = this.filterMenu.hasActiveFilters()
@@ -645,6 +685,7 @@ export class MiniCalendarView extends ItemView {
                                 name,
                                 viewType: 'calendar',
                                 filterState: this.filterMenu.getFilterState(),
+                                astronomyDisplay: this.astronomyDisplay,
                             });
                             this.customName = name;
                             this.leaf.updateHeader();
@@ -691,6 +732,9 @@ export class MiniCalendarView extends ItemView {
                                         this.customName = full.name;
                                         this.leaf.updateHeader();
                                     }
+                                    this.astronomyDisplay = full.astronomyDisplay
+                                        ? { ...full.astronomyDisplay }
+                                        : undefined;
                                     void this.app.workspace.requestSaveLayout();
                                     void this.render();
                                 });
@@ -707,6 +751,7 @@ export class MiniCalendarView extends ItemView {
                 .onClick(() => {
                     this.filterMenu.setFilterState(createEmptyFilterState());
                     this.customName = undefined;
+                    this.astronomyDisplay = undefined;
                     this.leaf.updateHeader();
                     void this.app.workspace.requestSaveLayout();
                     void this.render();

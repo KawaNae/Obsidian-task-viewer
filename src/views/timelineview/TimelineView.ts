@@ -33,6 +33,7 @@ import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { createEmptyFilterState, type FilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
+import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
@@ -87,6 +88,7 @@ export class TimelineView extends ItemView {
     private sidebarFilterMenu = new FilterMenuComponent();
     private sidebarSortMenu = new SortMenuComponent();
     private habitRenderer: HabitTrackerRenderer;
+    private moonRenderer: MoonPhaseRenderer;
     private dateHeaderRenderer: DateHeaderRenderer;
     private periodicHeaderRenderer: PeriodicHeaderRenderer;
     private linkInteractionManager: TaskLinkInteractionManager;
@@ -404,6 +406,7 @@ export class TimelineView extends ItemView {
             viewId: VIEW_ID,
         });
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
+        this.moonRenderer = new MoonPhaseRenderer();
         this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.sidebarFilterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.sidebarFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
@@ -752,14 +755,17 @@ export class TimelineView extends ItemView {
         if (!grid) return;
         const periodic = grid.querySelector('.periodic-header') as HTMLElement | null;
         const dateHeader = grid.querySelector('.date-header') as HTMLElement | null;
+        const moon = grid.querySelector('.moon-section') as HTMLElement | null;
         const habits = grid.querySelector('.habits-section') as HTMLElement | null;
         const periodicH = periodic?.offsetHeight ?? 0;
         const dateH = dateHeader?.offsetHeight ?? 0;
+        const moonH = moon?.offsetHeight ?? 0;
         const habitsH = habits?.offsetHeight ?? 0;
         grid.style.setProperty('--periodic-header-sticky-top', `0px`);
         grid.style.setProperty('--date-header-sticky-top', `${periodicH}px`);
-        grid.style.setProperty('--habits-section-sticky-top', `${periodicH + dateH}px`);
-        grid.style.setProperty('--allday-sticky-top', `${periodicH + dateH + habitsH}px`);
+        grid.style.setProperty('--moon-section-sticky-top', `${periodicH + dateH}px`);
+        grid.style.setProperty('--habits-section-sticky-top', `${periodicH + dateH + moonH}px`);
+        grid.style.setProperty('--allday-sticky-top', `${periodicH + dateH + moonH + habitsH}px`);
     }
 
     /** Rebind the resize observer to the freshly-rendered anchor elements.
@@ -770,10 +776,12 @@ export class TimelineView extends ItemView {
         if (!grid) return;
         const periodic = grid.querySelector('.periodic-header') as HTMLElement | null;
         const dateHeader = grid.querySelector('.date-header') as HTMLElement | null;
+        const moon = grid.querySelector('.moon-section') as HTMLElement | null;
         const habits = grid.querySelector('.habits-section') as HTMLElement | null;
         this.stickyAnchorObserver.disconnect();
         if (periodic) this.stickyAnchorObserver.observe(periodic);
         if (dateHeader) this.stickyAnchorObserver.observe(dateHeader);
+        if (moon) this.stickyAnchorObserver.observe(moon);
         if (habits) this.stickyAnchorObserver.observe(habits);
     }
 
@@ -966,6 +974,7 @@ export class TimelineView extends ItemView {
             this.allDayRenderer,
             this.timelineRenderer,
             this.habitRenderer,
+            this.moonRenderer,
             this.handleManager,
             dates,
             filteredTasks,

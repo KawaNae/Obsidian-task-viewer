@@ -5,7 +5,9 @@ import type { TaskReadService } from '../../services/data/TaskReadService';
 import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
+import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
+import type { AstronomyDisplay } from '../../types';
 
 export interface ScheduleToolbarDeps {
     app: App;
@@ -26,6 +28,9 @@ export interface ScheduleToolbarDeps {
 
     getMaskMode: () => boolean;
     setMaskMode: (next: boolean) => void;
+
+    getAstronomyDisplay: () => Partial<AstronomyDisplay> | undefined;
+    setAstronomyDisplay: (next: Partial<AstronomyDisplay> | undefined) => void;
 }
 
 /**
@@ -89,6 +94,7 @@ export class ScheduleToolbar extends ViewToolbarBase {
                 viewType: 'schedule',
                 filterState: deps.filterMenu.getFilterState(),
                 maskMode: deps.getMaskMode(),
+                astronomyDisplay: deps.getAstronomyDisplay(),
             }),
             getExportContainer: () => deps.container,
             getExportSpec: () => ({
@@ -103,16 +109,30 @@ export class ScheduleToolbar extends ViewToolbarBase {
                 if (template.maskMode != null) {
                     deps.setMaskMode(template.maskMode);
                 }
+                deps.setAstronomyDisplay(template.astronomyDisplay
+                    ? { ...template.astronomyDisplay }
+                    : undefined);
                 if (template.name) {
                     deps.onRename(template.name);
                 }
             },
             onReset: () => {
                 deps.filterMenu.setFilterState(createEmptyFilterState());
+                deps.setAstronomyDisplay(undefined);
                 deps.onRename(undefined);
                 deps.onReset();
             },
             menuPresenter: deps.plugin.menuPresenter,
+            appendCustomItems: (menu) => {
+                appendAstronomyMenuSection(menu, {
+                    // Schedule has a time axis just like Timeline, so it shows
+                    // both sun + moon toggles (corrects an earlier omission).
+                    overlays: ['sunTimes', 'moonPhase'],
+                    settings: deps.plugin.settings.astronomy,
+                    instance: deps.getAstronomyDisplay(),
+                    onChange: (next) => deps.setAstronomyDisplay(next),
+                });
+            },
         });
     }
 

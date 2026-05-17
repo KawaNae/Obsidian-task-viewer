@@ -40,12 +40,9 @@
     border-left: 1px solid var(--tv-border);
 }
 
-.date-header__cell:hover {
+.date-header__cell:not(:first-child):hover {
     background-color: var(--tv-bg-hover);
     color: var(--tv-text);
-}
-
-.date-header__cell:not(:first-child):hover {
     text-decoration: underline;
 }
 
@@ -73,27 +70,10 @@
     text-decoration: underline;
 }
 
-/* Today's date highlight - using pseudo-element for theme compatibility */
-.date-header__cell.is-today {
-    position: relative;
-    z-index: var(--z-task-card);
-}
-
-.date-header__cell.is-today::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: var(--tv-accent);
-    opacity: 0.9;
-    z-index: var(--z-negative);
-    pointer-events: none;
-}
-
-.date-header__cell.is-today:hover::after {
-    opacity: 1;
+.date-header__cell.is-today,
+.date-header__cell.is-today:hover {
+    background-color: var(--tv-bg-today);
+    color: var(--tv-text-today);
 }
 
 /* Date with overdue incomplete tasks - warning text color */

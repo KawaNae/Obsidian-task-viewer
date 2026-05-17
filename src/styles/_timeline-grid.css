@@ -164,4 +164,79 @@
     pointer-events: none;
 }
 
+/* Sun Indicators (sunrise / sunset). Same positioning mechanic as
+   current-time-indicator but dashed so they sit as ambient context behind
+   tasks rather than competing with them. Color via currentColor so the
+   sunrise/sunset variant classes only need to set `color` (theme-tracked
+   accent in _variables.css). */
+.sun-indicator {
+    position: absolute;
+    top: calc(var(--indicator-minutes, 0) * var(--hour-height) / 60);
+    left: 0;
+    width: 100%;
+    height: 0;
+    border-top: 2px dashed currentColor;
+    pointer-events: none;
+    opacity: 0.7;
+    z-index: var(--z-task-card);
+}
+.sun-indicator--sunrise { color: var(--tv-astro-sunrise); }
+.sun-indicator--sunset  { color: var(--tv-astro-sunset); }
+
+/* Sun-axis arrows — short vertical arrows sitting on the time-axis right
+   border at the sunrise/sunset y-position. The arrow points toward "night":
+   sunrise upward (the time before sunrise is night), sunset downward (the
+   time after sunset is night). Anchored on the column boundary so they
+   never collide with the hour-number text.
+
+   Positioning:
+   - `top` comes from `--indicator-minutes` (Timeline linear grid) or is set
+     inline by the caller (Schedule adaptive grid).
+   - Horizontally centered on the right edge of the host container so the
+     arrow shaft overlays the column boundary line.
+   - `--sun-axis-arrow-anchor` controls which end of the arrow lands at the
+     intersection: 0% = top of arrow at the line (sunset, head below),
+     100% = bottom of arrow at the line (sunrise, head above). */
+.sun-axis-arrow {
+    position: absolute;
+    top: calc(var(--indicator-minutes, 0) * var(--hour-height) / 60);
+    right: 0;
+    width: 8px;
+    height: 24px;
+    transform: translate(50%, calc(-1 * var(--sun-axis-arrow-anchor, 0%)));
+    pointer-events: auto;
+    z-index: 2;
+}
+.sun-axis-arrow > svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+.sun-axis-arrow--sunrise {
+    /* Bottom of arrow sits on the intersection; head points up into night. */
+    --sun-axis-arrow-anchor: 100%;
+    color: var(--tv-astro-sunrise);
+}
+.sun-axis-arrow--sunset {
+    /* Top of arrow sits on the intersection; head points down into night. */
+    --sun-axis-arrow-anchor: 0%;
+    color: var(--tv-astro-sunset);
+}
+
+/* Schedule pins the arrow at the axis right boundary and matches the
+   dashed line geometry to the now-line so the two indicators occupy the
+   same horizontal span (clear of the clock labels on the left, same 12px
+   right inset). */
+.schedule-grid__markers > .sun-axis-arrow {
+    right: auto;
+    left: var(--schedule-time-axis-width, 60px);
+    transform: translate(-50%, calc(-1 * var(--sun-axis-arrow-anchor, 0%)));
+}
+
+.schedule-grid > .sun-indicator {
+    left: var(--schedule-time-axis-width, 60px);
+    right: 12px;
+    width: auto;
+}
+
 /* Section toggle button styles moved to _section-toggle.css (tv-section-toggle). */

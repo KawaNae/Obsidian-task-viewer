@@ -58,6 +58,9 @@ export class ViewTemplateWriter {
         if (template.maskMode) {
             data.maskMode = true;
         }
+        if (template.astronomyDisplay && Object.keys(template.astronomyDisplay).length > 0) {
+            data.astronomyDisplay = { ...template.astronomyDisplay };
+        }
         if (Object.keys(data).length > 0) {
             lines.push('```json');
             lines.push(JSON.stringify(data, null, 2));

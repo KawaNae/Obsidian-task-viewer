@@ -6,7 +6,23 @@
       "viewDetails": "View Details",
       "notes": "Notes",
       "frontmatter": "Frontmatter",
-      "parsers": "Parsers"
+      "parsers": "Parsers",
+      "about": "About"
+    },
+    "about": {
+      "plugin": "Plugin",
+      "version": "Version",
+      "author": "Author",
+      "repository": "Repository",
+      "license": "License",
+      "openInBrowser": "Open",
+      "resources": "Resources",
+      "releaseNotes": "Release notes",
+      "releaseNotesDesc": "Full changelog and downloads are published on GitHub Releases.",
+      "issueTracker": "Issue tracker",
+      "issueTrackerDesc": "Report bugs or request features.",
+      "thirdPartyLicenses": "Third-party licenses",
+      "thirdPartyLicensesIntro": "The plugin bundles the following libraries. Their copyright notices are reproduced below as required by their licenses."
     },
     "general": {
       "editor": "Editor",
@@ -61,6 +77,15 @@
       "weekStartsOnDesc": "Choose the first day of the week. Used by Calendar, Mini Calendar, and the weekly note template anchor.",
       "sunday": "Sunday",
       "monday": "Monday",
+      "locationAndAstronomy": "Location & Astronomy",
+      "showSunTimes": "Show sunrise / sunset lines",
+      "showSunTimesDesc": "Draw thin horizontal lines at sunrise and sunset on the timeline. Requires latitude and longitude.",
+      "showMoonPhase": "Show moon phase row",
+      "showMoonPhaseDesc": "Show a per-date moon phase icon above the habits row.",
+      "homeLatitude": "Latitude",
+      "homeLatitudeDesc": "-90 to 90. Used to compute sunrise / sunset times.",
+      "homeLongitude": "Longitude",
+      "homeLongitudeDesc": "-180 to 180. Used to compute sunrise / sunset times.",
       "showWeekNumbers": "Show Week Numbers",
       "showWeekNumbersDesc": "Show week numbers in Calendar and Mini Calendar views. The number matches the week-number token of the weekly note filename format.",
       "timer": "Timer",
@@ -196,6 +221,11 @@
     "openMiniCalendar": "Open Mini Calendar",
     "openKanban": "Open Kanban",
     "openTimer": "Open Timer View"
+  },
+  "viewOptions": {
+    "toggleSunTimes": "Show sunrise / sunset lines",
+    "toggleMoonPhase": "Show moon phase",
+    "followGlobalAstronomy": "Follow global setting"
   },
   "toolbar": {
     "today": "Today",
@@ -566,6 +596,21 @@
     "toggleHabits": "Toggle Habits section",
     "expandHabits": "Expand Habits",
     "collapseHabits": "Collapse Habits"
+  },
+  "astronomy": {
+    "sunrise": "Sunrise",
+    "sunset": "Sunset"
+  },
+  "moonPhase": {
+    "label": "Moon",
+    "newMoon": "New moon",
+    "waxingCrescent": "Waxing crescent",
+    "firstQuarter": "First quarter",
+    "waxingGibbous": "Waxing gibbous",
+    "fullMoon": "Full moon",
+    "waningGibbous": "Waning gibbous",
+    "lastQuarter": "Last quarter",
+    "waningCrescent": "Waning crescent"
   },
   "allDaySection": {
     "allDay": "All Day",

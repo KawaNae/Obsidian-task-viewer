@@ -1,5 +1,5 @@
 import { setIcon, Notice } from 'obsidian';
-import type { App, MenuItem, WorkspaceLeaf } from 'obsidian';
+import type { App, Menu, MenuItem, WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../sharedLogic/ViewUriBuilder';
 import { InputModal } from '../../modals/InputModal';
@@ -305,6 +305,10 @@ export interface ViewSettingsOptions {
     menuPresenter: MenuPresenter;
     getExportContainer?: () => HTMLElement | null;
     getExportSpec?: () => ExportTargetSpec;
+    /** View-specific menu items appended above the Save/Load/Reset block.
+     *  Used by views to surface their own overlay/display toggles
+     *  (e.g. astronomy) without bloating the shared option list. */
+    appendCustomItems?: (menu: Menu) => void;
 }
 
 /**
@@ -324,11 +328,18 @@ export class ViewSettingsMenu {
         const {
             app, leaf, getCustomName, getDefaultName, onRename,
             buildUri, viewType, getViewTemplateFolder, getViewTemplate, onApplyTemplate, onReset,
-            menuPresenter,
+            menuPresenter, appendCustomItems,
         } = options;
 
         const folder = getViewTemplateFolder();
         menuPresenter.present((menu) => {
+        // View-specific items (astronomy toggles etc.). Added first so the
+        // shared Save/Load/Reset block remains the lower, stable section.
+        if (appendCustomItems) {
+            appendCustomItems(menu);
+            menu.addSeparator();
+        }
+
         // Save view... (name required, saves template + updates customName)
         menu.addItem((item) => {
             item.setTitle(t('toolbar.saveView'))

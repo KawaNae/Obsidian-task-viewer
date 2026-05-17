@@ -1,0 +1,92 @@
+/* =============================================================================
+   Moon Phase Section
+   A single-row grid showing the moon phase per visible date. Sits between
+   the date-header and the habits row in the sticky header stack.
+============================================================================= */
+
+.moon-section {
+    background-color: var(--tv-bg-habits);
+    flex-shrink: 0;
+    position: sticky;
+    top: var(--moon-section-sticky-top, var(--header-height));
+    z-index: var(--z-timeline-habits-section);
+    border-bottom: 1px solid var(--tv-border);
+}
+
+.moon-section__label {
+    font-size: 0.7em;
+    color: var(--tv-text-muted, var(--text-muted));
+    line-height: 1;
+}
+
+.moon-section__cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 0;
+    min-height: 22px;
+    color: var(--tv-text-muted, var(--text-muted));
+    /* Matches date-header / habits-section: each cell owns its right
+       border; the axis owns the left edge. No `is-first-cell` border-left,
+       otherwise it doubles with the axis border-right into 2px. */
+    border-right: 1px solid var(--tv-border);
+}
+
+.moon-section__cell > svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+}
+
+.moon-section__axis {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-left: 1px solid var(--tv-border);
+    background-color: var(--tv-bg-axis);
+}
+
+/* =============================================================================
+   Inline moon-phase adornment — used by AstronomyCellAdorner. Calendar puts
+   the icon inside the day cell (left of the date label), Schedule puts it
+   inside the date-header cell.
+============================================================================= */
+
+.moon-phase-inline {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    color: var(--tv-text-muted, var(--text-muted));
+    flex-shrink: 0;
+}
+
+.moon-phase-inline > svg {
+    display: block;
+}
+
+/* Calendar day-cell positioning — sits left of the date number, vertically
+   centered with it. */
+.cal-day-cell > .moon-phase-inline--cal {
+    margin-right: 4px;
+}
+
+/* Schedule date-header — sits right after the date link, with a small gap.
+   (Legacy positioning kept while we remove inline-moon callers; harmless when
+   no element carries this modifier.) */
+.date-header__cell > .moon-phase-inline--date-header {
+    margin-left: 6px;
+}
+
+/* Mini Calendar — replaces task indicator dots at the same spot. The
+   `.cal-day-cell__indicators` flex row centers its contents already, so the
+   moon SVG just sits there with no extra margin. */
+.cal-day-cell__indicators > .moon-phase-inline--mini > svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* Timeline dedicated row — modifier exists so future tweaks (centering, color)
+   don't bleed into other views. */
+.moon-section__cell > .moon-phase-inline--row {
+    /* No extra layout — the cell already centers contents. */
+}
