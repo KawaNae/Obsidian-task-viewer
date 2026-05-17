@@ -119,15 +119,6 @@
     font-weight: normal;
 }
 
-.cal-week-number--mini.is-current-week {
-    color: var(--tv-text-accent);
-    z-index: auto;
-}
-
-.cal-week-number--mini.is-current-week::after {
-    display: none;
-}
-
 .cal-week-number--mini:hover {
     background: none;
     color: var(--tv-text);
@@ -155,12 +146,7 @@
     opacity: 0.56;
 }
 
-.cal-day-cell--mini.is-today::after {
-    display: none;
-}
-
 .cal-day-cell--mini.is-today .cal-day-cell__date-link {
-    background: rgba(var(--tv-accent-rgb), 0.16);
     color: var(--tv-text-accent);
 }
 

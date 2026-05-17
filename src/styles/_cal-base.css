@@ -93,22 +93,7 @@
 }
 
 .cal-week-number.is-current-week {
-    position: relative;
-    z-index: var(--z-task-card);
-    color: var(--tv-text-on-accent);
-}
-
-.cal-week-number.is-current-week::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: var(--tv-accent);
-    opacity: 0.9;
-    z-index: var(--z-negative);
-    pointer-events: none;
+    color: var(--tv-text-accent);
 }
 
 .cal-week-number:hover {
@@ -145,22 +130,7 @@
 }
 
 .cal-day-cell.is-today {
-    position: relative;
-    z-index: var(--z-task-card);
-    color: var(--tv-text-on-accent);
-}
-
-.cal-day-cell.is-today::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: var(--tv-accent);
-    opacity: 0.9;
-    z-index: var(--z-negative);
-    pointer-events: none;
+    color: var(--tv-text-accent);
 }
 
 .cal-day-cell .internal-link {

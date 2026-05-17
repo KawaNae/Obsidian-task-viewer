@@ -33,19 +33,11 @@
 .periodic-header__axis {
     /* Left axis cell, occupies grid column 1. Acts as a clickable toggle
        region together with W-axis and date-header axis. No bottom border so
-       the three cells fuse into one column visually. Hover paint is driven
-       by the JS-synchronized .is-fused-hover class so all three cells light
-       up together — see PeriodicHeaderRenderer.wireFusedHover. */
+       the three cells fuse into one column visually. */
     border-right: 1px solid var(--tv-border);
     border-left: 1px solid var(--tv-border);
     min-height: 0;
     cursor: pointer;
-    transition: background-color 120ms ease;
-}
-
-.periodic-header__axis.is-fused-hover,
-.date-header__cell.is-fused-hover {
-    background-color: var(--tv-bg-hover);
 }
 
 .periodic-header__segment {

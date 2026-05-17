@@ -60,35 +60,13 @@ export class PeriodicHeaderRenderer {
         const container = parent.createDiv('periodic-header');
         if (collapsed) container.addClass('periodic-header--collapsed');
 
-        // Three axis cells (YM-axis, W-axis, date-header axis) form one fused
-        // hover region. Each binds mouseenter/mouseleave that toggles the
-        // is-fused-hover class on all three together; mouseleave inside the
-        // region (cursor moving between fused cells) is suppressed via
-        // relatedTarget so the highlight doesn't flicker.
-        const fusedCells: HTMLElement[] = [];
-        const setFused = (on: boolean) => {
-            for (const c of fusedCells) c.toggleClass('is-fused-hover', on);
-        };
-        const wireFusedHover = (cell: HTMLElement) => {
-            cell.addEventListener('mouseenter', () => setFused(true));
-            cell.addEventListener('mouseleave', (e: MouseEvent) => {
-                const next = e.relatedTarget as Node | null;
-                if (next && fusedCells.some(c => c === next || c.contains(next))) return;
-                setFused(false);
-            });
-        };
-
-        const { row: ymRow, axis: ymAxis } = this.buildRow(container, 'periodic-header__row--year-month', gridTemplateColumns, onToggle);
-        fusedCells.push(ymAxis);
-        wireFusedHover(ymAxis);
+        const { row: ymRow } = this.buildRow(container, 'periodic-header__row--year-month', gridTemplateColumns, onToggle);
         const ymSegments = this.computeSegments(dates, 'YM', todayMoment, weekStartDay, todayVisualWeekKey);
         for (const seg of ymSegments) {
             this.appendYearMonthSegment(ymRow, seg);
         }
 
-        const { row: wRow, axis: wAxis } = this.buildRow(container, 'periodic-header__row--week', gridTemplateColumns, onToggle);
-        fusedCells.push(wAxis);
-        wireFusedHover(wAxis);
+        const { row: wRow } = this.buildRow(container, 'periodic-header__row--week', gridTemplateColumns, onToggle);
         const wSegments = this.computeSegments(dates, 'W', todayMoment, weekStartDay, todayVisualWeekKey);
         for (const seg of wSegments) {
             this.appendWeekSegment(wRow, seg);
@@ -112,8 +90,6 @@ export class PeriodicHeaderRenderer {
             dateHeaderAxis.appendChild(chevron);
 
             this.wireAxisToggleCell(dateHeaderAxis, onToggle, /*isPrimary*/ true);
-            fusedCells.push(dateHeaderAxis);
-            wireFusedHover(dateHeaderAxis);
             this.applyToggleState(dateHeaderAxis, chevron, collapsed);
         };
 
