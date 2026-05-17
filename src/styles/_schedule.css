@@ -231,7 +231,12 @@
 
 .schedule-grid__now-line {
     position: absolute;
-    left: calc(var(--schedule-axis-width) - 4px);
+    /* Match the grid-line left edge exactly. Grid lines render at the
+       axis right boundary because they live inside .schedule-grid__marker
+       (which has left:4px), so their `calc(... - 4px)` cancels out. The
+       now-line is a direct grid child without that 4px offset, so we point
+       at the axis width straight. */
+    left: var(--schedule-time-axis-width);
     right: 12px;
     height: 2px;
     background-color: var(--tv-accent);

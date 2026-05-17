@@ -223,13 +223,20 @@
     color: var(--tv-astro-sunset);
 }
 
-/* Schedule's markers layer spans the full grid width, so the default
-   `right: 0` would land at the day-column right edge instead of the axis
-   boundary. Pin to the axis-content edge explicitly. */
+/* Schedule pins the arrow at the axis right boundary and matches the
+   dashed line geometry to the now-line so the two indicators occupy the
+   same horizontal span (clear of the clock labels on the left, same 12px
+   right inset). */
 .schedule-grid__markers > .sun-axis-arrow {
     right: auto;
     left: var(--schedule-time-axis-width, 60px);
     transform: translate(-50%, calc(-1 * var(--sun-axis-arrow-anchor, 0%)));
+}
+
+.schedule-grid > .sun-indicator {
+    left: var(--schedule-time-axis-width, 60px);
+    right: 12px;
+    width: auto;
 }
 
 /* Section toggle button styles moved to _section-toggle.css (tv-section-toggle). */
