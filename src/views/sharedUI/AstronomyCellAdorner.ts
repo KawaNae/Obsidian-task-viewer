@@ -1,4 +1,4 @@
-import { setIcon, setTooltip } from 'obsidian';
+import { setTooltip } from 'obsidian';
 import {
     buildMoonPhaseSvg,
     getMoonIllumination,
@@ -119,20 +119,21 @@ export function attachSunIndicators(
 }
 
 /**
- * Attach small sunrise/sunset Lucide icons to a time-axis container. The
- * icons land at the same vertical position as the horizontal sun lines and
- * give the lines a recognizable anchor in the axis column (which otherwise
- * shows only hour numbers).
+ * Attach short vertical arrow marks at the intersection of the sun line and
+ * the time-axis right border. The arrow points in the "night direction":
+ * sunrise → upward (the time *before* sunrise is night), sunset → downward
+ * (the time *after* sunset is night). The arrow sits on top of the column
+ * border, giving the sun line a clear anchor without consuming axis width.
  *
  * Positioning contract is identical to `attachSunIndicators`: `minutesToTopPx`
- * is honored when provided (for adaptive grids), otherwise the helper falls
- * back to setting the `--indicator-minutes` CSS variable and lets the stylesheet
- * compute `top: calc(... * --hour-height / 60)`.
+ * is honored when provided (Schedule's adaptive grid); otherwise the
+ * `--indicator-minutes` CSS variable drives the vertical position via the
+ * stylesheet's `top: calc(... * --hour-height / 60)`.
  *
- * Returns the count of attached icons. Polar latitudes that yield Invalid
+ * Returns the count of attached arrows. Polar latitudes that yield Invalid
  * Date are skipped silently.
  */
-export function attachSunAxisIcons(
+export function attachSunAxisArrows(
     container: HTMLElement,
     date: string,
     options: AttachSunIndicatorsOptions,
@@ -153,22 +154,13 @@ export function attachSunAxisIcons(
             if (absoluteTopPx === null) return false;
         }
 
-        const el = container.createDiv(`sun-axis-icon sun-axis-icon--${variant}`);
-        setIcon(el, variant);
+        const el = container.createDiv(`sun-axis-arrow sun-axis-arrow--${variant}`);
+        el.innerHTML = buildArrowSvg(variant);
         if (absoluteTopPx !== null) {
             el.style.top = `${absoluteTopPx}px`;
         } else {
             el.style.setProperty('--indicator-minutes', String(minutesFromStart));
         }
-
-        // Vertical offset: shift the icon away from the nearest hour-boundary
-        // so it doesn't sit on top of the hour-number text. The line itself
-        // stays at the exact event time; the icon hovers ~14px above or below
-        // it depending on which half of the hour the event falls in.
-        const minuteInHour = minutesFromStart % 60;
-        const AXIS_ICON_SHIFT_PX = 14;
-        const shiftPx = (minuteInHour < 30 ? +1 : -1) * AXIS_ICON_SHIFT_PX;
-        el.style.setProperty('--axis-icon-shift', `${shiftPx}px`);
 
         const timeLabel = `${String(sunDate.getHours()).padStart(2, '0')}:${String(sunDate.getMinutes()).padStart(2, '0')}`;
         setTooltip(el, `${t(`astronomy.${variant}`)} ${timeLabel}`);
@@ -179,4 +171,24 @@ export function attachSunAxisIcons(
     if (append(sunrise, 'sunrise')) count++;
     if (append(sunset, 'sunset')) count++;
     return count;
+}
+
+/**
+ * Inline SVG for the night-direction arrow. 8px wide × 24px tall: a vertical
+ * shaft + a triangular head at one end. `currentColor` lets the parent
+ * element drive the tint (sunrise gold vs sunset rose).
+ */
+function buildArrowSvg(variant: 'sunrise' | 'sunset'): string {
+    if (variant === 'sunrise') {
+        // Head at top, shaft extending downward toward the intersection.
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 24" width="8" height="24" aria-hidden="true">`
+             + `<line x1="4" y1="7" x2="4" y2="24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>`
+             + `<polygon points="4,0 0,7 8,7" fill="currentColor"/>`
+             + `</svg>`;
+    }
+    // sunset: head at bottom, shaft extending upward from the intersection.
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 24" width="8" height="24" aria-hidden="true">`
+         + `<line x1="4" y1="0" x2="4" y2="17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>`
+         + `<polygon points="4,24 0,17 8,17" fill="currentColor"/>`
+         + `</svg>`;
 }

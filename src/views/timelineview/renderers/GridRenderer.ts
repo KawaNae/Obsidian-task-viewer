@@ -14,7 +14,7 @@ import type { DisplayTask } from '../../../types';
 import { HabitTrackerRenderer } from '../../sharedUI/HabitTrackerRenderer';
 import { MoonPhaseRenderer } from '../../sharedUI/MoonPhaseRenderer';
 import { getEffectiveAstronomyDisplay } from '../../../services/astronomy/AstronomyService';
-import { attachSunAxisIcons } from '../../sharedUI/AstronomyCellAdorner';
+import { attachSunAxisArrows } from '../../sharedUI/AstronomyCellAdorner';
 import { splitTasks } from '../../../services/display/TaskSplitter';
 import { categorizeTasksByDate } from '../../../services/display/TaskDateCategorizer';
 import { bucketBySection } from '../../../services/display/SectionClassifier';
@@ -193,13 +193,13 @@ export class GridRenderer {
         const timeCol = timelineGrid.createDiv('timeline-scroll-area__axis');
         this.renderTimeLabels(timeCol);
 
-        // Sun icons in the time axis (anchor for the per-day sun lines). The
-        // axis is shared across all visible day columns, so we anchor the
-        // icons to the first visible date — sun times shift by <2 min/day,
-        // imperceptible at axis-icon resolution.
+        // Sun arrows on the time-axis right border (anchor for the per-day
+        // sun lines). The axis is shared across all visible day columns, so
+        // we anchor to the first visible date — sun times shift by < 2 min/day,
+        // imperceptible at axis-arrow resolution.
         if (astronomyDisplay.sunTimes && dates.length > 0) {
             const { latitude, longitude } = this.plugin.settings.astronomy.location;
-            attachSunAxisIcons(timeCol, dates[0], { startHour, latitude, longitude });
+            attachSunAxisArrows(timeCol, dates[0], { startHour, latitude, longitude });
         }
 
         // Day Columns — timed + dueOnly のみ。split で segment を生成してから日付分類。

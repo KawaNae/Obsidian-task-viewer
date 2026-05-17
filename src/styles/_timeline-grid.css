@@ -180,32 +180,53 @@
 .sun-indicator--sunrise { background-color: var(--tv-astro-sunrise); }
 .sun-indicator--sunset  { background-color: var(--tv-astro-sunset); }
 
-/* Sun-axis icons — small Lucide icons placed inside the time-axis column at
-   the same y-position as the sunrise/sunset horizontal lines. Acts as a
-   recognizable anchor for the lines (which are deliberately subtle).
+/* Sun-axis arrows — short vertical arrows sitting on the time-axis right
+   border at the sunrise/sunset y-position. The arrow points toward "night":
+   sunrise upward (the time before sunrise is night), sunset downward (the
+   time after sunset is night). Anchored on the column boundary so they
+   never collide with the hour-number text.
 
    Positioning:
    - `top` comes from `--indicator-minutes` (Timeline linear grid) or is set
-     inline (Schedule adaptive grid).
-   - Horizontally centered to match the time-number column alignment.
-   - Vertically offset from the line by `--axis-icon-shift` (set in JS) so the
-     icon clears the nearest hour-number text. The line itself stays at the
-     exact event time; the icon hovers ~14px above or below it. */
-.sun-axis-icon {
+     inline by the caller (Schedule adaptive grid).
+   - Horizontally centered on the right edge of the host container so the
+     arrow shaft overlays the column boundary line.
+   - `--sun-axis-arrow-anchor` controls which end of the arrow lands at the
+     intersection: 0% = top of arrow at the line (sunset, head below),
+     100% = bottom of arrow at the line (sunrise, head above). */
+.sun-axis-arrow {
     position: absolute;
     top: calc(var(--indicator-minutes, 0) * var(--hour-height) / 60);
-    left: 50%;
-    width: 20px;
-    height: 20px;
-    transform: translate(-50%, calc(-50% + var(--axis-icon-shift, 0px)));
+    right: 0;
+    width: 8px;
+    height: 24px;
+    transform: translate(50%, calc(-1 * var(--sun-axis-arrow-anchor, 0%)));
     pointer-events: auto;
     z-index: 2;
 }
-.sun-axis-icon > svg {
+.sun-axis-arrow > svg {
+    display: block;
     width: 100%;
     height: 100%;
 }
-.sun-axis-icon--sunrise { color: var(--tv-astro-sunrise); }
-.sun-axis-icon--sunset  { color: var(--tv-astro-sunset); }
+.sun-axis-arrow--sunrise {
+    /* Bottom of arrow sits on the intersection; head points up into night. */
+    --sun-axis-arrow-anchor: 100%;
+    color: var(--tv-astro-sunrise);
+}
+.sun-axis-arrow--sunset {
+    /* Top of arrow sits on the intersection; head points down into night. */
+    --sun-axis-arrow-anchor: 0%;
+    color: var(--tv-astro-sunset);
+}
+
+/* Schedule's markers layer spans the full grid width, so the default
+   `right: 0` would land at the day-column right edge instead of the axis
+   boundary. Pin to the axis-content edge explicitly. */
+.schedule-grid__markers > .sun-axis-arrow {
+    right: auto;
+    left: var(--schedule-time-axis-width, 60px);
+    transform: translate(-50%, calc(-1 * var(--sun-axis-arrow-anchor, 0%)));
+}
 
 /* Section toggle button styles moved to _section-toggle.css (tv-section-toggle). */

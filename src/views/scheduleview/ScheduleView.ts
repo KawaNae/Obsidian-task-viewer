@@ -21,7 +21,7 @@ import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
-import { attachSunIndicators, attachSunAxisIcons } from '../sharedUI/AstronomyCellAdorner';
+import { attachSunIndicators, attachSunAxisArrows } from '../sharedUI/AstronomyCellAdorner';
 import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
 import { PeriodicHeaderRenderer, type PeriodicHeaderRenderResult } from '../sharedUI/PeriodicHeaderRenderer';
 import type { CollapsibleSectionKey, TimedDisplayTask } from './ScheduleTypes';
@@ -470,12 +470,12 @@ export class ScheduleView extends ItemView {
             attachSunIndicators(main, this.currentVisualDate, {
                 startHour, latitude, longitude, minutesToTopPx,
             });
-            // Anchor the line with an icon in the time-axis column. The
-            // markers layer carries the time labels and shares the same
-            // y-coordinate system used by `minutesToTopPx`.
+            // Anchor the line with a night-direction arrow on the axis right
+            // border. The markers layer carries the time labels and shares
+            // the same y-coordinate system used by `minutesToTopPx`.
             const markers = main.querySelector<HTMLElement>('.schedule-grid__markers');
             if (markers) {
-                attachSunAxisIcons(markers, this.currentVisualDate, {
+                attachSunAxisArrows(markers, this.currentVisualDate, {
                     startHour, latitude, longitude, minutesToTopPx,
                 });
             }
