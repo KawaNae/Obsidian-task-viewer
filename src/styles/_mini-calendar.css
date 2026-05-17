@@ -117,6 +117,15 @@
 .cal-week-number--mini {
     font-size: 0.62em;
     font-weight: normal;
+    /* Align the week label with the date number above it. The base
+       .cal-week-number centers vertically in the row, but in mini the
+       day-cell's date-link is a flex column that pushes the date label
+       toward the top (because the indicator row sits below). Switching
+       to flex-start + a top padding that matches the link's inner offset
+       (padding 4 + flex top-gap ≈ 6) keeps the W-label baseline-level
+       with the date number, regardless of whether indicators are present. */
+    align-items: flex-start;
+    padding-top: 10px;
 }
 
 .cal-week-number--mini:hover {
@@ -146,8 +155,13 @@
     opacity: 0.56;
 }
 
-.cal-day-cell--mini.is-today .cal-day-cell__date-link {
-    color: var(--tv-text-accent);
+/* Today: fill the date-number span only. Indicator row (moon-phase or task
+   dots) sits below and stays untouched, so the moon overlay never gets
+   covered by the today highlight. */
+.cal-day-cell--mini.is-today .cal-day-cell__date-label {
+    background-color: var(--tv-bg-today);
+    color: var(--tv-text-today);
+    padding: 1px 6px;
 }
 
 /* --- mini-only sub-elements --------------------------------------------- */

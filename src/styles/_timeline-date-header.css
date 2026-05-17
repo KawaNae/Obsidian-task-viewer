@@ -70,8 +70,10 @@
     text-decoration: underline;
 }
 
-.date-header__cell.is-today {
-    color: var(--tv-text-accent);
+.date-header__cell.is-today,
+.date-header__cell.is-today:hover {
+    background-color: var(--tv-bg-today);
+    color: var(--tv-text-today);
 }
 
 /* Date with overdue incomplete tasks - warning text color */

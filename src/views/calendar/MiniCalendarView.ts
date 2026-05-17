@@ -404,8 +404,9 @@ export class MiniCalendarView extends ItemView {
         }
 
         const weekLinkTarget = DailyNoteUtils.getWeeklyNoteLinkTarget(this.plugin.settings, weekStartDate);
-        const weekLink = weekNumberEl.createEl('a', {
-            cls: 'internal-link',
+        const weekLink = weekNumberEl.createEl('a', { cls: 'internal-link' });
+        weekLink.createSpan({
+            cls: 'cal-week-number__label',
             text: `W${String(weekNumber).padStart(2, '0')}`,
         });
         weekLink.dataset.href = weekLinkTarget;

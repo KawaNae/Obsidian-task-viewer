@@ -177,6 +177,13 @@ body {
     --tv-drop-glow-light: rgba(var(--tv-accent-rgb), 0.2);
 
     --tv-ghost-shadow: var(--tv-shadow-strong);
+
+    /* Today / current-week fill (cell-type highlights). Dark mode uses the
+       raw accent; light mode darkens it to keep white-on-accent ≥ ~4.5:1 —
+       Obsidian's --interactive-accent in light themes hovers around HSL L≈71%
+       which fails AA against white otherwise. */
+    --tv-bg-today: var(--tv-accent);
+    --tv-text-today: var(--tv-text-on-accent);
 }
 
 body.theme-light {
@@ -186,6 +193,8 @@ body.theme-light {
     --tv-shadow-a-strong: 0.1;
     --tv-shadow-a-medium: 0.08;
     --tv-shadow-a-light: 0.05;
+
+    --tv-bg-today: color-mix(in srgb, var(--tv-accent), black 28%);
 }
 
 body.theme-dark {
