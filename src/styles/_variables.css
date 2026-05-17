@@ -55,11 +55,6 @@
     --toolbar-padding: 8px;
     --toolbar-gap: 8px;
 
-    /* Astronomy overlays — sunrise/sunset line and axis-icon tint.
-       Theme-overridable; consumers reference these vars (never literals). */
-    --tv-astro-sunrise: #f5a623;
-    --tv-astro-sunset:  #c2185b;
-
     /* Z-Index Layers */
     --z-negative: -1;
     --z-base: 0;
@@ -122,6 +117,15 @@ body {
     --tv-accent: var(--interactive-accent);
     --tv-accent-hover: var(--interactive-accent-hover);
     --tv-accent-rgb: var(--interactive-accent-rgb);
+
+    /* Astronomy overlays — sunrise/sunset line and axis-icon tint.
+       Theme-tracked muted text color: visible enough to read against the
+       grid background but quiet enough not to compete with task accents.
+       The two events share a color; axis arrows distinguish them by
+       direction. Must live in `body` (not `:root`) so `var(--tv-text-muted)`
+       resolves — --tv-text-muted itself is body-scoped. */
+    --tv-astro-sunrise: var(--tv-text-muted);
+    --tv-astro-sunset:  var(--tv-text-muted);
 
     --tv-danger-rgb: var(--background-modifier-error-rgb, var(--color-red-rgb));
 
