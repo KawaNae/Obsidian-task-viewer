@@ -14,6 +14,7 @@
 !/package.json
 !/package-lock.json
 !/readme.md
+!/THIRD_PARTY_LICENSES.md
 !/tsconfig.json
 !/vitest.config.e2e.ts
 !/vitest.config.ts

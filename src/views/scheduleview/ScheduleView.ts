@@ -3,7 +3,8 @@ import { t } from '../../i18n';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { isCompleteStatusChar } from '../../types';
-import type { DisplayTask } from '../../types';
+import type { DisplayTask, AstronomyDisplay } from '../../types';
+import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
 import { DateUtils } from '../../utils/DateUtils';
@@ -19,6 +20,8 @@ import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
+import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
+import { attachSunIndicators } from '../sharedUI/AstronomyCellAdorner';
 import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
 import { PeriodicHeaderRenderer, type PeriodicHeaderRenderResult } from '../sharedUI/PeriodicHeaderRenderer';
 import type { CollapsibleSectionKey, TimedDisplayTask } from './ScheduleTypes';
@@ -42,6 +45,7 @@ interface ScheduleViewState {
     customName?: string;
     periodicHeaderCollapsed?: boolean;
     maskMode?: boolean;
+    astronomyDisplay?: Partial<AstronomyDisplay>;
 }
 
 export class ScheduleView extends ItemView {
@@ -56,6 +60,7 @@ export class ScheduleView extends ItemView {
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly habitRenderer: HabitTrackerRenderer;
+    private readonly moonRenderer: MoonPhaseRenderer;
     private readonly dateHeaderRenderer: DateHeaderRenderer;
     private readonly periodicHeaderRenderer: PeriodicHeaderRenderer;
     private readonly filterMenu = new FilterMenuComponent();
@@ -77,6 +82,7 @@ export class ScheduleView extends ItemView {
     private customName: string | undefined;
     private periodicHeaderCollapsed: boolean = true;
     private maskMode: boolean = false;
+    private astronomyDisplay: Partial<AstronomyDisplay> | undefined = undefined;
     private collapsedSections: Record<CollapsibleSectionKey, boolean> = {
         allDay: false,
         dueOnly: false,
@@ -96,6 +102,7 @@ export class ScheduleView extends ItemView {
         this.addChild(this.taskRenderer);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
+        this.moonRenderer = new MoonPhaseRenderer();
         this.dateHeaderRenderer = new DateHeaderRenderer({
             app: this.app,
             plugin: this.plugin,
@@ -187,6 +194,13 @@ export class ScheduleView extends ItemView {
                 this.render();
                 this.toolbar.update();
             },
+            getAstronomyDisplay: () => this.astronomyDisplay,
+            setAstronomyDisplay: (next) => {
+                this.astronomyDisplay = next;
+                this.app.workspace.requestSaveLayout();
+                this.render();
+                this.toolbar.update();
+            },
         });
     }
 
@@ -225,6 +239,10 @@ export class ScheduleView extends ItemView {
 
         this.maskMode = state?.maskMode === true;
 
+        this.astronomyDisplay = state?.astronomyDisplay && Object.keys(state.astronomyDisplay).length > 0
+            ? { ...state.astronomyDisplay }
+            : undefined;
+
         await super.setState(state, result);
         if (this.container) {
             await this.performRender();
@@ -248,6 +266,9 @@ export class ScheduleView extends ItemView {
         }
         if (this.maskMode) {
             result.maskMode = true;
+        }
+        if (this.astronomyDisplay && Object.keys(this.astronomyDisplay).length > 0) {
+            result.astronomyDisplay = { ...this.astronomyDisplay };
         }
         return result;
     }
@@ -391,6 +412,10 @@ export class ScheduleView extends ItemView {
 
         this.renderDateHeader(fixedContainer, date, periodicHeader);
 
+        // Moon-phase row between date header and habits — mirrors Timeline's
+        // placement so the two time-axis views look symmetric.
+        this.renderMoonSection(fixedContainer, date);
+
         // Habits in fixed area (always visible), allday in scroll body (sticky on PC)
         this.renderHabitsSection(fixedContainer, date);
         await this.sectionRenderer.renderAllDaySection(bodyContainer, categorized.allDay, reconciler);
@@ -421,6 +446,33 @@ export class ScheduleView extends ItemView {
 
         if (this.isCurrentVisualDate(this.currentVisualDate)) {
             this.gridRenderer.renderNowLine(main, layout.rows, timelineHeight);
+        }
+
+        const astronomyDisplay = getEffectiveAstronomyDisplay(
+            this.astronomyDisplay,
+            this.plugin.settings.astronomy,
+        );
+        if (astronomyDisplay.sunTimes) {
+            const { latitude, longitude } = this.plugin.settings.astronomy.location;
+            const startHour = this.plugin.settings.startHour;
+            const rows = layout.rows;
+            const firstMinute = rows[0]?.minute ?? 0;
+            const lastMinute = rows[rows.length - 1]?.minute ?? 24 * 60;
+            attachSunIndicators(main, this.currentVisualDate, {
+                startHour,
+                latitude,
+                longitude,
+                // Schedule's adaptive grid: `row.minute` is in clock-minutes
+                // with startHour-aware wrap (same axis as `timeToVisualMinute`
+                // produces). The helper's callback contract is in
+                // minutes-from-startHour, so we add startHour*60 to convert.
+                minutesToTopPx: (minutesFromStart) => {
+                    const visualMinute = minutesFromStart + startHour * 60;
+                    if (visualMinute < firstMinute || visualMinute > lastMinute) return null;
+                    return this.gridCalculator.getTopForMinute(visualMinute, rows)
+                        + ScheduleView.TIMELINE_TOP_PADDING_PX;
+                },
+            });
         }
     }
 
@@ -455,6 +507,22 @@ export class ScheduleView extends ItemView {
         const row = container.createDiv('tv-grid-row habits-section');
         row.style.gridTemplateColumns = this.getScheduleRowColumns();
         this.habitRenderer.render(row, [date]);
+    }
+
+    /**
+     * Moon-phase grid row above the habits row. Symmetric with Timeline's
+     * `MoonPhaseRenderer` usage — same axis/cell shape, just a single date.
+     */
+    private renderMoonSection(container: HTMLElement, date: string): void {
+        const astronomyDisplay = getEffectiveAstronomyDisplay(
+            this.astronomyDisplay,
+            this.plugin.settings.astronomy,
+        );
+        if (!astronomyDisplay.moonPhase) return;
+
+        const row = container.createDiv('tv-grid-row moon-section');
+        row.style.gridTemplateColumns = this.getScheduleRowColumns();
+        this.moonRenderer.render(row, [date]);
     }
 
     private getScheduleRowColumns(): string {

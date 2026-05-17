@@ -10,6 +10,7 @@ import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { HandleManager } from '../HandleManager';
 import { CardReconciler } from '../../sharedUI/CardReconciler';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
+import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 
 
 const Z_GAP = 10;
@@ -32,7 +33,13 @@ export class TimelineSectionRenderer {
         private viewId: string
     ) { }
 
-    public render(container: HTMLElement, date: string, timedTasks: DisplayTask[], reconciler: CardReconciler) {
+    public render(
+        container: HTMLElement,
+        date: string,
+        timedTasks: DisplayTask[],
+        reconciler: CardReconciler,
+        renderOptions: { showSunTimes: boolean } = { showSunTimes: false },
+    ) {
         const startHour = this.plugin.settings.startHour;
 
         // Calculate layout for overlapping tasks
@@ -56,6 +63,21 @@ export class TimelineSectionRenderer {
             // hot path tight.
             if (!reused) this.menuHandler.addTaskContextMenu(el, task);
         });
+
+        if (renderOptions.showSunTimes) {
+            this.renderSunIndicators(container, date, startHour);
+        }
+    }
+
+    /**
+     * Append sunrise/sunset horizontal indicator lines for `date`. Thin
+     * wrapper around the shared `attachSunIndicators` helper — kept as an
+     * instance method so the call site reads `this.renderSunIndicators(...)`
+     * consistently with the other private renderers on this class.
+     */
+    private renderSunIndicators(container: HTMLElement, date: string, startHour: number): void {
+        const { latitude, longitude } = this.plugin.settings.astronomy.location;
+        attachSunIndicators(container, date, { startHour, latitude, longitude });
     }
 
     /**

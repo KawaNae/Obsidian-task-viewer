@@ -12,6 +12,8 @@ import { TimelineSectionRenderer } from './TimelineSectionRenderer';
 import { isDisplayTaskOnVisualDate } from '../../../services/display/DisplayTaskConverter';
 import type { DisplayTask } from '../../../types';
 import { HabitTrackerRenderer } from '../../sharedUI/HabitTrackerRenderer';
+import { MoonPhaseRenderer } from '../../sharedUI/MoonPhaseRenderer';
+import { getEffectiveAstronomyDisplay } from '../../../services/astronomy/AstronomyService';
 import { splitTasks } from '../../../services/display/TaskSplitter';
 import { categorizeTasksByDate } from '../../../services/display/TaskDateCategorizer';
 import { bucketBySection } from '../../../services/display/SectionClassifier';
@@ -38,6 +40,7 @@ export class GridRenderer {
         allDayRenderer: AllDaySectionRenderer,
         timelineRenderer: TimelineSectionRenderer,
         habitRenderer: HabitTrackerRenderer,
+        moonRenderer: MoonPhaseRenderer,
         handleManager: HandleManager,
         dates: string[],
         filteredTasks: DisplayTask[],
@@ -86,7 +89,20 @@ export class GridRenderer {
 
         periodicHeader.mountInAxisCell(dateHeaderResult.axisCell);
 
-        // 2. Habits Row (fixed, outside scroll area — always visible)
+        // 2a. Moon Phase Row (fixed, sits above habits). Only created when
+        // the *effective* display flag is on — keeps the row absent entirely
+        // otherwise so the grid stays compact.
+        const astronomyDisplay = getEffectiveAstronomyDisplay(
+            this.viewState.astronomyDisplay,
+            this.plugin.settings.astronomy,
+        );
+        if (astronomyDisplay.moonPhase) {
+            const moonRow = grid.createDiv('tv-grid-row moon-section');
+            moonRow.style.gridTemplateColumns = colTemplate;
+            moonRenderer.render(moonRow, dates);
+        }
+
+        // 2b. Habits Row (fixed, outside scroll area — always visible)
         const habitsRow = grid.createDiv('tv-grid-row habits-section');
         habitsRow.style.gridTemplateColumns = colTemplate;
         habitRenderer.render(habitsRow, dates);
@@ -184,7 +200,9 @@ export class GridRenderer {
             const col = timelineGrid.createDiv('timeline-scroll-area__day-column');
             col.dataset.date = date;
             const timedTasks = categorizedByDate.get(date)?.timed ?? [];
-            timelineRenderer.render(col, date, timedTasks, reconciler);
+            timelineRenderer.render(col, date, timedTasks, reconciler, {
+                showSunTimes: astronomyDisplay.sunTimes,
+            });
 
             // Add interaction listeners for creating tasks
             timelineRenderer.addCreateTaskListeners(col, date);

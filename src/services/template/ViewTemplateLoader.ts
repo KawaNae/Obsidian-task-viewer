@@ -129,6 +129,16 @@ export class ViewTemplateLoader {
         if (typeof data.maskMode === 'boolean') {
             template.maskMode = data.maskMode;
         }
+
+        if (data.astronomyDisplay && typeof data.astronomyDisplay === 'object') {
+            const a = data.astronomyDisplay as Record<string, unknown>;
+            const partial: Record<string, boolean> = {};
+            if (typeof a.sunTimes === 'boolean') partial.sunTimes = a.sunTimes;
+            if (typeof a.moonPhase === 'boolean') partial.moonPhase = a.moonPhase;
+            if (Object.keys(partial).length > 0) {
+                template.astronomyDisplay = partial as ViewTemplate['astronomyDisplay'];
+            }
+        }
     }
 
     private parsePinnedLists(raw: unknown[]): PinnedListDefinition[] {

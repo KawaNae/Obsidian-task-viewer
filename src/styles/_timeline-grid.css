@@ -164,4 +164,20 @@
     pointer-events: none;
 }
 
+/* Sun Indicators (sunrise / sunset). Same positioning mechanic as
+   current-time-indicator but thinner and softer so they sit as ambient
+   context behind tasks rather than competing with them. */
+.sun-indicator {
+    position: absolute;
+    top: calc(var(--indicator-minutes, 0) * var(--hour-height) / 60);
+    left: 0;
+    width: 100%;
+    height: 2px;
+    pointer-events: none;
+    opacity: 0.7;
+    z-index: var(--z-task-card);
+}
+.sun-indicator--sunrise { background-color: #f5a623; }
+.sun-indicator--sunset  { background-color: #9c4a2a; }
+
 /* Section toggle button styles moved to _section-toggle.css (tv-section-toggle). */

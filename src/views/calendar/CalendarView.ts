@@ -2,7 +2,9 @@ import { ItemView, TFile, WorkspaceLeaf, setIcon, type ViewStateResult } from 'o
 import { t } from '../../i18n';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import { Task, DisplayTask, PinnedListDefinition } from '../../types';
+import { Task, DisplayTask, PinnedListDefinition, AstronomyDisplay } from '../../types';
+import { attachMoonPhase } from '../sharedUI/AstronomyCellAdorner';
+import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { DateUtils } from '../../utils/DateUtils';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import { TaskReadService } from '../../services/data/TaskReadService';
@@ -65,6 +67,7 @@ interface CalendarViewState {
     pinnedLists?: PinnedListDefinition[];
     customName?: string;
     maskMode?: boolean;
+    astronomyDisplay?: Partial<AstronomyDisplay>;
 }
 
 export class CalendarView extends ItemView {
@@ -101,6 +104,7 @@ export class CalendarView extends ItemView {
     private pinnedLists: PinnedListDefinition[] = [];
     private customName: string | undefined;
     private maskMode: boolean = false;
+    private astronomyDisplay: Partial<AstronomyDisplay> | undefined = undefined;
     private scrollRestorePending = false;
     private savedScrollTop: number | null = null;
     private sidebarOpenedThisSession = false;
@@ -211,6 +215,13 @@ export class CalendarView extends ItemView {
                 this.toolbar.update();
                 this.pinnedListRenderer?.refresh();
             },
+            getAstronomyDisplay: () => this.astronomyDisplay,
+            setAstronomyDisplay: (next) => {
+                this.astronomyDisplay = next;
+                this.app.workspace.requestSaveLayout();
+                this.render();
+                this.toolbar.update();
+            },
         });
     }
 
@@ -259,6 +270,9 @@ export class CalendarView extends ItemView {
             this.customName = undefined;
         }
         this.maskMode = state?.maskMode === true;
+        this.astronomyDisplay = state?.astronomyDisplay && Object.keys(state.astronomyDisplay).length > 0
+            ? { ...state.astronomyDisplay }
+            : undefined;
         await super.setState(state, result);
         await this.performRender();
         // setState may have changed filterState / pinnedLists / collapse — none
@@ -288,6 +302,9 @@ export class CalendarView extends ItemView {
         }
         if (this.maskMode) {
             result.maskMode = true;
+        }
+        if (this.astronomyDisplay && Object.keys(this.astronomyDisplay).length > 0) {
+            result.astronomyDisplay = { ...this.astronomyDisplay };
         }
         return result;
     }
@@ -716,6 +733,14 @@ export class CalendarView extends ItemView {
         const dateLabel = isFirstOfMonth
             ? dateKey
             : `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+        const astronomyDisplay = getEffectiveAstronomyDisplay(
+            this.astronomyDisplay,
+            this.plugin.settings.astronomy,
+        );
+        if (astronomyDisplay.moonPhase) {
+            attachMoonPhase(header, dateKey, { size: 14, modifier: 'moon-phase-inline--cal' });
+        }
 
         header.style.gridColumn = `${this.getGridColumnForDay(colIndex)}`;
         header.style.gridRow = '1';

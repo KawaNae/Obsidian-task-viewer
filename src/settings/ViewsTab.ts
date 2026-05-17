@@ -33,6 +33,67 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
                 await plugin.saveSettings();
             }));
 
+    // Location & Astronomy (global defaults; each view can override per-instance)
+    el.createEl('h3', { text: t('settings.views.locationAndAstronomy'), cls: 'setting-section-header' });
+
+    new Setting(el)
+        .setName(t('settings.views.showSunTimes'))
+        .setDesc(t('settings.views.showSunTimesDesc'))
+        .addToggle(toggle => toggle
+            .setValue(plugin.settings.astronomy.display.sunTimes)
+            .onChange(async (value) => {
+                plugin.settings.astronomy.display.sunTimes = value;
+                await plugin.saveSettings();
+            }));
+
+    new Setting(el)
+        .setName(t('settings.views.showMoonPhase'))
+        .setDesc(t('settings.views.showMoonPhaseDesc'))
+        .addToggle(toggle => toggle
+            .setValue(plugin.settings.astronomy.display.moonPhase)
+            .onChange(async (value) => {
+                plugin.settings.astronomy.display.moonPhase = value;
+                await plugin.saveSettings();
+            }));
+
+    new Setting(el)
+        .setName(t('settings.views.homeLatitude'))
+        .setDesc(t('settings.views.homeLatitudeDesc'))
+        .addText(text => {
+            text.inputEl.type = 'number';
+            text.inputEl.step = 'any';
+            text
+                .setPlaceholder('35.6762')
+                .setValue(String(plugin.settings.astronomy.location.latitude))
+                .onChange(async (value) => {
+                    let n = parseFloat(value);
+                    if (isNaN(n)) return; // 入力途中は無視
+                    if (n < -90) n = -90;
+                    if (n > 90) n = 90;
+                    plugin.settings.astronomy.location.latitude = n;
+                    await plugin.saveSettings();
+                });
+        });
+
+    new Setting(el)
+        .setName(t('settings.views.homeLongitude'))
+        .setDesc(t('settings.views.homeLongitudeDesc'))
+        .addText(text => {
+            text.inputEl.type = 'number';
+            text.inputEl.step = 'any';
+            text
+                .setPlaceholder('139.6503')
+                .setValue(String(plugin.settings.astronomy.location.longitude))
+                .onChange(async (value) => {
+                    let n = parseFloat(value);
+                    if (isNaN(n)) return;
+                    if (n < -180) n = -180;
+                    if (n > 180) n = 180;
+                    plugin.settings.astronomy.location.longitude = n;
+                    await plugin.saveSettings();
+                });
+        });
+
     // Templates
     el.createEl('h3', { text: t('settings.views.templates'), cls: 'setting-section-header' });
 

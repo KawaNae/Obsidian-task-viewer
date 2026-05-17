@@ -162,3 +162,5 @@ tv-content: ウェブサイトリニューアル
 ## ライセンス
 
 MIT License
+
+サードパーティライブラリのライセンス表示は [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) を参照してください。

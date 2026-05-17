@@ -329,6 +329,9 @@ export interface ViewState {
     /** Per-leaf "mask mode" toggle. When true, the renderer substitutes each
      * card's content with the task's `tv-mask` value (live, not export-only). */
     maskMode?: boolean;
+    /** Per-instance override of astronomy display flags. undefined fields fall
+     *  back to settings.astronomy.display. */
+    astronomyDisplay?: Partial<AstronomyDisplay>;
 }
 
 export interface PinnedListDefinition {
@@ -355,6 +358,8 @@ export interface ViewTemplate extends ViewTemplateSummary {
     /** Snapshot of the view's mask-mode toggle. Loading a template with
      * `maskMode: true` flips the receiving view into masked rendering. */
     maskMode?: boolean;
+    /** Per-instance astronomy display override (same shape as ViewState's). */
+    astronomyDisplay?: Partial<AstronomyDisplay>;
 }
 
 export interface TvFileKeys {
@@ -506,6 +511,36 @@ export interface TaskViewerSettings {
     enableTasksPlugin: boolean;
     enableDayPlanner: boolean;
     tasksPluginMapping: TasksPluginMapping;
+
+    /**
+     * Astronomy sub-system. `display` is the global default for views
+     * (each view can override per-instance via `viewState.astronomyDisplay`).
+     * `location` is the observer position used for sun-time / horizon-dependent
+     * calculations; moon illumination is essentially observer-independent.
+     * Future: subLocations[] for multi-TZ travel scenarios.
+     */
+    astronomy: AstronomySettings;
+}
+
+export interface AstronomyDisplay {
+    /** Show sunrise/sunset horizontal lines on time-axis views. */
+    sunTimes: boolean;
+    /** Show moon phase indicator per visible date. */
+    moonPhase: boolean;
+}
+
+export interface AstronomyLocation {
+    /** Latitude in degrees, -90 to 90 */
+    latitude: number;
+    /** Longitude in degrees, -180 to 180 */
+    longitude: number;
+    // Phase B (multi-TZ): timezone?: string;
+}
+
+export interface AstronomySettings {
+    display: AstronomyDisplay;
+    location: AstronomyLocation;
+    // Phase B (multi-TZ): subLocations?: AstronomyLocation[];
 }
 
 export type TaskFieldMapping = 'startDate' | 'endDate' | 'due' | 'ignore';
@@ -576,5 +611,9 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
         start: 'startDate',
         scheduled: 'startDate',
         due: 'due',
+    },
+    astronomy: {
+        display: { sunTimes: false, moonPhase: false },
+        location: { latitude: 35.6762, longitude: 139.6503 }, // Tokyo Station
     },
 };

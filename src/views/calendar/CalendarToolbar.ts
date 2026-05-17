@@ -3,9 +3,10 @@ import { t } from '../../i18n';
 import type TaskViewerPlugin from '../../main';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import { createEmptyFilterState } from '../../services/filter/FilterTypes';
-import type { ViewTemplate, PinnedListDefinition } from '../../types';
+import type { ViewTemplate, PinnedListDefinition, AstronomyDisplay } from '../../types';
 import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
 import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
+import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 
@@ -33,6 +34,9 @@ export interface CalendarToolbarDeps {
 
     getMaskMode: () => boolean;
     setMaskMode: (next: boolean) => void;
+
+    getAstronomyDisplay: () => Partial<AstronomyDisplay> | undefined;
+    setAstronomyDisplay: (next: Partial<AstronomyDisplay> | undefined) => void;
 }
 
 /**
@@ -109,6 +113,7 @@ export class CalendarToolbar extends ViewToolbarBase {
                 filterState: deps.filterMenu.getFilterState(),
                 pinnedLists: deps.getPinnedLists(),
                 maskMode: deps.getMaskMode(),
+                astronomyDisplay: deps.getAstronomyDisplay(),
             }),
             getExportContainer: () => deps.container.querySelector<HTMLElement>('.cal-grid'),
             getExportSpec: () => ({
@@ -122,13 +127,25 @@ export class CalendarToolbar extends ViewToolbarBase {
                 if (template.maskMode != null) {
                     deps.setMaskMode(template.maskMode);
                 }
+                deps.setAstronomyDisplay(template.astronomyDisplay
+                    ? { ...template.astronomyDisplay }
+                    : undefined);
                 deps.onApplyTemplate(template);
             },
             onReset: () => {
                 deps.filterMenu.setFilterState(createEmptyFilterState());
+                deps.setAstronomyDisplay(undefined);
                 deps.onReset();
             },
             menuPresenter: deps.plugin.menuPresenter,
+            appendCustomItems: (menu) => {
+                appendAstronomyMenuSection(menu, {
+                    overlays: ['moonPhase'],
+                    settings: deps.plugin.settings.astronomy,
+                    instance: deps.getAstronomyDisplay(),
+                    onChange: (next) => deps.setAstronomyDisplay(next),
+                });
+            },
         });
 
         const toggleBtn = toolbar.createEl('button', {

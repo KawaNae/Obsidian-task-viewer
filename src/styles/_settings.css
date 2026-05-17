@@ -74,3 +74,25 @@
 .tv-settings .tv-settings__panel .setting-section-header:first-child {
     margin-top: 4px;
 }
+
+/* About tab */
+.tv-about__third-party-intro {
+    margin-top: 4px;
+    margin-bottom: 8px;
+}
+
+.tv-about__third-party-text {
+    max-height: 360px;
+    overflow: auto;
+    padding: 8px 12px;
+    margin: 0;
+    background-color: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    font-family: var(--font-monospace);
+    font-size: var(--font-ui-smaller);
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text-muted);
+}
