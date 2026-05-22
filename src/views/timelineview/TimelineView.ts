@@ -30,7 +30,7 @@ import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
 import { PinnedListRenderer, type PinnedListCallbacks } from '../sharedUI/PinnedListRenderer';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
-import { createEmptyFilterState, type FilterState } from '../../services/filter/FilterTypes';
+import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
@@ -40,6 +40,9 @@ import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 import { RenderScheduler } from '../sharedUI/RenderScheduler';
 import { CardReconciler } from '../sharedUI/CardReconciler';
+import { codecFor } from '../../services/viewConfig';
+import { TimelineSchema, type TimelineConfig, type TimelineTransient } from './TimelineSchema';
+import type { ViewConfigCodec } from '../../services/viewConfig';
 
 export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
 
@@ -53,19 +56,12 @@ const COLLAPSE_KEY_PREFIX = `${VIEW_ID}::`;
 
 /**
  * Timeline View - Displays tasks on a time-based grid layout.
+ *
+ * Persisted state shape is declared in TimelineSchema (config + transient).
+ * This view-local type alias is the union seen by setState — Obsidian gives
+ * us `unknown`-shaped dicts so the codec is what actually parses them.
  */
-interface TimelineViewState {
-    daysToShow?: number;
-    zoomLevel?: number;
-    startDate?: string;
-    filterState?: FilterState;
-    showSidebar?: boolean;
-    pinnedListCollapsed?: Record<string, boolean>;
-    pinnedLists?: PinnedListDefinition[];
-    customName?: string;
-    periodicHeaderCollapsed?: boolean;
-    maskMode?: boolean;
-}
+type TimelineViewState = Partial<TimelineConfig> & Partial<TimelineTransient>;
 
 export class TimelineView extends ItemView {
     // ==================== Services & Handlers ====================
@@ -213,45 +209,28 @@ export class TimelineView extends ItemView {
         return VIEW_META_TIMELINE.icon;
     }
 
+    private get codec(): ViewConfigCodec<TimelineConfig, TimelineTransient> {
+        return codecFor(VIEW_TYPE_TIMELINE) as ViewConfigCodec<TimelineConfig, TimelineTransient>;
+    }
+
     async setState(state: TimelineViewState, result: ViewStateResult): Promise<void> {
-        if (state) {
-            if (typeof state.daysToShow === 'number') {
-                this.viewState.daysToShow = state.daysToShow;
-            }
-            if (typeof state.zoomLevel === 'number') {
-                this.viewState.zoomLevel = state.zoomLevel;
-            }
-            if (typeof state.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(state.startDate)) {
-                this.viewState.startDate = state.startDate;
-            }
-            if (state.filterState) {
-                this.viewState.filterState = state.filterState;
-            } else {
-                this.viewState.filterState = undefined;
-            }
-            if (typeof state.showSidebar === 'boolean') {
-                this.viewState.showSidebar = state.showSidebar;
-                this.sidebarManager.applyOpen(state.showSidebar, { animate: false });
-            }
-            if (state.pinnedListCollapsed) {
-                // Migrate legacy un-prefixed keys (pre-viewId-namespacing) to the
-                // current `${viewId}::${listId}` form. One-shot at deserialize.
-                this.viewState.pinnedListCollapsed = this.migrateCollapsedKeys(state.pinnedListCollapsed);
-            }
-            if (Array.isArray(state.pinnedLists)) {
-                this.viewState.pinnedLists = state.pinnedLists;
-            }
-            if (typeof state.customName === 'string' && state.customName.trim()) {
-                this.viewState.customName = state.customName;
-            } else {
-                this.viewState.customName = undefined;
-            }
-            if (typeof state.periodicHeaderCollapsed === 'boolean') {
-                this.viewState.periodicHeaderCollapsed = state.periodicHeaderCollapsed;
-            }
-            this.viewState.maskMode = state.maskMode === true;
-            // Note: startDate is not restored - always use "Today" logic on reload
-        }
+        const stateDict = (state ?? {}) as Record<string, unknown>;
+        const config = this.codec.parseConfig(stateDict);
+        const transient = this.codec.parseTransient(stateDict);
+
+        // Apply config with REPLACE semantics over schema defaults — fields
+        // absent from `state` are restored to their declared defaults rather
+        // than retained. This is the single behavior that closes B5 across
+        // all views (no per-view "else undefined" branches needed).
+        const next: Partial<TimelineConfig> = { ...TimelineSchema.defaults, ...config };
+        Object.assign(this.viewState, next);
+
+        // Transient is overlaid additively (no defaults — these are per-leaf).
+        Object.assign(this.viewState, transient);
+
+        // Side effect: sidebar DOM has to follow the boolean.
+        this.sidebarManager.applyOpen(this.viewState.showSidebar ?? true, { animate: false });
+
         await super.setState(state, result);
         // State-side of the init barrier is now satisfied. If onOpen has
         // already run and tasks are loaded, this fires initial state-
@@ -267,34 +246,13 @@ export class TimelineView extends ItemView {
         this.pinnedListRenderer?.refresh();
     }
 
-    getState() {
-        const state: Record<string, unknown> = {
-            daysToShow: this.viewState.daysToShow,
-            showSidebar: this.viewState.showSidebar,
+    getState(): Record<string, unknown> {
+        const config = this.viewState as Partial<TimelineConfig>;
+        const transient = this.viewState as Partial<TimelineTransient>;
+        return {
+            ...this.codec.serializeConfig(config),
+            ...this.codec.serializeTransient(transient),
         };
-        if (this.viewState.pinnedListCollapsed && Object.keys(this.viewState.pinnedListCollapsed).length > 0) {
-            state.pinnedListCollapsed = this.viewState.pinnedListCollapsed;
-        }
-        const lists = this.viewState.pinnedLists;
-        if (lists && lists.length > 0) {
-            state.pinnedLists = lists;
-        }
-        if (this.viewState.zoomLevel != null) {
-            state.zoomLevel = this.viewState.zoomLevel;
-        }
-        if (this.viewState.filterState) {
-            state.filterState = this.viewState.filterState;
-        }
-        if (this.viewState.customName) {
-            state.customName = this.viewState.customName;
-        }
-        if (typeof this.viewState.periodicHeaderCollapsed === 'boolean') {
-            state.periodicHeaderCollapsed = this.viewState.periodicHeaderCollapsed;
-        }
-        if (this.viewState.maskMode) {
-            state.maskMode = true;
-        }
-        return state;
     }
 
     async onOpen() {
@@ -866,23 +824,6 @@ export class TimelineView extends ItemView {
             }
         }
         return out;
-    }
-
-    /**
-     * One-shot migration: any key without `::` is assumed to be a legacy
-     * listId-only entry from before viewId-namespacing was introduced.
-     * Prefix it with `${viewId}::` so timeline owns it.
-     */
-    private migrateCollapsedKeys(stored: Record<string, boolean>): Record<string, boolean> {
-        const migrated: Record<string, boolean> = {};
-        for (const [key, val] of Object.entries(stored)) {
-            if (key.includes('::')) {
-                migrated[key] = val;
-            } else {
-                migrated[`${COLLAPSE_KEY_PREFIX}${key}`] = val;
-            }
-        }
-        return migrated;
     }
 
     private performRender() {

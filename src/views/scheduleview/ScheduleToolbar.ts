@@ -2,12 +2,13 @@ import { setIcon, type App, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import type TaskViewerPlugin from '../../main';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import type { AstronomyDisplay } from '../../types';
+import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
+import { ScheduleSchema, type ScheduleConfig, type ScheduleTransient } from './ScheduleSchema';
 
 export interface ScheduleToolbarDeps {
     app: App;
@@ -23,8 +24,13 @@ export interface ScheduleToolbarDeps {
 
     getCustomName: () => string | undefined;
     onRename: (newName: string | undefined) => void;
-    onApplyFilterTemplate: (filterState: ReturnType<FilterMenuComponent['getFilterState']>) => void;
-    onReset: () => void;
+
+    /** Snapshot the view's full persistable config for template-save / URI build. */
+    getCurrentConfig: () => Partial<ScheduleConfig>;
+    /** Apply a parsed config (from template load / URI / reset). */
+    applyConfig: (cfg: Partial<ScheduleConfig>) => void;
+    /** Trigger render + saveLayout side effects after applyConfig. */
+    onConfigApplied: () => void;
 
     getMaskMode: () => boolean;
     setMaskMode: (next: boolean) => void;
@@ -43,6 +49,10 @@ export class ScheduleToolbar extends ViewToolbarBase {
 
     constructor(private deps: ScheduleToolbarDeps) {
         super();
+    }
+
+    private get codec(): ViewConfigCodec<ScheduleConfig, ScheduleTransient> {
+        return codecFor(ScheduleSchema.viewType) as ViewConfigCodec<ScheduleConfig, ScheduleTransient>;
     }
 
     protected override buildDom(toolbar: HTMLElement): void {
@@ -91,10 +101,8 @@ export class ScheduleToolbar extends ViewToolbarBase {
             getViewTemplate: () => ({
                 filePath: '',
                 name: deps.getCustomName() || VIEW_META_SCHEDULE.displayText,
-                viewType: 'schedule',
-                filterState: deps.filterMenu.getFilterState(),
-                maskMode: deps.getMaskMode(),
-                astronomyDisplay: deps.getAstronomyDisplay(),
+                viewType: ScheduleSchema.shortName,
+                config: this.codec.serializeConfig(deps.getCurrentConfig()),
             }),
             getExportContainer: () => deps.container,
             getExportSpec: () => ({
@@ -102,25 +110,15 @@ export class ScheduleToolbar extends ViewToolbarBase {
                 overflowParents: '.schedule-view, .schedule-view__body-scroll',
             }),
             onApplyTemplate: (template) => {
-                if (template.filterState) {
-                    deps.filterMenu.setFilterState(template.filterState);
-                    deps.onApplyFilterTemplate(template.filterState);
-                }
-                if (template.maskMode != null) {
-                    deps.setMaskMode(template.maskMode);
-                }
-                deps.setAstronomyDisplay(template.astronomyDisplay
-                    ? { ...template.astronomyDisplay }
-                    : undefined);
-                if (template.name) {
-                    deps.onRename(template.name);
-                }
+                const cfg = this.codec.parseConfig(template.config ?? null);
+                deps.applyConfig(cfg);
+                if (template.name) deps.onRename(template.name);
+                deps.onConfigApplied();
             },
             onReset: () => {
-                deps.filterMenu.setFilterState(createEmptyFilterState());
-                deps.setAstronomyDisplay(undefined);
+                deps.applyConfig({});
                 deps.onRename(undefined);
-                deps.onReset();
+                deps.onConfigApplied();
             },
             menuPresenter: deps.plugin.menuPresenter,
             appendCustomItems: (menu) => {

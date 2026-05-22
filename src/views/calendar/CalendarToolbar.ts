@@ -2,13 +2,14 @@ import { setIcon, type App, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import type TaskViewerPlugin from '../../main';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import { createEmptyFilterState } from '../../services/filter/FilterTypes';
-import type { ViewTemplate, PinnedListDefinition, AstronomyDisplay } from '../../types';
+import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
 import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
 import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
+import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
+import { CalendarSchema, type CalendarConfig, type CalendarTransient } from './CalendarSchema';
 
 export interface CalendarToolbarDeps {
     app: App;
@@ -29,8 +30,13 @@ export interface CalendarToolbarDeps {
     setPinnedLists: (lists: PinnedListDefinition[]) => void;
     getShowSidebar: () => boolean;
     setShowSidebar: (open: boolean, opts: { animate: boolean; persist: boolean }) => void;
-    onApplyTemplate: (template: ViewTemplate) => void;
-    onReset: () => void;
+
+    /** Snapshot the view's full persistable config for template-save / URI build. */
+    getCurrentConfig: () => Partial<CalendarConfig>;
+    /** Apply a parsed config (from template load / URI / reset). */
+    applyConfig: (cfg: Partial<CalendarConfig>, opts?: { explicit?: boolean }) => void;
+    /** Trigger render + saveLayout side effects after applyConfig. */
+    onConfigApplied: () => void;
 
     getMaskMode: () => boolean;
     setMaskMode: (next: boolean) => void;
@@ -49,6 +55,10 @@ export class CalendarToolbar extends ViewToolbarBase {
 
     constructor(private deps: CalendarToolbarDeps) {
         super();
+    }
+
+    private get codec(): ViewConfigCodec<CalendarConfig, CalendarTransient> {
+        return codecFor(CalendarSchema.viewType) as ViewConfigCodec<CalendarConfig, CalendarTransient>;
     }
 
     syncSidebarToggleState(): void {
@@ -108,12 +118,8 @@ export class CalendarToolbar extends ViewToolbarBase {
             getViewTemplate: () => ({
                 filePath: '',
                 name: deps.getCustomName() || VIEW_META_CALENDAR.displayText,
-                viewType: 'calendar',
-                showSidebar: deps.getShowSidebar(),
-                filterState: deps.filterMenu.getFilterState(),
-                pinnedLists: deps.getPinnedLists(),
-                maskMode: deps.getMaskMode(),
-                astronomyDisplay: deps.getAstronomyDisplay(),
+                viewType: CalendarSchema.shortName,
+                config: this.codec.serializeConfig(deps.getCurrentConfig()),
             }),
             getExportContainer: () => deps.container.querySelector<HTMLElement>('.cal-grid'),
             getExportSpec: () => ({
@@ -121,21 +127,15 @@ export class CalendarToolbar extends ViewToolbarBase {
                 overflowParents: '.calendar-view, .cal-grid',
             }),
             onApplyTemplate: (template) => {
-                if (template.filterState) {
-                    deps.filterMenu.setFilterState(template.filterState);
-                }
-                if (template.maskMode != null) {
-                    deps.setMaskMode(template.maskMode);
-                }
-                deps.setAstronomyDisplay(template.astronomyDisplay
-                    ? { ...template.astronomyDisplay }
-                    : undefined);
-                deps.onApplyTemplate(template);
+                const cfg = this.codec.parseConfig(template.config ?? null);
+                deps.applyConfig(cfg, { explicit: true });
+                if (template.name) deps.onRename(template.name);
+                deps.onConfigApplied();
             },
             onReset: () => {
-                deps.filterMenu.setFilterState(createEmptyFilterState());
-                deps.setAstronomyDisplay(undefined);
-                deps.onReset();
+                deps.applyConfig({}, { explicit: true });
+                deps.onRename(undefined);
+                deps.onConfigApplied();
             },
             menuPresenter: deps.plugin.menuPresenter,
             appendCustomItems: (menu) => {

@@ -349,17 +349,13 @@ export interface ViewTemplateSummary {
 }
 
 export interface ViewTemplate extends ViewTemplateSummary {
-    days?: number;
-    zoom?: number;
-    showSidebar?: boolean;
-    filterState?: FilterState;
-    pinnedLists?: PinnedListDefinition[];
-    grid?: PinnedListDefinition[][];
-    /** Snapshot of the view's mask-mode toggle. Loading a template with
-     * `maskMode: true` flips the receiving view into masked rendering. */
-    maskMode?: boolean;
-    /** Per-instance astronomy display override (same shape as ViewState's). */
-    astronomyDisplay?: Partial<AstronomyDisplay>;
+    /**
+     * Per-view configuration dict — the JSON code block in the template
+     * `.md` file is exactly this object. Each view's ViewConfigCodec parses
+     * and serializes this shape; adding a new persisted field is a one-line
+     * change in the per-view schema declaration.
+     */
+    config?: Record<string, unknown>;
 }
 
 export interface TvFileKeys {

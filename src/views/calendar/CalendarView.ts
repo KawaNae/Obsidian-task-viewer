@@ -37,6 +37,8 @@ import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
+import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
+import { CalendarSchema, type CalendarConfig, type CalendarTransient } from './CalendarSchema';
 import { HandleManager } from '../timelineview/HandleManager';
 import { SelectionController } from '../../interaction/selection/SelectionController';
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
@@ -180,28 +182,9 @@ export class CalendarView extends ItemView {
                 this.showSidebar = open;
                 this.sidebarManager.applyOpen(open, opts);
             },
-            onApplyTemplate: (template) => {
-                if (template.pinnedLists) this.pinnedLists = template.pinnedLists;
-                if (template.showSidebar != null) {
-                    if (template.showSidebar) this.sidebarOpenedThisSession = true;
-                    this.showSidebar = template.showSidebar;
-                    this.sidebarManager.applyOpen(template.showSidebar, { persist: true });
-                }
-                if (template.name) {
-                    this.customName = template.name;
-                    this.leaf.updateHeader();
-                }
-                this.app.workspace.requestSaveLayout();
-                this.render();
-                this.pinnedListRenderer?.refresh();
-            },
-            onReset: () => {
-                this.pinnedLists = [];
-                this.sidebarOpenedThisSession = true;
-                this.showSidebar = true;
-                this.sidebarManager.applyOpen(true, { persist: true });
-                this.customName = undefined;
-                this.maskMode = false;
+            getCurrentConfig: () => this.getCurrentConfig(),
+            applyConfig: (cfg, opts) => this.applyConfig(cfg, opts),
+            onConfigApplied: () => {
                 this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
                 this.render();
@@ -237,42 +220,71 @@ export class CalendarView extends ItemView {
         return VIEW_META_CALENDAR.icon;
     }
 
+    private get codec(): ViewConfigCodec<CalendarConfig, CalendarTransient> {
+        return codecFor(VIEW_TYPE_CALENDAR) as ViewConfigCodec<CalendarConfig, CalendarTransient>;
+    }
+
+    /**
+     * Apply a parsed config with REPLACE semantics over schema defaults.
+     * Single entry point used by setState AND by toolbar's template apply,
+     * so reset/load/restore all go through one path.
+     *
+     * `opts.explicit` flags user-driven applies (template-load / reset).
+     * Workspace restore sets explicit=false so the mobile auto-collapse
+     * heuristic continues to fire for fresh sessions.
+     */
+    applyConfig(cfg: Partial<CalendarConfig>, opts: { explicit?: boolean } = {}): void {
+        const next: Partial<CalendarConfig> = { ...CalendarSchema.defaults, ...cfg };
+
+        // FilterMenu owns the in-memory FilterState — keep it in sync.
+        this.filterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
+
+        const sidebarOpen = next.showSidebar ?? true;
+        if (opts.explicit && sidebarOpen) this.sidebarOpenedThisSession = true;
+        this.showSidebar = sidebarOpen;
+        this.sidebarManager.applyOpen(sidebarOpen, { animate: false });
+
+        this.pinnedLists = next.pinnedLists ?? [];
+        this.customName = next.customName;
+        this.maskMode = next.maskMode === true;
+        this.astronomyDisplay = next.astronomyDisplay
+            ? { ...next.astronomyDisplay }
+            : undefined;
+    }
+
+    /** Snapshot for template save / URI build. */
+    getCurrentConfig(): Partial<CalendarConfig> {
+        const filterState = this.filterMenu.getFilterState();
+        return {
+            customName: this.customName,
+            filterState: hasConditions(filterState) ? filterState : undefined,
+            maskMode: this.maskMode,
+            astronomyDisplay: this.astronomyDisplay,
+            showSidebar: this.showSidebar,
+            pinnedLists: this.pinnedLists.length > 0 ? this.pinnedLists : undefined,
+        };
+    }
+
     async setState(state: CalendarViewState, result: ViewStateResult): Promise<void> {
-        if (state && typeof state.windowStart === 'string') {
-            const parsedWindowStart = this.parseLocalDateString(state.windowStart);
+        const stateDict = (state ?? {}) as Record<string, unknown>;
+        const config = this.codec.parseConfig(stateDict);
+        const transient = this.codec.parseTransient(stateDict);
+
+        this.applyConfig(config);
+
+        // Transient: windowStart needs week alignment, so it's handled here
+        // rather than letting applyConfig blanket-overwrite.
+        if (transient.windowStart) {
+            const parsedWindowStart = this.parseLocalDateString(transient.windowStart);
             if (parsedWindowStart) {
                 const weekStart = this.getWeekStart(parsedWindowStart, this.plugin.settings.weekStartDay);
                 this.windowStart = DateUtils.getLocalDateString(weekStart);
             }
         }
-
-        if (state && state.filterState) {
-            this.filterMenu.setFilterState(FilterSerializer.fromJSON(state.filterState));
-        } else {
-            this.filterMenu.setFilterState(createEmptyFilterState());
+        if (transient.pinnedListCollapsed) {
+            this.pinnedListCollapsed = transient.pinnedListCollapsed;
         }
 
-        if (typeof state?.showSidebar === 'boolean') {
-            this.showSidebar = state.showSidebar;
-            this.sidebarManager.applyOpen(state.showSidebar, { animate: false });
-        }
-        if (state?.pinnedListCollapsed) {
-            // Migrate legacy un-prefixed keys (pre-viewId-namespacing) to the
-            // current `${viewId}::${listId}` form. One-shot at deserialize.
-            this.pinnedListCollapsed = this.migrateCollapsedKeys(state.pinnedListCollapsed);
-        }
-        if (Array.isArray(state?.pinnedLists)) {
-            this.pinnedLists = state.pinnedLists;
-        }
-        if (typeof state?.customName === 'string' && state.customName.trim()) {
-            this.customName = state.customName;
-        } else {
-            this.customName = undefined;
-        }
-        this.maskMode = state?.maskMode === true;
-        this.astronomyDisplay = state?.astronomyDisplay && Object.keys(state.astronomyDisplay).length > 0
-            ? { ...state.astronomyDisplay }
-            : undefined;
         await super.setState(state, result);
         await this.performRender();
         // setState may have changed filterState / pinnedLists / collapse — none
@@ -283,30 +295,13 @@ export class CalendarView extends ItemView {
     }
 
     getState(): Record<string, unknown> {
-        const filterState = this.filterMenu.getFilterState();
-        const result: Record<string, unknown> = {
-            windowStart: this.windowStart,
+        return {
+            ...this.codec.serializeConfig(this.getCurrentConfig()),
+            ...this.codec.serializeTransient({
+                windowStart: this.windowStart,
+                pinnedListCollapsed: this.pinnedListCollapsed,
+            }),
         };
-        if (hasConditions(filterState)) {
-            result.filterState = FilterSerializer.toJSON(filterState);
-        }
-        result.showSidebar = this.showSidebar;
-        if (Object.keys(this.pinnedListCollapsed).length > 0) {
-            result.pinnedListCollapsed = this.pinnedListCollapsed;
-        }
-        if (this.pinnedLists.length > 0) {
-            result.pinnedLists = this.pinnedLists;
-        }
-        if (this.customName) {
-            result.customName = this.customName;
-        }
-        if (this.maskMode) {
-            result.maskMode = true;
-        }
-        if (this.astronomyDisplay && Object.keys(this.astronomyDisplay).length > 0) {
-            result.astronomyDisplay = { ...this.astronomyDisplay };
-        }
-        return result;
     }
 
     async onOpen(): Promise<void> {

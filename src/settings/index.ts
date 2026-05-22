@@ -1,6 +1,7 @@
 import { App, PluginSettingTab } from 'obsidian';
 import TaskViewerPlugin from '../main';
 import { t } from '../i18n';
+import * as BasicTab from './BasicTab';
 import * as GeneralTab from './GeneralTab';
 import * as ViewsTab from './ViewsTab';
 import * as ViewDetailsTab from './ViewDetailsTab';
@@ -39,6 +40,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         const content = wrapper.createDiv('tv-settings__content');
 
         const tabs = [
+            { id: 'basic',        label: t('settings.tabs.basic'),        render: (el: HTMLElement) => BasicTab.render(el, this.plugin) },
             { id: 'general',      label: t('settings.tabs.general'),      render: (el: HTMLElement) => GeneralTab.render(el, this.plugin) },
             { id: 'views',        label: t('settings.tabs.views'),        render: (el: HTMLElement) => ViewsTab.render(el, this.plugin) },
             { id: 'viewDetails',  label: t('settings.tabs.viewDetails'),  render: (el: HTMLElement) => ViewDetailsTab.render(el, this.plugin) },

@@ -31,13 +31,14 @@ export interface SectionNode {
     endLine: number;
 }
 
-export type BlockNode = PropertyBlock | TaskBlock | TextBlock;
+export type BlockNode = TaskBlock;
 
-/** 連続するプロパティ行群（セクション先頭のみ） */
+/**
+ * セクションスコープのプロパティ集合。
+ * lead area (heading 直後 〜 最初のタスク行直前) 内の同レベル
+ * `- key:: value` 行をすべて集約する。物理的に連続している必要はない。
+ */
 export interface PropertyBlock {
-    type: 'property-block';
-    startLine: number;
-    endLine: number;                 // exclusive
     entries: PropertyBlockEntry[];
 }
 
@@ -56,11 +57,4 @@ export interface TaskBlock {
     childRawLines: string[];         // インデントされた子行（正規化前）
     childLineNumbers: number[];      // childRawLines の absolute line numbers
     childTaskBlocks: TaskBlock[];    // 再帰的な子タスクブロック
-}
-
-/** 非タスク・非プロパティのテキスト（無視対象） */
-export interface TextBlock {
-    type: 'text-block';
-    startLine: number;
-    endLine: number;                 // exclusive
 }

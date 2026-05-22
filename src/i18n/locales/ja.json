@@ -1,8 +1,9 @@
 {
   "settings": {
     "tabs": {
-      "general": "一般",
-      "views": "ビュー全体",
+      "basic": "基本",
+      "general": "操作",
+      "views": "ビュー",
       "viewDetails": "ビュー固有",
       "notes": "ノート",
       "frontmatter": "フロントマター",
@@ -25,14 +26,14 @@
       "thirdPartyLicensesIntro": "本プラグインは以下のライブラリを同梱しています。各ライセンスの要求に従って著作権表示を掲示します。"
     },
     "general": {
-      "editor": "エディター",
+      "menu": "メニュー",
+      "interaction": "インタラクション",
       "showEditorMenuForTasks": "タスクにエディターメニューを表示",
       "showEditorMenuForTasksDesc": "エディター内のインラインタスク行に ··· メニューボタンを表示します。",
       "showEditorMenuForCheckboxes": "チェックボックスにエディターメニューを表示",
       "showEditorMenuForCheckboxesDesc": "エディター内のプレーンチェックボックス行に ··· メニューボタンを表示します。",
       "showFileMenuForFrontmatterTasks": "フロントマタータスクにファイルメニューを表示",
       "showFileMenuForFrontmatterTasksDesc": "フロントマタータスクファイルのコンテキストメニュー（ファイルエクスプローラ右クリック / タブ ··· / ペインの more options）にタスク操作項目を追加します。",
-      "checkboxes": "チェックボックス",
       "applyCustomCheckboxStyles": "カスタムチェックボックススタイルを適用",
       "applyCustomCheckboxStylesDesc": "有効にすると、プラグインのチェックボックススタイルがObsidianエディター全体に適用されます。別途CSSスニペットは不要になります。",
       "enableStatusMenu": "ステータスメニューを有効化",
@@ -48,6 +49,11 @@
       "removeStatus": "ステータスを削除",
       "isCompleteTooltip": "完了ステータスとしてマークする"
     },
+    "basic": {
+      "timeAndCalendar": "時刻とカレンダー",
+      "latLon": "緯度経度",
+      "checkboxStyles": "チェックボックススタイル"
+    },
     "views": {
       "startHour": "開始時刻",
       "startHourDesc": "1日の開始時刻（0-23）。この時刻より前のタスクは前日に表示されます。",
@@ -56,7 +62,6 @@
       "viewTemplateFolderDesc": "ビューテンプレートファイル（フロントマターに _tv-view を含む .md）を保存するVaultフォルダ。デバイス間のビュー設定同期に使用します。",
       "intervalTemplateFolder": "インターバルテンプレート保存先",
       "intervalTemplateFolderDesc": "インターバルタイマーテンプレートファイル（フロントマターに _tv-segments を含む .md）を保存するVaultフォルダ。空欄で無効化。",
-      "interaction": "操作",
       "longPressThreshold": "長押し閾値",
       "longPressThresholdDesc": "タッチ/スタイラスの長押しでコンテキストメニューを表示するまでのミリ秒数（100-2000）。値が小さいほど反応が速くなります。",
       "reuseExistingTab": "既存タブを再利用",
@@ -77,7 +82,8 @@
       "weekStartsOnDesc": "カレンダー、ミニカレンダー、週次ノートテンプレートの起点として、週の開始曜日を選択します。",
       "sunday": "日曜日",
       "monday": "月曜日",
-      "locationAndAstronomy": "位置と天体",
+      "sunAndMoon": "太陽と月",
+      "navigation": "ナビゲーション",
       "showSunTimes": "日の出 / 日の入り線を表示",
       "showSunTimesDesc": "タイムライン上に日の出と日の入りの細い水平線を引きます。緯度・経度の入力が必要です。",
       "showMoonPhase": "月相欄を表示",
@@ -125,7 +131,7 @@
       "childTaskHeadingLevel": "子タスク見出しレベル",
       "childTaskHeadingLevelDesc": "見出しのレベル（1-6）。",
       "periodicNotes": "定期ノート",
-      "weekStartDayHint": "週の開始日は「ビュー」タブで設定します。週次ノートテンプレートの {{date}} はここで指定した曜日を起点に展開されます。",
+      "weekStartDayHint": "週の開始日は「基本」タブで設定します。週次ノートテンプレートの {{date}} はここで指定した曜日を起点に展開されます。",
       "weeklySubsection": "週次",
       "monthlySubsection": "月次",
       "yearlySubsection": "年次",

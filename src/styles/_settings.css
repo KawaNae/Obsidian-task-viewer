@@ -3,6 +3,13 @@
  * 命名規則: BEM (Block: tv-settings)
  */
 
+.tv-settings {
+    /* Tab-content horizontal padding under the narrow-width breakpoint.
+     * (The breakpoint itself must stay literal in @media — CSS does not
+     * allow var() in media-query conditions.) */
+    --tv-settings-narrow-padding: 0;
+}
+
 .tv-settings .tv-settings__version {
     padding: 4px 0 8px;
 }
@@ -73,6 +80,65 @@
 
 .tv-settings .tv-settings__panel .setting-section-header:first-child {
     margin-top: 4px;
+}
+
+/* ─── Narrow-width responsive (popout / narrow window) ────── */
+/* When the modal is narrow enough that toggles risk dropping below their
+ * name/desc, let setting-items wrap and yield the 48px tab-content
+ * padding to the stacked content. Status-row controls also wrap because
+ * they pack 6 items into a single flex line. */
+@media (max-width: 600px) {
+    .modal.mod-settings .vertical-tab-content.tv-settings {
+        padding-left: var(--tv-settings-narrow-padding);
+        padding-right: var(--tv-settings-narrow-padding);
+    }
+
+    .tv-settings .setting-item {
+        flex-wrap: wrap;
+    }
+
+    .tv-settings .setting-item-info {
+        min-width: 0;
+        flex: 1 1 100%;
+    }
+
+    /* Force control onto its own row so inputs/dropdowns get a full
+     * row to stretch into. (Status definitions opt out and keep their
+     * own wrap layout.) */
+    .tv-settings__panel > .setting-item .setting-item-control {
+        flex: 1 1 100%;
+        justify-content: flex-start;
+    }
+
+    .tv-settings .status-definitions-list-container .setting-item-control {
+        flex-wrap: wrap;
+        gap: 4px;
+        row-gap: 4px;
+    }
+
+    /* Obsidian only auto-stretches form controls to full width below
+     * ~580px, so between 580 and the wrap point they stay at their
+     * default ~158px. Inline width:3em on status-char input keeps that
+     * one small. */
+    .tv-settings .setting-item-control input[type="text"],
+    .tv-settings .setting-item-control input[type="number"],
+    .tv-settings .setting-item-control select {
+        width: 100%;
+    }
+}
+
+/* ─── Mobile active tab fill ──────────────────────────────── */
+/* Obsidian mobile reverses the desktop modal bg: in light themes the
+ * modal uses --background-secondary, in dark themes --background-primary.
+ * Either case collapses the desktop active-tab fill into the modal bg,
+ * so reverse the relationship — pick whichever bg variable the modal
+ * isn't using. Achromatic, theme-driven, no media query (mobile only). */
+body.is-mobile.theme-light .tv-settings .tv-settings__nav-btn--active {
+    background-color: var(--background-primary);
+}
+
+body.is-mobile.theme-dark .tv-settings .tv-settings__nav-btn--active {
+    background-color: var(--background-secondary);
 }
 
 /* About tab */

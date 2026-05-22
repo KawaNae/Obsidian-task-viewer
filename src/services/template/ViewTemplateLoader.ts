@@ -5,16 +5,17 @@
  * Each template is a .md file with _tv-view/_tv-name in YAML frontmatter
  * and view data in a ```json code block.
  *
+ * The JSON code block is handed back verbatim as `template.config`. Per-view
+ * parsing (including legacyKeys for older field names) is the responsibility
+ * of each view's ViewConfigCodec, not this loader.
+ *
  * Two-phase loading:
  * - loadTemplates() / findByBasename(): sync, returns summaries (frontmatter only)
  * - loadFullTemplate(): async, reads JSON code block via cachedRead
  */
 
 import { App, TFile, TFolder } from 'obsidian';
-import type { ViewTemplateSummary, ViewTemplate, PinnedListDefinition } from '../../types';
-import { FilterSerializer } from '../filter/FilterSerializer';
-import type { FilterState } from '../filter/FilterTypes';
-import type { SortState, SortRule } from '../sort/SortTypes';
+import type { ViewTemplateSummary, ViewTemplate } from '../../types';
 
 const VALID_VIEWS = new Set(['timeline', 'calendar', 'schedule', 'mini-calendar', 'kanban']);
 
@@ -76,7 +77,7 @@ export class ViewTemplateLoader {
         const content = await this.app.vault.cachedRead(file);
         const jsonData = this.extractJsonBlock(content);
         if (jsonData) {
-            this.applyJsonData(template, jsonData);
+            template.config = jsonData;
         }
 
         return template;
@@ -106,94 +107,5 @@ export class ViewTemplateLoader {
         } catch {
             return null;
         }
-    }
-
-    private applyJsonData(template: ViewTemplate, data: Record<string, unknown>): void {
-        if (typeof data.days === 'number') template.days = data.days;
-        if (typeof data.zoom === 'number') template.zoom = data.zoom;
-        if (typeof data.showSidebar === 'boolean') template.showSidebar = data.showSidebar;
-
-        const filterData = data.filterState ?? data.filter;
-        if (filterData && typeof filterData === 'object') {
-            template.filterState = FilterSerializer.fromJSON(filterData);
-        }
-
-        if (Array.isArray(data.pinnedLists)) {
-            template.pinnedLists = this.parsePinnedLists(data.pinnedLists);
-        }
-
-        if (Array.isArray(data.grid)) {
-            template.grid = this.parseGrid(data.grid);
-        }
-
-        if (typeof data.maskMode === 'boolean') {
-            template.maskMode = data.maskMode;
-        }
-
-        if (data.astronomyDisplay && typeof data.astronomyDisplay === 'object') {
-            const a = data.astronomyDisplay as Record<string, unknown>;
-            const partial: Record<string, boolean> = {};
-            if (typeof a.sunTimes === 'boolean') partial.sunTimes = a.sunTimes;
-            if (typeof a.moonPhase === 'boolean') partial.moonPhase = a.moonPhase;
-            if (Object.keys(partial).length > 0) {
-                template.astronomyDisplay = partial as ViewTemplate['astronomyDisplay'];
-            }
-        }
-    }
-
-    private parsePinnedLists(raw: unknown[]): PinnedListDefinition[] {
-        const result: PinnedListDefinition[] = [];
-
-        for (const entry of raw) {
-            if (!entry || typeof entry !== 'object') continue;
-            const obj = entry as Record<string, unknown>;
-
-            const name = typeof obj.name === 'string' ? obj.name : '';
-            if (!name) continue;
-            const id = typeof obj.id === 'string' && obj.id
-                ? obj.id
-                : 'pl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5);
-
-            let filterState: FilterState | undefined;
-            if (obj.filterState && typeof obj.filterState === 'object') {
-                filterState = FilterSerializer.fromJSON(obj.filterState);
-            }
-            if (!filterState) continue;
-
-            const def: PinnedListDefinition = { id, name, filterState };
-
-            if (obj.sortState && typeof obj.sortState === 'object') {
-                const rawSort = obj.sortState as Record<string, unknown>;
-                if (Array.isArray(rawSort.rules)) {
-                    def.sortState = {
-                        rules: (rawSort.rules as Record<string, unknown>[]).map(r => ({
-                            id: (typeof r.id === 'string' && r.id)
-                                ? r.id
-                                : `s-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-                            property: r.property as SortRule['property'],
-                            direction: r.direction as SortRule['direction'],
-                        })),
-                    };
-                }
-            }
-
-            if (typeof obj.applyViewFilter === 'boolean') {
-                def.applyViewFilter = obj.applyViewFilter;
-            }
-
-            result.push(def);
-        }
-
-        return result;
-    }
-
-    private parseGrid(raw: unknown[]): PinnedListDefinition[][] {
-        const grid: PinnedListDefinition[][] = [];
-        for (const row of raw) {
-            if (!Array.isArray(row)) continue;
-            const parsedRow = this.parsePinnedLists(row);
-            if (parsedRow.length > 0) grid.push(parsedRow);
-        }
-        return grid;
     }
 }
