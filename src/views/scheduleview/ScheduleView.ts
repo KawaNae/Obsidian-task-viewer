@@ -36,17 +36,12 @@ import { splitTasks } from '../../services/display/TaskSplitter';
 import { categorizeTasksForDate, type CategorizedTasks as BaseCategorizedTasks } from '../../services/display/TaskDateCategorizer';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
+import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
+import { ScheduleSchema, type ScheduleConfig, type ScheduleTransient } from './ScheduleSchema';
 
 export const VIEW_TYPE_SCHEDULE = VIEW_META_SCHEDULE.type;
 
-interface ScheduleViewState {
-    currentDate?: string;
-    filterState?: FilterState;
-    customName?: string;
-    periodicHeaderCollapsed?: boolean;
-    maskMode?: boolean;
-    astronomyDisplay?: Partial<AstronomyDisplay>;
-}
+type ScheduleViewState = Partial<ScheduleConfig> & Partial<ScheduleTransient>;
 
 export class ScheduleView extends ItemView {
     private static readonly HOURS_PER_DAY = 24;
@@ -178,12 +173,10 @@ export class ScheduleView extends ItemView {
                 this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
             },
-            onApplyFilterTemplate: () => {
-                this.app.workspace.requestSaveLayout();
-                this.render();
-            },
-            onReset: () => {
-                this.maskMode = false;
+            getCurrentConfig: () => this.getCurrentConfig(),
+            applyConfig: (cfg) => this.applyConfig(cfg),
+            onConfigApplied: () => {
+                this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
                 this.render();
             },
@@ -216,32 +209,45 @@ export class ScheduleView extends ItemView {
         return VIEW_META_SCHEDULE.icon;
     }
 
-    async setState(state: ScheduleViewState, result: ViewStateResult): Promise<void> {
-        if (state && typeof state.currentDate === 'string' && this.isValidDateKey(state.currentDate)) {
-            this.currentVisualDate = state.currentDate;
-        }
+    private get codec(): ViewConfigCodec<ScheduleConfig, ScheduleTransient> {
+        return codecFor(VIEW_TYPE_SCHEDULE) as ViewConfigCodec<ScheduleConfig, ScheduleTransient>;
+    }
 
-        if (state && state.filterState) {
-            this.filterMenu.setFilterState(FilterSerializer.fromJSON(state.filterState));
-        } else {
-            this.filterMenu.setFilterState(createEmptyFilterState());
-        }
-
-        if (typeof state?.customName === 'string' && state.customName.trim()) {
-            this.customName = state.customName;
-        } else {
-            this.customName = undefined;
-        }
-
-        if (typeof state?.periodicHeaderCollapsed === 'boolean') {
-            this.periodicHeaderCollapsed = state.periodicHeaderCollapsed;
-        }
-
-        this.maskMode = state?.maskMode === true;
-
-        this.astronomyDisplay = state?.astronomyDisplay && Object.keys(state.astronomyDisplay).length > 0
-            ? { ...state.astronomyDisplay }
+    /** REPLACE-over-defaults application of a parsed config. */
+    applyConfig(cfg: Partial<ScheduleConfig>): void {
+        const next: Partial<ScheduleConfig> = { ...ScheduleSchema.defaults, ...cfg };
+        this.filterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
+        this.customName = next.customName;
+        this.maskMode = next.maskMode === true;
+        this.astronomyDisplay = next.astronomyDisplay
+            ? { ...next.astronomyDisplay }
             : undefined;
+    }
+
+    /** Snapshot for template save / URI build. */
+    getCurrentConfig(): Partial<ScheduleConfig> {
+        const filterState = this.filterMenu.getFilterState();
+        return {
+            customName: this.customName,
+            filterState: hasConditions(filterState) ? filterState : undefined,
+            maskMode: this.maskMode,
+            astronomyDisplay: this.astronomyDisplay,
+        };
+    }
+
+    async setState(state: ScheduleViewState, result: ViewStateResult): Promise<void> {
+        const stateDict = (state ?? {}) as Record<string, unknown>;
+        const config = this.codec.parseConfig(stateDict);
+        const transient = this.codec.parseTransient(stateDict);
+
+        this.applyConfig(config);
+
+        if (transient.currentDate && this.isValidDateKey(transient.currentDate)) {
+            this.currentVisualDate = transient.currentDate;
+        }
+        if (transient.periodicHeaderCollapsed !== undefined) {
+            this.periodicHeaderCollapsed = transient.periodicHeaderCollapsed;
+        }
 
         await super.setState(state, result);
         if (this.container) {
@@ -250,27 +256,13 @@ export class ScheduleView extends ItemView {
     }
 
     getState(): Record<string, unknown> {
-        const filterState = this.filterMenu.getFilterState();
-        const result: Record<string, unknown> = {
-            currentDate: this.currentVisualDate,
+        return {
+            ...this.codec.serializeConfig(this.getCurrentConfig()),
+            ...this.codec.serializeTransient({
+                currentDate: this.currentVisualDate,
+                periodicHeaderCollapsed: this.periodicHeaderCollapsed,
+            }),
         };
-        if (hasConditions(filterState)) {
-            result.filterState = FilterSerializer.toJSON(filterState);
-        }
-        if (this.customName) {
-            result.customName = this.customName;
-        }
-        if (this.periodicHeaderCollapsed === false) {
-            // Persist only when expanded (default true → no persistence needed for collapsed state)
-            result.periodicHeaderCollapsed = false;
-        }
-        if (this.maskMode) {
-            result.maskMode = true;
-        }
-        if (this.astronomyDisplay && Object.keys(this.astronomyDisplay).length > 0) {
-            result.astronomyDisplay = { ...this.astronomyDisplay };
-        }
-        return result;
     }
 
     async onOpen(): Promise<void> {

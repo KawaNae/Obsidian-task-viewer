@@ -3,12 +3,14 @@
  *
  * Saves view templates as markdown files.
  * Format: YAML frontmatter (_tv-view, _tv-name) + JSON code block (data).
+ *
+ * The JSON code block content is exactly `template.config` — the
+ * canonical dict produced by each view's ViewConfigCodec. No per-field
+ * logic lives here.
  */
 
 import { App, TFile, TFolder, normalizePath } from 'obsidian';
-import type { ViewTemplate, PinnedListDefinition } from '../../types';
-import { FilterSerializer } from '../filter/FilterSerializer';
-import { hasConditions } from '../filter/FilterTypes';
+import type { ViewTemplate } from '../../types';
 
 export class ViewTemplateWriter {
     constructor(private app: App) {}
@@ -34,33 +36,13 @@ export class ViewTemplateWriter {
     }
 
     private buildFileContent(template: ViewTemplate): string {
-        // Frontmatter: metadata only
         const lines: string[] = ['---'];
         lines.push(`_tv-view: ${template.viewType}`);
         lines.push(`_tv-name: "${this.escapeYamlString(template.name)}"`);
         lines.push('---');
         lines.push('');
 
-        // JSON code block: all data fields
-        const data: Record<string, unknown> = {};
-        if (template.days != null) data.days = template.days;
-        if (template.zoom != null) data.zoom = template.zoom;
-        if (template.showSidebar != null) data.showSidebar = template.showSidebar;
-        if (template.filterState && hasConditions(template.filterState)) {
-            data.filterState = FilterSerializer.toJSON(template.filterState);
-        }
-        if (template.pinnedLists && template.pinnedLists.length > 0) {
-            data.pinnedLists = template.pinnedLists.map(pl => this.serializePinnedList(pl));
-        }
-        if (template.grid && template.grid.length > 0) {
-            data.grid = template.grid.map(row => row.map(pl => this.serializePinnedList(pl)));
-        }
-        if (template.maskMode) {
-            data.maskMode = true;
-        }
-        if (template.astronomyDisplay && Object.keys(template.astronomyDisplay).length > 0) {
-            data.astronomyDisplay = { ...template.astronomyDisplay };
-        }
+        const data = template.config ?? {};
         if (Object.keys(data).length > 0) {
             lines.push('```json');
             lines.push(JSON.stringify(data, null, 2));
@@ -69,23 +51,6 @@ export class ViewTemplateWriter {
         }
 
         return lines.join('\n');
-    }
-
-    private serializePinnedList(pl: PinnedListDefinition): Record<string, unknown> {
-        const result: Record<string, unknown> = {
-            name: pl.name,
-            filterState: FilterSerializer.toJSON(pl.filterState),
-        };
-        if (pl.sortState) {
-            result.sortState = {
-                rules: pl.sortState.rules.map(r => ({
-                    property: r.property,
-                    direction: r.direction,
-                })),
-            };
-        }
-        if (pl.applyViewFilter !== undefined) result.applyViewFilter = pl.applyViewFilter;
-        return result;
     }
 
     private escapeYamlString(str: string): string {
@@ -97,7 +62,6 @@ export class ViewTemplateWriter {
         const existing = this.app.vault.getAbstractFileByPath(normalized);
         if (existing instanceof TFolder) return;
 
-        // Create nested folders if needed
         const parts = normalized.split('/');
         let current = '';
         for (const part of parts) {

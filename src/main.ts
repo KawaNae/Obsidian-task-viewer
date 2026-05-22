@@ -14,7 +14,7 @@ import {
     normalizeTvFileKeys,
     validateTvFileKeys,
 } from './types';
-import type { DefaultLeafPosition, PinnedListDefinition, Task } from './types';
+import type { DefaultLeafPosition, Task } from './types';
 import { isTvFile } from './types';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/color/ColorSuggest';
@@ -25,11 +25,8 @@ import { registerWeekStartLocales } from './utils/momentWeekLocale';
 import { AudioUtils } from './timer/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
 import { getViewMeta } from './constants/viewRegistry';
-import type { FilterState } from './services/filter/FilterTypes';
-import { hasConditions } from './services/filter/FilterTypes';
-import { FilterSerializer } from './services/filter/FilterSerializer';
-import { unicodeAtob } from './utils/base64';
 import { ViewTemplateLoader } from './services/template/ViewTemplateLoader';
+import { codecFor, resolveViewTypeFromShortName } from './services/viewConfig';
 import { migrateAstronomySettings } from './services/settings/migration';
 import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
 import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
@@ -337,111 +334,111 @@ export default class TaskViewerPlugin extends Plugin {
         );
         this.propertySuggestObserver.start();
 
-        // Register URI handler: obsidian://task-viewer?view=timeline&days=3&filter=<base64>&pinnedLists=<base64>
+        // Register URI handler: obsidian://task-viewer?view=<shortName>&template=<name>&...
+        //
+        // After the ViewConfigSchema refactor the handler is uniform across all
+        // views: per-view differences live in the schema, not here. The handler
+        // role shrinks to (1) resolve view type, (2) load template (if any),
+        // (3) overlay URI-query overrides, (4) re-serialize through codec into
+        // canonical state dict, (5) hand to openLeafFromState. Adding a new
+        // persisted field requires zero changes in this function.
         this.registerObsidianProtocolHandler('task-viewer', (params) => {
             void (async () => {
-            const viewMap: Record<string, string> = {
-                timeline: VIEW_TYPE_TIMELINE,
-                calendar: VIEW_TYPE_CALENDAR,
-                schedule: VIEW_TYPE_SCHEDULE,
-                'mini-calendar': VIEW_TYPE_MINI_CALENDAR,
-                timer: VIEW_TYPE_TIMER,
-                kanban: VIEW_TYPE_KANBAN,
-            };
-            const viewType = viewMap[params.view];
-            if (!viewType) return;
+                const viewType = resolveViewTypeFromShortName(params.view) ?? this.resolveLegacyViewShortName(params.view);
+                if (!viewType) return;
 
-            const uriParams: {
-                filterState?: FilterState;
-                days?: number;
-                zoom?: number;
-                date?: string;
-                pinnedLists?: PinnedListDefinition[];
-                grid?: PinnedListDefinition[][];
-                showSidebar?: boolean;
-                position?: 'left' | 'right' | 'tab' | 'window' | 'override';
-                name?: string;
-                timerMode?: string;
-                intervalTemplate?: string;
-            } = {};
+                const position = this.parseUriPosition(params.position);
 
-            // Timer view: mode and interval template params
-            if (viewType === VIEW_TYPE_TIMER) {
-                if (params.mode) uriParams.timerMode = params.mode;
-                if (params.intervalTemplate) uriParams.intervalTemplate = params.intervalTemplate;
-            } else {
-                // Template resolution (provides base values; inline params override below)
-                if (params.template) {
-                    const loader = new ViewTemplateLoader(this.app);
-                    const summary = loader.findByBasename(
-                        this.settings.viewTemplateFolder,
-                        params.template,
-                    );
-                    if (summary) {
-                        const template = await loader.loadFullTemplate(summary.filePath);
-                        if (template) {
-                            if (template.filterState) uriParams.filterState = template.filterState;
-                            if (template.pinnedLists) uriParams.pinnedLists = template.pinnedLists;
-                            if (template.grid) uriParams.grid = template.grid;
-                            if (template.days != null) uriParams.days = template.days;
-                            if (template.zoom != null) uriParams.zoom = template.zoom;
-                            if (template.showSidebar != null) uriParams.showSidebar = template.showSidebar;
-                            if (template.name) uriParams.name = template.name;
-                        }
-                    } else {
-                        new Notice(t('notice.templateNotFound', { name: params.template }));
-                    }
+                if (viewType === VIEW_TYPE_TIMER) {
+                    await this.openTimerFromUri(params, position);
+                    return;
                 }
 
-                // Filter (base64) — overrides template value
-                if (params.filter) {
-                    uriParams.filterState = FilterSerializer.fromURIParam(params.filter);
-                }
-
-                // PinnedLists (base64) — overrides template value
-                if (params.pinnedLists) {
-                    try {
-                        const parsed = JSON.parse(unicodeAtob(params.pinnedLists));
-                        if (Array.isArray(parsed)) uriParams.pinnedLists = parsed;
-                    } catch { /* ignore */ }
-                }
-
-                // Grid (base64) — overrides template value
-                if (params.grid) {
-                    try {
-                        const parsed = JSON.parse(unicodeAtob(params.grid));
-                        if (Array.isArray(parsed)) uriParams.grid = parsed;
-                    } catch { /* ignore */ }
-                }
-
-                // View display params — override template values
-                if (params.days) {
-                    const days = parseInt(params.days, 10);
-                    if ([1, 3, 7].includes(days)) uriParams.days = days;
-                }
-                if (params.zoom) {
-                    const zoom = parseFloat(params.zoom);
-                    if (zoom >= 0.25 && zoom <= 10.0) uriParams.zoom = zoom;
-                }
-                if (params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date)) {
-                    uriParams.date = params.date;
-                }
-                if (params.showSidebar === 'true' || params.showSidebar === 'false') {
-                    uriParams.showSidebar = params.showSidebar === 'true';
-                }
-            }
-
-            const validPositions = new Set(['left', 'right', 'tab', 'window', 'override']);
-            if (params.position && validPositions.has(params.position)) {
-                uriParams.position = params.position as 'left' | 'right' | 'tab' | 'window' | 'override';
-            }
-            if (params.name) {
-                uriParams.name = params.name;
-            }
-
-            this.activateView(viewType, uriParams);
+                const state = await this.buildViewStateFromUri(viewType, params);
+                await this.openLeafFromState(viewType, position, state);
             })();
         });
+    }
+
+    /**
+     * Build the canonical workspace-state dict for `setViewState` from URI
+     * parameters. Merges: schema defaults (via codec REPLACE semantics inside
+     * the view's setState) ← template config ← URI query params.
+     */
+    private async buildViewStateFromUri(
+        viewType: string,
+        params: Record<string, string>,
+    ): Promise<Record<string, unknown>> {
+        const codec = codecFor(viewType);
+        if (!codec) return {};
+
+        // Step 1: template provides base config dict
+        let baseConfig: Record<string, unknown> = {};
+        let baseName: string | undefined;
+        if (params.template) {
+            const loader = new ViewTemplateLoader(this.app);
+            const summary = loader.findByBasename(this.settings.viewTemplateFolder, params.template);
+            if (summary) {
+                const tmpl = await loader.loadFullTemplate(summary.filePath);
+                if (tmpl) {
+                    baseConfig = tmpl.config ?? {};
+                    baseName = tmpl.name;
+                }
+            } else {
+                new Notice(t('notice.templateNotFound', { name: params.template }));
+            }
+        }
+
+        // Step 2: parse template config + URI overrides through codec.
+        // codec.fromUriParams handles both canonical names AND legacyKeys
+        // (e.g. `days` → `daysToShow`), so old URIs and new URIs both work.
+        const baseParsed = codec.parseConfig(baseConfig);
+        const uriParsed = codec.fromUriParams(params);
+        const mergedConfig = { ...baseParsed, ...uriParsed };
+
+        // Step 3: name precedence: URI param > template name > current config.
+        if (params.name) {
+            (mergedConfig as Record<string, unknown>).customName = params.name;
+        } else if (baseName && (mergedConfig as Record<string, unknown>).customName === undefined) {
+            (mergedConfig as Record<string, unknown>).customName = baseName;
+        }
+
+        // Step 4: re-serialize to canonical state dict (this is exactly what
+        // each view's setState parses back via the same codec — round-trip
+        // identity through the codec is the symmetry guarantee).
+        const transientSeed = codec.parseTransient(params);
+        return {
+            ...codec.serializeConfig(mergedConfig),
+            ...codec.serializeTransient(transientSeed),
+        };
+    }
+
+    /**
+     * Legacy short-name compat for old URIs/code that referenced views by
+     * the obsidian view-type suffix-style. Returns undefined if unknown.
+     */
+    private resolveLegacyViewShortName(shortName: string): string | undefined {
+        // Timer never had a schema; it stays in this lookup since
+        // resolveViewTypeFromShortName only knows registered schemas.
+        if (shortName === 'timer') return VIEW_TYPE_TIMER;
+        return undefined;
+    }
+
+    private parseUriPosition(raw: string | undefined): DefaultLeafPosition | 'tab' | 'window' | 'override' | undefined {
+        const valid = new Set(['left', 'right', 'tab', 'window', 'override']);
+        if (raw && valid.has(raw)) return raw as DefaultLeafPosition | 'tab' | 'window' | 'override';
+        return undefined;
+    }
+
+    private async openTimerFromUri(
+        params: Record<string, string>,
+        position: DefaultLeafPosition | 'tab' | 'window' | 'override' | undefined,
+    ): Promise<void> {
+        const state: Record<string, unknown> = {};
+        if (params.mode) state.timerViewMode = params.mode;
+        if (params.intervalTemplate) state.intervalTemplate = params.intervalTemplate;
+        if (params.name) state.customName = params.name;
+        await this.openLeafFromState(VIEW_TYPE_TIMER, position, state);
     }
 
     async loadSettings() {
@@ -566,32 +563,32 @@ export default class TaskViewerPlugin extends Plugin {
         });
     }
 
-    async activateView(viewType: string, params?: {
-        filterState?: FilterState;
-        days?: number;
-        zoom?: number;
-        date?: string;
-        pinnedLists?: PinnedListDefinition[];
-        grid?: PinnedListDefinition[][];
-        showSidebar?: boolean;
-        position?: 'left' | 'right' | 'tab' | 'window' | 'override';
-        name?: string;
-        timerMode?: string;
-        intervalTemplate?: string;
-    }) {
+    /** Open a view via ribbon / command. No state seeding — view uses its own defaults. */
+    async activateView(viewType: string): Promise<void> {
+        await this.openLeafFromState(viewType, undefined, {});
+    }
+
+    /**
+     * Resolve a leaf for `viewType` at `position`, then `setViewState` with
+     * the supplied state dict. Single entry point used by both the no-params
+     * ribbon/command path and the URI-handler-build state path.
+     */
+    async openLeafFromState(
+        viewType: string,
+        position: DefaultLeafPosition | 'tab' | 'window' | 'override' | undefined,
+        state: Record<string, unknown>,
+    ): Promise<void> {
         const { workspace } = this.app;
 
         let leaf: WorkspaceLeaf | null = null;
 
-        if (params?.position === 'override') {
+        if (position === 'override') {
             const leaves = workspace.getLeavesOfType(viewType);
-            if (leaves.length > 0) {
-                leaf = leaves[0];
-            } else {
-                leaf = this.getLeafForPosition(workspace, this.getDefaultPosition(viewType));
-            }
-        } else if (params?.position) {
-            switch (params.position) {
+            leaf = leaves.length > 0
+                ? leaves[0]
+                : this.getLeafForPosition(workspace, this.getDefaultPosition(viewType));
+        } else if (position) {
+            switch (position) {
                 case 'left':   leaf = workspace.getLeftLeaf(false); break;
                 case 'right':  leaf = workspace.getRightLeaf(false); break;
                 case 'tab':    leaf = workspace.getLeaf('tab'); break;
@@ -599,29 +596,12 @@ export default class TaskViewerPlugin extends Plugin {
             }
         } else {
             const leaves = workspace.getLeavesOfType(viewType);
-            if (leaves.length === 0) {
-                leaf = this.getLeafForPosition(workspace, this.getDefaultPosition(viewType));
-            } else {
-                leaf = workspace.getLeaf(true);
-            }
+            leaf = leaves.length === 0
+                ? this.getLeafForPosition(workspace, this.getDefaultPosition(viewType))
+                : workspace.getLeaf(true);
         }
 
         if (leaf) {
-            const state: Record<string, unknown> = {
-                filterState: params?.filterState && hasConditions(params.filterState)
-                    ? FilterSerializer.toJSON(params.filterState)
-                    : null,
-            };
-            if (params?.days != null) state.daysToShow = params.days;
-            if (params?.zoom != null) state.zoomLevel = params.zoom;
-            if (params?.date != null) state.startDate = params.date;
-            if (params?.pinnedLists) state.pinnedLists = params.pinnedLists;
-            if (params?.grid) state.grid = params.grid;
-            if (params?.showSidebar != null) state.showSidebar = params.showSidebar;
-            if (params?.name) state.customName = params.name;
-            if (params?.timerMode) state.timerViewMode = params.timerMode;
-            if (params?.intervalTemplate) state.intervalTemplate = params.intervalTemplate;
-
             await leaf.setViewState({ type: viewType, active: true, state });
             workspace.revealLeaf(leaf);
         }

@@ -3,6 +3,8 @@ import type { FilterState } from '../services/filter/FilterTypes';
 import { hasConditions } from '../services/filter/FilterTypes';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
 import { ViewTemplateLoader } from '../services/template/ViewTemplateLoader';
+import type { PinnedListDefinition } from '../types';
+import { F } from '../services/viewConfig/FieldCodecs';
 
 /**
  * Merge two FilterStates by combining them under a new AND group.
@@ -42,8 +44,19 @@ export async function loadFilterFile(
         const template = await loader.loadFullTemplate(normalizedPath);
         if (!template) return `Failed to load view template: ${normalizedPath}`;
 
-        const pinnedLists = template.pinnedLists
-            ?? (template.grid ? template.grid.flat() : []);
+        // Parse fields uniformly via the schema's per-type codec — same path
+        // every view uses, so old (flat) and new (config-key) template files
+        // both round-trip through legacyKeys.
+        const cfg = template.config ?? {};
+        const filterCodec = F.filter('filterState', { legacyKeys: ['filter'] });
+        const pinnedCodec = F.pinnedLists('pinnedLists');
+        const gridCodec = F.grid('grid');
+
+        const filterState = filterCodec.parse(cfg.filterState ?? cfg.filter);
+        const pinnedLists: PinnedListDefinition[] =
+            pinnedCodec.parse(cfg.pinnedLists)
+            ?? gridCodec.parse(cfg.grid)?.flat()
+            ?? [];
 
         // Determine which filter to use
         if (listName) {
@@ -55,8 +68,8 @@ export async function loadFilterFile(
                     : `No pinned lists in template. Remove --list flag`;
             }
             // Combine viewFilter + pinnedList filter if applyViewFilter !== false
-            if (list.applyViewFilter !== false && template.filterState && hasConditions(template.filterState)) {
-                return mergeFilters(template.filterState, list.filterState);
+            if (list.applyViewFilter !== false && filterState && hasConditions(filterState)) {
+                return mergeFilters(filterState, list.filterState);
             }
             return list.filterState;
         }
@@ -67,8 +80,8 @@ export async function loadFilterFile(
             return `Template has pinned lists. Specify one with list=<name>: ${names.join(', ')}`;
         }
 
-        if (template.filterState && hasConditions(template.filterState)) {
-            return template.filterState;
+        if (filterState && hasConditions(filterState)) {
+            return filterState;
         }
 
         return `Template has no filter: ${normalizedPath}`;

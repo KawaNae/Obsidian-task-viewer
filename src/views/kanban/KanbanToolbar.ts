@@ -2,11 +2,11 @@ import { setIcon, type App, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import type TaskViewerPlugin from '../../main';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import { createEmptyFilterState } from '../../services/filter/FilterTypes';
-import type { ViewTemplate } from '../../types';
 import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
 import { ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
+import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
+import { KanbanSchema, type KanbanConfig, type KanbanTransient } from './KanbanSchema';
 
 export interface KanbanToolbarDeps {
     app: App;
@@ -20,9 +20,13 @@ export interface KanbanToolbarDeps {
 
     getCustomName: () => string | undefined;
     onRename: (newName: string | undefined) => void;
-    getGrid: () => ViewTemplate['grid'];
-    onApplyTemplate: (template: ViewTemplate) => void;
-    onReset: () => void;
+
+    /** Snapshot the view's full persistable config for template-save / URI build. */
+    getCurrentConfig: () => Partial<KanbanConfig>;
+    /** Apply a parsed config (from template load / URI / reset). */
+    applyConfig: (cfg: Partial<KanbanConfig>) => void;
+    /** Trigger render + saveLayout side effects after applyConfig. */
+    onConfigApplied: () => void;
 
     getMaskMode: () => boolean;
     setMaskMode: (next: boolean) => void;
@@ -37,6 +41,10 @@ export class KanbanToolbar extends ViewToolbarBase {
 
     constructor(private deps: KanbanToolbarDeps) {
         super();
+    }
+
+    private get codec(): ViewConfigCodec<KanbanConfig, KanbanTransient> {
+        return codecFor(KanbanSchema.viewType) as ViewConfigCodec<KanbanConfig, KanbanTransient>;
     }
 
     protected override buildDom(toolbar: HTMLElement): void {
@@ -71,7 +79,7 @@ export class KanbanToolbar extends ViewToolbarBase {
             getDefaultName: () => VIEW_META_KANBAN.displayText,
             onRename: (newName) => deps.onRename(newName),
             buildUri: () => ({
-                grid: deps.getGrid(),
+                grid: deps.getCurrentConfig().grid,
                 filterState: deps.filterMenu.getFilterState(),
             }),
             viewType: VIEW_META_KANBAN.type,
@@ -79,10 +87,8 @@ export class KanbanToolbar extends ViewToolbarBase {
             getViewTemplate: () => ({
                 filePath: '',
                 name: deps.getCustomName() || VIEW_META_KANBAN.displayText,
-                viewType: 'kanban',
-                grid: deps.getGrid(),
-                filterState: deps.filterMenu.getFilterState(),
-                maskMode: deps.getMaskMode(),
+                viewType: KanbanSchema.shortName,
+                config: this.codec.serializeConfig(deps.getCurrentConfig()),
             }),
             getExportContainer: () => deps.container,
             // Kanban needs an extra pass: each cell has its own overflow/minHeight
@@ -106,17 +112,15 @@ export class KanbanToolbar extends ViewToolbarBase {
                 },
             }),
             onApplyTemplate: (template) => {
-                if (template.filterState) {
-                    deps.filterMenu.setFilterState(template.filterState);
-                }
-                if (template.maskMode != null) {
-                    deps.setMaskMode(template.maskMode);
-                }
-                deps.onApplyTemplate(template);
+                const cfg = this.codec.parseConfig(template.config ?? null);
+                deps.applyConfig(cfg);
+                if (template.name) deps.onRename(template.name);
+                deps.onConfigApplied();
             },
             onReset: () => {
-                deps.filterMenu.setFilterState(createEmptyFilterState());
-                deps.onReset();
+                deps.applyConfig({});
+                deps.onRename(undefined);
+                deps.onConfigApplied();
             },
             menuPresenter: deps.plugin.menuPresenter,
         });

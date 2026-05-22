@@ -14,6 +14,8 @@ import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
+import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
+import { TimelineSchema, type TimelineConfig, type TimelineTransient } from './TimelineSchema';
 
 export interface ToolbarCallbacks {
     onRender: () => void;
@@ -89,6 +91,48 @@ export class TimelineToolbar extends ViewToolbarBase {
      */
     closeFilterPopover(): void {
         this.filterMenu.close();
+    }
+
+    private get codec(): ViewConfigCodec<TimelineConfig, TimelineTransient> {
+        return codecFor(TimelineSchema.viewType) as ViewConfigCodec<TimelineConfig, TimelineTransient>;
+    }
+
+    /** Snapshot the view's current persistable configuration. */
+    private snapshotConfig(): Partial<TimelineConfig> {
+        return {
+            customName: this.callbacks.getCustomName(),
+            filterState: this.filterMenu.getFilterState(),
+            maskMode: this.viewState.maskMode,
+            astronomyDisplay: this.viewState.astronomyDisplay,
+            showSidebar: this.viewState.showSidebar,
+            pinnedLists: this.viewState.pinnedLists,
+            daysToShow: this.viewState.daysToShow as TimelineConfig['daysToShow'],
+            zoomLevel: this.viewState.zoomLevel,
+        };
+    }
+
+    /**
+     * Apply a parsed config to the live viewState. REPLACE semantics over
+     * schema defaults: fields omitted from `cfg` revert to defaults, matching
+     * the symmetry rule we enforce in TimelineView.setState.
+     */
+    private applyConfigToViewState(cfg: Partial<TimelineConfig>): void {
+        const next: Partial<TimelineConfig> = { ...TimelineSchema.defaults, ...cfg };
+        if (next.filterState !== undefined) {
+            this.filterMenu.setFilterState(next.filterState);
+            this.viewState.filterState = next.filterState;
+        } else {
+            this.filterMenu.setFilterState(createEmptyFilterState());
+            this.viewState.filterState = undefined;
+        }
+        this.viewState.maskMode = next.maskMode ?? false;
+        this.viewState.astronomyDisplay = next.astronomyDisplay
+            ? { ...next.astronomyDisplay }
+            : undefined;
+        if (next.showSidebar !== undefined) this.viewState.showSidebar = next.showSidebar;
+        this.viewState.pinnedLists = next.pinnedLists;
+        if (next.daysToShow !== undefined) this.viewState.daysToShow = next.daysToShow;
+        if (next.zoomLevel !== undefined) this.viewState.zoomLevel = next.zoomLevel;
     }
 
     /**
@@ -183,28 +227,14 @@ export class TimelineToolbar extends ViewToolbarBase {
             getViewTemplate: () => ({
                 filePath: '',
                 name: this.callbacks.getCustomName() || VIEW_META_TIMELINE.displayText,
-                viewType: 'timeline',
-                days: this.viewState.daysToShow,
-                zoom: this.viewState.zoomLevel,
-                showSidebar: this.viewState.showSidebar,
-                filterState: this.filterMenu.getFilterState(),
-                pinnedLists: this.viewState.pinnedLists,
-                maskMode: this.viewState.maskMode,
-                astronomyDisplay: this.viewState.astronomyDisplay,
+                viewType: TimelineSchema.shortName,
+                config: this.codec.serializeConfig(this.snapshotConfig()),
             }),
             onApplyTemplate: (template) => {
-                if (template.days != null) this.viewState.daysToShow = template.days;
-                if (template.zoom != null) this.viewState.zoomLevel = template.zoom;
-                if (template.showSidebar != null) this.viewState.showSidebar = template.showSidebar;
-                if (template.filterState) {
-                    this.filterMenu.setFilterState(template.filterState);
-                    this.viewState.filterState = template.filterState;
-                }
-                if (template.pinnedLists) this.viewState.pinnedLists = template.pinnedLists;
-                if (template.maskMode != null) this.viewState.maskMode = template.maskMode;
-                this.viewState.astronomyDisplay = template.astronomyDisplay
-                    ? { ...template.astronomyDisplay }
-                    : undefined;
+                // Migrated path: read canonical `config` dict (handles legacyKeys
+                // for old field names automatically).
+                const cfg = this.codec.parseConfig(template.config ?? null);
+                this.applyConfigToViewState(cfg);
                 if (template.name) this.callbacks.onRename(template.name);
                 this.callbacks.onRender();
                 this.app.workspace.requestSaveLayout();
@@ -219,15 +249,9 @@ export class TimelineToolbar extends ViewToolbarBase {
                 overflowParents: '.timeline-view',
             }),
             onReset: () => {
-                this.viewState.daysToShow = 3;
-                this.viewState.zoomLevel = 1.0;
-                this.viewState.showSidebar = true;
-                this.viewState.filterState = undefined;
-                this.viewState.pinnedLists = undefined;
+                // Reset to schema defaults — symmetric with applyConfigToViewState({}).
+                this.applyConfigToViewState({});
                 this.viewState.pinnedListCollapsed = undefined;
-                this.viewState.maskMode = false;
-                this.viewState.astronomyDisplay = undefined;
-                this.filterMenu.setFilterState(createEmptyFilterState());
                 this.callbacks.onRename(undefined);
                 this.callbacks.onRender();
                 this.app.workspace.requestSaveLayout();

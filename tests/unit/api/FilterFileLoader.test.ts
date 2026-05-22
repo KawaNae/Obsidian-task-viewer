@@ -51,12 +51,41 @@ function makePinnedList(name: string, applyViewFilter?: boolean): PinnedListDefi
     } as PinnedListDefinition;
 }
 
-function makeTemplate(overrides: Partial<ViewTemplate> = {}): ViewTemplate {
+/**
+ * Build a ViewTemplate fixture. Pre-refactor tests passed `filterState`,
+ * `pinnedLists`, `grid` as flat fields; post-refactor those live in
+ * `template.config`. This helper packs flat-style overrides into `config`
+ * automatically so existing test bodies keep working.
+ */
+function makeTemplate(overrides: {
+    filterState?: FilterState;
+    pinnedLists?: PinnedListDefinition[];
+    grid?: PinnedListDefinition[][];
+    name?: string;
+} = {}): ViewTemplate {
+    const config: Record<string, unknown> = {};
+    if (overrides.filterState) config.filterState = overrides.filterState;
+    if (overrides.pinnedLists) {
+        config.pinnedLists = overrides.pinnedLists.map(pl => ({
+            id: pl.id ?? `pl-${pl.name}`,
+            name: pl.name,
+            filterState: pl.filterState,
+            applyViewFilter: pl.applyViewFilter,
+        }));
+    }
+    if (overrides.grid) {
+        config.grid = overrides.grid.map(row => row.map(pl => ({
+            id: pl.id ?? `g-${pl.name}`,
+            name: pl.name,
+            filterState: pl.filterState,
+            applyViewFilter: pl.applyViewFilter,
+        })));
+    }
     return {
         filePath: 'templates/test.md',
-        name: 'Test',
+        name: overrides.name ?? 'Test',
         viewType: 'timeline',
-        ...overrides,
+        config,
     };
 }
 
@@ -216,13 +245,16 @@ describe('loadFilterFile', () => {
             }));
 
             const result = await loadFilterFile(app, 'templates/merged.md', 'urgent');
-            // Should be a merged AND group
+            // Should be a merged AND group. Inner FilterStates are structurally
+            // equal but not necessarily reference-equal: the codec parses fresh
+            // copies via FilterSerializer.fromJSON to keep template.config a
+            // pure JSON dict.
             expect(typeof result).not.toBe('string');
             const merged = result as FilterState;
             expect(merged.logic).toBe('and');
             expect(merged.filters).toHaveLength(2);
-            expect(merged.filters[0]).toBe(viewFilter);
-            expect(merged.filters[1]).toBe(pinnedList.filterState);
+            expect(merged.filters[0]).toEqual(viewFilter);
+            expect(merged.filters[1]).toEqual(pinnedList.filterState);
         });
 
         it('skips viewFilter merge when applyViewFilter is false', async () => {

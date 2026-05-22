@@ -25,6 +25,8 @@ import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManag
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { VIEW_META_MINI_CALENDAR } from '../../constants/viewRegistry';
+import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
+import { MiniCalendarSchema, type MiniCalendarConfig, type MiniCalendarTransient } from './MiniCalendarSchema';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
@@ -41,13 +43,7 @@ interface IndicatorState {
     hasComplete: boolean;
 }
 
-interface MiniCalendarViewState {
-    windowStart?: string;
-    monthKey?: string;
-    filterState?: unknown;
-    customName?: string;
-    astronomyDisplay?: Partial<AstronomyDisplay>;
-}
+type MiniCalendarViewState = Partial<MiniCalendarConfig> & Partial<MiniCalendarTransient>;
 
 export class MiniCalendarView extends ItemView {
     private readonly plugin: TaskViewerPlugin;
@@ -117,46 +113,51 @@ export class MiniCalendarView extends ItemView {
     }
 
     async setState(state: MiniCalendarViewState, result: ViewStateResult): Promise<void> {
-        if (state && typeof state.windowStart === 'string') {
-            const parsedWindowStart = this.parseLocalDateString(state.windowStart);
+        const stateDict = (state ?? {}) as Record<string, unknown>;
+        const config = this.codec.parseConfig(stateDict);
+        const transient = this.codec.parseTransient(stateDict);
+
+        this.applyConfig(config);
+
+        if (transient.windowStart) {
+            const parsedWindowStart = this.parseLocalDateString(transient.windowStart);
             if (parsedWindowStart) {
                 const weekStart = this.getWeekStart(parsedWindowStart, this.plugin.settings.weekStartDay);
                 this.windowStart = DateUtils.getLocalDateString(weekStart);
             }
         }
 
-        if (state?.filterState) {
-            this.filterMenu.setFilterState(FilterSerializer.fromJSON(state.filterState));
-        } else {
-            this.filterMenu.setFilterState(createEmptyFilterState());
-        }
-        if (typeof state?.customName === 'string' && state.customName.trim()) {
-            this.customName = state.customName;
-        }
-
-        this.astronomyDisplay = state?.astronomyDisplay && Object.keys(state.astronomyDisplay).length > 0
-            ? { ...state.astronomyDisplay }
-            : undefined;
-
         await super.setState(state, result);
         await this.render();
     }
 
-    getState(): Record<string, unknown> {
-        const result: Record<string, unknown> = {
-            windowStart: this.windowStart,
-        };
+    private get codec(): ViewConfigCodec<MiniCalendarConfig, MiniCalendarTransient> {
+        return codecFor(VIEW_TYPE_MINI_CALENDAR) as ViewConfigCodec<MiniCalendarConfig, MiniCalendarTransient>;
+    }
+
+    applyConfig(cfg: Partial<MiniCalendarConfig>): void {
+        const next: Partial<MiniCalendarConfig> = { ...MiniCalendarSchema.defaults, ...cfg };
+        this.filterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
+        this.customName = next.customName;
+        this.astronomyDisplay = next.astronomyDisplay
+            ? { ...next.astronomyDisplay }
+            : undefined;
+    }
+
+    getCurrentConfig(): Partial<MiniCalendarConfig> {
         const filterState = this.filterMenu.getFilterState();
-        if (hasConditions(filterState)) {
-            result.filterState = FilterSerializer.toJSON(filterState);
-        }
-        if (this.customName) {
-            result.customName = this.customName;
-        }
-        if (this.astronomyDisplay && Object.keys(this.astronomyDisplay).length > 0) {
-            result.astronomyDisplay = { ...this.astronomyDisplay };
-        }
-        return result;
+        return {
+            customName: this.customName,
+            filterState: hasConditions(filterState) ? filterState : undefined,
+            astronomyDisplay: this.astronomyDisplay,
+        };
+    }
+
+    getState(): Record<string, unknown> {
+        return {
+            ...this.codec.serializeConfig(this.getCurrentConfig()),
+            ...this.codec.serializeTransient({ windowStart: this.windowStart }),
+        };
     }
 
     async onOpen(): Promise<void> {
@@ -680,12 +681,15 @@ export class MiniCalendarView extends ItemView {
                             const name = value.trim();
                             if (!name) return;
                             const writer = new ViewTemplateWriter(this.app);
+                            // MiniCal intentionally shares the 'calendar' template
+                            // namespace with Calendar view (same data shape — filter +
+                            // astronomy + name). Templates saved here show up in
+                            // both Calendar and MiniCal load lists.
                             await writer.saveTemplate(folder, {
                                 filePath: '',
                                 name,
                                 viewType: 'calendar',
-                                filterState: this.filterMenu.getFilterState(),
-                                astronomyDisplay: this.astronomyDisplay,
+                                config: this.codec.serializeConfig(this.getCurrentConfig()),
                             });
                             this.customName = name;
                             this.leaf.updateHeader();
@@ -723,18 +727,16 @@ export class MiniCalendarView extends ItemView {
                                         new Notice(t('notice.failedToLoadTemplate'));
                                         return;
                                     }
-                                    if (full.filterState) {
-                                        this.filterMenu.setFilterState(full.filterState);
-                                    } else {
-                                        this.filterMenu.setFilterState(createEmptyFilterState());
-                                    }
+                                    // Templates saved by Calendar may carry fields
+                                    // MiniCalendar doesn't have (showSidebar, pinnedLists,
+                                    // maskMode). codec.parseConfig drops unknown keys
+                                    // automatically, keeping only what MiniCal cares about.
+                                    const cfg = this.codec.parseConfig(full.config ?? null);
+                                    this.applyConfig(cfg);
                                     if (full.name) {
                                         this.customName = full.name;
                                         this.leaf.updateHeader();
                                     }
-                                    this.astronomyDisplay = full.astronomyDisplay
-                                        ? { ...full.astronomyDisplay }
-                                        : undefined;
                                     void this.app.workspace.requestSaveLayout();
                                     void this.render();
                                 });
@@ -749,9 +751,7 @@ export class MiniCalendarView extends ItemView {
             item.setTitle(t('toolbar.resetView'))
                 .setIcon('rotate-ccw')
                 .onClick(() => {
-                    this.filterMenu.setFilterState(createEmptyFilterState());
-                    this.customName = undefined;
-                    this.astronomyDisplay = undefined;
+                    this.applyConfig({});
                     this.leaf.updateHeader();
                     void this.app.workspace.requestSaveLayout();
                     void this.render();

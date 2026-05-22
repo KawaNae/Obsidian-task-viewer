@@ -26,18 +26,14 @@ import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManag
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
 import type { PinnedListDefinition, DisplayTask } from '../../types';
+import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
+import { KanbanSchema, type KanbanConfig, type KanbanTransient } from './KanbanSchema';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 
 export const VIEW_TYPE_KANBAN = VIEW_META_KANBAN.type;
 
-interface KanbanViewState {
-    grid?: PinnedListDefinition[][];
-    gridCollapsed?: Record<string, boolean>;
-    customName?: string;
-    filterState?: FilterState;
-    maskMode?: boolean;
-}
+type KanbanViewState = Partial<KanbanConfig> & Partial<KanbanTransient>;
 
 export class KanbanView extends ItemView {
     private readonly plugin: TaskViewerPlugin;
@@ -115,24 +111,10 @@ export class KanbanView extends ItemView {
                 this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
             },
-            getGrid: () => this.grid,
-            onApplyTemplate: (template) => {
-                if (template.grid && template.grid.length > 0) {
-                    this.grid = template.grid;
-                    this.gridCollapsed = {};
-                }
-                if (template.filterState) {
-                    this.viewFilterState = template.filterState;
-                }
-                this.requestSaveLayout();
-                this.render();
-            },
-            onReset: () => {
-                this.grid = [[this.createDefaultList()]];
-                this.gridCollapsed = {};
-                this.customName = undefined;
-                this.viewFilterState = undefined;
-                this.maskMode = false;
+            getCurrentConfig: () => this.getCurrentConfig(),
+            applyConfig: (cfg) => this.applyConfig(cfg),
+            onConfigApplied: () => {
+                this.leaf.updateHeader();
                 this.requestSaveLayout();
                 this.render();
             },
@@ -158,22 +140,46 @@ export class KanbanView extends ItemView {
         return VIEW_META_KANBAN.icon;
     }
 
+    private get codec(): ViewConfigCodec<KanbanConfig, KanbanTransient> {
+        return codecFor(VIEW_TYPE_KANBAN) as ViewConfigCodec<KanbanConfig, KanbanTransient>;
+    }
+
+    applyConfig(cfg: Partial<KanbanConfig>): void {
+        const next: Partial<KanbanConfig> = { ...KanbanSchema.defaults, ...cfg };
+        if (next.grid && next.grid.length > 0) {
+            this.grid = next.grid;
+            this.gridCollapsed = {};
+        } else {
+            this.grid = [[this.createDefaultList()]];
+            this.gridCollapsed = {};
+        }
+        this.customName = next.customName;
+        this.maskMode = next.maskMode === true;
+        const fs = next.filterState;
+        this.viewFilterState = fs;
+        this.viewFilterMenu.setFilterState(fs ?? createEmptyFilterState());
+    }
+
+    getCurrentConfig(): Partial<KanbanConfig> {
+        return {
+            customName: this.customName,
+            filterState: this.viewFilterState && hasConditions(this.viewFilterState)
+                ? this.viewFilterState : undefined,
+            maskMode: this.maskMode,
+            grid: this.grid.length > 0 ? this.grid : undefined,
+        };
+    }
+
     async setState(state: KanbanViewState, result: ViewStateResult): Promise<void> {
-        if (state?.grid && Array.isArray(state.grid)) {
-            this.grid = state.grid;
+        const stateDict = (state ?? {}) as Record<string, unknown>;
+        const config = this.codec.parseConfig(stateDict);
+        const transient = this.codec.parseTransient(stateDict);
+
+        this.applyConfig(config);
+
+        if (transient.gridCollapsed) {
+            this.gridCollapsed = transient.gridCollapsed;
         }
-        if (state?.gridCollapsed && typeof state.gridCollapsed === 'object') {
-            this.gridCollapsed = state.gridCollapsed;
-        }
-        if (typeof state?.customName === 'string' && state.customName.trim()) {
-            this.customName = state.customName;
-        }
-        if (state?.filterState) {
-            const fs = FilterSerializer.fromJSON(state.filterState);
-            this.viewFilterState = fs;
-            this.viewFilterMenu.setFilterState(fs);
-        }
-        this.maskMode = state?.maskMode === true;
 
         await super.setState(state, result);
 
@@ -183,34 +189,10 @@ export class KanbanView extends ItemView {
     }
 
     getState(): Record<string, unknown> {
-        const result: Record<string, unknown> = {};
-
-        if (this.grid.length > 0) {
-            result.grid = this.grid;
-        }
-
-        // Only persist collapse states that are true
-        const collapsed: Record<string, boolean> = {};
-        for (const [id, val] of Object.entries(this.gridCollapsed)) {
-            if (val) collapsed[id] = true;
-        }
-        if (Object.keys(collapsed).length > 0) {
-            result.gridCollapsed = collapsed;
-        }
-
-        if (this.customName) {
-            result.customName = this.customName;
-        }
-
-        if (this.viewFilterState && hasConditions(this.viewFilterState)) {
-            result.filterState = FilterSerializer.toJSON(this.viewFilterState);
-        }
-
-        if (this.maskMode) {
-            result.maskMode = true;
-        }
-
-        return result;
+        return {
+            ...this.codec.serializeConfig(this.getCurrentConfig()),
+            ...this.codec.serializeTransient({ gridCollapsed: this.gridCollapsed }),
+        };
     }
 
     async onOpen(): Promise<void> {
