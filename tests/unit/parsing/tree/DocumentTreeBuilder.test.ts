@@ -217,7 +217,7 @@ describe('DocumentTreeBuilder', () => {
             expect(doc.sections[0].propertyBlock).toBeNull();
         });
 
-        it('チェックボックス行でプロパティ収集が停止', () => {
+        it('最初のタスク行で property 収集が打ち切られる (タスク後の property は section に昇格しない)', () => {
             const doc = buildFromBody([
                 '## Section',
                 '- tv-color:: red',
@@ -227,8 +227,9 @@ describe('DocumentTreeBuilder', () => {
             const pb = doc.sections[0].propertyBlock!;
             expect(pb.entries).toHaveLength(1);
             expect(pb.entries[0].key).toBe('tv-color');
-            // task 以降はタスクブロック
-            expect(doc.sections[0].blocks).toHaveLength(2); // task + "- custom:: after-task" as text
+            // text/property 行は block にしない: タスクのみ
+            expect(doc.sections[0].blocks).toHaveLength(1);
+            expect(doc.sections[0].blocks[0].type).toBe('task-block');
         });
 
         it('空行を挟んだプロパティも収集 (Markdown loose list)', () => {
@@ -287,46 +288,35 @@ describe('DocumentTreeBuilder', () => {
             expect(pb.entries).toHaveLength(2);
         });
 
-        it('wikilink 行は property block を終端する (現状維持)', () => {
+        it('wikilink 行を挟んだ property も拾う', () => {
             const doc = buildFromBody([
                 '## Section',
                 '- tv-color:: red',
                 '- [[wiki-target]]',
-                '- custom:: ignored',
+                '- custom:: still-collected',
                 '- [ ] task @2026-03-24',
             ]);
             const pb = doc.sections[0].propertyBlock!;
-            expect(pb.entries).toHaveLength(1);
+            expect(pb.entries).toHaveLength(2);
             expect(pb.entries[0].key).toBe('tv-color');
+            expect(pb.entries[1].key).toBe('custom');
         });
 
-        it('非リスト行 (plain text) は property block を終端する (現状維持)', () => {
+        it('plain text を挟んだ property も拾う', () => {
             const doc = buildFromBody([
                 '## Section',
                 '- tv-color:: red',
                 'plain paragraph text',
-                '- custom:: ignored',
+                '- custom:: still-collected',
                 '- [ ] task @2026-03-24',
             ]);
             const pb = doc.sections[0].propertyBlock!;
-            expect(pb.entries).toHaveLength(1);
+            expect(pb.entries).toHaveLength(2);
             expect(pb.entries[0].key).toBe('tv-color');
+            expect(pb.entries[1].key).toBe('custom');
         });
 
-        it('property block の endLine は最後の entry 行 + 1 (claim 範囲)', () => {
-            const doc = buildFromBody([
-                '## Section',
-                '- tv-color:: red',
-                '',
-                '',
-                '- [ ] task @2026-03-24',
-            ]);
-            const pb = doc.sections[0].propertyBlock!;
-            // entry は line 1 のみ。endLine は claim 範囲の終端 = 2
-            expect(pb.endLine).toBe(2);
-        });
-
-        it('テキストブロックを検出', () => {
+        it('テキスト行のみのセクション → block も propertyBlock も作らない', () => {
             const doc = buildFromBody([
                 '## Section',
                 'Some paragraph text',
@@ -334,9 +324,33 @@ describe('DocumentTreeBuilder', () => {
                 '- [ ] task @2026-03-24',
             ]);
             expect(doc.sections[0].propertyBlock).toBeNull();
-            expect(doc.sections[0].blocks).toHaveLength(2);
-            expect(doc.sections[0].blocks[0].type).toBe('text-block');
-            expect(doc.sections[0].blocks[1].type).toBe('task-block');
+            // text 行は block 化しない: タスクのみ
+            expect(doc.sections[0].blocks).toHaveLength(1);
+            expect(doc.sections[0].blocks[0].type).toBe('task-block');
+        });
+
+        it('暗黙ルートで末尾の property は拾わない (タスク以降は遡及しない)', () => {
+            const doc = buildFromBody([
+                '- root_tag:: alpha',
+                '- [ ] preTask @2026-05-27T10:00',
+                '- post_tag:: beta',
+            ]);
+            const pb = doc.sections[0].propertyBlock!;
+            expect(pb.entries).toHaveLength(1);
+            expect(pb.entries[0].key).toBe('root_tag');
+        });
+
+        it('インデントされた property 行は section に昇格しない (indent 0 のみ)', () => {
+            const doc = buildFromBody([
+                '## Section',
+                '- [[wiki-target]]',
+                '    - sub:: nested',
+                '- tv-color:: red',
+                '- [ ] task @2026-03-24',
+            ]);
+            const pb = doc.sections[0].propertyBlock!;
+            expect(pb.entries).toHaveLength(1);
+            expect(pb.entries[0].key).toBe('tv-color');
         });
 
         it('ネストセクションのブロックが正しく分離', () => {

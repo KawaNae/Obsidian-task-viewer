@@ -1,10 +1,9 @@
-import type { DocumentNode, SectionNode, BlockNode, PropertyBlock, PropertyBlockEntry, TaskBlock, TextBlock } from './DocumentTree';
+import type { DocumentNode, SectionNode, BlockNode, PropertyBlockEntry, TaskBlock } from './DocumentTree';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 
 const HEADING_REGEX = /^(#{1,6})\s+(.*)/;
 const PROPERTY_GROUP_HEADER = /^\s*-\s+properties::\s*$/;
-const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s/;
 
 /**
  * Markdown ファイルの行配列からドキュメント構造ツリーを構築する。
@@ -102,58 +101,142 @@ export class DocumentTreeBuilder {
     }
 
     // ── Pass 2: ブロック分類 ──
+    //
+    // セクションごとに 2 ステップで処理する:
+    //   Step A: collectSectionProperties — lead area 内の同レベル property を集約
+    //   Step B: classifyTaskBlocks       — own range 内の task 行を TaskBlock 化
+    // 両者は独立しており、property は「セクションの属性」、block 列は task 専用。
 
     private static classifyBlocks(section: SectionNode, allLines: string[]): void {
-        // セクション自身の行範囲から子セクションの範囲を除外した行範囲を計算
         const ownRanges = this.getOwnLineRanges(section);
         if (ownRanges.length === 0) return;
 
-        const blocks: BlockNode[] = [];
-        let isFirstRange = true;
+        // ── Step A: lead area の property 収集 ──
+        section.propertyBlock = this.collectSectionProperties(section, allLines, ownRanges);
 
+        // ── Step B: own range 内の task block 検出 ──
+        section.blocks = this.classifyTaskBlocks(section, allLines, ownRanges);
+    }
+
+    /**
+     * セクションの lead area からプロパティを収集する。
+     *
+     * Lead area = ヘッダー直後（または暗黙ルートの先頭）〜 最初のタスク行直前。
+     * 子セクション範囲は ownRanges 計算時点で既に除外済み。
+     *
+     * Lead area 内の **indent 0 の** `- key:: value` 行をすべて entries に集約する
+     * （テキスト・wikilink・空行・インデントされたリスト項目を挟んでもよい）。
+     * `- properties::` グループ形式 (indent 0) の直下インデント entry も吸収する。
+     *
+     * 最初のタスク行が出現した時点で打ち切り。これにより:
+     *   - 後方のタスクメモが前方のタスクへ遡及しない
+     *   - 暗黙ルートの末尾が暴走しない
+     *
+     * indent 0 固定の理由: File 層 (frontmatter top-level) との対称、および
+     * 「wikilink 直下の sub-bullet `- key:: value`」のような視覚的に
+     * セクションプロパティに見えないものを誤って拾わないため。
+     */
+    private static collectSectionProperties(
+        section: SectionNode,
+        allLines: string[],
+        ownRanges: [number, number][]
+    ): { entries: PropertyBlockEntry[] } | null {
+        const leadLines = this.collectLeadAreaLines(section, allLines, ownRanges);
+        if (leadLines.length === 0) return null;
+
+        const entries: PropertyBlockEntry[] = [];
+
+        for (let idx = 0; idx < leadLines.length; idx++) {
+            const lineNum = leadLines[idx];
+            const line = allLines[lineNum];
+            if (line.trim() === '') continue;
+            if (line.search(/\S|$/) !== 0) continue;
+
+            // グループ形式: `- properties::` の直下の indented エントリを吸収
+            if (PROPERTY_GROUP_HEADER.test(line)) {
+                let j = idx + 1;
+                while (j < leadLines.length) {
+                    const childLine = allLines[leadLines[j]];
+                    if (childLine.trim() === '') { j++; continue; }
+                    const childIndent = childLine.search(/\S|$/);
+                    if (childIndent === 0) break;
+                    const propMatch = childLine.match(ChildLineClassifier.PROPERTY_LINE);
+                    if (propMatch) {
+                        entries.push({
+                            key: propMatch[1].trim(),
+                            value: propMatch[2].trim(),
+                            line: leadLines[j],
+                        });
+                    }
+                    j++;
+                }
+                idx = j - 1;
+                continue;
+            }
+
+            // フラット形式: `- key:: value`
+            const propMatch = line.match(ChildLineClassifier.PROPERTY_LINE);
+            if (propMatch) {
+                entries.push({
+                    key: propMatch[1].trim(),
+                    value: propMatch[2].trim(),
+                    line: lineNum,
+                });
+            }
+            // それ以外（text / wikilink / 通常 bullet）は読み飛ばすだけで打ち切らない
+        }
+
+        return entries.length > 0 ? { entries } : null;
+    }
+
+    /**
+     * Lead area の行番号配列を返す。ownRanges を順に走査し、見出し行を除外しつつ
+     * 最初のタスク行が出現したらそこで打ち切る。
+     */
+    private static collectLeadAreaLines(
+        section: SectionNode,
+        allLines: string[],
+        ownRanges: [number, number][]
+    ): number[] {
+        const leadLines: number[] = [];
+        for (const [rangeStart, rangeEnd] of ownRanges) {
+            for (let i = rangeStart; i < rangeEnd; i++) {
+                if (section.heading && i === section.heading.line) continue;
+                if (TaskLineClassifier.isTaskLine(allLines[i])) {
+                    return leadLines;
+                }
+                leadLines.push(i);
+            }
+        }
+        return leadLines;
+    }
+
+    /**
+     * Own range 内のタスク行を走査し、TaskBlock 配列を生成する。
+     * Property 行・空行・テキスト行はスキップ（block にはしない）。
+     */
+    private static classifyTaskBlocks(
+        section: SectionNode,
+        allLines: string[],
+        ownRanges: [number, number][]
+    ): BlockNode[] {
+        const blocks: BlockNode[] = [];
         for (const [rangeStart, rangeEnd] of ownRanges) {
             let i = rangeStart;
-
-            // 見出し行自体をスキップ
-            if (isFirstRange && section.heading && i === section.heading.line) {
-                i++;
-            }
-            isFirstRange = false;
-
-            // セクション先頭のプロパティブロック検出
-            if (!section.propertyBlock && blocks.length === 0) {
-                const propBlock = this.collectPropertyBlock(allLines, i, rangeEnd);
-                if (propBlock) {
-                    section.propertyBlock = propBlock;
-                    i = propBlock.endLine;
-                }
-            }
-
-            // 残りの行をブロックに分類
             while (i < rangeEnd) {
+                if (section.heading && i === section.heading.line) { i++; continue; }
                 const line = allLines[i];
-
-                if (line.trim() === '') {
-                    i++;
-                    continue;
-                }
-
+                if (line.trim() === '') { i++; continue; }
                 if (TaskLineClassifier.isTaskLine(line)) {
                     const taskBlock = this.collectTaskBlock(allLines, i, rangeEnd);
                     blocks.push(taskBlock);
                     i = taskBlock.line + 1 + taskBlock.childRawLines.length;
                 } else {
-                    // TextBlock: 連続する非タスク・非空行
-                    const textStart = i;
-                    while (i < rangeEnd && allLines[i].trim() !== '' && !TaskLineClassifier.isTaskLine(allLines[i])) {
-                        i++;
-                    }
-                    blocks.push({ type: 'text-block', startLine: textStart, endLine: i } as TextBlock);
+                    i++;
                 }
             }
         }
-
-        section.blocks = blocks;
+        return blocks;
     }
 
     /** セクション自身の行範囲（子セクション範囲を除外） */
@@ -174,97 +257,6 @@ export class DocumentTreeBuilder {
             ranges.push([current, section.endLine]);
         }
         return ranges;
-    }
-
-    /**
-     * セクション先頭のプロパティブロックを収集する。
-     *
-     * Markdown list-aware な走査: 空行は list を終了させない (CommonMark の
-     * loose list と同じ semantics) ので transparent に skip する。
-     * property block を終端するのは:
-     *   - task 行 (checkbox)
-     *   - property でも group header でもない list 行 (wikilink, 通常 bullet)
-     *   - 非 list 行 (plain text)
-     *
-     * 返却する `endLine` は最後に収集した property entry の次行 (= entries が
-     * claim する範囲の終端)。後続の空行は claim しない。
-     */
-    private static collectPropertyBlock(
-        allLines: string[],
-        startLine: number,
-        endLine: number
-    ): PropertyBlock | null {
-        const entries: PropertyBlockEntry[] = [];
-        let scanIndex = startLine;
-        let lastEntryLine = -1;
-
-        while (scanIndex < endLine) {
-            const line = allLines[scanIndex];
-
-            // Markdown: 空行は list を終了させない (loose list)
-            if (line.trim() === '') {
-                scanIndex++;
-                continue;
-            }
-
-            // チェックボックス行（タスク行）で終了
-            if (TaskLineClassifier.isTaskLine(line)) break;
-
-            // グループ形式: `- properties::`
-            if (PROPERTY_GROUP_HEADER.test(line)) {
-                const groupIndent = line.search(/\S|$/);
-                scanIndex++;
-                while (scanIndex < endLine) {
-                    const childLine = allLines[scanIndex];
-                    if (childLine.trim() === '') {
-                        scanIndex++;
-                        continue;
-                    }
-                    const childIndent = childLine.search(/\S|$/);
-                    if (childIndent <= groupIndent) break;
-
-                    const propMatch = childLine.match(ChildLineClassifier.PROPERTY_LINE);
-                    if (propMatch) {
-                        entries.push({
-                            key: propMatch[1].trim(),
-                            value: propMatch[2].trim(),
-                            line: scanIndex,
-                        });
-                        lastEntryLine = scanIndex;
-                    }
-                    scanIndex++;
-                }
-                continue;
-            }
-
-            // フラット形式: `- key:: value`
-            const propMatch = line.match(ChildLineClassifier.PROPERTY_LINE);
-            if (propMatch) {
-                entries.push({
-                    key: propMatch[1].trim(),
-                    value: propMatch[2].trim(),
-                    line: scanIndex,
-                });
-                lastEntryLine = scanIndex;
-                scanIndex++;
-                continue;
-            }
-
-            // リスト項目だがプロパティでもタスクでもない (wikilink 等) → 終了
-            if (LIST_ITEM.test(line)) break;
-
-            // 非リスト行 → 終了
-            break;
-        }
-
-        if (entries.length === 0) return null;
-
-        return {
-            type: 'property-block',
-            startLine,
-            endLine: lastEntryLine + 1,
-            entries,
-        };
     }
 
     /** タスクブロックを収集（タスク行 + インデントされた子行） */
