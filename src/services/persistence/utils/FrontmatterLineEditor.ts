@@ -81,4 +81,15 @@ export class FrontmatterLineEditor {
 
         return result.join('\n');
     }
+
+    /**
+     * ステータス文字を YAML 用にエスケープする。
+     * `? ! > : -` 等の YAML 特殊文字は引用符で囲む。
+     * create (TaskConverter) / update (FrontmatterWriter) の両経路が
+     * 同一規則を共有し、書き込み方式による値の欠落差を防ぐ。
+     */
+    static escapeStatusChar(statusChar: string): string {
+        const needsQuoting = /[?!>:\-\[\]{}|&*#,]/.test(statusChar);
+        return needsQuoting ? `"${statusChar}"` : statusChar;
+    }
 }

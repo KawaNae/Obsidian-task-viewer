@@ -1,6 +1,7 @@
 import { App, TFile } from 'obsidian';
 import { DEFAULT_TV_FILE_KEYS, TvFileKeys, Task, PropertyValue } from '../../types';
 import { FileOperations } from './utils/FileOperations';
+import { FrontmatterLineEditor } from './utils/FrontmatterLineEditor';
 import { DateUtils } from '../../utils/DateUtils';
 import { TagExtractor } from '../parsing/utils/TagExtractor';
 
@@ -110,7 +111,7 @@ export class TaskConverter {
 
         // status (デフォルトの ' ' は省略)
         if (task.statusChar && task.statusChar !== ' ') {
-            lines.push(`${frontmatterKeys.status}: ${task.statusChar}`);
+            lines.push(`${frontmatterKeys.status}: ${FrontmatterLineEditor.escapeStatusChar(task.statusChar)}`);
         }
 
         // color (タスクの解決済み値を優先、ソースファイルをフォールバック)
