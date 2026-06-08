@@ -83,13 +83,16 @@ export class FrontmatterLineEditor {
     }
 
     /**
-     * ステータス文字を YAML 用にエスケープする。
-     * `? ! > : -` 等の YAML 特殊文字は引用符で囲む。
-     * create (TaskConverter) / update (FrontmatterWriter) の両経路が
-     * 同一規則を共有し、書き込み方式による値の欠落差を防ぐ。
+     * Quotes a YAML scalar when it would otherwise break a plain scalar
+     * (`:`/flow indicators/leading sigils/surrounding whitespace). The single
+     * rule shared by create (TaskConverter) and update (FrontmatterWriter +
+     * applyUpdates) so no value field — status, content, due — silently
+     * corrupts on write. Mirrors TaskConverter.formatPropertyValueForYaml's
+     * detection of YAML-sensitive characters.
      */
-    static escapeStatusChar(statusChar: string): string {
-        const needsQuoting = /[?!>:\-\[\]{}|&*#,]/.test(statusChar);
-        return needsQuoting ? `"${statusChar}"` : statusChar;
+    static escapeYamlScalar(value: string): string {
+        if (value === '') return '""';
+        const needsQuoting = /[:#{}[\],&*?|<>=!%@'"]/.test(value) || value !== value.trim();
+        return needsQuoting ? `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : value;
     }
 }

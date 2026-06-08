@@ -102,16 +102,16 @@ export class TaskConverter {
 
         // due
         if (task.due) {
-            lines.push(`${frontmatterKeys.due}: ${task.due}`);
+            lines.push(`${frontmatterKeys.due}: ${FrontmatterLineEditor.escapeYamlScalar(task.due)}`);
         }
 
         // content (#tag を除去して tv-content に書く)
         const cleanContent = task.content.replace(/\B#[^\s#]+/g, '').trim();
-        lines.push(`${frontmatterKeys.content}: ${cleanContent}`);
+        lines.push(`${frontmatterKeys.content}: ${FrontmatterLineEditor.escapeYamlScalar(cleanContent)}`);
 
         // status (デフォルトの ' ' は省略)
         if (task.statusChar && task.statusChar !== ' ') {
-            lines.push(`${frontmatterKeys.status}: ${FrontmatterLineEditor.escapeStatusChar(task.statusChar)}`);
+            lines.push(`${frontmatterKeys.status}: ${FrontmatterLineEditor.escapeYamlScalar(task.statusChar)}`);
         }
 
         // color (タスクの解決済み値を優先、ソースファイルをフォールバック)

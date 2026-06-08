@@ -30,7 +30,7 @@ export class FrontmatterWriter {
 
         if ('statusChar' in updates) {
             // ' ' (todo) → キー削除; それ以外 → エスケープしてキー書き込み
-            fmUpdates[frontmatterKeys.status] = task.statusChar === ' ' ? null : FrontmatterLineEditor.escapeStatusChar(task.statusChar);
+            fmUpdates[frontmatterKeys.status] = task.statusChar === ' ' ? null : FrontmatterLineEditor.escapeYamlScalar(task.statusChar);
         }
 
         if ('startDate' in updates || 'startTime' in updates) {
@@ -42,11 +42,11 @@ export class FrontmatterWriter {
         }
 
         if ('due' in updates) {
-            fmUpdates[frontmatterKeys.due] = task.due || null;
+            fmUpdates[frontmatterKeys.due] = task.due ? FrontmatterLineEditor.escapeYamlScalar(task.due) : null;
         }
 
         if ('content' in updates) {
-            fmUpdates[frontmatterKeys.content] = task.content || null;
+            fmUpdates[frontmatterKeys.content] = task.content ? FrontmatterLineEditor.escapeYamlScalar(task.content) : null;
         }
 
         if (Object.keys(fmUpdates).length > 0) {
