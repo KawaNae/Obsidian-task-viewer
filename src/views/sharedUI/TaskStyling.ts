@@ -89,4 +89,23 @@ export class TaskStyling {
     static applyReadOnly(el: HTMLElement, task: { isReadOnly?: boolean }): void {
         if (task.isReadOnly) el.dataset.readOnly = 'true';
     }
+
+    /**
+     * Applies split-segment variant classes from a DisplayTask's split flags.
+     * Time-axis views (Timeline / Schedule) split a task across day boundaries
+     * and call this; grid views (AllDay / Calendar) use their own multi-day bar
+     * variants instead. Idempotent — clears all split variants before applying.
+     */
+    static applySplitClasses(
+        el: HTMLElement,
+        task: { isSplit?: boolean; splitContinuesBefore?: boolean; splitContinuesAfter?: boolean }
+    ): void {
+        el.removeClass('task-card--split');
+        el.removeClass('task-card--split-continues-before');
+        el.removeClass('task-card--split-continues-after');
+        if (!task.isSplit) return;
+        el.addClass('task-card--split');
+        if (task.splitContinuesBefore) el.addClass('task-card--split-continues-before');
+        if (task.splitContinuesAfter) el.addClass('task-card--split-continues-after');
+    }
 }

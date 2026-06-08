@@ -16,12 +16,6 @@ import { TaskPagingController } from './TaskPagingController';
 import { CardReconciler } from './CardReconciler';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 
-const PINNED_VARIANT_CLASSES = [
-    'task-card--split',
-    'task-card--split-continues-before',
-    'task-card--split-continues-after',
-];
-
 export interface PinnedListCallbacks {
     onCollapsedChange: (listId: string, collapsed: boolean) => void;
     onSortEdit: (listDef: PinnedListDefinition, anchorEl: HTMLElement) => void;
@@ -408,17 +402,10 @@ export class PinnedListRenderer {
     }
 
     /**
-     * Idempotent decoration for pinned-list cards. Variant classes are reset
-     * before applying the current task's split state.
+     * Idempotent decoration for pinned-list cards (color / linestyle / readonly).
+     * Pinned-list tasks are never split in this path, so no split variants apply.
      */
     private decoratePinnedCard(card: HTMLElement, task: DisplayTask): void {
-        PINNED_VARIANT_CLASSES.forEach(cls => card.removeClass(cls));
-        if (task.isSplit) {
-            card.addClass('task-card--split');
-            if (task.splitContinuesBefore) card.addClass('task-card--split-continues-before');
-            if (task.splitContinuesAfter) card.addClass('task-card--split-continues-after');
-        }
-
         card.dataset.id = task.id;
 
         TaskStyling.applyTaskColor(card, task.color ?? null);

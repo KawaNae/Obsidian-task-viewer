@@ -15,11 +15,6 @@ import { TaskStyling } from '../sharedUI/TaskStyling';
 import { TaskPagingController } from '../sharedUI/TaskPagingController';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 
-const KANBAN_VARIANT_CLASSES = [
-    'task-card--split',
-    'task-card--split-continues-before',
-    'task-card--split-continues-after',
-];
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
@@ -377,17 +372,10 @@ export class KanbanView extends ItemView {
     }
 
     /**
-     * Idempotent decoration for kanban cards. Variant classes are reset
-     * before applying current task split state.
+     * Idempotent decoration for kanban cards (color / linestyle / readonly).
+     * Kanban tasks are never split in this path, so no split variants apply.
      */
     private decorateKanbanCard(card: HTMLElement, task: import('../../types').DisplayTask): void {
-        KANBAN_VARIANT_CLASSES.forEach(cls => card.removeClass(cls));
-        if (task.isSplit) {
-            card.addClass('task-card--split');
-            if (task.splitContinuesBefore) card.addClass('task-card--split-continues-before');
-            if (task.splitContinuesAfter) card.addClass('task-card--split-continues-after');
-        }
-
         card.dataset.id = task.id;
 
         TaskStyling.applyTaskColor(card, task.color ?? null);
