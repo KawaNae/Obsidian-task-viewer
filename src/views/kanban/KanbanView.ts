@@ -565,22 +565,19 @@ export class KanbanView extends ItemView {
 
     private duplicateCell(listDef: PinnedListDefinition, row: number, col: number): void {
         const dup: PinnedListDefinition = {
+            ...listDef,
             id: this.generateId(),
             name: listDef.name + ' (copy)',
             filterState: structuredClone(listDef.filterState),
             sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
         };
 
-        // Insert duplicated cell to the right in the same row, and add a new cell to all other rows
-        if (this.grid[0].length === this.grid[row].length) {
-            // Rectangular: insert column at col+1
-            for (let r = 0; r < this.grid.length; r++) {
-                if (r === row) {
-                    this.grid[r].splice(col + 1, 0, dup);
-                } else {
-                    this.grid[r].splice(col + 1, 0, this.createDefaultList());
-                }
-            }
+        // Insert the duplicate to the right in its row; keep the grid
+        // rectangular by inserting a default cell at the same column in every
+        // other row. splice tolerates col+1 past a shorter row's length (it
+        // appends), so a non-rectangular grid no longer silently no-ops.
+        for (let r = 0; r < this.grid.length; r++) {
+            this.grid[r].splice(col + 1, 0, r === row ? dup : this.createDefaultList());
         }
 
         this.requestSaveLayout();

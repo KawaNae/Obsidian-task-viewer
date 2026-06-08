@@ -246,10 +246,14 @@ export class PeriodicHeaderRenderer {
                 const isCurrent: boolean = tier === 'YM'
                     ? moment(dateObj).isSame(todayMoment, 'month')
                     : k === todayVisualWeekKey;
-                // For W tier the anchor is the visual week start (= key), so all
-                // downstream renderers (label, aria, weekly link target, click date)
-                // operate on the canonical anchor — symmetric with CalendarView.
-                const anchorDate: string = tier === 'W' ? k : d;
+                // W tier anchors on the visual week start (= key). YM tier
+                // anchors on the first of the month so the monthly-note link
+                // resolves to the month's canonical date regardless of the
+                // configured filename format — not the segment's first visible
+                // day (which only coincided when the format dropped the day).
+                const anchorDate: string = tier === 'W'
+                    ? k
+                    : moment(dateObj).startOf('month').format('YYYY-MM-DD');
                 current = { key: k, startIdx: i, span: 1, anchorDate, isCurrent };
             }
         }
