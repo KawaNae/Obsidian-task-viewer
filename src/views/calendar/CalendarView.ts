@@ -415,6 +415,31 @@ export class CalendarView extends ItemView {
         setTimeout(() => this.handleManager?.selectTask(null), 0);
     }
 
+    private isRendering = false;
+    private renderPending = false;
+
+    /**
+     * Serializes async performRender calls. A render requested while one is in
+     * flight is coalesced into a single re-run after the current pass settles,
+     * so the keyed reconciler's detach→build→dispose cycle stays atomic — no
+     * interleaving that would duplicate or orphan cards.
+     */
+    private async runRender(): Promise<void> {
+        if (this.isRendering) {
+            this.renderPending = true;
+            return;
+        }
+        this.isRendering = true;
+        try {
+            do {
+                this.renderPending = false;
+                await this.performRender();
+            } while (this.renderPending);
+        } finally {
+            this.isRendering = false;
+        }
+    }
+
     private render(): void {
         if (!this.scrollRestorePending) {
             const oldMain = this.container?.querySelector('.cal-grid__body') as HTMLElement | null;
@@ -422,7 +447,7 @@ export class CalendarView extends ItemView {
                 this.savedScrollTop = oldMain.scrollTop;
             }
         }
-        void this.performRender();
+        void this.runRender();
     }
 
     private async performRender(): Promise<void> {

@@ -319,6 +319,30 @@ export class ScheduleView extends ItemView {
         });
     }
 
+    private isRendering = false;
+    private renderPending = false;
+
+    /**
+     * Serializes async performRender calls. A render requested mid-flight is
+     * coalesced into a single re-run after the current pass settles, keeping
+     * the keyed reconciler's detach→build→dispose cycle atomic.
+     */
+    private async runRender(): Promise<void> {
+        if (this.isRendering) {
+            this.renderPending = true;
+            return;
+        }
+        this.isRendering = true;
+        try {
+            do {
+                this.renderPending = false;
+                await this.performRender();
+            } while (this.renderPending);
+        } finally {
+            this.isRendering = false;
+        }
+    }
+
     private render(): void {
         if (!this.scrollRestorePending) {
             const oldBodyScroll = this.container?.querySelector('.schedule-view__body-scroll') as HTMLElement | null;
@@ -326,7 +350,7 @@ export class ScheduleView extends ItemView {
                 this.savedScrollTop = oldBodyScroll.scrollTop;
             }
         }
-        void this.performRender();
+        void this.runRender();
     }
 
     private async performRender(): Promise<void> {
