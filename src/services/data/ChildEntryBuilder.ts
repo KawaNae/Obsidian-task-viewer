@@ -47,12 +47,13 @@ export function buildChildEntries(
             const c = getTask(cid);
             return c ? collectSubtreeLines(c, getTask) : null;
         })
-        .filter((s): s is Set<number> => s !== null);
+        .filter((s): s is Set<string> => s !== null);
 
     const filtered = entries.filter(e => {
         if (e.kind === 'task') return true;
+        const key = `${parent.file}:${e.bodyLine}`;
         for (const sub of siblingSubtrees) {
-            if (sub.has(e.bodyLine)) return false;
+            if (sub.has(key)) return false;
         }
         return true;
     });
@@ -63,28 +64,31 @@ export function buildChildEntries(
 }
 
 /**
- * All absolute file lines occupied by a task and its descendant subtree.
- * Used to detect cross-sibling line overlap.
+ * All body lines occupied by a task and its descendant subtree, as
+ * file-qualified `file:line` keys. File-qualification prevents a sibling
+ * subtree in another file from colliding with this parent's body lines —
+ * a cross-file tv-file child and an unrelated note can share an absolute
+ * line number.
  */
 function collectSubtreeLines(
     task: Task,
     getTask: (id: string) => Task | undefined,
     visited: Set<string> = new Set(),
     depth: number = 0
-): Set<number> {
-    const out = new Set<number>();
+): Set<string> {
+    const out = new Set<string>();
     if (depth > 10 || visited.has(task.id)) return out;
     visited.add(task.id);
 
-    if (task.line >= 0) out.add(task.line);
+    if (task.line >= 0) out.add(`${task.file}:${task.line}`);
     for (const off of task.childLineBodyOffsets) {
-        if (typeof off === 'number' && off >= 0) out.add(off);
+        if (typeof off === 'number' && off >= 0) out.add(`${task.file}:${off}`);
     }
     for (const cid of task.childIds) {
         const c = getTask(cid);
         if (!c) continue;
-        for (const l of collectSubtreeLines(c, getTask, visited, depth + 1)) {
-            out.add(l);
+        for (const key of collectSubtreeLines(c, getTask, visited, depth + 1)) {
+            out.add(key);
         }
     }
     return out;

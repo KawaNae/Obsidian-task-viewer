@@ -83,6 +83,28 @@ describe('buildChildEntries', () => {
         ]);
     });
 
+    it('keeps a plain entry whose bodyLine collides with a cross-file sibling subtree', () => {
+        // parent (A.md) has a plain note at absolute line 5 plus a cross-file
+        // tv-file child B whose own subtree occupies line 5 *in B.md*. The
+        // collision is only on the raw line number; file-qualified subtree
+        // keys (A.md:5 vs B.md:5) must keep A.md's plain entry from dropping.
+        const parent = makeTask({
+            id: 'p', file: 'A.md', parserId: 'tv-file', line: -1,
+            childIds: ['b'],
+            childLines: [plainCl('- note', null)],
+            childLineBodyOffsets: [5],
+        });
+        const b = makeTask({
+            id: 'b', file: 'B.md', parserId: 'tv-file', line: -1,
+            childIds: [],
+            childLines: [plainCl('- sub', ' ')],
+            childLineBodyOffsets: [5],
+        });
+        const lookup = (id: string): Task | undefined => id === 'b' ? b : undefined;
+        const entries = buildChildEntries(parent, lookup);
+        expect(entries.some(e => e.kind === 'line' && e.bodyLine === 5)).toBe(true);
+    });
+
     it('emits wikilink entries for childLines with wikilinkTarget', () => {
         const parent = makeTask({
             childIds: [],
