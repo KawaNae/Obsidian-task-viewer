@@ -109,10 +109,7 @@ export class CalendarToolbar extends ViewToolbarBase {
             getDefaultName: () => VIEW_META_CALENDAR.displayText,
             onRename: (newName) => deps.onRename(newName),
             buildUri: () => ({
-                filterState: deps.filterMenu.getFilterState(),
-                pinnedLists: deps.getPinnedLists(),
-                showSidebar: deps.getShowSidebar(),
-                extraUriParams: this.codec.toUriParams(deps.getCurrentConfig()),
+                configParams: this.codec.toUriParams(deps.getCurrentConfig()),
             }),
             viewType: VIEW_META_CALENDAR.type,
             getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,

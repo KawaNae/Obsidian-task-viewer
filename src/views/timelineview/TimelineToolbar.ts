@@ -216,12 +216,7 @@ export class TimelineToolbar extends ViewToolbarBase {
             getDefaultName: () => VIEW_META_TIMELINE.displayText,
             onRename: (newName) => this.callbacks.onRename(newName),
             buildUri: () => ({
-                filterState: this.filterMenu.getFilterState(),
-                days: this.viewState.daysToShow,
-                zoom: this.viewState.zoomLevel,
-                pinnedLists: this.viewState.pinnedLists,
-                showSidebar: this.viewState.showSidebar,
-                extraUriParams: this.codec.toUriParams(this.snapshotConfig()),
+                configParams: this.codec.toUriParams(this.snapshotConfig()),
             }),
             viewType: VIEW_META_TIMELINE.type,
             getViewTemplateFolder: () => this.plugin.settings.viewTemplateFolder,
