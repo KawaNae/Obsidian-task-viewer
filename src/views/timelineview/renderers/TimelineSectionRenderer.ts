@@ -14,8 +14,10 @@ import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 
 
 const Z_GAP = 10;
-const SELECTED_Z_INDEX = 200;
-const Z_MAX = SELECTED_Z_INDEX - Z_GAP;
+// Cap base lane z-index one gap below the selection overlay (CSS:
+// .task-card.is-selected → --z-task-card-selected: 200) so a selected card
+// always layers above non-selected ones.
+const Z_MAX = 190;
 
 export class TimelineSectionRenderer {
     constructor(

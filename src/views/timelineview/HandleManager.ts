@@ -3,8 +3,6 @@ import { GridHandleStrategy } from './handles/GridHandleStrategy';
 import { TimelineHandleStrategy } from './handles/TimelineHandleStrategy';
 import type { HandleStrategy } from './handles/HandleStrategy';
 
-const SELECTED_Z_INDEX = 200;
-
 interface HandleManagerDeps {
     getTask(id: string): Task | undefined;
     getStartHour(): number;
@@ -43,19 +41,10 @@ export class HandleManager {
      * segments of the same task get `.is-selected` via `dataset.splitOriginalId`.
      */
     selectTask(taskId: string | null): void {
-        // Remove handles from previously selected task and restore z-index.
+        // Remove handles from the previously selected task. Selection z-index
+        // is a CSS overlay (.is-selected), so there is no inline z to restore.
         if (this.selectedTaskId) {
             this.removeHandles(this.selectedTaskId);
-            const prevEls = this.getMainTaskCards();
-            prevEls.forEach(el => {
-                const htmlEl = el as HTMLElement;
-                if (htmlEl.dataset.id === this.selectedTaskId || htmlEl.dataset.splitOriginalId === this.selectedTaskId) {
-                    if (htmlEl.dataset.originalZIndex) {
-                        htmlEl.style.zIndex = htmlEl.dataset.originalZIndex;
-                        delete htmlEl.dataset.originalZIndex;
-                    }
-                }
-            });
         }
 
         this.selectedTaskId = taskId;
@@ -70,21 +59,15 @@ export class HandleManager {
     reapplySelectionClass(): void {
         const taskId = this.selectedTaskId;
         const taskCards = this.getMainTaskCards();
+        // Selection is a pure class toggle. The z-index overlay lives in CSS
+        // (.task-card.is-selected → --z-task-card-selected !important), so the
+        // base z-index stays owned solely by decorateLane and never needs the
+        // save/restore that previously went stale across re-renders.
         taskCards.forEach(el => {
             const htmlEl = el as HTMLElement;
-            if (taskId && (htmlEl.dataset.id === taskId || htmlEl.dataset.splitOriginalId === taskId)) {
-                if (!htmlEl.dataset.originalZIndex) {
-                    htmlEl.dataset.originalZIndex = htmlEl.style.zIndex || '1';
-                }
-                el.addClass('is-selected');
-                htmlEl.style.zIndex = String(SELECTED_Z_INDEX);
-            } else {
-                el.removeClass('is-selected');
-                if (htmlEl.dataset.originalZIndex) {
-                    htmlEl.style.zIndex = htmlEl.dataset.originalZIndex;
-                    delete htmlEl.dataset.originalZIndex;
-                }
-            }
+            const isSelected = !!taskId
+                && (htmlEl.dataset.id === taskId || htmlEl.dataset.splitOriginalId === taskId);
+            el.toggleClass('is-selected', isSelected);
         });
 
         if (taskId) {
