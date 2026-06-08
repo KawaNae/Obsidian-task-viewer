@@ -317,8 +317,10 @@ export class TVInlineParser implements LeafParserStrategy {
             metaStr += ` ${startStr}`;
 
             // End Part Logic
-            if (useInheritedNotation && task.endTime) {
-                // Inherited end date - output time only
+            if (useInheritedNotation && task.endTime && (!task.endDate || task.endDate === task.startDate)) {
+                // Inherited same-day end - output time only. A cross-day endDate
+                // falls through to the explicit-date branch below so the day is
+                // not lost (inherited notation only abbreviates the start anchor).
                 metaStr += `>${task.endTime}`;
             } else if (task.endDate) {
                 // endDate is explicitly set
