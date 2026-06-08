@@ -95,6 +95,7 @@ export class ScheduleToolbar extends ViewToolbarBase {
             onRename: (newName) => deps.onRename(newName),
             buildUri: () => ({
                 filterState: deps.filterMenu.getFilterState(),
+                extraUriParams: this.codec.toUriParams(deps.getCurrentConfig()),
             }),
             viewType: VIEW_META_SCHEDULE.type,
             getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,

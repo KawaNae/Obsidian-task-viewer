@@ -20,6 +20,12 @@ export interface ViewUriOptions {
     template?: string;
     mode?: string;
     intervalTemplate?: string;
+    /**
+     * Schema-driven config params (codec.toUriParams) not covered by the
+     * hand-coded fields above — e.g. maskMode, astronomyDisplay. Merged in
+     * build() (non-template export only) after the reserved vocabulary.
+     */
+    extraUriParams?: Record<string, string>;
 }
 
 /**
@@ -86,6 +92,25 @@ export class ViewUriBuilder {
                     return { ...rest, filterState: FilterSerializer.toJSON(pl.filterState) };
                 }));
                 uri += `&grid=${unicodeBtoa(JSON.stringify(serialized))}`;
+            }
+        }
+
+        // Merge schema-driven config params (codec.toUriParams) that the
+        // hand-coded fields above don't emit — maskMode, astronomyDisplay, etc.
+        // — so non-template URI export stays in sync with the read path
+        // (codec.fromUriParams). The reserved set is the vocabulary build()
+        // owns directly (canonical + legacy names); full unification of
+        // days/zoom/filter through the codec is future work. Skipped on the
+        // template path, where config lives in the referenced .md file.
+        if (opts.extraUriParams && !opts.template) {
+            const reserved = new Set([
+                'view', 'position', 'name', 'mode', 'intervalTemplate', 'template',
+                'days', 'daysToShow', 'zoom', 'zoomLevel', 'date', 'startDate',
+                'showSidebar', 'filter', 'filterState', 'pinnedLists', 'grid', 'customName',
+            ]);
+            for (const [k, v] of Object.entries(opts.extraUriParams)) {
+                if (reserved.has(k)) continue;
+                uri += `&${k}=${encodeURIComponent(v)}`;
             }
         }
 

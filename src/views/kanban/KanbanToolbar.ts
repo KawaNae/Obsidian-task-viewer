@@ -81,6 +81,7 @@ export class KanbanToolbar extends ViewToolbarBase {
             buildUri: () => ({
                 grid: deps.getCurrentConfig().grid,
                 filterState: deps.filterMenu.getFilterState(),
+                extraUriParams: this.codec.toUriParams(deps.getCurrentConfig()),
             }),
             viewType: VIEW_META_KANBAN.type,
             getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,

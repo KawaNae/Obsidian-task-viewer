@@ -810,6 +810,7 @@ export class MiniCalendarView extends ItemView {
         const opts: ViewUriOptions = {
             position: ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace),
             name: this.customName,
+            extraUriParams: this.codec.toUriParams(this.getCurrentConfig()),
         };
         const filterState = this.filterMenu.getFilterState();
         if (hasConditions(filterState)) {

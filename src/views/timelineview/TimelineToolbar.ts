@@ -221,6 +221,7 @@ export class TimelineToolbar extends ViewToolbarBase {
                 zoom: this.viewState.zoomLevel,
                 pinnedLists: this.viewState.pinnedLists,
                 showSidebar: this.viewState.showSidebar,
+                extraUriParams: this.codec.toUriParams(this.snapshotConfig()),
             }),
             viewType: VIEW_META_TIMELINE.type,
             getViewTemplateFolder: () => this.plugin.settings.viewTemplateFolder,
