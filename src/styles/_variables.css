@@ -126,6 +126,7 @@ body {
        resolves — --tv-text-muted itself is body-scoped. */
     --tv-astro-sunrise: var(--tv-text-muted);
     --tv-astro-sunset:  var(--tv-text-muted);
+    --tv-astro-moon-lit: #f5e6a8;
 
     --tv-danger-rgb: var(--background-modifier-error-rgb, var(--color-red-rgb));
 

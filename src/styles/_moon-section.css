@@ -64,6 +64,13 @@
     display: block;
 }
 
+/* Lit region of the moon-phase SVG. Themeable via --tv-astro-moon-lit
+   (default gold) instead of a hex baked into the SVG string, matching the
+   sun lines' --tv-astro-* token pattern. */
+.moon-phase__lit {
+    fill: var(--tv-astro-moon-lit);
+}
+
 /* Calendar day-cell positioning — sits left of the date number, vertically
    centered with it. */
 .cal-day-cell > .moon-phase-inline--cal {

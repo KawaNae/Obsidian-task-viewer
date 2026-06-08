@@ -4,6 +4,7 @@ import {
     getMoonIllumination,
     getMoonPhaseName,
     getSunTimes,
+    type SunTimes,
 } from '../../services/astronomy/AstronomyService';
 import { t } from '../../i18n';
 
@@ -68,6 +69,42 @@ export interface AttachSunIndicatorsOptions {
 }
 
 /**
+ * Today's and the next calendar day's sun times for a visual-day column. The
+ * next day is needed because an event before `startHour` belongs to the
+ * column's early-morning band (the next calendar date) and should use that
+ * day's actual sun time, not today's (they drift a few minutes day-to-day).
+ */
+function sunTimesForWrap(date: string, latitude: number, longitude: number): [SunTimes, SunTimes] {
+    const today = new Date(`${date}T12:00:00`);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return [getSunTimes(today, latitude, longitude), getSunTimes(tomorrow, latitude, longitude)];
+}
+
+/**
+ * Resolve a sun event's minutes-from-startHour offset. Events at/after
+ * startHour use today's time; an event before startHour wraps into the next
+ * calendar day's early-morning band and uses *that* day's sun time.
+ */
+function resolveSunPosition(
+    variant: 'sunrise' | 'sunset',
+    today: SunTimes,
+    tomorrow: SunTimes,
+    startHour: number,
+): { minutesFromStart: number; sunDate: Date } | null {
+    const todaySun = today[variant];
+    if (!todaySun) return null;
+    const todayMinutes = todaySun.getHours() * 60 + todaySun.getMinutes() - startHour * 60;
+    if (todayMinutes >= 0) {
+        return { minutesFromStart: todayMinutes, sunDate: todaySun };
+    }
+    const tomorrowSun = tomorrow[variant];
+    if (!tomorrowSun) return null;
+    const tomorrowMinutes = tomorrowSun.getHours() * 60 + tomorrowSun.getMinutes() - startHour * 60 + 24 * 60;
+    return { minutesFromStart: tomorrowMinutes, sunDate: tomorrowSun };
+}
+
+/**
  * Append sunrise and sunset horizontal indicator <div>s to a time-axis
  * container (Timeline's day-column or Schedule's time-grid). The container is
  * expected to have a CSS rule that maps `--indicator-minutes` to a vertical
@@ -87,14 +124,12 @@ export function attachSunIndicators(
     options: AttachSunIndicatorsOptions,
 ): number {
     const { startHour, latitude, longitude, minutesToTopPx } = options;
-    const referenceDate = new Date(`${date}T12:00:00`);
-    const { sunrise, sunset } = getSunTimes(referenceDate, latitude, longitude);
+    const [today, tomorrow] = sunTimesForWrap(date, latitude, longitude);
 
-    const append = (sunDate: Date | null, variant: 'sunrise' | 'sunset'): boolean => {
-        if (!sunDate) return false;
-        const clockMinutes = sunDate.getHours() * 60 + sunDate.getMinutes();
-        let minutesFromStart = clockMinutes - startHour * 60;
-        if (minutesFromStart < 0) minutesFromStart += 24 * 60;
+    const append = (variant: 'sunrise' | 'sunset'): boolean => {
+        const resolved = resolveSunPosition(variant, today, tomorrow, startHour);
+        if (!resolved) return false;
+        const { minutesFromStart } = resolved;
 
         let absoluteTopPx: number | null = null;
         if (minutesToTopPx) {
@@ -113,8 +148,8 @@ export function attachSunIndicators(
     };
 
     let count = 0;
-    if (append(sunrise, 'sunrise')) count++;
-    if (append(sunset, 'sunset')) count++;
+    if (append('sunrise')) count++;
+    if (append('sunset')) count++;
     return count;
 }
 
@@ -139,14 +174,12 @@ export function attachSunAxisArrows(
     options: AttachSunIndicatorsOptions,
 ): number {
     const { startHour, latitude, longitude, minutesToTopPx } = options;
-    const referenceDate = new Date(`${date}T12:00:00`);
-    const { sunrise, sunset } = getSunTimes(referenceDate, latitude, longitude);
+    const [today, tomorrow] = sunTimesForWrap(date, latitude, longitude);
 
-    const append = (sunDate: Date | null, variant: 'sunrise' | 'sunset'): boolean => {
-        if (!sunDate) return false;
-        const clockMinutes = sunDate.getHours() * 60 + sunDate.getMinutes();
-        let minutesFromStart = clockMinutes - startHour * 60;
-        if (minutesFromStart < 0) minutesFromStart += 24 * 60;
+    const append = (variant: 'sunrise' | 'sunset'): boolean => {
+        const resolved = resolveSunPosition(variant, today, tomorrow, startHour);
+        if (!resolved) return false;
+        const { minutesFromStart, sunDate } = resolved;
 
         let absoluteTopPx: number | null = null;
         if (minutesToTopPx) {
@@ -168,8 +201,8 @@ export function attachSunAxisArrows(
     };
 
     let count = 0;
-    if (append(sunrise, 'sunrise')) count++;
-    if (append(sunset, 'sunset')) count++;
+    if (append('sunrise')) count++;
+    if (append('sunset')) count++;
     return count;
 }
 
