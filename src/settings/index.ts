@@ -12,6 +12,7 @@ import * as AboutTab from './AboutTab';
 
 export class TaskViewerSettingTab extends PluginSettingTab {
     plugin: TaskViewerPlugin;
+    private activeTabId = 'basic';
 
     constructor(app: App, plugin: TaskViewerPlugin) {
         super(app, plugin);
@@ -63,7 +64,8 @@ export class TaskViewerSettingTab extends PluginSettingTab {
             tab.render(panel);
         });
 
-        this.activateTab(wrapper, tabs[0].id);
+        const initialTab = tabs.some(tab => tab.id === this.activeTabId) ? this.activeTabId : tabs[0].id;
+        this.activateTab(wrapper, initialTab);
 
         nav.addEventListener('click', (e) => {
             const btn = (e.target as HTMLElement).closest('.tv-settings__nav-btn') as HTMLElement | null;
@@ -74,6 +76,7 @@ export class TaskViewerSettingTab extends PluginSettingTab {
     }
 
     private activateTab(wrapper: HTMLElement, tabId: string): void {
+        this.activeTabId = tabId;
         wrapper.querySelectorAll('.tv-settings__nav-btn').forEach(btn =>
             btn.toggleClass('tv-settings__nav-btn--active', (btn as HTMLElement).dataset.tabId === tabId)
         );
