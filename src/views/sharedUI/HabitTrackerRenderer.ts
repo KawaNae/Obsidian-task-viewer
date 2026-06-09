@@ -189,7 +189,7 @@ export class HabitTrackerRenderer {
 
             const lines = normalized.split('\n');
             const fmEnd = FrontmatterLineEditor.findEnd(lines);
-            const fmValue = value === '' ? '' : String(value);
+            const fmValue = value === '' ? '' : FrontmatterLineEditor.escapeYamlScalar(String(value));
 
             return FrontmatterLineEditor.applyUpdates(lines, fmEnd, { [habitName]: fmValue });
         });

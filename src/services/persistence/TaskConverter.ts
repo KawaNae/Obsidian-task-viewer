@@ -106,8 +106,11 @@ export class TaskConverter {
         }
 
         // content (#tag を除去して tv-content に書く)
+        // 空なら省略 — update パス (FrontmatterWriter) が空 content でキーを削除するのと対称。
         const cleanContent = task.content.replace(/\B#[^\s#]+/g, '').trim();
-        lines.push(`${frontmatterKeys.content}: ${FrontmatterLineEditor.escapeYamlScalar(cleanContent)}`);
+        if (cleanContent) {
+            lines.push(`${frontmatterKeys.content}: ${FrontmatterLineEditor.escapeYamlScalar(cleanContent)}`);
+        }
 
         // status (デフォルトの ' ' は省略)
         if (task.statusChar && task.statusChar !== ' ') {
@@ -117,17 +120,17 @@ export class TaskConverter {
         // color (タスクの解決済み値を優先、ソースファイルをフォールバック)
         const effectiveColor = task.color || color;
         if (effectiveColor) {
-            lines.push(`${frontmatterKeys.color}: "${this.escapeForDoubleQuotedYaml(effectiveColor)}"`);
+            lines.push(`${frontmatterKeys.color}: ${FrontmatterLineEditor.escapeYamlScalar(effectiveColor)}`);
         }
 
         // linestyle
         if (task.linestyle) {
-            lines.push(`${frontmatterKeys.linestyle}: "${this.escapeForDoubleQuotedYaml(task.linestyle)}"`);
+            lines.push(`${frontmatterKeys.linestyle}: ${FrontmatterLineEditor.escapeYamlScalar(task.linestyle)}`);
         }
 
         // mask
         if (task.mask) {
-            lines.push(`${frontmatterKeys.mask}: "${this.escapeForDoubleQuotedYaml(task.mask)}"`);
+            lines.push(`${frontmatterKeys.mask}: ${FrontmatterLineEditor.escapeYamlScalar(task.mask)}`);
         }
 
         // tags
@@ -135,7 +138,8 @@ export class TaskConverter {
             ? TagExtractor.merge(task.tags, sharedTags)
             : task.tags;
         if (allTags.length > 0) {
-            lines.push(`tags: [${allTags.join(', ')}]`);
+            const tagItems = allTags.map(t => FrontmatterLineEditor.escapeYamlScalar(t)).join(', ');
+            lines.push(`tags: [${tagItems}]`);
         }
 
         // custom properties
@@ -158,15 +162,11 @@ export class TaskConverter {
             case 'array': {
                 const inner = prop.value.startsWith('[') ? prop.value.slice(1, -1) : prop.value;
                 const items = inner.split(',').map(s => s.trim()).filter(s => s !== '');
-                return `[${items.join(', ')}]`;
+                return `[${items.map(s => FrontmatterLineEditor.escapeYamlScalar(s)).join(', ')}]`;
             }
-            default: {
-                // Quote strings that contain YAML-sensitive characters
-                if (/[:#{}[\],&*?|<>=!%@'"]/.test(prop.value) || prop.value !== prop.value.trim()) {
-                    return `"${this.escapeForDoubleQuotedYaml(prop.value)}"`;
-                }
-                return prop.value;
-            }
+            default:
+                // Delegate to the single canonical scalar authority.
+                return FrontmatterLineEditor.escapeYamlScalar(prop.value);
         }
     }
 
@@ -185,12 +185,5 @@ export class TaskConverter {
         lines.push(...task.childLines.filter(cl => cl.propertyKey === null).map(cl => cl.text));
 
         return lines.join('\n');
-    }
-
-    /**
-     * Double-quoted YAML scalar 向けに \ と " をエスケープ。
-     */
-    private escapeForDoubleQuotedYaml(value: string): string {
-        return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     }
 }

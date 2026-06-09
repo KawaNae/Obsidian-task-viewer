@@ -137,4 +137,74 @@ describe('FrontmatterLineEditor', () => {
             expect(resultLines).toContain('added: value');
         });
     });
+
+    // ── escapeYamlScalar ──
+    describe('escapeYamlScalar', () => {
+        const esc = (v: string) => FrontmatterLineEditor.escapeYamlScalar(v);
+
+        it('emits empty string as explicit ""', () => {
+            expect(esc('')).toBe('""');
+        });
+
+        it('leaves a plain safe word unquoted', () => {
+            expect(esc('hello')).toBe('hello');
+            expect(esc('hello world')).toBe('hello world');
+            expect(esc('x')).toBe('x');
+            expect(esc('in_progress')).toBe('in_progress');
+        });
+
+        // Regression: hyphen status (Cancelled) must not be emitted as a bare `-`.
+        it('quotes a leading hyphen (Cancelled status)', () => {
+            expect(esc('-')).toBe('"-"');
+        });
+
+        it('quotes the tilde / null indicators', () => {
+            expect(esc('~')).toBe('"~"');
+            expect(esc('null')).toBe('"null"');
+            expect(esc('Null')).toBe('"Null"');
+        });
+
+        it('quotes a leading backtick', () => {
+            expect(esc('`foo')).toBe('"`foo"');
+        });
+
+        it('quotes flow / colon indicators', () => {
+            expect(esc('a: b')).toBe('"a: b"');
+            expect(esc('[a]')).toBe('"[a]"');
+            expect(esc('a, b')).toBe('"a, b"');
+            expect(esc('# heading')).toBe('"# heading"');
+        });
+
+        it('quotes pure numbers (would otherwise re-type as number)', () => {
+            expect(esc('123')).toBe('"123"');
+            expect(esc('3.14')).toBe('"3.14"');
+        });
+
+        it('quotes YAML boolean keywords (case-insensitive)', () => {
+            expect(esc('true')).toBe('"true"');
+            expect(esc('False')).toBe('"False"');
+            expect(esc('yes')).toBe('"yes"');
+            expect(esc('off')).toBe('"off"');
+        });
+
+        it('quotes date-shaped strings (would re-type as Date)', () => {
+            expect(esc('2026-06-09')).toBe('"2026-06-09"');
+        });
+
+        it('quotes surrounding whitespace', () => {
+            expect(esc(' hi')).toBe('" hi"');
+            expect(esc('hi ')).toBe('"hi "');
+        });
+
+        it('escapes control characters inside a double-quoted scalar', () => {
+            expect(esc('a\nb')).toBe('"a\\nb"');
+            expect(esc('a\tb')).toBe('"a\\tb"');
+            expect(esc('a\rb')).toBe('"a\\rb"');
+        });
+
+        it('escapes backslash and double-quote', () => {
+            expect(esc('quote"x')).toBe('"quote\\"x"');
+            expect(esc('back\\slash')).toBe('"back\\\\slash"');
+        });
+    });
 });
