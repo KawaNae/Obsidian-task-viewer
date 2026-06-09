@@ -209,6 +209,42 @@ describe('RepeatCommand', () => {
         expect(nextTask.startTime).toBe('09:00');
         expect(nextTask.endTime).toBe('17:00');
     });
+
+    // Regression: start-less (due-only / end-only) when-done tasks must rebase
+    // against the present date, not today, or an overdue task lands in the past.
+    it('when-done: due-only タスクが今日基準で生成される(過去に飛ばない)', async () => {
+        const task = makeTask({
+            content: 'pay rent',
+            due: '2025-06-01', // overdue, start-less
+            commands: [makeFlowCommand('repeat', ['7days when done'])],
+        });
+        const { ctx, insertRecurrenceForTask } = createMockContext(task);
+        await new RepeatCommand().execute(ctx, makeFlowCommand('repeat', ['7days when done']));
+
+        const nextTask: Task = insertRecurrenceForTask.mock.calls[0][2];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const expected = DateUtils.getLocalDateString(new Date(today.getTime() + 7 * 86400000));
+        expect(nextTask.due).toBe(expected);
+        expect(nextTask.startDate).toBeUndefined();
+    });
+
+    it('when-done: end-only タスクが今日基準で生成される', async () => {
+        const task = makeTask({
+            content: 'clean filter',
+            endDate: '2025-06-01',
+            commands: [makeFlowCommand('repeat', ['3days when done'])],
+        });
+        const { ctx, insertRecurrenceForTask } = createMockContext(task);
+        await new RepeatCommand().execute(ctx, makeFlowCommand('repeat', ['3days when done']));
+
+        const nextTask: Task = insertRecurrenceForTask.mock.calls[0][2];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const expected = DateUtils.getLocalDateString(new Date(today.getTime() + 3 * 86400000));
+        expect(nextTask.endDate).toBe(expected);
+        expect(nextTask.startDate).toBeUndefined();
+    });
 });
 
 describe('NextCommand', () => {

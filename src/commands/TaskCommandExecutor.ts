@@ -5,7 +5,7 @@ import { TaskIndex } from '../services/core/TaskIndex';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { CommandStrategy } from '../commands/CommandStrategy';
 import { MoveCommand } from '../commands/MoveCommand';
-import { RepeatCommand, NextCommand } from '../commands/GenerationCommands';
+import { RepeatCommand, NextCommand, GenerationCommand } from '../commands/GenerationCommands';
 
 /**
  * Executes flow commands (==> next, repeat, move) when tasks are completed.
@@ -136,15 +136,26 @@ export class TaskCommandExecutor {
         // We want Leftmost command -> Topmost task.
         // Leftmost runs Last -> Inserts at Top.
         // So we iterate Reverse: Rightmost first, Leftmost last.
+        // 1回の完了で生成される follow-up は高々1個。複数の generation command
+        // (repeat / next 併記)があっても最初に実行された1つだけを採用し、残りは
+        // 警告してスキップする(重複生成の防止)。
+        let generationDone = false;
         for (const cmd of [...task.commands].reverse()) {
             const strategy = this.strategies.get(cmd.name);
-            if (strategy) {
-                const result = await strategy.execute(context, cmd);
-                if (result.shouldDeleteOriginal) {
-                    shouldDeleteOriginal = true;
-                }
-            } else {
+            if (!strategy) {
                 console.warn(`[TaskCommandExecutor] Unknown command: ${cmd.name}`);
+                continue;
+            }
+            if (strategy instanceof GenerationCommand) {
+                if (generationDone) {
+                    console.warn(`[TaskCommandExecutor] Ignoring extra generation command '${cmd.name}'; only one runs per completion.`);
+                    continue;
+                }
+                generationDone = true;
+            }
+            const result = await strategy.execute(context, cmd);
+            if (result.shouldDeleteOriginal) {
+                shouldDeleteOriginal = true;
             }
         }
 

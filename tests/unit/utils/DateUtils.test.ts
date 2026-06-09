@@ -70,6 +70,16 @@ describe('DateUtils', () => {
         it('invalid date', () => {
             expect(DateUtils.isValidDateString('2026-13-01')).toBe(false);
         });
+
+        it('rejects day-of-month overflow', () => {
+            expect(DateUtils.isValidDateString('2026-02-30')).toBe(false);
+            expect(DateUtils.isValidDateString('2026-04-31')).toBe(false);
+        });
+
+        it('rejects Feb 29 on a non-leap year but allows it on a leap year', () => {
+            expect(DateUtils.isValidDateString('2025-02-29')).toBe(false);
+            expect(DateUtils.isValidDateString('2024-02-29')).toBe(true);
+        });
     });
 
     describe('isValidTimeString', () => {

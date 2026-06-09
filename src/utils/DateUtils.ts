@@ -113,7 +113,13 @@ export class DateUtils {
 
     static isValidDateString(value: string): boolean {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-        return !isNaN(new Date(value).getTime());
+        // new Date('YYYY-MM-DD') silently rolls day overflow forward (Feb 30 ->
+        // Mar 2), so it never reports invalid days. Round-trip the components to
+        // reject impossible dates (Feb 30, Apr 31, non-leap Feb 29) while still
+        // allowing a real Feb 29 on leap years.
+        const [y, m, d] = value.split('-').map(Number);
+        const dt = new Date(y, m - 1, d);
+        return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
     }
 
     static isValidTimeString(value: string): boolean {
