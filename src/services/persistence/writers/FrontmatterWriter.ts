@@ -42,7 +42,8 @@ export class FrontmatterWriter {
         }
 
         if ('due' in updates) {
-            fmUpdates[frontmatterKeys.due] = task.due ? FrontmatterLineEditor.escapeYamlScalar(task.due) : null;
+            // 日付フィールドは plain 出力(start/end と対称)
+            fmUpdates[frontmatterKeys.due] = task.due || null;
         }
 
         if ('content' in updates) {

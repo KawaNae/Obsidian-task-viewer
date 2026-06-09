@@ -7,6 +7,7 @@ import { TaskCloner } from './TaskCloner';
 import { TaskConverter } from './TaskConverter';
 import { getFileBaseName } from '../parsing/utils/TaskContent';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
+import { ChildLineClassifier } from '../parsing/utils/ChildLineClassifier';
 
 /**
  * TaskRepository - タスクのファイル操作を統括するファサードクラス
@@ -107,7 +108,8 @@ export class TaskRepository {
         headerLevel: number,
         sourceFileColor?: string,
         sourceSharedTags?: string[],
-        frontmatterKeys?: TvFileKeys
+        frontmatterKeys?: TvFileKeys,
+        bodyChildLines: string[] = []
     ): Promise<string> {
         return this.converter.convertToTvFile(
             task,
@@ -115,8 +117,33 @@ export class TaskRepository {
             headerLevel,
             sourceFileColor,
             sourceSharedTags,
-            frontmatterKeys
+            frontmatterKeys,
+            bodyChildLines
         );
+    }
+
+    /**
+     * 変換元ファイルから親タスク直下の生の子行を収集し、tv-file body 用に
+     * 正規化する(最浅インデント除去・property 行除外)。@notation 子・孫・説明文・
+     * 通常チェックボックスを区別せず全て含む — replaceInlineTaskWithWikilink の
+     * 削除範囲(collectChildrenFromLines)と同一ソースなので、消すのに移さない
+     * (データ消失)が起きない。
+     */
+    async collectChildBodyLines(task: Task): Promise<string[]> {
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) return [];
+
+        const content = await this.app.vault.read(file);
+        const lines = content.split('\n');
+        const idx = this.fileOps.findTaskLineNumber(lines, task);
+        if (idx < 0 || idx >= lines.length) return [];
+
+        const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, idx);
+        const firstChild = childrenLines.find(l => l.trim() !== '');
+        const childIndent = firstChild ? (firstChild.match(/^\s*/)?.[0] ?? '') : '';
+        const normalized = FileOperations.adjustChildIndentation(childrenLines, childIndent);
+        // property 行 (- key:: value) は frontmatter へ昇格済みのため body から除外
+        return normalized.filter(line => ChildLineClassifier.classify(line).propertyKey === null);
     }
 
     /**

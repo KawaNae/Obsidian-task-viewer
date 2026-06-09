@@ -24,6 +24,10 @@ export class TvInlineToTvFileConverter {
         const sourceColor = this.getSourceFileColor(task.file, frontmatterKeys.color);
         const sourceSharedTags = this.getSourceFileSharedTags(task.file);
 
+        // 削除範囲(replaceInlineTaskWithWikilink)と同一の生子行を移送する。
+        // @notation 子・孫・説明文を含む全子要素が tv-file へ引き継がれる。
+        const bodyChildLines = await this.repository.collectChildBodyLines(task);
+
         const newPath = await this.repository.createTvFile(
             task,
             headerName,
@@ -31,6 +35,7 @@ export class TvInlineToTvFileConverter {
             sourceColor,
             sourceSharedTags,
             frontmatterKeys,
+            bodyChildLines,
         );
 
         await this.repository.replaceInlineTaskWithWikilink(task, newPath);
