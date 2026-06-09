@@ -520,3 +520,128 @@ describe('wikilink without heading', () => {
         expect(childTask!.parentId).toBe(parentTask!.id);
     });
 });
+
+// ────────────────────────────────────────────
+// 11. Dangling cleanup: deleting a wikilink child purges parent.childIds
+//     (verifies idempotent clear→rebuild resolve + delete handler)
+// ────────────────────────────────────────────
+describe('wikilink dangling cleanup on child delete', () => {
+    const PARENT_FILE = 'test-int-wikilink-del-parent.md';
+    const CHILD_FILE = 'test-int-wikilink-del-child.md';
+
+    const parentFixture = createFixture(PARENT_FILE, [
+        '---',
+        'tv-start: 2026-06-01',
+        'tv-content: Del Parent',
+        '---',
+        '## Tasks',
+        '- [[test-int-wikilink-del-child]]',
+    ].join('\n'));
+
+    const childFixture = createFixture(CHILD_FILE, [
+        '---',
+        'tv-start: 2026-06-02',
+        'tv-content: Del Child',
+        '---',
+        'Body.',
+    ].join('\n'));
+
+    beforeAll(async () => {
+        await childFixture.setup();
+        await parentFixture.setup();
+        await sleep(5000);
+    });
+
+    afterAll(async () => {
+        await parentFixture.teardown();
+        await childFixture.teardown();
+    });
+
+    it('removes the deleted child from parent childIds', async () => {
+        // Precondition: parent links child
+        const before = cliList({ file: PARENT_FILE, outputFields: OUTPUT_FIELDS });
+        const parentBefore = before.tasks.find(t => t.parserId === 'tv-file');
+        const childRes = cliList({ file: CHILD_FILE, outputFields: OUTPUT_FIELDS });
+        const childTask = childRes.tasks.find(t => t.parserId === 'tv-file');
+        expect(parentBefore).toBeDefined();
+        expect(childTask).toBeDefined();
+        expect((parentBefore!.childIds as string[]) ?? []).toContain(childTask!.id);
+
+        // Delete the child file — the parent file is NOT re-scanned, so only the
+        // delete handler's resolve can purge the now-dangling childId.
+        deleteTestFile(CHILD_FILE);
+        await waitForFileDeindexed(CHILD_FILE);
+        await sleep(2000);
+
+        const after = cliList({ file: PARENT_FILE, outputFields: OUTPUT_FIELDS });
+        const parentAfter = after.tasks.find(t => t.parserId === 'tv-file');
+        expect(parentAfter).toBeDefined();
+        const childIdsAfter = (parentAfter!.childIds as string[]) ?? [];
+        expect(childIdsAfter).not.toContain(childTask!.id);
+    });
+});
+
+// ────────────────────────────────────────────
+// 12. Ambiguous basename resolves deterministically (path lexicographic)
+// ────────────────────────────────────────────
+describe('ambiguous basename wikilink', () => {
+    const PARENT_FILE = 'test-int-wikilink-dup-parent.md';
+    const DUP_A = 'zz-wl-dupdir-a/test-int-wikilink-dup.md';
+    const DUP_B = 'zz-wl-dupdir-b/test-int-wikilink-dup.md';
+
+    const dupAFixture = createFixture(DUP_A, [
+        '---',
+        'tv-start: 2026-06-03',
+        'tv-content: Dup A',
+        '---',
+        'Body A.',
+    ].join('\n'));
+
+    const dupBFixture = createFixture(DUP_B, [
+        '---',
+        'tv-start: 2026-06-03',
+        'tv-content: Dup B',
+        '---',
+        'Body B.',
+    ].join('\n'));
+
+    const parentFixture = createFixture(PARENT_FILE, [
+        '---',
+        'tv-start: 2026-06-03',
+        'tv-content: Dup Parent',
+        '---',
+        '## Tasks',
+        '- [[test-int-wikilink-dup]]',
+    ].join('\n'));
+
+    beforeAll(async () => {
+        await dupAFixture.setup();
+        await dupBFixture.setup();
+        await parentFixture.setup();
+        await sleep(5000);
+    });
+
+    afterAll(async () => {
+        await parentFixture.teardown();
+        await dupAFixture.teardown();
+        await dupBFixture.teardown();
+    });
+
+    it('resolves to the lexicographically first path among duplicate basenames', () => {
+        const parentResult = cliList({ file: PARENT_FILE, outputFields: OUTPUT_FIELDS });
+        const parentTask = parentResult.tasks.find(t => t.parserId === 'tv-file');
+        expect(parentTask).toBeDefined();
+
+        const aResult = cliList({ file: DUP_A, outputFields: OUTPUT_FIELDS });
+        const aTask = aResult.tasks.find(t => t.parserId === 'tv-file');
+        const bResult = cliList({ file: DUP_B, outputFields: OUTPUT_FIELDS });
+        const bTask = bResult.tasks.find(t => t.parserId === 'tv-file');
+        expect(aTask).toBeDefined();
+        expect(bTask).toBeDefined();
+
+        const childIds = (parentTask!.childIds as string[]) ?? [];
+        // dir-a sorts before dir-b → A is chosen deterministically
+        expect(childIds).toContain(aTask!.id);
+        expect(childIds).not.toContain(bTask!.id);
+    });
+});
