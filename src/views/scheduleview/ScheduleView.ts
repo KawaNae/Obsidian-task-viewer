@@ -25,6 +25,7 @@ import { attachSunIndicators, attachSunAxisArrows } from '../sharedUI/AstronomyC
 import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
 import { AsyncRenderSerializer } from '../sharedUI/AsyncRenderSerializer';
 import { RenderScheduler } from '../sharedUI/RenderScheduler';
+import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import { PeriodicHeaderRenderer, type PeriodicHeaderRenderResult } from '../sharedUI/PeriodicHeaderRenderer';
 import type { CollapsibleSectionKey, TimedDisplayTask } from './ScheduleTypes';
 import { ScheduleGridCalculator } from './utils/ScheduleGridCalculator';
@@ -74,8 +75,9 @@ export class ScheduleView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private currentVisualDate = '';
     private scrollToNowOnNextRender = false;
-    private scrollRestorePending = false;
-    private savedScrollTop: number | null = null;
+    private readonly scrollRestorer = new PixelScrollRestorer(
+        () => this.container?.querySelector('.schedule-view__body-scroll') as HTMLElement | null,
+    );
     private customName: string | undefined;
     private periodicHeaderCollapsed: boolean = true;
     private maskMode: boolean = false;
@@ -333,12 +335,7 @@ export class ScheduleView extends ItemView {
     private renderScheduler: RenderScheduler | null = null;
 
     private render(): void {
-        if (!this.scrollRestorePending) {
-            const oldBodyScroll = this.container?.querySelector('.schedule-view__body-scroll') as HTMLElement | null;
-            if (oldBodyScroll) {
-                this.savedScrollTop = oldBodyScroll.scrollTop;
-            }
-        }
+        this.scrollRestorer.save();
         void this.renderSerializer.request();
     }
 
@@ -381,21 +378,9 @@ export class ScheduleView extends ItemView {
 
         if (this.scrollToNowOnNextRender) {
             this.scrollToNowOnNextRender = false;
-            this.scrollRestorePending = true;
-            requestAnimationFrame(() => {
-                this.scrollRestorePending = false;
-                this.scrollToCurrentTime();
-            });
-        } else if (this.savedScrollTop !== null) {
-            this.scrollRestorePending = true;
-            const scrollTarget = this.savedScrollTop;
-            requestAnimationFrame(() => {
-                this.scrollRestorePending = false;
-                const newBodyScroll = this.container.querySelector('.schedule-view__body-scroll') as HTMLElement | null;
-                if (newBodyScroll) {
-                    newBodyScroll.scrollTop = scrollTarget;
-                }
-            });
+            this.scrollRestorer.runGuarded(() => this.scrollToCurrentTime());
+        } else {
+            this.scrollRestorer.restore();
         }
     }
 

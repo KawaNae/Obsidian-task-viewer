@@ -47,6 +47,7 @@ import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
 import { RenderScheduler } from '../sharedUI/RenderScheduler';
 import { AsyncRenderSerializer } from '../sharedUI/AsyncRenderSerializer';
 import { CardReconciler } from '../sharedUI/CardReconciler';
+import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
@@ -108,8 +109,9 @@ export class CalendarView extends ItemView {
     private customName: string | undefined;
     private maskMode: boolean = false;
     private astronomyDisplay: Partial<AstronomyDisplay> | undefined = undefined;
-    private scrollRestorePending = false;
-    private savedScrollTop: number | null = null;
+    private readonly scrollRestorer = new PixelScrollRestorer(
+        () => this.container?.querySelector('.cal-grid__body') as HTMLElement | null,
+    );
     private sidebarOpenedThisSession = false;
     private readonly hoverParent = new TaskViewHoverParent();
     private renderScheduler: RenderScheduler;
@@ -424,12 +426,7 @@ export class CalendarView extends ItemView {
     private readonly renderSerializer = new AsyncRenderSerializer(() => this.performRender());
 
     private render(): void {
-        if (!this.scrollRestorePending) {
-            const oldMain = this.container?.querySelector('.cal-grid__body') as HTMLElement | null;
-            if (oldMain) {
-                this.savedScrollTop = oldMain.scrollTop;
-            }
-        }
+        this.scrollRestorer.save();
         void this.renderSerializer.request();
     }
 
@@ -551,17 +548,7 @@ export class CalendarView extends ItemView {
             this.handleManager.reapplySelectionClass();
         }
 
-        if (this.savedScrollTop !== null) {
-            this.scrollRestorePending = true;
-            const scrollTarget = this.savedScrollTop;
-            requestAnimationFrame(() => {
-                this.scrollRestorePending = false;
-                const newMain = this.container.querySelector('.cal-grid__body') as HTMLElement | null;
-                if (newMain) {
-                    newMain.scrollTop = scrollTarget;
-                }
-            });
-        }
+        this.scrollRestorer.restore();
     }
 
     private renderSidebarContent(header: HTMLElement, body: HTMLElement): void {
