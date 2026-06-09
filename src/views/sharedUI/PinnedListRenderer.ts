@@ -14,6 +14,7 @@ import TaskViewerPlugin from '../../main';
 import { TaskStyling } from './TaskStyling';
 import { TaskPagingController } from './TaskPagingController';
 import { CardReconciler } from './CardReconciler';
+import { shouldRenderForChanges } from './RenderScheduler';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 
 export interface PinnedListCallbacks {
@@ -104,7 +105,8 @@ export class PinnedListRenderer {
         this.viewId = params.viewId;
 
         // Subscribe to data changes — refresh self-contained without view involvement.
-        this.unsubscribe = this.readService.onChange(() => {
+        this.unsubscribe = this.readService.onChange((_taskId, changes) => {
+            if (!shouldRenderForChanges(changes)) return;
             this.refresh();
         });
 

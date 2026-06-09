@@ -14,6 +14,7 @@ import { createEmptySortState, hasSortRules } from '../../services/sort/SortType
 import { TaskStyling } from '../sharedUI/TaskStyling';
 import { TaskPagingController } from '../sharedUI/TaskPagingController';
 import { CardReconciler } from '../sharedUI/CardReconciler';
+import { shouldRenderForChanges } from '../sharedUI/RenderScheduler';
 
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
@@ -200,7 +201,8 @@ export class KanbanView extends ItemView {
 
         this.render();
 
-        this.unsubscribe = this.readService.onChange(() => {
+        this.unsubscribe = this.readService.onChange((_taskId, changes) => {
+            if (!shouldRenderForChanges(changes)) return;
             this.render();
         });
     }

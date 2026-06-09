@@ -4,6 +4,7 @@ import { t } from '../../i18n';
 import { DisplayTask, Task, AstronomyDisplay } from '../../types';
 import { attachMoonPhase } from '../sharedUI/AstronomyCellAdorner';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
+import { shouldRenderForChanges } from '../sharedUI/RenderScheduler';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { DateUtils } from '../../utils/DateUtils';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
@@ -167,7 +168,8 @@ export class MiniCalendarView extends ItemView {
 
         await this.render();
 
-        this.unsubscribe = this.readService.onChange(() => {
+        this.unsubscribe = this.readService.onChange((_taskId, changes) => {
+            if (!shouldRenderForChanges(changes)) return;
             void this.render();
         });
     }

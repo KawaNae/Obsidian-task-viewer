@@ -24,6 +24,7 @@ import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { attachSunIndicators, attachSunAxisArrows } from '../sharedUI/AstronomyCellAdorner';
 import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
 import { AsyncRenderSerializer } from '../sharedUI/AsyncRenderSerializer';
+import { RenderScheduler } from '../sharedUI/RenderScheduler';
 import { PeriodicHeaderRenderer, type PeriodicHeaderRenderResult } from '../sharedUI/PeriodicHeaderRenderer';
 import type { CollapsibleSectionKey, TimedDisplayTask } from './ScheduleTypes';
 import { ScheduleGridCalculator } from './utils/ScheduleGridCalculator';
@@ -279,8 +280,9 @@ export class ScheduleView extends ItemView {
         this.scrollToNowOnNextRender = true;
         await this.renderSerializer.request();
 
-        this.unsubscribe = this.readService.onChange(() => {
-            this.render();
+        this.renderScheduler = new RenderScheduler({ performFull: () => this.render() });
+        this.unsubscribe = this.readService.onChange((taskId, changes) => {
+            this.renderScheduler?.handleChange(taskId, changes);
         });
     }
 
@@ -292,6 +294,8 @@ export class ScheduleView extends ItemView {
             this.unsubscribe();
             this.unsubscribe = null;
         }
+        this.renderScheduler?.dispose();
+        this.renderScheduler = null;
     }
 
     public refresh(): void {
@@ -326,6 +330,7 @@ export class ScheduleView extends ItemView {
      * detach→build→dispose cycle atomic against interleaving.
      */
     private readonly renderSerializer = new AsyncRenderSerializer(() => this.performRender());
+    private renderScheduler: RenderScheduler | null = null;
 
     private render(): void {
         if (!this.scrollRestorePending) {

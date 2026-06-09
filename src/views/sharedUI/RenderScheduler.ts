@@ -34,7 +34,7 @@ export class RenderScheduler {
      * flips do not affect any rendered card.
      */
     handleChange(taskId: string | undefined, changes: string[] | undefined): void {
-        if (changes && changes.length > 0 && changes.every(c => NO_RENDER_KEYS.has(c))) {
+        if (!shouldRenderForChanges(changes)) {
             return;
         }
         this.scheduleRender();
@@ -83,3 +83,14 @@ export class RenderScheduler {
 
 /** Keys with zero visual effect — render is skipped entirely. */
 const NO_RENDER_KEYS = new Set(['blockId', 'timerTargetId']);
+
+/**
+ * Whether a `readService.onChange` notification warrants a re-render. A change
+ * touching only internal keys (blockId / timerTargetId) has zero visual effect
+ * and is skipped. Single authority shared by every card-bearing view — both the
+ * scheduler-backed views and the renderers that lack a scheduler (e.g.
+ * PinnedListRenderer).
+ */
+export function shouldRenderForChanges(changes?: string[]): boolean {
+    return !(changes && changes.length > 0 && changes.every(c => NO_RENDER_KEYS.has(c)));
+}
