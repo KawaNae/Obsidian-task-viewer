@@ -163,6 +163,11 @@ export interface Task {
     // Parsed flow commands.
     commands?: FlowCommand[];
 
+    // Verbatim text after `==>` that parsed to zero commands (e.g. a URL or
+    // prose). Preserved so format() can re-emit it losslessly; ignored when
+    // `commands` is non-empty.
+    rawFlow?: string;
+
     // Parse-time validation result (error or warning).
     validation?: {
         severity: 'error' | 'warning';

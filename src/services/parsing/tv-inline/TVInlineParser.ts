@@ -67,8 +67,11 @@ export class TVInlineParser implements LeafParserStrategy {
 
         const { statusChar, rawContent } = classified;
 
-        // 2. Parse flow commands
+        // 2. Parse flow commands. If a non-empty flow segment yields zero
+        // commands (e.g. a URL or prose), keep it verbatim so format() can
+        // re-emit it instead of silently dropping it on the next write.
         const commands = flowPart ? this.parseFlowCommands(flowPart) : [];
+        const rawFlow = (flowPart && commands.length === 0) ? flowPart.trim() : undefined;
 
         // 3. Parse date block (@start>end>due)
         let content = rawContent;
@@ -128,6 +131,7 @@ export class TVInlineParser implements LeafParserStrategy {
             endTime,
             due,
             commands,
+            rawFlow,
             tags: TagExtractor.fromContent(content.trim()),
             originalText: line,
             childLines: [],
@@ -150,8 +154,22 @@ export class TVInlineParser implements LeafParserStrategy {
             return null;
         }
 
-        const fullDateBlock = dateBlockMatch[1];
-        const cleanedContent = content.replace(fullDateBlock, '').trim();
+        const fullDateBlock = dateBlockMatch[1]; // first block = canonical
+
+        // content は notation-free が不変条件。最初の date block を canonical と
+        // して採用し、content 中に残る全 date-like トークンを除去する。これが
+        // ないと format() の末尾再付与が次回 parse で先頭マッチを奪い、開始日が
+        // 化ける(round-trip 破壊)。除去で生じた連続スペースは単一に畳む。
+        const globalRe = new RegExp(TVInlineParser.DATE_BLOCK_REGEX.source, 'g');
+        let dateBlockCount = 0;
+        const cleanedContent = content
+            .replace(globalRe, (m) => {
+                if (m.length > 1) { dateBlockCount++; return ''; }
+                return m;
+            })
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+
         const rawBlock = fullDateBlock.substring(1); // Remove leading @
         const parts = rawBlock.split('>');
 
@@ -205,6 +223,12 @@ export class TVInlineParser implements LeafParserStrategy {
         // --- Excess separator check ---
         if (parts.length > 3) {
             validationWarning = `Too many '>' separators in date block. Expected at most 2 (start>end>due), found ${parts.length - 1}.`;
+        }
+
+        // --- Multiple date blocks check ---
+        if (dateBlockCount > 1) {
+            const extra = `Multiple date blocks found; kept the first and discarded ${dateBlockCount - 1}.`;
+            validationWarning = validationWarning ? `${validationWarning} ${extra}` : extra;
         }
 
         return {
@@ -367,6 +391,9 @@ export class TVInlineParser implements LeafParserStrategy {
                 return s;
             });
             flowStr = ` ==> ${cmdStrs.join(' ')}`;
+        } else if (task.rawFlow) {
+            // Unrecognized flow text preserved verbatim (round-trip safety).
+            flowStr = ` ==> ${task.rawFlow}`;
         }
 
         const blockIdStr = task.blockId ? ` ^${task.blockId}` : '';
