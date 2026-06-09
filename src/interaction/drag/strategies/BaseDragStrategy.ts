@@ -1,4 +1,5 @@
 import { DragStrategy, DragContext } from '../DragStrategy';
+import { TRANSIENT_DRAG_CLASSES } from '../constants';
 import { Task } from '../../../types';
 import { materializeRawDates, NO_TASK_LOOKUP, toDisplayTask } from '../../../services/display/DisplayTaskConverter';
 import { getTaskDateRange } from '../../../services/display/VisualDateRange';
@@ -91,14 +92,18 @@ export abstract class BaseDragStrategy implements DragStrategy {
     /**
      * ドラッグ状態をクリーンアップする
      */
+    /** Abort the gesture without committing (pointercancel / lost capture). */
+    onCancel(): void {
+        this.cleanup();
+    }
+
     protected cleanup(): void {
         this.clearHighlight();
         document.body.style.cursor = '';
 
         if (this.dragEl) {
-            this.dragEl.removeClass('is-dragging');
+            this.dragEl.classList.remove(...TRANSIENT_DRAG_CLASSES);
             this.dragEl.style.zIndex = '';
-            this.dragEl.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
             this.dragEl.style.transform = '';
         }
 

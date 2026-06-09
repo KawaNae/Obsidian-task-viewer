@@ -1,4 +1,5 @@
 import type { GhostPlan } from './GhostPlan';
+import { TRANSIENT_DRAG_CLASSES } from '../constants';
 
 /**
  * Drag 中の ghost / preview 描画を 1 本化したレンダラ。
@@ -77,12 +78,7 @@ export class GhostRenderer {
      */
     private createGhost(): HTMLElement {
         const ghost = this.sourceEl.cloneNode(true) as HTMLElement;
-        ghost.classList.remove(
-            'is-dragging',
-            'is-drag-hidden',
-            'is-drag-source-dimmed',
-            'is-drag-source-faint',
-        );
+        ghost.classList.remove(...TRANSIENT_DRAG_CLASSES);
         return ghost;
     }
 

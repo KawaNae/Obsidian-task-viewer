@@ -1,4 +1,5 @@
 import { BaseDragStrategy } from '../BaseDragStrategy';
+import { TRANSIENT_DRAG_CLASSES } from '../../constants';
 import type { DragContext } from '../../DragStrategy';
 import type { Task } from '../../../../types';
 import { DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
@@ -258,7 +259,7 @@ export class GridResizeGesture extends BaseDragStrategy {
 
     protected cleanup(): void {
         for (const el of this.hiddenElements) {
-            el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
+            el.classList.remove(...TRANSIENT_DRAG_CLASSES);
         }
         this.ghostRenderer?.clear();
         this.ghostRenderer = null;

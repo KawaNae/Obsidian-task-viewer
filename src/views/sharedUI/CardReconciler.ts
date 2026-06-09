@@ -1,3 +1,5 @@
+import { TRANSIENT_DRAG_CLASSES } from '../../interaction/drag/constants';
+
 /**
  * Keyed reconciler for `.task-card` elements across a render pass.
  *
@@ -45,7 +47,14 @@ export class CardReconciler {
      */
     acquire(key: string): HTMLElement | undefined {
         const el = this.survivors.get(key);
-        if (el) this.survivors.delete(key);
+        if (el) {
+            this.survivors.delete(key);
+            // Render never owns transient drag state — the active gesture
+            // re-applies it on the next onDown/onMove. Stripping it from reused
+            // cards means a missed gesture-end (e.g. pointercancel) cannot leave
+            // a card stuck invisible across re-renders.
+            el.classList.remove(...TRANSIENT_DRAG_CLASSES);
+        }
         return el;
     }
 

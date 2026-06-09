@@ -7,6 +7,7 @@ import type { GhostPlan } from '../../ghost/GhostPlan';
 import { toDisplayHeightPx, toDisplayTopPx } from '../../../../views/sharedLogic/TimelineCardPosition';
 import { DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
 import type { DragPlan } from '../../DragPlan';
+import { TRANSIENT_DRAG_CLASSES } from '../../constants';
 
 /**
  * Timeline (timed タスク, 縦軸) の Move Gesture。
@@ -386,8 +387,9 @@ export class TimelineMoveGesture extends BaseDragStrategy {
     }
 
     protected cleanup(): void {
+        this.stopAutoScroll();
         for (const el of this.hiddenElements) {
-            el.classList.remove('is-drag-hidden', 'is-drag-source-dimmed', 'is-drag-source-faint');
+            el.classList.remove(...TRANSIENT_DRAG_CLASSES);
         }
         this.ghostRenderer?.clear();
         this.ghostRenderer = null;
