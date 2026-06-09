@@ -45,6 +45,7 @@ import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
 import { RenderScheduler } from '../sharedUI/RenderScheduler';
+import { AsyncRenderSerializer } from '../sharedUI/AsyncRenderSerializer';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
@@ -286,7 +287,7 @@ export class CalendarView extends ItemView {
         }
 
         await super.setState(state, result);
-        await this.performRender();
+        await this.renderSerializer.request();
         // setState may have changed filterState / pinnedLists / collapse — none
         // of these go through readService.onChange, so PinnedList wouldn't
         // otherwise refresh. (Safe to call even before attach: refresh() no-ops
@@ -362,7 +363,7 @@ export class CalendarView extends ItemView {
 
         this.selectionController.attachBackgroundClick(this.container);
 
-        await this.performRender();
+        await this.renderSerializer.request();
 
         // Clear selection when the selected task is deleted via the UI.
         this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.writeService);
@@ -415,30 +416,12 @@ export class CalendarView extends ItemView {
         setTimeout(() => this.handleManager?.selectTask(null), 0);
     }
 
-    private isRendering = false;
-    private renderPending = false;
-
     /**
-     * Serializes async performRender calls. A render requested while one is in
-     * flight is coalesced into a single re-run after the current pass settles,
-     * so the keyed reconciler's detach→build→dispose cycle stays atomic — no
-     * interleaving that would duplicate or orphan cards.
+     * Single serialization gate for every async render entry point
+     * (render / setState / onOpen), keeping the reconciler's
+     * detach→build→dispose cycle atomic against interleaving.
      */
-    private async runRender(): Promise<void> {
-        if (this.isRendering) {
-            this.renderPending = true;
-            return;
-        }
-        this.isRendering = true;
-        try {
-            do {
-                this.renderPending = false;
-                await this.performRender();
-            } while (this.renderPending);
-        } finally {
-            this.isRendering = false;
-        }
-    }
+    private readonly renderSerializer = new AsyncRenderSerializer(() => this.performRender());
 
     private render(): void {
         if (!this.scrollRestorePending) {
@@ -447,7 +430,7 @@ export class CalendarView extends ItemView {
                 this.savedScrollTop = oldMain.scrollTop;
             }
         }
-        void this.runRender();
+        void this.renderSerializer.request();
     }
 
     private async performRender(): Promise<void> {

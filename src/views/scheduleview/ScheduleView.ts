@@ -23,6 +23,7 @@ import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { attachSunIndicators, attachSunAxisArrows } from '../sharedUI/AstronomyCellAdorner';
 import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
+import { AsyncRenderSerializer } from '../sharedUI/AsyncRenderSerializer';
 import { PeriodicHeaderRenderer, type PeriodicHeaderRenderResult } from '../sharedUI/PeriodicHeaderRenderer';
 import type { CollapsibleSectionKey, TimedDisplayTask } from './ScheduleTypes';
 import { ScheduleGridCalculator } from './utils/ScheduleGridCalculator';
@@ -251,7 +252,7 @@ export class ScheduleView extends ItemView {
 
         await super.setState(state, result);
         if (this.container) {
-            await this.performRender();
+            await this.renderSerializer.request();
         }
     }
 
@@ -276,7 +277,7 @@ export class ScheduleView extends ItemView {
 
         this.registerKeyboardNavigation();
         this.scrollToNowOnNextRender = true;
-        await this.performRender();
+        await this.renderSerializer.request();
 
         this.unsubscribe = this.readService.onChange(() => {
             this.render();
@@ -319,29 +320,12 @@ export class ScheduleView extends ItemView {
         });
     }
 
-    private isRendering = false;
-    private renderPending = false;
-
     /**
-     * Serializes async performRender calls. A render requested mid-flight is
-     * coalesced into a single re-run after the current pass settles, keeping
-     * the keyed reconciler's detach→build→dispose cycle atomic.
+     * Single serialization gate for every async render entry point
+     * (render / setState / onOpen), keeping the reconciler's
+     * detach→build→dispose cycle atomic against interleaving.
      */
-    private async runRender(): Promise<void> {
-        if (this.isRendering) {
-            this.renderPending = true;
-            return;
-        }
-        this.isRendering = true;
-        try {
-            do {
-                this.renderPending = false;
-                await this.performRender();
-            } while (this.renderPending);
-        } finally {
-            this.isRendering = false;
-        }
-    }
+    private readonly renderSerializer = new AsyncRenderSerializer(() => this.performRender());
 
     private render(): void {
         if (!this.scrollRestorePending) {
@@ -350,7 +334,7 @@ export class ScheduleView extends ItemView {
                 this.savedScrollTop = oldBodyScroll.scrollTop;
             }
         }
-        void this.runRender();
+        void this.renderSerializer.request();
     }
 
     private async performRender(): Promise<void> {
