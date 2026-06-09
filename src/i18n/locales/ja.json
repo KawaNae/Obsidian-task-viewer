@@ -86,6 +86,8 @@
       "navigation": "ナビゲーション",
       "showSunTimes": "日の出 / 日の入り線を表示",
       "showSunTimesDesc": "タイムライン上に日の出と日の入りの細い水平線を引きます。緯度・経度の入力が必要です。",
+      "showSunInFront": "日の出 / 日の入り線を前面に表示",
+      "showSunInFrontDesc": "オンにすると線をタスクカードの前面に重ねます。オフ（既定）では全カードの背面に表示します。ビューごとのメニューで個別に上書きできます。",
       "showMoonPhase": "月相欄を表示",
       "showMoonPhaseDesc": "習慣欄の上に、各日の月相アイコンを表示します。",
       "homeLatitude": "緯度",
@@ -230,6 +232,7 @@
   },
   "viewOptions": {
     "toggleSunTimes": "日の出 / 日の入り線",
+    "toggleSunInFront": "日の出 / 日の入り線を前面に",
     "toggleMoonPhase": "月相",
     "followGlobalAstronomy": "全体設定に従う"
   },

@@ -115,6 +115,16 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
             }));
 
     new Setting(el)
+        .setName(t('settings.views.showSunInFront'))
+        .setDesc(t('settings.views.showSunInFrontDesc'))
+        .addToggle(toggle => toggle
+            .setValue(plugin.settings.astronomy.display.sunTimesInFront)
+            .onChange(async (value) => {
+                plugin.settings.astronomy.display.sunTimesInFront = value;
+                await plugin.saveSettings();
+            }));
+
+    new Setting(el)
         .setName(t('settings.views.showMoonPhase'))
         .setDesc(t('settings.views.showMoonPhaseDesc'))
         .addToggle(toggle => toggle

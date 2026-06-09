@@ -25,7 +25,7 @@ interface FieldOptions {
     readonly legacyKeys?: readonly string[];
 }
 
-const ASTRONOMY_KEYS = ['sunTimes', 'moonPhase'] as const satisfies readonly (keyof AstronomyDisplay)[];
+const ASTRONOMY_KEYS = ['sunTimes', 'moonPhase', 'sunTimesInFront'] as const satisfies readonly (keyof AstronomyDisplay)[];
 
 // ── helpers ──
 
@@ -235,7 +235,7 @@ export const F = {
     },
 
     /**
-     * Partial<AstronomyDisplay>. Only known overlay keys (sunTimes, moonPhase)
+     * Partial<AstronomyDisplay>. Only known overlay keys (see ASTRONOMY_KEYS)
      * are accepted; everything else is dropped. Empty objects are omitted.
      */
     astronomyDisplay(key: string, opts: FieldOptions = {}): ConfigField<Partial<AstronomyDisplay>> {

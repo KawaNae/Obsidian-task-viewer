@@ -97,6 +97,8 @@ export class GridRenderer {
             this.viewState.astronomyDisplay,
             this.plugin.settings.astronomy,
         );
+        // Raise sun lines above task cards when the per-view setting asks for it.
+        grid.toggleClass('is-sun-front', astronomyDisplay.sunTimes && astronomyDisplay.sunTimesInFront);
         if (astronomyDisplay.moonPhase) {
             const moonRow = grid.createDiv('tv-grid-row moon-section');
             moonRow.style.gridTemplateColumns = colTemplate;

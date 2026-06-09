@@ -86,6 +86,8 @@
       "navigation": "Navigation",
       "showSunTimes": "Show sunrise / sunset lines",
       "showSunTimesDesc": "Draw thin horizontal lines at sunrise and sunset on the timeline. Requires latitude and longitude.",
+      "showSunInFront": "Sunrise / sunset lines in front",
+      "showSunInFrontDesc": "When on, the lines layer in front of task cards. When off (default) they sit behind all cards. Each view can override this from its options menu.",
       "showMoonPhase": "Show moon phase row",
       "showMoonPhaseDesc": "Show a per-date moon phase icon above the habits row.",
       "homeLatitude": "Latitude",
@@ -230,6 +232,7 @@
   },
   "viewOptions": {
     "toggleSunTimes": "Show sunrise / sunset lines",
+    "toggleSunInFront": "Sunrise / sunset lines in front",
     "toggleMoonPhase": "Show moon phase",
     "followGlobalAstronomy": "Follow global setting"
   },

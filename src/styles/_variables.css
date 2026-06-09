@@ -59,6 +59,13 @@
     --z-negative: -1;
     --z-base: 0;
     --z-task-card: 1;
+    /* Sunrise/sunset lines. Default 0 = below the task-card floor (1) so the
+       lines sit behind every card (ambient context). The `.is-sun-front`
+       modifier on the grid root raises this to 195 (above normal cards ≤190,
+       below selected card / now-line at 200). Toggled by the per-view
+       astronomy "sun in front" setting. */
+    --z-sun-indicator: 0;
+    --z-sun-indicator-front: 195;
     --z-current-time-indicator: 200;
     --z-task-card-handle: 20;
     --z-task-card-allday: 25;

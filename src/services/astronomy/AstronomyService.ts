@@ -52,6 +52,9 @@ export function getEffectiveAstronomyDisplay(
     return {
         sunTimes:  instance?.sunTimes  ?? settings.display.sunTimes,
         moonPhase: instance?.moonPhase ?? settings.display.moonPhase,
+        // `?? false` guards settings persisted before this field existed
+        // (shallow settings merge does not backfill nested astronomy keys).
+        sunTimesInFront: instance?.sunTimesInFront ?? settings.display.sunTimesInFront ?? false,
     };
 }
 

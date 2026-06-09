@@ -165,8 +165,9 @@
 }
 
 /* Sun Indicators (sunrise / sunset). Same positioning mechanic as
-   current-time-indicator but dashed so they sit as ambient context behind
-   tasks rather than competing with them. Color via currentColor so the
+   current-time-indicator but dashed. Layer is driven by `--z-sun-indicator`:
+   default 0 = behind every task card (ambient context); raised to the front
+   value by `.is-sun-front` on the grid root. Color via currentColor so the
    sunrise/sunset variant classes only need to set `color` (theme-tracked
    accent in _variables.css). */
 .sun-indicator {
@@ -178,7 +179,14 @@
     border-top: 2px dashed currentColor;
     pointer-events: none;
     opacity: 0.7;
-    z-index: var(--z-task-card);
+    z-index: var(--z-sun-indicator);
+}
+
+/* Front layer: timeline-grid / schedule-grid carry the modifier; the variable
+   cascades to the descendant .sun-indicator / .sun-axis-arrow. */
+.timeline-grid.is-sun-front,
+.schedule-grid.is-sun-front {
+    --z-sun-indicator: var(--z-sun-indicator-front);
 }
 .sun-indicator--sunrise { color: var(--tv-astro-sunrise); }
 .sun-indicator--sunset  { color: var(--tv-astro-sunset); }
@@ -205,7 +213,7 @@
     height: 24px;
     transform: translate(50%, calc(-1 * var(--sun-axis-arrow-anchor, 0%)));
     pointer-events: auto;
-    z-index: 2;
+    z-index: var(--z-sun-indicator);
 }
 .sun-axis-arrow > svg {
     display: block;

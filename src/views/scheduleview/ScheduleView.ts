@@ -442,6 +442,8 @@ export class ScheduleView extends ItemView {
             this.astronomyDisplay,
             this.plugin.settings.astronomy,
         );
+        // Raise sun lines above task cards when the per-view setting asks for it.
+        main.toggleClass('is-sun-front', astronomyDisplay.sunTimes && astronomyDisplay.sunTimesInFront);
         if (astronomyDisplay.sunTimes) {
             const { latitude, longitude } = this.plugin.settings.astronomy.location;
             const startHour = this.plugin.settings.startHour;

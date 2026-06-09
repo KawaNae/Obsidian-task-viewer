@@ -528,6 +528,12 @@ export interface AstronomyDisplay {
     sunTimes: boolean;
     /** Show moon phase indicator per visible date. */
     moonPhase: boolean;
+    /**
+     * Layer the sunrise/sunset lines in front of task cards instead of behind
+     * them. Default false = behind all cards (ambient context). Only meaningful
+     * when sunTimes is on.
+     */
+    sunTimesInFront: boolean;
 }
 
 export interface AstronomyLocation {
@@ -614,7 +620,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
         due: 'due',
     },
     astronomy: {
-        display: { sunTimes: false, moonPhase: false },
+        display: { sunTimes: false, moonPhase: false, sunTimesInFront: false },
         location: { latitude: 35.6762, longitude: 139.6503 }, // Tokyo Station
     },
 };

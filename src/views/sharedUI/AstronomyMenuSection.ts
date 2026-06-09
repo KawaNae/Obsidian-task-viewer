@@ -41,6 +41,22 @@ export function appendAstronomyMenuSection(menu: Menu, opts: AstronomyMenuSectio
         });
     }
 
+    // Sub-option for the sun-times overlay: layer the lines in front of task
+    // cards. Only shown when this view renders sun times, and disabled while
+    // the overlay itself is off (the choice has no visible effect then).
+    if (opts.overlays.includes('sunTimes')) {
+        menu.addItem((item: MenuItem) => {
+            item.setTitle(t('viewOptions.toggleSunInFront'))
+                .setChecked(effective.sunTimesInFront)
+                .setDisabled(!effective.sunTimes)
+                .onClick(() => {
+                    const next: Partial<AstronomyDisplay> = { ...(opts.instance ?? {}) };
+                    next.sunTimesInFront = !effective.sunTimesInFront;
+                    opts.onChange(next);
+                });
+        });
+    }
+
     // "Follow global" — clears the per-view override entirely. Disabled when
     // no override is set so its semantic ("revert to global") stays honest.
     const hasOverride = opts.instance != null && Object.keys(opts.instance).length > 0;
