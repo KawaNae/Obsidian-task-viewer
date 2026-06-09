@@ -438,7 +438,7 @@ export class MiniCalendarView extends ItemView {
         void this.app.workspace.requestSaveLayout();
         this.updateToolbarMonthLabel();
 
-        const body = this.container?.querySelector('.mini-calendar-body');
+        const body = this.container?.querySelector('.cal-grid__body--mini');
         if (!(body instanceof HTMLElement)) {
             void this.render();
             return;
@@ -499,7 +499,7 @@ export class MiniCalendarView extends ItemView {
         }
     }
     private animateWeekSlide(body: HTMLElement, offset: number): void {
-        const track = body.querySelector('.mini-calendar-body__track');
+        const track = body.querySelector('.cal-grid__body-track');
         if (!(track instanceof HTMLElement)) {
             void this.render();
             return;
