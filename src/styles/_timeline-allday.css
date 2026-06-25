@@ -44,24 +44,12 @@
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    cursor: pointer;
     gap: 2px;
     padding-top: 4px;
     border-left: 1px solid var(--tv-border);
     border-right: 1px solid var(--tv-border);
     border-bottom: 1px solid var(--tv-border);
     background-color: var(--tv-bg-axis);
-}
-
-.allday-section__axis:focus-visible {
-    outline: 2px solid rgba(var(--tv-accent-rgb), 0.35);
-    outline-offset: -2px;
-}
-
-.allday-section__axis:hover .tv-section-toggle {
-    background-color: var(--tv-bg-hover);
-    border-color: var(--tv-border);
-    color: var(--tv-text);
 }
 
 .allday-section__label {
@@ -72,15 +60,13 @@
     padding-bottom: 6px;
 }
 
-/* --- Collapsed State --- */
-/* Show cells but hide borders (except the last one) */
+/* --- Collapsed State (used by schedule view) --- */
 .allday-section--collapsed .allday-section__cell:not(.allday-section__axis) {
     display: flex;
     border-right: none;
     min-height: 36px;
 }
 
-/* Maintain right border for the last cell */
 .allday-section--collapsed .allday-section__cell.is-last-cell {
     border-right: 1px solid var(--tv-border);
 }
@@ -99,8 +85,6 @@
     display: none;
 }
 
-/* Show horizontal label when collapsed */
-/* Attach to the first cell instead of container to avoid grid layout issues */
 .allday-section--collapsed .allday-section__cell.is-first-cell::after {
     content: attr(data-collapsed-label);
     position: absolute;
@@ -116,65 +100,6 @@
     white-space: nowrap;
     z-index: 1;
     pointer-events: none;
-}
-
-/* --- Partial disclosure ---
-   Hide tracks beyond the partial budget. DOM (and dataset.trackIndex) is kept
-   intact so drag stays correct; only display is dropped, which collapses the
-   implicit grid rows and shrinks the section to N tracks. */
-.allday-section--partial .is-allday-overflow {
-    display: none !important;
-}
-
-/* "+N more" / "show less" disclosure chip. A compact, auto-width chip centered
-   across the day columns (not a full-width stadium bar). The "+N more" variant
-   is gated on `--partial` (only meaningful while tracks are hidden); the
-   "show less" variant (manual full) shows regardless. */
-.allday-section__more {
-    display: none;
-    justify-self: center;
-    align-self: start;
-    align-items: center;
-    gap: 2px;
-    margin-top: 1px;
-    padding: 1px 8px 1px 5px;
-    font-size: 0.72em;
-    line-height: 1.5;
-    color: var(--tv-text-muted);
-    background-color: var(--tv-bg-hover);
-    border-radius: 999px;
-    cursor: pointer;
-    user-select: none;
-    white-space: nowrap;
-    z-index: 11;
-}
-
-.allday-section--partial .allday-section__more {
-    display: inline-flex;
-}
-
-.allday-section__more--full {
-    display: inline-flex;
-}
-
-.allday-section__more:hover {
-    color: var(--tv-text);
-    background-color: var(--tv-bg-active, var(--tv-bg-hover));
-}
-
-.allday-section__more:focus-visible {
-    outline: 2px solid rgba(var(--tv-accent-rgb), 0.35);
-    outline-offset: -2px;
-}
-
-.allday-section__more-icon {
-    display: inline-flex;
-    align-items: center;
-}
-
-.allday-section__more-icon svg {
-    width: 13px;
-    height: 13px;
 }
 
 /* --- Split direction override (allday cards span horizontally) ---

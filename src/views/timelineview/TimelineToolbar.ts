@@ -108,6 +108,7 @@ export class TimelineToolbar extends ViewToolbarBase {
             pinnedLists: this.viewState.pinnedLists,
             daysToShow: this.viewState.daysToShow as TimelineConfig['daysToShow'],
             zoomLevel: this.viewState.zoomLevel,
+            showHabits: this.viewState.showHabits,
         };
     }
 
@@ -133,8 +134,7 @@ export class TimelineToolbar extends ViewToolbarBase {
         this.viewState.pinnedLists = next.pinnedLists;
         if (next.daysToShow !== undefined) this.viewState.daysToShow = next.daysToShow;
         if (next.zoomLevel !== undefined) this.viewState.zoomLevel = next.zoomLevel;
-        // undefined here means "follow global" — REPLACE semantics intentionally
-        // clears any prior per-view override.
+        this.viewState.showHabits = next.showHabits;
     }
 
     /**
@@ -266,11 +266,36 @@ export class TimelineToolbar extends ViewToolbarBase {
                         this.app.workspace.requestSaveLayout();
                     },
                 });
+                this.appendHabitsMenuSection(menu);
             },
         });
 
         // Sidebar Toggle
         this.renderSidebarToggle(toolbar);
+    }
+
+    private appendHabitsMenuSection(menu: Menu): void {
+        const override = this.viewState.showHabits;
+        const effective = override ?? this.plugin.settings.showHabits;
+        menu.addItem((item) => {
+            item.setTitle(t('viewOptions.toggleHabits'))
+                .setChecked(effective)
+                .onClick(() => {
+                    this.viewState.showHabits = !effective;
+                    this.callbacks.onRender();
+                    this.app.workspace.requestSaveLayout();
+                });
+        });
+        menu.addItem((item) => {
+            item.setTitle(t('viewOptions.followGlobalHabits'))
+                .setIcon('rotate-ccw')
+                .setDisabled(override === undefined)
+                .onClick(() => {
+                    this.viewState.showHabits = undefined;
+                    this.callbacks.onRender();
+                    this.app.workspace.requestSaveLayout();
+                });
+        });
     }
 
     private renderDateNavigation(toolbar: HTMLElement): void {

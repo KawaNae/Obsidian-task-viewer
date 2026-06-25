@@ -2,7 +2,7 @@ import { ItemView, WorkspaceLeaf, setIcon, type Workspace, type ViewStateResult 
 import { t } from '../../i18n';
 import { ViewUriBuilder } from '../sharedLogic/ViewUriBuilder';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import { Task, ViewState, PinnedListDefinition, type AllDayDisclosure } from '../../types';
+import { Task, ViewState, PinnedListDefinition } from '../../types';
 import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
@@ -331,7 +331,6 @@ export class TimelineView extends ItemView {
             this.dateHeaderRenderer,
             this.periodicHeaderRenderer,
             () => this.togglePeriodicHeader(),
-            (next) => this.setAllDayDisclosure(next),
         );
         this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.menuHandler, this.readService);
         // Persistent host for pinned lists. Lives outside the empty() target
@@ -708,14 +707,6 @@ export class TimelineView extends ItemView {
     private togglePeriodicHeader(): void {
         const current = this.viewState.periodicHeaderCollapsed ?? true;
         this.viewState.periodicHeaderCollapsed = !current;
-        this.app.workspace.requestSaveLayout();
-        this.render();
-    }
-
-    /** Persist a manual all-day disclosure change and re-render. */
-    private setAllDayDisclosure(next: AllDayDisclosure): void {
-        if (this.viewState.allDayDisclosure === next) return;
-        this.viewState.allDayDisclosure = next;
         this.app.workspace.requestSaveLayout();
         this.render();
     }

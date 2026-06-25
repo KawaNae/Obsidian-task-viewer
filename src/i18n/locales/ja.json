@@ -106,8 +106,8 @@
       "display": "表示",
       "hideViewHeader": "ビューヘッダーを非表示",
       "hideViewHeaderDesc": "タスクビューアーパネルのビューヘッダー（ナビゲーションバー）を非表示にします。",
-      "allDayPartialTracks": "終日欄の部分表示トラック数",
-      "allDayPartialTracksDesc": "部分表示で見せる終日行の数。超過分は展開するまで「他 N 件」ピルの下に隠れます。",
+      "showHabits": "習慣トラッカーを表示",
+      "showHabitsDesc": "タイムラインビューに習慣トラッカー行を表示します。ビューごとに上書き可能。",
       "mobileTopOffset": "モバイル上部オフセット (px)",
       "mobileTopOffsetDesc": "ヘッダー非表示時のモバイルビューの上部オフセット。OSステータスバーとの重なりを防ぎます。",
       "fixMobileGradientWidth": "モバイルグラデーション幅を修正",
@@ -236,7 +236,9 @@
     "toggleSunTimes": "日の出 / 日の入り線",
     "toggleSunInFront": "日の出 / 日の入り線を前面に",
     "toggleMoonPhase": "月相",
-    "followGlobalAstronomy": "全体設定に従う"
+    "followGlobalAstronomy": "全体設定に従う",
+    "toggleHabits": "習慣トラッカー",
+    "followGlobalHabits": "全体設定に従う"
   },
   "toolbar": {
     "today": "今日",
@@ -627,9 +629,7 @@
     "allDay": "終日",
     "toggleAllDay": "終日セクションを切り替え",
     "expandAllDay": "終日欄を展開",
-    "collapseAllDay": "終日欄を折りたたむ",
-    "showMore": "他 {{count}} 件",
-    "showLess": "折りたたむ"
+    "collapseAllDay": "終日欄を折りたたむ"
   },
   "periodicHeader": {
     "expand": "期間ヘッダーを展開",

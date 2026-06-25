@@ -63,14 +63,12 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
             }));
 
     new Setting(el)
-        .setName(t('settings.views.allDayPartialTracks'))
-        .setDesc(t('settings.views.allDayPartialTracksDesc'))
-        .addSlider(slider => slider
-            .setLimits(1, 8, 1)
-            .setValue(plugin.settings.allDayPartialTracks)
-            .setDynamicTooltip()
+        .setName(t('settings.views.showHabits'))
+        .setDesc(t('settings.views.showHabitsDesc'))
+        .addToggle(toggle => toggle
+            .setValue(plugin.settings.showHabits)
             .onChange(async (value) => {
-                plugin.settings.allDayPartialTracks = value;
+                plugin.settings.showHabits = value;
                 await plugin.saveSettings();
             }));
 
