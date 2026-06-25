@@ -63,6 +63,18 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
             }));
 
     new Setting(el)
+        .setName(t('settings.views.allDayPartialTracks'))
+        .setDesc(t('settings.views.allDayPartialTracksDesc'))
+        .addSlider(slider => slider
+            .setLimits(1, 8, 1)
+            .setValue(plugin.settings.allDayPartialTracks)
+            .setDynamicTooltip()
+            .onChange(async (value) => {
+                plugin.settings.allDayPartialTracks = value;
+                await plugin.saveSettings();
+            }));
+
+    new Setting(el)
         .setName(t('settings.views.mobileTopOffset'))
         .setDesc(t('settings.views.mobileTopOffsetDesc'))
         .addText(text => {

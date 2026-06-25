@@ -120,6 +120,27 @@ export const F = {
         };
     },
 
+    stringEnum<const S extends string>(
+        key: string,
+        allowed: readonly S[],
+        opts: FieldOptions = {},
+    ): ConfigField<S> {
+        const set = new Set<string>(allowed);
+        const parseValue = (v: string): S | undefined => (set.has(v) ? (v as S) : undefined);
+        return {
+            key,
+            legacyKeys: opts.legacyKeys,
+            parse(raw) {
+                return typeof raw === 'string' ? parseValue(raw) : undefined;
+            },
+            serialize(value) {
+                return typeof value === 'string' && set.has(value) ? value : undefined;
+            },
+            toUriParam(value) { return String(value); },
+            fromUriParam(raw) { return parseValue(raw); },
+        };
+    },
+
     float(
         key: string,
         opts: FieldOptions & { min?: number; max?: number } = {},
@@ -347,6 +368,15 @@ export const T = {
 
     optionalString(key: string, opts: TransientOpts = {}): TransientField<string> {
         const f = F.optionalString(key, opts);
+        return { key: f.key, parse: f.parse, serialize: f.serialize, legacyKeys: opts.legacyKeys };
+    },
+
+    stringEnum<const S extends string>(
+        key: string,
+        allowed: readonly S[],
+        opts: TransientOpts = {},
+    ): TransientField<S> {
+        const f = F.stringEnum(key, allowed, opts);
         return { key: f.key, parse: f.parse, serialize: f.serialize, legacyKeys: opts.legacyKeys };
     },
 };

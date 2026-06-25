@@ -1,3 +1,4 @@
+import { setIcon } from 'obsidian';
 import TaskViewerPlugin from '../../main';
 import { t } from '../../i18n';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
@@ -5,7 +6,7 @@ import { TouchLongPressBinder } from '../../interaction/menu/TouchLongPressBinde
 import { TaskStyling } from './TaskStyling';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { HandleManager } from '../timelineview/HandleManager';
-import { DisplayTask } from '../../types';
+import { DisplayTask, type AllDayDisclosure } from '../../types';
 import { CreateTaskModal, formatTaskLine } from '../../modals/CreateTaskModal';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from './DueArrowRenderer';
@@ -30,7 +31,19 @@ export class AllDaySectionRenderer {
         private viewId: string
     ) { }
 
-    public render(container: HTMLElement, dates: string[], displayTasks: DisplayTask[], reconciler: CardReconciler) {
+    /** Effective partial-disclosure track budget (>= 1), from global settings. */
+    private get partialTrackCount(): number {
+        return Math.max(1, this.plugin.settings.allDayPartialTracks || 3);
+    }
+
+    public render(
+        container: HTMLElement,
+        dates: string[],
+        displayTasks: DisplayTask[],
+        reconciler: CardReconciler,
+        disclosure: AllDayDisclosure,
+        onDisclosureChange: (next: AllDayDisclosure) => void,
+    ): void {
         const viewStart = dates[0];
         const viewEnd = dates[dates.length - 1];
         const startHour = this.plugin.settings.startHour;
@@ -73,16 +86,72 @@ export class AllDaySectionRenderer {
         const gridColOffset = 1;
         const gridRowOffset = 2;
 
+        const partialCount = this.partialTrackCount;
+        let maxTrackIndex = -1;
+        let overflowCardCount = 0;
+
         for (const entry of entries) {
             this.renderTaskCard(container, entry, gridColOffset, gridRowOffset, reconciler);
+            maxTrackIndex = Math.max(maxTrackIndex, entry.trackIndex);
+            if (entry.trackIndex >= partialCount) overflowCardCount++;
 
             if (entry.dueArrow) {
-                renderDueArrow(container, entry, {
+                const arrowEl = renderDueArrow(container, entry, {
                     gridRowOffset,
                     gridColOffset,
                 });
+                if (arrowEl && entry.trackIndex >= partialCount) {
+                    arrowEl.addClass('is-allday-overflow');
+                }
             }
         }
+
+        // "+N more" / "show less" pill. Rendered whenever the layout overflows
+        // the partial budget. Its visibility is CSS-gated per disclosure state
+        // (visible only under `--partial`). In 'full' the same pill flips to
+        // "show less".
+        const hasOverflow = maxTrackIndex >= partialCount;
+        if (hasOverflow && disclosure !== 'collapsed') {
+            this.renderDisclosurePill(
+                container, dates.length, gridColOffset, gridRowOffset,
+                disclosure, overflowCardCount, maxTrackIndex, onDisclosureChange,
+            );
+        }
+    }
+
+    /** Render the partial/full toggle pill spanning the day columns. */
+    private renderDisclosurePill(
+        container: HTMLElement,
+        dayCount: number,
+        gridColOffset: number,
+        gridRowOffset: number,
+        disclosure: AllDayDisclosure,
+        overflowCardCount: number,
+        maxTrackIndex: number,
+        onDisclosureChange: (next: AllDayDisclosure) => void,
+    ): void {
+        const isFull = disclosure === 'full';
+        const pill = container.createDiv('allday-section__more');
+        pill.toggleClass('allday-section__more--full', isFull);
+        // partial: sit at the first hidden track row; full: one row past the last.
+        const row = (isFull ? maxTrackIndex + 1 : this.partialTrackCount) + gridRowOffset;
+        pill.style.gridRow = `${row}`;
+        pill.style.gridColumn = `${gridColOffset + 1} / span ${dayCount}`;
+        pill.setAttribute('role', 'button');
+        pill.tabIndex = 0;
+        setIcon(pill.createSpan('allday-section__more-icon'), isFull ? 'chevron-up' : 'chevron-down');
+        pill.createSpan({
+            cls: 'allday-section__more-label',
+            text: isFull ? t('allDaySection.showLess') : t('allDaySection.showMore', { count: overflowCardCount }),
+        });
+        const toggle = () => onDisclosureChange(isFull ? 'partial' : 'full');
+        pill.addEventListener('click', toggle);
+        pill.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggle();
+            }
+        });
     }
 
     private renderTaskCard(
@@ -151,6 +220,10 @@ export class AllDaySectionRenderer {
         el.dataset.colStart = String(entry.colStart);
         el.dataset.span = String(entry.span);
         el.dataset.trackIndex = String(entry.trackIndex);
+
+        // Mark tracks beyond the partial budget so CSS can hide them under
+        // `--partial`. DOM (and trackIndex) is retained so drag stays correct.
+        el.toggleClass('is-allday-overflow', entry.trackIndex >= this.partialTrackCount);
 
         el.style.gridColumn = `${entry.colStart + gridColOffset} / span ${entry.span}`;
         el.style.gridRow = `${entry.trackIndex + gridRowOffset}`;

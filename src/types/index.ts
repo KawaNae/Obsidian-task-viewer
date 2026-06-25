@@ -321,6 +321,10 @@ export interface FlowModifier {
     args: string[];
 }
 
+/** All-day section disclosure level — a monotonic height-budget ladder.
+ *  collapsed(0 tracks) ⊂ partial(N tracks) ⊂ full(unbounded). */
+export type AllDayDisclosure = 'collapsed' | 'partial' | 'full';
+
 export interface ViewState {
     startDate: string;
     daysToShow: number;
@@ -331,6 +335,9 @@ export interface ViewState {
     pinnedLists?: PinnedListDefinition[];
     customName?: string;
     periodicHeaderCollapsed?: boolean;
+    /** All-day section height-budget disclosure level. Persisted per leaf.
+     *  collapsed(0) ⊂ partial(N tracks) ⊂ full(∞). Defaults to 'partial'. */
+    allDayDisclosure?: AllDayDisclosure;
     /** Per-leaf "mask mode" toggle. When true, the renderer substitutes each
      * card's content with the task's `tv-mask` value (live, not export-only). */
     maskMode?: boolean;
@@ -507,7 +514,9 @@ export interface TaskViewerSettings {
     hideViewHeader: boolean;
     mobileTopOffset: number;
     fixMobileGradientWidth: boolean;
-
+    /** Number of all-day tracks shown in the 'partial' disclosure level (>=1).
+     *  Tracks beyond this are hidden and surfaced via a "+N more" pill. */
+    allDayPartialTracks: number;
     // External parser support (read-only).
     enableTasksPlugin: boolean;
     enableDayPlanner: boolean;
@@ -612,6 +621,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     hideViewHeader: true,
     mobileTopOffset: 32,
     fixMobileGradientWidth: true,
+    allDayPartialTracks: 3,
     enableTasksPlugin: false,
     enableDayPlanner: false,
     tasksPluginMapping: {

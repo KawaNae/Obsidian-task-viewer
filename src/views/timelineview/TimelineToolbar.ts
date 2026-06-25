@@ -1,4 +1,4 @@
-import { App, setIcon, type WorkspaceLeaf } from 'obsidian';
+import { App, setIcon, type Menu, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import { ViewState } from '../../types';
 import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
@@ -133,6 +133,8 @@ export class TimelineToolbar extends ViewToolbarBase {
         this.viewState.pinnedLists = next.pinnedLists;
         if (next.daysToShow !== undefined) this.viewState.daysToShow = next.daysToShow;
         if (next.zoomLevel !== undefined) this.viewState.zoomLevel = next.zoomLevel;
+        // undefined here means "follow global" — REPLACE semantics intentionally
+        // clears any prior per-view override.
     }
 
     /**

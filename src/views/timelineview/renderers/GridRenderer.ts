@@ -1,6 +1,6 @@
 import { setIcon } from 'obsidian';
 import type { HoverParent } from 'obsidian';
-import { ViewState, isCompleteStatusChar } from '../../../types';
+import { ViewState, isCompleteStatusChar, type AllDayDisclosure } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
@@ -23,8 +23,6 @@ import { PeriodicHeaderRenderer } from '../../sharedUI/PeriodicHeaderRenderer';
 import { CardReconciler } from '../../sharedUI/CardReconciler';
 
 export class GridRenderer {
-    private isAllDayCollapsed: boolean = false;
-
     constructor(
         private container: HTMLElement,
         private viewState: ViewState,
@@ -34,6 +32,7 @@ export class GridRenderer {
         private dateHeaderRenderer: DateHeaderRenderer,
         private periodicHeaderRenderer: PeriodicHeaderRenderer,
         private onPeriodicHeaderToggle: () => void,
+        private onAllDayDisclosureChange: (next: AllDayDisclosure) => void,
     ) {}
 
     public render(
@@ -113,7 +112,7 @@ export class GridRenderer {
         // 3. Scroll Area (allday + timeline grid)
         const scrollArea = grid.createDiv('timeline-scroll-area');
 
-        // 3.1. All-Day Row (sticky on PC, scrolls on mobile via CSS)
+        // 3.1. All-Day Row
         const allDayRow = scrollArea.createDiv('tv-grid-row allday-section');
         allDayRow.style.gridTemplateColumns = colTemplate;
 
@@ -134,32 +133,27 @@ export class GridRenderer {
         axisCell.style.gridColumn = '1';
         axisCell.style.gridRow = '1 / span 50'; // Span all implicit rows
 
-        const applyAllDayCollapsedState = () => {
-            setIcon(toggleBtn, this.isAllDayCollapsed ? 'plus' : 'minus');
-            allDayRow.toggleClass('allday-section--collapsed', this.isAllDayCollapsed);
-            axisCell.setAttribute('aria-expanded', (!this.isAllDayCollapsed).toString());
-            axisCell.setAttribute('aria-label', this.isAllDayCollapsed ? t('allDaySection.expandAllDay') : t('allDaySection.collapseAllDay'));
-        };
+        // Disclosure is a monotonic height-budget ladder persisted per leaf.
+        // collapsed(0) ⊂ partial(N tracks) ⊂ full(∞). 'full' carries no modifier
+        // class (== legacy "expanded"). The axis button toggles collapsed ↔
+        // partial; from 'full' it collapses. partial ↔ full is driven by the
+        // "+N more" / "show less" pill (rendered by AllDaySectionRenderer).
+        const disclosure: AllDayDisclosure = this.viewState.allDayDisclosure ?? 'partial';
+        const isCollapsed = disclosure === 'collapsed';
+        setIcon(toggleBtn, isCollapsed ? 'plus' : 'minus');
+        allDayRow.toggleClass('allday-section--collapsed', isCollapsed);
+        allDayRow.toggleClass('allday-section--partial', disclosure === 'partial');
+        axisCell.setAttribute('aria-expanded', (!isCollapsed).toString());
+        axisCell.setAttribute('aria-label', isCollapsed ? t('allDaySection.expandAllDay') : t('allDaySection.collapseAllDay'));
 
-        const toggleAllDayCollapsed = () => {
-            this.isAllDayCollapsed = !this.isAllDayCollapsed;
-            applyAllDayCollapsedState();
-        };
-
-        // Toggle functionality
-        axisCell.addEventListener('click', () => {
-            toggleAllDayCollapsed();
-        });
-
+        const toggleAxis = () => this.onAllDayDisclosureChange(isCollapsed ? 'partial' : 'collapsed');
+        axisCell.addEventListener('click', toggleAxis);
         axisCell.addEventListener('keydown', (e: KeyboardEvent) => {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                toggleAllDayCollapsed();
+                toggleAxis();
             }
         });
-
-        // Apply initial collapsed state
-        applyAllDayCollapsedState();
 
         // Background Cells (Grid Lines)
         dates.forEach((date, i) => {
@@ -185,7 +179,7 @@ export class GridRenderer {
         const buckets = bucketBySection(filteredTasks, startHour);
 
         // Render Tasks (Overlaid) — allday バケツのみ渡す
-        allDayRenderer.render(allDayRow, dates, buckets.allday, reconciler);
+        allDayRenderer.render(allDayRow, dates, buckets.allday, reconciler, disclosure, this.onAllDayDisclosureChange);
 
         // 3.2. Timeline Grid (time axis + day columns)
         const timelineGrid = scrollArea.createDiv('tv-grid-row timeline-scroll-area__grid');

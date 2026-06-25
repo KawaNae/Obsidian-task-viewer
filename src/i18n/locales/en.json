@@ -106,6 +106,8 @@
       "display": "Display",
       "hideViewHeader": "Hide view header",
       "hideViewHeaderDesc": "Hide the view header (navigation bar) in task viewer panels.",
+      "allDayPartialTracks": "All-day partial track count",
+      "allDayPartialTracksDesc": "Number of all-day rows shown in the partial view. Extra rows are hidden behind a \"+N more\" pill until expanded.",
       "mobileTopOffset": "Mobile top offset (px)",
       "mobileTopOffsetDesc": "Top offset for mobile views when the header is hidden. Prevents overlap with the OS status bar.",
       "fixMobileGradientWidth": "Fix mobile gradient width",
@@ -625,7 +627,9 @@
     "allDay": "All Day",
     "toggleAllDay": "Toggle All Day section",
     "expandAllDay": "Expand All Day",
-    "collapseAllDay": "Collapse All Day"
+    "collapseAllDay": "Collapse All Day",
+    "showMore": "+{{count}} more",
+    "showLess": "Show less"
   },
   "periodicHeader": {
     "expand": "Expand periodic header",

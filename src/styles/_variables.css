@@ -73,11 +73,7 @@
        in-scroll elements (selected task card 200, current-time-indicator
        200, allday-handle 100) cannot bleed through the sticky layers
        when their natural y-position falls inside a sticky region.
-       Internal ordering: periodic > date-header > habits > allday.
-       habits + date-header form the always-on-top pair; allday is sticky
-       too but sits beneath habits so that on scroll it slides under the
-       habits row rather than overlapping it. */
-    --z-timeline-allday-sticky: 240;
+       Internal ordering: periodic > date-header > moon > habits. */
     --z-timeline-habits-section: 245;
     --z-timeline-date-header: 250;
     --z-timeline-periodic-header: 255;

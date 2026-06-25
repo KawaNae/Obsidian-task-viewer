@@ -118,6 +118,65 @@
     pointer-events: none;
 }
 
+/* --- Partial disclosure ---
+   Hide tracks beyond the partial budget. DOM (and dataset.trackIndex) is kept
+   intact so drag stays correct; only display is dropped, which collapses the
+   implicit grid rows and shrinks the section to N tracks. */
+.allday-section--partial .is-allday-overflow {
+    display: none !important;
+}
+
+/* "+N more" / "show less" disclosure chip. A compact, auto-width chip centered
+   across the day columns (not a full-width stadium bar). The "+N more" variant
+   is gated on `--partial` (only meaningful while tracks are hidden); the
+   "show less" variant (manual full) shows regardless. */
+.allday-section__more {
+    display: none;
+    justify-self: center;
+    align-self: start;
+    align-items: center;
+    gap: 2px;
+    margin-top: 1px;
+    padding: 1px 8px 1px 5px;
+    font-size: 0.72em;
+    line-height: 1.5;
+    color: var(--tv-text-muted);
+    background-color: var(--tv-bg-hover);
+    border-radius: 999px;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    z-index: 11;
+}
+
+.allday-section--partial .allday-section__more {
+    display: inline-flex;
+}
+
+.allday-section__more--full {
+    display: inline-flex;
+}
+
+.allday-section__more:hover {
+    color: var(--tv-text);
+    background-color: var(--tv-bg-active, var(--tv-bg-hover));
+}
+
+.allday-section__more:focus-visible {
+    outline: 2px solid rgba(var(--tv-accent-rgb), 0.35);
+    outline-offset: -2px;
+}
+
+.allday-section__more-icon {
+    display: inline-flex;
+    align-items: center;
+}
+
+.allday-section__more-icon svg {
+    width: 13px;
+    height: 13px;
+}
+
 /* --- Split direction override (allday cards span horizontally) ---
    base の vertical mask を horizontal (左右辺) に置き換える。mask は
    `.task-card__shape` のみに当て、host 直下の handle / drag overlay は

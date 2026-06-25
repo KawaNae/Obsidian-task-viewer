@@ -8,7 +8,7 @@
 
 import { F, T, registerSchema, type ViewSchema } from '../../services/viewConfig';
 import type { FilterState } from '../../services/filter/FilterTypes';
-import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
+import type { PinnedListDefinition, AstronomyDisplay, AllDayDisclosure } from '../../types';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 
 export interface TimelineConfig {
@@ -28,6 +28,7 @@ export interface TimelineTransient {
     startDate?: string;
     pinnedListCollapsed?: Record<string, boolean>;
     periodicHeaderCollapsed?: boolean;
+    allDayDisclosure?: AllDayDisclosure;
 }
 
 export const TimelineSchema: ViewSchema<TimelineConfig, TimelineTransient> = {
@@ -53,6 +54,7 @@ export const TimelineSchema: ViewSchema<TimelineConfig, TimelineTransient> = {
         startDate:               T.dateString('startDate', { legacyKeys: ['date'] }),
         pinnedListCollapsed:     T.collapsedKeys('pinnedListCollapsed', 'timeline'),
         periodicHeaderCollapsed: T.boolean('periodicHeaderCollapsed'),
+        allDayDisclosure:        T.stringEnum('allDayDisclosure', ['collapsed', 'partial', 'full']),
     },
 };
 
