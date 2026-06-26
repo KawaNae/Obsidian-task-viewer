@@ -199,7 +199,7 @@ export class PropertiesMenuBuilder {
         });
     }
 
-    private openChangePropertiesModal(task: DisplayTask, focusField: ChangePropertiesFocusField, viewStartDate: string | null = null): void {
+    openChangePropertiesModal(task: DisplayTask, focusField: ChangePropertiesFocusField, viewStartDate: string | null = null): void {
         // Build implicit placeholders from PropertyCalculator results
         const context: PropertyCalculationContext = {
             task,

@@ -28,6 +28,12 @@
     "general": {
       "menu": "Menu",
       "interaction": "Interaction",
+      "doubleTapAction": "Double-Tap Action",
+      "doubleTapActionDesc": "Choose what happens when you double-tap (double-click) a task card.",
+      "doubleTapActionDetail": "Detail Modal",
+      "doubleTapActionOpen": "Open in Editor",
+      "doubleTapActionMenu": "Context Menu",
+      "doubleTapActionProperties": "Change Properties",
       "showEditorMenuForTasks": "Show Editor Menu for Tasks",
       "showEditorMenuForTasksDesc": "Show a ··· menu button on recognized inline task lines in the editor.",
       "showEditorMenuForCheckboxes": "Show Editor Menu for Checkboxes",

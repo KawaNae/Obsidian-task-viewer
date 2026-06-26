@@ -1,5 +1,5 @@
 import { App, MarkdownRenderer, Component } from 'obsidian';
-import { Task, DisplayTask, TaskViewerSettings, isCompleteStatusChar, isTvFile } from '../../types';
+import { Task, DisplayTask, TaskViewerSettings, DoubleTapAction, isCompleteStatusChar, isTvFile } from '../../types';
 
 interface RenderOptions {
     cardInstanceId: string;
@@ -45,6 +45,10 @@ export class TaskCardRenderer extends Component {
     private checkboxWiring: CheckboxWiring;
     private linkInteractionManager: TaskLinkInteractionManager;
     private onDetailClick: ((task: Task) => void) | null = null;
+    private onContextMenu: ((task: Task, x: number, y: number) => void) | null = null;
+    private onOpenInEditor: ((task: Task) => void) | null = null;
+    private onOpenProperties: ((task: Task) => void) | null = null;
+    private getDoubleTapAction: () => DoubleTapAction = () => 'detail';
     private cardComponents: WeakMap<HTMLElement, Component> = new WeakMap();
     private unsubscribeTaskDeleted: (() => void) | null = null;
 
@@ -106,6 +110,22 @@ export class TaskCardRenderer extends Component {
         this.onDetailClick = cb;
     }
 
+    setContextMenuCallback(cb: (task: Task, x: number, y: number) => void): void {
+        this.onContextMenu = cb;
+    }
+
+    setOpenInEditorCallback(cb: (task: Task) => void): void {
+        this.onOpenInEditor = cb;
+    }
+
+    setOpenPropertiesCallback(cb: (task: Task) => void): void {
+        this.onOpenProperties = cb;
+    }
+
+    setDoubleTapActionGetter(getter: () => DoubleTapAction): void {
+        this.getDoubleTapAction = getter;
+    }
+
     async render(
         container: HTMLElement,
         task: DisplayTask,
@@ -153,7 +173,18 @@ export class TaskCardRenderer extends Component {
         this.renderTopRightMeta(container, task, settings, topRight);
         if (!isDetailModal) {
             bindTapIntents(container, {
-                onDoubleTap: () => this.onDetailClick?.(task),
+                onDoubleTap: (x, y) => {
+                    const action = this.getDoubleTapAction();
+                    if (action === 'menu') {
+                        this.onContextMenu?.(task, x, y);
+                    } else if (action === 'open') {
+                        this.onOpenInEditor?.(task);
+                    } else if (action === 'properties') {
+                        this.onOpenProperties?.(task);
+                    } else {
+                        this.onDetailClick?.(task);
+                    }
+                },
             }, {
                 // Skip dbltap on handles / checkboxes — these have their own
                 // activation. Links are intentionally included: capture-phase

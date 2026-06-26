@@ -1,5 +1,6 @@
 import { Setting } from 'obsidian';
 import TaskViewerPlugin from '../main';
+import { DoubleTapAction } from '../types';
 import { t } from '../i18n';
 
 export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
@@ -50,6 +51,20 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
 
     // Interaction
     el.createEl('h3', { text: t('settings.general.interaction'), cls: 'setting-section-header' });
+
+    new Setting(el)
+        .setName(t('settings.general.doubleTapAction'))
+        .setDesc(t('settings.general.doubleTapActionDesc'))
+        .addDropdown(dropdown => dropdown
+            .addOption('detail', t('settings.general.doubleTapActionDetail'))
+            .addOption('open', t('settings.general.doubleTapActionOpen'))
+            .addOption('menu', t('settings.general.doubleTapActionMenu'))
+            .addOption('properties', t('settings.general.doubleTapActionProperties'))
+            .setValue(plugin.settings.doubleTapAction)
+            .onChange(async (value) => {
+                plugin.settings.doubleTapAction = value as DoubleTapAction;
+                await plugin.saveSettings();
+            }));
 
     new Setting(el)
         .setName(t('settings.views.longPressThreshold'))

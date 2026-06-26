@@ -1,4 +1,5 @@
 import { App, MarkdownView } from 'obsidian';
+import { Task, hasBodyLine } from '../../types';
 
 /**
  * 既に開いているタブを検索し、あればフォーカスを移動する。
@@ -61,4 +62,26 @@ export function openFileAndSelectLine(app: App, filePath: string, lineNumber: nu
             editor.focus();
         }
     }, 100);
+}
+
+export function openTaskInEditor(app: App, task: Task, reuseTab: boolean): void {
+    if (reuseTab) {
+        openFileInExistingOrNewTab(app, task.file);
+    } else {
+        void app.workspace.openLinkText(task.file, '', true);
+    }
+    if (hasBodyLine(task)) {
+        setTimeout(() => {
+            const view = app.workspace.getActiveViewOfType(MarkdownView);
+            if (view) {
+                const editor = view.editor;
+                const lineText = editor.getLine(task.line);
+                editor.setSelection(
+                    { line: task.line, ch: 0 },
+                    { line: task.line, ch: lineText.length }
+                );
+                editor.focus();
+            }
+        }, 100);
+    }
 }

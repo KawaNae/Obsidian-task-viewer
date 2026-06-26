@@ -19,7 +19,7 @@ import type { Component } from 'obsidian';
  * 戻り値の unbind を手動で呼ぶこと。
  */
 export interface TapIntents {
-    onDoubleTap: () => void;
+    onDoubleTap: (x: number, y: number) => void;
 }
 
 export interface BindTapIntentsOptions {
@@ -61,7 +61,7 @@ export function bindTapIntents(
             // (native dblclick would do this implicitly; we substitute).
             e.preventDefault();
             if (capture) e.stopPropagation();
-            intents.onDoubleTap();
+            intents.onDoubleTap(e.clientX, e.clientY);
         } else {
             lastClickAt = now;
         }

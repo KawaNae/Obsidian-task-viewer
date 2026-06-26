@@ -52,6 +52,7 @@ import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout'
 import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
+import { openTaskInEditor } from '../sharedLogic/NavigationUtils';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
 
@@ -324,6 +325,10 @@ export class CalendarView extends ItemView {
         this.taskRenderer.setChildLineEditCallback((parentTask, line, bodyLine, x, y) => {
             childLineMenuBuilder.showMenu(parentTask, line, bodyLine, x, y);
         });
+        this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
+        this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
+        this.taskRenderer.setOpenPropertiesCallback((task) => this.menuHandler.openTaskProperties(task));
+        this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);
         this.pinnedListRenderer = new PinnedListRenderer(
             this.taskRenderer, this.plugin, this.menuHandler, this.readService,
         );
