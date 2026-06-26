@@ -6,7 +6,7 @@ import { TaskReadService } from '../../services/data/TaskReadService';
 import { DateUtils } from '../../utils/DateUtils';
 import type { LeafPosition } from '../sharedLogic/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
-import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
+import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, type ViewSettingsOptions } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
@@ -47,6 +47,7 @@ export class TimelineToolbar extends ViewToolbarBase {
     private readonly filterMenu = new FilterMenuComponent();
     private filterBtn: HTMLElement | null = null;
     private sidebarToggleBtn: HTMLElement | null = null;
+    private moreBtn: HTMLElement | null = null;
     private dateLabelHandle: { update: (year: number, month: number) => void } | null = null;
     private viewModeHandle: { update: () => void } | null = null;
     private zoomHandle: { update: () => void } | null = null;
@@ -171,8 +172,12 @@ export class TimelineToolbar extends ViewToolbarBase {
         this.viewModeHandle?.update();
         this.zoomHandle?.update();
         this.maskHandle?.update();
+        const hasFilters = this.filterMenu.hasActiveFilters();
         if (this.filterBtn) {
-            this.filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
+            this.filterBtn.classList.toggle('is-filtered', hasFilters);
+        }
+        if (this.moreBtn) {
+            this.moreBtn.classList.toggle('is-filtered', hasFilters);
         }
         if (this.sidebarToggleBtn) {
             this.updateSidebarToggleBtn(this.sidebarToggleBtn);
@@ -214,20 +219,16 @@ export class TimelineToolbar extends ViewToolbarBase {
         // Date Navigation
         this.renderDateNavigation(toolbar);
 
-        // View Mode Switch
-        this.renderViewModeSwitch(toolbar);
-
-        // Zoom Controls
-        this.renderZoomControls(toolbar);
-
-        // Push filter/toggle controls to the right
+        // Push action zone to the right
         toolbar.createDiv('view-toolbar__spacer');
 
-        // Filter Button
-        this.renderFilterButton(toolbar);
+        // Action zone (collapsed in compact mode)
+        const actionZone = toolbar.createDiv('view-toolbar__action-zone');
+        this.renderViewModeSwitch(actionZone);
+        this.renderZoomControls(actionZone);
+        this.renderFilterButton(actionZone);
 
-        // Mask Mode Toggle
-        this.maskHandle = MaskToggleButton.render(toolbar, {
+        this.maskHandle = MaskToggleButton.render(actionZone, {
             getMaskMode: () => this.viewState.maskMode ?? false,
             setMaskMode: (next) => {
                 this.viewState.maskMode = next;
@@ -236,69 +237,23 @@ export class TimelineToolbar extends ViewToolbarBase {
             },
         });
 
-        // View Settings
-        ViewSettingsMenu.renderButton(toolbar, {
-            app: this.app,
-            leaf: this.callbacks.getLeaf(),
-            getCustomName: () => this.callbacks.getCustomName(),
-            getDefaultName: () => VIEW_META_TIMELINE.displayText,
-            onRename: (newName) => this.callbacks.onRename(newName),
-            buildUri: () => ({
-                configParams: this.codec.toUriParams(this.snapshotConfig()),
-            }),
-            viewType: VIEW_META_TIMELINE.type,
-            getViewTemplateFolder: () => this.plugin.settings.viewTemplateFolder,
-            getViewTemplate: () => ({
-                filePath: '',
-                name: this.callbacks.getCustomName() || VIEW_META_TIMELINE.displayText,
-                viewType: TimelineSchema.shortName,
-                config: this.codec.serializeConfig(this.snapshotConfig()),
-            }),
-            onApplyTemplate: (template) => {
-                // Migrated path: read canonical `config` dict (handles legacyKeys
-                // for old field names automatically).
-                const cfg = this.codec.parseConfig(template.config ?? null);
-                this.applyConfigToViewState(cfg);
-                if (template.name) this.callbacks.onRename(template.name);
-                this.callbacks.onRender();
-                this.app.workspace.requestSaveLayout();
-            },
-            // Export container is the .timeline-view wrapper, not the
-            // .timeline-grid scroll area itself, so the scroll-area selector
-            // resolves as a proper descendant (matches the contract used by
-            // the other three views and removes the self-vs-descendant trap).
-            getExportContainer: () => this.rootEl?.closest<HTMLElement>('.timeline-view') ?? null,
-            getExportSpec: () => ({
-                scrollAreas: ['.timeline-grid'],
-                overflowParents: '.timeline-view',
-            }),
-            onReset: () => {
-                // Reset to schema defaults — symmetric with applyConfigToViewState({}).
-                this.applyConfigToViewState({});
-                this.viewState.pinnedListCollapsed = undefined;
-                this.callbacks.onRename(undefined);
-                this.callbacks.onRender();
-                this.app.workspace.requestSaveLayout();
-            },
-            menuPresenter: this.plugin.menuPresenter,
-            appendCustomItems: (menu) => {
-                appendAstronomyMenuSection(menu, {
-                    overlays: ['sunTimes', 'moonPhase'],
-                    settings: this.plugin.settings.astronomy,
-                    instance: this.viewState.astronomyDisplay,
-                    omitFollowGlobal: true,
-                    onChange: (next) => {
-                        this.viewState.astronomyDisplay = next;
-                        this.callbacks.onRender();
-                        this.app.workspace.requestSaveLayout();
-                    },
-                });
-                this.appendSectionToggles(menu);
-                this.appendFollowGlobal(menu);
-            },
-        });
+        ViewSettingsMenu.renderButton(actionZone, this.getSettingsOptions());
 
-        // Sidebar Toggle
+        // More button (compact mode — ⋮)
+        const moreBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon view-toolbar__btn--more' });
+        setIcon(moreBtn, 'more-vertical');
+        moreBtn.setAttribute('aria-label', t('toolbar.viewSettings'));
+        this.moreBtn = moreBtn;
+
+        moreBtn.onclick = (e) => {
+            this.plugin.menuPresenter.present((menu) => {
+                this.appendCompactMenuItems(menu, moreBtn);
+                menu.addSeparator();
+                ViewSettingsMenu.appendItems(menu, this.getSettingsOptions());
+            }, { kind: 'mouseEvent', event: e });
+        };
+
+        // Sidebar toggle — always visible (outside action zone)
         this.renderSidebarToggle(toolbar);
     }
 
@@ -462,6 +417,143 @@ export class TimelineToolbar extends ViewToolbarBase {
 
     private updateSidebarToggleBtn(toggleBtn: HTMLElement): void {
         updateSidebarToggleButton(toggleBtn, this.viewState.showSidebar);
+    }
+
+    private getSettingsOptions(): ViewSettingsOptions {
+        return {
+            app: this.app,
+            leaf: this.callbacks.getLeaf(),
+            getCustomName: () => this.callbacks.getCustomName(),
+            getDefaultName: () => VIEW_META_TIMELINE.displayText,
+            onRename: (newName) => this.callbacks.onRename(newName),
+            buildUri: () => ({
+                configParams: this.codec.toUriParams(this.snapshotConfig()),
+            }),
+            viewType: VIEW_META_TIMELINE.type,
+            getViewTemplateFolder: () => this.plugin.settings.viewTemplateFolder,
+            getViewTemplate: () => ({
+                filePath: '',
+                name: this.callbacks.getCustomName() || VIEW_META_TIMELINE.displayText,
+                viewType: TimelineSchema.shortName,
+                config: this.codec.serializeConfig(this.snapshotConfig()),
+            }),
+            onApplyTemplate: (template) => {
+                const cfg = this.codec.parseConfig(template.config ?? null);
+                this.applyConfigToViewState(cfg);
+                if (template.name) this.callbacks.onRename(template.name);
+                this.callbacks.onRender();
+                this.app.workspace.requestSaveLayout();
+            },
+            getExportContainer: () => this.rootEl?.closest<HTMLElement>('.timeline-view') ?? null,
+            getExportSpec: () => ({
+                scrollAreas: ['.timeline-grid'],
+                overflowParents: '.timeline-view',
+            }),
+            onReset: () => {
+                this.applyConfigToViewState({});
+                this.viewState.pinnedListCollapsed = undefined;
+                this.callbacks.onRename(undefined);
+                this.callbacks.onRender();
+                this.app.workspace.requestSaveLayout();
+            },
+            menuPresenter: this.plugin.menuPresenter,
+            appendCustomItems: (menu) => {
+                appendAstronomyMenuSection(menu, {
+                    overlays: ['sunTimes', 'moonPhase'],
+                    settings: this.plugin.settings.astronomy,
+                    instance: this.viewState.astronomyDisplay,
+                    omitFollowGlobal: true,
+                    onChange: (next) => {
+                        this.viewState.astronomyDisplay = next;
+                        this.callbacks.onRender();
+                        this.app.workspace.requestSaveLayout();
+                    },
+                });
+                this.appendSectionToggles(menu);
+                this.appendFollowGlobal(menu);
+            },
+        };
+    }
+
+    private appendCompactMenuItems(menu: Menu, moreBtn: HTMLElement): void {
+        // View mode (submenu)
+        const currentDays = this.viewState.daysToShow;
+        const viewModeLabel = currentDays === 1 ? t('toolbar.viewMode1Day')
+            : currentDays === 3 ? t('toolbar.viewMode3Days')
+            : t('toolbar.viewModeWeek');
+        menu.addItem((item) => {
+            item.setTitle(t('toolbar.viewModeLabel', { label: viewModeLabel }));
+            const sub = item.setSubmenu();
+            for (const opt of [
+                { value: 1, title: t('toolbar.viewMode1Day') },
+                { value: 3, title: t('toolbar.viewMode3Days') },
+                { value: 7, title: t('toolbar.viewModeWeek') },
+            ]) {
+                sub.addItem((si) => {
+                    si.setTitle(opt.title)
+                        .setChecked(currentDays === opt.value)
+                        .onClick(() => {
+                            this.viewState.daysToShow = opt.value;
+                            this.callbacks.onRender();
+                            this.app.workspace.requestSaveLayout();
+                            this.update();
+                        });
+                });
+            }
+        });
+
+        // Zoom (submenu)
+        const currentZoom = this.viewState.zoomLevel ?? this.plugin.settings.zoomLevel;
+        menu.addItem((item) => {
+            item.setTitle(t('toolbar.zoomLabel', { pct: `${Math.round(currentZoom * 100)}%` }));
+            const sub = item.setSubmenu();
+            for (const level of [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0]) {
+                sub.addItem((si) => {
+                    si.setTitle(`${Math.round(level * 100)}%`)
+                        .setChecked(currentZoom === level)
+                        .onClick(() => {
+                            this.viewState.zoomLevel = level;
+                            this.callbacks.onRender();
+                            this.app.workspace.requestSaveLayout();
+                            this.update();
+                        });
+                });
+            }
+        });
+
+        menu.addSeparator();
+
+        // Filter
+        menu.addItem((item) => {
+            item.setTitle(t('toolbar.filter'))
+                .setIcon('filter')
+                .onClick(() => {
+                    const allTasks = this.readService.getTasks();
+                    this.filterMenu.showMenuAtElement(moreBtn, {
+                        onFilterChange: () => {
+                            this.persistFilterState();
+                            this.callbacks.onRender();
+                            this.update();
+                        },
+                        getTasks: () => allTasks,
+                        getStartHour: () => this.plugin.settings.startHour,
+                    });
+                });
+        });
+
+        // Mask
+        const maskOn = this.viewState.maskMode ?? false;
+        menu.addItem((item) => {
+            item.setTitle(t('toolbar.maskMode'))
+                .setIcon(maskOn ? 'eye-off' : 'eye')
+                .setChecked(maskOn)
+                .onClick(() => {
+                    this.viewState.maskMode = !maskOn;
+                    this.callbacks.onRender();
+                    this.app.workspace.requestSaveLayout();
+                    this.update();
+                });
+        });
     }
 
     private navigateDate(days: number): void {

@@ -1,10 +1,10 @@
-import { setIcon, type App, type WorkspaceLeaf } from 'obsidian';
+import { setIcon, type App, type Menu, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import type TaskViewerPlugin from '../../main';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
 import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
-import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
+import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, type ViewSettingsOptions } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
@@ -58,6 +58,7 @@ export interface CalendarToolbarDeps {
 export class CalendarToolbar extends ViewToolbarBase {
     private filterBtn: HTMLButtonElement | null = null;
     private sidebarToggleBtn: HTMLButtonElement | null = null;
+    private moreBtn: HTMLElement | null = null;
     private dateLabelHandle: { update: (year: number, month: number) => void } | null = null;
     private maskHandle: { update: () => void } | null = null;
 
@@ -102,7 +103,10 @@ export class CalendarToolbar extends ViewToolbarBase {
 
         toolbar.createDiv('view-toolbar__spacer');
 
-        const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        // Action zone (expanded mode)
+        const actionZone = toolbar.createDiv('view-toolbar__action-zone');
+
+        const filterBtn = actionZone.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', t('toolbar.filter'));
         filterBtn.addEventListener('click', (event: MouseEvent) => {
@@ -117,12 +121,42 @@ export class CalendarToolbar extends ViewToolbarBase {
         });
         this.filterBtn = filterBtn;
 
-        this.maskHandle = MaskToggleButton.render(toolbar, {
+        this.maskHandle = MaskToggleButton.render(actionZone, {
             getMaskMode: () => deps.getMaskMode(),
             setMaskMode: (next) => deps.setMaskMode(next),
         });
 
-        ViewSettingsMenu.renderButton(toolbar, {
+        ViewSettingsMenu.renderButton(actionZone, this.getSettingsOptions());
+
+        // More button (compact mode — ⋮)
+        const moreBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon view-toolbar__btn--more' });
+        setIcon(moreBtn, 'more-vertical');
+        moreBtn.setAttribute('aria-label', t('toolbar.viewSettings'));
+        this.moreBtn = moreBtn;
+
+        moreBtn.onclick = (e) => {
+            deps.plugin.menuPresenter.present((menu) => {
+                this.appendCompactMenuItems(menu, moreBtn);
+                menu.addSeparator();
+                ViewSettingsMenu.appendItems(menu, this.getSettingsOptions());
+            }, { kind: 'mouseEvent', event: e });
+        };
+
+        // Sidebar toggle — always visible (outside action zone)
+        const toggleBtn = toolbar.createEl('button', {
+            cls: 'view-toolbar__btn--icon sidebar-toggle-button-icon',
+        });
+        updateSidebarToggleButton(toggleBtn, deps.getShowSidebar());
+        toggleBtn.onclick = () => {
+            const nextOpen = !deps.getShowSidebar();
+            deps.setShowSidebar(nextOpen, { animate: true, persist: true });
+        };
+        this.sidebarToggleBtn = toggleBtn;
+    }
+
+    private getSettingsOptions(): ViewSettingsOptions {
+        const { deps } = this;
+        return {
             app: deps.app,
             leaf: deps.leaf,
             getCustomName: () => deps.getCustomName(),
@@ -164,24 +198,48 @@ export class CalendarToolbar extends ViewToolbarBase {
                     onChange: (next) => deps.setAstronomyDisplay(next),
                 });
             },
+        };
+    }
+
+    private appendCompactMenuItems(menu: Menu, moreBtn: HTMLElement): void {
+        const { deps } = this;
+        menu.addItem((item) => {
+            item.setTitle(t('toolbar.filter'))
+                .setIcon('filter')
+                .onClick(() => {
+                    deps.filterMenu.showMenuAtElement(moreBtn, {
+                        onFilterChange: () => {
+                            deps.onFilterChange();
+                            this.update();
+                        },
+                        getTasks: () => deps.readService.getTasks(),
+                        getStartHour: () => deps.plugin.settings.startHour,
+                    });
+                });
         });
 
-        const toggleBtn = toolbar.createEl('button', {
-            cls: 'view-toolbar__btn--icon sidebar-toggle-button-icon',
+        const maskOn = deps.getMaskMode();
+        menu.addItem((item) => {
+            item.setTitle(t('toolbar.maskMode'))
+                .setIcon(maskOn ? 'eye-off' : 'eye')
+                .setChecked(maskOn)
+                .onClick(() => {
+                    deps.setMaskMode(!maskOn);
+                    this.update();
+                });
         });
-        updateSidebarToggleButton(toggleBtn, deps.getShowSidebar());
-        toggleBtn.onclick = () => {
-            const nextOpen = !deps.getShowSidebar();
-            deps.setShowSidebar(nextOpen, { animate: true, persist: true });
-        };
-        this.sidebarToggleBtn = toggleBtn;
+
     }
 
     override update(): void {
         const ref = this.deps.getReferenceMonth();
         this.dateLabelHandle?.update(ref.year, ref.month);
+        const hasFilters = this.deps.filterMenu.hasActiveFilters();
         if (this.filterBtn) {
-            this.filterBtn.classList.toggle('is-filtered', this.deps.filterMenu.hasActiveFilters());
+            this.filterBtn.classList.toggle('is-filtered', hasFilters);
+        }
+        if (this.moreBtn) {
+            this.moreBtn.classList.toggle('is-filtered', hasFilters);
         }
         this.maskHandle?.update();
         this.syncSidebarToggleState();

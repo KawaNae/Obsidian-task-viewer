@@ -82,6 +82,7 @@ export class MiniCalendarView extends ItemView {
             app: this.app,
             leaf: this.leaf,
             plugin: this.plugin,
+            readService: this.readService,
             filterMenu: this.filterMenu,
             linkInteractionManager: this.linkInteractionManager,
             hoverParent: this.hoverParent,
@@ -96,8 +97,29 @@ export class MiniCalendarView extends ItemView {
                 void this.app.workspace.requestSaveLayout();
                 void this.render();
             },
-            onOpenPeriodicNote: (kind, date) => this.openOrCreatePeriodicNote(kind, date),
-            onShowSettingsMenu: (e, anchor) => this.showSettingsMenu(e, anchor),
+            onFilterChange: () => {
+                void this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
+            getCustomName: () => this.customName,
+            onRename: (newName) => {
+                this.customName = newName;
+                this.leaf.updateHeader();
+                this.app.workspace.requestSaveLayout();
+            },
+            getCurrentConfig: () => this.getCurrentConfig(),
+            applyConfig: (cfg) => this.applyConfig(cfg),
+            onConfigApplied: () => {
+                this.leaf.updateHeader();
+                void this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
+            getAstronomyDisplay: () => this.astronomyDisplay,
+            setAstronomyDisplay: (next) => {
+                this.astronomyDisplay = next;
+                void this.app.workspace.requestSaveLayout();
+                void this.render();
+            },
         });
     }
 
@@ -438,7 +460,7 @@ export class MiniCalendarView extends ItemView {
 
         this.windowStart = DateUtils.addDays(this.windowStart, offset * 7);
         void this.app.workspace.requestSaveLayout();
-        this.updateToolbarMonthLabel();
+        this.toolbar.update();
 
         const body = this.container?.querySelector('.cal-grid__body--mini');
         if (!(body instanceof HTMLElement)) {
@@ -475,31 +497,6 @@ export class MiniCalendarView extends ItemView {
         return getNormalizedWindowStart(value, this.plugin.settings.weekStartDay);
     }
 
-    private updateToolbarMonthLabel(): void {
-        const referenceMonth = this.getReferenceMonth();
-        const now = new Date();
-        const isCurrentYear = referenceMonth.year === now.getFullYear();
-        const isCurrentMonth = isCurrentYear && referenceMonth.month === now.getMonth();
-
-        const monthEl = this.container?.querySelector('.mini-calendar-toolbar__month');
-        const yearEl = this.container?.querySelector('.mini-calendar-toolbar__year');
-
-        if (monthEl instanceof HTMLElement) {
-            const monthLink = monthEl.querySelector('.internal-link');
-            if (monthLink) {
-                monthLink.textContent = String(referenceMonth.month + 1).padStart(2, '0');
-            }
-            monthEl.toggleClass('is-current', isCurrentMonth);
-        }
-
-        if (yearEl instanceof HTMLElement) {
-            const yearLink = yearEl.querySelector('.internal-link');
-            if (yearLink) {
-                yearLink.textContent = `${referenceMonth.year}`;
-            }
-            yearEl.toggleClass('is-current', isCurrentYear);
-        }
-    }
     private animateWeekSlide(body: HTMLElement, offset: number): void {
         const track = body.querySelector('.cal-grid__body-track');
         if (!(track instanceof HTMLElement)) {
@@ -625,201 +622,6 @@ export class MiniCalendarView extends ItemView {
 
         return weekEl;
     }
-
-    private showSettingsMenu(e: MouseEvent, moreBtn: HTMLElement): void {
-        this.plugin.menuPresenter.present((menu) => {
-        // Astronomy overlay toggles (moon only — Mini has no time axis)
-        appendAstronomyMenuSection(menu, {
-            overlays: ['moonPhase'],
-            settings: this.plugin.settings.astronomy,
-            instance: this.astronomyDisplay,
-            onChange: (next) => {
-                this.astronomyDisplay = next;
-                void this.app.workspace.requestSaveLayout();
-                void this.render();
-            },
-        });
-
-        menu.addSeparator();
-
-        // Filter
-        menu.addItem((item: MenuItem) => {
-            const title = this.filterMenu.hasActiveFilters()
-                ? t('toolbar.filter') + ' \u2713'
-                : t('toolbar.filter');
-            item.setTitle(title)
-                .setIcon('filter')
-                .onClick(() => {
-                    this.filterMenu.showMenuAtElement(moreBtn, {
-                        onFilterChange: () => {
-                            void this.app.workspace.requestSaveLayout();
-                            void this.render();
-                        },
-                        getTasks: () => this.readService.getTasks(),
-                        getStartHour: () => this.plugin.settings.startHour,
-                    });
-                });
-        });
-
-        menu.addSeparator();
-
-        // Save view
-        const folder = this.plugin.settings.viewTemplateFolder;
-        menu.addItem((item: MenuItem) => {
-            item.setTitle(t('toolbar.saveView'))
-                .setIcon('save')
-                .onClick(() => {
-                    if (!folder) {
-                        new Notice(t('notice.setViewTemplateFolder'));
-                        return;
-                    }
-                    const defaultName = this.customName || VIEW_META_MINI_CALENDAR.displayText;
-                    new InputModal(
-                        this.app,
-                        t('toolbar.saveViewTitle'),
-                        t('toolbar.saveViewLabel'),
-                        defaultName,
-                        async (value) => {
-                            const name = value.trim();
-                            if (!name) return;
-                            const writer = new ViewTemplateWriter(this.app);
-                            // MiniCal intentionally shares the 'calendar' template
-                            // namespace with Calendar view (same data shape — filter +
-                            // astronomy + name). Templates saved here show up in
-                            // both Calendar and MiniCal load lists.
-                            await writer.saveTemplate(folder, {
-                                filePath: '',
-                                name,
-                                viewType: 'calendar',
-                                config: this.codec.serializeConfig(this.getCurrentConfig()),
-                            });
-                            this.customName = name;
-                            this.leaf.updateHeader();
-                            this.app.workspace.requestSaveLayout();
-                            new Notice(t('notice.viewSaved', { name }));
-                        },
-                    ).open();
-                });
-        });
-
-        // Load view
-        menu.addItem((item: MenuItem) => {
-            item.setTitle(t('toolbar.loadView'))
-                .setIcon('folder-open');
-
-            if (!folder) {
-                item.setSubmenu().addItem((sub: MenuItem) =>
-                    sub.setTitle(t('toolbar.noFolderConfigured')).setDisabled(true));
-            } else {
-                const loader = new ViewTemplateLoader(this.app);
-                const summaries = loader.loadTemplates(folder)
-                    .filter(s => s.viewType === 'calendar');
-
-                const submenu = item.setSubmenu();
-                if (summaries.length === 0) {
-                    submenu.addItem((sub: MenuItem) =>
-                        sub.setTitle(t('toolbar.noTemplatesFound')).setDisabled(true));
-                } else {
-                    for (const summary of summaries) {
-                        submenu.addItem((sub: MenuItem) => {
-                            sub.setTitle(summary.name)
-                                .onClick(async () => {
-                                    const full = await loader.loadFullTemplate(summary.filePath);
-                                    if (!full) {
-                                        new Notice(t('notice.failedToLoadTemplate'));
-                                        return;
-                                    }
-                                    // Templates saved by Calendar may carry fields
-                                    // MiniCalendar doesn't have (showSidebar, pinnedLists,
-                                    // maskMode). codec.parseConfig drops unknown keys
-                                    // automatically, keeping only what MiniCal cares about.
-                                    const cfg = this.codec.parseConfig(full.config ?? null);
-                                    this.applyConfig(cfg);
-                                    if (full.name) {
-                                        this.customName = full.name;
-                                        this.leaf.updateHeader();
-                                    }
-                                    void this.app.workspace.requestSaveLayout();
-                                    void this.render();
-                                });
-                        });
-                    }
-                }
-            }
-        });
-
-        // Reset view
-        menu.addItem((item: MenuItem) => {
-            item.setTitle(t('toolbar.resetView'))
-                .setIcon('rotate-ccw')
-                .onClick(() => {
-                    this.applyConfig({});
-                    this.leaf.updateHeader();
-                    void this.app.workspace.requestSaveLayout();
-                    void this.render();
-                });
-        });
-
-        menu.addSeparator();
-
-        // Copy URI
-        menu.addItem((item: MenuItem) => {
-            item.setTitle(t('toolbar.copyUri'))
-                .setIcon('link')
-                .onClick(async () => {
-                    const uri = ViewUriBuilder.build(VIEW_META_MINI_CALENDAR.type, this.buildUriOptions(folder));
-                    await navigator.clipboard.writeText(uri);
-                    new Notice(t('notice.uriCopied'));
-                });
-        });
-
-        // Copy as link
-        menu.addItem((item: MenuItem) => {
-            item.setTitle(t('toolbar.copyAsLink'))
-                .setIcon('external-link')
-                .onClick(async () => {
-                    const uri = ViewUriBuilder.build(VIEW_META_MINI_CALENDAR.type, this.buildUriOptions(folder));
-                    const displayName = this.customName || VIEW_META_MINI_CALENDAR.displayText;
-                    const link = `[${displayName}](${uri})`;
-                    await navigator.clipboard.writeText(link);
-                    new Notice(t('notice.linkCopied'));
-                });
-        });
-
-        menu.addSeparator();
-
-        // Position (read-only)
-        menu.addItem((item: MenuItem) => {
-            item.setTitle(t('toolbar.position')).setDisabled(true);
-        });
-        const pos = ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace);
-        const posLabels: Record<LeafPosition, string> = {
-            left: t('position.leftSidebar'),
-            right: t('position.rightSidebar'),
-            tab: t('position.tab'),
-            window: t('position.window'),
-            override: t('position.override'),
-        };
-        menu.addItem((item: MenuItem) => {
-            item.setTitle(`  ${posLabels[pos]}`)
-                .setChecked(true)
-                .setDisabled(true);
-        });
-        }, { kind: 'mouseEvent', event: e });
-    }
-
-    private buildUriOptions(folder: string): ViewUriOptions {
-        const opts: ViewUriOptions = {
-            position: ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace),
-            name: this.customName,
-            configParams: this.codec.toUriParams(this.getCurrentConfig()),
-        };
-        if (folder) {
-            opts.template = this.customName || VIEW_META_MINI_CALENDAR.displayText;
-        }
-        return opts;
-    }
-
     private async openOrCreateDailyNote(date: Date): Promise<void> {
         return openOrCreateDailyNote(this.app, date);
     }

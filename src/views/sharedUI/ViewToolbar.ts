@@ -326,22 +326,25 @@ export class ViewSettingsMenu {
     }
 
     static showMenu(e: MouseEvent, options: ViewSettingsOptions): void {
+        options.menuPresenter.present((menu) => {
+            ViewSettingsMenu.appendItems(menu, options);
+        }, { kind: 'mouseEvent', event: e });
+    }
+
+    static appendItems(menu: Menu, options: ViewSettingsOptions): void {
         const {
             app, leaf, getCustomName, getDefaultName, onRename,
             buildUri, viewType, getViewTemplateFolder, getViewTemplate, onApplyTemplate, onReset,
-            menuPresenter, appendCustomItems,
+            appendCustomItems,
         } = options;
 
         const folder = getViewTemplateFolder();
-        menuPresenter.present((menu) => {
-        // View-specific items (astronomy toggles etc.). Added first so the
-        // shared Save/Load/Reset block remains the lower, stable section.
+
         if (appendCustomItems) {
             appendCustomItems(menu);
             menu.addSeparator();
         }
 
-        // Save view... (name required, saves template + updates customName)
         menu.addItem((item) => {
             item.setTitle(t('toolbar.saveView'))
                 .setIcon('save')
@@ -370,7 +373,6 @@ export class ViewSettingsMenu {
                 });
         });
 
-        // Load view... (submenu)
         menu.addItem((item) => {
             item.setTitle(t('toolbar.loadView'))
                 .setIcon('folder-open');
@@ -404,7 +406,6 @@ export class ViewSettingsMenu {
             }
         });
 
-        // Reset view
         menu.addItem((item) => {
             item.setTitle(t('toolbar.resetView'))
                 .setIcon('rotate-ccw')
@@ -413,7 +414,6 @@ export class ViewSettingsMenu {
 
         menu.addSeparator();
 
-        // Copy URI
         menu.addItem((item) => {
             item.setTitle(t('toolbar.copyUri'))
                 .setIcon('link')
@@ -422,7 +422,6 @@ export class ViewSettingsMenu {
                     uriOpts.position = ViewUriBuilder.detectLeafPosition(leaf, app.workspace);
                     uriOpts.name = getCustomName();
 
-                    // Use template reference if folder is configured
                     if (folder) {
                         uriOpts.template = getCustomName() || getDefaultName();
                     }
@@ -433,7 +432,6 @@ export class ViewSettingsMenu {
                 });
         });
 
-        // Copy as Obsidian link [name](uri)
         menu.addItem((item) => {
             item.setTitle(t('toolbar.copyAsLink'))
                 .setIcon('external-link')
@@ -454,8 +452,6 @@ export class ViewSettingsMenu {
                 });
         });
 
-        // Export as image — single "full content" entry. The viewport-only mode
-        // is gone; OS screenshot is the right tool for that.
         if (options.getExportContainer && options.getExportSpec) {
             menu.addSeparator();
             const getContainer = options.getExportContainer;
@@ -487,7 +483,6 @@ export class ViewSettingsMenu {
 
         menu.addSeparator();
 
-        // Position (read-only)
         menu.addItem((item) => {
             item.setTitle(t('toolbar.position')).setDisabled(true);
         });
@@ -498,7 +493,6 @@ export class ViewSettingsMenu {
                 .setChecked(true)
                 .setDisabled(true);
         });
-        }, { kind: 'mouseEvent', event: e });
     }
 
     private static toShortViewType(viewType: string): string {

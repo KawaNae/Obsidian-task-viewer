@@ -12,6 +12,7 @@
     scrollbar-width: none;
     -ms-overflow-style: none;
     border-bottom: 1px solid var(--tv-border);
+    container-type: inline-size;
 }
 
 .view-toolbar::-webkit-scrollbar {
@@ -116,4 +117,31 @@
 .view-toolbar__date-label-year.is-current,
 .view-toolbar__date-label-month.is-current {
     color: var(--tv-text-accent);
+}
+
+/* Action zone — right-side buttons (filter, mask, settings, sidebar) */
+.view-toolbar__action-zone {
+    display: flex;
+    align-items: center;
+    gap: var(--toolbar-gap, 8px);
+    flex-shrink: 0;
+}
+
+/* Overflow ⋮ button — hidden by default, shown in compact mode */
+.view-toolbar__btn--more {
+    display: none;
+}
+
+.view-toolbar__btn--more.is-filtered {
+    color: var(--tv-text-accent);
+}
+
+/* Compact mode: hide inline action buttons, show ⋮ */
+@container (max-width: 500px) {
+    .view-toolbar__action-zone {
+        display: none;
+    }
+    .view-toolbar__btn--more {
+        display: inline-flex;
+    }
 }
