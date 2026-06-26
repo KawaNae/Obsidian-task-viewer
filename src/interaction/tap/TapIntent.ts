@@ -23,12 +23,16 @@ export interface TapIntents {
 }
 
 export interface BindTapIntentsOptions {
-    /** target filter that returns false to ignore the click (e.g. links, checkboxes, drag handles). */
+    /** target filter that returns false to ignore the click (e.g. checkboxes, drag handles). */
     targetFilter?: (target: HTMLElement) => boolean;
     /** double-tap window in ms. default 400. */
     threshold?: number;
     /** if provided, register(unbind) so the listener is removed on component unload. */
     component?: Component;
+    /** Register the listener in capture phase so it fires before target-phase
+     *  handlers (e.g. link click handlers that call stopPropagation). On
+     *  double-tap, stopPropagation is called to prevent those handlers. */
+    capture?: boolean;
 }
 
 const DEFAULT_THRESHOLD_MS = 400;
@@ -40,6 +44,7 @@ export function bindTapIntents(
 ): () => void {
     const threshold = opts.threshold ?? DEFAULT_THRESHOLD_MS;
     const targetFilter = opts.targetFilter;
+    const capture = opts.capture ?? false;
     // Sentinel that makes the first `now - lastClickAt < threshold` always
     // false. A literal `0` would mistakenly count as "just clicked at epoch"
     // when Date.now() is near 0 (vi.setSystemTime in tests).
@@ -55,14 +60,15 @@ export function bindTapIntents(
             // Suppress browser-level text selection that follows a 2nd click
             // (native dblclick would do this implicitly; we substitute).
             e.preventDefault();
+            if (capture) e.stopPropagation();
             intents.onDoubleTap();
         } else {
             lastClickAt = now;
         }
     };
 
-    el.addEventListener('click', onClick);
-    const unbind = () => el.removeEventListener('click', onClick);
+    el.addEventListener('click', onClick, capture);
+    const unbind = () => el.removeEventListener('click', onClick, capture);
     opts.component?.register(unbind);
     return unbind;
 }
