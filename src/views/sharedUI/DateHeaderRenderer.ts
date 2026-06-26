@@ -17,8 +17,14 @@ export interface DateHeaderRenderParams {
     dates: string[];
     gridTemplateColumns: string;
     isOverdue: (date: string) => boolean;
-    enableCompactBehavior: boolean;
-    forceShortLabel: boolean;
+    /**
+     * Reference year-month from the toolbar date label.
+     * When provided, dates matching this year-month show "DD dow" only;
+     * dates in a different month show "MM-DD dow";
+     * dates in a different year show "YYYY-MM-DD dow".
+     * When omitted, falls back to responsive compaction via ResizeObserver.
+     */
+    referenceYearMonth?: { year: number; month: number };
 }
 
 export interface DateHeaderRenderResult {
@@ -34,10 +40,6 @@ type DateHeaderDisplayEntry = {
     shortLabel: string;
 };
 
-// Compaction stages: full "yyyy-mm-dd ddd" → medium "mm-dd ddd" → short "dd ddd".
-// Day + weekday are always present; only the year (then month) drop as the cell
-// shrinks. Thresholds picked so each label has ~10-15px of breathing room over
-// its measured ink width at the default 15px bold font.
 const COMPACT_THRESHOLD_PX = 110;
 const NARROW_THRESHOLD_PX = 70;
 
@@ -50,7 +52,7 @@ export class DateHeaderRenderer {
         this.disconnectObserver();
 
         const { app, plugin, hoverParent, linkInteractionManager } = this.deps;
-        const { dates, gridTemplateColumns, isOverdue, enableCompactBehavior, forceShortLabel } = params;
+        const { dates, gridTemplateColumns, isOverdue, referenceYearMonth } = params;
 
         const row = parent.createDiv('tv-grid-row date-header');
         row.style.gridTemplateColumns = gridTemplateColumns;
@@ -69,15 +71,15 @@ export class DateHeaderRenderer {
             const dateObj = this.parseLocalDate(date);
             const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(app, dateObj);
             const linkLabel = DailyNoteUtils.getDailyNoteLabelForDate(app, dateObj);
-            // Display labels follow ISO chunks so the compaction is consistent —
-            // weekday and day are always shown; only year, then month, drop. The
-            // aria-label still uses linkLabel to preserve the daily-note format
-            // hint for screen readers.
+
             const fullLabel = `${date} ${dayName}`;
             const mediumLabel = `${date.slice(5)} ${dayName}`;
             const shortLabel = `${date.slice(8)} ${dayName}`;
 
-            const initialLabel = forceShortLabel ? shortLabel : fullLabel;
+            const initialLabel = referenceYearMonth
+                ? this.pickContextualLabel(date, referenceYearMonth, fullLabel, mediumLabel, shortLabel)
+                : fullLabel;
+
             const linkEl = cell.createEl('a', { cls: 'internal-link date-header__date-link', text: initialLabel });
             linkEl.dataset.href = linkTarget;
             linkEl.setAttribute('href', linkTarget);
@@ -113,13 +115,13 @@ export class DateHeaderRenderer {
                 }
             });
 
-            if (forceShortLabel) {
-                cell.addClass('is-narrow');
+            if (referenceYearMonth) {
                 cell.addClass('is-compact');
+                cell.addClass('is-narrow');
             }
         });
 
-        if (!forceShortLabel && enableCompactBehavior) {
+        if (!referenceYearMonth) {
             this.applyResponsiveCompact(headerCells);
         }
 
@@ -128,6 +130,20 @@ export class DateHeaderRenderer {
 
     dispose(): void {
         this.disconnectObserver();
+    }
+
+    private pickContextualLabel(
+        date: string,
+        ref: { year: number; month: number },
+        fullLabel: string,
+        mediumLabel: string,
+        shortLabel: string,
+    ): string {
+        const dateYear = parseInt(date.substring(0, 4), 10);
+        const dateMonth = parseInt(date.substring(5, 7), 10) - 1;
+        if (dateYear !== ref.year) return fullLabel;
+        if (dateMonth !== ref.month) return mediumLabel;
+        return shortLabel;
     }
 
     private disconnectObserver(): void {

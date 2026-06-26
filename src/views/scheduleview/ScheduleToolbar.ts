@@ -87,7 +87,7 @@ export class ScheduleToolbar extends ViewToolbarBase {
             toolbar,
             (days) => deps.onNavigate(days),
             () => deps.onToday(),
-            { label: t('toolbar.now') }
+            {}
         );
 
         toolbar.createDiv('view-toolbar__spacer');

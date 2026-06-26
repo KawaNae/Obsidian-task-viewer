@@ -33,7 +33,6 @@ export interface TimelineTransient {
      *  TimelineView recomputes startDate on every onOpen from visualToday. */
     startDate?: string;
     pinnedListCollapsed?: Record<string, boolean>;
-    periodicHeaderCollapsed?: boolean;
 }
 
 export const TimelineSchema: ViewSchema<TimelineConfig, TimelineTransient> = {
@@ -61,7 +60,6 @@ export const TimelineSchema: ViewSchema<TimelineConfig, TimelineTransient> = {
     transient: {
         startDate:               T.dateString('startDate', { legacyKeys: ['date'] }),
         pinnedListCollapsed:     T.collapsedKeys('pinnedListCollapsed', 'timeline'),
-        periodicHeaderCollapsed: T.boolean('periodicHeaderCollapsed'),
     },
 };
 

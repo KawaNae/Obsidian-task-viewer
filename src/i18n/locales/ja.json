@@ -112,6 +112,8 @@
       "showAllDayDesc": "終日タスクセクションの既定の表示状態。ビューごとに上書き可能。",
       "showTimeline": "タイムラインを表示",
       "showTimelineDesc": "時間軸セクションの既定の表示状態。ビューごとに上書き可能。",
+      "showWeekRow": "週番号行を表示",
+      "showWeekRowDesc": "タイムライン・スケジュールの日付ヘッダー上部に週番号行を表示します。",
       "mobileTopOffset": "モバイル上部オフセット (px)",
       "mobileTopOffsetDesc": "ヘッダー非表示時のモバイルビューの上部オフセット。OSステータスバーとの重なりを防ぎます。",
       "fixMobileGradientWidth": "モバイルグラデーション幅を修正",
@@ -635,10 +637,7 @@
     "expandAllDay": "終日欄を展開",
     "collapseAllDay": "終日欄を折りたたむ"
   },
-  "periodicHeader": {
-    "expand": "期間ヘッダーを展開",
-    "collapse": "期間ヘッダーを折りたたむ"
-  },
+  "periodicHeader": {},
   "cli": {
     "title": "Task Viewer CLIリファレンス",
     "commands": "コマンド",

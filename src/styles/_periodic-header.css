@@ -1,13 +1,8 @@
 /* =============================================================================
-   Periodic Header (Year+Month / Week)
-   Sits above .date-header in TimelineView and ScheduleView. The three left
-   axis cells (YM-axis, W-axis, date-header axis) form one fused toggle region:
-   each is click-wired to the same onToggle, focus stop lives on the
-   date-header axis, and borders are arranged so the column reads as one cell.
-   Wrapper is sticky at the top of the scroll viewport; collapsed state hides
-   the rows so wrapper offsetHeight drops to 0 and the rest of the sticky
-   stack (date-header, habits, allday) self-heals via the ResizeObserver in
-   TimelineView.
+   Periodic Header (Week row)
+   Sits above .date-header in TimelineView and ScheduleView. Renders week
+   number segments that link to weekly notes. Visibility controlled by the
+   showWeekRow plugin setting.
 ============================================================================= */
 
 .periodic-header {
@@ -18,26 +13,15 @@
     z-index: var(--z-timeline-periodic-header);
 }
 
-/* Row layout — slimmer than the daily date-header below (30px vs 40px) so
-   the year-month / week rows read as secondary context, not equal weight to
-   the day labels. The bottom divider is owned by segments (not the row) so
-   the axis column has no horizontal cuts between YM / W / date-header axis
-   cells. grid-template-rows is explicit because the row's auto-track
-   otherwise resolves to the date-header rhythm (40px) and ignores the
-   declared cell height. */
 .periodic-header__row {
     width: 100%;
     grid-template-rows: 30px;
 }
 
 .periodic-header__axis {
-    /* Left axis cell, occupies grid column 1. Acts as a clickable toggle
-       region together with W-axis and date-header axis. No bottom border so
-       the three cells fuse into one column visually. */
     border-right: 1px solid var(--tv-border);
     border-left: 1px solid var(--tv-border);
     min-height: 0;
-    cursor: pointer;
 }
 
 .periodic-header__segment {
@@ -56,8 +40,6 @@
     font-weight: bold;
 }
 
-/* Today is contained in this segment — accent the text the same way
-   mini-calendar marks the current year/month/week. */
 .periodic-header__segment.is-current {
     color: var(--tv-text-accent);
 }
@@ -65,9 +47,6 @@
 .periodic-header__link {
     color: inherit;
     text-decoration: none;
-    /* Inherit the segment's bold weight; Obsidian's .internal-link default
-       (400) would otherwise win the cascade and make the link text lighter
-       than the date-header link below, breaking the visual rhythm. */
     font: inherit;
     text-overflow: ellipsis;
     overflow: hidden;
@@ -77,24 +56,4 @@
 
 .periodic-header__link:hover {
     text-decoration: underline;
-}
-
-.periodic-header__separator {
-    color: var(--tv-text-faint);
-    font-weight: normal;
-}
-
-/* Collapsed state — hide both rows so wrapper offsetHeight is 0
-   (sticky stack self-heals via ResizeObserver in updateStickyOffsets). */
-.periodic-header--collapsed > .periodic-header__row {
-    display: none;
-}
-
-/* Chevron toggle installed into date-header axis cell — keep it small and
-   centered. Inherits .tv-section-toggle base from _section-toggle.css. The
-   click is handled on the axis cell itself, so the button is tabIndex=-1 and
-   visual-only. */
-.date-header__cell > .periodic-header__toggle {
-    margin: 0 auto;
-    pointer-events: none;
 }

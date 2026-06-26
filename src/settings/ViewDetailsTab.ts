@@ -93,6 +93,16 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
                 await plugin.saveSettings();
             }));
 
+    new Setting(el)
+        .setName(t('settings.views.showWeekRow'))
+        .setDesc(t('settings.views.showWeekRowDesc'))
+        .addToggle(toggle => toggle
+            .setValue(plugin.settings.showWeekRow)
+            .onChange(async (value) => {
+                plugin.settings.showWeekRow = value;
+                await plugin.saveSettings();
+            }));
+
     // Calendar / Mini Calendar
     el.createEl('h3', { text: t('settings.views.calendarMiniCalendar'), cls: 'setting-section-header' });
 

@@ -112,6 +112,8 @@
       "showAllDayDesc": "Default visibility of the all-day task section. Can be overridden per view.",
       "showTimeline": "Show timeline",
       "showTimelineDesc": "Default visibility of the hourly timeline section. Can be overridden per view.",
+      "showWeekRow": "Show week row",
+      "showWeekRowDesc": "Show a week-number row above the date header in Timeline and Schedule views.",
       "mobileTopOffset": "Mobile top offset (px)",
       "mobileTopOffsetDesc": "Top offset for mobile views when the header is hidden. Prevents overlap with the OS status bar.",
       "fixMobileGradientWidth": "Fix mobile gradient width",
@@ -635,10 +637,7 @@
     "expandAllDay": "Expand All Day",
     "collapseAllDay": "Collapse All Day"
   },
-  "periodicHeader": {
-    "expand": "Expand periodic header",
-    "collapse": "Collapse periodic header"
-  },
+  "periodicHeader": {},
   "cli": {
     "title": "Task Viewer CLI Reference",
     "commands": "Commands",

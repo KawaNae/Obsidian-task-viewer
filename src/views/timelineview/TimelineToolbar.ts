@@ -373,7 +373,7 @@ export class TimelineToolbar extends ViewToolbarBase {
                 }
                 this.callbacks.onScrollToNow();
             },
-            { label: t('toolbar.now') }
+            {}
         );
     }
 

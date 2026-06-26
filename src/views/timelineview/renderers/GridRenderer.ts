@@ -30,7 +30,6 @@ export class GridRenderer {
         private hoverParent: HoverParent,
         private dateHeaderRenderer: DateHeaderRenderer,
         private periodicHeaderRenderer: PeriodicHeaderRenderer,
-        private onPeriodicHeaderToggle: () => void,
     ) {}
 
     public render(
@@ -44,17 +43,14 @@ export class GridRenderer {
         filteredTasks: DisplayTask[],
         reconciler: CardReconciler,
     ) {
-        // Use parentContainer for rendering the grid
         const grid = parentContainer.createDiv('timeline-grid');
-        // Simple grid template - overlay scrollbar doesn't take space
         const colTemplate = `30px repeat(${this.viewState.daysToShow}, minmax(0, 1fr))`;
 
-        // Set view start date for MenuHandler (for E, ED, D type implicit start display)
         this.menuHandler.setViewStartDate(dates[0]);
 
         const startHour = this.plugin.settings.startHour;
 
-        // 1. Date Header Row — pre-compute overdue dates and delegate to shared renderer
+        // 1. Pre-compute overdue dates
         const todayVisualDate = DateUtils.getVisualDateOfNow(startHour);
         const completeChars = this.plugin.settings.statusDefinitions;
         const overdueDates = new Set<string>();
@@ -68,33 +64,28 @@ export class GridRenderer {
             }
         }
 
-        const periodicCollapsed = this.viewState.periodicHeaderCollapsed ?? true;
-
-        const periodicHeader = this.periodicHeaderRenderer.render(grid, {
+        // 2. Periodic header (week row only, controlled by setting)
+        this.periodicHeaderRenderer.render(grid, {
             dates,
             gridTemplateColumns: colTemplate,
-            collapsed: periodicCollapsed,
-            onToggle: this.onPeriodicHeaderToggle,
         });
 
-        const dateHeaderResult = this.dateHeaderRenderer.render(grid, {
+        // 3. Date header — reference year-month from startDate for contextual labels
+        const refYear = parseInt(this.viewState.startDate.substring(0, 4), 10);
+        const refMonth = parseInt(this.viewState.startDate.substring(5, 7), 10) - 1;
+
+        this.dateHeaderRenderer.render(grid, {
             dates,
             gridTemplateColumns: colTemplate,
             isOverdue: (date) => overdueDates.has(date),
-            enableCompactBehavior: true,
-            forceShortLabel: !periodicCollapsed,
+            referenceYearMonth: { year: refYear, month: refMonth },
         });
 
-        periodicHeader.mountInAxisCell(dateHeaderResult.axisCell);
-
-        // 2a. Moon Phase Row (fixed, sits above habits). Only created when
-        // the *effective* display flag is on — keeps the row absent entirely
-        // otherwise so the grid stays compact.
+        // 4. Moon Phase Row
         const astronomyDisplay = getEffectiveAstronomyDisplay(
             this.viewState.astronomyDisplay,
             this.plugin.settings.astronomy,
         );
-        // Raise sun lines above task cards when the per-view setting asks for it.
         grid.toggleClass('is-sun-front', astronomyDisplay.sunTimes && astronomyDisplay.sunTimesInFront);
         if (astronomyDisplay.moonPhase) {
             const moonRow = grid.createDiv('tv-grid-row moon-section');
@@ -104,24 +95,20 @@ export class GridRenderer {
 
         const showAllDay = this.viewState.showAllDay ?? this.plugin.settings.showAllDay;
         const showTimeline = this.viewState.showTimeline ?? this.plugin.settings.showTimeline;
-
         const showHabits = this.viewState.showHabits ?? this.plugin.settings.showHabits;
 
-        // 2b. Habits Row
+        // 5. Habits Row
         if (showHabits) {
             const habitsRow = grid.createDiv('tv-grid-row habits-section');
             habitsRow.style.gridTemplateColumns = colTemplate;
             habitRenderer.render(habitsRow, dates);
         }
 
-        // 3. Scroll Area (allday + timeline grid)
+        // 6. Scroll Area (allday + timeline grid)
         const scrollArea = grid.createDiv('timeline-scroll-area');
-
-        // セクション間で同じ task.id が両方に流れ込まないよう、ここで一度だけ
-        // 振り分ける。AllDay と Timeline の両方に同一カードが描画されるバグの根治。
         const buckets = bucketBySection(filteredTasks, startHour);
 
-        // 3.1. All-Day Row
+        // 6.1. All-Day Row
         if (showAllDay) {
             const allDayRow = scrollArea.createDiv('tv-grid-row allday-section');
             allDayRow.style.gridTemplateColumns = colTemplate;
@@ -147,7 +134,7 @@ export class GridRenderer {
             allDayRenderer.render(allDayRow, dates, buckets.allday, reconciler);
         }
 
-        // 3.2. Timeline Grid (time axis + day columns)
+        // 6.2. Timeline Grid (time axis + day columns)
         if (showTimeline) {
             const timelineGrid = scrollArea.createDiv('tv-grid-row timeline-scroll-area__grid');
             timelineGrid.style.gridTemplateColumns = colTemplate;
@@ -173,10 +160,6 @@ export class GridRenderer {
                 timelineRenderer.addCreateTaskListeners(col, date);
             });
         }
-
-        // Restore scroll position (To be handled by caller or via specific method if passed)
-        // For now, TimelineView handles restoring scroll position via its lastScrollTop property logic, 
-        // which might need to happen after this render returns.
     }
 
     private renderTimeLabels(container: HTMLElement) {
@@ -186,7 +169,6 @@ export class GridRenderer {
             const label = container.createDiv('timeline-scroll-area__time-label');
             label.style.setProperty('--label-hour', String(i));
 
-            // Display hour adjusted by startHour
             let displayHour = startHour + i;
             if (displayHour >= 24) displayHour -= 24;
 
@@ -195,26 +177,19 @@ export class GridRenderer {
     }
 
     public renderCurrentTimeIndicator() {
-        // Remove existing indicators
         const existingIndicators = this.container.querySelectorAll('.current-time-indicator');
         existingIndicators.forEach(el => el.remove());
 
         const now = new Date();
         const startHour = this.plugin.settings.startHour;
-
-        // Calculate current time in minutes from midnight
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-        // Calculate minutes relative to the visual day start
         let minutesFromStart = currentMinutes - (startHour * 60);
         if (minutesFromStart < 0) {
             minutesFromStart += 24 * 60;
         }
 
-        // Use local date string to match the column data-date (which assumes local dates)
         const visualDateString = DateUtils.getVisualDateOfNow(startHour);
-
-        // Find the column for this visual date
         const dayCol = this.container.querySelector(`.timeline-scroll-area__day-column[data-date="${visualDateString}"]`) as HTMLElement;
 
         if (dayCol) {

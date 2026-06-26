@@ -330,7 +330,6 @@ export interface ViewState {
     pinnedListCollapsed?: Record<string, boolean>;
     pinnedLists?: PinnedListDefinition[];
     customName?: string;
-    periodicHeaderCollapsed?: boolean;
     /** Per-leaf "mask mode" toggle. When true, the renderer substitutes each
      * card's content with the task's `tv-mask` value (live, not export-only). */
     maskMode?: boolean;
@@ -516,6 +515,7 @@ export interface TaskViewerSettings {
     showHabits: boolean;
     showAllDay: boolean;
     showTimeline: boolean;
+    showWeekRow: boolean;
     // External parser support (read-only).
     enableTasksPlugin: boolean;
     enableDayPlanner: boolean;
@@ -623,6 +623,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     showHabits: true,
     showAllDay: true,
     showTimeline: true,
+    showWeekRow: true,
     enableTasksPlugin: false,
     enableDayPlanner: false,
     tasksPluginMapping: {

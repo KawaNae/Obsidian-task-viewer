@@ -84,44 +84,45 @@ export class DateNavigator {
         toolbar: HTMLElement,
         onNavigate: (days: number) => void,
         onToday: () => void,
-        options?: { vertical?: boolean; label?: string; onNavigateFast?: (direction: number) => void }
+        options?: { vertical?: boolean; onNavigateFast?: (direction: number) => void }
     ): void {
         const vertical = options?.vertical ?? false;
-        const label = options?.label ?? t('toolbar.today');
         const prevIcon = vertical ? 'chevron-up' : 'chevron-left';
         const nextIcon = vertical ? 'chevron-down' : 'chevron-right';
         const prevLabel = vertical ? t('toolbar.previousWeek') : t('toolbar.previousDay');
         const nextLabel = vertical ? t('toolbar.nextWeek') : t('toolbar.nextDay');
 
+        const navGroup = toolbar.createDiv('view-toolbar__nav-group');
+
         if (options?.onNavigateFast) {
             const fastPrevIcon = vertical ? 'chevrons-up' : 'chevrons-left';
-            const fastPrevBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+            const fastPrevBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
             setIcon(fastPrevBtn, fastPrevIcon);
             fastPrevBtn.setAttribute('aria-label', t('toolbar.previousMonth'));
             const onFastPrev = options.onNavigateFast;
             fastPrevBtn.onclick = () => onFastPrev(-1);
         }
 
-        const prevBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        const prevBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(prevBtn, prevIcon);
         prevBtn.setAttribute('aria-label', prevLabel);
         prevBtn.onclick = () => onNavigate(-1);
 
-        const todayBtn = toolbar.createEl('button', {
+        const todayBtn = navGroup.createEl('button', {
             cls: 'view-toolbar__btn--today',
-            text: label
+            text: t('toolbar.today'),
         });
-        todayBtn.setAttribute('aria-label', label);
+        todayBtn.setAttribute('aria-label', t('toolbar.today'));
         todayBtn.onclick = () => onToday();
 
-        const nextBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        const nextBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(nextBtn, nextIcon);
         nextBtn.setAttribute('aria-label', nextLabel);
         nextBtn.onclick = () => onNavigate(1);
 
         if (options?.onNavigateFast) {
             const fastNextIcon = vertical ? 'chevrons-down' : 'chevrons-right';
-            const fastNextBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+            const fastNextBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
             setIcon(fastNextBtn, fastNextIcon);
             fastNextBtn.setAttribute('aria-label', t('toolbar.nextMonth'));
             const onFastNext = options.onNavigateFast;

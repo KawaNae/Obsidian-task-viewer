@@ -333,7 +333,6 @@ export class TimelineView extends ItemView {
             this.hoverParent,
             this.dateHeaderRenderer,
             this.periodicHeaderRenderer,
-            () => this.togglePeriodicHeader(),
         );
         this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.menuHandler, this.readService);
         // Persistent host for pinned lists. Lives outside the empty() target
@@ -705,13 +704,6 @@ export class TimelineView extends ItemView {
         if (dateHeader) this.stickyAnchorObserver.observe(dateHeader);
         if (moon) this.stickyAnchorObserver.observe(moon);
         if (habits) this.stickyAnchorObserver.observe(habits);
-    }
-
-    private togglePeriodicHeader(): void {
-        const current = this.viewState.periodicHeaderCollapsed ?? true;
-        this.viewState.periodicHeaderCollapsed = !current;
-        this.app.workspace.requestSaveLayout();
-        this.render();
     }
 
     private getPinnedListCallbacks(): PinnedListCallbacks {
