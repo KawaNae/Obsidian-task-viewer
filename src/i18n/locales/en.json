@@ -86,6 +86,8 @@
       "navigation": "Navigation",
       "showSunTimes": "Show sunrise / sunset lines",
       "showSunTimesDesc": "Draw thin horizontal lines at sunrise and sunset on the timeline. Requires latitude and longitude.",
+      "showSunInFront": "Sunrise / sunset lines in front",
+      "showSunInFrontDesc": "When on, the lines layer in front of task cards. When off (default) they sit behind all cards. Each view can override this from its options menu.",
       "showMoonPhase": "Show moon phase row",
       "showMoonPhaseDesc": "Show a per-date moon phase icon above the habits row.",
       "homeLatitude": "Latitude",
@@ -104,6 +106,14 @@
       "display": "Display",
       "hideViewHeader": "Hide view header",
       "hideViewHeaderDesc": "Hide the view header (navigation bar) in task viewer panels.",
+      "showHabits": "Show habit tracker",
+      "showHabitsDesc": "Default visibility of the habit tracker row. Can be overridden per view.",
+      "showAllDay": "Show all-day section",
+      "showAllDayDesc": "Default visibility of the all-day task section. Can be overridden per view.",
+      "showTimeline": "Show timeline",
+      "showTimelineDesc": "Default visibility of the hourly timeline section. Can be overridden per view.",
+      "showWeekRow": "Show week row",
+      "showWeekRowDesc": "Show a week-number row above the date header in Timeline and Schedule views.",
       "mobileTopOffset": "Mobile top offset (px)",
       "mobileTopOffsetDesc": "Top offset for mobile views when the header is hidden. Prevents overlap with the OS status bar.",
       "fixMobileGradientWidth": "Fix mobile gradient width",
@@ -231,7 +241,10 @@
   "viewOptions": {
     "toggleSunTimes": "Show sunrise / sunset lines",
     "toggleMoonPhase": "Show moon phase",
-    "followGlobalAstronomy": "Follow global setting"
+    "toggleHabits": "Habit tracker",
+    "toggleAllDay": "All-day section",
+    "toggleTimeline": "Timeline",
+    "followGlobal": "Follow global setting"
   },
   "toolbar": {
     "today": "Today",
@@ -253,6 +266,7 @@
     "copyAsLink": "Copy as link",
     "exportAsImage": "Export as image",
     "maskMode": "Mask mode",
+    "sidebar": "Sidebar",
     "position": "Position",
     "noFolderConfigured": "No folder configured",
     "noTemplatesFound": "No templates found",
@@ -624,10 +638,7 @@
     "expandAllDay": "Expand All Day",
     "collapseAllDay": "Collapse All Day"
   },
-  "periodicHeader": {
-    "expand": "Expand periodic header",
-    "collapse": "Collapse periodic header"
-  },
+  "periodicHeader": {},
   "cli": {
     "title": "Task Viewer CLI Reference",
     "commands": "Commands",

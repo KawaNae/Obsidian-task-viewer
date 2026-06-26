@@ -79,19 +79,31 @@ export abstract class GenerationCommand implements CommandStrategy {
         };
 
         if (isWhenDone) {
-            // when-done: nextDateObj を新しい startDate とし、元の span 幅を保持
+            // when-done: present の最古フィールド(start > end > due)を span の起点と
+            // し、それを nextDateStr に移して他フィールドの相対差を保つ。start-less
+            // (due-only / end-only)でも起点が today に化けず、過去日付に飛ばない。
             const nextDateStr = DateUtils.getLocalDateString(nextDateObj);
-            const baseStartDate = task.startDate ? this.parseDate(task.startDate) : baseDateObj;
+            const spanBase = task.startDate
+                ? this.parseDate(task.startDate)
+                : task.endDate
+                    ? this.parseDate(task.endDate)
+                    : task.due
+                        ? this.parseDate(task.due)
+                        : baseDateObj;
 
             return {
                 ...task,
                 ...commonOverrides,
-                startDate: task.startDate ? this.preserveTime(nextDateStr, task.startDate) : undefined,
+                startDate: task.startDate
+                    ? this.shiftDateFromBase(nextDateStr, spanBase, task.startDate)
+                    : undefined,
                 endDate: task.endDate
-                    ? this.shiftDateFromBase(nextDateStr, baseStartDate, task.endDate)
-                    : (task.endTime && task.startDate) ? nextDateStr : undefined,
+                    ? this.shiftDateFromBase(nextDateStr, spanBase, task.endDate)
+                    : (task.endTime && task.startDate)
+                        ? this.shiftDateFromBase(nextDateStr, spanBase, task.startDate)
+                        : undefined,
                 due: task.due
-                    ? this.shiftDateFromBase(nextDateStr, baseStartDate, task.due)
+                    ? this.shiftDateFromBase(nextDateStr, spanBase, task.due)
                     : undefined,
             };
         }

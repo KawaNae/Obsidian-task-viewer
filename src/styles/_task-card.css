@@ -719,6 +719,16 @@
     --task-card-frame-width: 2px;
 }
 
+/* Selection z-index overlay. The base z-index is owned by decorateLane (inline
+   style), so !important is required to layer a selected card above its
+   neighbours. The overlay drops the instant .is-selected is removed, leaving
+   the inline base z-index (always current from the latest render) intact — no
+   stale save/restore. Ghosts inherit .is-selected for the frame but must keep
+   their own drag z-index (9999 / 10), so they are excluded here. */
+.task-card.is-selected:not(.task-card--ghost-positioned):not(.task-card--ghost-grid) {
+    z-index: var(--z-task-card-selected) !important;
+}
+
 .task-card.is-dragging {
     opacity: 0.5;
     cursor: grabbing;

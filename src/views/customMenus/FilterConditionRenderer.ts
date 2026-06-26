@@ -14,7 +14,7 @@ import {
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 import { t } from '../../i18n';
 import type { PopoverStack } from '../sharedUI/PopoverStack';
-import type { PopoverShell } from '../sharedUI/PopoverShell';
+import { SuggestController } from './SuggestController';
 
 export class FilterConditionRenderer {
     constructor(
@@ -138,66 +138,23 @@ export class FilterConditionRenderer {
         });
         input.value = opts.initialValue;
 
-        const stack = this.getStack();
-        let shell: PopoverShell | null = null;
-        let selectedIdx = -1;
-        let suggestItems: { el: HTMLElement; value: string }[] = [];
-
-        const closeSuggest = () => {
-            if (shell) stack.close(shell);
-            shell = null;
-            suggestItems = [];
-            selectedIdx = -1;
-        };
-
-        const updateHighlight = () => {
-            for (let i = 0; i < suggestItems.length; i++) {
-                suggestItems[i].el.classList.toggle('filter-popover__tag-suggest-item--active', i === selectedIdx);
-            }
-            if (selectedIdx >= 0 && suggestItems[selectedIdx]) {
-                suggestItems[selectedIdx].el.scrollIntoView({ block: 'nearest' });
-            }
-        };
+        const suggest = new SuggestController(this.getStack(), inputWrap, opts.suggestClass, 'min');
 
         const showSuggest = (query: string, showAll: boolean) => {
-            const all = opts.getCandidates();
             const q = query.toLowerCase();
-            const filtered = all.filter(v => {
+            const filtered = opts.getCandidates().filter(v => {
                 if (showAll || !q) return true;
                 return v.toLowerCase().includes(q);
             });
-            if (filtered.length === 0) {
-                closeSuggest();
-                return;
-            }
-
-            const newItems: { el: HTMLElement; value: string }[] = [];
-            shell = stack.openChild({
-                anchor: { kind: 'element', element: inputWrap },
-                className: `filter-popover__tag-suggest ${opts.suggestClass}`,
-                extraContains: [inputWrap],
-                build: (suggestEl) => {
-                    suggestEl.style.minWidth = `${inputWrap.getBoundingClientRect().width}px`;
-                    for (const val of filtered) {
-                        const item = suggestEl.createDiv('filter-popover__tag-suggest-item');
-                        item.createSpan().setText(val);
-                        item.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            input.value = val;
-                            closeSuggest();
-                            opts.onCommit(val);
-                        });
-                        newItems.push({ el: item, value: val });
-                    }
+            suggest.show(
+                filtered,
+                (item, val) => { item.createSpan().setText(val); },
+                (val) => {
+                    input.value = val;
+                    suggest.close();
+                    opts.onCommit(val);
                 },
-                onClose: () => {
-                    shell = null;
-                    suggestItems = [];
-                    selectedIdx = -1;
-                },
-            });
-            suggestItems = newItems;
-            selectedIdx = -1;
+            );
         };
 
         input.addEventListener('input', () => {
@@ -206,29 +163,20 @@ export class FilterConditionRenderer {
         input.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                if (!shell) {
-                    showSuggest(input.value, !input.value);
-                } else if (suggestItems.length > 0) {
-                    selectedIdx = (selectedIdx + 1) % suggestItems.length;
-                    updateHighlight();
-                }
+                if (!suggest.isOpen) showSuggest(input.value, !input.value);
+                else suggest.moveHighlight(1);
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                if (suggestItems.length > 0) {
-                    selectedIdx = selectedIdx <= 0 ? suggestItems.length - 1 : selectedIdx - 1;
-                    updateHighlight();
-                }
+                suggest.moveHighlight(-1);
             } else if (e.key === 'Enter') {
                 e.preventDefault();
-                const picked = selectedIdx >= 0 && suggestItems[selectedIdx]
-                    ? suggestItems[selectedIdx].value
-                    : input.value;
+                const picked = suggest.highlightedValue ?? input.value;
                 input.value = picked;
-                closeSuggest();
+                suggest.close();
                 opts.onCommit(picked);
                 input.blur();
             } else if (e.key === 'Escape') {
-                closeSuggest();
+                suggest.close();
             }
         });
         input.addEventListener('focus', () => {
@@ -261,17 +209,7 @@ export class FilterConditionRenderer {
         });
 
         // Suggest state
-        const stack = this.getStack();
-        let shell: PopoverShell | null = null;
-        let selectedIdx = -1;
-        let suggestItems: { el: HTMLElement; value: string }[] = [];
-
-        const closeSuggest = () => {
-            if (shell) stack.close(shell);
-            shell = null;
-            suggestItems = [];
-            selectedIdx = -1;
-        };
+        const suggest = new SuggestController(this.getStack(), inputWrap, '', 'exact');
 
         const statusDefs = this.getStatusDefs();
         const tasks = this.getLastTasks();
@@ -285,7 +223,7 @@ export class FilterConditionRenderer {
                 this.getOnFilterChange()?.();
             }
             input.value = '';
-            closeSuggest();
+            suggest.close();
             this.renderContent();
         };
 
@@ -299,56 +237,25 @@ export class FilterConditionRenderer {
                 if (showAll || !q) return true;
                 return getValueDisplay(prop, v, statusDefs).toLowerCase().includes(q) || v.toLowerCase().includes(q);
             });
-            if (filtered.length === 0) {
-                closeSuggest();
-                return;
-            }
 
-            const newItems: { el: HTMLElement; value: string }[] = [];
-            shell = stack.openChild({
-                anchor: { kind: 'element', element: inputWrap },
-                className: 'filter-popover__tag-suggest',
-                extraContains: [inputWrap],
-                build: (suggestEl) => {
-                    suggestEl.style.width = `${inputWrap.getBoundingClientRect().width}px`;
-                    for (const val of filtered) {
-                        const item = suggestEl.createDiv('filter-popover__tag-suggest-item');
-                        if (prop === 'color') {
-                            const swatch = item.createSpan('filter-popover__color-swatch');
-                            swatch.style.backgroundColor = val;
-                        } else if (prop === 'status') {
-                            const checkbox = item.createEl('input', { cls: 'task-list-item-checkbox filter-popover__status-checkbox' });
-                            checkbox.type = 'checkbox';
-                            checkbox.checked = val !== ' ';
-                            checkbox.readOnly = true;
-                            checkbox.tabIndex = -1;
-                            if (val !== ' ') checkbox.dataset.task = val;
-                        }
-                        item.createSpan().setText(getValueDisplay(prop, val, statusDefs));
-                        item.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            addValue(val);
-                        });
-                        newItems.push({ el: item, value: val });
+            suggest.show(
+                filtered,
+                (item, val) => {
+                    if (prop === 'color') {
+                        const swatch = item.createSpan('filter-popover__color-swatch');
+                        swatch.style.backgroundColor = val;
+                    } else if (prop === 'status') {
+                        const checkbox = item.createEl('input', { cls: 'task-list-item-checkbox filter-popover__status-checkbox' });
+                        checkbox.type = 'checkbox';
+                        checkbox.checked = val !== ' ';
+                        checkbox.readOnly = true;
+                        checkbox.tabIndex = -1;
+                        if (val !== ' ') checkbox.dataset.task = val;
                     }
+                    item.createSpan().setText(getValueDisplay(prop, val, statusDefs));
                 },
-                onClose: () => {
-                    shell = null;
-                    suggestItems = [];
-                    selectedIdx = -1;
-                },
-            });
-            suggestItems = newItems;
-            selectedIdx = -1;
-        };
-
-        const updateHighlight = () => {
-            for (let i = 0; i < suggestItems.length; i++) {
-                suggestItems[i].el.classList.toggle('filter-popover__tag-suggest-item--active', i === selectedIdx);
-            }
-            if (selectedIdx >= 0 && suggestItems[selectedIdx]) {
-                suggestItems[selectedIdx].el.scrollIntoView({ block: 'nearest' });
-            }
+                (val) => addValue(val),
+            );
         };
 
         // Input events
@@ -359,27 +266,21 @@ export class FilterConditionRenderer {
         input.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                if (!shell) {
-                    showSuggest(input.value, !input.value);
-                } else if (suggestItems.length > 0) {
-                    selectedIdx = (selectedIdx + 1) % suggestItems.length;
-                    updateHighlight();
-                }
+                if (!suggest.isOpen) showSuggest(input.value, !input.value);
+                else suggest.moveHighlight(1);
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                if (suggestItems.length > 0) {
-                    selectedIdx = selectedIdx <= 0 ? suggestItems.length - 1 : selectedIdx - 1;
-                    updateHighlight();
-                }
+                suggest.moveHighlight(-1);
             } else if (e.key === 'Enter') {
                 e.preventDefault();
-                if (selectedIdx >= 0 && suggestItems[selectedIdx]) {
-                    addValue(suggestItems[selectedIdx].value);
+                const hl = suggest.highlightedValue;
+                if (hl !== null) {
+                    addValue(hl);
                 } else if (input.value.trim()) {
                     addValue(input.value);
                 }
             } else if (e.key === 'Escape') {
-                closeSuggest();
+                suggest.close();
             } else if (e.key === 'Backspace' && !input.value && currentValues.length > 0) {
                 // Remove last pill on backspace in empty input
                 const last = currentValues[currentValues.length - 1];

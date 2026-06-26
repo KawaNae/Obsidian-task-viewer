@@ -1,6 +1,7 @@
-import { App, TFile } from 'obsidian';
+import { App, TFile, normalizePath } from 'obsidian';
 import { DEFAULT_TV_FILE_KEYS, TvFileKeys, Task, PropertyValue } from '../../types';
 import { FileOperations } from './utils/FileOperations';
+import { FrontmatterLineEditor } from './utils/FrontmatterLineEditor';
 import { DateUtils } from '../../utils/DateUtils';
 import { TagExtractor } from '../parsing/utils/TagExtractor';
 
@@ -23,11 +24,12 @@ export class TaskConverter {
         headerLevel: number,
         sourceFileColor?: string,
         sourceSharedTags?: string[],
-        frontmatterKeys: TvFileKeys = DEFAULT_TV_FILE_KEYS
+        frontmatterKeys: TvFileKeys = DEFAULT_TV_FILE_KEYS,
+        bodyChildLines: string[] = []
     ): Promise<string> {
         const filePath = this.generateFilePath(task);
         const frontmatter = this.buildFrontmatterContent(task, sourceFileColor, sourceSharedTags, frontmatterKeys);
-        const body = this.buildBodyContent(task, headerName, headerLevel);
+        const body = this.buildBodyContent(bodyChildLines, headerName, headerLevel);
         const content = frontmatter + body;
 
         await this.app.vault.create(filePath, content);
@@ -49,18 +51,19 @@ export class TaskConverter {
             baseName = baseName.substring(0, 100);
         }
 
-        // Obsidian のデフォルト保存先フォルダ
-        const folder = this.app.fileManager.getNewFileParent('');
+        // 変換元ファイル基準の保存先フォルダ。パスは normalizePath で正準化
+        // (root の '/' 起因の '//' 二重スラッシュ → wikilink リンク切れを防ぐ)。
+        const folder = this.app.fileManager.getNewFileParent(task.file);
         const prefix = folder.path ? `${folder.path}/` : '';
 
         // 衝突チェック + 自動採番
-        let candidate = `${prefix}${baseName}.md`;
+        let candidate = normalizePath(`${prefix}${baseName}.md`);
         if (!this.app.vault.getAbstractFileByPath(candidate)) {
             return candidate;
         }
 
         for (let i = 2; i < 100; i++) {
-            candidate = `${prefix}${baseName} ${i}.md`;
+            candidate = normalizePath(`${prefix}${baseName} ${i}.md`);
             if (!this.app.vault.getAbstractFileByPath(candidate)) {
                 return candidate;
             }
@@ -99,34 +102,38 @@ export class TaskConverter {
             lines.push(`${frontmatterKeys.end}: ${endValue}`);
         }
 
-        // due
+        // due (日付フィールドは plain 出力 — start/end と対称。escapeYamlScalar は
+        // ユーザー任意文字列 content/status 専用)
         if (task.due) {
             lines.push(`${frontmatterKeys.due}: ${task.due}`);
         }
 
         // content (#tag を除去して tv-content に書く)
+        // 空なら省略 — update パス (FrontmatterWriter) が空 content でキーを削除するのと対称。
         const cleanContent = task.content.replace(/\B#[^\s#]+/g, '').trim();
-        lines.push(`${frontmatterKeys.content}: ${cleanContent}`);
+        if (cleanContent) {
+            lines.push(`${frontmatterKeys.content}: ${FrontmatterLineEditor.escapeYamlScalar(cleanContent)}`);
+        }
 
         // status (デフォルトの ' ' は省略)
         if (task.statusChar && task.statusChar !== ' ') {
-            lines.push(`${frontmatterKeys.status}: ${task.statusChar}`);
+            lines.push(`${frontmatterKeys.status}: ${FrontmatterLineEditor.escapeYamlScalar(task.statusChar)}`);
         }
 
         // color (タスクの解決済み値を優先、ソースファイルをフォールバック)
         const effectiveColor = task.color || color;
         if (effectiveColor) {
-            lines.push(`${frontmatterKeys.color}: "${this.escapeForDoubleQuotedYaml(effectiveColor)}"`);
+            lines.push(`${frontmatterKeys.color}: ${FrontmatterLineEditor.escapeYamlScalar(effectiveColor)}`);
         }
 
         // linestyle
         if (task.linestyle) {
-            lines.push(`${frontmatterKeys.linestyle}: "${this.escapeForDoubleQuotedYaml(task.linestyle)}"`);
+            lines.push(`${frontmatterKeys.linestyle}: ${FrontmatterLineEditor.escapeYamlScalar(task.linestyle)}`);
         }
 
         // mask
         if (task.mask) {
-            lines.push(`${frontmatterKeys.mask}: "${this.escapeForDoubleQuotedYaml(task.mask)}"`);
+            lines.push(`${frontmatterKeys.mask}: ${FrontmatterLineEditor.escapeYamlScalar(task.mask)}`);
         }
 
         // tags
@@ -134,7 +141,8 @@ export class TaskConverter {
             ? TagExtractor.merge(task.tags, sharedTags)
             : task.tags;
         if (allTags.length > 0) {
-            lines.push(`tags: [${allTags.join(', ')}]`);
+            const tagItems = allTags.map(t => FrontmatterLineEditor.escapeYamlScalar(t)).join(', ');
+            lines.push(`tags: [${tagItems}]`);
         }
 
         // custom properties
@@ -157,15 +165,11 @@ export class TaskConverter {
             case 'array': {
                 const inner = prop.value.startsWith('[') ? prop.value.slice(1, -1) : prop.value;
                 const items = inner.split(',').map(s => s.trim()).filter(s => s !== '');
-                return `[${items.join(', ')}]`;
+                return `[${items.map(s => FrontmatterLineEditor.escapeYamlScalar(s)).join(', ')}]`;
             }
-            default: {
-                // Quote strings that contain YAML-sensitive characters
-                if (/[:#{}[\],&*?|<>=!%@'"]/.test(prop.value) || prop.value !== prop.value.trim()) {
-                    return `"${this.escapeForDoubleQuotedYaml(prop.value)}"`;
-                }
-                return prop.value;
-            }
+            default:
+                // Delegate to the single canonical scalar authority.
+                return FrontmatterLineEditor.escapeYamlScalar(prop.value);
         }
     }
 
@@ -173,23 +177,17 @@ export class TaskConverter {
      * Body コンテンツを構築。
      * childLines がある場合は指定された見出し下に配置。
      */
-    private buildBodyContent(task: Task, header: string, headerLevel: number): string {
-        if (task.childLines.length === 0) {
+    /**
+     * 子行を見出し下に配置する body を構築。childLineTexts は変換元から取得した
+     * 生の子行(property 行除外・インデント正規化済み)。@notation 子・孫・説明文・
+     * 通常チェックボックスを区別せず全て含み、tv-file 再スキャンで childLines /
+     * childIds に再分類させる(削除範囲と対称 = データ消失しない)。
+     */
+    private buildBodyContent(childLineTexts: string[], header: string, headerLevel: number): string {
+        if (childLineTexts.length === 0) {
             return '';
         }
-
-        const headerPrefix = '#'.repeat(headerLevel) + ' ';
-        const lines = ['', headerPrefix + header]; // 空行 + 見出し
-        // プロパティ行は frontmatter に昇格済みなので body から除外
-        lines.push(...task.childLines.filter(cl => cl.propertyKey === null).map(cl => cl.text));
-
-        return lines.join('\n');
-    }
-
-    /**
-     * Double-quoted YAML scalar 向けに \ と " をエスケープ。
-     */
-    private escapeForDoubleQuotedYaml(value: string): string {
-        return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const headerPrefix = '#'.repeat(headerLevel) + ' '; // 空行 + 見出し + 子行
+        return ['', headerPrefix + header, ...childLineTexts].join('\n');
     }
 }

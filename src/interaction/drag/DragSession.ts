@@ -75,4 +75,17 @@ export class DragSession {
         this.currentDragTaskId = null;
         this.container.style.touchAction = '';
     }
+
+    /**
+     * Abort the active gesture without committing the edit (pointercancel /
+     * lost-capture). Mirrors handleUp's teardown minus the commit + notify.
+     */
+    cancel(): void {
+        if (!this.currentStrategy) return;
+        this.currentStrategy.onCancel();
+        this.writeService.setDraggingFile(null);
+        this.currentStrategy = null;
+        this.currentDragTaskId = null;
+        this.container.style.touchAction = '';
+    }
 }

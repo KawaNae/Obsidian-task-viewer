@@ -84,44 +84,45 @@ export class DateNavigator {
         toolbar: HTMLElement,
         onNavigate: (days: number) => void,
         onToday: () => void,
-        options?: { vertical?: boolean; label?: string; onNavigateFast?: (direction: number) => void }
+        options?: { vertical?: boolean; onNavigateFast?: (direction: number) => void }
     ): void {
         const vertical = options?.vertical ?? false;
-        const label = options?.label ?? t('toolbar.today');
         const prevIcon = vertical ? 'chevron-up' : 'chevron-left';
         const nextIcon = vertical ? 'chevron-down' : 'chevron-right';
         const prevLabel = vertical ? t('toolbar.previousWeek') : t('toolbar.previousDay');
         const nextLabel = vertical ? t('toolbar.nextWeek') : t('toolbar.nextDay');
 
+        const navGroup = toolbar.createDiv('view-toolbar__nav-group');
+
         if (options?.onNavigateFast) {
             const fastPrevIcon = vertical ? 'chevrons-up' : 'chevrons-left';
-            const fastPrevBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+            const fastPrevBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
             setIcon(fastPrevBtn, fastPrevIcon);
             fastPrevBtn.setAttribute('aria-label', t('toolbar.previousMonth'));
             const onFastPrev = options.onNavigateFast;
             fastPrevBtn.onclick = () => onFastPrev(-1);
         }
 
-        const prevBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        const prevBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(prevBtn, prevIcon);
         prevBtn.setAttribute('aria-label', prevLabel);
         prevBtn.onclick = () => onNavigate(-1);
 
-        const todayBtn = toolbar.createEl('button', {
+        const todayBtn = navGroup.createEl('button', {
             cls: 'view-toolbar__btn--today',
-            text: label
+            text: t('toolbar.today'),
         });
-        todayBtn.setAttribute('aria-label', label);
+        todayBtn.setAttribute('aria-label', t('toolbar.today'));
         todayBtn.onclick = () => onToday();
 
-        const nextBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        const nextBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(nextBtn, nextIcon);
         nextBtn.setAttribute('aria-label', nextLabel);
         nextBtn.onclick = () => onNavigate(1);
 
         if (options?.onNavigateFast) {
             const fastNextIcon = vertical ? 'chevrons-down' : 'chevrons-right';
-            const fastNextBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
+            const fastNextBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
             setIcon(fastNextBtn, fastNextIcon);
             fastNextBtn.setAttribute('aria-label', t('toolbar.nextMonth'));
             const onFastNext = options.onNavigateFast;
@@ -325,22 +326,25 @@ export class ViewSettingsMenu {
     }
 
     static showMenu(e: MouseEvent, options: ViewSettingsOptions): void {
+        options.menuPresenter.present((menu) => {
+            ViewSettingsMenu.appendItems(menu, options);
+        }, { kind: 'mouseEvent', event: e });
+    }
+
+    static appendItems(menu: Menu, options: ViewSettingsOptions): void {
         const {
             app, leaf, getCustomName, getDefaultName, onRename,
             buildUri, viewType, getViewTemplateFolder, getViewTemplate, onApplyTemplate, onReset,
-            menuPresenter, appendCustomItems,
+            appendCustomItems,
         } = options;
 
         const folder = getViewTemplateFolder();
-        menuPresenter.present((menu) => {
-        // View-specific items (astronomy toggles etc.). Added first so the
-        // shared Save/Load/Reset block remains the lower, stable section.
+
         if (appendCustomItems) {
             appendCustomItems(menu);
             menu.addSeparator();
         }
 
-        // Save view... (name required, saves template + updates customName)
         menu.addItem((item) => {
             item.setTitle(t('toolbar.saveView'))
                 .setIcon('save')
@@ -369,7 +373,6 @@ export class ViewSettingsMenu {
                 });
         });
 
-        // Load view... (submenu)
         menu.addItem((item) => {
             item.setTitle(t('toolbar.loadView'))
                 .setIcon('folder-open');
@@ -403,7 +406,6 @@ export class ViewSettingsMenu {
             }
         });
 
-        // Reset view
         menu.addItem((item) => {
             item.setTitle(t('toolbar.resetView'))
                 .setIcon('rotate-ccw')
@@ -412,7 +414,6 @@ export class ViewSettingsMenu {
 
         menu.addSeparator();
 
-        // Copy URI
         menu.addItem((item) => {
             item.setTitle(t('toolbar.copyUri'))
                 .setIcon('link')
@@ -421,7 +422,6 @@ export class ViewSettingsMenu {
                     uriOpts.position = ViewUriBuilder.detectLeafPosition(leaf, app.workspace);
                     uriOpts.name = getCustomName();
 
-                    // Use template reference if folder is configured
                     if (folder) {
                         uriOpts.template = getCustomName() || getDefaultName();
                     }
@@ -432,7 +432,6 @@ export class ViewSettingsMenu {
                 });
         });
 
-        // Copy as Obsidian link [name](uri)
         menu.addItem((item) => {
             item.setTitle(t('toolbar.copyAsLink'))
                 .setIcon('external-link')
@@ -453,8 +452,6 @@ export class ViewSettingsMenu {
                 });
         });
 
-        // Export as image — single "full content" entry. The viewport-only mode
-        // is gone; OS screenshot is the right tool for that.
         if (options.getExportContainer && options.getExportSpec) {
             menu.addSeparator();
             const getContainer = options.getExportContainer;
@@ -486,7 +483,6 @@ export class ViewSettingsMenu {
 
         menu.addSeparator();
 
-        // Position (read-only)
         menu.addItem((item) => {
             item.setTitle(t('toolbar.position')).setDisabled(true);
         });
@@ -497,7 +493,6 @@ export class ViewSettingsMenu {
                 .setChecked(true)
                 .setDisabled(true);
         });
-        }, { kind: 'mouseEvent', event: e });
     }
 
     private static toShortViewType(viewType: string): string {

@@ -1,4 +1,3 @@
-import { setIcon } from 'obsidian';
 import type { HoverParent } from 'obsidian';
 import { ViewState, isCompleteStatusChar } from '../../../types';
 import TaskViewerPlugin from '../../../main';
@@ -23,8 +22,6 @@ import { PeriodicHeaderRenderer } from '../../sharedUI/PeriodicHeaderRenderer';
 import { CardReconciler } from '../../sharedUI/CardReconciler';
 
 export class GridRenderer {
-    private isAllDayCollapsed: boolean = false;
-
     constructor(
         private container: HTMLElement,
         private viewState: ViewState,
@@ -33,7 +30,6 @@ export class GridRenderer {
         private hoverParent: HoverParent,
         private dateHeaderRenderer: DateHeaderRenderer,
         private periodicHeaderRenderer: PeriodicHeaderRenderer,
-        private onPeriodicHeaderToggle: () => void,
     ) {}
 
     public render(
@@ -47,17 +43,14 @@ export class GridRenderer {
         filteredTasks: DisplayTask[],
         reconciler: CardReconciler,
     ) {
-        // Use parentContainer for rendering the grid
         const grid = parentContainer.createDiv('timeline-grid');
-        // Simple grid template - overlay scrollbar doesn't take space
         const colTemplate = `30px repeat(${this.viewState.daysToShow}, minmax(0, 1fr))`;
 
-        // Set view start date for MenuHandler (for E, ED, D type implicit start display)
         this.menuHandler.setViewStartDate(dates[0]);
 
         const startHour = this.plugin.settings.startHour;
 
-        // 1. Date Header Row — pre-compute overdue dates and delegate to shared renderer
+        // 1. Pre-compute overdue dates
         const todayVisualDate = DateUtils.getVisualDateOfNow(startHour);
         const completeChars = this.plugin.settings.statusDefinitions;
         const overdueDates = new Set<string>();
@@ -71,156 +64,102 @@ export class GridRenderer {
             }
         }
 
-        const periodicCollapsed = this.viewState.periodicHeaderCollapsed ?? true;
-
-        const periodicHeader = this.periodicHeaderRenderer.render(grid, {
+        // 2. Periodic header (week row only, controlled by setting)
+        this.periodicHeaderRenderer.render(grid, {
             dates,
             gridTemplateColumns: colTemplate,
-            collapsed: periodicCollapsed,
-            onToggle: this.onPeriodicHeaderToggle,
         });
 
-        const dateHeaderResult = this.dateHeaderRenderer.render(grid, {
+        // 3. Date header — reference year-month from startDate for contextual labels
+        const refYear = parseInt(this.viewState.startDate.substring(0, 4), 10);
+        const refMonth = parseInt(this.viewState.startDate.substring(5, 7), 10) - 1;
+
+        this.dateHeaderRenderer.render(grid, {
             dates,
             gridTemplateColumns: colTemplate,
             isOverdue: (date) => overdueDates.has(date),
-            enableCompactBehavior: true,
-            forceShortLabel: !periodicCollapsed,
+            referenceYearMonth: { year: refYear, month: refMonth },
         });
 
-        periodicHeader.mountInAxisCell(dateHeaderResult.axisCell);
-
-        // 2a. Moon Phase Row (fixed, sits above habits). Only created when
-        // the *effective* display flag is on — keeps the row absent entirely
-        // otherwise so the grid stays compact.
+        // 4. Moon Phase Row
         const astronomyDisplay = getEffectiveAstronomyDisplay(
             this.viewState.astronomyDisplay,
             this.plugin.settings.astronomy,
         );
+        grid.toggleClass('is-sun-front', astronomyDisplay.sunTimes && astronomyDisplay.sunTimesInFront);
         if (astronomyDisplay.moonPhase) {
             const moonRow = grid.createDiv('tv-grid-row moon-section');
             moonRow.style.gridTemplateColumns = colTemplate;
             moonRenderer.render(moonRow, dates);
         }
 
-        // 2b. Habits Row (fixed, outside scroll area — always visible)
-        const habitsRow = grid.createDiv('tv-grid-row habits-section');
-        habitsRow.style.gridTemplateColumns = colTemplate;
-        habitRenderer.render(habitsRow, dates);
+        const showAllDay = this.viewState.showAllDay ?? this.plugin.settings.showAllDay;
+        const showTimeline = this.viewState.showTimeline ?? this.plugin.settings.showTimeline;
+        const showHabits = this.viewState.showHabits ?? this.plugin.settings.showHabits;
 
-        // 3. Scroll Area (allday + timeline grid)
-        const scrollArea = grid.createDiv('timeline-scroll-area');
-
-        // 3.1. All-Day Row (sticky on PC, scrolls on mobile via CSS)
-        const allDayRow = scrollArea.createDiv('tv-grid-row allday-section');
-        allDayRow.style.gridTemplateColumns = colTemplate;
-
-        // Time Axis All-Day (with toggle button)
-        const axisCell = allDayRow.createDiv('allday-section__cell allday-section__axis');
-        axisCell.setAttribute('role', 'button');
-        axisCell.setAttribute('tabindex', '0');
-        axisCell.setAttribute('aria-label', t('allDaySection.toggleAllDay'));
-
-        // Toggle button
-        const toggleBtn = axisCell.createEl('button', { cls: 'tv-section-toggle tv-section-toggle--axis' });
-        toggleBtn.tabIndex = -1;
-
-        // Label
-        const axisLabel = axisCell.createEl('span', { cls: 'allday-section__label' });
-        axisLabel.setText(t('allDaySection.allDay'));
-
-        axisCell.style.gridColumn = '1';
-        axisCell.style.gridRow = '1 / span 50'; // Span all implicit rows
-
-        const applyAllDayCollapsedState = () => {
-            setIcon(toggleBtn, this.isAllDayCollapsed ? 'plus' : 'minus');
-            allDayRow.toggleClass('allday-section--collapsed', this.isAllDayCollapsed);
-            axisCell.setAttribute('aria-expanded', (!this.isAllDayCollapsed).toString());
-            axisCell.setAttribute('aria-label', this.isAllDayCollapsed ? t('allDaySection.expandAllDay') : t('allDaySection.collapseAllDay'));
-        };
-
-        const toggleAllDayCollapsed = () => {
-            this.isAllDayCollapsed = !this.isAllDayCollapsed;
-            applyAllDayCollapsedState();
-        };
-
-        // Toggle functionality
-        axisCell.addEventListener('click', () => {
-            toggleAllDayCollapsed();
-        });
-
-        axisCell.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                toggleAllDayCollapsed();
-            }
-        });
-
-        // Apply initial collapsed state
-        applyAllDayCollapsedState();
-
-        // Background Cells (Grid Lines)
-        dates.forEach((date, i) => {
-            const cell = allDayRow.createDiv('allday-section__cell');
-            if (i === 0) {
-                cell.addClass('is-first-cell');
-                cell.dataset.collapsedLabel = t('allDaySection.allDay');
-            }
-            if (i === dates.length - 1) {
-                cell.addClass('is-last-cell');
-            }
-            cell.dataset.date = date;
-            cell.style.gridColumn = `${i + 2}`; // +2 because 1 is axis
-            cell.style.gridRow = '1 / span 50'; // Span implicit rows (large enough number)
-            cell.style.zIndex = '0';
-
-            // Add context menu for empty space
-            allDayRenderer.addEmptySpaceContextMenu(cell, date);
-        });
-
-        // セクション間で同じ task.id が両方に流れ込まないよう、ここで一度だけ
-        // 振り分ける。AllDay と Timeline の両方に同一カードが描画されるバグの根治。
-        const buckets = bucketBySection(filteredTasks, startHour);
-
-        // Render Tasks (Overlaid) — allday バケツのみ渡す
-        allDayRenderer.render(allDayRow, dates, buckets.allday, reconciler);
-
-        // 3.2. Timeline Grid (time axis + day columns)
-        const timelineGrid = scrollArea.createDiv('tv-grid-row timeline-scroll-area__grid');
-        timelineGrid.style.gridTemplateColumns = colTemplate;
-
-        // Time Axis Column
-        const timeCol = timelineGrid.createDiv('timeline-scroll-area__axis');
-        this.renderTimeLabels(timeCol);
-
-        // Sun arrows on the time-axis right border (anchor for the per-day
-        // sun lines). The axis is shared across all visible day columns, so
-        // we anchor to the first visible date — sun times shift by < 2 min/day,
-        // imperceptible at axis-arrow resolution.
-        if (astronomyDisplay.sunTimes && dates.length > 0) {
-            const { latitude, longitude } = this.plugin.settings.astronomy.location;
-            attachSunAxisArrows(timeCol, dates[0], { startHour, latitude, longitude });
+        // 5. Habits Row
+        if (showHabits) {
+            const habitsRow = grid.createDiv('tv-grid-row habits-section');
+            habitsRow.style.gridTemplateColumns = colTemplate;
+            habitRenderer.render(habitsRow, dates);
         }
 
-        // Day Columns — timed + dueOnly のみ。split で segment を生成してから日付分類。
-        const timelineInput = [...buckets.timed, ...buckets.dueOnly];
-        const splitResult = splitTasks(timelineInput, { type: 'visual-date', startHour });
-        const categorizedByDate = categorizeTasksByDate(splitResult, dates, startHour);
-        dates.forEach(date => {
-            const col = timelineGrid.createDiv('timeline-scroll-area__day-column');
-            col.dataset.date = date;
-            const timedTasks = categorizedByDate.get(date)?.timed ?? [];
-            timelineRenderer.render(col, date, timedTasks, reconciler, {
-                showSunTimes: astronomyDisplay.sunTimes,
+        // 6. Scroll Area (allday + timeline grid)
+        const scrollArea = grid.createDiv('timeline-scroll-area');
+        const buckets = bucketBySection(filteredTasks, startHour);
+
+        // 6.1. All-Day Row
+        if (showAllDay) {
+            const allDayRow = scrollArea.createDiv('tv-grid-row allday-section');
+            allDayRow.style.gridTemplateColumns = colTemplate;
+
+            const axisCell = allDayRow.createDiv('allday-section__cell allday-section__axis');
+            axisCell.setAttribute('aria-label', t('allDaySection.allDay'));
+            const axisLabel = axisCell.createEl('span', { cls: 'allday-section__label' });
+            axisLabel.setText(t('allDaySection.allDay'));
+            axisCell.style.gridColumn = '1';
+            axisCell.style.gridRow = '1 / span 50';
+
+            dates.forEach((date, i) => {
+                const cell = allDayRow.createDiv('allday-section__cell');
+                if (i === 0) cell.addClass('is-first-cell');
+                if (i === dates.length - 1) cell.addClass('is-last-cell');
+                cell.dataset.date = date;
+                cell.style.gridColumn = `${i + 2}`;
+                cell.style.gridRow = '1 / span 50';
+                cell.style.zIndex = '0';
+                allDayRenderer.addEmptySpaceContextMenu(cell, date);
             });
 
-            // Add interaction listeners for creating tasks
-            timelineRenderer.addCreateTaskListeners(col, date);
-        });
+            allDayRenderer.render(allDayRow, dates, buckets.allday, reconciler);
+        }
 
-        // Restore scroll position (To be handled by caller or via specific method if passed)
-        // For now, TimelineView handles restoring scroll position via its lastScrollTop property logic, 
-        // which might need to happen after this render returns.
+        // 6.2. Timeline Grid (time axis + day columns)
+        if (showTimeline) {
+            const timelineGrid = scrollArea.createDiv('tv-grid-row timeline-scroll-area__grid');
+            timelineGrid.style.gridTemplateColumns = colTemplate;
+
+            const timeCol = timelineGrid.createDiv('timeline-scroll-area__axis');
+            this.renderTimeLabels(timeCol);
+
+            if (astronomyDisplay.sunTimes && dates.length > 0) {
+                const { latitude, longitude } = this.plugin.settings.astronomy.location;
+                attachSunAxisArrows(timeCol, dates[0], { startHour, latitude, longitude });
+            }
+
+            const timelineInput = [...buckets.timed, ...buckets.dueOnly];
+            const splitResult = splitTasks(timelineInput, { type: 'visual-date', startHour });
+            const categorizedByDate = categorizeTasksByDate(splitResult, dates, startHour);
+            dates.forEach(date => {
+                const col = timelineGrid.createDiv('timeline-scroll-area__day-column');
+                col.dataset.date = date;
+                const timedTasks = categorizedByDate.get(date)?.timed ?? [];
+                timelineRenderer.render(col, date, timedTasks, reconciler, {
+                    showSunTimes: astronomyDisplay.sunTimes,
+                });
+                timelineRenderer.addCreateTaskListeners(col, date);
+            });
+        }
     }
 
     private renderTimeLabels(container: HTMLElement) {
@@ -230,7 +169,6 @@ export class GridRenderer {
             const label = container.createDiv('timeline-scroll-area__time-label');
             label.style.setProperty('--label-hour', String(i));
 
-            // Display hour adjusted by startHour
             let displayHour = startHour + i;
             if (displayHour >= 24) displayHour -= 24;
 
@@ -239,26 +177,19 @@ export class GridRenderer {
     }
 
     public renderCurrentTimeIndicator() {
-        // Remove existing indicators
         const existingIndicators = this.container.querySelectorAll('.current-time-indicator');
         existingIndicators.forEach(el => el.remove());
 
         const now = new Date();
         const startHour = this.plugin.settings.startHour;
-
-        // Calculate current time in minutes from midnight
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-        // Calculate minutes relative to the visual day start
         let minutesFromStart = currentMinutes - (startHour * 60);
         if (minutesFromStart < 0) {
             minutesFromStart += 24 * 60;
         }
 
-        // Use local date string to match the column data-date (which assumes local dates)
         const visualDateString = DateUtils.getVisualDateOfNow(startHour);
-
-        // Find the column for this visual date
         const dayCol = this.container.querySelector(`.timeline-scroll-area__day-column[data-date="${visualDateString}"]`) as HTMLElement;
 
         if (dayCol) {

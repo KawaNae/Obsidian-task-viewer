@@ -112,42 +112,55 @@ describe('AstronomyService', () => {
 
     describe('getEffectiveAstronomyDisplay', () => {
         const settings: AstronomySettings = {
-            display: { sunTimes: true, moonPhase: false },
+            display: { sunTimes: true, moonPhase: false, sunTimesInFront: false },
             location: { latitude: 0, longitude: 0 },
         };
 
         it('falls back to settings when no instance override', () => {
             expect(getEffectiveAstronomyDisplay(undefined, settings)).toEqual({
-                sunTimes: true, moonPhase: false,
+                sunTimes: true, moonPhase: false, sunTimesInFront: false,
             });
         });
 
         it('falls back to settings when instance is empty object', () => {
             expect(getEffectiveAstronomyDisplay({}, settings)).toEqual({
-                sunTimes: true, moonPhase: false,
+                sunTimes: true, moonPhase: false, sunTimesInFront: false,
             });
         });
 
         it('respects partial override (sunTimes only)', () => {
             expect(getEffectiveAstronomyDisplay({ sunTimes: false }, settings)).toEqual({
-                sunTimes: false, moonPhase: false,
+                sunTimes: false, moonPhase: false, sunTimesInFront: false,
             });
         });
 
         it('respects full override', () => {
-            expect(getEffectiveAstronomyDisplay({ sunTimes: false, moonPhase: true }, settings)).toEqual({
-                sunTimes: false, moonPhase: true,
+            expect(getEffectiveAstronomyDisplay({ sunTimes: false, moonPhase: true, sunTimesInFront: true }, settings)).toEqual({
+                sunTimes: false, moonPhase: true, sunTimesInFront: true,
             });
         });
 
         it('treats explicit false as authoritative (not fallback)', () => {
             const onSettings: AstronomySettings = {
-                display: { sunTimes: true, moonPhase: true },
+                display: { sunTimes: true, moonPhase: true, sunTimesInFront: true },
                 location: { latitude: 0, longitude: 0 },
             };
             expect(getEffectiveAstronomyDisplay({ moonPhase: false }, onSettings)).toEqual({
-                sunTimes: true, moonPhase: false,
+                sunTimes: true, moonPhase: false, sunTimesInFront: true,
             });
+        });
+
+        it('defaults sunTimesInFront to false when missing from legacy settings', () => {
+            // Settings persisted before this field existed lack it entirely.
+            const legacy = {
+                display: { sunTimes: true, moonPhase: true } as AstronomySettings['display'],
+                location: { latitude: 0, longitude: 0 },
+            };
+            expect(getEffectiveAstronomyDisplay(undefined, legacy).sunTimesInFront).toBe(false);
+        });
+
+        it('respects sunTimesInFront override', () => {
+            expect(getEffectiveAstronomyDisplay({ sunTimesInFront: true }, settings).sunTimesInFront).toBe(true);
         });
     });
 });

@@ -103,28 +103,10 @@ export class TimelineView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private unsubscribeDelete: (() => void) | null = null;
     private currentTimeInterval: number | null = null;
-    // Scroll save/restore is layout-independent: we save the visible time at
-    // the viewport top of the timed area (as minutes from 00:00) and restore
-    // by recomputing scrollTop from current --hour-height at apply time.
-    //
-    // Why time, not pixels? `.timeline-grid` is the single scroll container
-    // and allday-section is always sticky once any scrolling occurs, so the
-    // identity `visibleTopTime = scrollTop / hourHeight` holds regardless of
-    // allday height (allday is part of the sticky stack). Storing minutes
-    // makes the save/restore robust against:
-    //   1. Async layout flux (e.g. expand-bar settling) — see fix in
-    //      TaskCardRenderer hoist; this anchor approach is the secondary
-    //      defense in depth.
-    //   2. Zoom changes between save and restore — toolbar zoom now
-    //      preserves time at viewport top (matches pinch zoom semantics).
-    //
-    // iPad WebKit safety: the formula reads only --hour-height (set sync at
-    // the start of performRender from zoomLevel) and grid.scrollTop. No
-    // offsetTop / offsetHeight reads, so the deferred-layout drift that
-    // motivated 6c6b208 cannot recur.
-    //
-    // Three-pass rAF (sync + 2× rAF), mirroring scrollToCurrentTime, absorbs
-    // any residual transient that might still occur.
+    // Scroll save/restore: save the visible time at the viewport top as
+    // minutes from 00:00 and restore by recomputing scrollTop from current
+    // --hour-height. Robust against zoom changes and async layout settle.
+    // Three-pass rAF (sync + 2× rAF) absorbs residual transients.
     private savedScrollAnchor: { minutesFromTop: number } | null = null;
     private scrollToNowOnNextRender = false;
     private stickyAnchorObserver: ResizeObserver | null = null;
@@ -283,6 +265,8 @@ export class TimelineView extends ItemView {
         });
         this.selectionController = new SelectionController(this.handleManager);
 
+        this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
+
         // Construct the toolbar once for the lifetime of this view. performRender()
         // calls toolbar.detach() before container.empty() and toolbar.mount(host)
         // after, so the underlying DOM + filterMenu instance survive renders. This
@@ -321,13 +305,14 @@ export class TimelineView extends ItemView {
                     this.app.workspace.requestSaveLayout();
                 },
                 getLeaf: () => this.leaf,
+                linkInteractionManager: this.linkInteractionManager,
+                hoverParent: this.hoverParent,
             }
         );
 
         // Initialize Renderers
         this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow, VIEW_ID);
         this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel(), VIEW_ID);
-        this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.dateHeaderRenderer = new DateHeaderRenderer({
             app: this.app,
             plugin: this.plugin,
@@ -348,7 +333,6 @@ export class TimelineView extends ItemView {
             this.hoverParent,
             this.dateHeaderRenderer,
             this.periodicHeaderRenderer,
-            () => this.togglePeriodicHeader(),
         );
         this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.menuHandler, this.readService);
         // Persistent host for pinned lists. Lives outside the empty() target
@@ -514,11 +498,8 @@ export class TimelineView extends ItemView {
         this.initBarrier.domReady = true;
         this.tryRunInitialStateLogic();
 
-        // Self-heal --allday-sticky-top whenever .date-header or .habits-section
-        // resizes (habits collapse, window resize, sidebar toggle, daysToShow
-        // change). Re-observed at the end of performRender after empty().
         this.stickyAnchorObserver = new ResizeObserver(() => {
-            this.updateAlldayStickyTop();
+            this.updateStickyHeaderTops();
         });
 
         // Initial render — scroll to current time
@@ -694,21 +675,7 @@ export class TimelineView extends ItemView {
         return Number.isFinite(v) && v > 0 ? v : 60;
     }
 
-    /** Sets --allday-sticky-top to date-header.offsetHeight + habits-section.offsetHeight
-     *  so the sticky allday-section stacks below them. Idempotent on size; safe to
-     *  call from the resize observer callback (does NOT rebind the observer here —
-     *  doing so re-arms the initial-observation callback per observe() call and
-     *  causes an infinite ping-pong loop). */
-    /** Compute the sticky-top of every layer in the header stack
-     *  (periodic / date-header / habits / allday) from actual rendered
-     *  heights and write them as CSS variables on .timeline-grid. The CSS
-     *  side reads these variables for `position: sticky; top: ...`, so the
-     *  stack stays correct under any combination of: periodic expanded /
-     *  collapsed, date-header compact reflow, habits collapsed.
-     *  Idempotent on size; safe to call from the resize observer callback
-     *  (does NOT rebind the observer here — see rebindStickyAnchorObserver
-     *  for the rationale). */
-    private updateAlldayStickyTop(): void {
+    private updateStickyHeaderTops(): void {
         const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (!grid) return;
         const periodic = grid.querySelector('.periodic-header') as HTMLElement | null;
@@ -718,16 +685,12 @@ export class TimelineView extends ItemView {
         const periodicH = periodic?.offsetHeight ?? 0;
         const dateH = dateHeader?.offsetHeight ?? 0;
         const moonH = moon?.offsetHeight ?? 0;
-        const habitsH = habits?.offsetHeight ?? 0;
         grid.style.setProperty('--periodic-header-sticky-top', `0px`);
         grid.style.setProperty('--date-header-sticky-top', `${periodicH}px`);
         grid.style.setProperty('--moon-section-sticky-top', `${periodicH + dateH}px`);
         grid.style.setProperty('--habits-section-sticky-top', `${periodicH + dateH + moonH}px`);
-        grid.style.setProperty('--allday-sticky-top', `${periodicH + dateH + moonH + habitsH}px`);
     }
 
-    /** Rebind the resize observer to the freshly-rendered anchor elements.
-     *  Called from performRender after container.empty() rebuilds the DOM. */
     private rebindStickyAnchorObserver(): void {
         if (!this.stickyAnchorObserver) return;
         const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
@@ -741,13 +704,6 @@ export class TimelineView extends ItemView {
         if (dateHeader) this.stickyAnchorObserver.observe(dateHeader);
         if (moon) this.stickyAnchorObserver.observe(moon);
         if (habits) this.stickyAnchorObserver.observe(habits);
-    }
-
-    private togglePeriodicHeader(): void {
-        const current = this.viewState.periodicHeaderCollapsed ?? true;
-        this.viewState.periodicHeaderCollapsed = !current;
-        this.app.workspace.requestSaveLayout();
-        this.render();
     }
 
     private getPinnedListCallbacks(): PinnedListCallbacks {
@@ -929,15 +885,7 @@ export class TimelineView extends ItemView {
 
         this.renderCurrentTimeIndicator();
 
-        // Update --allday-sticky-top so allday-section sticks below the
-        // sticky date-header + habits-section. Read offsetHeight after the
-        // section renders so the value reflects the actual rendered heights
-        // (habits-section height varies with collapsed/expanded state).
-        this.updateAlldayStickyTop();
-        // Rebind observer to the freshly-rendered anchor elements after
-        // container.empty() detached the previous ones. Done outside
-        // updateAlldayStickyTop to avoid observer ping-pong (each observe()
-        // call fires an initial-observation callback).
+        this.updateStickyHeaderTops();
         this.rebindStickyAnchorObserver();
 
         // Restore scroll position with a sync write (avoids 1-frame flicker

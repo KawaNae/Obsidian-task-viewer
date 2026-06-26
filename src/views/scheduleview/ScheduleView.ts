@@ -23,7 +23,10 @@ import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { attachSunIndicators, attachSunAxisArrows } from '../sharedUI/AstronomyCellAdorner';
 import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
-import { PeriodicHeaderRenderer, type PeriodicHeaderRenderResult } from '../sharedUI/PeriodicHeaderRenderer';
+import { AsyncRenderSerializer } from '../sharedUI/AsyncRenderSerializer';
+import { RenderScheduler } from '../sharedUI/RenderScheduler';
+import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
+import { PeriodicHeaderRenderer } from '../sharedUI/PeriodicHeaderRenderer';
 import type { CollapsibleSectionKey, TimedDisplayTask } from './ScheduleTypes';
 import { ScheduleGridCalculator } from './utils/ScheduleGridCalculator';
 import { ScheduleTaskCategorizer } from './utils/ScheduleTaskCategorizer';
@@ -72,10 +75,10 @@ export class ScheduleView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private currentVisualDate = '';
     private scrollToNowOnNextRender = false;
-    private scrollRestorePending = false;
-    private savedScrollTop: number | null = null;
+    private readonly scrollRestorer = new PixelScrollRestorer(
+        () => this.container?.querySelector('.schedule-view__body-scroll') as HTMLElement | null,
+    );
     private customName: string | undefined;
-    private periodicHeaderCollapsed: boolean = true;
     private maskMode: boolean = false;
     private astronomyDisplay: Partial<AstronomyDisplay> | undefined = undefined;
     private collapsedSections: Record<CollapsibleSectionKey, boolean> = {
@@ -194,6 +197,9 @@ export class ScheduleView extends ItemView {
                 this.render();
                 this.toolbar.update();
             },
+            getCurrentDate: () => this.currentVisualDate,
+            linkInteractionManager: this.linkInteractionManager,
+            hoverParent: this.hoverParent,
         });
     }
 
@@ -245,13 +251,11 @@ export class ScheduleView extends ItemView {
         if (transient.currentDate && this.isValidDateKey(transient.currentDate)) {
             this.currentVisualDate = transient.currentDate;
         }
-        if (transient.periodicHeaderCollapsed !== undefined) {
-            this.periodicHeaderCollapsed = transient.periodicHeaderCollapsed;
-        }
+
 
         await super.setState(state, result);
         if (this.container) {
-            await this.performRender();
+            await this.renderSerializer.request();
         }
     }
 
@@ -260,7 +264,6 @@ export class ScheduleView extends ItemView {
             ...this.codec.serializeConfig(this.getCurrentConfig()),
             ...this.codec.serializeTransient({
                 currentDate: this.currentVisualDate,
-                periodicHeaderCollapsed: this.periodicHeaderCollapsed,
             }),
         };
     }
@@ -276,10 +279,11 @@ export class ScheduleView extends ItemView {
 
         this.registerKeyboardNavigation();
         this.scrollToNowOnNextRender = true;
-        await this.performRender();
+        await this.renderSerializer.request();
 
-        this.unsubscribe = this.readService.onChange(() => {
-            this.render();
+        this.renderScheduler = new RenderScheduler({ performFull: () => this.render() });
+        this.unsubscribe = this.readService.onChange((taskId, changes) => {
+            this.renderScheduler?.handleChange(taskId, changes);
         });
     }
 
@@ -291,6 +295,8 @@ export class ScheduleView extends ItemView {
             this.unsubscribe();
             this.unsubscribe = null;
         }
+        this.renderScheduler?.dispose();
+        this.renderScheduler = null;
     }
 
     public refresh(): void {
@@ -319,14 +325,17 @@ export class ScheduleView extends ItemView {
         });
     }
 
+    /**
+     * Single serialization gate for every async render entry point
+     * (render / setState / onOpen), keeping the reconciler's
+     * detach→build→dispose cycle atomic against interleaving.
+     */
+    private readonly renderSerializer = new AsyncRenderSerializer(() => this.performRender());
+    private renderScheduler: RenderScheduler | null = null;
+
     private render(): void {
-        if (!this.scrollRestorePending) {
-            const oldBodyScroll = this.container?.querySelector('.schedule-view__body-scroll') as HTMLElement | null;
-            if (oldBodyScroll) {
-                this.savedScrollTop = oldBodyScroll.scrollTop;
-            }
-        }
-        void this.performRender();
+        this.scrollRestorer.save();
+        void this.renderSerializer.request();
     }
 
     private async performRender(): Promise<void> {
@@ -368,21 +377,9 @@ export class ScheduleView extends ItemView {
 
         if (this.scrollToNowOnNextRender) {
             this.scrollToNowOnNextRender = false;
-            this.scrollRestorePending = true;
-            requestAnimationFrame(() => {
-                this.scrollRestorePending = false;
-                this.scrollToCurrentTime();
-            });
-        } else if (this.savedScrollTop !== null) {
-            this.scrollRestorePending = true;
-            const scrollTarget = this.savedScrollTop;
-            requestAnimationFrame(() => {
-                this.scrollRestorePending = false;
-                const newBodyScroll = this.container.querySelector('.schedule-view__body-scroll') as HTMLElement | null;
-                if (newBodyScroll) {
-                    newBodyScroll.scrollTop = scrollTarget;
-                }
-            });
+            this.scrollRestorer.runGuarded(() => this.scrollToCurrentTime());
+        } else {
+            this.scrollRestorer.restore();
         }
     }
 
@@ -395,14 +392,12 @@ export class ScheduleView extends ItemView {
     ): Promise<void> {
         const categorized = this.taskCategorizer.toScheduleFormat(baseCategorized);
 
-        const periodicHeader = this.periodicHeaderRenderer.render(fixedContainer, {
+        this.periodicHeaderRenderer.render(fixedContainer, {
             dates: [date],
             gridTemplateColumns: this.getScheduleRowColumns(),
-            collapsed: this.periodicHeaderCollapsed,
-            onToggle: () => this.togglePeriodicHeader(),
         });
 
-        this.renderDateHeader(fixedContainer, date, periodicHeader);
+        this.renderDateHeader(fixedContainer, date);
 
         // Moon-phase row between date header and habits — mirrors Timeline's
         // placement so the two time-axis views look symmetric.
@@ -444,6 +439,8 @@ export class ScheduleView extends ItemView {
             this.astronomyDisplay,
             this.plugin.settings.astronomy,
         );
+        // Raise sun lines above task cards when the per-view setting asks for it.
+        main.toggleClass('is-sun-front', astronomyDisplay.sunTimes && astronomyDisplay.sunTimesInFront);
         if (astronomyDisplay.sunTimes) {
             const { latitude, longitude } = this.plugin.settings.astronomy.location;
             const startHour = this.plugin.settings.startHour;
@@ -474,7 +471,7 @@ export class ScheduleView extends ItemView {
         }
     }
 
-    private renderDateHeader(container: HTMLElement, date: string, periodicHeader: PeriodicHeaderRenderResult): void {
+    private renderDateHeader(container: HTMLElement, date: string): void {
         const todayVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
         const isOverdue = (d: string): boolean => {
             if (d >= todayVisualDate) return false;
@@ -484,21 +481,15 @@ export class ScheduleView extends ItemView {
             );
         };
 
-        const { axisCell } = this.dateHeaderRenderer.render(container, {
+        const refYear = parseInt(date.substring(0, 4), 10);
+        const refMonth = parseInt(date.substring(5, 7), 10) - 1;
+
+        this.dateHeaderRenderer.render(container, {
             dates: [date],
             gridTemplateColumns: this.getScheduleRowColumns(),
             isOverdue,
-            enableCompactBehavior: false,
-            forceShortLabel: !this.periodicHeaderCollapsed,
+            referenceYearMonth: { year: refYear, month: refMonth },
         });
-
-        periodicHeader.mountInAxisCell(axisCell);
-    }
-
-    private togglePeriodicHeader(): void {
-        this.periodicHeaderCollapsed = !this.periodicHeaderCollapsed;
-        void this.app.workspace.requestSaveLayout();
-        this.render();
     }
 
     private renderHabitsSection(container: HTMLElement, date: string): void {

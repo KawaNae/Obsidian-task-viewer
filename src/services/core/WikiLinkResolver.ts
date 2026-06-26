@@ -15,6 +15,16 @@ export class WikiLinkResolver {
      * @param app Obsidian App インスタンス
      */
     static resolve(tasks: Map<string, Task>, wikilinkRefsMap: Map<string, WikilinkRef[]>, app: App): void {
+        // === clear フェーズ: wikilink 由来エッジと dangling を剥がす（冪等化の要） ===
+        // パーサー（TaskScanner / TreeTaskExtractor）は 1 ファイル内で完結するため、
+        // ファイルをまたぐ親子エッジは必ずこの resolver が張った wikilink 由来。
+        // 毎 resolve でこれを一旦剥がし、下の rebuild で現状から張り直すことで、
+        // resolve を「導出状態の冪等な再構築」にする。ファイル削除/改名でも
+        // 親の childIds・子の parentId が自然に正しい状態へ収束する（dangling 解消）。
+        // 同一ファイル内エッジ（@notation 子・frontmatter 孤児吸収）は親ファイルの
+        // 再スキャンが面倒を見るので、ここでは一切触らない。
+        this.clearCrossFileEdges(tasks);
+
         // wikilink 子の body 行位置を追跡（ソート用）
         const wikiChildLineMap = new Map<string, Map<string, number>>();
 
@@ -71,6 +81,29 @@ export class WikiLinkResolver {
     }
 
     /**
+     * 全タスクから「ファイルをまたぐ親子エッジ（= wikilink 由来）」と
+     * 「相手が消えた dangling エッジ」を除去する。同一ファイル内エッジは保持。
+     * rebuild の前段として呼ばれ、resolve を冪等にする。
+     */
+    private static clearCrossFileEdges(tasks: Map<string, Task>): void {
+        for (const [, parentTask] of tasks) {
+            if (parentTask.childIds.length === 0) continue;
+            parentTask.childIds = parentTask.childIds.filter(cid => {
+                const child = tasks.get(cid);
+                if (!child) return false;                  // dangling: 子が消えた
+                return child.file === parentTask.file;       // 別ファイル(=wikilink)は除去、同一ファイルは保持
+            });
+        }
+        for (const [, childTask] of tasks) {
+            if (!childTask.parentId) continue;
+            const parent = tasks.get(childTask.parentId);
+            if (!parent || parent.file !== childTask.file) {
+                childTask.parentId = undefined;             // dangling 親 or 別ファイル親(=wikilink)を clear
+            }
+        }
+    }
+
+    /**
      * childId からファイル内の出現行を取得（ソート用）
      */
     private static getChildBodyLine(
@@ -122,11 +155,14 @@ export class WikiLinkResolver {
      */
     private static wouldCreateCycle(
         childTaskId: string, targetId: string,
-        tasks: Map<string, Task>, maxDepth: number = 50
+        tasks: Map<string, Task>
     ): boolean {
+        // visited Set が終端を保証するので深さ上限は不要。
+        // 以前の maxDepth=50 cap は大きなサブツリーで本物の循環を見逃す
+        // false-negative しか生まなかったため撤廃。
         const visited = new Set<string>();
         const stack = [childTaskId];
-        while (stack.length > 0 && visited.size < maxDepth) {
+        while (stack.length > 0) {
             const current = stack.pop()!;
             if (current === targetId) return true;
             if (visited.has(current)) continue;
@@ -167,11 +203,18 @@ export class WikiLinkResolver {
             return withExt.path;
         }
 
-        // 3. basename で検索
+        // 3. basename で検索（同名複数時は path 辞書順で決定的に1件を選ぶ）
         const files = app.vault.getMarkdownFiles();
-        const found = files.find(f => f.basename === target);
-        if (found) {
-            return found.path;
+        const matches = files.filter(f => f.basename === target);
+        if (matches.length > 0) {
+            if (matches.length > 1) {
+                matches.sort((a, b) => a.path.localeCompare(b.path));
+                console.warn(
+                    `[WikiLinkResolver] Ambiguous wikilink "${target}" matches ${matches.length} files; ` +
+                    `resolving to "${matches[0].path}"`
+                );
+            }
+            return matches[0].path;
         }
 
         return null;

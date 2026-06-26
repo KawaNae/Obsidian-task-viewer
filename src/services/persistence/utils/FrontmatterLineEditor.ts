@@ -81,4 +81,54 @@ export class FrontmatterLineEditor {
 
         return result.join('\n');
     }
+
+    /**
+     * Converts an arbitrary string into a safe single-line YAML scalar.
+     * The single canonical authority shared by every frontmatter write surface
+     * (create: TaskConverter, update: FrontmatterWriter + applyUpdates, habits:
+     * HabitTrackerRenderer) so no value silently corrupts the block on write.
+     *
+     * Allowlist policy: emit a plain (unquoted) scalar ONLY for values that are
+     * provably safe and would round-trip as the same string. Everything else is
+     * double-quoted with full escaping. A misjudgement therefore degrades to a
+     * harmless extra pair of quotes rather than YAML corruption / data loss.
+     */
+    static escapeYamlScalar(value: string): string {
+        if (value === '') return '""';
+        return this.isSafePlainScalar(value) ? value : this.toDoubleQuotedYaml(value);
+    }
+
+    /**
+     * True only when `value` can be emitted unquoted and re-parses verbatim as
+     * the identical string. Conservative on purpose — anything uncertain returns
+     * false so the caller quotes it.
+     */
+    private static isSafePlainScalar(value: string): boolean {
+        // Surrounding whitespace would be trimmed away by the YAML parser.
+        if (value !== value.trim()) return false;
+        // Alphanumerics / spaces / underscore only, and must not lead with a
+        // space-class char. This rejects every YAML indicator and leading sigil
+        // (`-`, `~`, `` ` ``, `:`, `#`, `[`, `{`, `@`, `*`, `&`, `!`, `|`, `>`, …),
+        // colons, and control chars (newline/CR/tab) outright.
+        if (!/^[A-Za-z0-9_][A-Za-z0-9 _]*$/.test(value)) return false;
+        // Pure numbers would be re-typed as a number on read.
+        if (/^[0-9]+(?:\.[0-9]+)?$/.test(value)) return false;
+        // YAML 1.1 keywords would be re-typed as boolean/null on read.
+        if (/^(?:true|false|null|yes|no|on|off|~)$/i.test(value)) return false;
+        return true;
+    }
+
+    /**
+     * Wraps `value` in a double-quoted YAML scalar with full escaping. A
+     * double-quoted scalar can represent any string, so this never fails.
+     */
+    private static toDoubleQuotedYaml(value: string): string {
+        const escaped = value
+            .replace(/\\/g, '\\\\')
+            .replace(/"/g, '\\"')
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r')
+            .replace(/\t/g, '\\t');
+        return `"${escaped}"`;
+    }
 }

@@ -59,6 +59,13 @@
     --z-negative: -1;
     --z-base: 0;
     --z-task-card: 1;
+    /* Sunrise/sunset lines. Default 0 = below the task-card floor (1) so the
+       lines sit behind every card (ambient context). The `.is-sun-front`
+       modifier on the grid root raises this to 195 (above normal cards ≤190,
+       below selected card / now-line at 200). Toggled by the per-view
+       astronomy "sun in front" setting. */
+    --z-sun-indicator: 0;
+    --z-sun-indicator-front: 195;
     --z-current-time-indicator: 200;
     --z-task-card-handle: 20;
     --z-task-card-allday: 25;
@@ -66,11 +73,7 @@
        in-scroll elements (selected task card 200, current-time-indicator
        200, allday-handle 100) cannot bleed through the sticky layers
        when their natural y-position falls inside a sticky region.
-       Internal ordering: periodic > date-header > habits > allday.
-       habits + date-header form the always-on-top pair; allday is sticky
-       too but sits beneath habits so that on scroll it slides under the
-       habits row rather than overlapping it. */
-    --z-timeline-allday-sticky: 240;
+       Internal ordering: periodic > date-header > moon > habits. */
     --z-timeline-habits-section: 245;
     --z-timeline-date-header: 250;
     --z-timeline-periodic-header: 255;
@@ -126,6 +129,7 @@ body {
        resolves — --tv-text-muted itself is body-scoped. */
     --tv-astro-sunrise: var(--tv-text-muted);
     --tv-astro-sunset:  var(--tv-text-muted);
+    --tv-astro-moon-lit: #f5e6a8;
 
     --tv-danger-rgb: var(--background-modifier-error-rgb, var(--color-red-rgb));
 

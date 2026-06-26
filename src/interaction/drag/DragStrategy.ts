@@ -33,4 +33,8 @@ export interface DragStrategy {
 
     // Called on pointer up
     onUp(e: PointerEvent, context: DragContext): Promise<void>;
+
+    // Called when the gesture is aborted (pointercancel / lost capture):
+    // release transient state without committing the edit.
+    onCancel(): void;
 }

@@ -12,6 +12,8 @@ export interface AstronomyMenuSectionOptions {
     instance: Partial<AstronomyDisplay> | undefined;
     /** Receives a new per-view override (or undefined to clear it). */
     onChange: (next: Partial<AstronomyDisplay> | undefined) => void;
+    /** When true, suppress the "follow global" item (caller will add its own). */
+    omitFollowGlobal?: boolean;
 }
 
 const OVERLAY_LABELS: Record<'sunTimes' | 'moonPhase', () => string> = {
@@ -41,13 +43,13 @@ export function appendAstronomyMenuSection(menu: Menu, opts: AstronomyMenuSectio
         });
     }
 
-    // "Follow global" — clears the per-view override entirely. Disabled when
-    // no override is set so its semantic ("revert to global") stays honest.
-    const hasOverride = opts.instance != null && Object.keys(opts.instance).length > 0;
-    menu.addItem((item: MenuItem) => {
-        item.setTitle(t('viewOptions.followGlobalAstronomy'))
-            .setIcon('rotate-ccw')
-            .setDisabled(!hasOverride)
-            .onClick(() => opts.onChange(undefined));
-    });
+    if (!opts.omitFollowGlobal) {
+        const hasOverride = opts.instance != null && Object.keys(opts.instance).length > 0;
+        menu.addItem((item: MenuItem) => {
+            item.setTitle(t('viewOptions.followGlobal'))
+                .setIcon('rotate-ccw')
+                .setDisabled(!hasOverride)
+                .onClick(() => opts.onChange(undefined));
+        });
+    }
 }

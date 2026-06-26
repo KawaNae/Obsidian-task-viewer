@@ -44,24 +44,12 @@
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    cursor: pointer;
     gap: 2px;
     padding-top: 4px;
     border-left: 1px solid var(--tv-border);
     border-right: 1px solid var(--tv-border);
     border-bottom: 1px solid var(--tv-border);
     background-color: var(--tv-bg-axis);
-}
-
-.allday-section__axis:focus-visible {
-    outline: 2px solid rgba(var(--tv-accent-rgb), 0.35);
-    outline-offset: -2px;
-}
-
-.allday-section__axis:hover .tv-section-toggle {
-    background-color: var(--tv-bg-hover);
-    border-color: var(--tv-border);
-    color: var(--tv-text);
 }
 
 .allday-section__label {
@@ -72,15 +60,13 @@
     padding-bottom: 6px;
 }
 
-/* --- Collapsed State --- */
-/* Show cells but hide borders (except the last one) */
+/* --- Collapsed State (used by schedule view) --- */
 .allday-section--collapsed .allday-section__cell:not(.allday-section__axis) {
     display: flex;
     border-right: none;
     min-height: 36px;
 }
 
-/* Maintain right border for the last cell */
 .allday-section--collapsed .allday-section__cell.is-last-cell {
     border-right: 1px solid var(--tv-border);
 }
@@ -99,8 +85,6 @@
     display: none;
 }
 
-/* Show horizontal label when collapsed */
-/* Attach to the first cell instead of container to avoid grid layout issues */
 .allday-section--collapsed .allday-section__cell.is-first-cell::after {
     content: attr(data-collapsed-label);
     position: absolute;

@@ -1,32 +1,31 @@
 import type { Workspace, WorkspaceLeaf } from 'obsidian';
-import type { FilterState } from '../../services/filter/FilterTypes';
-import { hasConditions } from '../../services/filter/FilterTypes';
-import { FilterSerializer } from '../../services/filter/FilterSerializer';
-import type { PinnedListDefinition } from '../../types';
-import { unicodeBtoa } from '../../utils/base64';
 
 export type LeafPosition = 'left' | 'right' | 'tab' | 'window' | 'override';
 
 export interface ViewUriOptions {
-    filterState?: FilterState;
-    days?: number;
-    zoom?: number;
-    date?: string;
-    pinnedLists?: PinnedListDefinition[];
-    grid?: PinnedListDefinition[][];
-    showSidebar?: boolean;
     position?: LeafPosition;
     name?: string;
     template?: string;
-    mode?: string;
-    intervalTemplate?: string;
+    mode?: string;             // timer-only
+    intervalTemplate?: string; // timer-only
+    /**
+     * Every persisted ViewConfig field encoded as URI params, produced by
+     * `codec.toUriParams` — the single source for days/zoom/date/showSidebar/
+     * filter/pinnedLists/grid/maskMode/astronomyDisplay/... Omitted when
+     * `template` is set (config then lives in the referenced .md file).
+     */
+    configParams?: Record<string, string>;
 }
 
 /**
- * Builds obsidian://task-viewer URIs from view type and optional parameters.
+ * Builds obsidian://task-viewer URIs.
  *
- * View display params are kept as readable query params.
- * Filter and pinnedLists are base64-encoded.
+ * Schema-external params (position/name/template/mode/intervalTemplate) are
+ * hand-coded here; every ViewConfig field flows through `configParams`
+ * (codec.toUriParams), so this builder shares the single codec vocabulary with
+ * the read path (codec.fromUriParams), template files, and workspace state —
+ * one schema declaration drives all boundaries. Old URIs (days/zoom/date/
+ * filter) remain readable via the codec's legacyKeys.
  */
 export class ViewUriBuilder {
     private static readonly VIEW_SHORT_NAMES: Record<string, string> = {
@@ -45,47 +44,19 @@ export class ViewUriBuilder {
 
         let uri = `obsidian://task-viewer?view=${shortName}`;
 
-        // Position
+        // Schema-external params (not part of any ViewConfig schema).
         if (opts.position) uri += `&position=${opts.position}`;
-
-        // Name
         if (opts.name) uri += `&name=${encodeURIComponent(opts.name)}`;
-
-        // View display params (readable)
-        if (opts.days != null) uri += `&days=${opts.days}`;
-        if (opts.zoom != null) uri += `&zoom=${opts.zoom}`;
-        if (opts.date != null) uri += `&date=${encodeURIComponent(opts.date)}`;
-        if (opts.showSidebar != null) uri += `&showSidebar=${opts.showSidebar}`;
-
-        // Timer-specific params
         if (opts.mode) uri += `&mode=${opts.mode}`;
         if (opts.intervalTemplate) uri += `&intervalTemplate=${encodeURIComponent(opts.intervalTemplate)}`;
 
-        // Template reference (compact) or inline base64 (fallback)
+        // Config: a template reference replaces inline config; otherwise the
+        // codec is the single source for every persisted field.
         if (opts.template) {
             uri += `&template=${encodeURIComponent(opts.template)}`;
-        } else {
-            // Filter (base64)
-            if (opts.filterState && hasConditions(opts.filterState)) {
-                uri += `&filter=${FilterSerializer.toURIParam(opts.filterState)}`;
-            }
-
-            // PinnedLists (base64, with serialized filterState)
-            if (opts.pinnedLists && opts.pinnedLists.length > 0) {
-                const serialized = opts.pinnedLists.map(pl => {
-                    const { id, ...rest } = pl;
-                    return { ...rest, filterState: FilterSerializer.toJSON(pl.filterState) };
-                });
-                uri += `&pinnedLists=${unicodeBtoa(JSON.stringify(serialized))}`;
-            }
-
-            // Grid (base64, with serialized filterState)
-            if (opts.grid && opts.grid.length > 0) {
-                const serialized = opts.grid.map(row => row.map(pl => {
-                    const { id, ...rest } = pl;
-                    return { ...rest, filterState: FilterSerializer.toJSON(pl.filterState) };
-                }));
-                uri += `&grid=${unicodeBtoa(JSON.stringify(serialized))}`;
+        } else if (opts.configParams) {
+            for (const [k, v] of Object.entries(opts.configParams)) {
+                uri += `&${k}=${encodeURIComponent(v)}`;
             }
         }
 

@@ -79,8 +79,7 @@ export class KanbanToolbar extends ViewToolbarBase {
             getDefaultName: () => VIEW_META_KANBAN.displayText,
             onRename: (newName) => deps.onRename(newName),
             buildUri: () => ({
-                grid: deps.getCurrentConfig().grid,
-                filterState: deps.filterMenu.getFilterState(),
+                configParams: this.codec.toUriParams(deps.getCurrentConfig()),
             }),
             viewType: VIEW_META_KANBAN.type,
             getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,

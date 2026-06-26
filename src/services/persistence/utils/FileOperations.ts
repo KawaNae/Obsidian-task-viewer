@@ -154,7 +154,15 @@ export class FileOperations {
         // Build a pattern: contains task content AND @ date notation
         const content = task.content || '';
         const escapedContent = content.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const datePattern = task.startDate ? `@${task.startDate}` : (task.due ? `@` : null);
+        // due-only / end-only タスクで bare '@' に退化すると同名タスクを誤マッチ
+        // するため、実トークン(>due / >end)で照合する。
+        const datePattern = task.startDate
+            ? `@${task.startDate}`
+            : task.due
+                ? `>${task.due}`
+                : task.endDate
+                    ? `>${task.endDate}`
+                    : null;
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];

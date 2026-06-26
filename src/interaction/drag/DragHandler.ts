@@ -29,6 +29,7 @@ export class DragHandler {
     private readonly boundPointerUp: (e: PointerEvent) => void;
     private readonly boundTouchStart: (e: TouchEvent) => void;
     private readonly boundTouchMove: (e: TouchEvent) => void;
+    private readonly boundPointerCancel: () => void;
 
     constructor(
         private readonly container: HTMLElement,
@@ -63,6 +64,7 @@ export class DragHandler {
         this.boundPointerUp = this.onPointerUp.bind(this);
         this.boundTouchStart = this.onTouchStart.bind(this);
         this.boundTouchMove = this.onTouchMove.bind(this);
+        this.boundPointerCancel = this.onPointerCancel.bind(this);
 
         this.container.addEventListener('pointerdown', this.boundPointerDown);
         this.container.addEventListener('touchstart', this.boundTouchStart, { capture: true, passive: false });
@@ -71,6 +73,11 @@ export class DragHandler {
         this.currentDoc = this.container.ownerDocument || document;
         this.currentDoc.addEventListener('pointermove', this.boundPointerMove);
         this.currentDoc.addEventListener('pointerup', this.boundPointerUp);
+        // pointercancel / lostpointercapture: the UA can steal a touch/pen drag
+        // (system gesture, palm rejection, scroll takeover). Treat as a gesture
+        // terminal so cleanup runs (no leak: stuck is-drag-hidden / auto-scroll).
+        this.currentDoc.addEventListener('pointercancel', this.boundPointerCancel);
+        this.currentDoc.addEventListener('lostpointercapture', this.boundPointerCancel);
     }
 
     /** detail handle 押下時のハンドラ設定。内部で DragRouter に橋渡し。 */
@@ -87,6 +94,8 @@ export class DragHandler {
         this.container.removeEventListener('touchmove', this.boundTouchMove);
         this.currentDoc.removeEventListener('pointermove', this.boundPointerMove);
         this.currentDoc.removeEventListener('pointerup', this.boundPointerUp);
+        this.currentDoc.removeEventListener('pointercancel', this.boundPointerCancel);
+        this.currentDoc.removeEventListener('lostpointercapture', this.boundPointerCancel);
     }
 
     private onPointerDown(e: PointerEvent): void {
@@ -95,9 +104,13 @@ export class DragHandler {
         if (newDoc !== this.currentDoc) {
             this.currentDoc.removeEventListener('pointermove', this.boundPointerMove);
             this.currentDoc.removeEventListener('pointerup', this.boundPointerUp);
+            this.currentDoc.removeEventListener('pointercancel', this.boundPointerCancel);
+            this.currentDoc.removeEventListener('lostpointercapture', this.boundPointerCancel);
             this.currentDoc = newDoc;
             this.currentDoc.addEventListener('pointermove', this.boundPointerMove);
             this.currentDoc.addEventListener('pointerup', this.boundPointerUp);
+            this.currentDoc.addEventListener('pointercancel', this.boundPointerCancel);
+            this.currentDoc.addEventListener('lostpointercapture', this.boundPointerCancel);
         }
         this.router.handle(e);
     }
@@ -112,6 +125,11 @@ export class DragHandler {
         if (!this.session.isActive()) return;
         e.preventDefault();
         await this.session.handleUp(e);
+    }
+
+    private onPointerCancel(): void {
+        if (!this.session.isActive()) return;
+        this.session.cancel();
     }
 
     /**

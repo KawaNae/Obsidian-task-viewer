@@ -14,6 +14,10 @@
     height: 100%;
     overflow: hidden;
     padding: 0 !important;
+    /* leaf 幅基準の responsive (狭いサイドバー/popout に追従)。
+       viewport @media では leaf 幅と無関係で効かないため container query に統一。 */
+    container-type: inline-size;
+    container-name: calendar-view;
 }
 
 .calendar-view__toolbar-host {
@@ -189,7 +193,8 @@
     overflow: auto;
 }
 
-@media (max-width: 900px) {
+/* leaf 幅基準 (cell は leaf 幅の 1/7)。viewport ではなく .calendar-view コンテナ幅で判定。 */
+@container calendar-view (max-width: 600px) {
     .cal-week-row {
         --calendar-track-height: 36px;
         min-height: 112px;

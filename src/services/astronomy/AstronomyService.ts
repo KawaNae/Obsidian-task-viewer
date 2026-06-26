@@ -52,6 +52,9 @@ export function getEffectiveAstronomyDisplay(
     return {
         sunTimes:  instance?.sunTimes  ?? settings.display.sunTimes,
         moonPhase: instance?.moonPhase ?? settings.display.moonPhase,
+        // `?? false` guards settings persisted before this field existed
+        // (shallow settings merge does not backfill nested astronomy keys).
+        sunTimesInFront: instance?.sunTimesInFront ?? settings.display.sunTimesInFront ?? false,
     };
 }
 
@@ -86,7 +89,6 @@ export function getMoonPhaseName(phase: number): MoonPhaseName {
 
 export interface MoonPhaseSvgOptions {
     size?: number;
-    litColor?: string;
     darkColor?: string;
     strokeColor?: string;
 }
@@ -108,7 +110,6 @@ export function buildMoonPhaseSvg(
     options: MoonPhaseSvgOptions = {},
 ): string {
     const size = options.size ?? 16;
-    const litColor = options.litColor ?? '#f5e6a8';
     const darkColor = options.darkColor ?? 'transparent';
     const strokeColor = options.strokeColor ?? 'currentColor';
 
@@ -144,6 +145,8 @@ export function buildMoonPhaseSvg(
     }
 
     const stroke = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${darkColor}" stroke="${strokeColor}" stroke-width="0.5"/>`;
-    const lit = litPath ? `<path d="${litPath}" fill="${litColor}"/>` : '';
+    // Lit-region fill is driven by CSS (.moon-phase__lit → --tv-astro-moon-lit)
+    // so the moon tracks the theme like the sun lines, rather than a baked hex.
+    const lit = litPath ? `<path d="${litPath}" class="moon-phase__lit"/>` : '';
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">${stroke}${lit}</svg>`;
 }

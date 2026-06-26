@@ -30,7 +30,7 @@ export class FrontmatterWriter {
 
         if ('statusChar' in updates) {
             // ' ' (todo) → キー削除; それ以外 → エスケープしてキー書き込み
-            fmUpdates[frontmatterKeys.status] = task.statusChar === ' ' ? null : this.escapeStatusChar(task.statusChar);
+            fmUpdates[frontmatterKeys.status] = task.statusChar === ' ' ? null : FrontmatterLineEditor.escapeYamlScalar(task.statusChar);
         }
 
         if ('startDate' in updates || 'startTime' in updates) {
@@ -42,11 +42,12 @@ export class FrontmatterWriter {
         }
 
         if ('due' in updates) {
+            // 日付フィールドは plain 出力(start/end と対称)
             fmUpdates[frontmatterKeys.due] = task.due || null;
         }
 
         if ('content' in updates) {
-            fmUpdates[frontmatterKeys.content] = task.content || null;
+            fmUpdates[frontmatterKeys.content] = task.content ? FrontmatterLineEditor.escapeYamlScalar(task.content) : null;
         }
 
         if (Object.keys(fmUpdates).length > 0) {
@@ -103,15 +104,6 @@ export class FrontmatterWriter {
 
             return FrontmatterLineEditor.applyUpdates(lines, fmEnd, updates);
         });
-    }
-
-    /**
-     * 必要に応じてステータス文字をYAML用にエスケープする。
-     * YAML特殊文字: ? ! > - : などは引用符で囲む必要がある。
-     */
-    private escapeStatusChar(statusChar: string): string {
-        const needsQuoting = /[?!>:\-\[\]{}|&*#,]/.test(statusChar);
-        return needsQuoting ? `"${statusChar}"` : statusChar;
     }
 
 }

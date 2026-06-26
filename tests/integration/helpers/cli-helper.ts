@@ -17,7 +17,9 @@ export function obsidianCli(command: string, flags: Record<string, string | bool
         }
     }
     const args = parts.join(' ');
-    const fullCmd = `obsidian obsidian-task-viewer:${command}${args ? ' ' + args : ''}`;
+    // Always target the Dev vault explicitly so E2E does not depend on which
+    // vault is currently active/focused (Main data stays untouched).
+    const fullCmd = `obsidian vault=dev obsidian-task-viewer:${command}${args ? ' ' + args : ''}`;
 
     let raw: string;
     try {

@@ -38,10 +38,6 @@
 .timeline-toolbar__btn--view-mode {}
 .timeline-toolbar__btn--zoom {}
 
-.timeline-toolbar__btn--sidebar-toggle {
-    margin-left: 8px;
-}
-
 .sidebar-toggle-button-icon {
     flex-shrink: 0;
 }

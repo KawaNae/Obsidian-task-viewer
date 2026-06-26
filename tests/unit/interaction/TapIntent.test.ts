@@ -10,11 +10,11 @@ import { bindTapIntents } from '../../../src/interaction/tap/TapIntent';
 function makeElement() {
     const listeners = new Map<string, Set<(e: any) => void>>();
     const el = {
-        addEventListener(type: string, fn: (e: any) => void) {
+        addEventListener(type: string, fn: (e: any) => void, _capture?: boolean | AddEventListenerOptions) {
             if (!listeners.has(type)) listeners.set(type, new Set());
             listeners.get(type)!.add(fn);
         },
-        removeEventListener(type: string, fn: (e: any) => void) {
+        removeEventListener(type: string, fn: (e: any) => void, _capture?: boolean | EventListenerOptions) {
             listeners.get(type)?.delete(fn);
         },
         listenerCount(type: string) {
@@ -24,6 +24,7 @@ function makeElement() {
             const ev = {
                 target,
                 preventDefault: vi.fn(),
+                stopPropagation: vi.fn(),
             };
             for (const fn of listeners.get('click') ?? []) fn(ev);
             return ev;
@@ -31,7 +32,10 @@ function makeElement() {
     };
     return el as unknown as HTMLElement & {
         listenerCount: (type: string) => number;
-        dispatchClick: (target?: { closest?: (sel: string) => unknown }) => { preventDefault: () => void };
+        dispatchClick: (target?: { closest?: (sel: string) => unknown }) => {
+            preventDefault: ReturnType<typeof vi.fn>;
+            stopPropagation: ReturnType<typeof vi.fn>;
+        };
     };
 }
 
@@ -147,5 +151,63 @@ describe('bindTapIntents', () => {
         // Simulate component.unload() running its registered cleanups.
         registered[0]();
         expect(el.listenerCount('click')).toBe(0);
+    });
+
+    describe('capture mode', () => {
+        it('calls stopPropagation on double-tap when capture is true', () => {
+            const el = makeElement();
+            const onDoubleTap = vi.fn();
+            bindTapIntents(el, { onDoubleTap }, { capture: true });
+            const ev1 = el.dispatchClick();
+            vi.advanceTimersByTime(50);
+            const ev2 = el.dispatchClick();
+            expect(onDoubleTap).toHaveBeenCalledTimes(1);
+            expect(ev1.stopPropagation).not.toHaveBeenCalled();
+            expect(ev2.stopPropagation).toHaveBeenCalledTimes(1);
+        });
+
+        it('does not call stopPropagation on double-tap when capture is false', () => {
+            const el = makeElement();
+            const onDoubleTap = vi.fn();
+            bindTapIntents(el, { onDoubleTap });
+            el.dispatchClick();
+            vi.advanceTimersByTime(50);
+            const ev2 = el.dispatchClick();
+            expect(onDoubleTap).toHaveBeenCalledTimes(1);
+            expect(ev2.stopPropagation).not.toHaveBeenCalled();
+        });
+
+        it('counts link clicks when targetFilter does not exclude them', () => {
+            const el = makeElement();
+            const onDoubleTap = vi.fn();
+            const link = { closest: (sel: string) => (sel === 'a' ? {} : null) };
+            bindTapIntents(el, { onDoubleTap }, {
+                targetFilter: (t) =>
+                    !(t as any).closest('.task-card__handle') &&
+                    !(t as any).closest('input[type="checkbox"]'),
+                capture: true,
+            });
+            el.dispatchClick(link);
+            vi.advanceTimersByTime(50);
+            el.dispatchClick(link);
+            expect(onDoubleTap).toHaveBeenCalledTimes(1);
+        });
+
+        it('fires double-tap across link and non-link clicks', () => {
+            const el = makeElement();
+            const onDoubleTap = vi.fn();
+            const link = { closest: (sel: string) => (sel === 'a' ? {} : null) };
+            const card = { closest: (_sel: string) => null };
+            bindTapIntents(el, { onDoubleTap }, {
+                targetFilter: (t) =>
+                    !(t as any).closest('.task-card__handle') &&
+                    !(t as any).closest('input[type="checkbox"]'),
+                capture: true,
+            });
+            el.dispatchClick(link);
+            vi.advanceTimersByTime(50);
+            el.dispatchClick(card);
+            expect(onDoubleTap).toHaveBeenCalledTimes(1);
+        });
     });
 });

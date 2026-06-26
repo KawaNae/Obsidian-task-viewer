@@ -14,14 +14,10 @@ import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 
 
 const Z_GAP = 10;
-const SELECTED_Z_INDEX = 200;
-const Z_MAX = SELECTED_Z_INDEX - Z_GAP;
-
-const SPLIT_VARIANT_CLASSES = [
-    'task-card--split',
-    'task-card--split-continues-before',
-    'task-card--split-continues-after',
-];
+// Cap base lane z-index one gap below the selection overlay (CSS:
+// .task-card.is-selected → --z-task-card-selected: 200) so a selected card
+// always layers above non-selected ones.
+const Z_MAX = 190;
 
 export class TimelineSectionRenderer {
     constructor(
@@ -96,13 +92,8 @@ export class TimelineSectionRenderer {
         // Selection class is owned by HandleManager; sync it from authoritative state.
         el.toggleClass('is-selected', task.id === this.handleManager.getSelectedTaskId());
 
-        // Reset variant classes before applying the current task's state.
-        SPLIT_VARIANT_CLASSES.forEach(cls => el.removeClass(cls));
-        if (task.isSplit) {
-            el.addClass('task-card--split');
-            if (task.splitContinuesBefore) el.addClass('task-card--split-continues-before');
-            if (task.splitContinuesAfter) el.addClass('task-card--split-continues-after');
-        }
+        // Reset + apply split-segment variant classes (idempotent).
+        TaskStyling.applySplitClasses(el, task);
 
         if (task.isSplit && task.originalTaskId) {
             el.dataset.splitOriginalId = task.originalTaskId;

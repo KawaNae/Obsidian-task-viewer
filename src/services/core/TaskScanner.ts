@@ -176,9 +176,6 @@ export class TaskScanner {
                 fmTask.content = file.basename;
             }
 
-            // Store wikilink refs separately
-            this.store.setWikilinkRefs(fmTask.id, fmResult.wikilinkRefs);
-
             // 全孤児インラインタスクを FM/Container の子にする
             for (const bt of allExtractedTasks) {
                 if (!bt.parentId) {
@@ -257,10 +254,17 @@ export class TaskScanner {
         }
 
         // 5. インデックスを更新
+        // 注: removeTasksByFile は対象ファイルの wikilinkRefs も削除するため、
+        // wikilink refs の登録は必ずこの後で行う（前に置くと再スキャンで消える）。
         this.store.removeTasksByFile(file.path);
 
         for (const task of newTasks) {
             this.store.setTask(task.id, task);
+        }
+
+        // wikilink refs を登録（removeTasksByFile の後でなければ消える）
+        if (fmResult) {
+            this.store.setWikilinkRefs(fmResult.task.id, fmResult.wikilinkRefs);
         }
 
         // 6. トリガーを実行

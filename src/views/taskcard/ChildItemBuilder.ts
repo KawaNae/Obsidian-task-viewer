@@ -78,14 +78,16 @@ export class ChildItemBuilder {
     /**
      * Wikilink → child Task resolution.
      *
-     * Walks the parent's `task`-kind ChildEntries (frontmatter children
-     * wired up by WikiLinkResolver at parse time) and matches by file path.
+     * tv-file children carry `line === -1` (no body line) by design and are
+     * therefore intentionally absent from the parent's body-line-bearing
+     * 'task' ChildEntries. Resolve the wikilink against the parent's wired
+     * `childIds` directly — WikiLinkResolver populates these at parse time —
+     * matching by file path.
      */
     private resolveWikilink(parent: Task, linkName: string): Task | undefined {
         const target = extractWikilinkTarget(linkName);
-        for (const entry of this.readService.getChildEntries(parent)) {
-            if (entry.kind !== 'task') continue;
-            const c = this.readService.getTask(entry.taskId);
+        for (const cid of parent.childIds) {
+            const c = this.readService.getTask(cid);
             if (!c || !isTvFile(c)) continue;
             const baseName = c.file.replace(/\.md$/, '').split('/').pop() || '';
             const fullPath = c.file.replace(/\.md$/, '');

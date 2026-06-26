@@ -8,14 +8,15 @@ export interface DueArrowOptions {
 }
 
 /**
- * Render a due arrow element into a grid container.
+ * Render a due arrow element into a grid container. Returns the created element
+ * (or null when the entry has no due arrow) so callers can decorate it.
  */
 export function renderDueArrow(
     container: HTMLElement,
     entry: GridTaskEntry,
     options: DueArrowOptions = {},
-): void {
-    if (!entry.dueArrow) return;
+): HTMLElement | null {
+    if (!entry.dueArrow) return null;
 
     const { arrowStartCol, arrowEndCol, isClipped, dueStr } = entry.dueArrow;
     const arrowEl = container.createDiv('due-arrow');
@@ -31,4 +32,6 @@ export function renderDueArrow(
     if (isClipped) {
         arrowEl.addClass('due-arrow--clipped');
     }
+
+    return arrowEl;
 }

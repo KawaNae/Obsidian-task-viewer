@@ -155,13 +155,15 @@ export class TaskCardRenderer extends Component {
             bindTapIntents(container, {
                 onDoubleTap: () => this.onDetailClick?.(task),
             }, {
-                // Skip dbltap on handles / checkboxes / links — these have their
-                // own activation. Inline children's checkboxes are nested inside
-                // .task-card so the filter must look up the ancestor chain.
+                // Skip dbltap on handles / checkboxes — these have their own
+                // activation. Links are intentionally included: capture-phase
+                // registration lets the counter see link clicks before the
+                // link handler's stopPropagation, and on double-tap the
+                // capture stopPropagation prevents the link from navigating.
                 targetFilter: (t) =>
                     !t.closest('.task-card__handle') &&
-                    !t.closest('input[type="checkbox"]') &&
-                    !t.closest('a'),
+                    !t.closest('input[type="checkbox"]'),
+                capture: true,
                 component: cardComp,
             });
         }

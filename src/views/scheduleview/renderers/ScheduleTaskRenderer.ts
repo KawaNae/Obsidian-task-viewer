@@ -10,12 +10,6 @@ import { toDisplayHeightPx, toDisplayTopPx } from '../../sharedLogic/TimelineCar
 import type { DisplayTask } from '../../../types';
 import type { CardReconciler } from '../../sharedUI/CardReconciler';
 
-const SCHEDULE_VARIANT_CLASSES = [
-    'task-card--split',
-    'task-card--split-continues-before',
-    'task-card--split-continues-after',
-];
-
 export interface ScheduleTaskRendererOptions {
     app: App;
     taskRenderer: TaskCardRenderer;
@@ -126,12 +120,7 @@ export class ScheduleTaskRenderer {
      * applying current task split state.
      */
     private decorateScheduleCard(card: HTMLElement, task: DisplayTask): void {
-        SCHEDULE_VARIANT_CLASSES.forEach(cls => card.removeClass(cls));
-        if (task.isSplit) {
-            card.addClass('task-card--split');
-            if (task.splitContinuesBefore) card.addClass('task-card--split-continues-before');
-            if (task.splitContinuesAfter) card.addClass('task-card--split-continues-after');
-        }
+        TaskStyling.applySplitClasses(card, task);
 
         card.dataset.id = task.id;
 

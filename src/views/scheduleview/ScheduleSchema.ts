@@ -16,7 +16,6 @@ export interface ScheduleConfig {
 
 export interface ScheduleTransient {
     currentDate?: string;
-    periodicHeaderCollapsed?: boolean;
 }
 
 export const ScheduleSchema: ViewSchema<ScheduleConfig, ScheduleTransient> = {
@@ -33,7 +32,6 @@ export const ScheduleSchema: ViewSchema<ScheduleConfig, ScheduleTransient> = {
     },
     transient: {
         currentDate:             T.dateString('currentDate'),
-        periodicHeaderCollapsed: T.boolean('periodicHeaderCollapsed'),
     },
 };
 

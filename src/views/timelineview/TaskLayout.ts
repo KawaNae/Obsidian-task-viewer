@@ -1,5 +1,6 @@
 import { DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
+import { buildOverlapClusters } from '../sharedLogic/OverlapClusters';
 
 export class TaskLayout {
     static calculateTaskLayout(tasks: DisplayTask[], date: string, startHour: number): Map<string, { width: number, left: number, zIndex: number }> {
@@ -40,38 +41,16 @@ export class TaskLayout {
             return { task, start, end };
         });
 
-        // 2. Sort by start time, then by duration (longer first)
-        preparedTasks.sort((a, b) => {
-            if (a.start !== b.start) return a.start - b.start;
-            const durA = a.end - a.start;
-            const durB = b.end - b.start;
-            return durB - durA;
-        });
-
-        // 3. Group into clusters of overlapping tasks
-        const clusters: typeof preparedTasks[] = [];
-        let currentCluster: typeof preparedTasks = [];
-        let clusterMaxEnd = -1;
-
-        for (const item of preparedTasks) {
-            if (currentCluster.length === 0) {
-                currentCluster.push(item);
-                clusterMaxEnd = item.end;
-            } else {
-                // If this task starts after the current cluster ends, it's a new cluster
-                if (item.start >= clusterMaxEnd) {
-                    clusters.push(currentCluster);
-                    currentCluster = [item];
-                    clusterMaxEnd = item.end;
-                } else {
-                    currentCluster.push(item);
-                    clusterMaxEnd = Math.max(clusterMaxEnd, item.end);
-                }
-            }
-        }
-        if (currentCluster.length > 0) {
-            clusters.push(currentCluster);
-        }
+        // 2-3. Sort by start time (longer first on tie) and group into overlap clusters.
+        const clusters = buildOverlapClusters(
+            preparedTasks,
+            (a, b) => {
+                if (a.start !== b.start) return a.start - b.start;
+                return (b.end - b.start) - (a.end - a.start);
+            },
+            item => item.start,
+            item => item.end,
+        );
 
         // 4. Process each cluster independently
         for (const cluster of clusters) {

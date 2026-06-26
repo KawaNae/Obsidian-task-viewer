@@ -14,12 +14,8 @@ import { createEmptySortState, hasSortRules } from '../../services/sort/SortType
 import { TaskStyling } from '../sharedUI/TaskStyling';
 import { TaskPagingController } from '../sharedUI/TaskPagingController';
 import { CardReconciler } from '../sharedUI/CardReconciler';
+import { shouldRenderForChanges } from '../sharedUI/RenderScheduler';
 
-const KANBAN_VARIANT_CLASSES = [
-    'task-card--split',
-    'task-card--split-continues-before',
-    'task-card--split-continues-after',
-];
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
@@ -205,7 +201,8 @@ export class KanbanView extends ItemView {
 
         this.render();
 
-        this.unsubscribe = this.readService.onChange(() => {
+        this.unsubscribe = this.readService.onChange((_taskId, changes) => {
+            if (!shouldRenderForChanges(changes)) return;
             this.render();
         });
     }
@@ -377,17 +374,10 @@ export class KanbanView extends ItemView {
     }
 
     /**
-     * Idempotent decoration for kanban cards. Variant classes are reset
-     * before applying current task split state.
+     * Idempotent decoration for kanban cards (color / linestyle / readonly).
+     * Kanban tasks are never split in this path, so no split variants apply.
      */
     private decorateKanbanCard(card: HTMLElement, task: import('../../types').DisplayTask): void {
-        KANBAN_VARIANT_CLASSES.forEach(cls => card.removeClass(cls));
-        if (task.isSplit) {
-            card.addClass('task-card--split');
-            if (task.splitContinuesBefore) card.addClass('task-card--split-continues-before');
-            if (task.splitContinuesAfter) card.addClass('task-card--split-continues-after');
-        }
-
         card.dataset.id = task.id;
 
         TaskStyling.applyTaskColor(card, task.color ?? null);
@@ -577,22 +567,19 @@ export class KanbanView extends ItemView {
 
     private duplicateCell(listDef: PinnedListDefinition, row: number, col: number): void {
         const dup: PinnedListDefinition = {
+            ...listDef,
             id: this.generateId(),
             name: listDef.name + ' (copy)',
             filterState: structuredClone(listDef.filterState),
             sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
         };
 
-        // Insert duplicated cell to the right in the same row, and add a new cell to all other rows
-        if (this.grid[0].length === this.grid[row].length) {
-            // Rectangular: insert column at col+1
-            for (let r = 0; r < this.grid.length; r++) {
-                if (r === row) {
-                    this.grid[r].splice(col + 1, 0, dup);
-                } else {
-                    this.grid[r].splice(col + 1, 0, this.createDefaultList());
-                }
-            }
+        // Insert the duplicate to the right in its row; keep the grid
+        // rectangular by inserting a default cell at the same column in every
+        // other row. splice tolerates col+1 past a shorter row's length (it
+        // appends), so a non-rectangular grid no longer silently no-ops.
+        for (let r = 0; r < this.grid.length; r++) {
+            this.grid[r].splice(col + 1, 0, r === row ? dup : this.createDefaultList());
         }
 
         this.requestSaveLayout();

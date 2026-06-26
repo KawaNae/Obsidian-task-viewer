@@ -12,6 +12,7 @@
     scrollbar-width: none;
     -ms-overflow-style: none;
     border-bottom: 1px solid var(--tv-border);
+    container-type: inline-size;
 }
 
 .view-toolbar::-webkit-scrollbar {
@@ -64,14 +65,83 @@
     height: 28px;
     display: inline-flex;
     align-items: center;
-    justify-content: center;
     cursor: pointer;
-    padding: 0 8px !important;
-    font-size: 0.82em;
-    min-width: 3.2em;
+    padding: 0 5px !important;
+    color: var(--tv-text);
+    font-size: 0.9em;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.view-toolbar__nav-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
     flex-shrink: 0;
 }
 
 .view-toolbar__spacer {
     flex: 1;
+}
+
+/* Date label (YYYY - MM) — toolbar left side */
+.view-toolbar__date-label {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    padding: 0 5px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.view-toolbar__date-label-year,
+.view-toolbar__date-label-month {
+    font-size: 1.4em;
+    font-weight: 700;
+    color: var(--tv-text);
+}
+
+.view-toolbar__date-label-year .internal-link,
+.view-toolbar__date-label-month .internal-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.view-toolbar__date-label-sep {
+    font-size: 1.4em;
+    font-weight: 700;
+    color: var(--tv-text-muted);
+}
+
+.view-toolbar__date-label-year.is-current,
+.view-toolbar__date-label-month.is-current {
+    color: var(--tv-text-accent);
+}
+
+/* Action zone — right-side buttons (filter, mask, settings, sidebar) */
+.view-toolbar__action-zone {
+    display: flex;
+    align-items: center;
+    gap: var(--toolbar-gap, 8px);
+    flex-shrink: 0;
+}
+
+/* Overflow ⋮ button — hidden by default, shown in compact mode */
+.view-toolbar__btn--more {
+    display: none;
+}
+
+.view-toolbar__btn--more.is-filtered {
+    color: var(--tv-text-accent);
+}
+
+/* Compact mode: hide inline action buttons, show ⋮ */
+@container (max-width: 500px) {
+    .view-toolbar__action-zone {
+        display: none;
+    }
+    .view-toolbar__btn--more {
+        display: inline-flex;
+    }
 }

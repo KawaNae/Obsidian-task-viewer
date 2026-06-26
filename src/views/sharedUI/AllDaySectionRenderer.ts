@@ -30,7 +30,12 @@ export class AllDaySectionRenderer {
         private viewId: string
     ) { }
 
-    public render(container: HTMLElement, dates: string[], displayTasks: DisplayTask[], reconciler: CardReconciler) {
+    public render(
+        container: HTMLElement,
+        dates: string[],
+        displayTasks: DisplayTask[],
+        reconciler: CardReconciler,
+    ): void {
         const viewStart = dates[0];
         const viewEnd = dates[dates.length - 1];
         const startHour = this.plugin.settings.startHour;

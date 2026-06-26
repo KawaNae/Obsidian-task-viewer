@@ -25,7 +25,7 @@ interface FieldOptions {
     readonly legacyKeys?: readonly string[];
 }
 
-const ASTRONOMY_KEYS = ['sunTimes', 'moonPhase'] as const satisfies readonly (keyof AstronomyDisplay)[];
+const ASTRONOMY_KEYS = ['sunTimes', 'moonPhase', 'sunTimesInFront'] as const satisfies readonly (keyof AstronomyDisplay)[];
 
 // ── helpers ──
 
@@ -117,6 +117,27 @@ export const F = {
                 const n = parseInt(raw, 10);
                 return Number.isFinite(n) ? parseValue(n) : undefined;
             },
+        };
+    },
+
+    stringEnum<const S extends string>(
+        key: string,
+        allowed: readonly S[],
+        opts: FieldOptions = {},
+    ): ConfigField<S> {
+        const set = new Set<string>(allowed);
+        const parseValue = (v: string): S | undefined => (set.has(v) ? (v as S) : undefined);
+        return {
+            key,
+            legacyKeys: opts.legacyKeys,
+            parse(raw) {
+                return typeof raw === 'string' ? parseValue(raw) : undefined;
+            },
+            serialize(value) {
+                return typeof value === 'string' && set.has(value) ? value : undefined;
+            },
+            toUriParam(value) { return String(value); },
+            fromUriParam(raw) { return parseValue(raw); },
         };
     },
 
@@ -235,7 +256,7 @@ export const F = {
     },
 
     /**
-     * Partial<AstronomyDisplay>. Only known overlay keys (sunTimes, moonPhase)
+     * Partial<AstronomyDisplay>. Only known overlay keys (see ASTRONOMY_KEYS)
      * are accepted; everything else is dropped. Empty objects are omitted.
      */
     astronomyDisplay(key: string, opts: FieldOptions = {}): ConfigField<Partial<AstronomyDisplay>> {
@@ -347,6 +368,15 @@ export const T = {
 
     optionalString(key: string, opts: TransientOpts = {}): TransientField<string> {
         const f = F.optionalString(key, opts);
+        return { key: f.key, parse: f.parse, serialize: f.serialize, legacyKeys: opts.legacyKeys };
+    },
+
+    stringEnum<const S extends string>(
+        key: string,
+        allowed: readonly S[],
+        opts: TransientOpts = {},
+    ): TransientField<S> {
+        const f = F.stringEnum(key, allowed, opts);
         return { key: f.key, parse: f.parse, serialize: f.serialize, legacyKeys: opts.legacyKeys };
     },
 };

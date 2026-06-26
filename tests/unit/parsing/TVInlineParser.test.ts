@@ -335,5 +335,27 @@ describe('TVInlineParser', () => {
         it('round-trips numbered marker', () => {
             expect(roundTrip('1. [ ] num @2026-01-15')).toBe('1. [ ] num @2026-01-15');
         });
+
+        // Regression: a second @date token embedded in content must not survive
+        // into the formatted line, or it would hijack the start date on re-parse
+        // (the bug reproduced live: a status toggle silently changed the date).
+        it('discards a second @date token and keeps the first as start date', () => {
+            const task = parser.parse('- [ ] task @2026-01-01 foo @2026-02-02', 'test.md', 0)!;
+            expect(task.startDate).toBe('2026-01-01');
+            expect(task.content).toBe('task foo');
+            const formatted = parser.format(task);
+            expect(formatted).toBe('- [ ] task foo @2026-01-01');
+            // Idempotent: re-parsing the formatted line keeps the same start date.
+            expect(parser.parse(formatted, 'test.md', 0)!.startDate).toBe('2026-01-01');
+        });
+
+        it('preserves non-command text after ==> verbatim', () => {
+            expect(roundTrip('- [ ] note ==> see https://example.com'))
+                .toBe('- [ ] note ==> see https://example.com');
+        });
+
+        it('preserves a bare ==> word (missing parens) instead of dropping it', () => {
+            expect(roundTrip('- [ ] task ==> next')).toBe('- [ ] task ==> next');
+        });
     });
 });

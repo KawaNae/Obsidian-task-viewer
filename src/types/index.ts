@@ -163,6 +163,11 @@ export interface Task {
     // Parsed flow commands.
     commands?: FlowCommand[];
 
+    // Verbatim text after `==>` that parsed to zero commands (e.g. a URL or
+    // prose). Preserved so format() can re-emit it losslessly; ignored when
+    // `commands` is non-empty.
+    rawFlow?: string;
+
     // Parse-time validation result (error or warning).
     validation?: {
         severity: 'error' | 'warning';
@@ -325,13 +330,18 @@ export interface ViewState {
     pinnedListCollapsed?: Record<string, boolean>;
     pinnedLists?: PinnedListDefinition[];
     customName?: string;
-    periodicHeaderCollapsed?: boolean;
     /** Per-leaf "mask mode" toggle. When true, the renderer substitutes each
      * card's content with the task's `tv-mask` value (live, not export-only). */
     maskMode?: boolean;
     /** Per-instance override of astronomy display flags. undefined fields fall
      *  back to settings.astronomy.display. */
     astronomyDisplay?: Partial<AstronomyDisplay>;
+    /** Per-view override of habit tracker visibility. undefined = follow global. */
+    showHabits?: boolean;
+    /** Per-view override of all-day section visibility. undefined = follow global. */
+    showAllDay?: boolean;
+    /** Per-view override of timeline section visibility. undefined = follow global. */
+    showTimeline?: boolean;
 }
 
 export interface PinnedListDefinition {
@@ -502,7 +512,10 @@ export interface TaskViewerSettings {
     hideViewHeader: boolean;
     mobileTopOffset: number;
     fixMobileGradientWidth: boolean;
-
+    showHabits: boolean;
+    showAllDay: boolean;
+    showTimeline: boolean;
+    showWeekRow: boolean;
     // External parser support (read-only).
     enableTasksPlugin: boolean;
     enableDayPlanner: boolean;
@@ -523,6 +536,12 @@ export interface AstronomyDisplay {
     sunTimes: boolean;
     /** Show moon phase indicator per visible date. */
     moonPhase: boolean;
+    /**
+     * Layer the sunrise/sunset lines in front of task cards instead of behind
+     * them. Default false = behind all cards (ambient context). Only meaningful
+     * when sunTimes is on.
+     */
+    sunTimesInFront: boolean;
 }
 
 export interface AstronomyLocation {
@@ -601,6 +620,10 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     hideViewHeader: true,
     mobileTopOffset: 32,
     fixMobileGradientWidth: true,
+    showHabits: true,
+    showAllDay: true,
+    showTimeline: true,
+    showWeekRow: true,
     enableTasksPlugin: false,
     enableDayPlanner: false,
     tasksPluginMapping: {
@@ -609,7 +632,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
         due: 'due',
     },
     astronomy: {
-        display: { sunTimes: false, moonPhase: false },
+        display: { sunTimes: false, moonPhase: false, sunTimesInFront: false },
         location: { latitude: 35.6762, longitude: 139.6503 }, // Tokyo Station
     },
 };

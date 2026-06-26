@@ -86,6 +86,8 @@
       "navigation": "ナビゲーション",
       "showSunTimes": "日の出 / 日の入り線を表示",
       "showSunTimesDesc": "タイムライン上に日の出と日の入りの細い水平線を引きます。緯度・経度の入力が必要です。",
+      "showSunInFront": "日の出 / 日の入り線を前面に表示",
+      "showSunInFrontDesc": "オンにすると線をタスクカードの前面に重ねます。オフ（既定）では全カードの背面に表示します。ビューごとのメニューで個別に上書きできます。",
       "showMoonPhase": "月相欄を表示",
       "showMoonPhaseDesc": "習慣欄の上に、各日の月相アイコンを表示します。",
       "homeLatitude": "緯度",
@@ -104,6 +106,14 @@
       "display": "表示",
       "hideViewHeader": "ビューヘッダーを非表示",
       "hideViewHeaderDesc": "タスクビューアーパネルのビューヘッダー（ナビゲーションバー）を非表示にします。",
+      "showHabits": "習慣トラッカーを表示",
+      "showHabitsDesc": "習慣トラッカー行の既定の表示状態。ビューごとに上書き可能。",
+      "showAllDay": "終日セクションを表示",
+      "showAllDayDesc": "終日タスクセクションの既定の表示状態。ビューごとに上書き可能。",
+      "showTimeline": "タイムラインを表示",
+      "showTimelineDesc": "時間軸セクションの既定の表示状態。ビューごとに上書き可能。",
+      "showWeekRow": "週番号行を表示",
+      "showWeekRowDesc": "タイムライン・スケジュールの日付ヘッダー上部に週番号行を表示します。",
       "mobileTopOffset": "モバイル上部オフセット (px)",
       "mobileTopOffsetDesc": "ヘッダー非表示時のモバイルビューの上部オフセット。OSステータスバーとの重なりを防ぎます。",
       "fixMobileGradientWidth": "モバイルグラデーション幅を修正",
@@ -231,7 +241,10 @@
   "viewOptions": {
     "toggleSunTimes": "日の出 / 日の入り線",
     "toggleMoonPhase": "月相",
-    "followGlobalAstronomy": "全体設定に従う"
+    "toggleHabits": "習慣トラッカー",
+    "toggleAllDay": "終日",
+    "toggleTimeline": "タイムライン",
+    "followGlobal": "全体設定に従う"
   },
   "toolbar": {
     "today": "今日",
@@ -253,6 +266,7 @@
     "copyAsLink": "リンクとしてコピー",
     "exportAsImage": "画像として保存",
     "maskMode": "マスクモード",
+    "sidebar": "サイドバー",
     "position": "表示位置",
     "noFolderConfigured": "フォルダ未設定",
     "noTemplatesFound": "テンプレートなし",
@@ -624,10 +638,7 @@
     "expandAllDay": "終日欄を展開",
     "collapseAllDay": "終日欄を折りたたむ"
   },
-  "periodicHeader": {
-    "expand": "期間ヘッダーを展開",
-    "collapse": "期間ヘッダーを折りたたむ"
-  },
+  "periodicHeader": {},
   "cli": {
     "title": "Task Viewer CLIリファレンス",
     "commands": "コマンド",

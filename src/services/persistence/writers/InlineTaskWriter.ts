@@ -192,43 +192,60 @@ export class InlineTaskWriter {
     }
 
     /**
-     * Append task with children to file (for move command)
-     * Reads children from the original file and appends them together
-     * Adjusts children indentation relative to new parent position
+     * Collect the task's children from `lines`, strip block IDs, and re-indent
+     * them relative to the parent. Returns the children lines ready to append.
+     * Shared by both the same-file (atomic) and cross-file paths of
+     * `appendTaskWithChildren` so the collection logic lives in one place.
+     */
+    private buildAdjustedChildren(lines: string[], task: Task): string[] {
+        const currentLine = this.fileOps.findTaskLineNumber(lines, task);
+        if (currentLine < 0 || currentLine >= lines.length) return [];
+
+        // Parent's original indentation prefix (preserves tabs/spaces)
+        const parentIndent = lines[currentLine].match(/^\s*/)?.[0] ?? '';
+        const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
+        const cleaned = this.fileOps.stripBlockIds(childrenLines);
+        return FileOperations.adjustChildIndentation(cleaned, parentIndent);
+    }
+
+    /**
+     * Append task with children to file (for move command).
+     * Reads children from the original file and appends them together,
+     * adjusting children indentation relative to the new parent position.
+     *
+     * Atomicity note: when source === dest we read and write in a single
+     * `vault.process` (atomic). When source ≠ dest (the normal move case) the
+     * operation spans two files, which Obsidian's single-file `process` API
+     * cannot make atomic. That split is harmless: read(source) → write(dest)
+     * only copies the collected child lines into another file — a concurrent
+     * edit to source between the read and the append cannot corrupt the dest
+     * write, and the subsequent deletion of the original re-locates the task by
+     * line number, so it tracks any shift. Do not "fix" this by serializing the
+     * two files — the window has no observable effect.
      */
     async appendTaskWithChildren(destPath: string, content: string, task: Task): Promise<void> {
-        // 1. Read children from original file
         const sourceFile = this.app.vault.getAbstractFileByPath(task.file);
-        let childrenLines: string[] = [];
-        let parentIndent = '';
 
-        if (sourceFile instanceof TFile) {
-            const sourceContent = await this.app.vault.read(sourceFile);
-            const lines = sourceContent.split('\n');
-
-            // Find current line using originalText
-            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-
-            if (currentLine >= 0 && currentLine < lines.length) {
-                // Get parent's original indentation prefix (preserves tabs/spaces)
-                const parentLine = lines[currentLine];
-                parentIndent = parentLine.match(/^\s*/)?.[0] ?? '';
-
-                const result = this.fileOps.collectChildrenFromLines(lines, currentLine);
-                childrenLines = result.childrenLines;
-            }
+        // Same-file append: a single atomic process reads children and appends.
+        if (sourceFile instanceof TFile && destPath === task.file) {
+            await this.app.vault.process(sourceFile, (fileContent) => {
+                const lines = fileContent.split('\n');
+                const adjustedChildren = this.buildAdjustedChildren(lines, task);
+                const fullContent = [content, ...adjustedChildren].join('\n');
+                const prefix = fileContent.length > 0 && !fileContent.endsWith('\n') ? '\n' : '';
+                return fileContent + prefix + fullContent;
+            });
+            return;
         }
 
-        // 2. Strip block IDs from children
-        const cleanedChildren = this.fileOps.stripBlockIds(childrenLines);
+        // Cross-file: collect children from source, then append to dest (see note).
+        let adjustedChildren: string[] = [];
+        if (sourceFile instanceof TFile) {
+            const sourceContent = await this.app.vault.read(sourceFile);
+            adjustedChildren = this.buildAdjustedChildren(sourceContent.split('\n'), task);
+        }
 
-        // 3. Adjust children indentation relative to parent
-        const adjustedChildren = FileOperations.adjustChildIndentation(cleanedChildren, parentIndent);
-
-        // 4. Build full content to append
         const fullContent = [content, ...adjustedChildren].join('\n');
-
-        // 5. Append to destination file
         await this.appendTaskToFile(destPath, fullContent);
     }
 }
