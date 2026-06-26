@@ -339,6 +339,10 @@ export interface ViewState {
     astronomyDisplay?: Partial<AstronomyDisplay>;
     /** Per-view override of habit tracker visibility. undefined = follow global. */
     showHabits?: boolean;
+    /** Per-view override of all-day section visibility. undefined = follow global. */
+    showAllDay?: boolean;
+    /** Per-view override of timeline section visibility. undefined = follow global. */
+    showTimeline?: boolean;
 }
 
 export interface PinnedListDefinition {
@@ -510,6 +514,8 @@ export interface TaskViewerSettings {
     mobileTopOffset: number;
     fixMobileGradientWidth: boolean;
     showHabits: boolean;
+    showAllDay: boolean;
+    showTimeline: boolean;
     // External parser support (read-only).
     enableTasksPlugin: boolean;
     enableDayPlanner: boolean;
@@ -615,6 +621,8 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     mobileTopOffset: 32,
     fixMobileGradientWidth: true,
     showHabits: true,
+    showAllDay: true,
+    showTimeline: true,
     enableTasksPlugin: false,
     enableDayPlanner: false,
     tasksPluginMapping: {

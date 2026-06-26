@@ -102,8 +102,12 @@ export class GridRenderer {
             moonRenderer.render(moonRow, dates);
         }
 
-        // 2b. Habits Row — only rendered when the effective showHabits flag is on
+        const showAllDay = this.viewState.showAllDay ?? this.plugin.settings.showAllDay;
+        const showTimeline = this.viewState.showTimeline ?? this.plugin.settings.showTimeline;
+
         const showHabits = this.viewState.showHabits ?? this.plugin.settings.showHabits;
+
+        // 2b. Habits Row
         if (showHabits) {
             const habitsRow = grid.createDiv('tv-grid-row habits-section');
             habitsRow.style.gridTemplateColumns = colTemplate;
@@ -113,78 +117,62 @@ export class GridRenderer {
         // 3. Scroll Area (allday + timeline grid)
         const scrollArea = grid.createDiv('timeline-scroll-area');
 
-        // 3.1. All-Day Row
-        const allDayRow = scrollArea.createDiv('tv-grid-row allday-section');
-        allDayRow.style.gridTemplateColumns = colTemplate;
-
-        // Time Axis All-Day
-        const axisCell = allDayRow.createDiv('allday-section__cell allday-section__axis');
-        axisCell.setAttribute('aria-label', t('allDaySection.allDay'));
-
-        // Label
-        const axisLabel = axisCell.createEl('span', { cls: 'allday-section__label' });
-        axisLabel.setText(t('allDaySection.allDay'));
-
-        axisCell.style.gridColumn = '1';
-        axisCell.style.gridRow = '1 / span 50';
-
-        // Background Cells (Grid Lines)
-        dates.forEach((date, i) => {
-            const cell = allDayRow.createDiv('allday-section__cell');
-            if (i === 0) {
-                cell.addClass('is-first-cell');
-            }
-            if (i === dates.length - 1) {
-                cell.addClass('is-last-cell');
-            }
-            cell.dataset.date = date;
-            cell.style.gridColumn = `${i + 2}`; // +2 because 1 is axis
-            cell.style.gridRow = '1 / span 50'; // Span implicit rows (large enough number)
-            cell.style.zIndex = '0';
-
-            // Add context menu for empty space
-            allDayRenderer.addEmptySpaceContextMenu(cell, date);
-        });
-
         // セクション間で同じ task.id が両方に流れ込まないよう、ここで一度だけ
         // 振り分ける。AllDay と Timeline の両方に同一カードが描画されるバグの根治。
         const buckets = bucketBySection(filteredTasks, startHour);
 
-        // Render Tasks (Overlaid) — allday バケツのみ渡す
-        allDayRenderer.render(allDayRow, dates, buckets.allday, reconciler);
+        // 3.1. All-Day Row
+        if (showAllDay) {
+            const allDayRow = scrollArea.createDiv('tv-grid-row allday-section');
+            allDayRow.style.gridTemplateColumns = colTemplate;
 
-        // 3.2. Timeline Grid (time axis + day columns)
-        const timelineGrid = scrollArea.createDiv('tv-grid-row timeline-scroll-area__grid');
-        timelineGrid.style.gridTemplateColumns = colTemplate;
+            const axisCell = allDayRow.createDiv('allday-section__cell allday-section__axis');
+            axisCell.setAttribute('aria-label', t('allDaySection.allDay'));
+            const axisLabel = axisCell.createEl('span', { cls: 'allday-section__label' });
+            axisLabel.setText(t('allDaySection.allDay'));
+            axisCell.style.gridColumn = '1';
+            axisCell.style.gridRow = '1 / span 50';
 
-        // Time Axis Column
-        const timeCol = timelineGrid.createDiv('timeline-scroll-area__axis');
-        this.renderTimeLabels(timeCol);
-
-        // Sun arrows on the time-axis right border (anchor for the per-day
-        // sun lines). The axis is shared across all visible day columns, so
-        // we anchor to the first visible date — sun times shift by < 2 min/day,
-        // imperceptible at axis-arrow resolution.
-        if (astronomyDisplay.sunTimes && dates.length > 0) {
-            const { latitude, longitude } = this.plugin.settings.astronomy.location;
-            attachSunAxisArrows(timeCol, dates[0], { startHour, latitude, longitude });
-        }
-
-        // Day Columns — timed + dueOnly のみ。split で segment を生成してから日付分類。
-        const timelineInput = [...buckets.timed, ...buckets.dueOnly];
-        const splitResult = splitTasks(timelineInput, { type: 'visual-date', startHour });
-        const categorizedByDate = categorizeTasksByDate(splitResult, dates, startHour);
-        dates.forEach(date => {
-            const col = timelineGrid.createDiv('timeline-scroll-area__day-column');
-            col.dataset.date = date;
-            const timedTasks = categorizedByDate.get(date)?.timed ?? [];
-            timelineRenderer.render(col, date, timedTasks, reconciler, {
-                showSunTimes: astronomyDisplay.sunTimes,
+            dates.forEach((date, i) => {
+                const cell = allDayRow.createDiv('allday-section__cell');
+                if (i === 0) cell.addClass('is-first-cell');
+                if (i === dates.length - 1) cell.addClass('is-last-cell');
+                cell.dataset.date = date;
+                cell.style.gridColumn = `${i + 2}`;
+                cell.style.gridRow = '1 / span 50';
+                cell.style.zIndex = '0';
+                allDayRenderer.addEmptySpaceContextMenu(cell, date);
             });
 
-            // Add interaction listeners for creating tasks
-            timelineRenderer.addCreateTaskListeners(col, date);
-        });
+            allDayRenderer.render(allDayRow, dates, buckets.allday, reconciler);
+        }
+
+        // 3.2. Timeline Grid (time axis + day columns)
+        if (showTimeline) {
+            const timelineGrid = scrollArea.createDiv('tv-grid-row timeline-scroll-area__grid');
+            timelineGrid.style.gridTemplateColumns = colTemplate;
+
+            const timeCol = timelineGrid.createDiv('timeline-scroll-area__axis');
+            this.renderTimeLabels(timeCol);
+
+            if (astronomyDisplay.sunTimes && dates.length > 0) {
+                const { latitude, longitude } = this.plugin.settings.astronomy.location;
+                attachSunAxisArrows(timeCol, dates[0], { startHour, latitude, longitude });
+            }
+
+            const timelineInput = [...buckets.timed, ...buckets.dueOnly];
+            const splitResult = splitTasks(timelineInput, { type: 'visual-date', startHour });
+            const categorizedByDate = categorizeTasksByDate(splitResult, dates, startHour);
+            dates.forEach(date => {
+                const col = timelineGrid.createDiv('timeline-scroll-area__day-column');
+                col.dataset.date = date;
+                const timedTasks = categorizedByDate.get(date)?.timed ?? [];
+                timelineRenderer.render(col, date, timedTasks, reconciler, {
+                    showSunTimes: astronomyDisplay.sunTimes,
+                });
+                timelineRenderer.addCreateTaskListeners(col, date);
+            });
+        }
 
         // Restore scroll position (To be handled by caller or via specific method if passed)
         // For now, TimelineView handles restoring scroll position via its lastScrollTop property logic, 

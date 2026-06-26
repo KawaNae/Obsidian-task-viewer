@@ -109,6 +109,8 @@ export class TimelineToolbar extends ViewToolbarBase {
             daysToShow: this.viewState.daysToShow as TimelineConfig['daysToShow'],
             zoomLevel: this.viewState.zoomLevel,
             showHabits: this.viewState.showHabits,
+            showAllDay: this.viewState.showAllDay,
+            showTimeline: this.viewState.showTimeline,
         };
     }
 
@@ -135,6 +137,8 @@ export class TimelineToolbar extends ViewToolbarBase {
         if (next.daysToShow !== undefined) this.viewState.daysToShow = next.daysToShow;
         if (next.zoomLevel !== undefined) this.viewState.zoomLevel = next.zoomLevel;
         this.viewState.showHabits = next.showHabits;
+        this.viewState.showAllDay = next.showAllDay;
+        this.viewState.showTimeline = next.showTimeline;
     }
 
     /**
@@ -260,13 +264,15 @@ export class TimelineToolbar extends ViewToolbarBase {
                     overlays: ['sunTimes', 'moonPhase'],
                     settings: this.plugin.settings.astronomy,
                     instance: this.viewState.astronomyDisplay,
+                    omitFollowGlobal: true,
                     onChange: (next) => {
                         this.viewState.astronomyDisplay = next;
                         this.callbacks.onRender();
                         this.app.workspace.requestSaveLayout();
                     },
                 });
-                this.appendHabitsMenuSection(menu);
+                this.appendSectionToggles(menu);
+                this.appendFollowGlobal(menu);
             },
         });
 
@@ -274,24 +280,56 @@ export class TimelineToolbar extends ViewToolbarBase {
         this.renderSidebarToggle(toolbar);
     }
 
-    private appendHabitsMenuSection(menu: Menu): void {
-        const override = this.viewState.showHabits;
-        const effective = override ?? this.plugin.settings.showHabits;
+    private appendSectionToggles(menu: Menu): void {
+        const effectiveHabits = this.viewState.showHabits ?? this.plugin.settings.showHabits;
         menu.addItem((item) => {
             item.setTitle(t('viewOptions.toggleHabits'))
-                .setChecked(effective)
+                .setChecked(effectiveHabits)
                 .onClick(() => {
-                    this.viewState.showHabits = !effective;
+                    this.viewState.showHabits = !effectiveHabits;
                     this.callbacks.onRender();
                     this.app.workspace.requestSaveLayout();
                 });
         });
+
+        const effectiveAllDay = this.viewState.showAllDay ?? this.plugin.settings.showAllDay;
         menu.addItem((item) => {
-            item.setTitle(t('viewOptions.followGlobalHabits'))
-                .setIcon('rotate-ccw')
-                .setDisabled(override === undefined)
+            item.setTitle(t('viewOptions.toggleAllDay'))
+                .setChecked(effectiveAllDay)
                 .onClick(() => {
+                    this.viewState.showAllDay = !effectiveAllDay;
+                    this.callbacks.onRender();
+                    this.app.workspace.requestSaveLayout();
+                });
+        });
+
+        const effectiveTimeline = this.viewState.showTimeline ?? this.plugin.settings.showTimeline;
+        menu.addItem((item) => {
+            item.setTitle(t('viewOptions.toggleTimeline'))
+                .setChecked(effectiveTimeline)
+                .onClick(() => {
+                    this.viewState.showTimeline = !effectiveTimeline;
+                    this.callbacks.onRender();
+                    this.app.workspace.requestSaveLayout();
+                });
+        });
+    }
+
+    private appendFollowGlobal(menu: Menu): void {
+        const hasAstroOverride = this.viewState.astronomyDisplay != null
+            && Object.keys(this.viewState.astronomyDisplay).length > 0;
+        const hasHabitsOverride = this.viewState.showHabits !== undefined;
+        const hasAllDayOverride = this.viewState.showAllDay !== undefined;
+        const hasTimelineOverride = this.viewState.showTimeline !== undefined;
+        menu.addItem((item) => {
+            item.setTitle(t('viewOptions.followGlobal'))
+                .setIcon('rotate-ccw')
+                .setDisabled(!hasAstroOverride && !hasHabitsOverride && !hasAllDayOverride && !hasTimelineOverride)
+                .onClick(() => {
+                    this.viewState.astronomyDisplay = undefined;
                     this.viewState.showHabits = undefined;
+                    this.viewState.showAllDay = undefined;
+                    this.viewState.showTimeline = undefined;
                     this.callbacks.onRender();
                     this.app.workspace.requestSaveLayout();
                 });

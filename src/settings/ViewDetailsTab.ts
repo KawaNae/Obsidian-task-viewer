@@ -63,6 +63,36 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
                 await plugin.saveSettings();
             }));
 
+    new Setting(el)
+        .setName(t('settings.views.showHabits'))
+        .setDesc(t('settings.views.showHabitsDesc'))
+        .addToggle(toggle => toggle
+            .setValue(plugin.settings.showHabits)
+            .onChange(async (value) => {
+                plugin.settings.showHabits = value;
+                await plugin.saveSettings();
+            }));
+
+    new Setting(el)
+        .setName(t('settings.views.showAllDay'))
+        .setDesc(t('settings.views.showAllDayDesc'))
+        .addToggle(toggle => toggle
+            .setValue(plugin.settings.showAllDay)
+            .onChange(async (value) => {
+                plugin.settings.showAllDay = value;
+                await plugin.saveSettings();
+            }));
+
+    new Setting(el)
+        .setName(t('settings.views.showTimeline'))
+        .setDesc(t('settings.views.showTimelineDesc'))
+        .addToggle(toggle => toggle
+            .setValue(plugin.settings.showTimeline)
+            .onChange(async (value) => {
+                plugin.settings.showTimeline = value;
+                await plugin.saveSettings();
+            }));
+
     // Calendar / Mini Calendar
     el.createEl('h3', { text: t('settings.views.calendarMiniCalendar'), cls: 'setting-section-header' });
 

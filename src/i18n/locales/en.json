@@ -107,7 +107,11 @@
       "hideViewHeader": "Hide view header",
       "hideViewHeaderDesc": "Hide the view header (navigation bar) in task viewer panels.",
       "showHabits": "Show habit tracker",
-      "showHabitsDesc": "Show the habit tracker row in timeline views. Can be overridden per view.",
+      "showHabitsDesc": "Default visibility of the habit tracker row. Can be overridden per view.",
+      "showAllDay": "Show all-day section",
+      "showAllDayDesc": "Default visibility of the all-day task section. Can be overridden per view.",
+      "showTimeline": "Show timeline",
+      "showTimelineDesc": "Default visibility of the hourly timeline section. Can be overridden per view.",
       "mobileTopOffset": "Mobile top offset (px)",
       "mobileTopOffsetDesc": "Top offset for mobile views when the header is hidden. Prevents overlap with the OS status bar.",
       "fixMobileGradientWidth": "Fix mobile gradient width",
@@ -234,11 +238,11 @@
   },
   "viewOptions": {
     "toggleSunTimes": "Show sunrise / sunset lines",
-    "toggleSunInFront": "Sunrise / sunset lines in front",
     "toggleMoonPhase": "Show moon phase",
-    "followGlobalAstronomy": "Follow global setting",
     "toggleHabits": "Habit tracker",
-    "followGlobalHabits": "Follow global setting"
+    "toggleAllDay": "All-day section",
+    "toggleTimeline": "Timeline",
+    "followGlobal": "Follow global setting"
   },
   "toolbar": {
     "today": "Today",

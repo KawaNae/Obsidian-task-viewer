@@ -63,16 +63,6 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
             }));
 
     new Setting(el)
-        .setName(t('settings.views.showHabits'))
-        .setDesc(t('settings.views.showHabitsDesc'))
-        .addToggle(toggle => toggle
-            .setValue(plugin.settings.showHabits)
-            .onChange(async (value) => {
-                plugin.settings.showHabits = value;
-                await plugin.saveSettings();
-            }));
-
-    new Setting(el)
         .setName(t('settings.views.mobileTopOffset'))
         .setDesc(t('settings.views.mobileTopOffsetDesc'))
         .addText(text => {
