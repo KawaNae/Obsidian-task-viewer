@@ -5,9 +5,12 @@ import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
 import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
 import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
+import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
+import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
+import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { CalendarSchema, type CalendarConfig, type CalendarTransient } from './CalendarSchema';
 
@@ -43,6 +46,10 @@ export interface CalendarToolbarDeps {
 
     getAstronomyDisplay: () => Partial<AstronomyDisplay> | undefined;
     setAstronomyDisplay: (next: Partial<AstronomyDisplay> | undefined) => void;
+
+    getReferenceMonth: () => { year: number; month: number };
+    linkInteractionManager: TaskLinkInteractionManager;
+    hoverParent: TaskViewHoverParent;
 }
 
 /**
@@ -51,6 +58,7 @@ export interface CalendarToolbarDeps {
 export class CalendarToolbar extends ViewToolbarBase {
     private filterBtn: HTMLButtonElement | null = null;
     private sidebarToggleBtn: HTMLButtonElement | null = null;
+    private dateLabelHandle: { update: (year: number, month: number) => void } | null = null;
     private maskHandle: { update: () => void } | null = null;
 
     constructor(private deps: CalendarToolbarDeps) {
@@ -69,6 +77,18 @@ export class CalendarToolbar extends ViewToolbarBase {
 
     protected override buildDom(toolbar: HTMLElement): void {
         const { deps } = this;
+
+        // Date Label (YYYY - MM)
+        const dateLabelDeps = {
+            app: deps.app,
+            getSettings: () => deps.plugin.settings,
+            linkInteractionManager: deps.linkInteractionManager,
+            hoverParent: deps.hoverParent,
+        };
+        this.dateLabelHandle = DateLabel.render(toolbar, dateLabelDeps);
+        const ref = deps.getReferenceMonth();
+        this.dateLabelHandle.update(ref.year, ref.month);
+        DateLabel.bindHoverPreview(toolbar, dateLabelDeps);
 
         DateNavigator.render(
             toolbar,
@@ -158,6 +178,8 @@ export class CalendarToolbar extends ViewToolbarBase {
     }
 
     override update(): void {
+        const ref = this.deps.getReferenceMonth();
+        this.dateLabelHandle?.update(ref.year, ref.month);
         if (this.filterBtn) {
             this.filterBtn.classList.toggle('is-filtered', this.deps.filterMenu.hasActiveFilters());
         }

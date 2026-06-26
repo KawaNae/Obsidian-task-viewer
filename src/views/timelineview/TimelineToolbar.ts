@@ -7,6 +7,7 @@ import { DateUtils } from '../../utils/DateUtils';
 import type { LeafPosition } from '../sharedLogic/ViewUriBuilder';
 import TaskViewerPlugin from '../../main';
 import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
+import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
@@ -14,6 +15,8 @@ import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
+import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
+import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { TimelineSchema, type TimelineConfig, type TimelineTransient } from './TimelineSchema';
 
@@ -27,6 +30,8 @@ export interface ToolbarCallbacks {
     getCustomName: () => string | undefined;
     onRename: (newName: string | undefined) => void;
     getLeaf: () => WorkspaceLeaf;
+    linkInteractionManager: TaskLinkInteractionManager;
+    hoverParent: TaskViewHoverParent;
 }
 
 /**
@@ -42,6 +47,7 @@ export class TimelineToolbar extends ViewToolbarBase {
     private readonly filterMenu = new FilterMenuComponent();
     private filterBtn: HTMLElement | null = null;
     private sidebarToggleBtn: HTMLElement | null = null;
+    private dateLabelHandle: { update: (year: number, month: number) => void } | null = null;
     private viewModeHandle: { update: () => void } | null = null;
     private zoomHandle: { update: () => void } | null = null;
     private maskHandle: { update: () => void } | null = null;
@@ -160,9 +166,8 @@ export class TimelineToolbar extends ViewToolbarBase {
     override update(): void {
         if (!this.rootEl) return;
         this.maybeRehydrateFilterState();
-        // View-mode and zoom labels are built once in buildDom; refresh them
-        // here so external state changes (layout restore, URI params, template
-        // apply) reflect in the persistent toolbar DOM.
+        const { year, month } = this.getStartDateYearMonth();
+        this.dateLabelHandle?.update(year, month);
         this.viewModeHandle?.update();
         this.zoomHandle?.update();
         this.maskHandle?.update();
@@ -188,7 +193,24 @@ export class TimelineToolbar extends ViewToolbarBase {
         }
     }
 
+    private getStartDateYearMonth(): { year: number; month: number } {
+        const d = this.viewState.startDate;
+        return { year: parseInt(d.substring(0, 4), 10), month: parseInt(d.substring(5, 7), 10) - 1 };
+    }
+
     protected override buildDom(toolbar: HTMLElement): void {
+        // Date Label (YYYY - MM)
+        const dateLabelDeps = {
+            app: this.app,
+            getSettings: () => this.plugin.settings,
+            linkInteractionManager: this.callbacks.linkInteractionManager,
+            hoverParent: this.callbacks.hoverParent,
+        };
+        this.dateLabelHandle = DateLabel.render(toolbar, dateLabelDeps);
+        const { year, month } = this.getStartDateYearMonth();
+        this.dateLabelHandle.update(year, month);
+        DateLabel.bindHoverPreview(toolbar, dateLabelDeps);
+
         // Date Navigation
         this.renderDateNavigation(toolbar);
 

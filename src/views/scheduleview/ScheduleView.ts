@@ -198,6 +198,9 @@ export class ScheduleView extends ItemView {
                 this.render();
                 this.toolbar.update();
             },
+            getCurrentDate: () => this.currentVisualDate,
+            linkInteractionManager: this.linkInteractionManager,
+            hoverParent: this.hoverParent,
         });
     }
 

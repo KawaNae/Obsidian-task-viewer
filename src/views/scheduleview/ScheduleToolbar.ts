@@ -4,9 +4,12 @@ import type TaskViewerPlugin from '../../main';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
+import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import type { AstronomyDisplay } from '../../types';
+import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
+import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { ScheduleSchema, type ScheduleConfig, type ScheduleTransient } from './ScheduleSchema';
 
@@ -37,6 +40,10 @@ export interface ScheduleToolbarDeps {
 
     getAstronomyDisplay: () => Partial<AstronomyDisplay> | undefined;
     setAstronomyDisplay: (next: Partial<AstronomyDisplay> | undefined) => void;
+
+    getCurrentDate: () => string;
+    linkInteractionManager: TaskLinkInteractionManager;
+    hoverParent: TaskViewHoverParent;
 }
 
 /**
@@ -45,6 +52,7 @@ export interface ScheduleToolbarDeps {
  */
 export class ScheduleToolbar extends ViewToolbarBase {
     private filterBtn: HTMLButtonElement | null = null;
+    private dateLabelHandle: { update: (year: number, month: number) => void } | null = null;
     private maskHandle: { update: () => void } | null = null;
 
     constructor(private deps: ScheduleToolbarDeps) {
@@ -55,8 +63,25 @@ export class ScheduleToolbar extends ViewToolbarBase {
         return codecFor(ScheduleSchema.viewType) as ViewConfigCodec<ScheduleConfig, ScheduleTransient>;
     }
 
+    private getDateYearMonth(): { year: number; month: number } {
+        const d = this.deps.getCurrentDate();
+        return { year: parseInt(d.substring(0, 4), 10), month: parseInt(d.substring(5, 7), 10) - 1 };
+    }
+
     protected override buildDom(toolbar: HTMLElement): void {
         const { deps } = this;
+
+        // Date Label (YYYY - MM)
+        const dateLabelDeps = {
+            app: deps.app,
+            getSettings: () => deps.plugin.settings,
+            linkInteractionManager: deps.linkInteractionManager,
+            hoverParent: deps.hoverParent,
+        };
+        this.dateLabelHandle = DateLabel.render(toolbar, dateLabelDeps);
+        const { year, month } = this.getDateYearMonth();
+        this.dateLabelHandle.update(year, month);
+        DateLabel.bindHoverPreview(toolbar, dateLabelDeps);
 
         DateNavigator.render(
             toolbar,
@@ -135,6 +160,8 @@ export class ScheduleToolbar extends ViewToolbarBase {
     }
 
     override update(): void {
+        const { year, month } = this.getDateYearMonth();
+        this.dateLabelHandle?.update(year, month);
         if (this.filterBtn) {
             this.filterBtn.classList.toggle('is-filtered', this.deps.filterMenu.hasActiveFilters());
         }

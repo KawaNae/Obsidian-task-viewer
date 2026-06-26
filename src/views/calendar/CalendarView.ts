@@ -208,6 +208,9 @@ export class CalendarView extends ItemView {
                 this.render();
                 this.toolbar.update();
             },
+            getReferenceMonth: () => this.getReferenceMonth(),
+            linkInteractionManager: this.linkInteractionManager,
+            hoverParent: this.hoverParent,
         });
     }
 

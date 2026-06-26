@@ -265,6 +265,8 @@ export class TimelineView extends ItemView {
         });
         this.selectionController = new SelectionController(this.handleManager);
 
+        this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
+
         // Construct the toolbar once for the lifetime of this view. performRender()
         // calls toolbar.detach() before container.empty() and toolbar.mount(host)
         // after, so the underlying DOM + filterMenu instance survive renders. This
@@ -303,13 +305,14 @@ export class TimelineView extends ItemView {
                     this.app.workspace.requestSaveLayout();
                 },
                 getLeaf: () => this.leaf,
+                linkInteractionManager: this.linkInteractionManager,
+                hoverParent: this.hoverParent,
             }
         );
 
         // Initialize Renderers
         this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow, VIEW_ID);
         this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel(), VIEW_ID);
-        this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.dateHeaderRenderer = new DateHeaderRenderer({
             app: this.app,
             plugin: this.plugin,
