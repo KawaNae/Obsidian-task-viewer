@@ -20,9 +20,11 @@ function makeElement() {
         listenerCount(type: string) {
             return listeners.get(type)?.size ?? 0;
         },
-        dispatchClick(target: { closest?: (sel: string) => unknown } = {}) {
+        dispatchClick(target: { closest?: (sel: string) => unknown } = {}, clientX = 0, clientY = 0) {
             const ev = {
                 target,
+                clientX,
+                clientY,
                 preventDefault: vi.fn(),
                 stopPropagation: vi.fn(),
             };

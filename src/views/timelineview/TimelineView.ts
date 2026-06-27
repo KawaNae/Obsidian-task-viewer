@@ -35,6 +35,7 @@ import { createEmptySortState } from '../../services/sort/SortTypes';
 import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
+import { openTaskInEditor } from '../sharedLogic/NavigationUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
@@ -257,6 +258,10 @@ export class TimelineView extends ItemView {
             childLineMenuBuilder.showMenu(parentTask, line, bodyLine, x, y);
         });
         this.taskRenderer.setDetailCallback((task) => this.openDetailModal(task));
+        this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
+        this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
+        this.taskRenderer.setOpenPropertiesCallback((task) => this.menuHandler.openTaskProperties(task));
+        this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);
 
         // Initialize HandleManager
         this.handleManager = new HandleManager(this.container, {

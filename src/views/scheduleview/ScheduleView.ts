@@ -16,6 +16,7 @@ import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
 import { ScheduleToolbar } from './ScheduleToolbar';
+import { openTaskInEditor } from '../sharedLogic/NavigationUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
@@ -122,6 +123,10 @@ export class ScheduleView extends ItemView {
         this.taskRenderer.setDetailCallback((task) => {
             new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
         });
+        this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
+        this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
+        this.taskRenderer.setOpenPropertiesCallback((task) => this.menuHandler.openTaskProperties(task));
+        this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);
         this.gridCalculator = new ScheduleGridCalculator({
             getStartHour: () => this.plugin.settings.startHour,
             hoursPerDay: ScheduleView.HOURS_PER_DAY,

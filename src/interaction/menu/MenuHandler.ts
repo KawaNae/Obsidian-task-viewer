@@ -84,12 +84,34 @@ export class MenuHandler {
     }
 
     /**
-     * Show context menu for a task by its ID at the given position.
+     * Show context menu for a task by its ID. Used by child-task menus where
+     * only the (always-original) task ID is available.
      */
     showMenuForTask(taskId: string, x: number, y: number): void {
         const task = this.readService.getTask(taskId);
         if (!task) return;
         this.showContextMenu(x, y, task);
+    }
+
+    /**
+     * Show context menu for a task object. Resolves split → original
+     * internally via getOriginalTaskId, so callers can pass DisplayTask
+     * (including split segments) directly.
+     */
+    showTaskContextMenu(task: Task, x: number, y: number): void {
+        this.showContextMenu(x, y, task);
+    }
+
+    /**
+     * Open the properties modal for a task object. Resolves split → original
+     * internally.
+     */
+    openTaskProperties(task: Task): void {
+        const originalId = getOriginalTaskId(task);
+        const resolved = this.readService.getTask(originalId);
+        if (!resolved || resolved.isReadOnly) return;
+        const displayTask = toDisplayTask(resolved, this.plugin.settings.startHour, (id) => this.readService.getTask(id));
+        this.propertiesMenuBuilder.openChangePropertiesModal(displayTask, 'name', this.viewStartDate);
     }
 
     /**

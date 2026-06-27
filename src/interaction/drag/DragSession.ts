@@ -18,6 +18,9 @@ import type { DragContext, DragStrategy } from './DragStrategy';
 export class DragSession {
     private currentStrategy: DragStrategy | null = null;
     private currentDragTaskId: string | null = null;
+    /** True while handleUp is executing (async). Prevents lostpointercapture
+     *  from cancelling a commit that is already in progress. */
+    private committing = false;
 
     constructor(
         private readonly context: DragContext,
@@ -60,7 +63,12 @@ export class DragSession {
         if (!this.currentStrategy) return;
         const taskId = this.currentDragTaskId;
 
-        await this.currentStrategy.onUp(e, this.context);
+        this.committing = true;
+        try {
+            await this.currentStrategy.onUp(e, this.context);
+        } finally {
+            this.committing = false;
+        }
 
         this.writeService.notifyImmediate(
             taskId ?? undefined,
@@ -82,6 +90,7 @@ export class DragSession {
      */
     cancel(): void {
         if (!this.currentStrategy) return;
+        if (this.committing) return;
         this.currentStrategy.onCancel();
         this.writeService.setDraggingFile(null);
         this.currentStrategy = null;

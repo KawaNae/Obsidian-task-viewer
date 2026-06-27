@@ -460,6 +460,8 @@ export function validateTvFileKeys(keys: TvFileKeys): string | null {
 
 export type DefaultLeafPosition = 'left' | 'right' | 'tab' | 'window';
 
+export type DoubleTapAction = 'detail' | 'open' | 'menu' | 'properties';
+
 export interface TaskViewerSettings {
     startHour: number;
     applyGlobalStyles: boolean;
@@ -477,6 +479,7 @@ export interface TaskViewerSettings {
     habitExcludeKeys: string[];
     tvFileChildHeader: string;
     tvFileChildHeaderLevel: number;
+    doubleTapAction: DoubleTapAction;
     longPressThreshold: number;
     reuseExistingTab: boolean;
     editorMenuForTasks: boolean;
@@ -586,6 +589,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     habitExcludeKeys: ['tags', 'cssclasses', 'aliases'],
     tvFileChildHeader: 'Tasks',
     tvFileChildHeaderLevel: 2,
+    doubleTapAction: 'detail',
     longPressThreshold: 400,
     reuseExistingTab: true,
     editorMenuForTasks: true,

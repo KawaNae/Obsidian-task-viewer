@@ -28,6 +28,12 @@
     "general": {
       "menu": "メニュー",
       "interaction": "インタラクション",
+      "doubleTapAction": "ダブルタップ時のアクション",
+      "doubleTapActionDesc": "タスクカードをダブルタップ（ダブルクリック）したときの動作を選択します。",
+      "doubleTapActionDetail": "詳細モーダル",
+      "doubleTapActionOpen": "エディターで開く",
+      "doubleTapActionMenu": "コンテキストメニュー",
+      "doubleTapActionProperties": "プロパティを変更",
       "showEditorMenuForTasks": "タスクにエディターメニューを表示",
       "showEditorMenuForTasksDesc": "エディター内のインラインタスク行に ··· メニューボタンを表示します。",
       "showEditorMenuForCheckboxes": "チェックボックスにエディターメニューを表示",
