@@ -4,6 +4,7 @@ import { ParserChain } from './strategies/ParserChain';
 import { TVInlineParser } from './tv-inline/TVInlineParser';
 import { DayPlannerParser } from './tv-inline/DayPlannerParser';
 import { TasksPluginParser } from './tv-inline/TasksPluginParser';
+import { logDebug } from '../../log/log';
 
 /**
  * TaskParser facade - delegates to the active parser strategy.
@@ -32,6 +33,7 @@ export class TaskParser {
         }
         parsers.push(new TVInlineParser());
         this.strategy = new ParserChain(parsers);
+        logDebug(`[TaskParser:rebuildChain] parsers=[${parsers.map(p => p.id)}]`);
     }
 
     /**

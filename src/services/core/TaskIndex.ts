@@ -18,7 +18,7 @@ import { getTaskDateRange } from '../display/VisualDateRange';
 import { TaskParser } from '../parsing/TaskParser';
 import { HeadingInserter } from '../../utils/HeadingInserter';
 import { FileOperations } from '../persistence/utils/FileOperations';
-import { logError, logWarn } from '../../log/log';
+import { logError, logInfo, logWarn } from '../../log/log';
 
 export interface ValidationError {
     file: string;
@@ -379,6 +379,7 @@ export class TaskIndex {
     }
 
     async updateTask(taskId: string, updates: Partial<Task>): Promise<void> {
+        logInfo(`[updateTask] id=${taskId} fields=[${Object.keys(updates)}]`);
 
         // スプリットタスク処理（##seg:YYYY-MM-DD）
         const segmentInfo = TaskIdGenerator.parseSegmentId(taskId);
@@ -492,6 +493,7 @@ export class TaskIndex {
 
     async deleteTask(taskId: string): Promise<void> {
         return this.withNotify(async () => {
+            logInfo(`[deleteTask] id=${taskId}`);
             const task = this.store.getTask(taskId);
             if (!task) return;
             if (task.isReadOnly) return;
@@ -558,6 +560,7 @@ export class TaskIndex {
 
     async createTask(filePath: string, taskLine: string, heading?: string): Promise<void> {
         return this.withNotify(async () => {
+            logInfo(`[createTask] path=${filePath} heading=${heading ?? '(none)'}`);
             this.syncDetector.markLocalEdit(filePath);
 
             if (heading) {
@@ -576,6 +579,7 @@ export class TaskIndex {
 
     async insertChildTask(parentTaskId: string, childLine: string): Promise<void> {
         return this.withNotify(async () => {
+            logInfo(`[insertChildTask] parentId=${parentTaskId}`);
             const task = this.store.getTask(parentTaskId);
             if (!task) return;
 

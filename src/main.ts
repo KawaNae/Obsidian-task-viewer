@@ -534,6 +534,7 @@ export default class TaskViewerPlugin extends Plugin {
     }
 
     async saveSettings() {
+        logInfo(`[saveSettings] startHour=${this.settings.startHour} parsers=[${this.getEnabledParsers()}]`);
         await this.saveData(this.settings);
         this.taskIndex.updateSettings(this.settings);
         this.readService.updateStartHour(this.settings.startHour);

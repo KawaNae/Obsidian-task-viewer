@@ -16,7 +16,7 @@ import { TimerLifecycle } from './TimerLifecycle';
 import { TimerStorageUtils } from './TimerStorageUtils';
 import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
 import TaskViewerPlugin from '../main';
-import { logError } from '../log/log';
+import { logError, logInfo } from '../log/log';
 
 /**
  * Map legacy parserId values (pre-rename) to current ones. Persisted timer
@@ -96,6 +96,7 @@ export class TimerPersistence {
     // ─── Persist ─────────────────────────────────────────────
 
     persistTimersToStorage(): void {
+        logInfo(`[Timer:persist] count=${this.ctx.timers.size}`);
         const storageKey = this.storageUtils.getStorageKey();
         try {
             if (this.ctx.timers.size === 0) {
@@ -167,6 +168,7 @@ export class TimerPersistence {
                 }
             }
 
+            logInfo(`[Timer:restored] count=${this.ctx.timers.size}`);
             this.ctx.render();
         } catch (error) {
             window.localStorage.removeItem(storageKey);

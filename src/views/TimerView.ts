@@ -7,6 +7,7 @@
  */
 
 import { ItemView, WorkspaceLeaf, Notice, Menu, setIcon, ViewStateResult } from 'obsidian';
+import { logDebug } from '../log/log';
 import TaskViewerPlugin from '../main';
 import { InputModal } from '../modals/InputModal';
 import { VIEW_META_TIMER } from '../constants/viewRegistry';
@@ -113,6 +114,7 @@ export class TimerView extends ItemView {
     }
 
     async onOpen(): Promise<void> {
+        logDebug(`[${this.getViewType()}] opened`);
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('timer-view');
@@ -136,6 +138,7 @@ export class TimerView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        logDebug(`[${this.getViewType()}] closed`);
         this.stopTicker();
     }
 

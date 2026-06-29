@@ -1,4 +1,5 @@
 import { ItemView, WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
+import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
@@ -197,6 +198,7 @@ export class KanbanView extends ItemView {
     }
 
     async onOpen(): Promise<void> {
+        logDebug(`[${this.getViewType()}] opened`);
         this.container = this.contentEl;
         this.container.addClass('kanban-view');
 
@@ -213,6 +215,7 @@ export class KanbanView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        logDebug(`[${this.getViewType()}] closed`);
         this.hoverParent.dispose();
         this.filterMenu.close();
         this.sortMenu.close();

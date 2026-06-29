@@ -6,7 +6,7 @@ import { TaskParser } from '../services/parsing/TaskParser';
 import { CommandStrategy } from '../commands/CommandStrategy';
 import { MoveCommand } from '../commands/MoveCommand';
 import { RepeatCommand, NextCommand, GenerationCommand } from '../commands/GenerationCommands';
-import { logError, logWarn } from '../log/log';
+import { logError, logInfo, logWarn } from '../log/log';
 
 /**
  * Executes flow commands (==> next, repeat, move) when tasks are completed.
@@ -40,6 +40,7 @@ export class TaskCommandExecutor {
     }
 
     async handleTaskCompletion(task: Task): Promise<void> {
+        logInfo(`[Command:completion] taskId=${task.id} commands=[${task.commands?.map(c => c.name).join(',') ?? 'none'}]`);
         // Support Flow Syntax only
         const hasCommands = !!(task.commands && task.commands.length > 0);
 
@@ -154,6 +155,7 @@ export class TaskCommandExecutor {
                 }
                 generationDone = true;
             }
+            logInfo(`[Command:execute] cmd=${cmd.name} taskId=${task.id}`);
             const result = await strategy.execute(context, cmd);
             if (result.shouldDeleteOriginal) {
                 shouldDeleteOriginal = true;

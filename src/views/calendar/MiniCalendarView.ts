@@ -1,5 +1,6 @@
 import { ItemView, WorkspaceLeaf, TFile, Notice, setIcon, type ViewStateResult } from 'obsidian';
 import type { MenuItem } from 'obsidian';
+import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
 import { DisplayTask, Task, AstronomyDisplay } from '../../types';
 import { attachMoonPhase } from '../sharedUI/AstronomyCellAdorner';
@@ -184,6 +185,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     async onOpen(): Promise<void> {
+        logDebug(`[${this.getViewType()}] opened`);
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('mini-calendar-view');
@@ -197,6 +199,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        logDebug(`[${this.getViewType()}] closed`);
         this.hoverParent.dispose();
         this.filterMenu.close();
         if (this.navigateWeekDebounceTimer !== null) {

@@ -1,4 +1,5 @@
 import { ItemView, WorkspaceLeaf, type ViewStateResult } from 'obsidian';
+import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { CardReconciler } from '../sharedUI/CardReconciler';
@@ -274,6 +275,7 @@ export class ScheduleView extends ItemView {
     }
 
     async onOpen(): Promise<void> {
+        logDebug(`[${this.getViewType()}] opened`);
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('schedule-view');
@@ -293,6 +295,7 @@ export class ScheduleView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        logDebug(`[${this.getViewType()}] closed`);
         this.hoverParent.dispose();
         this.filterMenu.close();
         this.dateHeaderRenderer.dispose();
