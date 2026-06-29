@@ -7,6 +7,7 @@ import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder'
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskDetailModal } from '../../modals/TaskDetailModal';
+import { logError } from '../../log/log';
 
 import { DateUtils } from '../../utils/DateUtils';
 import { TaskReadService } from '../../services/data/TaskReadService';
@@ -945,7 +946,7 @@ export class TimelineView extends ItemView {
         });
         for (const [id, n] of counts) {
             if (n > 1) {
-                console.error('[render-invariant] duplicate task-card data-id', { id, count: n });
+                logError(`[render-invariant] duplicate task-card data-id: id=${id}, count=${n}`);
             }
         }
     }

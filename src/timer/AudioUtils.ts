@@ -20,6 +20,8 @@
  * 長音 = 0.35s発音 (660Hz) — 2音連続で0.7s
  */
 
+import { logWarn } from '../log/log';
+
 const FREQ = 660;
 const SHORT_DUR = 0.25;
 const LONG_DUR = 0.35;
@@ -109,7 +111,7 @@ export class AudioUtils {
                 oscillator.stop(t + note.duration);
             }
         } catch (e) {
-            console.warn('Failed to play chime:', e);
+            logWarn(`Failed to play chime: ${(e as Error)?.message ?? e}`);
         }
     }
 

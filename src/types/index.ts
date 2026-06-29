@@ -532,6 +532,11 @@ export interface TaskViewerSettings {
      * Future: subLocations[] for multi-TZ travel scenarios.
      */
     astronomy: AstronomySettings;
+
+    // Logging
+    logRetentionDays: number;
+    logMaxStorageMB: number;
+    verboseNotice: boolean;
 }
 
 export interface AstronomyDisplay {
@@ -639,4 +644,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
         display: { sunTimes: false, moonPhase: false, sunTimesInFront: false },
         location: { latitude: 35.6762, longitude: 139.6503 }, // Tokyo Station
     },
+    logRetentionDays: 7,
+    logMaxStorageMB: 50,
+    verboseNotice: false,
 };

@@ -1,6 +1,7 @@
 import { Notice } from 'obsidian';
 import type { ViewExportOptions, ExportTargetSpec } from './ExportTypes';
 import { ExportUtils } from './ExportUtils';
+import { logError } from '../../log/log';
 
 /**
  * One-shot view-to-PNG export. Always captures the **full content** (the entire
@@ -54,7 +55,7 @@ export class ViewExporter {
                 clone.remove();
             }
         } catch (err) {
-            console.error('[ViewExporter] Export failed:', err);
+            logError(`[ViewExporter] Export failed: ${(err as Error)?.message ?? err}`);
             progress.hide();
             new Notice('Export failed. See console for details.');
         }

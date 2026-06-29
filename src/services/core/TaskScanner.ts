@@ -8,6 +8,7 @@ import { TaskStore } from './TaskStore';
 import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
+import { logError } from '../../log/log';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { TaskPropertyResolver } from '../parsing/TaskPropertyResolver';
 import { DocumentTreeBuilder } from '../parsing/tree/DocumentTreeBuilder';
@@ -74,7 +75,7 @@ export class TaskScanner {
             try {
                 await this.scanFile(file, isLocal);
             } catch (error) {
-                console.error(`Error scanning file ${file.path}:`, error);
+                logError(`Error scanning file ${file.path}: ${(error as Error)?.message ?? error}`);
             }
         });
 

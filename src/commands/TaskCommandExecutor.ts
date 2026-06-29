@@ -6,6 +6,7 @@ import { TaskParser } from '../services/parsing/TaskParser';
 import { CommandStrategy } from '../commands/CommandStrategy';
 import { MoveCommand } from '../commands/MoveCommand';
 import { RepeatCommand, NextCommand, GenerationCommand } from '../commands/GenerationCommands';
+import { logError, logWarn } from '../log/log';
 
 /**
  * Executes flow commands (==> next, repeat, move) when tasks are completed.
@@ -90,7 +91,7 @@ export class TaskCommandExecutor {
                     await this.executeTaskCommands(currentTask);
                     didExecute = true;
                 } catch (err) {
-                    console.error(`[TaskCommandExecutor] Error processing task ${currentTask.id}:`, err);
+                    logError(`[TaskCommandExecutor] Error processing task ${currentTask.id}: ${(err as Error)?.message ?? err}`);
                 }
 
                 // 4. Remove from queue AFTER processing
@@ -143,12 +144,12 @@ export class TaskCommandExecutor {
         for (const cmd of [...task.commands].reverse()) {
             const strategy = this.strategies.get(cmd.name);
             if (!strategy) {
-                console.warn(`[TaskCommandExecutor] Unknown command: ${cmd.name}`);
+                logWarn(`[TaskCommandExecutor] Unknown command: ${cmd.name}`);
                 continue;
             }
             if (strategy instanceof GenerationCommand) {
                 if (generationDone) {
-                    console.warn(`[TaskCommandExecutor] Ignoring extra generation command '${cmd.name}'; only one runs per completion.`);
+                    logWarn(`[TaskCommandExecutor] Ignoring extra generation command '${cmd.name}'; only one runs per completion.`);
                     continue;
                 }
                 generationDone = true;

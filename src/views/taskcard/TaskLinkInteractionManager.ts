@@ -2,6 +2,7 @@ import { App } from 'obsidian';
 import type { TaskViewerSettings } from '../../types';
 import { openLinkInExistingOrNewTab } from '../sharedLogic/NavigationUtils';
 import type { HoverLinkPayload, TaskLinkBindContext } from './types';
+import { logError } from '../../log/log';
 
 type TaskLinkBindOptions = {
     bindClick?: boolean;
@@ -88,7 +89,7 @@ export class TaskLinkInteractionManager {
         try {
             this.app.workspace.trigger('hover-link', payload);
         } catch (error) {
-            console.error('[TaskViewer] Failed to trigger hover-link event:', error);
+            logError(`[TaskViewer] Failed to trigger hover-link event: ${(error as Error)?.message ?? error}`);
         }
     }
 }

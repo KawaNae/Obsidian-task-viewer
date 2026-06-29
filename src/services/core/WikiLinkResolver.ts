@@ -1,6 +1,7 @@
 import { App, TFile } from 'obsidian';
 import { Task, WikilinkRef, isTvFile, hasBodyLine } from '../../types';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
+import { logWarn } from '../../log/log';
 
 /**
  * `- [[name]]` パターンのwikilink子タスクを解決し、親子関係をワイアーする。
@@ -209,7 +210,7 @@ export class WikiLinkResolver {
         if (matches.length > 0) {
             if (matches.length > 1) {
                 matches.sort((a, b) => a.path.localeCompare(b.path));
-                console.warn(
+                logWarn(
                     `[WikiLinkResolver] Ambiguous wikilink "${target}" matches ${matches.length} files; ` +
                     `resolving to "${matches[0].path}"`
                 );

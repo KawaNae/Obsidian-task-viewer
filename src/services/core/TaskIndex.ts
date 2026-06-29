@@ -18,6 +18,7 @@ import { getTaskDateRange } from '../display/VisualDateRange';
 import { TaskParser } from '../parsing/TaskParser';
 import { HeadingInserter } from '../../utils/HeadingInserter';
 import { FileOperations } from '../persistence/utils/FileOperations';
+import { logError, logWarn } from '../../log/log';
 
 export interface ValidationError {
     file: string;
@@ -293,7 +294,7 @@ export class TaskIndex {
         this.scanner.updateSettings(settings);
         this.scanner.scanVault()
             .catch((error) => {
-                console.error('[TaskIndex] Failed to rescan vault after settings update:', error);
+                logError(`[TaskIndex] Failed to rescan vault: ${(error as Error)?.message ?? error}`);
             });
     }
 
@@ -386,14 +387,14 @@ export class TaskIndex {
             const originalTask = this.store.getTask(originalId);
 
             if (!originalTask) {
-                console.warn(`[TaskIndex] Original task ${originalId} not found for split segment`);
+                logWarn(`[TaskIndex] Original task ${originalId} not found for split segment`);
                 return;
             }
 
             // Resolve effective dates to match splitDisplayTaskAtBoundary's logic
             const dt = toDisplayTask(originalTask, this.settings.startHour, (id) => this.store.getTask(id));
             if (!dt.effectiveStartDate) {
-                console.warn(`[TaskIndex] Original task ${originalId} has no effective start date`);
+                logWarn(`[TaskIndex] Original task ${originalId} has no effective start date`);
                 return;
             }
 
@@ -421,7 +422,7 @@ export class TaskIndex {
             } else if (segmentInfo.segmentDate === afterSegmentDate) {
                 segment = 'after';
             } else {
-                console.warn(`[TaskIndex] Unsupported split segment date: ${segmentInfo.segmentDate} for task ${originalId}`);
+                logWarn(`[TaskIndex] Unsupported split segment date: ${segmentInfo.segmentDate} for task ${originalId}`);
                 return;
             }
 
@@ -457,7 +458,7 @@ export class TaskIndex {
 
         const task = this.store.getTask(taskId);
         if (!task) {
-            console.warn(`[TaskIndex] Task ${taskId} not found`);
+            logWarn(`[TaskIndex] Task ${taskId} not found`);
             return;
         }
         if (task.isReadOnly) return;
