@@ -58,6 +58,24 @@ const vaultLabel = process.env.OBSIDIAN_VAULT_PATH
 console.log(`[build] Target vault: ${vaultLabel} (${vaultPath})`);
 console.log(`[build] Output dir : ${outDir}`);
 
+// Dexie uses Symbol.for("Dexie") as a global singleton key and throws at
+// module evaluation time when two different versions coexist. Rewrite the
+// symbol to a plugin-scoped key so our Dexie instance is fully isolated
+// from other plugins (e.g. obsidian-couchsync).
+const isolateDexie = {
+  name: 'isolate-dexie',
+  setup(build) {
+    build.onEnd((result) => {
+      if (result.errors.length > 0) return;
+      const outfile = build.initialOptions.outfile;
+      if (!outfile || !fs.existsSync(outfile)) return;
+      const code = fs.readFileSync(outfile, 'utf8');
+      const patched = code.replaceAll('Symbol.for("Dexie")', 'Symbol.for("Dexie-task-viewer")');
+      if (patched !== code) fs.writeFileSync(outfile, patched);
+    });
+  },
+};
+
 const copyStaticFiles = {
   name: 'copy-static-files',
   setup(build) {
@@ -165,7 +183,7 @@ const context = await esbuild.context({
   sourcemap: prod ? false : "inline",
   treeShaking: true,
   outfile: path.join(outDir, "main.js"),
-  plugins: [copyStaticFiles],
+  plugins: [isolateDexie, copyStaticFiles],
 });
 
 if (prod) {
