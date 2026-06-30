@@ -22,12 +22,11 @@ export class FilePropertyResolver {
 
     static extract(
         frontmatter: Record<string, any> | undefined,
-        keys: TvFileKeys,
-        dailyNoteDate?: string
+        keys: TvFileKeys
     ): ExtractedProperties {
-        if (!frontmatter && !dailyNoteDate) return { properties: {} };
+        if (!frontmatter) return { properties: {} };
 
-        const fm = frontmatter ?? {};
+        const fm = frontmatter;
         const color = this.resolveColor(fm[keys.color]);
         const linestyle = this.resolveLinestyle(fm[keys.linestyle]);
         const mask = this.resolveMask(fm[keys.mask]);
@@ -36,7 +35,7 @@ export class FilePropertyResolver {
         const endParsed = parseDateTimeField(normalizeYamlDate(fm[keys.end]));
         const dueParsed = parseDateTimeField(normalizeYamlDate(fm[keys.due]));
 
-        const startDate = startParsed.date ?? dailyNoteDate;
+        const startDate = startParsed.date;
         const startTime = startParsed.time;
         const endDate = endParsed.date;
         const endTime = endParsed.time;

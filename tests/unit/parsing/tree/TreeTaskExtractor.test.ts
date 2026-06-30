@@ -10,11 +10,10 @@ const defaultCtx: TaskExtractionContext = {
     tvFileKeys: DEFAULT_TV_FILE_KEYS,
 };
 
-function extractTasks(bodyLines: string[], frontmatter?: Record<string, any>, ctx?: Partial<TaskExtractionContext> & { dailyNoteDate?: string }) {
-    const { dailyNoteDate, ...extractorCtx } = ctx ?? {};
+function extractTasks(bodyLines: string[], frontmatter?: Record<string, any>, ctx?: Partial<TaskExtractionContext>) {
     const doc = DocumentTreeBuilder.build('test.md', bodyLines, 0);
-    SectionPropertyResolver.resolve(doc, frontmatter, DEFAULT_TV_FILE_KEYS, dailyNoteDate);
-    return TreeTaskExtractor.extract(doc, { ...defaultCtx, ...extractorCtx });
+    SectionPropertyResolver.resolve(doc, frontmatter, DEFAULT_TV_FILE_KEYS);
+    return TreeTaskExtractor.extract(doc, { ...defaultCtx, ...ctx });
 }
 
 describe('TreeTaskExtractor', () => {
@@ -22,7 +21,7 @@ describe('TreeTaskExtractor', () => {
         it('単一タスクを抽出', () => {
             const tasks = extractTasks([
                 '- [ ] task @2026-03-24',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks).toHaveLength(1);
             expect(tasks[0].content).toBe('task');
             expect(tasks[0].startDate).toBe('2026-03-24');
@@ -38,7 +37,7 @@ describe('TreeTaskExtractor', () => {
         it('時刻のみでもデイリーノートなら抽出', () => {
             const tasks = extractTasks([
                 '- [ ] time only task @T09:00',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ], { 'tv-start': '2026-03-24' });
             expect(tasks).toHaveLength(1);
             expect(tasks[0].cascadeContext?.startDate).toBe('2026-03-24');
         });
@@ -47,7 +46,7 @@ describe('TreeTaskExtractor', () => {
             const tasks = extractTasks([
                 '- [ ] task1 @2026-03-24',
                 '- [ ] task2 @2026-03-25',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks).toHaveLength(2);
         });
     });
@@ -57,7 +56,7 @@ describe('TreeTaskExtractor', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    - [ ] child @2026-03-25',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks).toHaveLength(2);
             const parent = tasks.find(t => t.content === 'parent')!;
             const child = tasks.find(t => t.content === 'child')!;
@@ -70,7 +69,7 @@ describe('TreeTaskExtractor', () => {
                 '- [ ] parent @2026-03-24',
                 '    - [ ] child @2026-03-25',
                 '        - [ ] grandchild @2026-03-26',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks).toHaveLength(3);
             const parent = tasks.find(t => t.content === 'parent')!;
             const child = tasks.find(t => t.content === 'child')!;
@@ -85,7 +84,7 @@ describe('TreeTaskExtractor', () => {
             const tasks = extractTasks([
                 '- [ ] task @2026-03-24',
                 '    - tv-color:: 333333',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks[0].color).toBe('333333');
             // properties に tv-color が入っていないこと
             expect(tasks[0].properties['tv-color']).toBeUndefined();
@@ -95,7 +94,7 @@ describe('TreeTaskExtractor', () => {
             const tasks = extractTasks([
                 '- [ ] task @2026-03-24',
                 '    - tv-linestyle:: dashed',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks[0].linestyle).toBe('dashed');
         });
 
@@ -104,7 +103,7 @@ describe('TreeTaskExtractor', () => {
                 '- [ ] task @2026-03-24',
                 '    - note:: something',
                 '    - priority:: 1',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks[0].properties['note']).toEqual({ value: 'something', type: 'string' });
             expect(tasks[0].properties['priority']).toEqual({ value: '1', type: 'number' });
         });
@@ -116,7 +115,7 @@ describe('TreeTaskExtractor', () => {
                 '## Section',
                 '- tv-color:: ff0000',
                 '- [ ] task @2026-03-24',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks[0].color).toBe('ff0000');
         });
 
@@ -126,7 +125,7 @@ describe('TreeTaskExtractor', () => {
                 '- tv-color:: ff0000',
                 '- [ ] task @2026-03-24',
                 '    - tv-color:: 00ff00',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks[0].color).toBe('00ff00');
         });
 
@@ -135,7 +134,7 @@ describe('TreeTaskExtractor', () => {
                 '## Section',
                 '- category:: work',
                 '- [ ] task @2026-03-24',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks[0].properties['category']).toEqual({ value: 'work', type: 'string' });
         });
 
@@ -145,7 +144,7 @@ describe('TreeTaskExtractor', () => {
                 '- priority:: 1',
                 '- [ ] task @2026-03-24',
                 '    - priority:: 5',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks[0].properties['priority']).toEqual({ value: '5', type: 'number' });
         });
     });
@@ -157,7 +156,7 @@ describe('TreeTaskExtractor', () => {
                 '- tv-linestyle:: dashed',
                 '- [ ] task @2026-03-24',
                 '    - tv-color:: 333333',
-            ], { 'tv-color': 'red', 'tv-mask': '***' }, { dailyNoteDate: '2026-03-24' });
+            ], { 'tv-color': 'red', 'tv-mask': '***' });
 
             const task = tasks[0];
             // 子行 > セクション > frontmatter
@@ -173,7 +172,7 @@ describe('TreeTaskExtractor', () => {
                 '### Child',
                 '- tv-linestyle:: dotted',
                 '- [ ] task @2026-03-24',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
 
             const task = tasks[0];
             expect(task.color).toBe('red');          // 親セクションから継承
@@ -187,7 +186,7 @@ describe('TreeTaskExtractor', () => {
                 '- [ ] parent @2026-03-24',
                 '    - [ ] child @2026-03-25',
                 '    - note:: parent-note',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             const parent = tasks.find(t => t.content === 'parent')!;
             // childLines にはチェックボックス行ではなく note 行のみ
             expect(parent.childLines).toHaveLength(1);
@@ -215,7 +214,7 @@ describe('TreeTaskExtractor', () => {
                 '- [ ] B3 子行で色を上書き @T15:00>16:00',
                 '\t- tv-color:: 4ecdc4',
                 '\t- [ ] B4 @T15:00>16:00',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ], undefined, { hasTvFileParent: true });
 
             const b1 = tasks.find(t => t.content.includes('B1'))!;
             const b2 = tasks.find(t => t.content.includes('B2'))!;
@@ -242,7 +241,7 @@ describe('TreeTaskExtractor', () => {
                 '- [ ] parent @2026-03-24',
                 '    - [ ] plain checkbox',
                 '    - note:: something',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             const parent = tasks[0];
             expect(parent.childLines).toHaveLength(2);
             expect(parent.childLines[0].checkboxChar).toBe(' ');
@@ -258,7 +257,7 @@ describe('TreeTaskExtractor', () => {
                 '    - [x] mini-calendarの調整',
                 '    - [x] スタイル修正',
                 '    - [x] tv-colorの変更',
-            ], undefined, { dailyNoteDate: '2026-03-25' });
+            ]);
             expect(tasks).toHaveLength(1);
             const parent = tasks[0];
             expect(parent.childLines).toHaveLength(3);
@@ -272,7 +271,7 @@ describe('TreeTaskExtractor', () => {
                 '- [ ] parent @2026-03-24',
                 '    - [x] plain checkbox',
                 '    - [ ] child task @2026-03-25',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks).toHaveLength(2);
             const parent = tasks.find(t => t.content === 'parent')!;
             const child = tasks.find(t => t.content === 'child task')!;
@@ -289,7 +288,7 @@ describe('TreeTaskExtractor', () => {
                 '    説明テキスト',
                 '    - [x] done item',
                 '    - priority:: high',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             const parent = tasks[0];
             expect(parent.childLines).toHaveLength(3);
             // 順序が保持される
@@ -304,7 +303,7 @@ describe('TreeTaskExtractor', () => {
                 '- [ ] parent @2026-03-24',
                 '    - [x] wrapper without notation',
                 '        - [ ] grandchild @2026-03-26',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             // parent + grandchild（wrapper はタスクにならない）
             expect(tasks).toHaveLength(2);
             const parent = tasks.find(t => t.content === 'parent')!;
@@ -321,7 +320,7 @@ describe('TreeTaskExtractor', () => {
                 '- [ ] parent @2026-03-24',    // line 0
                 '    child line 1',             // line 1
                 '    child line 2',             // line 2
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             const parent = tasks[0];
             expect(parent.childLineBodyOffsets).toEqual([1, 2]);
         });
@@ -333,7 +332,7 @@ describe('TreeTaskExtractor', () => {
                 '    - [ ] child @2026-03-25',  // line 2 (excluded)
                 '        child desc',           // line 3 (excluded)
                 '    desc line 2',              // line 4
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             const parent = tasks.find(t => t.content === 'parent')!;
             expect(parent.childLines).toHaveLength(2);
             expect(parent.childLineBodyOffsets).toEqual([1, 4]);
@@ -345,7 +344,7 @@ describe('TreeTaskExtractor', () => {
                 '    - [x] item A',             // line 1
                 '    - [x] item B',             // line 2
                 '    - [x] item C',             // line 3
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             const parent = tasks[0];
             expect(parent.childLineBodyOffsets).toEqual([1, 2, 3]);
         });
@@ -356,7 +355,7 @@ describe('TreeTaskExtractor', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    * [x] asterisk item',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks).toHaveLength(1);
             expect(tasks[0].childLines).toHaveLength(1);
             expect(tasks[0].childLines[0].checkboxChar).toBe('x');
@@ -366,7 +365,7 @@ describe('TreeTaskExtractor', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    + [x] plus item',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks).toHaveLength(1);
             expect(tasks[0].childLines).toHaveLength(1);
             expect(tasks[0].childLines[0].checkboxChar).toBe('x');
@@ -376,7 +375,7 @@ describe('TreeTaskExtractor', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    1. [x] ordered dot item',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks).toHaveLength(1);
             expect(tasks[0].childLines).toHaveLength(1);
             expect(tasks[0].childLines[0].checkboxChar).toBe('x');
@@ -386,7 +385,7 @@ describe('TreeTaskExtractor', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    1) [x] ordered paren item',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks).toHaveLength(1);
             expect(tasks[0].childLines).toHaveLength(1);
             expect(tasks[0].childLines[0].checkboxChar).toBe('x');
@@ -399,7 +398,7 @@ describe('TreeTaskExtractor', () => {
                 '    * [x] asterisk item',
                 '    + [ ] plus item',
                 '    1. [x] ordered item',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks).toHaveLength(1);
             const parent = tasks[0];
             expect(parent.childLines).toHaveLength(4);
@@ -417,7 +416,7 @@ describe('TreeTaskExtractor', () => {
                 '    - [/] in-progress',
                 '    - [-] cancelled',
                 '    - [>] forwarded',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             const cl = tasks[0].childLines;
             expect(cl).toHaveLength(5);
             expect(cl.map(c => c.checkboxChar)).toEqual([' ', 'x', '/', '-', '>']);
@@ -427,7 +426,7 @@ describe('TreeTaskExtractor', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    * [ ] child task @2026-03-25',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks).toHaveLength(2);
             const parent = tasks.find(t => t.content === 'parent')!;
             expect(parent.childLines).toHaveLength(0);
@@ -439,7 +438,7 @@ describe('TreeTaskExtractor', () => {
                 '- [ ] parent @2026-03-24',
                 '    plain text without marker',
                 '    - plain bullet no checkbox',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             const cl = tasks[0].childLines;
             expect(cl).toHaveLength(2);
             expect(cl[0].checkboxChar).toBeNull();
@@ -453,7 +452,7 @@ describe('TreeTaskExtractor', () => {
         it('content タグのみ（従来動作）', () => {
             const tasks = extractTasks([
                 '- [ ] task #inline @2026-03-24',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks[0].tags).toEqual(['inline']);
         });
 
@@ -461,14 +460,14 @@ describe('TreeTaskExtractor', () => {
             const tasks = extractTasks([
                 '- [ ] task #inline @2026-03-24',
                 '    - tags:: #propTag',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks[0].tags).toEqual(['inline', 'propTag']);
         });
 
         it('frontmatter tags がインラインタスクにカスケード', () => {
             const tasks = extractTasks([
                 '- [ ] task @2026-03-24',
-            ], { tags: ['project'] }, { dailyNoteDate: '2026-03-24' });
+            ], { tags: ['project'] });
             expect(tasks[0].tags).toEqual(['project']);
         });
 
@@ -477,7 +476,7 @@ describe('TreeTaskExtractor', () => {
                 '## Section',
                 '- tags:: #sectionTag',
                 '- [ ] task @2026-03-24',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks[0].tags).toEqual(['sectionTag']);
         });
 
@@ -486,7 +485,7 @@ describe('TreeTaskExtractor', () => {
                 '## Section',
                 '- tags:: #sectionTag',
                 '- [ ] task #inline @2026-03-24',
-            ], { tags: ['project'] }, { dailyNoteDate: '2026-03-24' });
+            ], { tags: ['project'] });
             expect(tasks[0].tags).toEqual(['inline', 'project', 'sectionTag']);
         });
 
@@ -496,7 +495,7 @@ describe('TreeTaskExtractor', () => {
                 '- tags:: #sectionTag',
                 '- [ ] task #inline @2026-03-24',
                 '    - tags:: #propTag',
-            ], { tags: ['project'] }, { dailyNoteDate: '2026-03-24' });
+            ], { tags: ['project'] });
             expect(tasks[0].tags).toEqual(['inline', 'project', 'propTag', 'sectionTag']);
         });
 
@@ -505,7 +504,7 @@ describe('TreeTaskExtractor', () => {
                 '## Section',
                 '- tags:: #shared',
                 '- [ ] task #shared @2026-03-24',
-            ], { tags: ['shared'] }, { dailyNoteDate: '2026-03-24' });
+            ], { tags: ['shared'] });
             expect(tasks[0].tags).toEqual(['shared']);
         });
 
@@ -513,7 +512,7 @@ describe('TreeTaskExtractor', () => {
             const tasks = extractTasks([
                 '- [ ] task @2026-03-24',
                 '    - tags:: #propTag',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ]);
             expect(tasks[0].tags).toContain('propTag');
             expect(tasks[0].properties['tags']).toBeUndefined();
         });
@@ -552,7 +551,7 @@ describe('TreeTaskExtractor', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    - [ ] 子手順',
-            ], undefined, { dailyNoteDate: '2026-03-24', hasTvFileParent: true });
+            ], undefined, { hasTvFileParent: true });
             const scheduledTasks = tasks.filter(isScheduled);
             const bareTasks = tasks.filter(isBare);
             expect(scheduledTasks).toHaveLength(1);
@@ -585,10 +584,10 @@ describe('TreeTaskExtractor', () => {
             expect(bareTasks[0].childLines.some(c => c.text.includes('nested plain'))).toBe(true);
         });
 
-        it('デイリーノート内の bare checkbox は日付継承により dated task になる（inbox ではない）', () => {
+        it('カスケード日付を持つ bare checkbox は dated task になる（inbox ではない）', () => {
             const tasks = extractTasks([
                 '- [ ] メモ',
-            ], undefined, { dailyNoteDate: '2026-03-24' });
+            ], { 'tv-start': '2026-03-24' });
             expect(tasks).toHaveLength(1);
             expect(tasks[0].parserId).toBe('tv-inline');
             expect(tasks[0].cascadeContext?.startDate).toBe('2026-03-24');

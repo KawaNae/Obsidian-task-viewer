@@ -9,7 +9,6 @@ import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
 import { logDebug, logError, logInfo } from '../../log/log';
-import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { TaskPropertyResolver } from '../parsing/TaskPropertyResolver';
 import { DocumentTreeBuilder } from '../parsing/tree/DocumentTreeBuilder';
 import { SectionPropertyResolver } from '../parsing/tree/SectionPropertyResolver';
@@ -146,13 +145,11 @@ export class TaskScanner {
             this.settings.tvFileChildHeaderLevel
         );
 
-        // デイリーノートのファイル名から日付を抽出（親タスクからの継承は廃止）
-        const dailyNoteDate = DailyNoteUtils.parseDateFromFilePath(this.app, file.path);
         const hasFmParent = fmResult !== null;
 
         // --- ツリーパイプライン ---
         const doc = DocumentTreeBuilder.build(file.path, lines, bodyStartIndex);
-        SectionPropertyResolver.resolve(doc, frontmatterObj, this.settings.tvFileKeys, dailyNoteDate ?? undefined);
+        SectionPropertyResolver.resolve(doc, frontmatterObj, this.settings.tvFileKeys);
         const allExtractedTasks = TreeTaskExtractor.extract(doc, {
             filePath: file.path,
             hasTvFileParent: hasFmParent,

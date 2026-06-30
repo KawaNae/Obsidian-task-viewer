@@ -16,10 +16,9 @@ export class SectionPropertyResolver {
     static resolve(
         doc: DocumentNode,
         frontmatter: Record<string, any> | undefined,
-        keys: TvFileKeys,
-        dailyNoteDate?: string
+        keys: TvFileKeys
     ): void {
-        const fmBase = FilePropertyResolver.extract(frontmatter, keys, dailyNoteDate);
+        const fmBase = FilePropertyResolver.extract(frontmatter, keys);
 
         for (const section of doc.sections) {
             this.resolveSection(section, fmBase, keys);
