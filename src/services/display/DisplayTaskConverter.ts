@@ -31,13 +31,12 @@ export function getOriginalTaskId(task: { id: string; originalTaskId?: string })
  * (modal placeholders, drag previews, etc.).
  */
 export function toDisplayTask(task: Task, startHour: number, getTask: TaskLookup): DisplayTask {
-    let effectiveStartDate = task.startDate ?? '';
-    let effectiveStartTime = task.startTime;
-    let effectiveEndDate = task.endDate;
-    let effectiveEndTime = task.endTime;
+    let effectiveStartDate = task.startDate || task.cascadeContext?.startDate || '';
+    let effectiveStartTime = task.startTime || task.cascadeContext?.startTime;
+    let effectiveEndDate = task.endDate || task.cascadeContext?.endDate;
+    let effectiveEndTime = task.endTime || task.cascadeContext?.endTime;
 
-    // startDateInherited = daily note inherited date (has value but not explicitly written in notation)
-    const startDateExplicit = !!task.startDate && !task.startDateInherited;
+    const startDateExplicit = !!task.startDate;
 
     let startDateImplicit = !startDateExplicit;
     let startTimeImplicit = !task.startTime;

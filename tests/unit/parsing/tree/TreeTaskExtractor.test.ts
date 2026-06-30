@@ -10,10 +10,11 @@ const defaultCtx: TaskExtractionContext = {
     tvFileKeys: DEFAULT_TV_FILE_KEYS,
 };
 
-function extractTasks(bodyLines: string[], frontmatter?: Record<string, any>, ctx?: Partial<TaskExtractionContext>) {
+function extractTasks(bodyLines: string[], frontmatter?: Record<string, any>, ctx?: Partial<TaskExtractionContext> & { dailyNoteDate?: string }) {
+    const { dailyNoteDate, ...extractorCtx } = ctx ?? {};
     const doc = DocumentTreeBuilder.build('test.md', bodyLines, 0);
-    SectionPropertyResolver.resolve(doc, frontmatter, DEFAULT_TV_FILE_KEYS);
-    return TreeTaskExtractor.extract(doc, { ...defaultCtx, ...ctx });
+    SectionPropertyResolver.resolve(doc, frontmatter, DEFAULT_TV_FILE_KEYS, dailyNoteDate);
+    return TreeTaskExtractor.extract(doc, { ...defaultCtx, ...extractorCtx });
 }
 
 describe('TreeTaskExtractor', () => {
@@ -39,7 +40,7 @@ describe('TreeTaskExtractor', () => {
                 '- [ ] time only task @T09:00',
             ], undefined, { dailyNoteDate: '2026-03-24' });
             expect(tasks).toHaveLength(1);
-            expect(tasks[0].startDate).toBe('2026-03-24');
+            expect(tasks[0].cascadeContext?.startDate).toBe('2026-03-24');
         });
 
         it('複数タスクを抽出', () => {
@@ -590,7 +591,7 @@ describe('TreeTaskExtractor', () => {
             ], undefined, { dailyNoteDate: '2026-03-24' });
             expect(tasks).toHaveLength(1);
             expect(tasks[0].parserId).toBe('tv-inline');
-            expect(tasks[0].startDate).toBe('2026-03-24');
+            expect(tasks[0].cascadeContext?.startDate).toBe('2026-03-24');
         });
 
         it('同一ファイル内で @ task と inbox task が共存できる', () => {

@@ -317,7 +317,7 @@ The plugin recognizes eight task types internally.
 Tasks are classified by **display behavior** — where they appear and what values are inferred.
 All times are relative to the configured `startHour` (default 5 → visual day 05:00–04:59).
 Display-layer implicit value resolution is centralised in `toDisplayTask()` (in `services/display/DisplayTaskConverter.ts`).
-Parse-layer daily-note date inheritance is in `resolveDailyNoteDates()` (`src/services/parsing/resolveDailyNoteDates.ts`).
+Parse-layer date inheritance is via `cascadeContext` (set by `TreeTaskExtractor`, consumed by `DisplayTaskConverter`).
 
 #### 1. Timed tasks (S-Timed / E-Timed / SD-Timed / ED-Timed)
 
@@ -934,17 +934,16 @@ isTvInline(task)  →  InlineTaskWriter
 | Aspect | tv-inline | tv-file |
 |--------|-----------|---------|
 | Time-only values | ✅ Allowed (`@10:00`) | ❌ Prohibited (returns null → key deleted) |
-| startDateInherited | ✅ Used (daily note date inheritance) | ❌ Never set |
+| cascadeContext | ✅ Used (section/file cascade inheritance) | ✅ Used (section/file cascade inheritance) |
 | endDate same-day omission | ✅ Normal (`>14:00` = same day as start) | ❌ Always explicit date |
 | Update strategy | Full line re-format via `TVInlineParser.format()` | Surgical YAML key edit via `FrontmatterLineEditor` |
 | Empty field in Properties modal | Sparse update (field omitted → preserved) | Resolved value written (field filled from PropertyCalculator) |
 
 #### tv-inline notation format rules (`TVInlineParser.format()`)
 
-**startDateInherited**:
-- `true` + startTime → `@10:00` (date omitted)
-- `false` / unset → `@2026-03-07T10:00` (date explicit)
-- Drag/resize always sets startDate → clears inherited flag
+**cascadeContext**:
+- Inherited values from file/section cascade; consumed by DisplayTaskConverter only
+- `format()` reads raw fields only — cascade values are never serialized back
 
 **endDate same-day omission**:
 - `endDate === startDate` + endTime → `>14:00` (date omitted)
@@ -964,18 +963,16 @@ In TaskConverter (inline→frontmatter), task comes from parser with parsed star
 #### Properties modal update behavior (`PropertiesMenuBuilder.buildTaskUpdatesFromResult()`)
 
 - **Frontmatter**: Empty fields filled with PropertyCalculator resolved values → all dates always explicit in YAML
-- **Inline**: Empty fields excluded from updates → preserves `startDateInherited` and time-only notation
+- **Inline**: Empty fields excluded from updates → preserves `cascadeContext` and time-only notation
 
-### startDateInherited lifecycle
+### cascadeContext lifecycle
 
 | Event | Result |
 |-------|--------|
-| Daily note parse (startTime present, startDate absent) | Set `true` |
-| Drag / resize | Cleared (startDate always set explicitly) |
-| Properties modal — inline, startDate left empty | Preserved (not in updates) |
-| Properties modal — inline, startDate filled in | Cleared |
-| Properties modal — frontmatter | N/A (never set for frontmatter) |
-| `TaskIndex.updateTask()` condition | `'startDate' in updates && updates.startDate !== undefined` |
+| Parse (TreeTaskExtractor) | Set from file/section cascade when task lacks own dates |
+| DisplayTaskConverter | Merged into effective values via `\|\|` fallback |
+| `format()` (TVInlineParser) | Ignored — only raw fields are serialized |
+| Drag / resize | Raw fields set explicitly → cascade no longer contributes |
 
 ---
 

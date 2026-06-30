@@ -468,12 +468,6 @@ export class TaskIndex {
         Object.assign(task, updates);
         this.store.bumpRevision();
 
-        // startDate が明示的に更新された → 継承フラグをクリア
-        // (undefined = Propertiesモーダル未変更 → フラグ維持)
-        if ('startDate' in updates && updates.startDate !== undefined) {
-            task.startDateInherited = false;
-        }
-
         // ドラッグ中のファイルはnotifyをスキップ（ドラッグ終了時にsetDraggingFile(null)で一括通知）
         if (this.draggingFilePath !== task.file) {
             this.store.notifyListeners(taskId, Object.keys(updates));

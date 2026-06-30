@@ -3,6 +3,7 @@ import type { ExtractedProperties } from './tree/BuiltinPropertyExtractor';
 import { VALID_LINE_STYLES } from '../../constants/style';
 import { normalizeColor } from '../../utils/ColorUtils';
 import { TagExtractor } from './utils/TagExtractor';
+import { normalizeYamlDate, parseDateTimeField } from './utils/DateTimeFieldParser';
 
 /**
  * File-scope (frontmatter) property resolver.
@@ -21,20 +22,34 @@ export class FilePropertyResolver {
 
     static extract(
         frontmatter: Record<string, any> | undefined,
-        keys: TvFileKeys
+        keys: TvFileKeys,
+        dailyNoteDate?: string
     ): ExtractedProperties {
-        if (!frontmatter) return { properties: {} };
+        if (!frontmatter && !dailyNoteDate) return { properties: {} };
 
-        const color = this.resolveColor(frontmatter[keys.color]);
-        const linestyle = this.resolveLinestyle(frontmatter[keys.linestyle]);
-        const mask = this.resolveMask(frontmatter[keys.mask]);
+        const fm = frontmatter ?? {};
+        const color = this.resolveColor(fm[keys.color]);
+        const linestyle = this.resolveLinestyle(fm[keys.linestyle]);
+        const mask = this.resolveMask(fm[keys.mask]);
+
+        const startParsed = parseDateTimeField(normalizeYamlDate(fm[keys.start]));
+        const endParsed = parseDateTimeField(normalizeYamlDate(fm[keys.end]));
+        const dueParsed = parseDateTimeField(normalizeYamlDate(fm[keys.due]));
+
+        const startDate = startParsed.date ?? dailyNoteDate;
+        const startTime = startParsed.time;
+        const endDate = endParsed.date;
+        const endTime = endParsed.time;
+        const due = dueParsed.date
+            ? (dueParsed.time ? `${dueParsed.date}T${dueParsed.time}` : dueParsed.date)
+            : undefined;
 
         const excluded = new Set<string>(Object.values(keys));
         excluded.add('tags');
         for (const k of this.INTERNAL_KEYS) excluded.add(k);
 
         const properties: Record<string, PropertyValue> = {};
-        for (const [key, value] of Object.entries(frontmatter)) {
+        for (const [key, value] of Object.entries(fm)) {
             if (excluded.has(key)) continue;
             if (value === null || value === undefined) continue;
             const type = typeof value === 'number' ? 'number' as const
@@ -47,13 +62,18 @@ export class FilePropertyResolver {
             };
         }
 
-        const tags = TagExtractor.fromFrontmatter(frontmatter['tags']);
+        const tags = TagExtractor.fromFrontmatter(fm['tags']);
 
         return {
             color,
             linestyle,
             mask,
             tags: tags.length > 0 ? tags : undefined,
+            startDate,
+            startTime,
+            endDate,
+            endTime,
+            due,
             properties,
         };
     }

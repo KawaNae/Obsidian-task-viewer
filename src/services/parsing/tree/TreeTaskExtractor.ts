@@ -4,11 +4,9 @@ import { BuiltinPropertyExtractor } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TagExtractor } from '../utils/TagExtractor';
 import { TaskParser } from '../TaskParser';
-import { resolveDailyNoteDates } from '../resolveDailyNoteDates';
 
 export interface TaskExtractionContext {
     filePath: string;
-    dailyNoteDate?: string;
     hasTvFileParent: boolean;
     tvFileKeys: TvFileKeys;
 }
@@ -57,12 +55,26 @@ export class TreeTaskExtractor {
     ): void {
         let task = TaskParser.parse(block.rawLine, ctx.filePath, block.line);
 
+        // Section/File カスケードから日時を継承（cascadeContext に格納、raw fields は触れない）
+        if (task) {
+            const cc: NonNullable<Task['cascadeContext']> = {};
+            if (!task.startDate && section.resolvedStartDate) cc.startDate = section.resolvedStartDate;
+            if (!task.startTime && section.resolvedStartTime) cc.startTime = section.resolvedStartTime;
+            if (!task.endDate && section.resolvedEndDate) cc.endDate = section.resolvedEndDate;
+            if (!task.endTime && section.resolvedEndTime) cc.endTime = section.resolvedEndTime;
+            if (!task.due && section.resolvedDue) cc.due = section.resolvedDue;
+            if (Object.keys(cc).length > 0) task.cascadeContext = cc;
+        }
+
         // 非デイリーノートかつ task-bearing でないファイルで、
         // 日付・コマンドを持たない bare checkbox は表出させない。
-        if (task && !ctx.dailyNoteDate && !ctx.hasTvFileParent
-            && !task.startDate && !task.endDate && !task.due
-            && (!task.commands || task.commands.length === 0)) {
-            task = null;
+        if (task) {
+            const hasCascadeDates = !!(task.cascadeContext?.startDate || task.cascadeContext?.endDate || task.cascadeContext?.due);
+            if (!ctx.hasTvFileParent && !hasCascadeDates
+                && !task.startDate && !task.endDate && !task.due
+                && (!task.commands || task.commands.length === 0)) {
+                task = null;
+            }
         }
 
         // 祖先に Task がある bare checkbox（日付・コマンドなし）は
@@ -79,11 +91,6 @@ export class TreeTaskExtractor {
             return;
         }
 
-        // デイリーノートの日付を継承
-        if (ctx.dailyNoteDate) {
-            Object.assign(task, resolveDailyNoteDates(task, ctx.dailyNoteDate));
-        }
-
         // インデントを設定
         task.indent = block.indent;
         task.childIds = [];
@@ -95,7 +102,7 @@ export class TreeTaskExtractor {
         // （plain `- [ ]` は祖先に Task（＝自分）がいるため Task 化されず childLines に残す）
         const taskProducingLines = new Set<number>();
         for (const cb of block.childTaskBlocks) {
-            if (this.isTaskProducing(cb.rawLine, ctx.filePath, cb.line, ctx, /*hasAncestorTask=*/true)) {
+            if (this.isTaskProducing(cb.rawLine, ctx.filePath, cb.line, ctx, section, /*hasAncestorTask=*/true)) {
                 taskProducingLines.add(cb.line);
             }
         }
@@ -192,13 +199,21 @@ export class TreeTaskExtractor {
         filePath: string,
         lineNumber: number,
         ctx: TaskExtractionContext,
+        section: SectionNode,
         hasAncestorTask: boolean = false
     ): boolean {
         let task = TaskParser.parse(rawLine, filePath, lineNumber);
-        if (task && !ctx.dailyNoteDate && !ctx.hasTvFileParent
-            && !task.startDate && !task.endDate && !task.due
-            && (!task.commands || task.commands.length === 0)) {
-            task = null;
+        if (task) {
+            const hasCascadeDates = !!(
+                (!task.startDate && section.resolvedStartDate)
+                || (!task.endDate && section.resolvedEndDate)
+                || (!task.due && section.resolvedDue)
+            );
+            if (!ctx.hasTvFileParent && !hasCascadeDates
+                && !task.startDate && !task.endDate && !task.due
+                && (!task.commands || task.commands.length === 0)) {
+                task = null;
+            }
         }
         if (task && hasAncestorTask && this.isBareCheckbox(task)) {
             task = null;

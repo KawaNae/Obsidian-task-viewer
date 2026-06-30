@@ -152,10 +152,9 @@ export class TaskScanner {
 
         // --- ツリーパイプライン ---
         const doc = DocumentTreeBuilder.build(file.path, lines, bodyStartIndex);
-        SectionPropertyResolver.resolve(doc, frontmatterObj, this.settings.tvFileKeys);
+        SectionPropertyResolver.resolve(doc, frontmatterObj, this.settings.tvFileKeys, dailyNoteDate ?? undefined);
         const allExtractedTasks = TreeTaskExtractor.extract(doc, {
             filePath: file.path,
-            dailyNoteDate: dailyNoteDate ?? undefined,
             hasTvFileParent: hasFmParent,
             tvFileKeys: this.settings.tvFileKeys,
         });

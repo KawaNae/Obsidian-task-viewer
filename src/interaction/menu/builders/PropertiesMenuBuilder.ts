@@ -260,7 +260,7 @@ export class PropertiesMenuBuilder {
             updates.endTime = endTime ?? endCalc.time;
             if (due !== undefined) updates.due = due;
         } else {
-            // inline: 空欄は省略維持（startDateInherited 保護）
+            // inline: 空欄は省略維持（cascadeContext 保護）
             if (startDate !== undefined) updates.startDate = startDate;
             if (startTime !== undefined) updates.startTime = startTime;
             if (endDate !== undefined) updates.endDate = endDate;
