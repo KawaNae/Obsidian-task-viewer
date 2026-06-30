@@ -69,7 +69,6 @@ export abstract class GenerationCommand implements CommandStrategy {
         const commonOverrides = {
             id: '',
             statusChar: ' ' as const,
-            startDateInherited: false,
             originalText: '',
             childLines: [] as ChildLine[],
             childLineBodyOffsets: [] as number[],

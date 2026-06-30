@@ -5,6 +5,7 @@ import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { validateDateTimeRules } from '../utils/DateTimeRuleValidator';
 import { isTaskBearingFile } from '../utils/FrontmatterPolicy';
 import { FilePropertyResolver } from '../FilePropertyResolver';
+import { normalizeYamlDate, parseDateTimeField } from '../utils/DateTimeFieldParser';
 
 export interface FrontmatterParseResult {
     task: Task;
@@ -152,50 +153,8 @@ export class TVFileBuilder {
     /**
      * Normalize YAML scalar values emitted by metadata cache.
      */
-    static normalizeYamlDate(value: unknown): string | null {
-        if (value === null || value === undefined) return null;
-
-        if (value instanceof Date) {
-            const y = value.getFullYear();
-            const m = (value.getMonth() + 1).toString().padStart(2, '0');
-            const d = value.getDate().toString().padStart(2, '0');
-            const h = value.getHours();
-            const min = value.getMinutes();
-            if (h === 0 && min === 0) {
-                return `${y}-${m}-${d}`;
-            }
-            return `${y}-${m}-${d}T${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-        }
-
-        if (typeof value === 'number') {
-            if (value >= 0 && value < 1440) {
-                const hours = Math.floor(value / 60);
-                const minutes = value % 60;
-                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-            }
-            return null;
-        }
-
-        if (typeof value === 'string') {
-            const trimmed = value.trim();
-            return trimmed.length > 0 ? trimmed : null;
-        }
-
-        return String(value).trim() || null;
-    }
-
-    /**
-     * Extract date/time fragments from a normalized field.
-     */
-    static parseDateTimeField(normalized: string | null): { date?: string; time?: string } {
-        if (!normalized) return {};
-        const dateMatch = normalized.match(/(\d{4}-\d{2}-\d{2})/);
-        const timeMatch = normalized.match(/(\d{2}:\d{2})/);
-        return {
-            date: dateMatch ? dateMatch[1] : undefined,
-            time: timeMatch ? timeMatch[1] : undefined
-        };
-    }
+    static normalizeYamlDate = normalizeYamlDate;
+    static parseDateTimeField = parseDateTimeField;
 
     private static findHeaderSection(
         bodyLines: string[],

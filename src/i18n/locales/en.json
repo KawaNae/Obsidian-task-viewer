@@ -8,7 +8,8 @@
       "notes": "Notes",
       "frontmatter": "Frontmatter",
       "parsers": "Parsers",
-      "about": "About"
+      "about": "About",
+      "log": "Log"
     },
     "about": {
       "plugin": "Plugin",
@@ -218,6 +219,28 @@
       "fieldEndDate": "End Date",
       "fieldDue": "Due Date",
       "fieldIgnore": "Ignore"
+    },
+    "log": {
+      "verboseNotice": "Verbose notice",
+      "verboseNoticeDesc": "When ON, debug/info-level logs are also shown in the console and as Notices. When OFF, everything is still recorded in the Log View.",
+      "logRetention": "Log retention (days)",
+      "logRetentionDesc": "How many days of log entries to keep in the persistent buffer. Minimum 1.",
+      "maxStorage": "Max log storage (MB)",
+      "maxStorageDesc": "Upper bound on log buffer size in megabytes. Set to 0 for unlimited.",
+      "logBuffer": "Log buffer",
+      "bufferStats": "{{count}} entries — {{size}} — {{range}}",
+      "bufferEmpty": "Empty",
+      "exportLogs": "Export logs",
+      "exportLogsDesc": "Write a snapshot of the persistent log buffer to the vault root.",
+      "exportSuccess": "Exported {{count}} entries to {{path}}",
+      "clearLogs": "Clear stored logs",
+      "clearLogsDesc": "Delete all entries from the persistent log buffer.",
+      "clearLogsConfirm": "Delete all entries from the persistent log buffer? This cannot be undone.",
+      "cleared": "Log buffer cleared",
+      "deleteDatabase": "Delete log database",
+      "deleteDatabaseDesc": "Drop the entire IndexedDB store. Use only if the database is corrupted.",
+      "deleteDatabaseConfirm": "Drop the entire IndexedDB store? All persistent log data on this device will be lost.",
+      "deleted": "Log database deleted"
     }
   },
   "view": {
@@ -226,7 +249,8 @@
     "calendar": "Calendar View",
     "miniCalendar": "Mini Calendar",
     "kanban": "Kanban View",
-    "timer": "Timer View"
+    "timer": "Timer View",
+    "log": "Task Viewer Log"
   },
   "command": {
     "openTimeline": "Open Timeline View",
@@ -234,7 +258,8 @@
     "openCalendar": "Open Calendar View",
     "openMiniCalendar": "Open Mini Calendar View",
     "openKanban": "Open Kanban View",
-    "openTimer": "Open Timer View"
+    "openTimer": "Open Timer View",
+    "openLog": "Open Log View"
   },
   "ribbon": {
     "openTimeline": "Open Timeline",

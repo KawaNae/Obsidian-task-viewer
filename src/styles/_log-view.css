@@ -1,0 +1,116 @@
+.tv-log-view {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.tv-log-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--divider-color);
+    flex-shrink: 0;
+}
+
+.tv-log-filters {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+}
+
+.tv-log-filter-btn {
+    font-size: var(--font-ui-smaller);
+    padding: 2px 8px;
+    border-radius: var(--radius-s);
+    border: 1px solid var(--background-modifier-border);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    text-transform: capitalize;
+}
+
+.tv-log-filter-btn:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.tv-log-filter-btn.is-active {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border-color: var(--interactive-accent);
+}
+
+.tv-log-actions {
+    display: flex;
+    gap: 0.25rem;
+    margin-left: auto;
+}
+
+.tv-log-action-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: var(--radius-s);
+    display: flex;
+    align-items: center;
+}
+
+.tv-log-action-btn:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.tv-log-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.5rem;
+    font-family: var(--font-monospace);
+    font-size: var(--font-ui-smaller);
+}
+
+.tv-log-entry {
+    display: flex;
+    gap: 0.75rem;
+    padding: 2px 4px;
+    border-radius: var(--radius-s);
+    line-height: 1.4;
+}
+
+.tv-log-time {
+    color: var(--text-muted);
+    min-width: 8ch;
+    flex-shrink: 0;
+}
+
+.tv-log-level {
+    min-width: 5ch;
+    text-transform: uppercase;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.tv-log-message {
+    flex: 1;
+    word-break: break-word;
+}
+
+/* Level-specific colours */
+.tv-log-debug .tv-log-level { color: var(--text-faint); }
+.tv-log-debug .tv-log-message { color: var(--text-muted); }
+
+.tv-log-info .tv-log-level { color: var(--color-blue, var(--text-accent)); }
+
+.tv-log-warn {
+    background: color-mix(in srgb, var(--color-orange, orange) 10%, transparent);
+}
+.tv-log-warn .tv-log-level { color: var(--color-orange, var(--text-warning, orange)); }
+
+.tv-log-error {
+    background: color-mix(in srgb, var(--color-red, red) 10%, transparent);
+}
+.tv-log-error .tv-log-level { color: var(--text-error, red); }
+.tv-log-error .tv-log-message { color: var(--text-error, red); }

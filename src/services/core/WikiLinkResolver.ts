@@ -1,6 +1,7 @@
 import { App, TFile } from 'obsidian';
 import { Task, WikilinkRef, isTvFile, hasBodyLine } from '../../types';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
+import { logWarn, logDebug } from '../../log/log';
 
 /**
  * `- [[name]]` パターンのwikilink子タスクを解決し、親子関係をワイアーする。
@@ -15,6 +16,10 @@ export class WikiLinkResolver {
      * @param app Obsidian App インスタンス
      */
     static resolve(tasks: Map<string, Task>, wikilinkRefsMap: Map<string, WikilinkRef[]>, app: App): void {
+        let parentCount = 0;
+        let linkCount = 0;
+        let unresolvedCount = 0;
+
         // === clear フェーズ: wikilink 由来エッジと dangling を剥がす（冪等化の要） ===
         // パーサー（TaskScanner / TreeTaskExtractor）は 1 ファイル内で完結するため、
         // ファイルをまたぐ親子エッジは必ずこの resolver が張った wikilink 由来。
@@ -32,10 +37,12 @@ export class WikiLinkResolver {
             // frontmatter タスク: wikilinkRefs を使用（childLines は空）
             const refs = wikilinkRefsMap.get(parentId);
             if (refs && refs.length > 0) {
+                parentCount++;
                 const childLineMap = new Map<string, number>();
                 for (const ref of refs) {
+                    linkCount++;
                     const resolvedPath = this.resolveWikiLink(ref.target, app);
-                    if (!resolvedPath) continue;
+                    if (!resolvedPath) { unresolvedCount++; continue; }
                     const childTaskId = this.wireChild(parentTask, parentId, tasks, resolvedPath);
                     if (childTaskId) {
                         childLineMap.set(childTaskId, ref.bodyLine);
@@ -56,14 +63,17 @@ export class WikiLinkResolver {
                 minChildIndent = Math.min(minChildIndent, cl.indent.length);
             }
 
+            let hasWikilink = false;
             for (const cl of parentTask.childLines) {
                 if (cl.wikilinkTarget === null) continue;
 
                 // 直接子のインデントレベルのみ処理（孫以降はスキップ）
                 if (cl.indent.length !== minChildIndent) continue;
 
+                if (!hasWikilink) { parentCount++; hasWikilink = true; }
+                linkCount++;
                 const resolvedPath = this.resolveWikiLink(cl.wikilinkTarget, app);
-                if (!resolvedPath) continue;
+                if (!resolvedPath) { unresolvedCount++; continue; }
                 this.wireChild(parentTask, parentId, tasks, resolvedPath);
             }
         }
@@ -78,6 +88,8 @@ export class WikiLinkResolver {
                 return lineA - lineB;
             });
         }
+
+        logDebug(`[WikiLink:resolved] parents=${parentCount} links=${linkCount} unresolved=${unresolvedCount}`);
     }
 
     /**
@@ -209,7 +221,7 @@ export class WikiLinkResolver {
         if (matches.length > 0) {
             if (matches.length > 1) {
                 matches.sort((a, b) => a.path.localeCompare(b.path));
-                console.warn(
+                logWarn(
                     `[WikiLinkResolver] Ambiguous wikilink "${target}" matches ${matches.length} files; ` +
                     `resolving to "${matches[0].path}"`
                 );

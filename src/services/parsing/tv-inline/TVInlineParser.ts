@@ -316,24 +316,16 @@ export class TVInlineParser implements LeafParserStrategy {
         let metaStr = '';
         let hasDateBlock = false;
 
-        // Determine if we should use inherited (time-only) notation
-        // startDateInherited covers both start and end dates (they are inherited together)
-        const useInheritedNotation = task.startDateInherited && task.startTime;
-
         let startStr = '';
-        if (useInheritedNotation) {
-
-            // Inherited date - output time only
-            startStr = `@${task.startTime}`;
-            hasDateBlock = true;
-        } else if (task.startDate) {
+        if (task.startDate) {
             startStr = `@${task.startDate}`;
             if (task.startTime) startStr += `T${task.startTime}`;
             hasDateBlock = true;
-        } else if (task.startTime || task.endDate || task.endTime || task.due) {
-            // Implicit Start with content to format (D type, S-Timed with implicit date, etc.)
+        } else if (task.startTime) {
+            startStr = `@${task.startTime}`;
+            hasDateBlock = true;
+        } else if (task.endDate || task.endTime || task.due) {
             startStr = '@';
-            if (task.startTime) startStr += `T${task.startTime}`;
             hasDateBlock = true;
         }
 
@@ -341,12 +333,7 @@ export class TVInlineParser implements LeafParserStrategy {
             metaStr += ` ${startStr}`;
 
             // End Part Logic
-            if (useInheritedNotation && task.endTime && (!task.endDate || task.endDate === task.startDate)) {
-                // Inherited same-day end - output time only. A cross-day endDate
-                // falls through to the explicit-date branch below so the day is
-                // not lost (inherited notation only abbreviates the start anchor).
-                metaStr += `>${task.endTime}`;
-            } else if (task.endDate) {
+            if (task.endDate) {
                 // endDate is explicitly set
                 // If future (no startDate), isSameDay is false.
                 const isSameDay = task.startDate ? (task.endDate === task.startDate) : false;

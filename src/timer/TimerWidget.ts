@@ -26,6 +26,7 @@ import {
     TimerContext,
     IDLE_TIMER_ID,
 } from './TimerContext';
+import { logInfo } from '../log/log';
 
 export class TimerWidget implements TimerContext {
     readonly app: App;
@@ -59,6 +60,7 @@ export class TimerWidget implements TimerContext {
      * currently holds the active leaf.
      */
     activate(): void {
+        logInfo('[Timer:activate]');
         if (this.observer) return;
         this.observer = new TimerWidgetWindowObserver(this.app, this.plugin, this);
         this.observer.start();

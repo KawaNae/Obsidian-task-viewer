@@ -125,12 +125,13 @@ describe('toDisplayTask', () => {
         expect(dt.originalTaskId).toBe(task.id);
     });
 
-    it('handles inherited startDate', () => {
+    it('uses cascadeContext startDate when task has no startDate', () => {
         const task = makeTask({
-            startDate: '2026-01-15',
-            startDateInherited: true,
+            startDate: undefined,
+            cascadeContext: { startDate: '2026-01-15' },
         });
         const dt = toDisplayTask(task, startHour);
+        expect(dt.effectiveStartDate).toBe('2026-01-15');
         expect(dt.startDateImplicit).toBe(true);
     });
 });

@@ -18,6 +18,7 @@ import { getTaskDateRange } from '../display/VisualDateRange';
 import { TaskParser } from '../parsing/TaskParser';
 import { HeadingInserter } from '../../utils/HeadingInserter';
 import { FileOperations } from '../persistence/utils/FileOperations';
+import { logError, logInfo, logWarn } from '../../log/log';
 
 export interface ValidationError {
     file: string;
@@ -293,7 +294,7 @@ export class TaskIndex {
         this.scanner.updateSettings(settings);
         this.scanner.scanVault()
             .catch((error) => {
-                console.error('[TaskIndex] Failed to rescan vault after settings update:', error);
+                logError(`[TaskIndex] Failed to rescan vault: ${(error as Error)?.message ?? error}`);
             });
     }
 
@@ -378,6 +379,7 @@ export class TaskIndex {
     }
 
     async updateTask(taskId: string, updates: Partial<Task>): Promise<void> {
+        logInfo(`[updateTask] id=${taskId} fields=[${Object.keys(updates)}]`);
 
         // スプリットタスク処理（##seg:YYYY-MM-DD）
         const segmentInfo = TaskIdGenerator.parseSegmentId(taskId);
@@ -386,14 +388,14 @@ export class TaskIndex {
             const originalTask = this.store.getTask(originalId);
 
             if (!originalTask) {
-                console.warn(`[TaskIndex] Original task ${originalId} not found for split segment`);
+                logWarn(`[TaskIndex] Original task ${originalId} not found for split segment`);
                 return;
             }
 
             // Resolve effective dates to match splitDisplayTaskAtBoundary's logic
             const dt = toDisplayTask(originalTask, this.settings.startHour, (id) => this.store.getTask(id));
             if (!dt.effectiveStartDate) {
-                console.warn(`[TaskIndex] Original task ${originalId} has no effective start date`);
+                logWarn(`[TaskIndex] Original task ${originalId} has no effective start date`);
                 return;
             }
 
@@ -421,7 +423,7 @@ export class TaskIndex {
             } else if (segmentInfo.segmentDate === afterSegmentDate) {
                 segment = 'after';
             } else {
-                console.warn(`[TaskIndex] Unsupported split segment date: ${segmentInfo.segmentDate} for task ${originalId}`);
+                logWarn(`[TaskIndex] Unsupported split segment date: ${segmentInfo.segmentDate} for task ${originalId}`);
                 return;
             }
 
@@ -457,7 +459,7 @@ export class TaskIndex {
 
         const task = this.store.getTask(taskId);
         if (!task) {
-            console.warn(`[TaskIndex] Task ${taskId} not found`);
+            logWarn(`[TaskIndex] Task ${taskId} not found`);
             return;
         }
         if (task.isReadOnly) return;
@@ -465,12 +467,6 @@ export class TaskIndex {
         this.syncDetector.markLocalEdit(task.file);
         Object.assign(task, updates);
         this.store.bumpRevision();
-
-        // startDate が明示的に更新された → 継承フラグをクリア
-        // (undefined = Propertiesモーダル未変更 → フラグ維持)
-        if ('startDate' in updates && updates.startDate !== undefined) {
-            task.startDateInherited = false;
-        }
 
         // ドラッグ中のファイルはnotifyをスキップ（ドラッグ終了時にsetDraggingFile(null)で一括通知）
         if (this.draggingFilePath !== task.file) {
@@ -491,6 +487,7 @@ export class TaskIndex {
 
     async deleteTask(taskId: string): Promise<void> {
         return this.withNotify(async () => {
+            logInfo(`[deleteTask] id=${taskId}`);
             const task = this.store.getTask(taskId);
             if (!task) return;
             if (task.isReadOnly) return;
@@ -557,6 +554,7 @@ export class TaskIndex {
 
     async createTask(filePath: string, taskLine: string, heading?: string): Promise<void> {
         return this.withNotify(async () => {
+            logInfo(`[createTask] path=${filePath} heading=${heading ?? '(none)'}`);
             this.syncDetector.markLocalEdit(filePath);
 
             if (heading) {
@@ -575,6 +573,7 @@ export class TaskIndex {
 
     async insertChildTask(parentTaskId: string, childLine: string): Promise<void> {
         return this.withNotify(async () => {
+            logInfo(`[insertChildTask] parentId=${parentTaskId}`);
             const task = this.store.getTask(parentTaskId);
             if (!task) return;
 

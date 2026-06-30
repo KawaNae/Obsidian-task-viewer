@@ -24,6 +24,11 @@ export interface SectionNode {
     resolvedLinestyle?: string;
     resolvedMask?: string;
     resolvedTags?: string[];
+    resolvedStartDate?: string;
+    resolvedStartTime?: string;
+    resolvedEndDate?: string;
+    resolvedEndTime?: string;
+    resolvedDue?: string;
     blocks: BlockNode[];             // セクション内のブロック群（プロパティブロック除く）
     children: SectionNode[];         // ネストした子セクション
     /** セクションの行範囲 [startLine, endLine)（子セクション含む） */

@@ -16,9 +16,10 @@ export class SectionPropertyResolver {
     static resolve(
         doc: DocumentNode,
         frontmatter: Record<string, any> | undefined,
-        keys: TvFileKeys
+        keys: TvFileKeys,
+        dailyNoteDate?: string
     ): void {
-        const fmBase = FilePropertyResolver.extract(frontmatter, keys);
+        const fmBase = FilePropertyResolver.extract(frontmatter, keys, dailyNoteDate);
 
         for (const section of doc.sections) {
             this.resolveSection(section, fmBase, keys);
@@ -43,12 +44,24 @@ export class SectionPropertyResolver {
             ? TagExtractor.merge(parentProps.tags ?? [], ownExtracted.tags)
             : parentProps.tags;
 
+        // Partial merge: date と time は独立に継承
+        section.resolvedStartDate = ownExtracted.startDate ?? parentProps.startDate;
+        section.resolvedStartTime = ownExtracted.startTime ?? parentProps.startTime;
+        section.resolvedEndDate = ownExtracted.endDate ?? parentProps.endDate;
+        section.resolvedEndTime = ownExtracted.endTime ?? parentProps.endTime;
+        section.resolvedDue = ownExtracted.due ?? parentProps.due;
+
         // 子セクションへ再帰
         const resolved: ExtractedProperties = {
             color: section.resolvedColor,
             linestyle: section.resolvedLinestyle,
             mask: section.resolvedMask,
             tags: section.resolvedTags,
+            startDate: section.resolvedStartDate,
+            startTime: section.resolvedStartTime,
+            endDate: section.resolvedEndDate,
+            endTime: section.resolvedEndTime,
+            due: section.resolvedDue,
             properties: section.resolvedProperties,
         };
         for (const child of section.children) {

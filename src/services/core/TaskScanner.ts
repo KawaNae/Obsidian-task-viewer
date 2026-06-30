@@ -8,6 +8,7 @@ import { TaskStore } from './TaskStore';
 import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
+import { logDebug, logError, logInfo } from '../../log/log';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { TaskPropertyResolver } from '../parsing/TaskPropertyResolver';
 import { DocumentTreeBuilder } from '../parsing/tree/DocumentTreeBuilder';
@@ -47,12 +48,14 @@ export class TaskScanner {
     async scanVault(): Promise<void> {
         this.validator.clearErrors();
         const files = this.app.vault.getMarkdownFiles();
+        logInfo(`[scanVault] files=${files.length}`);
 
         for (const file of files) {
             await this.queueScan(file);
         }
         WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
         this.store.notifyListenersStaggered();
+        logInfo(`[scanVault:done] tasks=${this.store.getTasks().length}`);
         this.isInitializing = false;
     }
 
@@ -67,6 +70,7 @@ export class TaskScanner {
      * スキャンをキューに追加
      */
     async queueScan(file: TFile, isLocal: boolean = false): Promise<void> {
+        if (!this.isInitializing) logDebug(`[queueScan] file=${file.path} isLocal=${isLocal}`);
         // シンプルなキューメカニズム: ファイルパスごとにプロミスをチェーン
         const previousScan = this.scanQueue.get(file.path) || Promise.resolve();
 
@@ -74,7 +78,7 @@ export class TaskScanner {
             try {
                 await this.scanFile(file, isLocal);
             } catch (error) {
-                console.error(`Error scanning file ${file.path}:`, error);
+                logError(`Error scanning file ${file.path}: ${(error as Error)?.message ?? error}`);
             }
         });
 
@@ -148,10 +152,9 @@ export class TaskScanner {
 
         // --- ツリーパイプライン ---
         const doc = DocumentTreeBuilder.build(file.path, lines, bodyStartIndex);
-        SectionPropertyResolver.resolve(doc, frontmatterObj, this.settings.tvFileKeys);
+        SectionPropertyResolver.resolve(doc, frontmatterObj, this.settings.tvFileKeys, dailyNoteDate ?? undefined);
         const allExtractedTasks = TreeTaskExtractor.extract(doc, {
             filePath: file.path,
-            dailyNoteDate: dailyNoteDate ?? undefined,
             hasTvFileParent: hasFmParent,
             tvFileKeys: this.settings.tvFileKeys,
         });

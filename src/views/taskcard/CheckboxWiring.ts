@@ -4,6 +4,7 @@ import { TaskWriteService } from '../../services/data/TaskWriteService';
 import { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { ChildRenderItem } from './types';
 import { buildStatusOptions, createStatusTitle } from '../../constants/statusOptions';
+import { logWarn } from '../../log/log';
 
 /**
  * Wires checkbox interactions for parent and child items.
@@ -115,7 +116,7 @@ export class CheckboxWiring {
         settings: TaskViewerSettings
     ): void {
         if (bodyLine < 0) {
-            console.warn('[CheckboxWiring] childLine handler has invalid bodyLine; skipping wire.');
+            logWarn('[CheckboxWiring] childLine handler has invalid bodyLine; skipping wire.');
             return;
         }
 

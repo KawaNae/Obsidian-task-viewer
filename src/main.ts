@@ -1,4 +1,4 @@
-import { Notice, Plugin, Workspace, WorkspaceLeaf, TFile } from 'obsidian';
+import { apiVersion, Notice, Platform, Plugin, Workspace, WorkspaceLeaf, TFile } from 'obsidian';
 import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
@@ -44,12 +44,19 @@ import { TaskReadService } from './services/data/TaskReadService';
 import { TaskWriteService } from './services/data/TaskWriteService';
 import { initI18n, t } from './i18n';
 import { TaskParser } from './services/parsing/TaskParser';
+import { initLog, logInfo } from './log/log';
+import { LogStorage } from './log/log-storage';
+import { LogManager } from './log/log-manager';
+import { LogView, VIEW_TYPE_LOG } from './views/logview/LogView';
+import type { DeviceInfo } from './log/markdown-formatter';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
     private readService: TaskReadService;
     private writeService: TaskWriteService;
     private timerWidget: TimerWidget;
+    private logStorage: LogStorage;
+    private logManager: LogManager;
     public settings: TaskViewerSettings;
     public api: TaskApi;
     public menuPresenter: MenuPresenter;
@@ -79,9 +86,43 @@ export default class TaskViewerPlugin extends Plugin {
         await this.loadSettings();
         TaskParser.rebuildChain(this.settings);
 
+        // Initialize logging subsystem
+        initLog(
+            () => this.settings,
+            (msg, dur) => new Notice(`Task Viewer: ${msg}`, dur),
+        );
+
         // Initialize Services
         this.taskIndex = new TaskIndex(this.app, this.settings);
         await this.taskIndex.initialize();
+
+        // Initialize persistent log storage
+        const vaultName = this.app.vault.getName();
+        this.logStorage = new LogStorage(vaultName);
+        await this.logStorage.ensureSchemaVersion();
+        this.logManager = new LogManager({
+            storage: this.logStorage,
+            getSettings: () => this.settings,
+            getPluginVersion: () => this.manifest.version,
+            getObsidianVersion: () => apiVersion,
+            getPlatform: () => ({
+                os: this.deriveOsLabel(),
+                isMobile: Platform.isMobile,
+            }),
+            getTaskDiagnostics: () => ({
+                taskCount: this.taskIndex.getTasks().length,
+                activeViewCount: this.countActiveViews(),
+                enabledParsers: this.getEnabledParsers(),
+                startHour: this.settings.startHour,
+            }),
+            getDeviceInfo: () => this.collectDeviceInfo(),
+            vault: {
+                exists: (p) => this.app.vault.adapter.exists(p),
+                createBinary: async (p, d) => { await this.app.vault.createBinary(p, d); },
+            },
+            doc: typeof document !== 'undefined' ? document : undefined,
+            win: typeof window !== 'undefined' ? window : undefined,
+        });
         this.readService = new TaskReadService(this.taskIndex, this.settings.startHour);
         this.writeService = new TaskWriteService(this.taskIndex);
 
@@ -101,6 +142,9 @@ export default class TaskViewerPlugin extends Plugin {
 
         this.app.workspace.onLayoutReady(() => {
             this.timerWidget?.activate();
+            this.logManager.start();
+            const built = typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'unknown';
+            logInfo(`Task Viewer v${this.manifest.version} starting — built ${built}`);
         });
 
         this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
@@ -142,6 +186,11 @@ export default class TaskViewerPlugin extends Plugin {
         this.registerView(
             VIEW_TYPE_KANBAN,
             (leaf) => new KanbanView(leaf, this)
+        );
+
+        this.registerView(
+            VIEW_TYPE_LOG,
+            (leaf) => new LogView(leaf)
         );
 
         const timelineViewMeta = getViewMeta(VIEW_TYPE_TIMELINE);
@@ -222,6 +271,14 @@ export default class TaskViewerPlugin extends Plugin {
             name: kanbanViewMeta.commandName,
             callback: () => {
                 this.activateView(VIEW_TYPE_KANBAN);
+            }
+        });
+
+        this.addCommand({
+            id: 'open-log-view',
+            name: t('command.openLog'),
+            callback: () => {
+                this.activateLogView();
             }
         });
 
@@ -477,6 +534,7 @@ export default class TaskViewerPlugin extends Plugin {
     }
 
     async saveSettings() {
+        logInfo(`[saveSettings] startHour=${this.settings.startHour} parsers=[${this.getEnabledParsers()}]`);
         await this.saveData(this.settings);
         this.taskIndex.updateSettings(this.settings);
         this.readService.updateStartHour(this.settings.startHour);
@@ -630,6 +688,8 @@ export default class TaskViewerPlugin extends Plugin {
     }
 
     onunload() {
+        this.logManager?.stop();
+        this.logStorage?.close();
         this.taskMenuCleanup?.();
         this.taskIndex?.dispose();
         AudioUtils.dispose();
@@ -645,6 +705,101 @@ export default class TaskViewerPlugin extends Plugin {
         // Disconnect Properties color suggest observer
         this.propertySuggestObserver?.destroy();
         this.propertySuggestObserver = null;
+    }
+
+    // ── Logging helpers ────────────────────────────────────
+
+    getLogManager(): LogManager | null {
+        return this.logManager ?? null;
+    }
+
+    private async activateLogView(): Promise<void> {
+        const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_LOG);
+        if (existing.length > 0) {
+            this.app.workspace.revealLeaf(existing[0]);
+            return;
+        }
+        const leaf = this.app.workspace.getRightLeaf(false);
+        if (leaf) {
+            await leaf.setViewState({ type: VIEW_TYPE_LOG, active: true });
+            this.app.workspace.revealLeaf(leaf);
+        }
+    }
+
+    private deriveOsLabel(): string {
+        if (typeof process !== 'undefined' && process.platform) return process.platform;
+        const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+        if (Platform.isAndroidApp) {
+            const m = /Android (\d+(?:\.\d+)?)/.exec(ua);
+            return m ? `android ${m[1]}` : 'android';
+        }
+        if (Platform.isIosApp) {
+            const base = Platform.isTablet ? 'ipados' : 'ios';
+            const m = /OS (\d+(?:_\d+)*)/.exec(ua);
+            return m ? `${base} ${m[1].replace(/_/g, '.')}` : base;
+        }
+        return 'unknown';
+    }
+
+    private collectDeviceInfo(): DeviceInfo {
+        const d: DeviceInfo = {};
+        try {
+            if (typeof navigator !== 'undefined') {
+                if (typeof navigator.hardwareConcurrency === 'number') {
+                    d.cpuCores = navigator.hardwareConcurrency;
+                }
+                if (navigator.userAgent) d.userAgent = navigator.userAgent;
+                const dm = (navigator as any).deviceMemory;
+                if (typeof dm === 'number') d.deviceMemoryGb = dm;
+            }
+        } catch { /* best effort */ }
+        try {
+            const pm = typeof performance !== 'undefined' ? (performance as any).memory : undefined;
+            if (pm) {
+                if (typeof pm.usedJSHeapSize === 'number') {
+                    d.jsHeapUsedMb = Math.round(pm.usedJSHeapSize / 1048576);
+                }
+                if (typeof pm.jsHeapSizeLimit === 'number') {
+                    d.jsHeapLimitMb = Math.round(pm.jsHeapSizeLimit / 1048576);
+                }
+            }
+        } catch { /* best effort */ }
+        try {
+            const req = typeof window !== 'undefined' ? (window as any).require : undefined;
+            if (typeof req === 'function') {
+                const os = req('os');
+                d.arch = os.arch();
+                d.osRelease = os.release();
+                const cpus = os.cpus();
+                if (cpus?.length) {
+                    d.cpuCores = cpus.length;
+                    const model = (cpus[0]?.model ?? '').trim();
+                    if (model) d.cpuModel = model;
+                }
+                d.totalRamGb = Math.round((os.totalmem() / 1073741824) * 10) / 10;
+                d.freeRamGb = Math.round((os.freemem() / 1073741824) * 10) / 10;
+            }
+        } catch { /* best effort */ }
+        return d;
+    }
+
+    private countActiveViews(): number {
+        const viewTypes = [
+            VIEW_TYPE_TIMELINE, VIEW_TYPE_SCHEDULE, VIEW_TYPE_CALENDAR,
+            VIEW_TYPE_MINI_CALENDAR, VIEW_TYPE_KANBAN, VIEW_TYPE_TIMER,
+        ];
+        let count = 0;
+        for (const vt of viewTypes) {
+            count += this.app.workspace.getLeavesOfType(vt).length;
+        }
+        return count;
+    }
+
+    private getEnabledParsers(): string[] {
+        const parsers = ['tv-inline', 'tv-file'];
+        if (this.settings.enableTasksPlugin) parsers.push('tasks-plugin');
+        if (this.settings.enableDayPlanner) parsers.push('day-planner');
+        return parsers;
     }
 
 }

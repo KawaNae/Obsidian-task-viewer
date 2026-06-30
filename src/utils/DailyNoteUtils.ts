@@ -3,6 +3,7 @@ import { HeadingInserter } from './HeadingInserter';
 import { TaskViewerSettings, NoteType } from '../types';
 import { processTemplate, normalizeTrailingNewline } from './NoteTemplateProcessor';
 import { withWeekStartDay } from './momentWeekLocale';
+import { logError, logWarn } from '../log/log';
 
 export class DailyNoteUtils {
     static getDailyNoteSettings(app: App) {
@@ -17,7 +18,7 @@ export class DailyNoteUtils {
                 };
             }
         } catch (e) {
-            console.error("Failed to get Daily Notes settings", e);
+            logError(`Failed to get Daily Notes settings: ${(e as Error)?.message ?? e}`);
         }
         return { format: 'YYYY-MM-DD', folder: '', template: '' };
     }
@@ -117,7 +118,7 @@ export class DailyNoteUtils {
             templateFile = app.vault.getAbstractFileByPath(`${templatePath}.md`);
         }
         if (!(templateFile instanceof TFile)) {
-            console.warn(`[task-viewer] Template not found for ${ctx.noteType} note: ${templatePath}`);
+            logWarn(`[task-viewer] Template not found for ${ctx.noteType} note: ${templatePath}`);
             return '';
         }
 

@@ -8,6 +8,7 @@ import { TimerContext } from './TimerContext';
 import { TimerStorageUtils } from './TimerStorageUtils';
 import { TimerTaskResolver } from './TimerTaskResolver';
 import { Task, isTvFile, isTvInline } from '../types';
+import { logError } from '../log/log';
 
 export class TimerTargetManager {
     private resolver: TimerTaskResolver;
@@ -84,7 +85,7 @@ export class TimerTargetManager {
                 this.ctx.persistTimersToStorage();
             }
         } catch (error) {
-            console.error('[TimerWidget] Failed to assign timer target ID for inline task:', error);
+            logError(`[TimerWidget] Failed to assign timer target ID for inline task: ${(error as Error)?.message ?? error}`);
         }
     }
 
@@ -124,7 +125,7 @@ export class TimerTargetManager {
                 this.ctx.persistTimersToStorage();
             }
         } catch (error) {
-            console.error('[TimerWidget] Failed to assign timer target ID for frontmatter task:', error);
+            logError(`[TimerWidget] Failed to assign timer target ID for frontmatter task: ${(error as Error)?.message ?? error}`);
         }
     }
 
@@ -177,7 +178,7 @@ export class TimerTargetManager {
             await taskIndex.updateTask(targetTask.id, { blockId: undefined });
             await taskIndex.waitForScan(targetTask.file);
         } catch (error) {
-            console.error('[TimerWidget] Failed to remove inline timer target ID:', error);
+            logError(`[TimerWidget] Failed to remove inline timer target ID: ${(error as Error)?.message ?? error}`);
         }
     }
 
@@ -201,7 +202,7 @@ export class TimerTargetManager {
             });
             await this.ctx.plugin.getTaskIndex().waitForScan(targetPath);
         } catch (error) {
-            console.error('[TimerWidget] Failed to remove frontmatter timer target ID:', error);
+            logError(`[TimerWidget] Failed to remove frontmatter timer target ID: ${(error as Error)?.message ?? error}`);
         }
     }
 

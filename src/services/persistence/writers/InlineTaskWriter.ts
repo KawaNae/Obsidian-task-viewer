@@ -2,6 +2,7 @@ import { App, TFile } from 'obsidian';
 import type { Task } from '../../../types';
 import { TaskParser } from '../../parsing/TaskParser';
 import { FileOperations } from '../utils/FileOperations';
+import { logWarn } from '../../../log/log';
 
 
 /**
@@ -17,7 +18,7 @@ export class InlineTaskWriter {
     async updateTaskInFile(task: Task, updatedTask: Task): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
-            console.warn(`[InlineTaskWriter] File not found: ${task.file}`);
+            logWarn(`[InlineTaskWriter] File not found: ${task.file}`);
             return;
         }
 
@@ -27,7 +28,7 @@ export class InlineTaskWriter {
             // Find current line number using originalText (handles line shifts)
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) {
-                console.warn(`[InlineTaskWriter] Task not found in file`);
+                logWarn(`[InlineTaskWriter] Task not found in file`);
                 return content;
             }
 

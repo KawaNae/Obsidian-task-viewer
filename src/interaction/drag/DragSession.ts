@@ -1,6 +1,7 @@
 import type { Task } from '../../types';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import type { DragContext, DragStrategy } from './DragStrategy';
+import { logDebug } from '../../log/log';
 
 /**
  * 1 回の drag (pointerdown → pointerup) の lifecycle を保持する。
@@ -34,6 +35,7 @@ export class DragSession {
 
     /** pointerdown でルーティング後に呼ばれる。Strategy の `onDown` を起動。 */
     start(strategy: DragStrategy, e: PointerEvent, task: Task, taskEl: HTMLElement): void {
+        logDebug(`[Drag:start] taskId=${task.id}`);
         this.currentStrategy = strategy;
         this.currentDragTaskId = task.id;
         this.writeService.setDraggingFile(task.file);
@@ -69,6 +71,7 @@ export class DragSession {
         } finally {
             this.committing = false;
         }
+        logDebug(`[Drag:committed] taskId=${this.currentDragTaskId}`);
 
         this.writeService.notifyImmediate(
             taskId ?? undefined,
@@ -89,6 +92,7 @@ export class DragSession {
      * lost-capture). Mirrors handleUp's teardown minus the commit + notify.
      */
     cancel(): void {
+        logDebug(`[Drag:cancel] taskId=${this.currentDragTaskId}`);
         if (!this.currentStrategy) return;
         if (this.committing) return;
         this.currentStrategy.onCancel();

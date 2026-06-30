@@ -1,4 +1,5 @@
 import { ItemView, TFile, WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
+import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -312,6 +313,7 @@ export class CalendarView extends ItemView {
     }
 
     async onOpen(): Promise<void> {
+        logDebug(`[${this.getViewType()}] opened`);
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('calendar-view');
@@ -391,6 +393,7 @@ export class CalendarView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        logDebug(`[${this.getViewType()}] closed`);
         this.hoverParent.dispose();
         this.filterMenu.close();
         this.sidebarFilterMenu.close();

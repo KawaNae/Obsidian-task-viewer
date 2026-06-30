@@ -344,9 +344,12 @@ export class TimelineMoveGesture extends BaseDragStrategy {
         const scrollThreshold = 50;
         const scrollSpeed = 20;
 
-        // sticky な allday-section に被らないよう、上限は allday の bottom にする
+        // allday-section が見えていればその下端、スクロールアウト済みなら
+        // container 上端にクランプ（さもないと effectiveTop が負値→閾値到達不能）
         const allday = this.scrollContainer.querySelector('.allday-section') as HTMLElement | null;
-        const effectiveTop = allday ? allday.getBoundingClientRect().bottom : rect.top;
+        const effectiveTop = allday
+            ? Math.max(allday.getBoundingClientRect().bottom, rect.top)
+            : rect.top;
 
         const shouldScrollUp = mouseY < effectiveTop + scrollThreshold;
         const shouldScrollDown = mouseY > rect.bottom - scrollThreshold;

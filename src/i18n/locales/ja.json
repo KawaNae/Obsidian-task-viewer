@@ -8,7 +8,8 @@
       "notes": "ノート",
       "frontmatter": "フロントマター",
       "parsers": "パーサー",
-      "about": "このプラグインについて"
+      "about": "このプラグインについて",
+      "log": "ログ"
     },
     "about": {
       "plugin": "プラグイン情報",
@@ -218,6 +219,28 @@
       "fieldEndDate": "終了日",
       "fieldDue": "期限日",
       "fieldIgnore": "無視"
+    },
+    "log": {
+      "verboseNotice": "詳細通知",
+      "verboseNoticeDesc": "ONにすると、debug/info レベルのログもコンソールと通知に表示します。OFFでもログビューには記録されます。",
+      "logRetention": "ログ保持期間（日）",
+      "logRetentionDesc": "永続バッファにログを保持する日数。最低1日。",
+      "maxStorage": "最大ログ容量（MB）",
+      "maxStorageDesc": "ログバッファの上限サイズ（MB）。0で無制限。",
+      "logBuffer": "ログバッファ",
+      "bufferStats": "{{count}} 件 — {{size}} — {{range}}",
+      "bufferEmpty": "空",
+      "exportLogs": "ログをエクスポート",
+      "exportLogsDesc": "永続ログバッファのスナップショットを vault ルートに書き出します。",
+      "exportSuccess": "{{count}} 件のエントリを {{path}} にエクスポートしました",
+      "clearLogs": "保存済みログを削除",
+      "clearLogsDesc": "永続ログバッファの全エントリを削除します。",
+      "clearLogsConfirm": "永続ログバッファの全エントリを削除しますか？この操作は元に戻せません。",
+      "cleared": "ログバッファを削除しました",
+      "deleteDatabase": "ログデータベースを削除",
+      "deleteDatabaseDesc": "IndexedDB ストア全体を削除します。データベースが破損した場合のみ使用してください。",
+      "deleteDatabaseConfirm": "IndexedDB ストア全体を削除しますか？このデバイス上の全永続ログデータが失われます。",
+      "deleted": "ログデータベースを削除しました"
     }
   },
   "view": {
@@ -226,7 +249,8 @@
     "calendar": "カレンダービュー",
     "miniCalendar": "ミニカレンダー",
     "kanban": "カンバンビュー",
-    "timer": "タイマービュー"
+    "timer": "タイマービュー",
+    "log": "Task Viewer ログ"
   },
   "command": {
     "openTimeline": "タイムラインビューを開く",
@@ -234,7 +258,8 @@
     "openCalendar": "カレンダービューを開く",
     "openMiniCalendar": "ミニカレンダービューを開く",
     "openKanban": "カンバンビューを開く",
-    "openTimer": "タイマービューを開く"
+    "openTimer": "タイマービューを開く",
+    "openLog": "ログビューを開く"
   },
   "ribbon": {
     "openTimeline": "タイムラインを開く",

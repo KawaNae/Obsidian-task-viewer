@@ -137,20 +137,18 @@ export interface Task {
     due?: string;
 
     /**
-     * True when startDate was inherited from the daily note filename at parse time
-     * (tv-inline only; tv-file never sets this). Set by `resolveDailyNoteDates()`
-     * via `TreeTaskExtractor`.
-     *
-     * Read by 3 layers:
-     * - `DisplayTaskConverter.toDisplayTask` — derives `startDateImplicit` /
-     *   `startDateExplicit` so display marks the value as non-explicit.
-     * - `TVInlineParser.format` — emits time-only notation (`@HH:mm`) instead of
-     *   the full `@YYYY-MM-DDTHH:mm` form, preserving round-trip with the original
-     *   markdown.
-     * - `TaskIndex.updateTask` / `MoveCommand` / `GenerationCommands` — clear to
-     *   `false` when an explicit startDate is set, moved, or recurrence-spawned.
+     * Date/time values inherited from the File → Section cascade rather than
+     * from the task's own @notation or frontmatter.  Set by TreeTaskExtractor;
+     * consumed by DisplayTaskConverter (merged as effective values) and ignored
+     * by format() (which reads only raw fields for round-trip fidelity).
      */
-    startDateInherited?: boolean;
+    cascadeContext?: {
+        startDate?: string;
+        startTime?: string;
+        endDate?: string;
+        endTime?: string;
+        due?: string;
+    };
 
     // Original parsed text and stable IDs.
     originalText: string;
@@ -532,6 +530,11 @@ export interface TaskViewerSettings {
      * Future: subLocations[] for multi-TZ travel scenarios.
      */
     astronomy: AstronomySettings;
+
+    // Logging
+    logRetentionDays: number;
+    logMaxStorageMB: number;
+    verboseNotice: boolean;
 }
 
 export interface AstronomyDisplay {
@@ -639,4 +642,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
         display: { sunTimes: false, moonPhase: false, sunTimesInFront: false },
         location: { latitude: 35.6762, longitude: 139.6503 }, // Tokyo Station
     },
+    logRetentionDays: 7,
+    logMaxStorageMB: 50,
+    verboseNotice: false,
 };
