@@ -6,7 +6,7 @@ import { EvalContext } from '../lang/ExprEvaluator';
 import { evalExpr } from '../lang/ExprEvaluator';
 import { EvalHost } from '../lang/functions';
 import { Value, parseDateStr, valueToDisplay } from '../lang/Value';
-import { FlowProgram } from './FlowAst';
+import { FlowProgram, SET_FIELD_ORDER } from './FlowAst';
 import { FlowEffect } from './FlowEffects';
 import { serializeFlow } from './FlowSerializer';
 import { DateAnchor, NextOccurrence, nextOccurrence } from './ScheduleEngine';
@@ -135,12 +135,14 @@ function buildNextTask(task: Task, anchor: DateAnchor | null, next: NextOccurren
 // ---------------------------------------------------------------------------
 
 function applySet(newTask: Task, program: FlowProgram, deps: FlowPlanDeps): void {
-    if (!program.set) return;
+    if (!program.sets) return;
 
     // All RHS evaluate against the same post-shift snapshot, then apply at
-    // once — assignment order carries no meaning (matches order-free syntax).
+    // once — setter order carries no meaning (matches order-free syntax).
     const postCtx = buildEvalContext(newTask, deps);
-    const results = program.set.assignments.map(a => ({ field: a.field, value: evalExpr(a.expr, postCtx) }));
+    const results = SET_FIELD_ORDER
+        .filter(field => program.sets![field])
+        .map(field => ({ field, value: evalExpr(program.sets![field]!.expr, postCtx) }));
 
     for (const { field, value } of results) {
         switch (field) {

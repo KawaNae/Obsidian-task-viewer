@@ -24,8 +24,8 @@ describe('diagnosticText', () => {
             'x5',                               // flow.orphan-modifier
             'every mon until 2026-02-30',       // flow.bad-date
             'at("text")',                       // type.at-not-datish
-            'every mon set(due: "x")',          // type.set-date-mismatch
-            'every mon set(content: start + due)', // type.cannot-combine
+            'every mon setDue("x")',           // type.set-date-mismatch
+            'every mon setContent(start + due)', // type.cannot-combine
             'at(startOf("day"))',               // type.bad-unit-keyword
             'at(starrt)',                       // expr.unknown-ident
             'at(format(start))',                // type.arg-count

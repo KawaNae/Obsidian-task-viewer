@@ -116,13 +116,13 @@ describe('FlowPlanner', () => {
 
     describe('set()', () => {
         it('evaluates against the post-shift snapshot', () => {
-            const { newTask } = createNextOf(plan('every mon set(due: start + 3d)', { startDate: '2026-06-29' }));
+            const { newTask } = createNextOf(plan('every mon setDue(start + 3d)', { startDate: '2026-06-29' }));
             // post-shift start = 7/6 → due = 7/9
             expect(newTask.due).toBe('2026-07-09');
         });
 
         it('applies all assignments from one snapshot (no chaining)', () => {
-            const { newTask } = createNextOf(plan('every mon set(start: due, due: start + 1d)', {
+            const { newTask } = createNextOf(plan('every mon setStart(due) setDue(start + 1d)', {
                 startDate: '2026-06-29', due: '2026-07-01',
             }));
             // post-shift: start=7/6, due=7/8. Both RHS see that snapshot:
@@ -132,18 +132,35 @@ describe('FlowPlanner', () => {
         });
 
         it('sets content from string expressions', () => {
-            const { newTask } = createNextOf(plan('every mon set(content: "週報 " + format(start, "MM/DD"))', {
+            const { newTask } = createNextOf(plan('every mon setContent("週報 " + format(start, "MM/DD"))', {
                 startDate: '2026-06-29', content: 'old',
             }));
             expect(newTask.content).toBe('週報 [MM/DD]');
         });
 
         it('clears the time part when set assigns a plain date', () => {
-            const { newTask } = createNextOf(plan('every mon set(start: 2026-08-01)', {
+            const { newTask } = createNextOf(plan('every mon setStart(2026-08-01)', {
                 startDate: '2026-06-29', startTime: '09:00',
             }));
             expect(newTask.startDate).toBe('2026-08-01');
             expect(newTask.startTime).toBeUndefined();
+        });
+
+        it('strips the time each generation: +3d setStart(date(start))', () => {
+            const { newTask } = createNextOf(plan('+3d setStart(date(start))', {
+                startDate: '2026-07-14', startTime: '11:00',
+            }));
+            expect(newTask.startDate).toBe('2026-07-17');
+            expect(newTask.startTime).toBeUndefined();
+            expect(newTask.flow?.raw).toBe('+3d setStart(date(start))');
+        });
+
+        it('sets an absolute time: setStart(date(start) + 13:00)', () => {
+            const { newTask } = createNextOf(plan('+3d setStart(date(start) + 13:00)', {
+                startDate: '2026-07-14', startTime: '11:00',
+            }));
+            expect(newTask.startDate).toBe('2026-07-17');
+            expect(newTask.startTime).toBe('13:00');
         });
     });
 
@@ -190,7 +207,7 @@ describe('FlowPlanner', () => {
 
     describe('runtime failures', () => {
         it('throws EvalError when a referenced property is unset (executor leaves command intact)', () => {
-            expect(() => plan('every mon set(due: end + 1d)', { startDate: '2026-06-29' })).toThrow(EvalError);
+            expect(() => plan('every mon setDue(end + 1d)', { startDate: '2026-06-29' })).toThrow(EvalError);
         });
     });
 });

@@ -3,7 +3,7 @@ import { parseExpr } from '../lang/ExprParser';
 import { splitDurationText, tokenize } from '../lang/Lexer';
 import { Token, TokenCursor, tokenSpan } from '../lang/Token';
 import { Weekday, weekdayFromName } from '../lang/Value';
-import { EveryRule, FlowProgram, SetAssignment, SetField, ScheduleNode } from './FlowAst';
+import { EveryRule, FlowProgram, SET_FIELD_ORDER, SetField, ScheduleNode, setHeadName } from './FlowAst';
 import { checkFlow } from './FlowChecker';
 
 export interface ParseFlowResult {
@@ -12,8 +12,10 @@ export interface ParseFlowResult {
     diagnostics: Diagnostic[];
 }
 
-const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until / nochildren / set(...) / move(...)';
-const SET_FIELDS: SetField[] = ['content', 'start', 'end', 'due'];
+const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until / nochildren / setContent|setStart|setEnd|setDue(...) / move(...)';
+const SET_HEADS: Record<string, SetField> = Object.fromEntries(
+    SET_FIELD_ORDER.map(field => [setHeadName(field), field])
+);
 const LEGACY_HEADS = ['repeat', 'next'];
 
 /**
@@ -99,9 +101,6 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
             cursor.next();
             assignNode(program, 'nochildren', { span: tokenSpan(head) }, diagnostics, tokenSpan(head));
             return;
-        case 'set':
-            parseSet(cursor, program, diagnostics);
-            return;
         case 'move': {
             cursor.next();
             const target = parseParenExpr(cursor, 'move', diagnostics);
@@ -112,6 +111,26 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
             }
             return;
         }
+    }
+
+    // setContent(...) / setStart(...) / setEnd(...) / setDue(...)
+    const setField = SET_HEADS[head.text];
+    if (setField !== undefined) {
+        cursor.next();
+        const expr = parseParenExpr(cursor, head.text, diagnostics);
+        if (!expr) {
+            skipToNextNode(cursor);
+            return;
+        }
+        if (program.sets?.[setField]) {
+            diagnostics.push(error('flow.duplicate-node', `Duplicate '${head.text}' clause`, tokenSpan(head), { clause: head.text }));
+            return;
+        }
+        program.sets = {
+            ...program.sets,
+            [setField]: { expr, span: { start: head.start, end: expr.span.end + 1 } },
+        };
+        return;
     }
 
     cursor.next();
@@ -211,60 +230,6 @@ function parseMonthDay(cursor: TokenCursor, intervalMonths: number, diagnostics:
 }
 
 // ---------------------------------------------------------------------------
-// set
-// ---------------------------------------------------------------------------
-
-function parseSet(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagnostic[]): void {
-    const head = cursor.next(); // 'set'
-    if (!cursor.tryEat('lparen')) {
-        diagnostics.push(error('flow.expected-lparen', "Expected '(' after 'set'", tokenSpan(cursor.peek()), { fn: 'set' }));
-        skipToNextNode(cursor);
-        return;
-    }
-
-    const assignments: SetAssignment[] = [];
-    for (;;) {
-        const fieldToken = cursor.peek();
-        if (fieldToken.kind !== 'ident' || !(SET_FIELDS as string[]).includes(fieldToken.text)) {
-            diagnostics.push(error('flow.bad-set-field',
-                `set() fields are ${SET_FIELDS.join('/')}, got '${fieldToken.text}'`, tokenSpan(fieldToken),
-                { field: fieldToken.text, fields: SET_FIELDS.join('/') }));
-            skipToNextNode(cursor);
-            return;
-        }
-        cursor.next();
-        if (!cursor.tryEat('colon')) {
-            diagnostics.push(error('flow.expected-set-colon', `Expected ':' after set field '${fieldToken.text}'`, tokenSpan(cursor.peek()), { field: fieldToken.text }));
-            skipToNextNode(cursor);
-            return;
-        }
-        const expr = parseExpr(cursor, diagnostics);
-        if (!expr) {
-            skipToNextNode(cursor);
-            return;
-        }
-        if (assignments.some(a => a.field === fieldToken.text)) {
-            diagnostics.push(error('flow.duplicate-set-field', `set() assigns '${fieldToken.text}' twice`, tokenSpan(fieldToken), { field: fieldToken.text }));
-        }
-        assignments.push({
-            field: fieldToken.text as SetField,
-            expr,
-            span: { start: fieldToken.start, end: expr.span.end },
-        });
-        if (cursor.tryEat('comma')) continue;
-        break;
-    }
-
-    const close = cursor.tryEat('rparen');
-    if (!close) {
-        diagnostics.push(error('flow.expected-rparen', "Expected ')' to close set(...)", tokenSpan(cursor.peek()), { fn: 'set' }));
-        skipToNextNode(cursor);
-        return;
-    }
-    assignNode(program, 'set', { assignments, span: { start: head.start, end: close.end } }, diagnostics, tokenSpan(head));
-}
-
-// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -290,7 +255,7 @@ function assignSchedule(program: FlowProgram, node: ScheduleNode, diagnostics: D
     program.schedule = node;
 }
 
-function assignNode<K extends 'lifetime' | 'until' | 'nochildren' | 'set' | 'move'>(
+function assignNode<K extends 'lifetime' | 'until' | 'nochildren' | 'move'>(
     program: FlowProgram,
     key: K,
     node: NonNullable<FlowProgram[K]>,
@@ -312,7 +277,9 @@ function skipToNextNode(cursor: TokenCursor): void {
     while (!cursor.atEof()) {
         const t = cursor.peek();
         if (t.kind === 'ident' && (
-            ['every', 'at', 'until', 'nochildren', 'set', 'move'].includes(t.text) || /^x\d+$/.test(t.text)
+            ['every', 'at', 'until', 'nochildren', 'move'].includes(t.text)
+            || t.text in SET_HEADS
+            || /^x\d+$/.test(t.text)
         )) return;
         cursor.next();
     }

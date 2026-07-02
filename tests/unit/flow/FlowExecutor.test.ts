@@ -136,7 +136,7 @@ describe('FlowExecutor', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository);
         // `end` is unset on the task → EvalError at fire time
-        await executor.handleTaskCompletion(flowTask('every mon set(due: end + 1d)'));
+        await executor.handleTaskCompletion(flowTask('every mon setDue(end + 1d)'));
         await flush();
 
         expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();

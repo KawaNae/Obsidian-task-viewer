@@ -124,6 +124,14 @@ function checkBinary(
         if (op === '+' && lt === 'duration' && isDatishType(rt)) return rt;
         if (lt === 'duration' && rt === 'duration') return 'duration';
         if (lt === 'number' && rt === 'number') return 'number';
+        // date + time attaches a time-of-day. Only plain dates qualify —
+        // adding a time to a datetime would be ambiguous (add vs replace),
+        // so datetime/datish operands must be truncated first via date(x).
+        if (op === '+' && lt === 'date' && rt === 'time') return 'datetime';
+        if (op === '+' && isDatishType(lt) && rt === 'time') {
+            return fail('type.datetime-plus-time',
+                `Adding a time to a ${lt} is ambiguous — truncate first: date(x) + 14:00`, { left: lt });
+        }
         // Links coerce to their target text in concatenation (move([[Log/]] + file.name))
         const stringish = (t: StaticType) => t === 'string' || t === 'link';
         if (op === '+' && stringish(lt) && stringish(rt)) return 'string';

@@ -78,10 +78,14 @@ describe('FlowParser', () => {
             expect(errors('at(today + 1d) x0')).toContain('flow.zero-lifetime');
         });
 
-        it('parses set with multiple typed assignments', () => {
-            const { program, diagnostics } = parseFlow('every mon set(content: "週報 " + format(start, "MM/DD"), due: start + 3d)');
+        it('parses independent setter clauses', () => {
+            const { program, diagnostics } = parseFlow('every mon setContent("週報 " + format(start, "MM/DD")) setDue(start + 3d)');
             expect(diagnostics).toEqual([]);
-            expect(program?.set?.assignments.map(a => a.field)).toEqual(['content', 'due']);
+            expect(Object.keys(program!.sets!)).toEqual(['content', 'due']);
+        });
+
+        it('rejects duplicate setter clauses', () => {
+            expect(errors('every mon setDue(start + 1d) setDue(start + 2d)')).toContain('flow.duplicate-node');
         });
 
         it('parses move alone (no schedule)', () => {
@@ -121,8 +125,8 @@ describe('FlowParser', () => {
         });
 
         it('rejects bad set field types', () => {
-            expect(errors('every mon set(due: "text")')).toContain('type.set-date-mismatch');
-            expect(errors('every mon set(content: 3d)')).toContain('type.set-content-not-string');
+            expect(errors('every mon setDue("text")')).toContain('type.set-date-mismatch');
+            expect(errors('every mon setContent(3d)')).toContain('type.set-content-not-string');
         });
 
         it('rejects non-datish at()', () => {
@@ -163,7 +167,7 @@ describe('FlowParser', () => {
             'move([[Archive/Done]])',
             'every mon move([[Log]])',
             'at(startOf(month, done + 1mo) + 4d)',
-            'every mon set(content: "週報 " + format(start, "MM/DD"), due: start + 3d)',
+            'every mon setContent("週報 " + format(start, "MM/DD")) setDue(start + 3d)',
         ])('parse → serialize → parse is stable: %s', (src) => {
             const first = parseFlow(src);
             expect(first.program).not.toBeNull();

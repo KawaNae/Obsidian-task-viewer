@@ -1,6 +1,6 @@
 import { printExpr } from '../lang/ExprPrinter';
 import { WEEKDAY_NAMES } from '../lang/Value';
-import { EveryRule, FlowProgram, ScheduleNode } from './FlowAst';
+import { EveryRule, FlowProgram, SET_FIELD_ORDER, ScheduleNode, setHeadName } from './FlowAst';
 
 /**
  * Serialize a FlowProgram to canonical source form.
@@ -16,11 +16,11 @@ export function serializeFlow(program: FlowProgram): string {
     if (program.lifetime) parts.push(`x${program.lifetime.count}`);
     if (program.until) parts.push(`until ${program.until.date}`);
     if (program.nochildren) parts.push('nochildren');
-    if (program.set) {
-        const assignments = program.set.assignments
-            .map(a => `${a.field}: ${printExpr(a.expr)}`)
-            .join(', ');
-        parts.push(`set(${assignments})`);
+    if (program.sets) {
+        for (const field of SET_FIELD_ORDER) {
+            const node = program.sets[field];
+            if (node) parts.push(`${setHeadName(field)}(${printExpr(node.expr)})`);
+        }
     }
     if (program.move) parts.push(`move(${printExpr(program.move.target)})`);
     return parts.join(' ');

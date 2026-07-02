@@ -67,6 +67,7 @@ export const FN_SIGS: Record<FnName, FnSig> = {
     startOf: { name: 'startOf', minArgs: 1, params: ['string', 'datish'], result: 'date', checkArgs: requireUnitKeyword },
     endOf: { name: 'endOf', minArgs: 1, params: ['string', 'datish'], result: 'date', checkArgs: requireUnitKeyword },
     nextCycle: { name: 'nextCycle', minArgs: 2, params: ['datish', 'duration'], result: 'datish' },
+    date: { name: 'date', minArgs: 1, params: ['datish'], result: 'date' },
 };
 
 // ---------------------------------------------------------------------------
@@ -120,6 +121,13 @@ export function callFn(fn: FnName, args: Value[], rt: EvalRuntime): Value {
             const anchorDate = anchor.type === 'date' ? anchor.value : anchor.date;
             const anchorTime = anchor.type === 'datetime' ? anchor.time : undefined;
             return nextCycle(anchorDate, anchorTime, { amount: step.amount, unit: step.unit }, rt);
+        }
+        case 'date': {
+            const [v] = args;
+            if (!isDatishValue(v)) throw new FnCallError('date() expects a date or datetime');
+            // Truncate: drop the time-of-day. Pairs with `date + time` to
+            // form the time algebra (strip / attach / shift).
+            return { type: 'date', value: v.type === 'date' ? v.value : v.date };
         }
     }
 }

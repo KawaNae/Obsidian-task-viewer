@@ -78,6 +78,24 @@ describe('ExprEvaluator', () => {
         expect(evaluate('format(2026-07-15, "MM/DD")')).toEqual({ type: 'string', value: '[MM/DD:2026-07-15]' });
     });
 
+    it('truncates datetimes with date()', () => {
+        expect(evaluate('date(2026-07-14T11:00)')).toEqual({ type: 'date', value: '2026-07-14' });
+        expect(evaluate('date(2026-07-14)')).toEqual({ type: 'date', value: '2026-07-14' });
+        expect(evaluate('date(start + 3d)', { start: { type: 'datetime', date: '2026-07-14', time: '11:00' } }))
+            .toEqual({ type: 'date', value: '2026-07-17' });
+    });
+
+    it('attaches a time with date + time', () => {
+        expect(evaluate('2026-07-17 + 13:00')).toEqual({ type: 'datetime', date: '2026-07-17', time: '13:00' });
+        // The full absolute-time idiom: keep the date, replace the time
+        expect(evaluate('date(start) + 13:00', { start: { type: 'datetime', date: '2026-07-17', time: '11:00' } }))
+            .toEqual({ type: 'datetime', date: '2026-07-17', time: '13:00' });
+    });
+
+    it('rejects datetime + time as ambiguous', () => {
+        expect(() => evaluate('2026-07-17T11:00 + 13:00')).toThrow(EvalError);
+    });
+
     it('computes next weekday strictly after the base', () => {
         // 2026-07-02 is a Thursday
         expect(evaluate('next(thu)')).toEqual({ type: 'date', value: '2026-07-09' });

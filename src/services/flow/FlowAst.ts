@@ -23,10 +23,11 @@ export type ScheduleNode =
 
 export type SetField = 'content' | 'start' | 'end' | 'due';
 
-export interface SetAssignment {
-    field: SetField;
-    expr: Expr;
-    span: Span;
+export const SET_FIELD_ORDER: readonly SetField[] = ['content', 'start', 'end', 'due'];
+
+/** Clause head for a setter field: 'content' → 'setContent'. */
+export function setHeadName(field: SetField): string {
+    return `set${field[0].toUpperCase()}${field.slice(1)}`;
 }
 
 /**
@@ -41,7 +42,12 @@ export interface FlowProgram {
     /** Generate only while next anchor date <= this date (inclusive). */
     until?: { date: string; span: Span };
     nochildren?: { span: Span };
-    set?: { assignments: SetAssignment[]; span: Span };
+    /**
+     * setContent(...) / setStart(...) / setEnd(...) / setDue(...) — field
+     * overrides applied to the generated instance AFTER the schedule shift.
+     * All RHS evaluate against the same post-shift snapshot (no chaining).
+     */
+    sets?: Partial<Record<SetField, { expr: Expr; span: Span }>>;
     /** Move the completed task (+children) to the target file. */
     move?: { target: Expr; span: Span };
 }

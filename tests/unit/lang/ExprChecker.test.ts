@@ -34,6 +34,14 @@ describe('ExprChecker', () => {
         expect(check('format(start, "MM/DD")')).toMatchObject({ type: 'string', diagnostics: [] });
         expect(check('next(tue)')).toMatchObject({ type: 'date', diagnostics: [] });
         expect(check('endOf(month, start)')).toMatchObject({ type: 'date', diagnostics: [] });
+        expect(check('date(start)')).toMatchObject({ type: 'date', diagnostics: [] });
+    });
+
+    it('types date + time as datetime, rejects datish + time', () => {
+        expect(check('date(start) + 13:00')).toMatchObject({ type: 'datetime', diagnostics: [] });
+        const { type, diagnostics } = check('start + 13:00');
+        expect(type).toBe('error');
+        expect(diagnostics.some(d => d.code === 'type.datetime-plus-time')).toBe(true);
     });
 
     it('types conditionals', () => {

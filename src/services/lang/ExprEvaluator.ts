@@ -85,6 +85,12 @@ function evalBinary(expr: Expr & { kind: 'binary' }, ctx: EvalContext): Value {
         const sign = op === '+' ? 1 : -1;
         if (isDatishValue(l) && r.type === 'duration') return addDuration(l, r, sign as 1 | -1);
         if (op === '+' && l.type === 'duration' && isDatishValue(r)) return addDuration(r, l, 1);
+        if (op === '+' && l.type === 'date' && r.type === 'time') {
+            return { type: 'datetime', date: l.value, time: r.value };
+        }
+        if (op === '+' && l.type === 'datetime' && r.type === 'time') {
+            throw new EvalError('Adding a time to a datetime is ambiguous — truncate first: date(x) + 14:00', span);
+        }
         if (l.type === 'duration' && r.type === 'duration') {
             if (l.unit === r.unit) return { type: 'duration', amount: l.amount + sign * r.amount, unit: l.unit };
             const lm = minutesOrThrow(l, span);
