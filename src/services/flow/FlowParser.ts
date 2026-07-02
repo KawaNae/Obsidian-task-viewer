@@ -12,7 +12,7 @@ export interface ParseFlowResult {
     diagnostics: Diagnostic[];
 }
 
-const HEAD_HINT = 'clauses start with every / at(...) / xN / until / nochildren / set(...) / move(...)';
+const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until / nochildren / set(...) / move(...)';
 const SET_FIELDS: SetField[] = ['content', 'start', 'end', 'due'];
 const LEGACY_HEADS = ['repeat', 'next'];
 
@@ -40,6 +40,15 @@ export function parseFlow(raw: string): ParseFlowResult {
 
 function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagnostic[]): void {
     const head = cursor.peek();
+
+    // +3d — offset from the visible anchor date (what the notation reads as)
+    if (head.kind === 'plus' && cursor.peek(1).kind === 'duration') {
+        cursor.next();
+        const dur = cursor.next();
+        const { amount, unit } = splitDurationText(dur.text);
+        assignSchedule(program, { kind: 'plus', amount, unit, span: { start: head.start, end: dur.end } }, diagnostics);
+        return;
+    }
 
     if (head.kind !== 'ident') {
         diagnostics.push(error('flow.unknown-head', `Unknown clause '${head.text}' — ${HEAD_HINT}`, tokenSpan(head), { head: head.text }));

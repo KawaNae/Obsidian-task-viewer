@@ -36,15 +36,16 @@ describe('FlowParser', () => {
             });
         });
 
-        it('parses completion-anchored +duration', () => {
-            // Completion-relative offsets are expressions, not a clause head
+        it('parses +duration as an anchor offset (what the notation reads as)', () => {
+            const { program, diagnostics } = parseFlow('+3d');
+            expect(diagnostics).toEqual([]);
+            expect(program?.schedule).toMatchObject({ kind: 'plus', amount: 3, unit: 'd' });
+        });
+
+        it('parses completion-relative offsets as expressions', () => {
             const { program, diagnostics } = parseFlow('at(today + 3d)');
             expect(diagnostics).toEqual([]);
             expect(program?.schedule?.kind).toBe('at');
-        });
-
-        it('rejects the removed +duration head', () => {
-            expect(errors('+3d')).toContain('flow.unknown-head');
         });
 
         it('parses at(expr) escape hatch', () => {
@@ -53,8 +54,8 @@ describe('FlowParser', () => {
             expect(program?.schedule?.kind).toBe('at');
         });
 
-        it('parses grid() so every is expressible as an expression', () => {
-            const { program, diagnostics } = parseFlow('at(grid(start, 3d))');
+        it('parses cycle() so every is expressible as an expression', () => {
+            const { program, diagnostics } = parseFlow('at(cycle(start, 3d))');
             expect(diagnostics).toEqual([]);
             expect(program?.schedule?.kind).toBe('at');
         });
@@ -151,9 +152,11 @@ describe('FlowParser', () => {
             'every mo@25',
             'every mo@last',
             'every 2mo@15',
+            '+3d',
+            '+30min',
             'at(today + 3d)',
             'at(done + 30min)',
-            'at(grid(start, 3d))',
+            'at(cycle(start, 3d))',
             'every mon x14',
             'every mon until 2026-09-28',
             'every mon x14 until 2026-09-28 nochildren',

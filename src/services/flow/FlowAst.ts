@@ -10,9 +10,16 @@ export type EveryRule =
 
 export type ScheduleNode =
     | { kind: 'every'; rule: EveryRule; span: Span }
+    /**
+     * `+3d` — plain offset from the task's own anchor date (the date you
+     * see in the @block): catch-up semantics, late completions produce
+     * past-dated instances. ≒ at(start + 3d) with the anchor fallback
+     * chain (start → end → due; dateless tasks fall back to today).
+     */
+    | { kind: 'plus'; amount: number; unit: DurUnit; span: Span }
     | { kind: 'at'; expr: Expr; span: Span };
-    // Completion-relative offsets are expressions, not clause heads:
-    // `at(today + 3d)` (date-granular) / `at(done + 2h)` (time-granular).
+    // Completion-relative offsets are expressions: `at(today + 3d)`
+    // (date-granular) / `at(done + 2h)` (time-granular).
 
 export type SetField = 'content' | 'start' | 'end' | 'due';
 

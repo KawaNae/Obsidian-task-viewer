@@ -29,6 +29,7 @@ export function serializeFlow(program: FlowProgram): string {
 function serializeSchedule(schedule: ScheduleNode): string {
     switch (schedule.kind) {
         case 'every': return `every ${serializeEveryRule(schedule.rule)}`;
+        case 'plus': return `+${schedule.amount}${schedule.unit}`;
         case 'at': return `at(${printExpr(schedule.expr)})`;
     }
 }

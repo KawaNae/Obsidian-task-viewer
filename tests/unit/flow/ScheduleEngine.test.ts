@@ -134,16 +134,39 @@ describe('ScheduleEngine', () => {
                 .toEqual({ date: '2026-07-02', time: '11:00' });
         });
 
-        it('at(grid(start, 3d)) matches every 3d exactly', () => {
+        it('at(cycle(start, 3d)) matches every 3d exactly', () => {
             const anchor = { date: '2026-06-24' };
-            const gridCtx: EvalContext = { ...ctx, props: { start: { type: 'date', value: anchor.date } } };
-            expect(next('at(grid(start, 3d))', anchor, RT, gridCtx))
+            const cycleCtx: EvalContext = { ...ctx, props: { start: { type: 'date', value: anchor.date } } };
+            expect(next('at(cycle(start, 3d))', anchor, RT, cycleCtx))
                 .toEqual(next('every 3d', anchor, RT, null));
         });
 
-        it('grid month steps clamp like every Nmo (anchor day 31 = month-end)', () => {
-            const gridCtx: EvalContext = { ...ctx, props: { start: { type: 'date', value: '2026-01-31' } } };
-            expect(next('at(grid(start, 1mo))', { date: '2026-01-31' }, RT, gridCtx)).toEqual({ date: '2026-07-31' });
+        it('cycle month steps clamp like every Nmo (anchor day 31 = month-end)', () => {
+            const cycleCtx: EvalContext = { ...ctx, props: { start: { type: 'date', value: '2026-01-31' } } };
+            expect(next('at(cycle(start, 1mo))', { date: '2026-01-31' }, RT, cycleCtx)).toEqual({ date: '2026-07-31' });
+        });
+    });
+
+    describe('+N (anchor offset, catch-up)', () => {
+        it('adds to the anchor date — the visible reading', () => {
+            expect(next('+3d', { date: '2026-07-07' })).toEqual({ date: '2026-07-10' });
+        });
+
+        it('yields past dates on late completion (no skip)', () => {
+            // anchor 6/20, completed 7/2 → 6/23, in the past by design
+            expect(next('+3d', { date: '2026-06-20' })).toEqual({ date: '2026-06-23' });
+        });
+
+        it('keeps the anchor time on day offsets', () => {
+            expect(next('+1d', { date: '2026-07-07', time: '09:00' })).toEqual({ date: '2026-07-08', time: '09:00' });
+        });
+
+        it('falls back to today when dateless', () => {
+            expect(next('+3d', null)).toEqual({ date: '2026-07-05' });
+        });
+
+        it('clamps month offsets', () => {
+            expect(next('+1mo', { date: '2026-01-31' })).toEqual({ date: '2026-02-28' });
         });
     });
 });

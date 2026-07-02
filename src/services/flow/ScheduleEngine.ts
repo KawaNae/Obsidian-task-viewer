@@ -1,7 +1,7 @@
 import { addMonths } from 'date-fns';
 import { EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
-import { gridNext, nextWeekdayAfter } from '../lang/functions';
-import { formatDateStr, isDatishValue, parseDateStr } from '../lang/Value';
+import { cycleNext, nextWeekdayAfter } from '../lang/functions';
+import { addDuration, formatDateStr, isDatishValue, parseDateStr } from '../lang/Value';
 import { EveryRule, ScheduleNode } from './FlowAst';
 
 /** The task's primary date (start > end > due priority), if any. */
@@ -27,18 +27,20 @@ const MAX_GRID_STEPS = 10000;
 /**
  * Compute the next occurrence for a schedule clause.
  *
- * - `every` is calendar-grid anchored: the result is the first grid point
+ * - `every` is calendar-cycle anchored: the result is the first cycle point
  *   strictly after max(today, anchor) — late completions skip missed
  *   occurrences, early completions still land after the current instance.
- *   Interval rules delegate to the expression function `grid()` so
- *   `every 3d` and `at(grid(start, 3d))` are the same computation.
+ *   Interval rules delegate to the expression function `cycle()` so
+ *   `every 3d` and `at(cycle(start, 3d))` are the same computation.
+ * - `+3d` is a plain offset from the anchor date (catch-up: late
+ *   completions yield past-dated instances). ≒ at(start + 3d).
  * - `at(expr)` evaluates against the PRE-shift snapshot of the original
  *   task (the expression defines the next anchor); may throw EvalError.
  *   Completion-relative offsets are written as expressions: `at(today + 3d)`
  *   (date-granular) / `at(done + 2h)` (time-granular).
  *
- * Anchor-less tasks: weekday rules need no anchor; interval and monthday
- * grids fall back to today as a pseudo-anchor.
+ * Anchor-less tasks: weekday rules need no anchor; interval / monthday /
+ * plus fall back to today as a pseudo-anchor.
  */
 export function nextOccurrence(
     schedule: ScheduleNode,
@@ -49,6 +51,17 @@ export function nextOccurrence(
     switch (schedule.kind) {
         case 'every':
             return nextGridOccurrence(schedule.rule, anchor, rt);
+
+        case 'plus': {
+            const base = anchor ?? { date: rt.today };
+            const v = addDuration(
+                base.time
+                    ? { type: 'datetime', date: base.date, time: base.time }
+                    : { type: 'date', value: base.date },
+                { amount: schedule.amount, unit: schedule.unit }
+            );
+            return v.type === 'date' ? { date: v.value } : { date: v.date, time: v.time };
+        }
 
         case 'at': {
             if (!atCtx) throw new EvalError('at() requires an evaluation context', schedule.expr.span);
@@ -73,7 +86,7 @@ function nextGridOccurrence(rule: EveryRule, anchor: DateAnchor | null, rt: Sche
         }
 
         case 'interval': {
-            const v = gridNext(
+            const v = cycleNext(
                 anchor?.date ?? rt.today,
                 anchor?.time,
                 { amount: rule.amount, unit: rule.unit },

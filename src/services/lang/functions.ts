@@ -66,7 +66,7 @@ export const FN_SIGS: Record<FnName, FnSig> = {
     next: { name: 'next', minArgs: 1, params: ['weekday', 'datish'], result: 'date' },
     startOf: { name: 'startOf', minArgs: 1, params: ['string', 'datish'], result: 'date', checkArgs: requireUnitKeyword },
     endOf: { name: 'endOf', minArgs: 1, params: ['string', 'datish'], result: 'date', checkArgs: requireUnitKeyword },
-    grid: { name: 'grid', minArgs: 2, params: ['datish', 'duration'], result: 'datish' },
+    cycle: { name: 'cycle', minArgs: 2, params: ['datish', 'duration'], result: 'datish' },
 };
 
 // ---------------------------------------------------------------------------
@@ -113,13 +113,13 @@ export function callFn(fn: FnName, args: Value[], rt: EvalRuntime): Value {
             const base = parseDateStr(datishDateOr(from, rt.today));
             return { type: 'date', value: formatDateStr(fn === 'startOf' ? startOf(unit.value, base, rt.weekStartDay) : endOf(unit.value, base, rt.weekStartDay)) };
         }
-        case 'grid': {
+        case 'cycle': {
             const [anchor, step] = args;
-            if (!isDatishValue(anchor)) throw new FnCallError('grid() expects a date or datetime anchor');
-            if (step.type !== 'duration') throw new FnCallError('grid() expects a duration step');
+            if (!isDatishValue(anchor)) throw new FnCallError('cycle() expects a date or datetime anchor');
+            if (step.type !== 'duration') throw new FnCallError('cycle() expects a duration step');
             const anchorDate = anchor.type === 'date' ? anchor.value : anchor.date;
             const anchorTime = anchor.type === 'datetime' ? anchor.time : undefined;
-            return gridNext(anchorDate, anchorTime, { amount: step.amount, unit: step.unit }, rt);
+            return cycleNext(anchorDate, anchorTime, { amount: step.amount, unit: step.unit }, rt);
         }
     }
 }
@@ -138,25 +138,26 @@ export function nextWeekdayAfter(weekday: Weekday, fromDate: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Calendar grid (`grid(anchor, step)` / the engine behind `every <interval>`)
+// Calendar cycle (`cycle(anchor, step)` / the engine behind `every <interval>`)
 // ---------------------------------------------------------------------------
 
 const MAX_GRID_STEPS = 10000;
 
 /**
- * First grid point (anchor + k*step) strictly after max(today, anchor).
- * Late completions skip missed occurrences; early completions still land
- * after the current instance. mo/y compute each point from the original
- * anchor via date-fns (month-end clamping without accumulation — an anchor
- * on day 31 therefore behaves as "last day of month").
+ * Next cycle point: the first of (anchor + k*step) strictly after
+ * max(today, anchor). Late completions skip missed occurrences; early
+ * completions still land after the current instance. mo/y compute each
+ * point from the original anchor via date-fns (month-end clamping without
+ * accumulation — an anchor on day 31 therefore behaves as "last day of
+ * month").
  */
-export function gridNext(
+export function cycleNext(
     anchorDate: string,
     anchorTime: string | undefined,
     step: { amount: number; unit: DurUnit },
     rt: Pick<EvalRuntime, 'today' | 'now'>
 ): Value & { type: 'date' | 'datetime' } {
-    if (step.amount < 1) throw new FnCallError('grid() step must be at least 1');
+    if (step.amount < 1) throw new FnCallError('cycle() step must be at least 1');
 
     if (step.unit === 'min' || step.unit === 'h') {
         const stepMin = step.amount * (step.unit === 'h' ? 60 : 1);
@@ -180,7 +181,7 @@ export function gridNext(
         const s = formatDateStr(candidate);
         if (s > rt.today) return { type: 'date', value: s };
     }
-    throw new FnCallError('grid() overflow');
+    throw new FnCallError('cycle() overflow');
 }
 
 /** Local reference day for TZ-safe minute arithmetic (not epoch-based). */
