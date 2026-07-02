@@ -37,6 +37,7 @@ import { CheckboxMenuBuilder } from './interaction/menu/builders/CheckboxMenuBui
 import { ValidationMenuBuilder } from './interaction/menu/builders/ValidationMenuBuilder';
 import { MenuPresenter } from './interaction/menu/MenuPresenter';
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
+import { createFlowDiagnosticsExtension } from './editor/FlowDiagnosticsExtension';
 import { toDisplayTask } from './services/display/DisplayTaskConverter';
 import { registerCliHandlers } from './cli/CliRegistrar';
 import { TaskApi } from './api/TaskApi';
@@ -340,6 +341,10 @@ export default class TaskViewerPlugin extends Plugin {
         this.registerEditorExtension(taskMenuResult.extension);
         this.taskMenuCleanup = taskMenuResult.cleanup;
         this.taskMenuNotifySettingsChanged = taskMenuResult.notifySettingsChanged;
+
+        // Wavy-underline diagnostics for `==>` flow commands (typos, legacy
+        // syntax, type errors). Pure re-parse of visible lines — no TaskIndex.
+        this.registerEditorExtension(createFlowDiagnosticsExtension());
 
         // File context menu integration for frontmatter tasks.
         // Frontmatter tasks have no inline anchor in the editor body (file menu is the only entry point),
