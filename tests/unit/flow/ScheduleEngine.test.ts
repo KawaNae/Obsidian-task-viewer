@@ -134,16 +134,16 @@ describe('ScheduleEngine', () => {
                 .toEqual({ date: '2026-07-02', time: '11:00' });
         });
 
-        it('at(cycle(start, 3d)) matches every 3d exactly', () => {
+        it('at(nextCycle(start, 3d)) matches every 3d exactly', () => {
             const anchor = { date: '2026-06-24' };
             const cycleCtx: EvalContext = { ...ctx, props: { start: { type: 'date', value: anchor.date } } };
-            expect(next('at(cycle(start, 3d))', anchor, RT, cycleCtx))
+            expect(next('at(nextCycle(start, 3d))', anchor, RT, cycleCtx))
                 .toEqual(next('every 3d', anchor, RT, null));
         });
 
         it('cycle month steps clamp like every Nmo (anchor day 31 = month-end)', () => {
             const cycleCtx: EvalContext = { ...ctx, props: { start: { type: 'date', value: '2026-01-31' } } };
-            expect(next('at(cycle(start, 1mo))', { date: '2026-01-31' }, RT, cycleCtx)).toEqual({ date: '2026-07-31' });
+            expect(next('at(nextCycle(start, 1mo))', { date: '2026-01-31' }, RT, cycleCtx)).toEqual({ date: '2026-07-31' });
         });
     });
 

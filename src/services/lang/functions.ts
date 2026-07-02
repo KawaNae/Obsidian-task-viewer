@@ -66,7 +66,7 @@ export const FN_SIGS: Record<FnName, FnSig> = {
     next: { name: 'next', minArgs: 1, params: ['weekday', 'datish'], result: 'date' },
     startOf: { name: 'startOf', minArgs: 1, params: ['string', 'datish'], result: 'date', checkArgs: requireUnitKeyword },
     endOf: { name: 'endOf', minArgs: 1, params: ['string', 'datish'], result: 'date', checkArgs: requireUnitKeyword },
-    cycle: { name: 'cycle', minArgs: 2, params: ['datish', 'duration'], result: 'datish' },
+    nextCycle: { name: 'nextCycle', minArgs: 2, params: ['datish', 'duration'], result: 'datish' },
 };
 
 // ---------------------------------------------------------------------------
@@ -113,13 +113,13 @@ export function callFn(fn: FnName, args: Value[], rt: EvalRuntime): Value {
             const base = parseDateStr(datishDateOr(from, rt.today));
             return { type: 'date', value: formatDateStr(fn === 'startOf' ? startOf(unit.value, base, rt.weekStartDay) : endOf(unit.value, base, rt.weekStartDay)) };
         }
-        case 'cycle': {
+        case 'nextCycle': {
             const [anchor, step] = args;
-            if (!isDatishValue(anchor)) throw new FnCallError('cycle() expects a date or datetime anchor');
-            if (step.type !== 'duration') throw new FnCallError('cycle() expects a duration step');
+            if (!isDatishValue(anchor)) throw new FnCallError('nextCycle() expects a date or datetime anchor');
+            if (step.type !== 'duration') throw new FnCallError('nextCycle() expects a duration step');
             const anchorDate = anchor.type === 'date' ? anchor.value : anchor.date;
             const anchorTime = anchor.type === 'datetime' ? anchor.time : undefined;
-            return cycleNext(anchorDate, anchorTime, { amount: step.amount, unit: step.unit }, rt);
+            return nextCycle(anchorDate, anchorTime, { amount: step.amount, unit: step.unit }, rt);
         }
     }
 }
@@ -138,7 +138,7 @@ export function nextWeekdayAfter(weekday: Weekday, fromDate: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Calendar cycle (`cycle(anchor, step)` / the engine behind `every <interval>`)
+// Calendar cycle (`nextCycle(anchor, step)` / the engine behind `every <interval>`)
 // ---------------------------------------------------------------------------
 
 const MAX_GRID_STEPS = 10000;
@@ -151,13 +151,13 @@ const MAX_GRID_STEPS = 10000;
  * accumulation — an anchor on day 31 therefore behaves as "last day of
  * month").
  */
-export function cycleNext(
+export function nextCycle(
     anchorDate: string,
     anchorTime: string | undefined,
     step: { amount: number; unit: DurUnit },
     rt: Pick<EvalRuntime, 'today' | 'now'>
 ): Value & { type: 'date' | 'datetime' } {
-    if (step.amount < 1) throw new FnCallError('cycle() step must be at least 1');
+    if (step.amount < 1) throw new FnCallError('nextCycle() step must be at least 1');
 
     if (step.unit === 'min' || step.unit === 'h') {
         const stepMin = step.amount * (step.unit === 'h' ? 60 : 1);
@@ -181,7 +181,7 @@ export function cycleNext(
         const s = formatDateStr(candidate);
         if (s > rt.today) return { type: 'date', value: s };
     }
-    throw new FnCallError('cycle() overflow');
+    throw new FnCallError('nextCycle() overflow');
 }
 
 /** Local reference day for TZ-safe minute arithmetic (not epoch-based). */

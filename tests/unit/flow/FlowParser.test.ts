@@ -54,8 +54,8 @@ describe('FlowParser', () => {
             expect(program?.schedule?.kind).toBe('at');
         });
 
-        it('parses cycle() so every is expressible as an expression', () => {
-            const { program, diagnostics } = parseFlow('at(cycle(start, 3d))');
+        it('parses nextCycle() so every is expressible as an expression', () => {
+            const { program, diagnostics } = parseFlow('at(nextCycle(start, 3d))');
             expect(diagnostics).toEqual([]);
             expect(program?.schedule?.kind).toBe('at');
         });
@@ -156,7 +156,7 @@ describe('FlowParser', () => {
             '+30min',
             'at(today + 3d)',
             'at(done + 30min)',
-            'at(cycle(start, 3d))',
+            'at(nextCycle(start, 3d))',
             'every mon x14',
             'every mon until 2026-09-28',
             'every mon x14 until 2026-09-28 nochildren',

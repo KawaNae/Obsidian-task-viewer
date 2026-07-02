@@ -1,6 +1,6 @@
 import { addMonths } from 'date-fns';
 import { EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
-import { cycleNext, nextWeekdayAfter } from '../lang/functions';
+import { nextCycle, nextWeekdayAfter } from '../lang/functions';
 import { addDuration, formatDateStr, isDatishValue, parseDateStr } from '../lang/Value';
 import { EveryRule, ScheduleNode } from './FlowAst';
 
@@ -30,8 +30,8 @@ const MAX_GRID_STEPS = 10000;
  * - `every` is calendar-cycle anchored: the result is the first cycle point
  *   strictly after max(today, anchor) — late completions skip missed
  *   occurrences, early completions still land after the current instance.
- *   Interval rules delegate to the expression function `cycle()` so
- *   `every 3d` and `at(cycle(start, 3d))` are the same computation.
+ *   Interval rules delegate to the expression function `nextCycle()` so
+ *   `every 3d` and `at(nextCycle(start, 3d))` are the same computation.
  * - `+3d` is a plain offset from the anchor date (catch-up: late
  *   completions yield past-dated instances). ≒ at(start + 3d).
  * - `at(expr)` evaluates against the PRE-shift snapshot of the original
@@ -86,7 +86,7 @@ function nextGridOccurrence(rule: EveryRule, anchor: DateAnchor | null, rt: Sche
         }
 
         case 'interval': {
-            const v = cycleNext(
+            const v = nextCycle(
                 anchor?.date ?? rt.today,
                 anchor?.time,
                 { amount: rule.amount, unit: rule.unit },

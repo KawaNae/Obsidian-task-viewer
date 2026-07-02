@@ -4,7 +4,7 @@ import { Value } from './Value';
 export const PROP_NAMES = ['start', 'end', 'due', 'content', 'done', 'today', 'file.name'] as const;
 export type PropName = typeof PROP_NAMES[number];
 
-export const FN_NAMES = ['format', 'next', 'startOf', 'endOf', 'cycle'] as const;
+export const FN_NAMES = ['format', 'next', 'startOf', 'endOf', 'nextCycle'] as const;
 export type FnName = typeof FN_NAMES[number];
 
 export type BinaryOp =
