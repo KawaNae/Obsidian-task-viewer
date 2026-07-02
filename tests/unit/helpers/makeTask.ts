@@ -24,7 +24,6 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
         endDate: undefined,
         endTime: undefined,
         due: undefined,
-        commands: [],
         properties: {},
         ...overrides,
     };

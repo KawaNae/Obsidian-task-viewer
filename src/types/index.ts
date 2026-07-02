@@ -160,14 +160,6 @@ export interface Task {
     // Tags extracted from task content and/or frontmatter.
     tags: string[];
 
-    // Parsed flow commands.
-    commands?: FlowCommand[];
-
-    // Verbatim text after `==>` that parsed to zero commands (e.g. a URL or
-    // prose). Preserved so format() can re-emit it losslessly; ignored when
-    // `commands` is non-empty.
-    rawFlow?: string;
-
     /**
      * Flow command (`==> ...`), parsed by the flow language core.
      * format() always re-emits `raw` verbatim; canonical re-serialization
@@ -315,17 +307,6 @@ export interface DisplayTask extends Task {
      * `buildChildEntries` で derive。render / write の唯一の入口。
      */
     childEntries: ChildEntry[];
-}
-
-export interface FlowCommand {
-    name: string;
-    args: string[];
-    modifiers: FlowModifier[];
-}
-
-export interface FlowModifier {
-    name: string;
-    args: string[];
 }
 
 /**

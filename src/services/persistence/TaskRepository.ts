@@ -96,8 +96,8 @@ export class TaskRepository {
         return this.cloner.duplicateTvFile(task, keys, options);
     }
 
-    async insertRecurrenceForTask(task: Task, content: string, newTask?: Task, copyChildren = true): Promise<void> {
-        return this.cloner.insertRecurrenceForTask(task, content, newTask, copyChildren);
+    async insertRecurrenceForTask(task: Task, content: string, copyChildren = true): Promise<void> {
+        return this.cloner.insertRecurrenceForTask(task, content, copyChildren);
     }
 
     // --- Task Conversion Operations ---

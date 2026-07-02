@@ -27,7 +27,7 @@ export interface TempTaskFields {
  * - `toDisplayTask(t, startHour, NO_TASK_LOOKUP)` for modal placeholders
  *
  * Centralizing the construction keeps the substrate fields
- * (`childIds`, `childLines`, `childLineBodyOffsets`, `commands`, `tags`,
+ * (`childIds`, `childLines`, `childLineBodyOffsets`, `tags`,
  * `properties`) consistent across temp-task call sites and makes
  * `parserId` defaulting explicit.
  */
@@ -43,7 +43,6 @@ export function createTempTask(fields: TempTaskFields): Task {
         childIds: [],
         childLines: [],
         childLineBodyOffsets: [],
-        commands: [],
         originalText: '',
         tags: [],
         properties: {},

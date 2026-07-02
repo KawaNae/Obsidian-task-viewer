@@ -1,4 +1,5 @@
-import type { Task, FlowCommand, FlowModifier } from '../../../types';
+import type { Task, TaskFlow } from '../../../types';
+import { parseFlow } from '../../flow/FlowParser';
 import { LeafParserStrategy } from '../strategies/ParserStrategy';
 import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
@@ -37,10 +38,6 @@ export class TVInlineParser implements LeafParserStrategy {
     // Rejects non-date @ patterns like @user, @notation
     private static readonly DATE_BLOCK_REGEX =
         /(@(?=[\d>T])(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|T?\d{2}:\d{2})?(?:>(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|\d{2}:\d{2})?)*)/;
-    // Regex for Command: Name(Args)
-    private static readonly COMMAND_REGEX = /([a-zA-Z0-9_]+)\((.*?)\)((?:\.[a-zA-Z0-9_]+\(.*?\))*)/g;
-    private static readonly MODIFIER_REGEX = /\.([a-zA-Z0-9_]+)\((.*?)\)/g;
-
     parse(line: string, filePath: string, lineNumber: number): Task | null {
         // Extract trailing block ID (^id) before parsing task structure.
         let lineForParse = line;
@@ -67,11 +64,13 @@ export class TVInlineParser implements LeafParserStrategy {
 
         const { statusChar, rawContent } = classified;
 
-        // 2. Parse flow commands. If a non-empty flow segment yields zero
-        // commands (e.g. a URL or prose), keep it verbatim so format() can
-        // re-emit it instead of silently dropping it on the next write.
-        const commands = flowPart ? this.parseFlowCommands(flowPart) : [];
-        const rawFlow = (flowPart && commands.length === 0) ? flowPart.trim() : undefined;
+        // 2. Parse the flow command. `raw` always carries the verbatim text
+        // so format() re-emits it losslessly even when parsing failed;
+        // `program` is non-null only when the command is executable.
+        const trimmedFlow = flowPart.trim();
+        const flow: TaskFlow | undefined = trimmedFlow
+            ? { raw: trimmedFlow, ...parseFlow(trimmedFlow) }
+            : undefined;
 
         // 3. Parse date block (@start>end>due)
         let content = rawContent;
@@ -106,6 +105,19 @@ export class TVInlineParser implements LeafParserStrategy {
                 message: parseWarning,
                 hint: '',
             };
+        } else if (flow && !flow.program) {
+            // Surface the first flow diagnostic through the existing
+            // validation channel so a typo'd command is not a silent no-op
+            // for users who never see editor decorations.
+            const first = flow.diagnostics.find(d => d.severity === 'error') ?? flow.diagnostics[0];
+            if (first) {
+                validation = {
+                    severity: first.severity,
+                    rule: first.code,
+                    message: first.message,
+                    hint: `==> ${flow.raw}`,
+                };
+            }
         }
 
         return {
@@ -130,8 +142,7 @@ export class TVInlineParser implements LeafParserStrategy {
             endDate,
             endTime,
             due,
-            commands,
-            rawFlow,
+            flow,
             tags: TagExtractor.fromContent(content.trim()),
             originalText: line,
             childLines: [],
@@ -278,39 +289,6 @@ export class TVInlineParser implements LeafParserStrategy {
         return { date, time };
     }
 
-    private parseFlowCommands(flowStr: string): FlowCommand[] {
-        const commands: FlowCommand[] = [];
-        let match;
-
-        // Reset lastIndex because regex is global
-        TVInlineParser.COMMAND_REGEX.lastIndex = 0;
-
-        while ((match = TVInlineParser.COMMAND_REGEX.exec(flowStr)) !== null) {
-            const name = match[1];
-            const argsStr = match[2];
-            const modifiersStr = match[3];
-
-            const args = argsStr.split(',').map(s => s.trim()).filter(s => s !== '');
-            const modifiers: FlowModifier[] = [];
-
-            if (modifiersStr) {
-                let modMatch;
-                // Reset modifier regex
-                TVInlineParser.MODIFIER_REGEX.lastIndex = 0;
-                while ((modMatch = TVInlineParser.MODIFIER_REGEX.exec(modifiersStr)) !== null) {
-                    modifiers.push({
-                        name: modMatch[1],
-                        args: modMatch[2].split(',').map(s => s.trim()).filter(s => s !== '')
-                    });
-                }
-            }
-
-            commands.push({ name, args, modifiers });
-        }
-
-        return commands;
-    }
-
     format(task: Task): string {
         const statusChar = task.statusChar || ' ';
         let metaStr = '';
@@ -368,29 +346,13 @@ export class TVInlineParser implements LeafParserStrategy {
             }
         }
 
-        let flowStr = '';
-        if (task.commands && task.commands.length > 0) {
-            const cmdStrs = task.commands.map(cmd => {
-                let s = `${cmd.name}(${cmd.args.join(', ')})`;
-                if (cmd.modifiers && cmd.modifiers.length > 0) {
-                    s += cmd.modifiers.map(m => `.${m.name}(${m.args.join(', ')})`).join('');
-                }
-                return s;
-            });
-            flowStr = ` ==> ${cmdStrs.join(' ')}`;
-        } else if (task.rawFlow) {
-            // Unrecognized flow text preserved verbatim (round-trip safety).
-            flowStr = ` ==> ${task.rawFlow}`;
-        }
+        // Flow text is always re-emitted verbatim (round-trip safety, even
+        // for unparseable commands). Canonical re-serialization happens only
+        // when a fire generates the next instance (FlowPlanner).
+        const flowStr = task.flow ? ` ==> ${task.flow.raw}` : '';
 
         const blockIdStr = task.blockId ? ` ^${task.blockId}` : '';
         const marker = TaskLineClassifier.extractMarker(task.originalText);
         return `${marker} [${statusChar}] ${task.content}${metaStr}${flowStr}${blockIdStr}`;
-    }
-
-    isTriggerableStatus(task: Task): boolean {
-        // Trigger for any status that is not todo (space)
-        // e.g. x, X, -, !, etc.
-        return task.statusChar !== ' ';
     }
 }

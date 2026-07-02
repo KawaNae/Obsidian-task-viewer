@@ -7,7 +7,8 @@ import { WikiLinkResolver } from './WikiLinkResolver';
 import { TaskStore } from './TaskStore';
 import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
-import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
+import { FlowExecutor } from '../flow/FlowExecutor';
+import { canTriggerFlow } from '../flow/FlowTrigger';
 import { logDebug, logError, logInfo } from '../../log/log';
 import { TaskPropertyResolver } from '../parsing/TaskPropertyResolver';
 import { DocumentTreeBuilder } from '../parsing/tree/DocumentTreeBuilder';
@@ -29,16 +30,16 @@ export class TaskScanner {
         private store: TaskStore,
         private validator: TaskValidator,
         private syncDetector: SyncDetector,
-        private commandExecutor: TaskCommandExecutor,
+        private commandExecutor: FlowExecutor,
         private settings: TaskViewerSettings
     ) { }
 
     /**
-     * タスクシグネチャ生成（重複検出用）
+     * タスクシグネチャ生成（重複検出用）。フロー raw を含むため、発火＝消費で
+     * 行が書き換わると署名も変わり、同一完了の二重検出が構造的に起きない。
      */
     private getTaskSignature(task: Task): string {
-        const cmdSig = task.commands ? task.commands.map(c => `${c.name}(${c.args.join(',')})`).join('') : '';
-        return `${task.file}|${task.startDate || 'no-date'}|${task.content}|${cmdSig}`;
+        return `${task.file}|${task.startDate || 'no-date'}|${task.content}|${task.flow?.raw ?? ''}`;
     }
 
     /**
@@ -200,7 +201,7 @@ export class TaskScanner {
         const doneTasks: Task[] = [];
 
         for (const task of newTasks) {
-            if (TaskParser.isTriggerableStatus(task) && task.commands && task.commands.length > 0) {
+            if (canTriggerFlow(task, this.settings.statusDefinitions)) {
                 const sig = this.getTaskSignature(task);
                 currentCounts.set(sig, (currentCounts.get(sig) || 0) + 1);
                 doneTasks.push(task);

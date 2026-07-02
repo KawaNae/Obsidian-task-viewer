@@ -72,7 +72,7 @@ export class TreeTaskExtractor {
             const hasCascadeDates = !!(task.cascadeContext?.startDate || task.cascadeContext?.endDate || task.cascadeContext?.due);
             if (!ctx.hasTvFileParent && !hasCascadeDates
                 && !task.startDate && !task.endDate && !task.due
-                && (!task.commands || task.commands.length === 0)) {
+                && !task.flow?.program) {
                 task = null;
             }
         }
@@ -211,7 +211,7 @@ export class TreeTaskExtractor {
             );
             if (!ctx.hasTvFileParent && !hasCascadeDates
                 && !task.startDate && !task.endDate && !task.due
-                && (!task.commands || task.commands.length === 0)) {
+                && !task.flow?.program) {
                 task = null;
             }
         }
@@ -230,7 +230,7 @@ export class TreeTaskExtractor {
         return !task.startDate && !task.startTime
             && !task.endDate && !task.endTime
             && !task.due
-            && (!task.commands || task.commands.length === 0);
+            && !task.flow?.program;
     }
 
     /** セクションツリーを深さ優先でフラットに展開 */

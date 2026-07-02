@@ -104,8 +104,9 @@ export class TaskCloner {
     /**
      * タスクの再発処理：元タスク+子行の直後に新しいタスク（+子行コピー）を挿入する。
      * 既存タスクがある場合はその直後に、なければ新しいタスクとして追加する。
+     * `content` は呼び出し側（FlowExecutor interpreter）が format 済みの行文字列。
      */
-    async insertRecurrenceForTask(task: Task, content: string, newTask?: Task, copyChildren = true): Promise<void> {
+    async insertRecurrenceForTask(task: Task, content: string, copyChildren = true): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;
 
@@ -119,11 +120,10 @@ export class TaskCloner {
                 return fileContent + prefix + content;
             }
 
-            // Format new parent line with original indentation
+            // Re-indent the formatted line to match the original task line
             const originalLine = lines[currentLine];
             const originalIndent = originalLine.match(/^(\s*)/)?.[1] || '';
-            const newContent = TaskParser.format(newTask || task);
-            const newParentLine = originalIndent + newContent.trim();
+            const newParentLine = originalIndent + content.trim();
 
             const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
             if (copyChildren) {

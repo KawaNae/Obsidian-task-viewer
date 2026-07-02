@@ -64,11 +64,4 @@ export class TaskParser {
     static format(task: Task): string {
         return this.strategy.format(task);
     }
-
-    /**
-     * Check if the task's status should trigger commands.
-     */
-    static isTriggerableStatus(task: Task): boolean {
-        return this.strategy.isTriggerableStatus(task);
-    }
 }

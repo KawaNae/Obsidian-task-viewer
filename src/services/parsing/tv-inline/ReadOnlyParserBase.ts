@@ -33,11 +33,6 @@ export abstract class ReadOnlyParserBase implements LeafParserStrategy {
         return task.originalText;
     }
 
-    /** Read-only: never trigger flow commands. */
-    isTriggerableStatus(): boolean {
-        return false;
-    }
-
     /** Build a Task from parsed fields. Sets isReadOnly: true. */
     protected buildTask(params: ReadOnlyTaskParams): Task {
         return {

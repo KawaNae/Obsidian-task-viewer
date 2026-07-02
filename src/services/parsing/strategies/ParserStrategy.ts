@@ -21,11 +21,6 @@ export interface ParserStrategy {
      * Format a Task object back into its string representation.
      */
     format(task: Task): string;
-
-    /**
-     * Check if the task's status should trigger commands (e.g., recurrence).
-     */
-    isTriggerableStatus(task: Task): boolean;
 }
 
 /**

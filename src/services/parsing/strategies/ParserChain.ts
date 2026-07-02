@@ -45,20 +45,6 @@ export class ParserChain implements ParserStrategy {
     }
 
     /**
-     * Delegate to the original parser, or use common logic.
-     */
-    isTriggerableStatus(task: Task): boolean {
-        if (task.parserId) {
-            const parser = this.parsers.find(p => p.id === task.parserId);
-            if (parser) {
-                return parser.isTriggerableStatus(task);
-            }
-        }
-        // Fallback: use first parser's logic (should be safe for status chars)
-        return this.parsers[0].isTriggerableStatus(task);
-    }
-
-    /**
      * Add a parser to the chain.
      */
     addParser(parser: LeafParserStrategy): void {

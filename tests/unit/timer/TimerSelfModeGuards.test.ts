@@ -1,50 +1,54 @@
 import { describe, it, expect } from 'vitest';
-import type { Task } from '../../../src/types';
+import { canTriggerFlow } from '../../../src/services/flow/FlowTrigger';
+import { parseFlow } from '../../../src/services/flow/FlowParser';
+import { DEFAULT_STATUS_DEFINITIONS, TaskFlow } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
 
 // ---------------------------------------------------------------------------
-// Issue 1: TimerMenuBuilder guard — completed command tasks must not show Track Self
+// Issue 1: TimerMenuBuilder guard — completed command tasks must not show Track
+// Self. The guard IS canTriggerFlow (single source of truth), so test it directly.
 // ---------------------------------------------------------------------------
 
-/**
- * Extracted guard logic from TimerMenuBuilder.addTimerSubmenu().
- * Returns true if the Track Self menu should be suppressed.
- */
-function shouldSuppressTrackSelf(task: Task): boolean {
-    return task.statusChar !== ' ' && !!task.commands && task.commands.length > 0;
+function repeatFlow(): TaskFlow {
+    const raw = '+1d';
+    return { raw, ...parseFlow(raw) };
 }
 
 describe('TimerMenuBuilder guard: completed command task suppression', () => {
     it('完了済みコマンドタスクに Track Self メニューを表示しない', () => {
-        const task = makeTask({
-            statusChar: 'x',
-            commands: [{ name: 'repeat', args: ['1days'], modifiers: [] }],
-        });
-        expect(shouldSuppressTrackSelf(task)).toBe(true);
+        const task = makeTask({ statusChar: 'x', flow: repeatFlow() });
+        expect(canTriggerFlow(task, DEFAULT_STATUS_DEFINITIONS)).toBe(true);
     });
 
     it('未完了コマンドタスクでは Track Self を許可する', () => {
-        const task = makeTask({
-            statusChar: ' ',
-            commands: [{ name: 'repeat', args: ['1days'], modifiers: [] }],
-        });
-        expect(shouldSuppressTrackSelf(task)).toBe(false);
+        const task = makeTask({ statusChar: ' ', flow: repeatFlow() });
+        expect(canTriggerFlow(task, DEFAULT_STATUS_DEFINITIONS)).toBe(false);
     });
 
     it('完了済みだがコマンドなしタスクでは Track Self を許可する', () => {
-        const task = makeTask({
-            statusChar: 'x',
-            commands: [],
-        });
-        expect(shouldSuppressTrackSelf(task)).toBe(false);
+        const task = makeTask({ statusChar: 'x' });
+        expect(canTriggerFlow(task, DEFAULT_STATUS_DEFINITIONS)).toBe(false);
     });
 
     it('未完了でコマンドなしタスクでは Track Self を許可する', () => {
-        const task = makeTask({
-            statusChar: ' ',
-            commands: [],
-        });
-        expect(shouldSuppressTrackSelf(task)).toBe(false);
+        const task = makeTask({ statusChar: ' ' });
+        expect(canTriggerFlow(task, DEFAULT_STATUS_DEFINITIONS)).toBe(false);
+    });
+
+    it('壊れたフロー（program=null）は発火しない', () => {
+        const raw = 'evry mon';
+        const task = makeTask({ statusChar: 'x', flow: { raw, ...parseFlow(raw) } });
+        expect(canTriggerFlow(task, DEFAULT_STATUS_DEFINITIONS)).toBe(false);
+    });
+
+    it('Doing(/) は完了扱いでないため発火しない', () => {
+        const task = makeTask({ statusChar: '/', flow: repeatFlow() });
+        expect(canTriggerFlow(task, DEFAULT_STATUS_DEFINITIONS)).toBe(false);
+    });
+
+    it('Cancelled(-) は完了扱いのため発火する', () => {
+        const task = makeTask({ statusChar: '-', flow: repeatFlow() });
+        expect(canTriggerFlow(task, DEFAULT_STATUS_DEFINITIONS)).toBe(true);
     });
 });
 

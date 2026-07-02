@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { canTriggerFlow } from '../../../src/services/flow/FlowTrigger';
 import { DayPlannerParser } from '../../../src/services/parsing/tv-inline/DayPlannerParser';
 import { TasksPluginParser } from '../../../src/services/parsing/tv-inline/TasksPluginParser';
+import { DEFAULT_STATUS_DEFINITIONS } from '../../../src/types';
 import type { TasksPluginMapping } from '../../../src/types';
 
 const defaultMapping: TasksPluginMapping = {
@@ -64,9 +66,9 @@ describe('DayPlannerParser', () => {
         expect(parser.format(task)).toBe('- [ ] 09:00 Test');
     });
 
-    it('isTriggerableStatus returns false', () => {
+    it('read-only tasks never trigger flow (canTriggerFlow gate)', () => {
         const task = parser.parse('- [x] 09:00 Done', 'daily.md', 0)!;
-        expect(parser.isTriggerableStatus(task)).toBe(false);
+        expect(canTriggerFlow(task, DEFAULT_STATUS_DEFINITIONS)).toBe(false);
     });
 });
 
@@ -161,8 +163,8 @@ describe('TasksPluginParser', () => {
         expect(parser.format(task)).toBe('- [ ] Task 📅 2026-03-21');
     });
 
-    it('isTriggerableStatus returns false', () => {
+    it('read-only tasks never trigger flow (canTriggerFlow gate)', () => {
         const task = parser.parse('- [x] Done 📅 2026-03-21', 'test.md', 0)!;
-        expect(parser.isTriggerableStatus(task)).toBe(false);
+        expect(canTriggerFlow(task, DEFAULT_STATUS_DEFINITIONS)).toBe(false);
     });
 });

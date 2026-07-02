@@ -137,7 +137,6 @@ export class TVFileBuilder {
                 due,
                 tags: TagExtractor.merge(contentTags, fmExtracted.tags ?? []),
                 originalText: '',
-                commands: [],
                 timerTargetId,
                 parserId: 'tv-file',
                 properties: fmExtracted.properties,
