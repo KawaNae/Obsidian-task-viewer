@@ -148,8 +148,8 @@ describe('FlowExecutor', () => {
         const repository = makeRepository();
         const { executor, taskIndex } = makeExecutor(repository);
 
-        await executor.handleTaskCompletion(flowTask('+1d', { content: 'A', originalText: '- [x] A' }));
-        await executor.handleTaskCompletion(flowTask('+1d', { content: 'B', originalText: '- [x] B' }));
+        await executor.handleTaskCompletion(flowTask('at(today + 1d)', { content: 'A', originalText: '- [x] A' }));
+        await executor.handleTaskCompletion(flowTask('at(today + 1d)', { content: 'B', originalText: '- [x] B' }));
         await flush();
 
         expect(repository.insertRecurrenceForTask).toHaveBeenCalledTimes(2);
@@ -160,18 +160,18 @@ describe('FlowExecutor', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository);
 
-        await executor.handleTaskCompletion(flowTask('+1d x3'));
+        await executor.handleTaskCompletion(flowTask('at(today + 1d) x3'));
         await flush();
 
         const [, line] = repository.insertRecurrenceForTask.mock.calls[0];
-        expect(line).toContain('==> +1d x2');
+        expect(line).toContain('==> at(today + 1d) x2');
     });
 
     it('x1: generated line carries no command', async () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository);
 
-        await executor.handleTaskCompletion(flowTask('+1d x1'));
+        await executor.handleTaskCompletion(flowTask('at(today + 1d) x1'));
         await flush();
 
         const [, line] = repository.insertRecurrenceForTask.mock.calls[0];

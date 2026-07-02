@@ -207,7 +207,11 @@ function buildEvalContext(task: Task, deps: FlowPlanDeps): EvalContext {
     const props: Partial<Record<PropName, Value>> = {
         content: { type: 'string', value: task.content },
         'file.name': { type: 'string', value: fileName(task.file) },
+        // Completion moment, two granularities: `done` carries the clock
+        // (at(done + 2h)), `today` is the plain calendar date (at(today + 3d))
+        // so day-granular offsets don't smear the completion time onto tasks.
         done: { type: 'datetime', date: deps.now.date, time: deps.now.time },
+        today: { type: 'date', value: deps.today },
     };
     if (task.startDate) props.start = datish(task.startDate, task.startTime);
     if (task.endDate) props.end = datish(task.endDate, task.endTime);
@@ -215,7 +219,7 @@ function buildEvalContext(task: Task, deps: FlowPlanDeps): EvalContext {
         const [date, time] = task.due.split('T');
         props.due = datish(date, time);
     }
-    return { props, today: deps.today, weekStartDay: deps.weekStartDay, host: deps.host };
+    return { props, today: deps.today, now: deps.now, weekStartDay: deps.weekStartDay, host: deps.host };
 }
 
 function datish(date: string, time: string | undefined): Value {

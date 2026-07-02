@@ -12,7 +12,10 @@ export const FLOW_TYPE_ENV: TypeEnv = {
     due: 'datish',
     content: 'string',
     'file.name': 'string',
+    /** Completion date+time. Arithmetic on it carries the time along. */
     done: 'datetime',
+    /** Completion calendar date (no time) — for day-granular offsets. */
+    today: 'date',
 };
 
 /**

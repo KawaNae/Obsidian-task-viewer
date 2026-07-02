@@ -65,15 +65,17 @@ describe('FlowPlanner', () => {
             expect(newTask.startDate).toBeUndefined();
         });
 
-        it('places dateless afterDone results on start', () => {
-            const { newTask } = createNextOf(plan('+3d'));
+        it('places dateless completion-relative results on start', () => {
+            const { newTask } = createNextOf(plan('at(today + 3d)'));
             expect(newTask.startDate).toBe('2026-07-05');
+            // `today` is date-granular: no completion time leaks in
+            expect(newTask.startTime).toBeUndefined();
         });
 
         it('resets per-instance identity', () => {
-            const { newTask } = createNextOf(plan('+1d', {
+            const { newTask } = createNextOf(plan('at(today + 1d)', {
                 startDate: '2026-07-01', blockId: 'abc', timerTargetId: undefined,
-                statusChar: 'x', originalText: '- [x] Test task @2026-07-01 ==> +1d ^abc',
+                statusChar: 'x', originalText: '- [x] Test task @2026-07-01 ==> at(today + 1d) ^abc',
             }));
             expect(newTask.statusChar).toBe(' ');
             expect(newTask.id).toBe('');
@@ -84,13 +86,13 @@ describe('FlowPlanner', () => {
 
     describe('telomere', () => {
         it('decrements the count into the next instance', () => {
-            const { newTask } = createNextOf(plan('+1d x14', { startDate: '2026-07-01' }));
-            expect(newTask.flow?.raw).toBe('+1d x13');
+            const { newTask } = createNextOf(plan('at(today + 1d) x14', { startDate: '2026-07-01' }));
+            expect(newTask.flow?.raw).toBe('at(today + 1d) x13');
             expect(newTask.flow?.program?.lifetime).toMatchObject({ count: 13 });
         });
 
         it('x1: final instance carries no flow at all', () => {
-            const { newTask } = createNextOf(plan('+1d x1', { startDate: '2026-07-01' }));
+            const { newTask } = createNextOf(plan('at(today + 1d) x1', { startDate: '2026-07-01' }));
             expect(newTask.flow).toBeUndefined();
         });
 
@@ -176,12 +178,12 @@ describe('FlowPlanner', () => {
 
     describe('options', () => {
         it('nochildren turns off child copying', () => {
-            expect(createNextOf(plan('+1d nochildren', { startDate: '2026-07-01' })).copyChildren).toBe(false);
-            expect(createNextOf(plan('+1d', { startDate: '2026-07-01' })).copyChildren).toBe(true);
+            expect(createNextOf(plan('at(today + 1d) nochildren', { startDate: '2026-07-01' })).copyChildren).toBe(false);
+            expect(createNextOf(plan('at(today + 1d)', { startDate: '2026-07-01' })).copyChildren).toBe(true);
         });
 
         it('strips timer emoji prefixes from the copied content', () => {
-            const { newTask } = createNextOf(plan('+1d', { startDate: '2026-07-01', content: '⏱️ Test task' }));
+            const { newTask } = createNextOf(plan('at(today + 1d)', { startDate: '2026-07-01', content: '⏱️ Test task' }));
             expect(newTask.content).toBe('Test task');
         });
     });

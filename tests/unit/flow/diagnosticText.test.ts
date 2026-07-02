@@ -19,8 +19,8 @@ describe('diagnosticText', () => {
         const samples = [
             'garbage',                          // flow.unknown-head
             'repeat(weekly)',                   // flow.legacy-syntax
-            'every mon +3d',                    // flow.duplicate-schedule
-            '+1d x5 x3',                        // flow.duplicate-node
+            'every mon at(today + 3d)',         // flow.duplicate-schedule
+            'at(today + 1d) x5 x3',             // flow.duplicate-node
             'x5',                               // flow.orphan-modifier
             'every mon until 2026-02-30',       // flow.bad-date
             'at("text")',                       // type.at-not-datish

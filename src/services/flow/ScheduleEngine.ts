@@ -1,7 +1,7 @@
-import { addMonths, addYears, differenceInCalendarDays } from 'date-fns';
+import { addMonths } from 'date-fns';
 import { EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
-import { nextWeekdayAfter } from '../lang/functions';
-import { addDuration, formatDateStr, isDatishValue, parseDateStr } from '../lang/Value';
+import { gridNext, nextWeekdayAfter } from '../lang/functions';
+import { formatDateStr, isDatishValue, parseDateStr } from '../lang/Value';
 import { EveryRule, ScheduleNode } from './FlowAst';
 
 /** The task's primary date (start > end > due priority), if any. */
@@ -18,7 +18,7 @@ export interface NextOccurrence {
 export interface ScheduleRuntime {
     /** Local calendar date of "now". */
     today: string;
-    /** Local date+time of "now" (used by min/h grids and afterDone). */
+    /** Local date+time of "now" (minute/hour grids). */
     now: { date: string; time: string };
 }
 
@@ -30,12 +30,15 @@ const MAX_GRID_STEPS = 10000;
  * - `every` is calendar-grid anchored: the result is the first grid point
  *   strictly after max(today, anchor) — late completions skip missed
  *   occurrences, early completions still land after the current instance.
- * - `+N` (afterDone) is completion-anchored: today/now + duration.
+ *   Interval rules delegate to the expression function `grid()` so
+ *   `every 3d` and `at(grid(start, 3d))` are the same computation.
  * - `at(expr)` evaluates against the PRE-shift snapshot of the original
  *   task (the expression defines the next anchor); may throw EvalError.
+ *   Completion-relative offsets are written as expressions: `at(today + 3d)`
+ *   (date-granular) / `at(done + 2h)` (time-granular).
  *
- * Anchor-less tasks: weekday/afterDone/at need no anchor; interval and
- * monthday grids fall back to today as a pseudo-anchor.
+ * Anchor-less tasks: weekday rules need no anchor; interval and monthday
+ * grids fall back to today as a pseudo-anchor.
  */
 export function nextOccurrence(
     schedule: ScheduleNode,
@@ -46,18 +49,6 @@ export function nextOccurrence(
     switch (schedule.kind) {
         case 'every':
             return nextGridOccurrence(schedule.rule, anchor, rt);
-
-        case 'afterDone': {
-            if (schedule.unit === 'min' || schedule.unit === 'h') {
-                const v = addDuration(
-                    { type: 'datetime', date: rt.now.date, time: rt.now.time },
-                    { amount: schedule.amount, unit: schedule.unit }
-                );
-                return v.type === 'datetime' ? { date: v.date, time: v.time } : { date: v.value };
-            }
-            const v = addDuration({ type: 'date', value: rt.today }, { amount: schedule.amount, unit: schedule.unit });
-            return v.type === 'date' ? { date: v.value } : { date: v.date, time: v.time };
-        }
 
         case 'at': {
             if (!atCtx) throw new EvalError('at() requires an evaluation context', schedule.expr.span);
@@ -82,34 +73,13 @@ function nextGridOccurrence(rule: EveryRule, anchor: DateAnchor | null, rt: Sche
         }
 
         case 'interval': {
-            const base = anchor?.date ?? rt.today;
-
-            if (rule.unit === 'min' || rule.unit === 'h') {
-                const stepMin = rule.amount * (rule.unit === 'h' ? 60 : 1);
-                const baseMin = toMinutes(base, anchor?.time ?? '00:00');
-                const nowMin = toMinutes(rt.now.date, rt.now.time);
-                const k = Math.max(1, Math.floor((nowMin - baseMin) / stepMin) + 1);
-                return fromMinutes(baseMin + k * stepMin);
-            }
-
-            if (rule.unit === 'd' || rule.unit === 'w') {
-                const stepDays = rule.amount * (rule.unit === 'w' ? 7 : 1);
-                const diff = differenceInCalendarDays(parseDateStr(rt.today), parseDateStr(base));
-                const k = Math.max(1, Math.floor(diff / stepDays) + 1);
-                return { date: formatDateStr(addDaysLocal(base, k * stepDays)) };
-            }
-
-            // mo / y: date-fns addMonths/addYears clamp month-ends; compute
-            // each grid point from the base to avoid clamp accumulation.
-            const baseDate = parseDateStr(base);
-            for (let k = 1; k <= MAX_GRID_STEPS; k++) {
-                const candidate = rule.unit === 'mo'
-                    ? addMonths(baseDate, k * rule.amount)
-                    : addYears(baseDate, k * rule.amount);
-                const s = formatDateStr(candidate);
-                if (s > rt.today) return { date: s };
-            }
-            throw new EvalError('Recurrence grid overflow', { start: 0, end: 0 });
+            const v = gridNext(
+                anchor?.date ?? rt.today,
+                anchor?.time,
+                { amount: rule.amount, unit: rule.unit },
+                rt
+            );
+            return v.type === 'date' ? { date: v.value } : { date: v.date, time: v.time };
         }
 
         case 'monthday': {
@@ -127,29 +97,3 @@ function nextGridOccurrence(rule: EveryRule, anchor: DateAnchor | null, rt: Sche
     }
 }
 
-function addDaysLocal(dateStr: string, days: number): Date {
-    const d = parseDateStr(dateStr);
-    d.setDate(d.getDate() + days);
-    return d;
-}
-
-/** Local reference day for TZ-safe minute arithmetic (not epoch-based). */
-const REF_DAY = new Date(2000, 0, 1);
-
-function toMinutes(date: string, time: string): number {
-    const [h, m] = time.split(':').map(n => parseInt(n, 10));
-    const dayNumber = differenceInCalendarDays(parseDateStr(date), REF_DAY);
-    return dayNumber * 1440 + h * 60 + m;
-}
-
-function fromMinutes(totalMin: number): NextOccurrence {
-    const dayNumber = Math.floor(totalMin / 1440);
-    const minOfDay = totalMin - dayNumber * 1440;
-    const date = new Date(REF_DAY.getFullYear(), REF_DAY.getMonth(), REF_DAY.getDate() + dayNumber);
-    const h = Math.floor(minOfDay / 60);
-    const m = minOfDay % 60;
-    return {
-        date: formatDateStr(date),
-        time: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`,
-    };
-}

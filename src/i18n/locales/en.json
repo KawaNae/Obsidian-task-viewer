@@ -710,8 +710,7 @@
       "move-target": "move() expects a wikilink or string target, got {{actual}}"
     },
     "flow": {
-      "expected-duration": "Expected a duration after '+' (e.g. +3d)",
-      "unknown-head": "Unknown clause '{{head}}' — clauses start with every / + / at(...) / xN / until / nochildren / set(...) / move(...)",
+      "unknown-head": "Unknown clause '{{head}}' — clauses start with every / at(...) / xN / until / nochildren / set(...) / move(...)",
       "zero-lifetime": "xN requires N >= 1",
       "duplicate-schedule": "Only one schedule clause (every / + / at) is allowed",
       "duplicate-node": "Duplicate '{{clause}}' clause",

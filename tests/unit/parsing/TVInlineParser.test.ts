@@ -156,9 +156,9 @@ describe('TVInlineParser', () => {
         });
 
         it('parses flow-command-only task (no date)', () => {
-            const result = parser.parse('- [ ] task ==> +3d', 'test.md', 0);
+            const result = parser.parse('- [ ] task ==> at(today + 3d)', 'test.md', 0);
             expect(result).not.toBeNull();
-            expect(result!.flow?.program?.schedule).toMatchObject({ kind: 'afterDone', amount: 3 });
+            expect(result!.flow?.program?.schedule).toMatchObject({ kind: 'at' });
             expect(result!.startDate).toBe('');
         });
 

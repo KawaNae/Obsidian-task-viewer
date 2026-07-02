@@ -10,8 +10,9 @@ export type EveryRule =
 
 export type ScheduleNode =
     | { kind: 'every'; rule: EveryRule; span: Span }
-    | { kind: 'afterDone'; amount: number; unit: DurUnit; span: Span }   // +3d (completion-anchored)
-    | { kind: 'at'; expr: Expr; span: Span };                            // at(<expr>) escape hatch
+    | { kind: 'at'; expr: Expr; span: Span };
+    // Completion-relative offsets are expressions, not clause heads:
+    // `at(today + 3d)` (date-granular) / `at(done + 2h)` (time-granular).
 
 export type SetField = 'content' | 'start' | 'end' | 'due';
 

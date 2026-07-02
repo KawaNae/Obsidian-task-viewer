@@ -12,7 +12,7 @@ export interface ParseFlowResult {
     diagnostics: Diagnostic[];
 }
 
-const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until / nochildren / set(...) / move(...)';
+const HEAD_HINT = 'clauses start with every / at(...) / xN / until / nochildren / set(...) / move(...)';
 const SET_FIELDS: SetField[] = ['content', 'start', 'end', 'due'];
 const LEGACY_HEADS = ['repeat', 'next'];
 
@@ -40,20 +40,6 @@ export function parseFlow(raw: string): ParseFlowResult {
 
 function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagnostic[]): void {
     const head = cursor.peek();
-
-    // +3d — completion-anchored schedule
-    if (head.kind === 'plus') {
-        cursor.next();
-        const dur = cursor.tryEat('duration');
-        if (!dur) {
-            diagnostics.push(error('flow.expected-duration', "Expected a duration after '+' (e.g. +3d)", tokenSpan(cursor.peek())));
-            skipToNextNode(cursor);
-            return;
-        }
-        const { amount, unit } = splitDurationText(dur.text);
-        assignSchedule(program, { kind: 'afterDone', amount, unit, span: { start: head.start, end: dur.end } }, diagnostics);
-        return;
-    }
 
     if (head.kind !== 'ident') {
         diagnostics.push(error('flow.unknown-head', `Unknown clause '${head.text}' — ${HEAD_HINT}`, tokenSpan(head), { head: head.text }));
@@ -316,7 +302,6 @@ function assignNode<K extends 'lifetime' | 'until' | 'nochildren' | 'set' | 'mov
 function skipToNextNode(cursor: TokenCursor): void {
     while (!cursor.atEof()) {
         const t = cursor.peek();
-        if (t.kind === 'plus') return;
         if (t.kind === 'ident' && (
             ['every', 'at', 'until', 'nochildren', 'set', 'move'].includes(t.text) || /^x\d+$/.test(t.text)
         )) return;

@@ -7,7 +7,7 @@ import { weekdayFromName } from './Value';
 /** Bare idents inside expressions that read as unit keywords (startOf(week)). */
 const UNIT_KEYWORDS = ['week', 'month', 'year'] as const;
 
-const SIMPLE_PROPS = ['start', 'end', 'due', 'content', 'done'] as const;
+const SIMPLE_PROPS = ['start', 'end', 'due', 'content', 'done', 'today'] as const;
 
 /**
  * Recursive-descent expression parser. Consumes tokens from the cursor and

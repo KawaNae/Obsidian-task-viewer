@@ -96,19 +96,23 @@ describe('ScheduleEngine', () => {
         });
     });
 
-    describe('afterDone (+N)', () => {
-        it('adds days to today regardless of anchor', () => {
-            expect(next('+3d', { date: '2026-01-01' })).toEqual({ date: '2026-07-05' });
+    describe('completion-relative expressions (at(today/done + N))', () => {
+        it('adds days to today regardless of anchor (at(today + Nd))', () => {
+            expect(next('at(today + 3d)', { date: '2026-01-01' }, RT, ctxFor(RT))).toEqual({ date: '2026-07-05' });
         });
 
         it('adds calendar months with clamping', () => {
-            expect(next('+1mo', null, { today: '2026-01-31', now: { date: '2026-01-31', time: '09:00' } }))
-                .toEqual({ date: '2026-02-28' });
+            const rt = { today: '2026-01-31', now: { date: '2026-01-31', time: '09:00' } };
+            expect(next('at(today + 1mo)', null, rt, ctxFor(rt))).toEqual({ date: '2026-02-28' });
         });
 
-        it('adds minutes/hours from now with time in the result', () => {
-            expect(next('+2h', null)).toEqual({ date: '2026-07-02', time: '12:00' });
-            expect(next('+30min', null)).toEqual({ date: '2026-07-02', time: '10:30' });
+        it('adds minutes/hours from now with time in the result (at(done + N))', () => {
+            expect(next('at(done + 2h)', null, RT, ctxFor(RT))).toEqual({ date: '2026-07-02', time: '12:00' });
+            expect(next('at(done + 30min)', null, RT, ctxFor(RT))).toEqual({ date: '2026-07-02', time: '10:30' });
+        });
+
+        it('today stays date-granular — no completion time leaks in', () => {
+            expect(next('at(today + 3d)', null, RT, ctxFor(RT))).toEqual({ date: '2026-07-05' });
         });
     });
 
@@ -116,6 +120,7 @@ describe('ScheduleEngine', () => {
         const ctx: EvalContext = {
             props: { start: { type: 'date', value: '2026-07-01' } },
             today: RT.today,
+            now: RT.now,
             weekStartDay: 1,
             host: { formatDate: () => '' },
         };
@@ -128,5 +133,31 @@ describe('ScheduleEngine', () => {
             expect(next('at(done + 1h)', null, RT, { ...ctx, props: { done: { type: 'datetime', date: '2026-07-02', time: '10:00' } } }))
                 .toEqual({ date: '2026-07-02', time: '11:00' });
         });
+
+        it('at(grid(start, 3d)) matches every 3d exactly', () => {
+            const anchor = { date: '2026-06-24' };
+            const gridCtx: EvalContext = { ...ctx, props: { start: { type: 'date', value: anchor.date } } };
+            expect(next('at(grid(start, 3d))', anchor, RT, gridCtx))
+                .toEqual(next('every 3d', anchor, RT, null));
+        });
+
+        it('grid month steps clamp like every Nmo (anchor day 31 = month-end)', () => {
+            const gridCtx: EvalContext = { ...ctx, props: { start: { type: 'date', value: '2026-01-31' } } };
+            expect(next('at(grid(start, 1mo))', { date: '2026-01-31' }, RT, gridCtx)).toEqual({ date: '2026-07-31' });
+        });
     });
 });
+
+/** Completion-context (done/today) for at() expressions in these tests. */
+function ctxFor(rt: { today: string; now: { date: string; time: string } }): EvalContext {
+    return {
+        props: {
+            done: { type: 'datetime', date: rt.now.date, time: rt.now.time },
+            today: { type: 'date', value: rt.today },
+        },
+        today: rt.today,
+        now: rt.now,
+        weekStartDay: 1,
+        host: { formatDate: () => '' },
+    };
+}

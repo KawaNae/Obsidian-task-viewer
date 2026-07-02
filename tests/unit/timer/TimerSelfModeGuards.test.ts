@@ -10,7 +10,7 @@ import { makeTask } from '../helpers/makeTask';
 // ---------------------------------------------------------------------------
 
 function repeatFlow(): TaskFlow {
-    const raw = '+1d';
+    const raw = 'at(today + 1d)';
     return { raw, ...parseFlow(raw) };
 }
 

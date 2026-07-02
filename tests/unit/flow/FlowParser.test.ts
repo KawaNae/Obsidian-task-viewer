@@ -37,13 +37,24 @@ describe('FlowParser', () => {
         });
 
         it('parses completion-anchored +duration', () => {
-            const { program, diagnostics } = parseFlow('+3d');
+            // Completion-relative offsets are expressions, not a clause head
+            const { program, diagnostics } = parseFlow('at(today + 3d)');
             expect(diagnostics).toEqual([]);
-            expect(program?.schedule).toMatchObject({ kind: 'afterDone', amount: 3, unit: 'd' });
+            expect(program?.schedule?.kind).toBe('at');
+        });
+
+        it('rejects the removed +duration head', () => {
+            expect(errors('+3d')).toContain('flow.unknown-head');
         });
 
         it('parses at(expr) escape hatch', () => {
             const { program, diagnostics } = parseFlow('at(startOf(month, done + 1mo) + 4d)');
+            expect(diagnostics).toEqual([]);
+            expect(program?.schedule?.kind).toBe('at');
+        });
+
+        it('parses grid() so every is expressible as an expression', () => {
+            const { program, diagnostics } = parseFlow('at(grid(start, 3d))');
             expect(diagnostics).toEqual([]);
             expect(program?.schedule?.kind).toBe('at');
         });
@@ -59,11 +70,11 @@ describe('FlowParser', () => {
         });
 
         it('parses telomere count', () => {
-            expect(parseFlow('+1d x14').program?.lifetime).toMatchObject({ count: 14 });
+            expect(parseFlow('at(today + 1d) x14').program?.lifetime).toMatchObject({ count: 14 });
         });
 
         it('rejects x0', () => {
-            expect(errors('+1d x0')).toContain('flow.zero-lifetime');
+            expect(errors('at(today + 1d) x0')).toContain('flow.zero-lifetime');
         });
 
         it('parses set with multiple typed assignments', () => {
@@ -86,11 +97,11 @@ describe('FlowParser', () => {
         });
 
         it('rejects duplicate schedule clauses', () => {
-            expect(errors('every mon +3d')).toContain('flow.duplicate-schedule');
+            expect(errors('every mon at(today + 3d)')).toContain('flow.duplicate-schedule');
         });
 
         it('rejects duplicate lifetimes', () => {
-            expect(errors('+1d x5 x3')).toContain('flow.duplicate-node');
+            expect(errors('at(today + 1d) x5 x3')).toContain('flow.duplicate-node');
         });
 
         it('rejects orphan modifiers without a schedule', () => {
@@ -140,8 +151,9 @@ describe('FlowParser', () => {
             'every mo@25',
             'every mo@last',
             'every 2mo@15',
-            '+3d',
-            '+30min',
+            'at(today + 3d)',
+            'at(done + 30min)',
+            'at(grid(start, 3d))',
             'every mon x14',
             'every mon until 2026-09-28',
             'every mon x14 until 2026-09-28 nochildren',

@@ -14,7 +14,13 @@ function evaluate(src: string, props: EvalContext['props'] = {}): Value {
     const { tokens, diagnostics } = tokenize(src);
     const expr = parseExpr(new TokenCursor(tokens), diagnostics);
     if (!expr) throw new Error(`parse failed: ${diagnostics.map(d => d.message).join('; ')}`);
-    const ctx: EvalContext = { props, today: '2026-07-02', weekStartDay: 1, host: stubHost };
+    const ctx: EvalContext = {
+        props,
+        today: '2026-07-02',
+        now: { date: '2026-07-02', time: '10:00' },
+        weekStartDay: 1,
+        host: stubHost,
+    };
     return evalExpr(expr, ctx);
 }
 
@@ -77,6 +83,17 @@ describe('ExprEvaluator', () => {
         expect(evaluate('next(thu)')).toEqual({ type: 'date', value: '2026-07-09' });
         expect(evaluate('next(fri)')).toEqual({ type: 'date', value: '2026-07-03' });
         expect(evaluate('next(mon, 2026-07-02)')).toEqual({ type: 'date', value: '2026-07-06' });
+    });
+
+    it('computes grid occurrences (the engine behind every <interval>)', () => {
+        // today = 2026-07-02; anchor 6/24, 3d grid: 6/27, 6/30, 7/3 → 7/3
+        expect(evaluate('grid(2026-06-24, 3d)')).toEqual({ type: 'date', value: '2026-07-03' });
+        // month grid clamps like every Nmo (anchor day 31 = month-end behavior)
+        expect(evaluate('grid(2026-01-31, 1mo)')).toEqual({ type: 'date', value: '2026-07-31' });
+        // minute/hour grids are datetime-valued
+        expect(evaluate('grid(2026-07-02T01:00, 4h)')).toEqual({ type: 'datetime', date: '2026-07-02', time: '13:00' });
+        // future anchor (early completion): first point after the anchor itself
+        expect(evaluate('grid(2026-07-07, 3d)')).toEqual({ type: 'date', value: '2026-07-10' });
     });
 
     it('computes startOf/endOf with weekStartDay', () => {

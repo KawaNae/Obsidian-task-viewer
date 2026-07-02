@@ -710,8 +710,7 @@
       "move-target": "move() の宛先には wikilink か string が必要です（{{actual}} が渡されました）"
     },
     "flow": {
-      "expected-duration": "'+' の後には期間が必要です（例: +3d）",
-      "unknown-head": "不明な節 '{{head}}' — 節は every / + / at(...) / xN / until / nochildren / set(...) / move(...) で始まります",
+      "unknown-head": "不明な節 '{{head}}' — 節は every / at(...) / xN / until / nochildren / set(...) / move(...) で始まります",
       "zero-lifetime": "xN の N は 1 以上が必要です",
       "duplicate-schedule": "スケジュール節（every / + / at）は1つだけ書けます",
       "duplicate-node": "'{{clause}}' 節が重複しています",
