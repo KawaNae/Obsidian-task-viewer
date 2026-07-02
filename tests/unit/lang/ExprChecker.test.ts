@@ -44,7 +44,8 @@ describe('ExprChecker', () => {
     it('rejects date + date', () => {
         const { type, diagnostics } = check('start + due');
         expect(type).toBe('error');
-        expect(diagnostics.some(d => d.code === 'type.mismatch')).toBe(true);
+        expect(diagnostics.some(d => d.code === 'type.cannot-combine')).toBe(true);
+        expect(diagnostics[0].params).toMatchObject({ op: '+', left: 'datish', right: 'datish' });
     });
 
     it('rejects string vs number comparison', () => {
@@ -53,7 +54,7 @@ describe('ExprChecker', () => {
 
     it('rejects wrong argument types', () => {
         const { diagnostics } = check('format(3, "MM/DD")');
-        expect(diagnostics.some(d => d.code === 'type.mismatch')).toBe(true);
+        expect(diagnostics.some(d => d.code === 'type.arg-mismatch')).toBe(true);
     });
 
     it('rejects wrong argument counts', () => {
@@ -63,12 +64,12 @@ describe('ExprChecker', () => {
 
     it('rejects invalid unit keywords in startOf', () => {
         const { diagnostics } = check('startOf("day")');
-        expect(diagnostics.some(d => d.code === 'type.bad-argument')).toBe(true);
+        expect(diagnostics.some(d => d.code === 'type.bad-unit-keyword')).toBe(true);
     });
 
     it('rejects non-bool condition', () => {
         const { diagnostics } = check('3 ? 1 : 2');
-        expect(diagnostics.some(d => d.code === 'type.mismatch')).toBe(true);
+        expect(diagnostics.some(d => d.code === 'type.cond-not-bool')).toBe(true);
     });
 
     it('poisons upward without duplicate diagnostics', () => {

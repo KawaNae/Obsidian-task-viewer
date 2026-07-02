@@ -56,7 +56,7 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
     }
 
     if (head.kind !== 'ident') {
-        diagnostics.push(error('flow.unknown-head', `Unexpected '${head.text}' — ${HEAD_HINT}`, tokenSpan(head)));
+        diagnostics.push(error('flow.unknown-head', `Unknown clause '${head.text}' — ${HEAD_HINT}`, tokenSpan(head), { head: head.text }));
         cursor.next();
         skipToNextNode(cursor);
         return;
@@ -123,12 +123,12 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
     if (LEGACY_HEADS.includes(head.text) && cursor.at('lparen')) {
         diagnostics.push(error('flow.legacy-syntax',
             `'${head.text}(...)' is the removed legacy syntax — use 'every <cadence>' / '+<duration>' instead`,
-            tokenSpan(head)));
+            tokenSpan(head), { head: head.text }));
         skipToNextNode(cursor);
         return;
     }
 
-    diagnostics.push(error('flow.unknown-head', `Unknown clause '${head.text}' — ${HEAD_HINT}`, tokenSpan(head)));
+    diagnostics.push(error('flow.unknown-head', `Unknown clause '${head.text}' — ${HEAD_HINT}`, tokenSpan(head), { head: head.text }));
     skipToNextNode(cursor);
 }
 
@@ -148,7 +148,7 @@ function parseEvery(cursor: TokenCursor, program: FlowProgram, diagnostics: Diag
             const dayToken = cursor.peek();
             const day = dayToken.kind === 'ident' ? weekdayFromName(dayToken.text) : null;
             if (day === null) {
-                diagnostics.push(error('flow.expected-weekday', `Expected a weekday (mon..sun), got '${dayToken.text}'`, tokenSpan(dayToken)));
+                diagnostics.push(error('flow.expected-weekday', `Expected a weekday (mon..sun), got '${dayToken.text}'`, tokenSpan(dayToken), { token: dayToken.text }));
                 skipToNextNode(cursor);
                 return;
             }
@@ -201,7 +201,7 @@ function parseMonthDay(cursor: TokenCursor, intervalMonths: number, diagnostics:
         cursor.next();
         const day = parseInt(dayToken.text, 10);
         if (day < 1 || day > 31) {
-            diagnostics.push(error('flow.bad-monthday', `Day of month must be 1-31, got ${day}`, tokenSpan(dayToken)));
+            diagnostics.push(error('flow.bad-monthday-range', `Day of month must be 1-31, got ${day}`, tokenSpan(dayToken), { day }));
             return null;
         }
         return { type: 'monthday', intervalMonths, day };
@@ -222,7 +222,7 @@ function parseMonthDay(cursor: TokenCursor, intervalMonths: number, diagnostics:
 function parseSet(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagnostic[]): void {
     const head = cursor.next(); // 'set'
     if (!cursor.tryEat('lparen')) {
-        diagnostics.push(error('flow.expected-lparen', "Expected '(' after 'set'", tokenSpan(cursor.peek())));
+        diagnostics.push(error('flow.expected-lparen', "Expected '(' after 'set'", tokenSpan(cursor.peek()), { fn: 'set' }));
         skipToNextNode(cursor);
         return;
     }
@@ -232,13 +232,14 @@ function parseSet(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagno
         const fieldToken = cursor.peek();
         if (fieldToken.kind !== 'ident' || !(SET_FIELDS as string[]).includes(fieldToken.text)) {
             diagnostics.push(error('flow.bad-set-field',
-                `set() fields are ${SET_FIELDS.join('/')}, got '${fieldToken.text}'`, tokenSpan(fieldToken)));
+                `set() fields are ${SET_FIELDS.join('/')}, got '${fieldToken.text}'`, tokenSpan(fieldToken),
+                { field: fieldToken.text, fields: SET_FIELDS.join('/') }));
             skipToNextNode(cursor);
             return;
         }
         cursor.next();
         if (!cursor.tryEat('colon')) {
-            diagnostics.push(error('flow.expected-colon', `Expected ':' after set field '${fieldToken.text}'`, tokenSpan(cursor.peek())));
+            diagnostics.push(error('flow.expected-set-colon', `Expected ':' after set field '${fieldToken.text}'`, tokenSpan(cursor.peek()), { field: fieldToken.text }));
             skipToNextNode(cursor);
             return;
         }
@@ -248,7 +249,7 @@ function parseSet(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagno
             return;
         }
         if (assignments.some(a => a.field === fieldToken.text)) {
-            diagnostics.push(error('flow.duplicate-set-field', `set() assigns '${fieldToken.text}' twice`, tokenSpan(fieldToken)));
+            diagnostics.push(error('flow.duplicate-set-field', `set() assigns '${fieldToken.text}' twice`, tokenSpan(fieldToken), { field: fieldToken.text }));
         }
         assignments.push({
             field: fieldToken.text as SetField,
@@ -261,7 +262,7 @@ function parseSet(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagno
 
     const close = cursor.tryEat('rparen');
     if (!close) {
-        diagnostics.push(error('flow.expected-rparen', "Expected ')' to close set(...)", tokenSpan(cursor.peek())));
+        diagnostics.push(error('flow.expected-rparen', "Expected ')' to close set(...)", tokenSpan(cursor.peek()), { fn: 'set' }));
         skipToNextNode(cursor);
         return;
     }
@@ -274,13 +275,13 @@ function parseSet(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagno
 
 function parseParenExpr(cursor: TokenCursor, fnName: string, diagnostics: Diagnostic[]) {
     if (!cursor.tryEat('lparen')) {
-        diagnostics.push(error('flow.expected-lparen', `Expected '(' after '${fnName}'`, tokenSpan(cursor.peek())));
+        diagnostics.push(error('flow.expected-lparen', `Expected '(' after '${fnName}'`, tokenSpan(cursor.peek()), { fn: fnName }));
         return null;
     }
     const expr = parseExpr(cursor, diagnostics);
     if (!expr) return null;
     if (!cursor.tryEat('rparen')) {
-        diagnostics.push(error('flow.expected-rparen', `Expected ')' to close ${fnName}(...)`, tokenSpan(cursor.peek())));
+        diagnostics.push(error('flow.expected-rparen', `Expected ')' to close ${fnName}(...)`, tokenSpan(cursor.peek()), { fn: fnName }));
         return null;
     }
     return expr;
@@ -288,7 +289,7 @@ function parseParenExpr(cursor: TokenCursor, fnName: string, diagnostics: Diagno
 
 function assignSchedule(program: FlowProgram, node: ScheduleNode, diagnostics: Diagnostic[]): void {
     if (program.schedule) {
-        diagnostics.push(error('flow.duplicate-node', 'Only one schedule clause (every / + / at) is allowed', node.span));
+        diagnostics.push(error('flow.duplicate-schedule', 'Only one schedule clause (every / + / at) is allowed', node.span));
         return;
     }
     program.schedule = node;
@@ -302,7 +303,7 @@ function assignNode<K extends 'lifetime' | 'until' | 'nochildren' | 'set' | 'mov
     span: Span
 ): void {
     if (program[key]) {
-        diagnostics.push(error('flow.duplicate-node', `Duplicate '${key}' clause`, span));
+        diagnostics.push(error('flow.duplicate-node', `Duplicate '${key}' clause`, span, { clause: key }));
         return;
     }
     program[key] = node;

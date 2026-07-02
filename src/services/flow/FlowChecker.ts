@@ -1,6 +1,6 @@
 import { Diagnostic, error } from '../lang/Diagnostic';
 import { FLOW_TYPE_ENV, checkExpr } from '../lang/ExprChecker';
-import { StaticType, isDatishType } from '../lang/functions';
+import { isDatishType } from '../lang/functions';
 import { FlowProgram } from './FlowAst';
 
 /**
@@ -14,8 +14,9 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
         for (const key of ['lifetime', 'until', 'nochildren', 'set'] as const) {
             const node = program[key];
             if (node) {
+                const clause = key === 'lifetime' ? 'xN' : key;
                 diagnostics.push(error('flow.orphan-modifier',
-                    `'${key === 'lifetime' ? 'xN' : key}' requires a schedule clause (every / + / at)`, node.span));
+                    `'${clause}' requires a schedule clause (every / + / at)`, node.span, { clause }));
             }
         }
         if (!program.move && !program.lifetime && !program.until && !program.nochildren && !program.set) {
@@ -28,13 +29,15 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
     }
 
     if (program.until && !isValidDateString(program.until.date)) {
-        diagnostics.push(error('flow.bad-date', `'${program.until.date}' is not a valid calendar date`, program.until.span));
+        diagnostics.push(error('flow.bad-date', `'${program.until.date}' is not a valid calendar date`, program.until.span,
+            { date: program.until.date }));
     }
 
     if (program.schedule?.kind === 'at') {
         const t = checkExpr(program.schedule.expr, FLOW_TYPE_ENV, diagnostics);
         if (t !== 'error' && !isDatishType(t)) {
-            diagnostics.push(error('type.mismatch', `at() expects a date or datetime expression, got ${t}`, program.schedule.expr.span));
+            diagnostics.push(error('type.at-not-datish', `at() expects a date or datetime expression, got ${t}`,
+                program.schedule.expr.span, { actual: t }));
         }
     }
 
@@ -42,11 +45,14 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
         for (const a of program.set.assignments) {
             const t = checkExpr(a.expr, FLOW_TYPE_ENV, diagnostics);
             if (t === 'error') continue;
-            const expected: (t: StaticType) => boolean =
-                a.field === 'content' ? (x => x === 'string') : isDatishType;
-            if (!expected(t)) {
-                diagnostics.push(error('type.mismatch',
-                    `set(${a.field}: ...) expects ${a.field === 'content' ? 'string' : 'date or datetime'}, got ${t}`, a.expr.span));
+            if (a.field === 'content') {
+                if (t !== 'string') {
+                    diagnostics.push(error('type.set-content-not-string',
+                        `set(content: ...) expects string, got ${t}`, a.expr.span, { actual: t }));
+                }
+            } else if (!isDatishType(t)) {
+                diagnostics.push(error('type.set-date-mismatch',
+                    `set(${a.field}: ...) expects date or datetime, got ${t}`, a.expr.span, { field: a.field, actual: t }));
             }
         }
     }
@@ -54,7 +60,8 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
     if (program.move) {
         const t = checkExpr(program.move.target, FLOW_TYPE_ENV, diagnostics);
         if (t !== 'error' && t !== 'link' && t !== 'string') {
-            diagnostics.push(error('type.mismatch', `move() expects a wikilink or string target, got ${t}`, program.move.target.span));
+            diagnostics.push(error('type.move-target', `move() expects a wikilink or string target, got ${t}`,
+                program.move.target.span, { actual: t }));
         }
     }
 }

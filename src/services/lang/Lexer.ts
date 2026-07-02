@@ -107,7 +107,8 @@ export function tokenize(src: string): LexResult {
                 } else {
                     diagnostics.push(error('lex.unknown-unit',
                         `Unknown duration unit '${unit}' (expected ${DURATION_UNITS.join('/')})`,
-                        { start: i, end: i + full.length }));
+                        { start: i, end: i + full.length },
+                        { unit, units: DURATION_UNITS.join('/') }));
                     // Emit as duration-shaped ident so downstream reports once.
                     push('ident', full, i, i + full.length);
                 }
@@ -161,7 +162,7 @@ export function tokenize(src: string): LexResult {
             continue;
         }
 
-        diagnostics.push(error('lex.unexpected-char', `Unexpected character '${ch}'`, { start: i, end: i + 1 }));
+        diagnostics.push(error('lex.unexpected-char', `Unexpected character '${ch}'`, { start: i, end: i + 1 }, { char: ch }));
         i++;
     }
 

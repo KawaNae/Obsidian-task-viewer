@@ -2,6 +2,7 @@ import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@
 import { RangeSet, type Extension } from '@codemirror/state';
 import { Diagnostic } from '../services/lang/Diagnostic';
 import { parseFlow } from '../services/flow/FlowParser';
+import { diagnosticText } from '../services/flow/diagnosticText';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 
 const FLOW_MARKER = '==>';
@@ -58,7 +59,7 @@ export function createFlowDiagnosticsExtension(): Extension {
                         to: Math.min(toPos, line.to),
                         deco: Decoration.mark({
                             class: `tv-flow-diag tv-flow-diag--${d.severity}`,
-                            attributes: { title: d.message },
+                            attributes: { title: diagnosticText(d) },
                         }),
                     });
                 }

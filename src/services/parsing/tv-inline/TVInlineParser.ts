@@ -1,5 +1,6 @@
 import type { Task, TaskFlow } from '../../../types';
 import { parseFlow } from '../../flow/FlowParser';
+import { diagnosticText } from '../../flow/diagnosticText';
 import { LeafParserStrategy } from '../strategies/ParserStrategy';
 import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
@@ -114,7 +115,7 @@ export class TVInlineParser implements LeafParserStrategy {
                 validation = {
                     severity: first.severity,
                     rule: first.code,
-                    message: first.message,
+                    message: diagnosticText(first),
                     hint: `==> ${flow.raw}`,
                 };
             }

@@ -674,5 +674,62 @@
     "title": "Task Viewer CLIリファレンス",
     "commands": "コマンド",
     "commonFlags": "共通フラグ"
+  }  ,
+  "flowDiag": {
+    "lex": {
+      "unterminated-wikilink": "wikilink が閉じられていません",
+      "unterminated-string": "文字列が閉じられていません",
+      "unknown-unit": "不明な期間単位 '{{unit}}'（使用可能: {{units}}）",
+      "unexpected-char": "予期しない文字 '{{char}}'"
+    },
+    "expr": {
+      "expected-colon": "条件式には ':' が必要です",
+      "expected-rparen": "')' が必要です",
+      "expected-rparen-call": "{{fn}}(...) を閉じる ')' が必要です",
+      "unexpected-token": "予期しないトークン '{{token}}'",
+      "unexpected-eof": "式が途中で終わっています",
+      "unknown-property": "不明なプロパティ '{{name}}'",
+      "file-needs-member": "'file' にはメンバー指定が必要です（file.name）",
+      "unknown-ident": "不明な識別子 '{{name}}'"
+    },
+    "type": {
+      "unknown-property": "プロパティ '{{name}}' はここでは使えません",
+      "bang-expects-bool": "'!' には bool が必要です（{{actual}} が渡されました）",
+      "unary-minus-operand": "単項 '-' には number か duration が必要です（{{actual}} が渡されました）",
+      "logic-expects-bool": "'{{op}}' の両辺には bool が必要です（{{left}} と {{right}} が渡されました）",
+      "cannot-combine": "'{{op}}' で {{left}} と {{right}} は結合できません",
+      "cannot-compare": "{{left}} と {{right}} は比較できません",
+      "cond-not-bool": "条件には bool が必要です（{{actual}} が渡されました）",
+      "branch-mismatch": "条件式の分岐の型が一致しません（{{thenType}} と {{elseType}}）",
+      "arg-count": "{{fn}}() の引数は {{expected}} 個です（{{actual}} 個が渡されました）",
+      "arg-mismatch": "{{fn}}() の第{{index}}引数には {{expected}} が必要です（{{actual}} が渡されました）",
+      "bad-unit-keyword": "week / month / year のいずれかが必要です（'{{actual}}' が渡されました）",
+      "at-not-datish": "at() には日付/日時になる式が必要です（{{actual}} が渡されました）",
+      "set-content-not-string": "set(content: ...) には string が必要です（{{actual}} が渡されました）",
+      "set-date-mismatch": "set({{field}}: ...) には日付/日時が必要です（{{actual}} が渡されました）",
+      "move-target": "move() の宛先には wikilink か string が必要です（{{actual}} が渡されました）"
+    },
+    "flow": {
+      "expected-duration": "'+' の後には期間が必要です（例: +3d）",
+      "unknown-head": "不明な節 '{{head}}' — 節は every / + / at(...) / xN / until / nochildren / set(...) / move(...) で始まります",
+      "zero-lifetime": "xN の N は 1 以上が必要です",
+      "duplicate-schedule": "スケジュール節（every / + / at）は1つだけ書けます",
+      "duplicate-node": "'{{clause}}' 節が重複しています",
+      "expected-date": "'until' の後には日付が必要です（例: until 2026-09-28）",
+      "expected-lparen": "'{{fn}}' の後には '(' が必要です",
+      "expected-rparen": "{{fn}}(...) を閉じる ')' が必要です",
+      "bad-set-field": "set() のフィールドは {{fields}} です（'{{field}}' が指定されました）",
+      "expected-set-colon": "set の '{{field}}' の後には ':' が必要です",
+      "duplicate-set-field": "set() で '{{field}}' が二重に指定されています",
+      "expected-weekday": "曜日（mon..sun）が必要です（'{{token}}' が指定されました）",
+      "expected-monthday": "'mo' の後には '@' が必要です（例: every mo@25, every mo@last）",
+      "expected-cadence": "'every' の後には周期が必要です（曜日 / 2w のような間隔 / mo@N）",
+      "bad-monthday-range": "日付は 1〜31 で指定してください（{{day}} が指定されました）",
+      "bad-monthday": "'@' の後には日番号か 'last' が必要です",
+      "legacy-syntax": "'{{head}}(...)' は廃止された旧記法です — 'every <周期>' / '+<期間>' を使ってください",
+      "orphan-modifier": "'{{clause}}' にはスケジュール節（every / + / at）が必要です",
+      "empty": "フロー・コマンドが空です",
+      "bad-date": "'{{date}}' は存在しない日付です"
+    }
   }
 }

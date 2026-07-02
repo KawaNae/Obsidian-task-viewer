@@ -674,5 +674,62 @@
     "title": "Task Viewer CLI Reference",
     "commands": "Commands",
     "commonFlags": "Common Flags"
+  }  ,
+  "flowDiag": {
+    "lex": {
+      "unterminated-wikilink": "Unterminated wikilink",
+      "unterminated-string": "Unterminated string",
+      "unknown-unit": "Unknown duration unit '{{unit}}' (expected {{units}})",
+      "unexpected-char": "Unexpected character '{{char}}'"
+    },
+    "expr": {
+      "expected-colon": "Expected ':' in conditional expression",
+      "expected-rparen": "Expected ')'",
+      "expected-rparen-call": "Expected ')' to close {{fn}}(...)",
+      "unexpected-token": "Unexpected token '{{token}}'",
+      "unexpected-eof": "Unexpected end of expression",
+      "unknown-property": "Unknown property '{{name}}'",
+      "file-needs-member": "Property 'file' requires a member (file.name)",
+      "unknown-ident": "Unknown identifier '{{name}}'"
+    },
+    "type": {
+      "unknown-property": "Property '{{name}}' is not available here",
+      "bang-expects-bool": "'!' expects bool, got {{actual}}",
+      "unary-minus-operand": "Unary '-' expects number or duration, got {{actual}}",
+      "logic-expects-bool": "'{{op}}' expects bool operands, got {{left}} and {{right}}",
+      "cannot-combine": "'{{op}}' cannot combine {{left}} and {{right}}",
+      "cannot-compare": "Cannot compare {{left}} with {{right}}",
+      "cond-not-bool": "Condition must be bool, got {{actual}}",
+      "branch-mismatch": "Conditional branches have different types ({{thenType}} vs {{elseType}})",
+      "arg-count": "{{fn}}() expects {{expected}} argument(s), got {{actual}}",
+      "arg-mismatch": "{{fn}}() argument {{index}} expects {{expected}}, got {{actual}}",
+      "bad-unit-keyword": "Expected week, month or year, got '{{actual}}'",
+      "at-not-datish": "at() expects a date or datetime expression, got {{actual}}",
+      "set-content-not-string": "set(content: ...) expects string, got {{actual}}",
+      "set-date-mismatch": "set({{field}}: ...) expects date or datetime, got {{actual}}",
+      "move-target": "move() expects a wikilink or string target, got {{actual}}"
+    },
+    "flow": {
+      "expected-duration": "Expected a duration after '+' (e.g. +3d)",
+      "unknown-head": "Unknown clause '{{head}}' — clauses start with every / + / at(...) / xN / until / nochildren / set(...) / move(...)",
+      "zero-lifetime": "xN requires N >= 1",
+      "duplicate-schedule": "Only one schedule clause (every / + / at) is allowed",
+      "duplicate-node": "Duplicate '{{clause}}' clause",
+      "expected-date": "Expected a date after 'until' (e.g. until 2026-09-28)",
+      "expected-lparen": "Expected '(' after '{{fn}}'",
+      "expected-rparen": "Expected ')' to close {{fn}}(...)",
+      "bad-set-field": "set() fields are {{fields}}, got '{{field}}'",
+      "expected-set-colon": "Expected ':' after set field '{{field}}'",
+      "duplicate-set-field": "set() assigns '{{field}}' twice",
+      "expected-weekday": "Expected a weekday (mon..sun), got '{{token}}'",
+      "expected-monthday": "Expected '@' after 'mo' (e.g. every mo@25, every mo@last)",
+      "expected-cadence": "Expected a cadence after 'every' (weekday, interval like 2w, or mo@N)",
+      "bad-monthday-range": "Day of month must be 1-31, got {{day}}",
+      "bad-monthday": "Expected a day number or 'last' after '@'",
+      "legacy-syntax": "'{{head}}(...)' is the removed legacy syntax — use 'every <cadence>' / '+<duration>' instead",
+      "orphan-modifier": "'{{clause}}' requires a schedule clause (every / + / at)",
+      "empty": "Flow command is empty",
+      "bad-date": "'{{date}}' is not a valid calendar date"
+    }
   }
 }

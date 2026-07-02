@@ -146,9 +146,11 @@ function parsePrimary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
         case 'ident':
             return parseIdentLed(cursor, diagnostics);
         default:
-            diagnostics.push(error('expr.unexpected-token',
-                token.kind === 'eof' ? 'Unexpected end of expression' : `Unexpected token '${token.text}'`,
-                span));
+            if (token.kind === 'eof') {
+                diagnostics.push(error('expr.unexpected-eof', 'Unexpected end of expression', span));
+            } else {
+                diagnostics.push(error('expr.unexpected-token', `Unexpected token '${token.text}'`, span, { token: token.text }));
+            }
             return null;
     }
 }
@@ -190,14 +192,14 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
                 cursor.next();
                 return { kind: 'prop', name: 'file.name', span: spanBetween(span, tokenSpan(member)) };
             }
-            diagnostics.push(error('expr.unknown-property', `Unknown property 'file.${member.text}'`, tokenSpan(member)));
+            diagnostics.push(error('expr.unknown-property', `Unknown property 'file.${member.text}'`, tokenSpan(member), { name: `file.${member.text}` }));
             return null;
         }
-        diagnostics.push(error('expr.unknown-property', "Property 'file' requires a member (file.name)", span));
+        diagnostics.push(error('expr.file-needs-member', "Property 'file' requires a member (file.name)", span));
         return null;
     }
 
-    diagnostics.push(error('expr.unknown-ident', `Unknown identifier '${name}'`, span));
+    diagnostics.push(error('expr.unknown-ident', `Unknown identifier '${name}'`, span, { name }));
     return null;
 }
 
@@ -215,7 +217,7 @@ function parseCall(fn: FnName, fnSpan: Span, cursor: TokenCursor, diagnostics: D
     }
     const close = cursor.tryEat('rparen');
     if (!close) {
-        diagnostics.push(error('expr.expected-rparen', `Expected ')' to close ${fn}(...)`, tokenSpan(cursor.peek())));
+        diagnostics.push(error('expr.expected-rparen-call', `Expected ')' to close ${fn}(...)`, tokenSpan(cursor.peek()), { fn }));
         return null;
     }
     return { kind: 'call', fn, args, span: spanBetween(fnSpan, tokenSpan(close)) };

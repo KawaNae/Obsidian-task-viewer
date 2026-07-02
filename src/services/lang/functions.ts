@@ -26,6 +26,13 @@ export function isAssignable(actual: StaticType, expected: StaticType): boolean 
 // Signatures (single table shared by checker and evaluator)
 // ---------------------------------------------------------------------------
 
+export interface FnSigViolation {
+    code: string;
+    message: string;
+    span: Span;
+    params?: Record<string, string | number>;
+}
+
 export interface FnSig {
     name: FnName;
     minArgs: number;
@@ -34,17 +41,22 @@ export interface FnSig {
     result: StaticType;
     /**
      * Extra constraint applied at check time (e.g. unit keyword must be a
-     * constant). Returns an error message or null.
+     * constant). Returns a diagnostic-shaped violation or null.
      */
-    checkArgs?: (args: Expr[]) => { message: string; span: Span } | null;
+    checkArgs?: (args: Expr[]) => FnSigViolation | null;
 }
 
 const UNIT_SET = ['week', 'month', 'year'];
 
-function requireUnitKeyword(args: Expr[]): { message: string; span: Span } | null {
+function requireUnitKeyword(args: Expr[]): FnSigViolation | null {
     const first = args[0];
     if (first && first.kind === 'lit' && first.value.type === 'string' && !UNIT_SET.includes(first.value.value)) {
-        return { message: `Expected week, month or year, got '${first.value.value}'`, span: first.span };
+        return {
+            code: 'type.bad-unit-keyword',
+            message: `Expected week, month or year, got '${first.value.value}'`,
+            span: first.span,
+            params: { actual: first.value.value },
+        };
     }
     return null;
 }

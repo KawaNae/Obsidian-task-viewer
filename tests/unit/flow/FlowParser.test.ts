@@ -86,7 +86,7 @@ describe('FlowParser', () => {
         });
 
         it('rejects duplicate schedule clauses', () => {
-            expect(errors('every mon +3d')).toContain('flow.duplicate-node');
+            expect(errors('every mon +3d')).toContain('flow.duplicate-schedule');
         });
 
         it('rejects duplicate lifetimes', () => {
@@ -109,12 +109,12 @@ describe('FlowParser', () => {
         });
 
         it('rejects bad set field types', () => {
-            expect(errors('every mon set(due: "text")')).toContain('type.mismatch');
-            expect(errors('every mon set(content: 3d)')).toContain('type.mismatch');
+            expect(errors('every mon set(due: "text")')).toContain('type.set-date-mismatch');
+            expect(errors('every mon set(content: 3d)')).toContain('type.set-content-not-string');
         });
 
         it('rejects non-datish at()', () => {
-            expect(errors('at("text")')).toContain('type.mismatch');
+            expect(errors('at("text")')).toContain('type.at-not-datish');
         });
 
         it('returns null program with raw preserved semantics on prose', () => {

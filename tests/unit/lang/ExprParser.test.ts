@@ -106,8 +106,14 @@ describe('ExprParser', () => {
         expect(diagnostics.some(d => d.code === 'expr.unknown-ident')).toBe(true);
     });
 
-    it('reports missing closing paren', () => {
+    it('reports missing closing paren on calls', () => {
         const { expr, diagnostics } = parse('format(start, "x"');
+        expect(expr).toBeNull();
+        expect(diagnostics.some(d => d.code === 'expr.expected-rparen-call')).toBe(true);
+    });
+
+    it('reports missing closing paren on groups', () => {
+        const { expr, diagnostics } = parse('(start + 1d');
         expect(expr).toBeNull();
         expect(diagnostics.some(d => d.code === 'expr.expected-rparen')).toBe(true);
     });
