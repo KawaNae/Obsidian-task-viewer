@@ -44,6 +44,17 @@ const FIXTURE_CONTENT = [
     '',
     '## combined',
     '- [ ] flow-combo-F @2026-04-01 ==> at(start + 1d) move([[test-archive]])',
+    '',
+    '## multi-line',
+    '- [ ] flow-multi-G @2026-04-01 ==> at(start + 1d)',
+    '\t- ==> setDue(start + 3d)',
+    '\t- ==> x3',
+    '- [ ] flow-multi-H @2026-04-01',
+    '\t- ==> at(start + 2d)',
+    '- [ ] flow-multi-I @2026-04-01 ==> at(start + 1d)',
+    '\t- ==> x1',
+    '- [ ] flow-multi-J @2026-04-01',
+    '\t- ==> move([[test-archive]])',
 ].join('\n');
 
 /** Find a task by content substring in the test file */
@@ -261,5 +272,129 @@ describe('move', () => {
         // Exactly one instance remains in the source (the new one)
         const remaining = cliList({ file: TEST_FILE, content: 'flow-combo-F', outputFields: 'id,status' });
         expect(remaining.count).toBe(1);
+    }, 20000);
+});
+
+// ────────────────────────────────────────────
+// 5. multi-line flows (`- ==>` child segments)
+// ────────────────────────────────────────────
+describe('multi-line flows', () => {
+    beforeAll(() => resetFixture());
+
+    it('fires a multi-line flow: flow lines follow the new task line, telomere decremented in place', async () => {
+        const task = findTask('flow-multi-G');
+        expect(task).toBeDefined();
+
+        cliUpdate({ id: task!.id as string, status: 'x' });
+
+        const newTask = await waitForTask(
+            { file: TEST_FILE, outputFields: 'id,content,status,startDate' },
+            t => (t.content as string).includes('flow-multi-G')
+                && t.status === ' '
+                && t.startDate === '2026-04-02',
+            8000,
+        );
+        expect(newTask).not.toBeNull();
+
+        // Fire-consumes: the original loses `==>` AND its flow child lines
+        const consumed = await waitForFileContent(c =>
+            c.includes('- [x] flow-multi-G @2026-04-01') &&
+            !c.includes('flow-multi-G @2026-04-01 ==>') &&
+            !c.includes('- ==> x3'));
+        expect(consumed).toBe(true);
+
+        const lines = readTestFile().split('\n');
+        // setDue(start + 3d) evaluated post-shift → due = 2026-04-05 in the date block
+        const newIdx = lines.findIndex(l =>
+            l.includes('flow-multi-G @2026-04-02>>2026-04-05 ==> at(start + 1d)'));
+        expect(newIdx).toBeGreaterThanOrEqual(0);
+        // Line-level canonical inheritance: each segment keeps its line,
+        // emitted right after the task line, xN decremented in place
+        expect(lines[newIdx + 1].trim()).toBe('- ==> setDue(start + 3d)');
+        expect(lines[newIdx + 2].trim()).toBe('- ==> x2');
+        // The consumed original contributed no leftover copies
+        expect(lines.filter(l => l.includes('- ==> setDue')).length).toBe(1);
+    }, 20000);
+
+    it('fires a child-line-only flow: the task line never gains ==>', async () => {
+        await resetFixture();
+
+        const task = findTask('flow-multi-H');
+        expect(task).toBeDefined();
+
+        cliUpdate({ id: task!.id as string, status: 'x' });
+
+        const newTask = await waitForTask(
+            { file: TEST_FILE, outputFields: 'id,content,status,startDate' },
+            t => (t.content as string).includes('flow-multi-H')
+                && t.status === ' '
+                && t.startDate === '2026-04-03',
+            8000,
+        );
+        expect(newTask).not.toBeNull();
+
+        const lines = readTestFile().split('\n');
+        const newIdx = lines.findIndex(l => l.includes('- [ ] flow-multi-H @2026-04-03'));
+        expect(newIdx).toBeGreaterThanOrEqual(0);
+        expect(lines[newIdx]).not.toContain('==>');
+        expect(lines[newIdx + 1].trim()).toBe('- ==> at(start + 2d)');
+        // The original's flow line was consumed — exactly one copy remains
+        expect(lines.filter(l => l.includes('- ==> at(start + 2d)')).length).toBe(1);
+        expect(readTestFile()).toContain('- [x] flow-multi-H @2026-04-01');
+    }, 20000);
+
+    it('x1 on a child line: the final instance carries no flow lines at all', async () => {
+        await resetFixture();
+
+        const task = findTask('flow-multi-I');
+        expect(task).toBeDefined();
+
+        cliUpdate({ id: task!.id as string, status: 'x' });
+
+        const newTask = await waitForTask(
+            { file: TEST_FILE, outputFields: 'id,content,status,startDate' },
+            t => (t.content as string).includes('flow-multi-I')
+                && t.status === ' '
+                && t.startDate === '2026-04-02',
+            8000,
+        );
+        expect(newTask).not.toBeNull();
+
+        const lines = readTestFile().split('\n');
+        const newIdx = lines.findIndex(l => l.includes('- [ ] flow-multi-I @2026-04-02'));
+        expect(newIdx).toBeGreaterThanOrEqual(0);
+        expect(lines[newIdx]).not.toContain('==>');
+        // Telomere exhausted: neither instance owns any flow line
+        expect(lines[newIdx + 1]?.includes('- ==> x1') ?? false).toBe(false);
+        expect(lines.filter(l => l.includes('- ==> x1')).length).toBe(0);
+    }, 20000);
+
+    it('move via a child-line flow: archive receives no flow lines', async () => {
+        await resetFixture();
+
+        const task = findTask('flow-multi-J');
+        expect(task).toBeDefined();
+
+        cliUpdate({ id: task!.id as string, status: 'x' });
+
+        const gone = await waitForTaskGone(
+            { file: TEST_FILE, outputFields: 'id,content' },
+            t => (t.content as string).includes('flow-multi-J'),
+            5000,
+        );
+        expect(gone).toBe(true);
+
+        const archived = cliList({
+            file: ARCHIVE_FILE,
+            content: 'flow-multi-J',
+            outputFields: 'id,content,status',
+        });
+        expect(archived.count).toBeGreaterThanOrEqual(1);
+
+        // The consumed flow line must not travel to the archive
+        const archiveContent = fs.readFileSync(vaultAbsolute(ARCHIVE_FILE), 'utf-8');
+        expect(archiveContent).not.toContain('- ==>');
+        // ...and the source file no longer contains J's flow line
+        expect(readTestFile()).not.toContain('- ==> move([[test-archive]])');
     }, 20000);
 });
