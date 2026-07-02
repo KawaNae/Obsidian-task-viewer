@@ -83,6 +83,44 @@ describe('buildChildEntries', () => {
         ]);
     });
 
+    it('drops plain entries occupied by a sibling tasks flow child lines', () => {
+        // c1 owns a `- ==>` flow line at line 6; the extractor removes it
+        // from c1's childLineBodyOffsets (it lives in flow.childSegments),
+        // but the parent must still treat it as c1's subtree line.
+        const parent = makeTask({
+            id: 'p',
+            parserId: 'tv-file',
+            line: -1,
+            childIds: ['c1'],
+            childLines: [
+                plainCl('- [ ] a', ' '),      // line 5: c1's own line
+                plainCl('- ==> every mon'),   // line 6: c1's flow child line
+                plainCl('- c'),               // line 7: parent's own note
+            ],
+            childLineBodyOffsets: [5, 6, 7],
+        });
+        const c1 = makeTask({
+            id: 'c1',
+            parserId: 'tv-inline',
+            line: 5,
+            childIds: [],
+            childLines: [],
+            childLineBodyOffsets: [],
+            flow: {
+                raw: '',
+                childSegments: [{ raw: 'every mon', bodyLine: 6 }],
+                program: null,
+                diagnostics: [],
+            },
+        });
+        const lookup = (id: string): Task | undefined => id === 'c1' ? c1 : undefined;
+        const entries = buildChildEntries(parent, lookup);
+        expect(entries.map(e => ({ kind: e.kind, bodyLine: e.bodyLine }))).toEqual([
+            { kind: 'task', bodyLine: 5 },
+            { kind: 'line', bodyLine: 7 },
+        ]);
+    });
+
     it('keeps a plain entry whose bodyLine collides with a cross-file sibling subtree', () => {
         // parent (A.md) has a plain note at absolute line 5 plus a cross-file
         // tv-file child B whose own subtree occupies line 5 *in B.md*. The

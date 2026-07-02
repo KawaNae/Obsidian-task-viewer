@@ -8,6 +8,7 @@ import { TaskStore } from './TaskStore';
 import { TaskValidator } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { FlowExecutor } from '../flow/FlowExecutor';
+import { flowSource } from '../flow/FlowSegments';
 import { canTriggerFlow } from '../flow/FlowTrigger';
 import { logDebug, logError, logInfo } from '../../log/log';
 import { TaskPropertyResolver } from '../parsing/TaskPropertyResolver';
@@ -35,11 +36,12 @@ export class TaskScanner {
     ) { }
 
     /**
-     * タスクシグネチャ生成（重複検出用）。フロー raw を含むため、発火＝消費で
+     * タスクシグネチャ生成（重複検出用）。フローの joined ソース（タスク行
+     * segment + `- ==>` 子行 segment 群）を含むため、発火＝消費でいずれかの
      * 行が書き換わると署名も変わり、同一完了の二重検出が構造的に起きない。
      */
     private getTaskSignature(task: Task): string {
-        return `${task.file}|${task.startDate || 'no-date'}|${task.content}|${task.flow?.raw ?? ''}`;
+        return `${task.file}|${task.startDate || 'no-date'}|${task.content}|${task.flow ? flowSource(task.flow) : ''}`;
     }
 
     /**

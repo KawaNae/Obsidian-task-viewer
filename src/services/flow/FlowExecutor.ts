@@ -7,6 +7,7 @@ import { TaskParser } from '../parsing/TaskParser';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { EvalError } from '../lang/ExprEvaluator';
 import { FlowEffect } from './FlowEffects';
+import { flowSource } from './FlowSegments';
 import { FlowPlanDeps, planFlow } from './FlowPlanner';
 import { canTriggerFlow } from './FlowTrigger';
 import { createMomentEvalHost } from './MomentEvalHost';
@@ -35,7 +36,7 @@ export class FlowExecutor {
 
     async handleTaskCompletion(task: Task): Promise<void> {
         if (!canTriggerFlow(task, this.getSettings().statusDefinitions)) return;
-        logInfo(`[Flow:completion] taskId=${task.id} flow="${task.flow?.raw ?? ''}"`);
+        logInfo(`[Flow:completion] taskId=${task.id} flow="${task.flow ? flowSource(task.flow) : ''}"`);
         this.taskQueue.push(task);
         // Fire and forget; the queue serializes execution.
         this.processQueue();

@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { DocumentTreeBuilder } from '../../../../src/services/parsing/tree/DocumentTreeBuilder';
 import { SectionPropertyResolver } from '../../../../src/services/parsing/tree/SectionPropertyResolver';
 import { TreeTaskExtractor, type TaskExtractionContext } from '../../../../src/services/parsing/tree/TreeTaskExtractor';
-import { DEFAULT_TV_FILE_KEYS } from '../../../../src/types';
+import { TaskParser } from '../../../../src/services/parsing/TaskParser';
+import { DEFAULT_SETTINGS, DEFAULT_TV_FILE_KEYS } from '../../../../src/types';
 
 const defaultCtx: TaskExtractionContext = {
     filePath: 'test.md',
@@ -603,6 +604,107 @@ describe('TreeTaskExtractor', () => {
             const inbox = tasks.find(isBare)!;
             expect(scheduled.startDate).toBe('2026-03-24');
             expect(inbox.startDate).toBe('');
+        });
+    });
+
+    describe('フロー子行 (`- ==>`) の merge', () => {
+        it('タスク行 + 子行 segment を joined でパースし program が成立する', () => {
+            const tasks = extractTasks([
+                '- [ ] task @2026-03-24 ==> every mon',
+                '    - ==> setDue(start + 3d)',
+                '    - ==> x3',
+            ]);
+            expect(tasks).toHaveLength(1);
+            const flow = tasks[0].flow!;
+            expect(flow.raw).toBe('every mon');
+            expect(flow.childSegments.map(s => s.raw)).toEqual(['setDue(start + 3d)', 'x3']);
+            expect(flow.childSegments.map(s => s.bodyLine)).toEqual([1, 2]);
+            expect(flow.program?.lifetime).toMatchObject({ count: 3 });
+            expect(Object.keys(flow.program?.sets ?? {})).toEqual(['due']);
+            expect(tasks[0].validation).toBeUndefined();
+        });
+
+        it('flow 行は childLines / childLineBodyOffsets から除外される', () => {
+            const tasks = extractTasks([
+                '- [ ] task @2026-03-24 ==> every mon',
+                '    - ==> x3',
+                '    - plain note',
+            ]);
+            expect(tasks[0].childLines.map(cl => cl.text.trim())).toEqual(['- plain note']);
+            expect(tasks[0].childLineBodyOffsets).toEqual([2]);
+        });
+
+        it('子行だけに flow を書いた bare checkbox はタスクに昇格する', () => {
+            const tasks = extractTasks([
+                '- [ ] promoted',
+                '    - ==> every mon',
+            ]);
+            expect(tasks).toHaveLength(1);
+            expect(tasks[0].content).toBe('promoted');
+            expect(tasks[0].flow?.raw).toBe('');
+            expect(tasks[0].flow?.program?.schedule?.kind).toBe('every');
+        });
+
+        it('昇格した子タスクは親の childLines に残らない（二重表出しない）', () => {
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24',
+                '    - [ ] promoted child',
+                '        - ==> every mon',
+            ]);
+            expect(tasks).toHaveLength(2);
+            const parent = tasks.find(t => t.content === 'parent')!;
+            const child = tasks.find(t => t.content === 'promoted child')!;
+            expect(child.parentId).toBe(parent.id);
+            expect(child.flow?.program?.schedule?.kind).toBe('every');
+            expect(parent.childLines).toHaveLength(0);
+        });
+
+        it('孫の flow 行を親が奪わない', () => {
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24 ==> every mon',
+                '    - [ ] child @2026-03-25',
+                '        - ==> every tue',
+            ]);
+            const parent = tasks.find(t => t.content === 'parent')!;
+            const child = tasks.find(t => t.content === 'child')!;
+            expect(parent.flow?.childSegments).toEqual([]);
+            expect(parent.flow?.program?.schedule).toMatchObject({ rule: { days: [1] } });
+            expect(child.flow?.childSegments.map(s => s.raw)).toEqual(['every tue']);
+            expect(child.flow?.program?.schedule).toMatchObject({ rule: { days: [2] } });
+        });
+
+        it('タスク行単体の orphan-modifier が joined で解消され validation もクリアされる', () => {
+            const tasks = extractTasks([
+                '- [ ] task @2026-03-24 ==> x3',
+                '    - ==> every mon',
+            ]);
+            expect(tasks[0].flow?.program).not.toBeNull();
+            expect(tasks[0].validation).toBeUndefined();
+        });
+
+        it('segment 境界をまたぐノードは validation エラーになる', () => {
+            const tasks = extractTasks([
+                '- [ ] task @2026-03-24 ==> every',
+                '    - ==> mon',
+            ]);
+            expect(tasks[0].flow?.program).toBeNull();
+            expect(tasks[0].validation?.rule).toBe('flow.node-spans-lines');
+        });
+
+        it('非 tv-inline タスクの `- ==>` 子行は通常の childLine のまま', () => {
+            TaskParser.rebuildChain({ ...DEFAULT_SETTINGS, enableDayPlanner: true });
+            try {
+                const tasks = extractTasks([
+                    '- [ ] 09:00 - 10:00 dp task',
+                    '    - ==> every mon',
+                ], { 'tv-start': '2026-03-24' });
+                expect(tasks).toHaveLength(1);
+                expect(tasks[0].parserId).toBe('day-planner');
+                expect(tasks[0].flow).toBeUndefined();
+                expect(tasks[0].childLines.map(cl => cl.text.trim())).toEqual(['- ==> every mon']);
+            } finally {
+                TaskParser.rebuildChain(DEFAULT_SETTINGS);
+            }
         });
     });
 });

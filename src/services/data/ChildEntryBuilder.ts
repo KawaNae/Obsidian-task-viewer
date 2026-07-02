@@ -84,6 +84,13 @@ function collectSubtreeLines(
     for (const off of task.childLineBodyOffsets) {
         if (typeof off === 'number' && off >= 0) out.add(`${task.file}:${off}`);
     }
+    // Flow child lines (`- ==>`) are excluded from childLineBodyOffsets by
+    // the extractor but are still body lines owned by this task — without
+    // them here, an ancestor (e.g. a tv-file card) would surface them as
+    // plain text child entries.
+    for (const seg of task.flow?.childSegments ?? []) {
+        if (seg.bodyLine >= 0) out.add(`${task.file}:${seg.bodyLine}`);
+    }
     for (const cid of task.childIds) {
         const c = getTask(cid);
         if (!c) continue;
