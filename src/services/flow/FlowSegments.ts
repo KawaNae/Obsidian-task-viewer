@@ -1,4 +1,4 @@
-import type { Task, TaskFlow } from '../../types';
+import type { DiagnosticCode, Task, TaskFlow } from '../../types';
 import { Diagnostic, Span, error } from '../lang/Diagnostic';
 import { FlowProgram } from './FlowAst';
 import { ParseFlowResult, parseFlow } from './FlowParser';
@@ -125,7 +125,9 @@ export function flowValidation(flow: TaskFlow): Task['validation'] {
     if (!first) return undefined;
     return {
         severity: first.severity,
-        rule: first.code,
+        // Diagnostic codes are namespaced (`flow.` / `lex.` / `expr.` /
+        // `type.`) by construction — see the ValidationRule union.
+        rule: first.code as DiagnosticCode,
         message: diagnosticText(first),
         hint: `==> ${flowRaws(flow).filter(r => r !== '').join(' ')}`,
     };

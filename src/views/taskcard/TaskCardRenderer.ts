@@ -323,8 +323,12 @@ export class TaskCardRenderer extends Component {
             if (task.due && DateUtils.isPastDue(task.due, settings.startHour)) {
                 overdueIcon = '🚨 ';
             } else {
-                const endDate = task.effectiveEndDate ?? task.endDate;
-                const endTime = task.effectiveEndTime ?? task.endTime;
+                // effective only: toDisplayTask seeds effectiveEndDate from
+                // task.endDate, so a raw fallback here could never fire —
+                // and falling back would reintroduce the raw endDate's
+                // inclusive/exclusive dual semantics this layer must not see.
+                const endDate = task.effectiveEndDate;
+                const endTime = task.effectiveEndTime;
                 if (endDate) {
                     const cleanEndTime = endTime?.includes('T') ? endTime.split('T')[1] : endTime;
                     if (DateUtils.isPastDate(endDate, cleanEndTime, settings.startHour)) {
@@ -346,6 +350,12 @@ export class TaskCardRenderer extends Component {
         return `- [${statusChar}] ${overdueIcon}${fileLink}`;
     }
 
+    /**
+     * The `task.startDate` passed down as parentStartDate is deliberately
+     * RAW (not effective): child notation labels are built from raw Tasks
+     * (see NotationUtils contract), so the parent date substituted into
+     * time-only child notations must live in the same raw coordinate system.
+     */
     private async renderInlineChildren(
         contentContainer: HTMLElement,
         task: Task,

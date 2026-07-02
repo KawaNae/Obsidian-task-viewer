@@ -1,4 +1,3 @@
-import type { Task } from '../../types';
 import { t } from '../../i18n';
 
 // ── Property & Operator enums ──
@@ -51,11 +50,9 @@ export interface FilterGroup {
 
 export type FilterState = FilterGroup;
 
-/** Optional context for filter evaluation (e.g., view-level settings). */
-export interface FilterContext {
-    startHour?: number;
-    taskLookup?: (id: string) => Task | undefined;
-}
+// FilterContext (the only filter type referencing Task) lives in
+// ./FilterContext to keep this module Task-free — types/index.ts imports
+// FilterState from here, so importing types back would create a cycle.
 
 // ── Type guards ──
 

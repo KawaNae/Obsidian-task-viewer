@@ -1,5 +1,6 @@
 import type { DisplayTask, Task } from '../../types';
-import type { FilterState, FilterCondition, FilterGroup, FilterItem, FilterContext, DateFilterValue } from './FilterTypes';
+import type { FilterState, FilterCondition, FilterGroup, FilterItem, DateFilterValue } from './FilterTypes';
+import type { FilterContext } from './FilterContext';
 import { isFilterCondition } from './FilterTypes';
 import { DateResolver } from './DateResolver';
 import { DateUtils } from '../../utils/DateUtils';

@@ -1,4 +1,5 @@
 import { t } from '../../../i18n';
+import type { DateTimeRule } from '../../../types';
 
 export interface DateTimeValidationInput {
     startDate?: string;
@@ -16,9 +17,8 @@ export interface DateTimeValidationInput {
 
 export interface DateTimeValidationResult {
     severity: 'error' | 'warning';
-    /** ルール識別子（プログラム的処理用） */
-    rule: 'cross-midnight' | 'same-day-inversion' | 'end-before-start'
-        | 'end-time-without-start' | 'due-without-date' | 'frontmatter-time-only';
+    /** ルール識別子（プログラム的処理用）。canonical な列挙は types の DateTimeRule */
+    rule: DateTimeRule;
     /** ファクト: 何が問題か */
     message: string;
     /** 解決策: どうすれば直せるか（UI層が任意で表示） */
