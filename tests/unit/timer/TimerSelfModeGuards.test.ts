@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { canTriggerFlow } from '../../../src/services/flow/FlowTrigger';
-import { parseFlow } from '../../../src/services/flow/FlowParser';
+import { singleLineFlow } from '../../../src/services/flow/FlowSegments';
 import { DEFAULT_STATUS_DEFINITIONS, TaskFlow } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
 
@@ -10,8 +10,7 @@ import { makeTask } from '../helpers/makeTask';
 // ---------------------------------------------------------------------------
 
 function repeatFlow(): TaskFlow {
-    const raw = 'at(today + 1d)';
-    return { raw, ...parseFlow(raw) };
+    return singleLineFlow('at(today + 1d)');
 }
 
 describe('TimerMenuBuilder guard: completed command task suppression', () => {
@@ -36,8 +35,7 @@ describe('TimerMenuBuilder guard: completed command task suppression', () => {
     });
 
     it('壊れたフロー（program=null）は発火しない', () => {
-        const raw = 'evry mon';
-        const task = makeTask({ statusChar: 'x', flow: { raw, ...parseFlow(raw) } });
+        const task = makeTask({ statusChar: 'x', flow: singleLineFlow('evry mon') });
         expect(canTriggerFlow(task, DEFAULT_STATUS_DEFINITIONS)).toBe(false);
     });
 

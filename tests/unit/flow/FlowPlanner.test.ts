@@ -16,7 +16,7 @@ const DEPS: FlowPlanDeps = {
 function plan(src: string, overrides: Partial<Task> = {}) {
     const { program, diagnostics } = parseFlow(src);
     if (!program) throw new Error(`parse failed: ${diagnostics.map(d => d.message).join('; ')}`);
-    const task = makeTask({ statusChar: 'x', flow: { raw: src, program, diagnostics: [] }, ...overrides });
+    const task = makeTask({ statusChar: 'x', flow: { raw: src, childSegments: [], program, diagnostics: [] }, ...overrides });
     return planFlow(task, program, DEPS);
 }
 

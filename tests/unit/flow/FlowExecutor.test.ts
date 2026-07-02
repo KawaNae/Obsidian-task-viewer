@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
-import { parseFlow } from '../../../src/services/flow/FlowParser';
+import { singleLineFlow } from '../../../src/services/flow/FlowSegments';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import { DEFAULT_SETTINGS, Task } from '../../../src/types';
@@ -42,7 +42,7 @@ function flowTask(src: string, overrides: Partial<Task> = {}): Task {
         statusChar: 'x',
         startDate: '2026-06-29',
         originalText: '- [x] Test task',
-        flow: { raw: src, ...parseFlow(src) },
+        flow: singleLineFlow(src),
         ...overrides,
     });
 }

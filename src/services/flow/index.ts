@@ -7,6 +7,8 @@
  */
 export * from './FlowAst';
 export * from './FlowParser';
+export * from './FlowSegments';
+export * from './FlowLineScanner';
 export * from './FlowSerializer';
 export * from './ScheduleEngine';
 export * from './FlowPlanner';

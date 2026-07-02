@@ -1,5 +1,5 @@
 import { differenceInCalendarDays } from 'date-fns';
-import { Task } from '../../types';
+import { Task, TaskFlow } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { PropName } from '../lang/ExprAst';
 import { EvalContext } from '../lang/ExprEvaluator';
@@ -8,7 +8,8 @@ import { EvalHost } from '../lang/functions';
 import { Value, parseDateStr, valueToDisplay } from '../lang/Value';
 import { FlowProgram, SET_FIELD_ORDER } from './FlowAst';
 import { FlowEffect } from './FlowEffects';
-import { serializeFlow } from './FlowSerializer';
+import { flowRaws, joinSegments } from './FlowSegments';
+import { serializeFlowLines } from './FlowSerializer';
 import { DateAnchor, NextOccurrence, nextOccurrence } from './ScheduleEngine';
 
 export interface FlowPlanDeps {
@@ -52,7 +53,7 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
         if (withinUntil && hasLife) {
             const newTask = buildNextTask(task, anchor, next);
             applySet(newTask, program, deps);
-            attachNextFlow(newTask, program);
+            attachNextFlow(newTask, program, task.flow!);
             effects.push({ kind: 'create-next', newTask, copyChildren: !program.nochildren });
         }
     }
@@ -182,23 +183,31 @@ function applySet(newTask: Task, program: FlowProgram, deps: FlowPlanDeps): void
 // Telomere & flow inheritance
 // ---------------------------------------------------------------------------
 
-function attachNextFlow(newTask: Task, program: FlowProgram): void {
+function attachNextFlow(newTask: Task, program: FlowProgram, originalFlow: TaskFlow): void {
+    let nextProgram = program;
     if (program.lifetime) {
         const remaining = program.lifetime.count - 1;
         if (remaining <= 0) {
-            // x1 fired: the final instance carries no command at all.
+            // x1 fired: the final instance carries no command at all
+            // (the extreme case of "an emptied segment loses its line").
             newTask.flow = undefined;
             return;
         }
-        const nextProgram: FlowProgram = {
-            ...program,
-            lifetime: { ...program.lifetime, count: remaining },
-        };
-        newTask.flow = { raw: serializeFlow(nextProgram), program: nextProgram, diagnostics: [] };
-        return;
+        nextProgram = { ...program, lifetime: { ...program.lifetime, count: remaining } };
     }
-    // No telomere: the command is inherited as-is, re-serialized canonically.
-    newTask.flow = { raw: serializeFlow(program), program, diagnostics: [] };
+
+    // Line-level canonical inheritance: each node keeps the line the user
+    // wrote it on (derived from its span via the original segment table —
+    // the lifetime spread above preserves spans), while line contents are
+    // regenerated in canonical order.
+    const { table } = joinSegments(flowRaws(originalFlow));
+    const lines = serializeFlowLines(nextProgram, table);
+    newTask.flow = {
+        raw: lines.taskLine,
+        childSegments: lines.childLines.map(raw => ({ raw, bodyLine: -1 })),
+        program: nextProgram,
+        diagnostics: [],
+    };
 }
 
 // ---------------------------------------------------------------------------

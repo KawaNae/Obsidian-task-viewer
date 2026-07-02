@@ -223,7 +223,7 @@ describe('TVInlineParser', () => {
                 content: 'task',
                 startDate: '2026-01-15',
                 // Deliberately non-canonical order — format must NOT normalize
-                flow: { raw: 'x3 every mon', program: null, diagnostics: [] },
+                flow: { raw: 'x3 every mon', childSegments: [], program: null, diagnostics: [] },
             });
             expect(parser.format(task)).toBe('- [ ] task @2026-01-15 ==> x3 every mon');
         });

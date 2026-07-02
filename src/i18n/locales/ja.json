@@ -726,7 +726,8 @@
       "legacy-syntax": "'{{head}}(...)' は廃止された旧記法です — 'every <周期>' / '+<期間>' を使ってください",
       "orphan-modifier": "'{{clause}}' にはスケジュール節（every / + / at）が必要です",
       "empty": "フロー・コマンドが空です",
-      "bad-date": "'{{date}}' は存在しない日付です"
+      "bad-date": "'{{date}}' は存在しない日付です",
+      "node-spans-lines": "節は行をまたいで書けません"
     }
   }
 }

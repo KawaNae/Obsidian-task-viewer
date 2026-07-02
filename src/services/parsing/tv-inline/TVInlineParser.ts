@@ -1,6 +1,5 @@
 import type { Task, TaskFlow } from '../../../types';
-import { parseFlow } from '../../flow/FlowParser';
-import { diagnosticText } from '../../flow/diagnosticText';
+import { flowValidation, singleLineFlow } from '../../flow/FlowSegments';
 import { LeafParserStrategy } from '../strategies/ParserStrategy';
 import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
@@ -68,9 +67,11 @@ export class TVInlineParser implements LeafParserStrategy {
         // 2. Parse the flow command. `raw` always carries the verbatim text
         // so format() re-emits it losslessly even when parsing failed;
         // `program` is non-null only when the command is executable.
+        // Line-level view only: `- ==>` child segments are merged (and the
+        // program re-parsed from the joined source) by TreeTaskExtractor.
         const trimmedFlow = flowPart.trim();
         const flow: TaskFlow | undefined = trimmedFlow
-            ? { raw: trimmedFlow, ...parseFlow(trimmedFlow) }
+            ? singleLineFlow(trimmedFlow)
             : undefined;
 
         // 3. Parse date block (@start>end>due)
@@ -106,19 +107,13 @@ export class TVInlineParser implements LeafParserStrategy {
                 message: parseWarning,
                 hint: '',
             };
-        } else if (flow && !flow.program) {
+        } else if (flow) {
             // Surface the first flow diagnostic through the existing
             // validation channel so a typo'd command is not a silent no-op
-            // for users who never see editor decorations.
-            const first = flow.diagnostics.find(d => d.severity === 'error') ?? flow.diagnostics[0];
-            if (first) {
-                validation = {
-                    severity: first.severity,
-                    rule: first.code,
-                    message: diagnosticText(first),
-                    hint: `==> ${flow.raw}`,
-                };
-            }
+            // for users who never see editor decorations. May be superseded
+            // when TreeTaskExtractor merges `- ==>` child segments and
+            // re-validates the joined program.
+            validation = flowValidation(flow);
         }
 
         return {
@@ -349,8 +344,10 @@ export class TVInlineParser implements LeafParserStrategy {
 
         // Flow text is always re-emitted verbatim (round-trip safety, even
         // for unparseable commands). Canonical re-serialization happens only
-        // when a fire generates the next instance (FlowPlanner).
-        const flowStr = task.flow ? ` ==> ${task.flow.raw}` : '';
+        // when a fire generates the next instance (FlowPlanner). Only the
+        // task-line segment is emitted here — `- ==>` child segments are
+        // physical lines of their own and are never rewritten by format().
+        const flowStr = task.flow?.raw ? ` ==> ${task.flow.raw}` : '';
 
         const blockIdStr = task.blockId ? ` ^${task.blockId}` : '';
         const marker = TaskLineClassifier.extractMarker(task.originalText);

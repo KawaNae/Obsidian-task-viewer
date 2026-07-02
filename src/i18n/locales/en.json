@@ -726,7 +726,8 @@
       "legacy-syntax": "'{{head}}(...)' is the removed legacy syntax — use 'every <cadence>' / '+<duration>' instead",
       "orphan-modifier": "'{{clause}}' requires a schedule clause (every / + / at)",
       "empty": "Flow command is empty",
-      "bad-date": "'{{date}}' is not a valid calendar date"
+      "bad-date": "'{{date}}' is not a valid calendar date",
+      "node-spans-lines": "A clause must be written within a single line"
     }
   }
 }
