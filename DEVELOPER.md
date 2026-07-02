@@ -276,22 +276,24 @@ TreeTaskExtractor がインラインタスクの `childLines` を構築するル
 
 1. `DocumentTreeBuilder` がタスク行配下のインデント行を全て収集（`childRawLines`）
 2. `- [x]` パターンの行は `childTaskBlocks` として構造的にグループ化される
-3. `TreeTaskExtractor` は各 childTaskBlock に対して `isTaskProducing()` で判定:
-   - @notation/日付/コマンドがある → タスクとして抽出、`childLines` から除外
+3. `TreeTaskExtractor.classifyBlock()` が各 block を **1 回だけ** 判定（結果は
+   `BlockOutcome` として childLines 除外と再帰の両方が共有する）:
+   - @notation/日付/コマンド（`- ==>` フロー子行含む）がある → タスクとして抽出、`childLines` から除外
    - ない → `childLines` に残す（プレーンチェックボックスとして表示）
-4. `childLineBodyOffsets` に各 childLine の絶対行番号を格納
+4. 各 `ChildLine.bodyLine` に絶対行番号を格納
 
 原則: **ブロック内の全行がタスクカードに表示される。**
 
-#### childLineBodyOffsets のセマンティクス
+#### ChildLine.bodyLine のセマンティクス
 
-frontmatter / inline タスク共に **ファイル先頭からの絶対行番号** を格納する。
-レンダラ／ライタは `DisplayTask.childEntries[i].bodyLine` を直接読む（`buildChildEntries`
-が `childLineBodyOffsets[i]` をそのまま entry に転載する）。
+frontmatter / inline タスク共に **ファイル先頭からの絶対行番号** を各 ChildLine が
+内包する（`Task.line` と同規約、`-1` = body 行なし）。レンダラ／ライタは
+`DisplayTask.childEntries[i].bodyLine` を直接読む（`buildChildEntries` が
+`ChildLine.bodyLine` をそのまま entry に転載する）。
 
-- `TVFileBuilder` では `bodyStartIndex + relIndex`（= 絶対行）を格納
-- `TreeTaskExtractor` では `block.childLineNumbers`（= 絶対行）を格納
-- offset が欠落している entry は `buildChildEntries` で除外される（parser 契約上発生しない想定）
+- `TVFileBuilder` では `bodyStartIndex + relIndex`（= 絶対行）を classify に渡す
+- `TreeTaskExtractor` では `block.childLineNumbers`（= 絶対行）を classify に渡す
+- `bodyLine < 0` の entry は `buildChildEntries` で除外される（parser 契約上発生しない想定）
 
 ---
 
@@ -421,8 +423,8 @@ The heading configured in settings (`tvFileChildHeader` / `tvFileChildHeaderLeve
 
 1. `TVFileBuilder.parse()` receives `tvFileChildHeader` and `tvFileChildHeaderLevel` and locates the matching heading section.
 2. Starting from the first root-level list item under that heading, only the first contiguous list block is extracted.
-3. Results are stored in `Task.childLines` and `Task.childLineBodyOffsets` (absolute line numbers).
-4. `TaskScanner` attaches unparented tasks found in `childLineBodyOffsets` to `fmTask.childIds`.
+3. Results are stored in `Task.childLines` (each `ChildLine` carries its absolute line number in `bodyLine`).
+4. `FileParsePipeline` attaches unparented inline tasks to `fmTask.childIds`.
 5. `TaskCardRenderer` renders frontmatter tasks on a dedicated path (no inline branch) to prevent duplicate toggle rendering.
 6. `ChildItemBuilder` prioritises absolute line numbers and skips already-expanded descendants to prevent duplicate rendering.
 
