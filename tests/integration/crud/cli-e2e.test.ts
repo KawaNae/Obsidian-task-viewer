@@ -4,9 +4,12 @@
  * These tests call the real Obsidian CLI via PowerShell and assert on JSON responses.
  * Prerequisites:
  *   - Obsidian is running with the Dev vault (C:\Obsidian\Dev) open
- *   - test-tags-properties.md exists in the vault root with the expected test data
  *
- * Run:  npx vitest run tests/e2e/cli-e2e.test.ts
+ * The tag/property fixture (test-tags-properties.md) is written by this
+ * suite itself — it used to be a manually-maintained vault file and got
+ * destroyed at some point, so the data now lives here as code.
+ *
+ * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/crud/cli-e2e.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
@@ -19,13 +22,44 @@ import { deleteTestFile, writeTestFile, waitForFileIndexed, readTestFile } from 
 
 const TEST_FILE = 'test-tags-properties.md';
 
-beforeAll(() => {
+// Contract encoded in the assertions below: 10 tasks / tag=支出 → 7
+// (食費3 + ゲーム3 + 日用品1) / 支払/クレカ → 4 / 収入 → 1 / 優先度:高 → 3 /
+// 金額:2000 → 1 / 店舗:コンビニ → 1 / content 課金 → 3 / all unchecked.
+const FIXTURE_CONTENT = [
+    '---',
+    'customProperty: 継承テスト',
+    '---',
+    '',
+    '# タグ・プロパティ フィルタテスト',
+    '',
+    '- [ ] 食料品の買い出し #支出/食費 @2026-03-15',
+    '- [ ] 外食ランチ #支出/食費 #支払/クレカ @2026-03-16',
+    '- [ ] スーパー特売 #支出/食費 @2026-03-16>2026-03-17',
+    '    - 店舗:: コンビニ',
+    '- [ ] ゲーム課金テスト #支出/ゲーム #支払/クレカ @2026-03-16',
+    '    - 優先度:: 高',
+    '- [ ] 課金A #支出/ゲーム #支払/クレカ @2026-03-16',
+    '    - 金額:: 2000',
+    '    - 優先度:: 高',
+    '    - メモ:: 月パス',
+    '- [ ] ゲーム月次購読 #支出/ゲーム @2026-03-17',
+    '    - 優先度:: 高',
+    '- [ ] 洗剤の購入 #支出/日用品 @2026-03-15',
+    '- [ ] 高額課金E #支払/クレカ @2026-03-18',
+    '    - 金額:: 50000',
+    '- [ ] 給与振込 #収入 @2026-03-25',
+    '- [ ] タグなしテスト @2026-03-16',
+].join('\n');
+
+beforeAll(async () => {
     if (!isObsidianRunning()) {
         throw new Error(
             'Obsidian is not running or CLI is unreachable. ' +
             'Start Obsidian with the Dev vault before running E2E tests.',
         );
     }
+    writeTestFile(TEST_FILE, FIXTURE_CONTENT);
+    await waitForFileIndexed(TEST_FILE);
 });
 
 // ────────────────────────────────────────────

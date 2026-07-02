@@ -99,9 +99,14 @@ describe('time-only on non-daily note', () => {
 // 3. Daily note date inheritance
 // ────────────────────────────────────────────
 describe('daily note date inheritance', () => {
-    // Use DailyNotes/ folder (matches Dev vault daily note settings)
+    // Since 1fdca03 daily notes no longer get dates from the filename —
+    // the date cascades from tv-start in frontmatter (daily note templates
+    // are expected to provide it).
     const DAILY_NOTE_FILE = 'DailyNotes/2026-08-15.md';
     const fixture = createFixture(DAILY_NOTE_FILE, [
+        '---',
+        'tv-start: 2026-08-15',
+        '---',
         '- [ ] Morning standup @09:00>09:30',
         '- [ ] Future task @2026-04-01',
     ].join('\n'));
@@ -110,10 +115,15 @@ describe('daily note date inheritance', () => {
     afterAll(() => fixture.teardown());
 
     it('inherits date for time-only task on daily note', () => {
-        const r = cliList({ file: 'DailyNotes/2026-08-15', outputFields: OUTPUT_FIELDS });
+        // Inherited dates live on effective* (raw fields stay as written
+        // for round-trip fidelity — raw/cascade/effective 3層分離)
+        const r = cliList({
+            file: 'DailyNotes/2026-08-15',
+            outputFields: OUTPUT_FIELDS + ',effectiveStartDate',
+        });
         const standup = r.tasks.find(t => (t.content as string).includes('Morning standup'));
         expect(standup).toBeDefined();
-        expect(standup!.startDate).toBe('2026-08-15');
+        expect(standup!.effectiveStartDate).toBe('2026-08-15');
         expect(standup!.startTime).toBe('09:00');
         expect(standup!.endTime).toBe('09:30');
     });
