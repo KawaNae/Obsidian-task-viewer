@@ -52,6 +52,10 @@ export class TaskRepository {
         return this.inlineWriter.deleteTaskFromFile(task);
     }
 
+    async stripFlow(task: Task): Promise<void> {
+        return this.inlineWriter.stripFlow(task);
+    }
+
     async insertLineAfterTask(task: Task, lineContent: string): Promise<number> {
         return this.inlineWriter.insertLineAfterTask(task, lineContent);
     }
@@ -96,8 +100,8 @@ export class TaskRepository {
         return this.cloner.duplicateTvFile(task, keys, options);
     }
 
-    async insertRecurrenceForTask(task: Task, content: string, copyChildren = true): Promise<void> {
-        return this.cloner.insertRecurrenceForTask(task, content, copyChildren);
+    async insertRecurrenceForTask(task: Task, content: string, copyChildren = true, flowLines: string[] = []): Promise<void> {
+        return this.cloner.insertRecurrenceForTask(task, content, copyChildren, flowLines);
     }
 
     // --- Task Conversion Operations ---

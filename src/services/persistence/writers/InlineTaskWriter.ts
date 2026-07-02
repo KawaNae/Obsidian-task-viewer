@@ -1,6 +1,7 @@
 import { App, TFile } from 'obsidian';
 import type { Task } from '../../../types';
 import { TaskParser } from '../../parsing/TaskParser';
+import { collectFlowLineIndices } from '../../flow/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { logWarn } from '../../../log/log';
 
@@ -82,6 +83,42 @@ export class InlineTaskWriter {
             const lines = content.split('\n');
             if (lineNumber < 0 || lineNumber >= lines.length) return content;
             lines.splice(lineNumber, 1);
+            return lines.join('\n');
+        });
+    }
+
+    /**
+     * Fire-consumes a flow command: rewrite the task line without `==>` and
+     * delete the task's direct `- ==>` flow child lines — one atomic
+     * vault.process. Flow lines are located by a content scan from the
+     * resolved task line (never by stored body offsets, which are stale
+     * after create-next inserted the new instance above).
+     */
+    async stripFlow(task: Task): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) {
+            logWarn(`[InlineTaskWriter] File not found: ${task.file}`);
+            return;
+        }
+
+        await this.app.vault.process(file, (content) => {
+            const lines = content.split('\n');
+
+            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
+            if (currentLine < 0 || currentLine >= lines.length) {
+                logWarn(`[InlineTaskWriter] Task not found in file (stripFlow)`);
+                return content;
+            }
+
+            const flowIndices = collectFlowLineIndices(lines, currentLine);
+            for (let i = flowIndices.length - 1; i >= 0; i--) {
+                lines.splice(flowIndices[i], 1);
+            }
+
+            const newLine = TaskParser.format({ ...task, flow: undefined });
+            const originalIndent = lines[currentLine].match(/^(\s*)/)?.[1] || '';
+            lines[currentLine] = originalIndent + newLine.trim();
+
             return lines.join('\n');
         });
     }
@@ -204,8 +241,13 @@ export class InlineTaskWriter {
 
         // Parent's original indentation prefix (preserves tabs/spaces)
         const parentIndent = lines[currentLine].match(/^\s*/)?.[0] ?? '';
+        // The task's own direct `- ==>` flow lines are consumed by the fire —
+        // they must not travel to the archive. Descendant tasks' flow lines
+        // are NOT direct (structural-parent rule) and stay as templates.
+        const flowAbs = new Set(collectFlowLineIndices(lines, currentLine));
         const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
-        const cleaned = this.fileOps.stripBlockIds(childrenLines);
+        const kept = childrenLines.filter((_, i) => !flowAbs.has(currentLine + 1 + i));
+        const cleaned = this.fileOps.stripBlockIds(kept);
         return FileOperations.adjustChildIndentation(cleaned, parentIndent);
     }
 

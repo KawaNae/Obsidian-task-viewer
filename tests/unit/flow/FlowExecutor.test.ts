@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
-import { singleLineFlow } from '../../../src/services/flow/FlowSegments';
+import { parseFlowSegments, singleLineFlow } from '../../../src/services/flow/FlowSegments';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import { DEFAULT_SETTINGS, Task } from '../../../src/types';
@@ -11,6 +11,7 @@ function makeRepository() {
         insertRecurrenceForTask: vi.fn().mockResolvedValue(undefined),
         appendTaskWithChildren: vi.fn().mockResolvedValue(undefined),
         updateTaskInFile: vi.fn().mockResolvedValue(undefined),
+        stripFlow: vi.fn().mockResolvedValue(undefined),
         deleteTaskFromFile: vi.fn().mockResolvedValue(undefined),
     };
 }
@@ -62,21 +63,46 @@ describe('FlowExecutor', () => {
         await flush();
 
         expect(repository.insertRecurrenceForTask).toHaveBeenCalledTimes(1);
-        const [origArg, lineArg, copyChildrenArg] = repository.insertRecurrenceForTask.mock.calls[0];
+        const [origArg, lineArg, copyChildrenArg, flowLinesArg] = repository.insertRecurrenceForTask.mock.calls[0];
         expect(origArg).toBe(task);
         expect(lineArg).toContain('==> every mon');
         expect(copyChildrenArg).toBe(true);
+        expect(flowLinesArg).toEqual([]);
 
-        expect(repository.updateTaskInFile).toHaveBeenCalledTimes(1);
-        const [, cleaned] = repository.updateTaskInFile.mock.calls[0];
-        expect(cleaned.flow).toBeUndefined();
+        expect(repository.stripFlow).toHaveBeenCalledTimes(1);
+        expect(repository.stripFlow).toHaveBeenCalledWith(task);
+        expect(repository.updateTaskInFile).not.toHaveBeenCalled();
 
         // Order: insert BEFORE strip (line resolution depends on originalText)
         expect(repository.insertRecurrenceForTask.mock.invocationCallOrder[0])
-            .toBeLessThan(repository.updateTaskInFile.mock.invocationCallOrder[0]);
+            .toBeLessThan(repository.stripFlow.mock.invocationCallOrder[0]);
 
         expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
         expect(taskIndex.notifyImmediate).toHaveBeenCalled();
+    });
+
+    it('fires a multi-line flow: child segments travel as flowLines, telomere decremented', async () => {
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository);
+        const raws = ['every mon', 'setDue(start + 3d)', 'x3'];
+        const { program, diagnostics } = parseFlowSegments(raws);
+        const task = flowTask('every mon', {
+            flow: {
+                raw: raws[0],
+                childSegments: raws.slice(1).map((raw, i) => ({ raw, bodyLine: i + 1 })),
+                program,
+                diagnostics,
+            },
+        });
+
+        await executor.handleTaskCompletion(task);
+        await flush();
+
+        const [, line, , flowLines] = repository.insertRecurrenceForTask.mock.calls[0];
+        expect(line).toContain('==> every mon');
+        expect(line).not.toContain('setDue');
+        expect(flowLines).toEqual(['setDue(start + 3d)', 'x2']);
+        expect(repository.stripFlow).toHaveBeenCalledTimes(1);
     });
 
     it('fires move: archives then deletes the original (no strip)', async () => {
@@ -105,7 +131,7 @@ describe('FlowExecutor', () => {
         await flush();
 
         expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
-        expect(repository.updateTaskInFile).not.toHaveBeenCalled();
+        expect(repository.stripFlow).not.toHaveBeenCalled();
     });
 
     it('re-checks after resolve: unchecked task is skipped', async () => {
@@ -118,7 +144,7 @@ describe('FlowExecutor', () => {
         await flush();
 
         expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
-        expect(repository.updateTaskInFile).not.toHaveBeenCalled();
+        expect(repository.stripFlow).not.toHaveBeenCalled();
     });
 
     it('consumes without generating when until has expired', async () => {
@@ -129,7 +155,7 @@ describe('FlowExecutor', () => {
         await flush();
 
         expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
-        expect(repository.updateTaskInFile).toHaveBeenCalledTimes(1);
+        expect(repository.stripFlow).toHaveBeenCalledTimes(1);
     });
 
     it('leaves the command intact on runtime eval failure', async () => {
@@ -140,7 +166,7 @@ describe('FlowExecutor', () => {
         await flush();
 
         expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
-        expect(repository.updateTaskInFile).not.toHaveBeenCalled();
+        expect(repository.stripFlow).not.toHaveBeenCalled();
         expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
     });
 

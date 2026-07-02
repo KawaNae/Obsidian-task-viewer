@@ -123,7 +123,11 @@ export class FlowExecutor {
         switch (effect.kind) {
             case 'create-next': {
                 const line = TaskParser.format(effect.newTask).trim();
-                await this.repository.insertRecurrenceForTask(task, line, effect.copyChildren);
+                // Multi-line flows: the new instance's `- ==>` child lines
+                // (line-level canonical, from FlowPlanner) are emitted right
+                // after the task line.
+                const flowLines = (effect.newTask.flow?.childSegments ?? []).map(s => s.raw);
+                await this.repository.insertRecurrenceForTask(task, line, effect.copyChildren, flowLines);
                 return;
             }
             case 'archive-to': {
@@ -132,7 +136,9 @@ export class FlowExecutor {
                 return;
             }
             case 'strip-flow':
-                await this.repository.updateTaskInFile(task, { ...task, flow: undefined });
+                // Dedicated writer: rewrites the task line AND deletes the
+                // task's direct flow child lines in one atomic process.
+                await this.repository.stripFlow(task);
                 return;
             case 'delete-original':
                 await this.repository.deleteTaskFromFile(task);

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { FlowPlanDeps, planFlow } from '../../../src/services/flow/FlowPlanner';
 import { parseFlow } from '../../../src/services/flow/FlowParser';
+import { parseFlowSegments } from '../../../src/services/flow/FlowSegments';
 import { EvalError } from '../../../src/services/lang/ExprEvaluator';
 import { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
@@ -99,6 +100,52 @@ describe('FlowPlanner', () => {
         it('inherits the command canonically when no telomere', () => {
             const { newTask } = createNextOf(plan('until 2026-12-31 every mon', { startDate: '2026-06-29' }));
             expect(newTask.flow?.raw).toBe('every mon until 2026-12-31');
+        });
+    });
+
+    describe('multi-line flows (line-level canonical inheritance)', () => {
+        function planSegments(raws: string[], overrides: Partial<Task> = {}) {
+            const { program, diagnostics } = parseFlowSegments(raws);
+            if (!program) throw new Error(`parse failed: ${diagnostics.map(d => d.message).join('; ')}`);
+            const task = makeTask({
+                statusChar: 'x',
+                flow: {
+                    raw: raws[0],
+                    childSegments: raws.slice(1).map((raw, i) => ({ raw, bodyLine: i + 1 })),
+                    program,
+                    diagnostics: [],
+                },
+                ...overrides,
+            });
+            return planFlow(task, program, DEPS);
+        }
+
+        it('keeps each node on its line, canonical within the line', () => {
+            const { newTask } = createNextOf(planSegments(
+                ['every mon', 'setDue(start + 3d) x3'],
+                { startDate: '2026-06-29' },
+            ));
+            expect(newTask.flow?.raw).toBe('every mon');
+            // canonical within line: xN (decremented) before setter
+            expect(newTask.flow?.childSegments.map(s => s.raw)).toEqual(['x2 setDue(start + 3d)']);
+            expect(newTask.flow?.childSegments[0].bodyLine).toBe(-1);
+        });
+
+        it('supports flows living only in child lines (empty task-line segment)', () => {
+            const { newTask } = createNextOf(planSegments(
+                ['', 'every mon'],
+                { startDate: '2026-06-29' },
+            ));
+            expect(newTask.flow?.raw).toBe('');
+            expect(newTask.flow?.childSegments.map(s => s.raw)).toEqual(['every mon']);
+        });
+
+        it('x1 on a child line: the final instance carries no flow at all', () => {
+            const { newTask } = createNextOf(planSegments(
+                ['every mon', 'x1'],
+                { startDate: '2026-06-29' },
+            ));
+            expect(newTask.flow).toBeUndefined();
         });
     });
 
