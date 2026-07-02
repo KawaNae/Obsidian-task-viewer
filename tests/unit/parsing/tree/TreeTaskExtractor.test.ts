@@ -692,8 +692,7 @@ describe('TreeTaskExtractor', () => {
         });
 
         it('非 tv-inline タスクの `- ==>` 子行は通常の childLine のまま', () => {
-            TaskParser.rebuildChain({ ...DEFAULT_SETTINGS, enableDayPlanner: true });
-            try {
+            TaskParser.withChain({ ...DEFAULT_SETTINGS, enableDayPlanner: true }, () => {
                 const tasks = extractTasks([
                     '- [ ] 09:00 - 10:00 dp task',
                     '    - ==> every mon',
@@ -702,9 +701,7 @@ describe('TreeTaskExtractor', () => {
                 expect(tasks[0].parserId).toBe('day-planner');
                 expect(tasks[0].flow).toBeUndefined();
                 expect(tasks[0].childLines.map(cl => cl.text.trim())).toEqual(['- ==> every mon']);
-            } finally {
-                TaskParser.rebuildChain(DEFAULT_SETTINGS);
-            }
+            });
         });
     });
 });

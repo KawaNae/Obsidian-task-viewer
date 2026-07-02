@@ -27,6 +27,13 @@ describe('ChildLineClassifier', () => {
             expect(result.wikilinkTarget).toBe('path/to/note');
         });
 
+        it('parses wikilink child with any list bullet (unified with tv-file)', () => {
+            expect(ChildLineClassifier.classify('  * [[Note A]]').wikilinkTarget).toBe('Note A');
+            expect(ChildLineClassifier.classify('  + [[Note B]]').wikilinkTarget).toBe('Note B');
+            expect(ChildLineClassifier.classify('  1. [[Note C]]').wikilinkTarget).toBe('Note C');
+            expect(ChildLineClassifier.classify('  2) [[Note D]]').wikilinkTarget).toBe('Note D');
+        });
+
         it('parses plain text line', () => {
             const result = ChildLineClassifier.classify('  just text');
             expect(result.checkboxChar).toBeNull();

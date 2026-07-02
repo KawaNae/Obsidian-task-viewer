@@ -1,10 +1,11 @@
 import type { Task, TaskFlow } from '../../../types';
 import { flowValidation, singleLineFlow } from '../../flow/FlowSegments';
+import { createBaseTask } from '../TaskFactory';
 import { LeafParserStrategy } from '../strategies/ParserStrategy';
 import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';
-import { DateUtils } from '../../../utils/DateUtils';
+import { parseDateTimeField } from '../utils/DateTimeFieldParser';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { validateDateTimeRules, DateTimeValidationResult } from '../utils/DateTimeRuleValidator';
 
@@ -40,17 +41,8 @@ export class TVInlineParser implements LeafParserStrategy {
         /(@(?=[\d>T])(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|T?\d{2}:\d{2})?(?:>(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|\d{2}:\d{2})?)*)/;
     parse(line: string, filePath: string, lineNumber: number): Task | null {
         // Extract trailing block ID (^id) before parsing task structure.
-        let lineForParse = line;
-        let blockId: string | undefined;
-        let timerTargetId: string | undefined;
-        const blockIdMatch = lineForParse.match(/\s\^([A-Za-z0-9-]+)\s*$/);
-        if (blockIdMatch) {
-            blockId = blockIdMatch[1];
-            if (isTimerTargetId(blockId)) {
-                timerTargetId = blockId;
-            }
-            lineForParse = lineForParse.slice(0, blockIdMatch.index).trimEnd();
-        }
+        const { text: lineForParse, blockId } = TaskLineClassifier.extractBlockId(line);
+        const timerTargetId = blockId && isTimerTargetId(blockId) ? blockId : undefined;
 
         // 1. Split flow commands (==>)
         const flowSplit = lineForParse.split(/==>(.+)/);
@@ -116,7 +108,7 @@ export class TVInlineParser implements LeafParserStrategy {
             validation = flowValidation(flow);
         }
 
-        return {
+        return createBaseTask({
             id: TaskIdGenerator.generate(
                 this.id,
                 filePath,
@@ -131,8 +123,9 @@ export class TVInlineParser implements LeafParserStrategy {
             line: lineNumber,
             content: content.trim(),
             statusChar,
-            indent: 0,          // Will be set by TaskScanner
-            childIds: [],       // Will be set by TaskScanner
+            parserId: this.id,
+            originalText: line,
+        }, {
             startDate: date,
             startTime,
             endDate,
@@ -140,15 +133,10 @@ export class TVInlineParser implements LeafParserStrategy {
             due,
             flow,
             tags: TagExtractor.fromContent(content.trim()),
-            originalText: line,
-            childLines: [],
-            childLineBodyOffsets: [],
-            parserId: this.id,
             blockId,
             timerTargetId,
             validation,
-            properties: {},     // Will be populated by TaskScanner from childLines
-        };
+        });
     }
 
     /**
@@ -190,7 +178,7 @@ export class TVInlineParser implements LeafParserStrategy {
         // --- Start segment ---
         const rawStart = parts[0];
         if (rawStart !== '') {
-            const parsed = this.parseDateTime(rawStart);
+            const parsed = parseDateTimeField(rawStart);
             if (parsed.date) {
                 date = parsed.date;
             }
@@ -208,7 +196,7 @@ export class TVInlineParser implements LeafParserStrategy {
             if (!rawEnd) {
                 // Empty end (@start>>due): endDate stays undefined
             } else {
-                const parsed = this.parseDateTime(rawEnd);
+                const parsed = parseDateTimeField(rawEnd);
                 if (parsed.date) {
                     endDate = parsed.date;
                 }
@@ -220,7 +208,7 @@ export class TVInlineParser implements LeafParserStrategy {
 
         // --- Due segment ---
         if (parts.length > 2 && parts[2]) {
-            const parsed = this.parseDateTime(parts[2]);
+            const parsed = parseDateTimeField(parts[2]);
             due = parsed.date;
             if (parsed.date && parsed.time) {
                 due += `T${parsed.time}`;
@@ -262,27 +250,6 @@ export class TVInlineParser implements LeafParserStrategy {
             startTime, endDate, endTime, due,
             endDateImplicit: !endDate,
         });
-    }
-
-    private parseDateTime(str: string): { date?: string, time?: string } {
-        const dateMatch = str.match(/(\d{4}-\d{2}-\d{2})/);
-        const timeMatch = str.match(/(\d{2}:\d{2})/);
-
-        let date: string | undefined;
-        if (dateMatch) {
-            const parts = dateMatch[1].match(/(\d{4})-(\d{2})-(\d{2})/)!;
-            const month = Number(parts[2]), day = Number(parts[3]);
-            if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                date = dateMatch[1];
-            }
-        }
-
-        let time: string | undefined;
-        if (timeMatch && DateUtils.isValidTimeString(timeMatch[1])) {
-            time = timeMatch[1];
-        }
-
-        return { date, time };
     }
 
     format(task: Task): string {

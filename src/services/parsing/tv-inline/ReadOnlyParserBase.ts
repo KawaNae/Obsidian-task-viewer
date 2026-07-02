@@ -1,5 +1,6 @@
 import type { ParserId, Task } from '../../../types';
 import { LeafParserStrategy } from '../strategies/ParserStrategy';
+import { createBaseTask } from '../TaskFactory';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
@@ -35,7 +36,7 @@ export abstract class ReadOnlyParserBase implements LeafParserStrategy {
 
     /** Build a Task from parsed fields. Sets isReadOnly: true. */
     protected buildTask(params: ReadOnlyTaskParams): Task {
-        return {
+        return createBaseTask({
             id: TaskIdGenerator.generate(
                 this.id,
                 params.filePath,
@@ -49,32 +50,24 @@ export abstract class ReadOnlyParserBase implements LeafParserStrategy {
             line: params.lineNumber,
             content: params.content,
             statusChar: params.statusChar,
-            indent: 0,
-            childIds: [],
-            childLines: [],
-            childLineBodyOffsets: [],
+            parserId: this.id,
+            originalText: params.line,
+        }, {
             startDate: params.startDate,
             startTime: params.startTime,
             endDate: params.endDate,
             endTime: params.endTime,
             due: params.due,
             tags: TagExtractor.fromContent(params.content),
-            originalText: params.line,
-            parserId: this.id,
             blockId: params.blockId,
-            properties: {},
             isReadOnly: true,
-        };
+        });
     }
 
-    /** Extract trailing ^block-id from content. Returns cleaned content and blockId. */
+    /** Extract trailing ^block-id from content. Delegates to the shared implementation. */
     protected extractBlockId(content: string): { content: string; blockId?: string } {
-        const match = content.match(/\s\^([A-Za-z0-9-]+)\s*$/);
-        if (!match) return { content };
-        return {
-            content: content.slice(0, match.index).trimEnd(),
-            blockId: match[1],
-        };
+        const { text, blockId } = TaskLineClassifier.extractBlockId(content);
+        return { content: text, blockId };
     }
 
     /** Classify a line as a task checkbox. Delegates to TaskLineClassifier. */

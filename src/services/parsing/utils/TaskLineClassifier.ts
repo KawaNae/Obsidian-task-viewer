@@ -19,6 +19,21 @@ export interface TaskLineMatch {
 export class TaskLineClassifier {
     private static readonly TASK_LINE_REGEX = /^(\s*)((?:[-*+]|\d+[.)]) *\[)(.)(\].*)$/;
     private static readonly MARKER_REGEX = /^\s*([-*+]|\d+[.)])/;
+    private static readonly BLOCK_ID_REGEX = /\s\^([A-Za-z0-9-]+)\s*$/;
+
+    /**
+     * Strip a trailing `^block-id` from a line/content string. The single
+     * implementation shared by all parsers (timer-target semantics of the
+     * id are the caller's concern).
+     */
+    static extractBlockId(text: string): { text: string; blockId?: string } {
+        const match = text.match(this.BLOCK_ID_REGEX);
+        if (!match) return { text };
+        return {
+            text: text.slice(0, match.index).trimEnd(),
+            blockId: match[1],
+        };
+    }
 
     /** Full classification — returns null if the line is not a task line. */
     static classify(line: string): TaskLineMatch | null {

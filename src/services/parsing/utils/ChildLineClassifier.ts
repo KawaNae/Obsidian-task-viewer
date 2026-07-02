@@ -5,7 +5,8 @@ import type { ChildLine, PropertyType, PropertyValue } from '../../../types';
  * パース層で ChildLine を生成し、下流での regex 再実行を不要にする。
  */
 export class ChildLineClassifier {
-    static readonly WIKILINK_CHILD = /^\s*-\s+\[\[([^\]]+)\]\]\s*$/;
+    /** `- [[link]]` with any list bullet (kept in sync with CHECKBOX_CHAR's bullet set). */
+    static readonly WIKILINK_CHILD = /^\s*(?:[-*+]|\d+[.)])\s+\[\[([^\]]+)\]\]\s*$/;
     static readonly CHECKBOX_CHAR = /^\s*(?:[-*+]|\d+[.)])\s*\[(.)\]/;
     /** Matches `- key:: value` (Dataview-compatible) but not checkbox or wikilink lines */
     static readonly PROPERTY_LINE = /^\s*-\s+([^:\[\]]+?)::\s*(.+)$/;

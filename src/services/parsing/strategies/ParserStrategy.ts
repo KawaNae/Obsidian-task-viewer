@@ -4,9 +4,11 @@ import { ParserId, Task } from '../../../types';
  * Interface for task parser strategies.
  * Allows different parsing implementations for various task notation formats.
  *
- * Implemented by leaf parsers (TVInlineParser, TVFileBuilder, etc.) that
- * each emit one specific {@link ParserId}, and by the meta-strategy
- * {@link ParserChain} that delegates to leaf parsers.
+ * Implemented by line-level leaf parsers (TVInlineParser, DayPlannerParser,
+ * TasksPluginParser) that each emit one specific {@link ParserId}, and by
+ * the meta-strategy {@link ParserChain} that delegates to leaf parsers.
+ * TVFileBuilder is NOT a strategy — file-level building (frontmatter +
+ * body → Task) is a separate category with a different input shape.
  */
 export interface ParserStrategy {
     /** True when this parser is read-only (no writeback support). */

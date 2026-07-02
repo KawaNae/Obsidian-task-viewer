@@ -1,4 +1,5 @@
 import type { ParserId, Task } from '../../types';
+import { createBaseTask } from '../parsing/TaskFactory';
 
 /**
  * Inputs accepted by {@link createTempTask}. Anything not provided is
@@ -32,24 +33,20 @@ export interface TempTaskFields {
  * `parserId` defaulting explicit.
  */
 export function createTempTask(fields: TempTaskFields): Task {
-    return {
+    return createBaseTask({
         id: fields.id,
         file: fields.file ?? '',
         line: fields.line ?? 0,
-        indent: fields.indent ?? 0,
         content: fields.content ?? '',
         statusChar: fields.statusChar ?? ' ',
         parserId: fields.parserId ?? 'tv-inline',
-        childIds: [],
-        childLines: [],
-        childLineBodyOffsets: [],
         originalText: '',
-        tags: [],
-        properties: {},
+    }, {
+        indent: fields.indent ?? 0,
         startDate: fields.startDate,
         startTime: fields.startTime,
         endDate: fields.endDate,
         endTime: fields.endTime,
         due: fields.due,
-    };
+    });
 }

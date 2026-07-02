@@ -45,6 +45,22 @@ export class TaskParser {
     }
 
     /**
+     * Run `fn` with a chain built from `settings`, then restore the previous
+     * strategy — even on throw. Test-only scoping helper: the static
+     * strategy is process-global, so tests that need a non-default chain
+     * (e.g. day-planner enabled) must not leak it into later tests.
+     */
+    static withChain<T>(settings: TaskViewerSettings, fn: () => T): T {
+        const previous = this.strategy;
+        this.rebuildChain(settings);
+        try {
+            return fn();
+        } finally {
+            this.strategy = previous;
+        }
+    }
+
+    /**
      * Get the current parser strategy.
      */
     static getStrategy(): ParserStrategy {

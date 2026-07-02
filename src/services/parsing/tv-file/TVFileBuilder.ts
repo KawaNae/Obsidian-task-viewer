@@ -1,4 +1,5 @@
 import { TvFileKeys, Task, WikilinkRef, ChildLine } from '../../../types';
+import { createBaseTask } from '../TaskFactory';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
@@ -95,9 +96,8 @@ export class TVFileBuilder {
         // Extract wikilinkRefs from entire body (for parent-child resolution)
         // Safe because WikiLinkResolver.wireChild() validates the target exists as a frontmatter task
         const wikilinkRefs: WikilinkRef[] = [];
-        const wikiRegex = /^\s*(?:[-*+]|\d+[.)])\s+\[\[([^\]]+)\]\]\s*$/;
         for (let i = 0; i < bodyLines.length; i++) {
-            const wikiMatch = bodyLines[i].match(wikiRegex);
+            const wikiMatch = bodyLines[i].match(ChildLineClassifier.WIKILINK_CHILD);
             if (wikiMatch) {
                 wikilinkRefs.push({ target: wikiMatch[1].trim(), bodyLine: bodyStartIndex + i });
             }
@@ -120,14 +120,15 @@ export class TVFileBuilder {
             : undefined;
 
         return {
-            task: {
+            task: createBaseTask({
                 id: TaskIdGenerator.generate('tv-file', filePath, 'fm-root'),
                 file: filePath,
                 line: -1,
                 content,
                 statusChar,
-                indent: 0,
-                childIds: [],
+                parserId: 'tv-file',
+                originalText: '',
+            }, {
                 childLines,
                 childLineBodyOffsets: childBodyIndices,
                 startDate: start.date,
@@ -136,15 +137,13 @@ export class TVFileBuilder {
                 endTime: end.time,
                 due,
                 tags: TagExtractor.merge(contentTags, fmExtracted.tags ?? []),
-                originalText: '',
                 timerTargetId,
-                parserId: 'tv-file',
                 properties: fmExtracted.properties,
                 color: fmExtracted.color,
                 linestyle: fmExtracted.linestyle,
                 mask: fmExtracted.mask,
                 validation,
-            },
+            }),
             wikilinkRefs,
         };
     }
