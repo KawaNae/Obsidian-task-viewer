@@ -51,7 +51,7 @@ export class TokenCursor {
     constructor(private readonly tokens: Token[]) { }
 
     peek(offset = 0): Token {
-        const i = Math.min(this.pos + offset, this.tokens.length - 1);
+        const i = Math.max(0, Math.min(this.pos + offset, this.tokens.length - 1));
         return this.tokens[i];
     }
 

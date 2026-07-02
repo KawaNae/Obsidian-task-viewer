@@ -1,5 +1,7 @@
 import type { FilterState } from '../services/filter/FilterTypes';
 import type { SortState } from '../services/sort/SortTypes';
+import type { Diagnostic } from '../services/lang/Diagnostic';
+import type { FlowProgram } from '../services/flow/FlowAst';
 
 export interface StatusDefinition {
     char: string;
@@ -166,6 +168,13 @@ export interface Task {
     // `commands` is non-empty.
     rawFlow?: string;
 
+    /**
+     * Flow command (`==> ...`), parsed by the flow language core.
+     * format() always re-emits `raw` verbatim; canonical re-serialization
+     * happens only when a fire generates the next instance.
+     */
+    flow?: TaskFlow;
+
     // Parse-time validation result (error or warning).
     validation?: {
         severity: 'error' | 'warning';
@@ -317,6 +326,21 @@ export interface FlowCommand {
 export interface FlowModifier {
     name: string;
     args: string[];
+}
+
+/**
+ * Parsed flow command state carried on a Task.
+ *
+ * Invariants:
+ * - `raw` is the verbatim text after `==>` (trimmed). format() re-emits it
+ *   unchanged for round-trip safety, even when parsing failed.
+ * - `program` is non-null iff parsing AND checking produced no error
+ *   diagnostics — i.e. the command is executable.
+ */
+export interface TaskFlow {
+    raw: string;
+    program: FlowProgram | null;
+    diagnostics: Diagnostic[];
 }
 
 export interface ViewState {

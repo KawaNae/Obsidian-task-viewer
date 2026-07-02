@@ -117,7 +117,9 @@ function checkBinary(
         if (op === '+' && lt === 'duration' && isDatishType(rt)) return rt;
         if (lt === 'duration' && rt === 'duration') return 'duration';
         if (lt === 'number' && rt === 'number') return 'number';
-        if (op === '+' && lt === 'string' && rt === 'string') return 'string';
+        // Links coerce to their target text in concatenation (move([[Log/]] + file.name))
+        const stringish = (t: StaticType) => t === 'string' || t === 'link';
+        if (op === '+' && stringish(lt) && stringish(rt)) return 'string';
         return fail(`'${op}' cannot combine ${lt} and ${rt}`);
     }
 

@@ -12,6 +12,7 @@ export * from './Lexer';
 export * from './Value';
 export * from './ExprAst';
 export * from './ExprParser';
+export * from './ExprPrinter';
 export * from './ExprChecker';
 export * from './ExprEvaluator';
 export * from './functions';

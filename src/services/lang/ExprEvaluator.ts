@@ -92,7 +92,9 @@ function evalBinary(expr: Expr & { kind: 'binary' }, ctx: EvalContext): Value {
             return { type: 'duration', amount: lm + sign * rm, unit: 'min' };
         }
         if (l.type === 'number' && r.type === 'number') return { type: 'number', value: l.value + sign * r.value };
-        if (op === '+' && l.type === 'string' && r.type === 'string') return { type: 'string', value: l.value + r.value };
+        if (op === '+' && isStringish(l) && isStringish(r)) {
+            return { type: 'string', value: stringishText(l) + stringishText(r) };
+        }
         throw new EvalError(`'${op}' cannot combine ${l.type} and ${r.type}`, span);
     }
 
@@ -110,6 +112,15 @@ function evalBinary(expr: Expr & { kind: 'binary' }, ctx: EvalContext): Value {
         case '>': return { type: 'bool', value: cmp > 0 };
         default: return { type: 'bool', value: cmp >= 0 };
     }
+}
+
+function isStringish(v: Value): v is Value & { type: 'string' | 'link' } {
+    return v.type === 'string' || v.type === 'link';
+}
+
+/** Links coerce to their target text in concatenation. */
+function stringishText(v: Value & { type: 'string' | 'link' }): string {
+    return v.type === 'string' ? v.value : v.target;
 }
 
 function minutesOrThrow(dur: Value & { type: 'duration' }, span: Span): number {
