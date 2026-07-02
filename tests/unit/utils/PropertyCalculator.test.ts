@@ -16,7 +16,6 @@ function makeDT(overrides: Partial<DisplayTask> = {}): DisplayTask {
         indent: 0,
         childIds: [],
         childLines: [],
-        childLineBodyOffsets: [],
         originalText: '',
         tags: [],
         parserId: 'tv-inline',

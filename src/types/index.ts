@@ -49,6 +49,11 @@ export interface PropertyValue {
 
 export interface ChildLine {
     text: string;
+    /**
+     * Absolute 0-indexed file line this child line lives on
+     * (same convention as `Task.line`; `-1` = no valid body line).
+     */
+    bodyLine: number;
     indent: string;
     checkboxChar: string | null;
     wikilinkTarget: string | null;
@@ -107,15 +112,11 @@ export interface Task {
      */
     childIds: string[];
     /**
-     * @internal Parser-emitted raw body lines. Substrate for
-     * `buildChildEntries`; render/write consume via `DisplayTask.childEntries`.
+     * @internal Parser-emitted raw body lines (each carries its absolute
+     * file line in `ChildLine.bodyLine`). Substrate for `buildChildEntries`;
+     * render/write consume via `DisplayTask.childEntries`.
      */
     childLines: ChildLine[];
-    /**
-     * @internal Absolute file line per `childLines` entry. Substrate for
-     * `buildChildEntries`; render/write consume via `DisplayTask.childEntries`.
-     */
-    childLineBodyOffsets: number[];
 
     // Date/time fields.
     startDate?: string;
@@ -303,7 +304,7 @@ export interface DisplayTask extends Task {
     splitContinuesAfter?: boolean;
     /**
      * Materialized child entries (body 順、1 行 1 オーナー)。
-     * Task.childIds / childLines / childLineBodyOffsets から
+     * Task.childIds / childLines から
      * `buildChildEntries` で derive。render / write の唯一の入口。
      */
     childEntries: ChildEntry[];
@@ -336,7 +337,7 @@ export type ValidationRule = DateTimeRule | 'parse-error' | DiagnosticCode;
  * One `- ==> ...` child line owned by the task's flow program.
  * `raw` is the verbatim text after the line's `==>` marker (trimmed);
  * `bodyLine` is the absolute file line (same convention as
- * childLineBodyOffsets), or -1 for a not-yet-written new instance.
+ * ChildLine.bodyLine), or -1 for a not-yet-written new instance.
  */
 export interface FlowChildSegment {
     raw: string;

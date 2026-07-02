@@ -71,7 +71,6 @@ export class TVFileBuilder {
         }
 
         const childLines: ChildLine[] = [];
-        const childBodyIndices: number[] = [];
 
         // Collect childLines from configured heading section (for card display)
         const section = this.findHeaderSection(
@@ -86,10 +85,7 @@ export class TVFileBuilder {
                 section.end
             );
             for (const relIndex of block.lineIndices) {
-                const line = bodyLines[relIndex];
-                const absoluteLine = bodyStartIndex + relIndex;
-                childLines.push(ChildLineClassifier.classify(line));
-                childBodyIndices.push(absoluteLine);
+                childLines.push(ChildLineClassifier.classify(bodyLines[relIndex], bodyStartIndex + relIndex));
             }
         }
 
@@ -130,7 +126,6 @@ export class TVFileBuilder {
                 originalText: '',
             }, {
                 childLines,
-                childLineBodyOffsets: childBodyIndices,
                 startDate: start.date,
                 startTime: start.time,
                 endDate: end.date,

@@ -16,7 +16,6 @@ function makeTask(overrides: Partial<Task> = {}): Task {
         indent: 0,
         childIds: [],
         childLines: [],
-        childLineBodyOffsets: [],
         originalText: '- [ ] Test task',
         tags: [],
         parserId: 'tv-inline',

@@ -33,7 +33,6 @@ export function createBaseTask(core: BaseTaskCore, overrides: Partial<Task> = {}
         indent: 0,
         childIds: [],
         childLines: [],
-        childLineBodyOffsets: [],
         tags: [],
         properties: {},
         ...overrides,

@@ -147,7 +147,7 @@ export class TaskRepository {
         const childIndent = firstChild ? (firstChild.match(/^\s*/)?.[0] ?? '') : '';
         const normalized = FileOperations.adjustChildIndentation(childrenLines, childIndent);
         // property 行 (- key:: value) は frontmatter へ昇格済みのため body から除外
-        return normalized.filter(line => ChildLineClassifier.classify(line).propertyKey === null);
+        return normalized.filter(line => !ChildLineClassifier.isPropertyLine(line));
     }
 
     /**

@@ -3,8 +3,9 @@ import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { makeTask } from '../helpers/makeTask';
 import type { Task, ChildLine } from '../../../src/types';
 
-const plainCl = (text: string, checkboxChar: string | null = null): ChildLine => ({
+const plainCl = (text: string, bodyLine: number, checkboxChar: string | null = null): ChildLine => ({
     text,
+    bodyLine,
     indent: '',
     checkboxChar,
     wikilinkTarget: null,
@@ -29,8 +30,7 @@ describe('TaskWriteService child-line operations', () => {
             file: 'note.md',
             parserId: 'tv-inline',
             line: 5,
-            childLines: [plainCl('- [ ] x', ' ')],
-            childLineBodyOffsets: [6],
+            childLines: [plainCl('- [ ] x', 6, ' ')],
         });
         const idx = buildIndex([parent]);
         const svc = new TaskWriteService(idx);
@@ -51,8 +51,7 @@ describe('TaskWriteService child-line operations', () => {
             id: 'p',
             parserId: 'tv-inline',
             line: 5,
-            childLines: [plainCl('- a', ' ')],
-            childLineBodyOffsets: [6],
+            childLines: [plainCl('- a', 6, ' ')],
         });
         const idx = buildIndex([parent]);
         const svc = new TaskWriteService(idx);
@@ -68,7 +67,6 @@ describe('TaskWriteService child-line operations', () => {
             line: 5,
             childIds: ['c'],
             childLines: [],
-            childLineBodyOffsets: [],
         });
         const child = makeTask({ id: 'c', file: 'f.md', parserId: 'tv-inline', line: 6 });
         const idx = buildIndex([parent, child]);
@@ -82,8 +80,7 @@ describe('TaskWriteService child-line operations', () => {
             id: 'p',
             parserId: 'tv-inline',
             line: 5,
-            childLines: [plainCl('- a', ' ')],
-            childLineBodyOffsets: [6],
+            childLines: [plainCl('- a', 6, ' ')],
         });
         const idx = buildIndex([parent]);
         const svc = new TaskWriteService(idx);
@@ -96,8 +93,7 @@ describe('TaskWriteService child-line operations', () => {
             id: 'p',
             parserId: 'tv-inline',
             line: 5,
-            childLines: [plainCl('- a', ' ')],
-            childLineBodyOffsets: [6],
+            childLines: [plainCl('- a', 6, ' ')],
         });
         const idx = buildIndex([parent]);
         const svc = new TaskWriteService(idx);

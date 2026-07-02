@@ -138,7 +138,7 @@ export class TreeTaskExtractor {
             }
         }
 
-        // インデント正規化 + タスク生成行除外 + childLineBodyOffsets 構築
+        // インデント正規化 + タスク生成行除外 + 絶対行番号の付与
         const nonEmptyChildren = children.filter(c => c.trim() !== '');
         if (nonEmptyChildren.length > 0) {
             const minIndent = Math.min(...nonEmptyChildren.map(c => c.search(/\S|$/)));
@@ -155,11 +155,9 @@ export class TreeTaskExtractor {
                 ownLineNumbers.push(block.childLineNumbers[k]);
             }
 
-            task.childLines = ChildLineClassifier.classifyLines(ownLines);
-            task.childLineBodyOffsets = ownLineNumbers;
+            task.childLines = ChildLineClassifier.classifyLines(ownLines, ownLineNumbers);
         } else {
-            task.childLines = ChildLineClassifier.classifyLines(children);
-            task.childLineBodyOffsets = [...block.childLineNumbers];
+            task.childLines = ChildLineClassifier.classifyLines(children, block.childLineNumbers);
         }
 
         // 子行プロパティを収集

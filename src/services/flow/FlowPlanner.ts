@@ -98,7 +98,6 @@ function buildNextTask(task: Task, anchor: DateAnchor | null, next: NextOccurren
         statusChar: ' ',
         originalText: '',
         childLines: [],
-        childLineBodyOffsets: [],
         blockId: undefined,
         timerTargetId: undefined,
         content: task.content.replace(/^(?:⏱️|🍅|⏳)\s*/, ''),

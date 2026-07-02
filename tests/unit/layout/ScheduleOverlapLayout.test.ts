@@ -13,7 +13,6 @@ function makeTimed(id: string, startMin: number, endMin: number): TimedDisplayTa
         indent: 0,
         childIds: [],
         childLines: [],
-        childLineBodyOffsets: [],
         originalText: '',
         tags: [],
         parserId: 'tv-inline',

@@ -315,7 +315,7 @@ describe('TreeTaskExtractor', () => {
         });
     });
 
-    describe('childLineBodyOffsets', () => {
+    describe('ChildLine.bodyLine（絶対行番号）', () => {
         it('連続する childLines の絶対行番号が正しい', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',    // line 0
@@ -323,10 +323,10 @@ describe('TreeTaskExtractor', () => {
                 '    child line 2',             // line 2
             ]);
             const parent = tasks[0];
-            expect(parent.childLineBodyOffsets).toEqual([1, 2]);
+            expect(parent.childLines.map(c => c.bodyLine)).toEqual([1, 2]);
         });
 
-        it('子タスクを挟む場合に正しいオフセットが設定される', () => {
+        it('子タスクを挟む場合に正しい行番号が設定される', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',    // line 0
                 '    desc line 1',              // line 1
@@ -336,10 +336,10 @@ describe('TreeTaskExtractor', () => {
             ]);
             const parent = tasks.find(t => t.content === 'parent')!;
             expect(parent.childLines).toHaveLength(2);
-            expect(parent.childLineBodyOffsets).toEqual([1, 4]);
+            expect(parent.childLines.map(c => c.bodyLine)).toEqual([1, 4]);
         });
 
-        it('@notation なしチェックボックスのオフセットが正しい', () => {
+        it('@notation なしチェックボックスの行番号が正しい', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',    // line 0
                 '    - [x] item A',             // line 1
@@ -347,7 +347,7 @@ describe('TreeTaskExtractor', () => {
                 '    - [x] item C',             // line 3
             ]);
             const parent = tasks[0];
-            expect(parent.childLineBodyOffsets).toEqual([1, 2, 3]);
+            expect(parent.childLines.map(c => c.bodyLine)).toEqual([1, 2, 3]);
         });
     });
 
@@ -624,14 +624,14 @@ describe('TreeTaskExtractor', () => {
             expect(tasks[0].validation).toBeUndefined();
         });
 
-        it('flow 行は childLines / childLineBodyOffsets から除外される', () => {
+        it('flow 行は childLines から除外される', () => {
             const tasks = extractTasks([
                 '- [ ] task @2026-03-24 ==> every mon',
                 '    - ==> x3',
                 '    - plain note',
             ]);
             expect(tasks[0].childLines.map(cl => cl.text.trim())).toEqual(['- plain note']);
-            expect(tasks[0].childLineBodyOffsets).toEqual([2]);
+            expect(tasks[0].childLines.map(cl => cl.bodyLine)).toEqual([2]);
         });
 
         it('子行だけに flow を書いた bare checkbox はタスクに昇格する', () => {
