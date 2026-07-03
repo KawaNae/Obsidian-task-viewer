@@ -5,6 +5,9 @@ import { isFilterCondition } from './FilterTypes';
 import { DateResolver } from './DateResolver';
 import { DateUtils } from '../../utils/DateUtils';
 import { getTaskKind, getTaskNotation } from './parserTaxonomy';
+import {
+    getEffectiveColor, getEffectiveLinestyle, getEffectiveTags, getEffectiveProperties,
+} from '../data/EffectiveProperties';
 
 /**
  * Evaluates whether a task passes a recursive filter tree.
@@ -77,9 +80,9 @@ export class TaskFilterEngine {
                 return true;
             }
             case 'color':
-                return this.evalStringSet(task.color ?? '', condition);
+                return this.evalStringSet(getEffectiveColor(task) ?? '', condition);
             case 'linestyle':
-                return this.evalStringSet(task.linestyle ?? '', condition);
+                return this.evalStringSet(getEffectiveLinestyle(task) ?? '', condition);
             case 'length':
                 return this.evalLength(task, condition, context?.startHour ?? 0);
             case 'kind':
@@ -155,19 +158,20 @@ export class TaskFilterEngine {
 
     private static evalTag(task: Task, c: FilterCondition): boolean {
         if (!Array.isArray(c.value)) return true;
+        const tags = getEffectiveTags(task);
         if (c.operator === 'includes') {
-            return c.value.some(v => task.tags.some(t => this.tagMatches(t, v)));
+            return c.value.some(v => tags.some(t => this.tagMatches(t, v)));
         }
         if (c.operator === 'excludes') {
-            return !c.value.some(v => task.tags.some(t => this.tagMatches(t, v)));
+            return !c.value.some(v => tags.some(t => this.tagMatches(t, v)));
         }
         if (c.operator === 'equals') {
-            return c.value.some(v => task.tags.some(t => t === v));
+            return c.value.some(v => tags.some(t => t === v));
         }
         if (c.operator === 'only') {
             const filterSet = new Set(c.value);
-            return task.tags.length === filterSet.size
-                && task.tags.every(t => filterSet.has(t));
+            return tags.length === filterSet.size
+                && tags.every(t => filterSet.has(t));
         }
         return true;
     }
@@ -201,7 +205,7 @@ export class TaskFilterEngine {
 
     private static evalProperty(task: Task, c: FilterCondition): boolean {
         if (c.key == null || c.key === '') return true;
-        const actual = task.properties?.[c.key]?.value;
+        const actual = getEffectiveProperties(task)[c.key]?.value;
         const filterValue = typeof c.value === 'string' ? c.value : '';
         switch (c.operator) {
             case 'isSet': return actual !== undefined;

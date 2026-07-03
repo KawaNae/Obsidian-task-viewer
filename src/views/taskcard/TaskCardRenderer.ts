@@ -37,6 +37,7 @@ import { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
 import { bindTapIntents } from '../../interaction/tap/TapIntent';
 import type { TaskCardLinkRuntime } from './types';
+import { getEffectiveMask } from '../../services/data/EffectiveProperties';
 
 export class TaskCardRenderer extends Component {
     private expandedTaskIds: Set<string> = new Set();
@@ -236,8 +237,9 @@ export class TaskCardRenderer extends Component {
 
         // Apply mask last so it overlays whatever child/inline renderer produced.
         // Detail modal opts out — the user explicitly asked to inspect this task.
-        if (!isDetailModal && this.getMaskMode() && task.mask) {
-            TaskCardRenderer.applyMaskToContent(contentContainer, task.mask);
+        const mask = getEffectiveMask(task);
+        if (!isDetailModal && this.getMaskMode() && mask) {
+            TaskCardRenderer.applyMaskToContent(contentContainer, mask);
         }
     }
 

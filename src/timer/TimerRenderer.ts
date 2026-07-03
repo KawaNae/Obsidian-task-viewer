@@ -26,6 +26,7 @@ import { TimerSettingsMenu } from './TimerSettingsMenu';
 import { AudioUtils } from './AudioUtils';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { t } from '../i18n';
+import { getEffectiveColor } from '../services/data/EffectiveProperties';
 
 export class TimerRenderer {
     private closeConfirmTimers = new Map<string, number>();
@@ -265,7 +266,7 @@ export class TimerRenderer {
             if (nameEl) nameEl.setText(newName);
         }
 
-        const newColor = task.color ?? '';
+        const newColor = getEffectiveColor(task) ?? '';
         if (newColor !== timer.taskColor) {
             timer.taskColor = newColor;
             if (newColor) {

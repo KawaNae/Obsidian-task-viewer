@@ -8,6 +8,7 @@ import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent'
 import { openFileInExistingOrNewTab } from '../../../views/sharedLogic/NavigationUtils';
 import { DateUtils } from '../../../utils/DateUtils';
 import { t } from '../../../i18n';
+import { getEffectiveColor } from '../../../services/data/EffectiveProperties';
 
 /**
  * Task操作メニューの構築
@@ -69,7 +70,7 @@ export class TaskActionsMenuBuilder {
                 taskName: displayName,
                 taskOriginalText: task.originalText,
                 taskFile: task.file,
-                taskColor: task.color ?? '',
+                taskColor: getEffectiveColor(task) ?? '',
                 recordMode: 'child' as const,
                 parserId: task.parserId,
                 timerTargetId: task.timerTargetId ?? task.blockId,

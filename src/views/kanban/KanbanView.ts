@@ -13,6 +13,7 @@ import { combineFilterStates, createEmptyFilterState, hasConditions } from '../.
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState, hasSortRules } from '../../services/sort/SortTypes';
 import { TaskStyling } from '../sharedUI/TaskStyling';
+import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { TaskPagingController } from '../sharedUI/TaskPagingController';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { shouldRenderForChanges } from '../sharedUI/RenderScheduler';
@@ -388,8 +389,8 @@ export class KanbanView extends ItemView {
     private decorateKanbanCard(card: HTMLElement, task: import('../../types').DisplayTask): void {
         card.dataset.id = task.id;
 
-        TaskStyling.applyTaskColor(card, task.color ?? null);
-        TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
+        TaskStyling.applyTaskColor(card, getEffectiveColor(task) ?? null);
+        TaskStyling.applyTaskLinestyle(card, getEffectiveLinestyle(task) ?? null);
         TaskStyling.applyReadOnly(card, task);
     }
 

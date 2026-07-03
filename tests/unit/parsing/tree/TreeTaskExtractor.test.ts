@@ -4,6 +4,10 @@ import { SectionPropertyResolver } from '../../../../src/services/parsing/tree/S
 import { TreeTaskExtractor, type TaskExtractionContext } from '../../../../src/services/parsing/tree/TreeTaskExtractor';
 import { TaskParser } from '../../../../src/services/parsing/TaskParser';
 import { DEFAULT_SETTINGS, DEFAULT_TV_FILE_KEYS } from '../../../../src/types';
+import {
+    getEffectiveColor, getEffectiveLinestyle, getEffectiveMask,
+    getEffectiveTags, getEffectiveProperties,
+} from '../../../../src/services/data/EffectiveProperties';
 
 const defaultCtx: TaskExtractionContext = {
     filePath: 'test.md',
@@ -111,13 +115,15 @@ describe('TreeTaskExtractor', () => {
     });
 
     describe('セクションプロパティの継承', () => {
-        it('セクションの color が直接 color に設定される', () => {
+        it('セクションの color は cascadeContext に置かれ raw を汚さない', () => {
             const tasks = extractTasks([
                 '## Section',
                 '- tv-color:: ff0000',
                 '- [ ] task @2026-03-24',
             ]);
-            expect(tasks[0].color).toBe('ff0000');
+            expect(tasks[0].color).toBeUndefined();
+            expect(tasks[0].cascadeContext?.color).toBe('ff0000');
+            expect(getEffectiveColor(tasks[0])).toBe('ff0000');
         });
 
         it('タスクの子行 color がセクション color をオーバーライド', () => {
@@ -130,13 +136,15 @@ describe('TreeTaskExtractor', () => {
             expect(tasks[0].color).toBe('00ff00');
         });
 
-        it('セクションのカスタムプロパティがタスクに継承される', () => {
+        it('セクションのカスタムプロパティは cascadeContext 経由で継承される', () => {
             const tasks = extractTasks([
                 '## Section',
                 '- category:: work',
                 '- [ ] task @2026-03-24',
             ]);
-            expect(tasks[0].properties['category']).toEqual({ value: 'work', type: 'string' });
+            expect(tasks[0].properties['category']).toBeUndefined();
+            expect(tasks[0].cascadeContext?.properties?.['category']).toEqual({ value: 'work', type: 'string' });
+            expect(getEffectiveProperties(tasks[0])['category']).toEqual({ value: 'work', type: 'string' });
         });
 
         it('タスクの子行プロパティがセクションプロパティをオーバーライド', () => {
@@ -160,10 +168,14 @@ describe('TreeTaskExtractor', () => {
             ], { 'tv-color': 'red', 'tv-mask': '***' });
 
             const task = tasks[0];
-            // 子行 > セクション > frontmatter
-            expect(task.color).toBe('333333');      // 子行（最強）
-            expect(task.linestyle).toBe('dashed');   // セクション
-            expect(task.mask).toBe('***');           // frontmatter（SectionPropertyResolver 経由）
+            // 子行 > セクション > frontmatter（effective 合成後）
+            expect(getEffectiveColor(task)).toBe('333333');      // 子行（最強）
+            expect(getEffectiveLinestyle(task)).toBe('dashed');   // セクション
+            expect(getEffectiveMask(task)).toBe('***');           // frontmatter（SectionPropertyResolver 経由）
+            // raw には子行由来の color だけが残る
+            expect(task.color).toBe('333333');
+            expect(task.linestyle).toBeUndefined();
+            expect(task.mask).toBeUndefined();
         });
 
         it('ネストセクションからのカスケード', () => {
@@ -176,8 +188,10 @@ describe('TreeTaskExtractor', () => {
             ]);
 
             const task = tasks[0];
-            expect(task.color).toBe('red');          // 親セクションから継承
-            expect(task.linestyle).toBe('dotted');   // 子セクション
+            expect(getEffectiveColor(task)).toBe('red');          // 親セクションから継承
+            expect(getEffectiveLinestyle(task)).toBe('dotted');   // 子セクション
+            expect(task.color).toBeUndefined();                    // raw は空のまま
+            expect(task.linestyle).toBeUndefined();
         });
     });
 
@@ -222,20 +236,24 @@ describe('TreeTaskExtractor', () => {
             const b3 = tasks.find(t => t.content.includes('B3'))!;
             const b4 = tasks.find(t => t.content.includes('B4'))!;
 
-            // B1, B2: セクション色が直接 color に設定
-            expect(b1.color).toBe('ff6b6b');
-            expect(b2.color).toBe('ff6b6b');
+            // B1, B2: セクション色は cascade 経由（raw は空）
+            expect(getEffectiveColor(b1)).toBe('ff6b6b');
+            expect(getEffectiveColor(b2)).toBe('ff6b6b');
+            expect(b1.color).toBeUndefined();
 
-            // B3: 子行 tv-color がセクション色をオーバーライド
+            // B3: 子行 tv-color がセクション色をオーバーライド（raw に載る）
             expect(b3.color).toBe('4ecdc4');
+            expect(getEffectiveColor(b3)).toBe('4ecdc4');
 
             // B4: 親タスクの色は継承しない（タスク親子間継承は廃止、
             // 日付と同一原則）。セクション色にフォールバックする
-            expect(b4.color).toBe('ff6b6b');
+            expect(b4.color).toBeUndefined();
+            expect(getEffectiveColor(b4)).toBe('ff6b6b');
 
-            // customProp が全タスクに継承
-            expect(b1.properties['customProp']).toEqual({ value: 'section-B', type: 'string' });
-            expect(b3.properties['customProp']).toEqual({ value: 'section-B', type: 'string' });
+            // customProp が全タスクに cascade 経由で継承
+            expect(getEffectiveProperties(b1)['customProp']).toEqual({ value: 'section-B', type: 'string' });
+            expect(getEffectiveProperties(b3)['customProp']).toEqual({ value: 'section-B', type: 'string' });
+            expect(b1.properties['customProp']).toBeUndefined();
         });
 
         it('プレーンチェックボックスは childLines に残る', () => {
@@ -466,20 +484,23 @@ describe('TreeTaskExtractor', () => {
             expect(tasks[0].tags).toEqual(['inline', 'propTag']);
         });
 
-        it('frontmatter tags がインラインタスクにカスケード', () => {
+        it('frontmatter tags がインラインタスクに cascade 経由でカスケード', () => {
             const tasks = extractTasks([
                 '- [ ] task @2026-03-24',
             ], { tags: ['project'] });
-            expect(tasks[0].tags).toEqual(['project']);
+            expect(tasks[0].tags).toEqual([]);
+            expect(tasks[0].cascadeContext?.tags).toEqual(['project']);
+            expect(getEffectiveTags(tasks[0])).toEqual(['project']);
         });
 
-        it('セクション property block tags がタスクにカスケード', () => {
+        it('セクション property block tags がタスクに cascade 経由でカスケード', () => {
             const tasks = extractTasks([
                 '## Section',
                 '- tags:: #sectionTag',
                 '- [ ] task @2026-03-24',
             ]);
-            expect(tasks[0].tags).toEqual(['sectionTag']);
+            expect(tasks[0].tags).toEqual([]);
+            expect(getEffectiveTags(tasks[0])).toEqual(['sectionTag']);
         });
 
         it('3段マージ: frontmatter + section + content tags', () => {
@@ -488,7 +509,9 @@ describe('TreeTaskExtractor', () => {
                 '- tags:: #sectionTag',
                 '- [ ] task #inline @2026-03-24',
             ], { tags: ['project'] });
-            expect(tasks[0].tags).toEqual(['inline', 'project', 'sectionTag']);
+            expect(tasks[0].tags).toEqual(['inline']);
+            expect(tasks[0].cascadeContext?.tags).toEqual(['project', 'sectionTag']);
+            expect(getEffectiveTags(tasks[0])).toEqual(['inline', 'project', 'sectionTag']);
         });
 
         it('全レベルマージ: frontmatter + section + property line + content', () => {
@@ -498,7 +521,8 @@ describe('TreeTaskExtractor', () => {
                 '- [ ] task #inline @2026-03-24',
                 '    - tags:: #propTag',
             ], { tags: ['project'] });
-            expect(tasks[0].tags).toEqual(['inline', 'project', 'propTag', 'sectionTag']);
+            expect(tasks[0].tags).toEqual(['inline', 'propTag']);
+            expect(getEffectiveTags(tasks[0])).toEqual(['inline', 'project', 'propTag', 'sectionTag']);
         });
 
         it('重複タグは dedup される', () => {
@@ -508,6 +532,7 @@ describe('TreeTaskExtractor', () => {
                 '- [ ] task #shared @2026-03-24',
             ], { tags: ['shared'] });
             expect(tasks[0].tags).toEqual(['shared']);
+            expect(getEffectiveTags(tasks[0])).toEqual(['shared']);
         });
 
         it('プロパティ行 tags は task.properties に漏れない', () => {

@@ -1,6 +1,7 @@
 import type { App } from 'obsidian';
 import type { TaskViewerSettings } from '../../../types';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
+import { getEffectiveColor, getEffectiveLinestyle } from '../../../services/data/EffectiveProperties';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import type { GridRow, TaskPlacement, TimedDisplayTask } from '../ScheduleTypes';
@@ -124,8 +125,8 @@ export class ScheduleTaskRenderer {
 
         card.dataset.id = task.id;
 
-        TaskStyling.applyTaskColor(card, task.color ?? null);
-        TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
+        TaskStyling.applyTaskColor(card, getEffectiveColor(task) ?? null);
+        TaskStyling.applyTaskLinestyle(card, getEffectiveLinestyle(task) ?? null);
         TaskStyling.applyReadOnly(card, task);
     }
 }

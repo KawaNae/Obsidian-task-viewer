@@ -220,6 +220,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskDateCategorizer** | `services/display/TaskDateCategorizer.ts` | Categorizes tasks into allDay / timed / dueOnly |
 | **ViewExporter** | `services/export/ViewExporter.ts` | View data export with per-view ExportStrategy |
 | **FilePropertyResolver** | `services/parsing/FilePropertyResolver.ts` | File-scope frontmatter → ExtractedProperties; shared by TVFileBuilder and SectionPropertyResolver |
+| **EffectiveProperties** | `services/data/EffectiveProperties.ts` | `getEffective*()` derived helpers merging raw + cascadeContext for properties/tags/style; see "Inheritance pipeline" |
 | **TaskValidator** | `services/core/TaskValidator.ts` | Task validation |
 | **DocumentTreeBuilder** | `services/parsing/tree/DocumentTreeBuilder.ts` | Document structure tree for section property inheritance |
 | **DayPlannerParser** | `services/parsing/inline/DayPlannerParser.ts` | Day Planner compatible parser (read-only) |
@@ -264,6 +265,16 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 | **Section** | `SectionPropertyResolver` | Heading hierarchy (`## A` → `### B`) + section property blocks | FM → root section → nested sections, child-wins cascade for `color`/`linestyle`/`mask`/`tags`/custom properties. Output stored on `SectionNode.resolvedX`. |
 
 **Tasks do not inherit from parent tasks.** Inheritance flows exclusively from document structure (frontmatter → sections); the task tree (`parentId`/`childIds`) never contributes properties, tags, or styling — the same principle dates established with `cascadeContext`. A task's values are fully determined by its own lines plus its section context, so property resolution completes locally during extraction with no cross-task post-pass. (Task-scope inheritance — `TaskPropertyResolver` BFS + `parentStyle` propagation — was removed 2026-07-03.)
+
+**Three-layer value model (raw / cascadeContext / effective).** Dates and properties/tags/style share the same layering:
+
+| Layer | Dates | Properties / tags / style | Written by | Read by |
+|-------|-------|---------------------------|------------|---------|
+| **raw** | `task.startDate` etc. | `task.color`/`linestyle`/`mask`/`tags`/`properties` | Parser, from the task's own lines / own FM only | `format()`, all writers (round-trip fidelity) |
+| **cascade** | `task.cascadeContext.startDate` etc. | `task.cascadeContext.color`/`tags`/`properties` etc. | `TreeTaskExtractor`, from `SectionNode.resolvedX` | Merge step below |
+| **effective** | `DisplayTask.effectiveStartDate` etc. (materialized — merge needs `startHour`) | `getEffective*()` derived helpers (`services/data/EffectiveProperties.ts` — merge closes over the Task alone) | — | Display, filter, sort, API output |
+
+Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properties are per-key child-wins spread. The cascade layer stores style only when raw is absent (same guard as dates — equivalent for override semantics), but stores tags/properties unconditionally since they merge partially rather than shadow.
 
 **Builtin vs custom properties.** Builtin (`color`/`linestyle`/`mask`/`tags`) have a fixed schema, validation, and dedicated UI rendering; their FM keys are configurable via `TvFileKeys`. Custom properties are user-defined free-form key-value pairs stored in `task.properties: Record<string, PropertyValue>`. Both inherit with child-wins precedence at every layer; the only structural difference is type-level (separate Task fields vs `Record`).
 
@@ -966,12 +977,12 @@ In TaskConverter (inline→frontmatter), task comes from parser with parsed star
 
 ### cascadeContext lifecycle
 
-| Event | Result |
-|-------|--------|
-| Parse (TreeTaskExtractor) | Set from file/section cascade when task lacks own dates |
-| DisplayTaskConverter | Merged into effective values via `\|\|` fallback |
-| `format()` (TVInlineParser) | Ignored — only raw fields are serialized |
-| Drag / resize | Raw fields set explicitly → cascade no longer contributes |
+| Event | Dates | Properties / tags / style |
+|-------|-------|---------------------------|
+| Parse (TreeTaskExtractor) | Set from file/section cascade when task lacks own dates | Style set when raw absent; tags/properties always (partial merge) |
+| Effective merge | `DisplayTaskConverter` → `DisplayTask.effective*` via `\|\|` fallback | `getEffective*()` helpers (`services/data/EffectiveProperties.ts`) |
+| `format()` (TVInlineParser) / writers | Ignored — only raw fields are serialized | Same — inherited values are never written back |
+| Explicit edit (drag / resize / future property edit) | Raw fields set explicitly → cascade no longer contributes | Same principle |
 
 ---
 

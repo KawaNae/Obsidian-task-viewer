@@ -140,10 +140,15 @@ export interface Task {
     due?: string;
 
     /**
-     * Date/time values inherited from the File → Section cascade rather than
-     * from the task's own @notation or frontmatter.  Set by TreeTaskExtractor;
-     * consumed by DisplayTaskConverter (merged as effective values) and ignored
-     * by format() (which reads only raw fields for round-trip fidelity).
+     * Values inherited from the File → Section cascade rather than from the
+     * task's own lines / frontmatter.  Set by TreeTaskExtractor; never
+     * serialized — format() and all writers read only raw fields for
+     * round-trip fidelity.
+     *
+     * Dates are merged into `DisplayTask.effective*` by DisplayTaskConverter
+     * (needs display context: startHour). Properties/tags/style close over
+     * the Task alone, so they merge via the `getEffective*` derived helpers
+     * (`services/data/EffectiveProperties.ts`).
      */
     cascadeContext?: {
         startDate?: string;
@@ -151,6 +156,11 @@ export interface Task {
         endDate?: string;
         endTime?: string;
         due?: string;
+        color?: string;
+        linestyle?: string;
+        mask?: string;
+        tags?: string[];
+        properties?: Record<string, PropertyValue>;
     };
 
     // Original parsed text and stable IDs.
@@ -158,7 +168,12 @@ export interface Task {
     blockId?: string;
     timerTargetId?: string;
 
-    // Tags extracted from task content and/or frontmatter.
+    /**
+     * Raw tags: the task's own declaration only (content `#tags` + own
+     * child-line / own-frontmatter `tags`). Section-inherited tags live in
+     * `cascadeContext.tags`; consumers read the merged view via
+     * `getEffectiveTags()`.
+     */
     tags: string[];
 
     /**
@@ -182,17 +197,25 @@ export interface Task {
      */
     parserId: ParserId;
 
-    // Resolved styling (from child lines or parent-task inheritance).
+    /**
+     * Raw styling: the task's own child lines / own frontmatter only.
+     * Section-inherited style lives in `cascadeContext`; consumers read the
+     * merged view via `getEffectiveColor()` / `getEffectiveLinestyle()`.
+     */
     color?: string;
     linestyle?: string;
 
-    // Resolved mask for export masking.
+    /** Raw mask (own declaration only; merged view via `getEffectiveMask()`). */
     mask?: string;
 
     /** True when parsed by a read-only parser (no writeback support). */
     isReadOnly?: boolean;
 
-    /** Custom properties parsed from childLines / frontmatter. Read-only. */
+    /**
+     * Raw custom properties: the task's own child lines / own frontmatter
+     * only. Section-inherited properties live in `cascadeContext.properties`;
+     * consumers read the merged view via `getEffectiveProperties()`.
+     */
     properties: Record<string, PropertyValue>;
 }
 

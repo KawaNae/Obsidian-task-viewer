@@ -182,20 +182,30 @@ export class TreeTaskExtractor {
         // 組み込みプロパティを専用フィールドに分離
         const extracted = BuiltinPropertyExtractor.extract(rawProps, ctx.tvFileKeys);
 
-        // セクションプロパティ → 子行プロパティの順でマージ（child-wins）
-        task.properties = { ...section.resolvedProperties, ...extracted.properties };
-
-        // カスケード: 子行 > セクション（FM含む）。タスク親子間は継承しない（日付と同一原則）
-        task.color = extracted.color ?? section.resolvedColor;
-        task.linestyle = extracted.linestyle ?? section.resolvedLinestyle;
-        task.mask = extracted.mask ?? section.resolvedMask;
-
-        // タグのマージ: section resolved + childLine property + content tags（union）
-        const sectionTags = section.resolvedTags ?? [];
+        // raw = 自分の宣言のみ（子行プロパティ + content タグ）。
+        // section 継承分は日付と同様 cascadeContext に別置きし、合成は
+        // getEffective*（services/data/EffectiveProperties.ts）が担う。
+        task.properties = extracted.properties;
+        task.color = extracted.color;
+        task.linestyle = extracted.linestyle;
+        task.mask = extracted.mask;
         const propertyTags = extracted.tags ?? [];
-        if (sectionTags.length > 0 || propertyTags.length > 0) {
-            task.tags = TagExtractor.merge(sectionTags, propertyTags, task.tags);
+        if (propertyTags.length > 0) {
+            task.tags = TagExtractor.merge(propertyTags, task.tags);
         }
+
+        // cascade 側: tags/properties は部分的に透過（union / キー単位
+        // child-wins）するため無条件で格納。上書きセマンティクスの style は
+        // 日付と同じ「raw が無いときのみ」の guard（effective は等価）。
+        const cc: NonNullable<Task['cascadeContext']> = task.cascadeContext ?? {};
+        if (!task.color && section.resolvedColor) cc.color = section.resolvedColor;
+        if (!task.linestyle && section.resolvedLinestyle) cc.linestyle = section.resolvedLinestyle;
+        if (!task.mask && section.resolvedMask) cc.mask = section.resolvedMask;
+        if (section.resolvedTags && section.resolvedTags.length > 0) cc.tags = section.resolvedTags;
+        if (section.resolvedProperties && Object.keys(section.resolvedProperties).length > 0) {
+            cc.properties = section.resolvedProperties;
+        }
+        if (Object.keys(cc).length > 0) task.cascadeContext = cc;
 
         // 子タスクブロックを再帰的に処理（判定は上で計算済みの outcome を
         // 再利用 — 再パースしない）

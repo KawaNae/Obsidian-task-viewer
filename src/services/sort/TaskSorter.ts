@@ -1,5 +1,6 @@
 import type { DisplayTask } from '../../types';
 import type { SortState, SortRule, SortProperty } from './SortTypes';
+import { getEffectiveTags } from '../data/EffectiveProperties';
 
 /**
  * Sorts tasks according to a user-defined SortState.
@@ -48,7 +49,7 @@ export class TaskSorter {
             case 'endDate': return task.effectiveEndDate ?? task.endDate ?? '';
             case 'file': return task.file || '';
             case 'status': return task.statusChar || '';
-            case 'tag': return task.tags[0] || '';
+            case 'tag': return getEffectiveTags(task)[0] || '';
         }
     }
 }

@@ -5,6 +5,7 @@ import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent'
 import { DateUtils } from '../../../utils/DateUtils';
 import { canTriggerFlow } from '../../../services/flow/FlowTrigger';
 import { t } from '../../../i18n';
+import { getEffectiveColor } from '../../../services/data/EffectiveProperties';
 
 /**
  * Builder for timer-related menu items.
@@ -28,7 +29,7 @@ export class TimerMenuBuilder {
             taskName: displayName,
             taskOriginalText: task.originalText,
             taskFile: task.file,
-            taskColor: task.color ?? '',
+            taskColor: getEffectiveColor(task) ?? '',
             recordMode: 'self' as const,
             parserId: task.parserId,
             timerTargetId: task.timerTargetId ?? task.blockId,
