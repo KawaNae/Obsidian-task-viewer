@@ -137,7 +137,7 @@ const result = await api.update({
 // => { task: NormalizedTask }
 ```
 
-**UpdateParams:** `id`（必須）, `content`, `start`, `end`, `due`, `status`（すべてオプション。`'none'` を指定するとフィールドをクリア）
+**UpdateParams:** `id`（必須）, `content`, `start`, `end`, `due`, `status`（すべてオプション）。`start`/`end`/`due`/`status` は `'none'` を指定するとフィールドをクリアする。`content` に `'none'` の特別処理はなく、文字列 `"none"` として設定される
 
 ## delete
 

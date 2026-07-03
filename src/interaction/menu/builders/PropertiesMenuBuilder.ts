@@ -49,7 +49,7 @@ export class PropertiesMenuBuilder {
             };
 
             // Requested order:
-            // file / --- / name / start / end / due / --- / length
+            // file / --- / name / start / end / due / --- / length / tags / color / linestyle / mask / custom
             // (Status is now added at root level by the caller)
             this.addFileItem(subMenu, task, menu);
             subMenu.addSeparator();
@@ -140,7 +140,7 @@ export class PropertiesMenuBuilder {
     }
 
     /**
-     * Add Start, End, Due, Length items.
+     * Add Start, End, Due, Length, Tags, Color, Linestyle, Mask, and Custom Properties items.
      */
     private addPropertyItems(menu: Menu, task: DisplayTask, viewStartDate: string | null, openModal: (focusField: ChangePropertiesFocusField) => void): void {
         const context: PropertyCalculationContext = {

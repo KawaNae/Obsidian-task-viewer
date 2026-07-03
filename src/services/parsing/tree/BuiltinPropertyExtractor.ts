@@ -21,7 +21,9 @@ export interface ExtractedProperties {
  * Record<string, PropertyValue> から組み込みキー（tv-color 等）を
  * 専用フィールドに分離し、残りをカスタムプロパティとして返す。
  *
- * TVFileBuilder / TaskScanner / SectionPropertyResolver で共通使用。
+ * SectionPropertyResolver / TreeTaskExtractor で共通使用（section-scope と
+ * task-scope のビルトインキー抽出）。TVFileBuilder はFM層専用の
+ * FilePropertyResolver を別途使用する。
  */
 export class BuiltinPropertyExtractor {
     static extract(
