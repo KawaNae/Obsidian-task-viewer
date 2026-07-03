@@ -115,9 +115,9 @@ describe('FlowParser', () => {
             expect(errors('until 2026-09-28')).toContain('flow.orphan-modifier');
         });
 
-        it('reports legacy syntax with a dedicated code', () => {
-            expect(errors('repeat(weekly)')).toContain('flow.legacy-syntax');
-            expect(errors('next(monday).as(text)')).toContain('flow.legacy-syntax');
+        it('reports legacy syntax as an unknown clause', () => {
+            expect(errors('repeat(weekly)')).toContain('flow.unknown-head');
+            expect(errors('next(monday).as(text)')).toContain('flow.unknown-head');
         });
 
         it('rejects invalid calendar dates in until', () => {

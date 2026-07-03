@@ -712,7 +712,6 @@
       "expected-cadence": "'every' の後には周期が必要です（曜日 / 2w のような間隔 / mo@N）",
       "bad-monthday-range": "日付は 1〜31 で指定してください（{{day}} が指定されました）",
       "bad-monthday": "'@' の後には日番号か 'last' が必要です",
-      "legacy-syntax": "'{{head}}(...)' は廃止された旧記法です — 'every <周期>' / '+<期間>' を使ってください",
       "orphan-modifier": "'{{clause}}' にはスケジュール節（every / + / at）が必要です",
       "empty": "フロー・コマンドが空です",
       "bad-date": "'{{date}}' は存在しない日付です",

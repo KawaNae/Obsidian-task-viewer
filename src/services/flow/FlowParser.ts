@@ -16,7 +16,6 @@ const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until / nochild
 const SET_HEADS: Record<string, SetField> = Object.fromEntries(
     SET_FIELD_ORDER.map(field => [setHeadName(field), field])
 );
-const LEGACY_HEADS = ['repeat', 'next'];
 
 /**
  * Parse the raw text after `==>` into a FlowProgram.
@@ -134,14 +133,6 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
     }
 
     cursor.next();
-    if (LEGACY_HEADS.includes(head.text) && cursor.at('lparen')) {
-        diagnostics.push(error('flow.legacy-syntax',
-            `'${head.text}(...)' is the removed legacy syntax — use 'every <cadence>' / '+<duration>' instead`,
-            tokenSpan(head), { head: head.text }));
-        skipToNextNode(cursor);
-        return;
-    }
-
     diagnostics.push(error('flow.unknown-head', `Unknown clause '${head.text}' — ${HEAD_HINT}`, tokenSpan(head), { head: head.text }));
     skipToNextNode(cursor);
 }

@@ -16,7 +16,7 @@ export interface Diagnostic {
     severity: DiagnosticSeverity;
     /**
      * Stable machine-readable code, e.g. 'lex.unterminated-string',
-     * 'flow.legacy-syntax'. Exactly ONE message shape per code — the
+     * 'flow.unknown-head'. Exactly ONE message shape per code — the
      * presentation layer translates via `t('flowDiag.<code>', params)`
      * (see services/flow/diagnosticText.ts).
      */

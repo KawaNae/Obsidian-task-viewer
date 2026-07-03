@@ -712,7 +712,6 @@
       "expected-cadence": "Expected a cadence after 'every' (weekday, interval like 2w, or mo@N)",
       "bad-monthday-range": "Day of month must be 1-31, got {{day}}",
       "bad-monthday": "Expected a day number or 'last' after '@'",
-      "legacy-syntax": "'{{head}}(...)' is the removed legacy syntax — use 'every <cadence>' / '+<duration>' instead",
       "orphan-modifier": "'{{clause}}' requires a schedule clause (every / + / at)",
       "empty": "Flow command is empty",
       "bad-date": "'{{date}}' is not a valid calendar date",

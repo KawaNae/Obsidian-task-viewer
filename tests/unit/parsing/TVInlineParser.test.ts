@@ -98,10 +98,10 @@ describe('TVInlineParser', () => {
             expect(result!.validation?.severity).toBe('error');
         });
 
-        it('flags legacy repeat() syntax as a notation error', () => {
+        it('flags legacy repeat() syntax as an unknown clause', () => {
             const result = parser.parse('- [ ] task @2026-01-15 ==> repeat(weekly)', 'test.md', 0);
             expect(result!.flow?.program).toBeNull();
-            expect(result!.flow?.diagnostics.some(d => d.code === 'flow.legacy-syntax')).toBe(true);
+            expect(result!.flow?.diagnostics.some(d => d.code === 'flow.unknown-head')).toBe(true);
         });
 
         it('parses block id', () => {
