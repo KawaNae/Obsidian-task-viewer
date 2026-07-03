@@ -7,6 +7,7 @@ import { validateDateTimeRules } from '../utils/DateTimeRuleValidator';
 import { isTaskBearingFile } from '../utils/FrontmatterPolicy';
 import { FilePropertyResolver } from '../FilePropertyResolver';
 import { normalizeYamlDate, parseDateTimeField } from '../utils/DateTimeFieldParser';
+import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
 
 export interface FrontmatterParseResult {
     task: Task;
@@ -73,16 +74,19 @@ export class TVFileBuilder {
         const childLines: ChildLine[] = [];
 
         // Collect childLines from configured heading section (for card display)
+        const fenceMask = CodeFenceTracker.mask(bodyLines);
         const section = this.findHeaderSection(
             bodyLines,
             tvFileChildHeader,
-            tvFileChildHeaderLevel
+            tvFileChildHeaderLevel,
+            fenceMask
         );
         if (section) {
             const block = this.collectAllListItems(
                 bodyLines,
                 section.start,
-                section.end
+                section.end,
+                fenceMask
             );
             for (const relIndex of block.lineIndices) {
                 childLines.push(ChildLineClassifier.classify(bodyLines[relIndex], bodyStartIndex + relIndex));
@@ -152,13 +156,15 @@ export class TVFileBuilder {
     private static findHeaderSection(
         bodyLines: string[],
         headerName: string,
-        headerLevel: number
+        headerLevel: number,
+        fenceMask: boolean[]
     ): { start: number; end: number } | null {
         const expected = headerName.trim();
         if (!expected || headerLevel < 1 || headerLevel > 6) return null;
 
         let start = -1;
         for (let i = 0; i < bodyLines.length; i++) {
+            if (fenceMask[i]) continue;
             const header = this.parseHeaderLine(bodyLines[i]);
             if (!header) continue;
             if (header.level === headerLevel && header.text.trim() === expected) {
@@ -170,6 +176,7 @@ export class TVFileBuilder {
 
         let end = bodyLines.length;
         for (let i = start; i < bodyLines.length; i++) {
+            if (fenceMask[i]) continue;
             const header = this.parseHeaderLine(bodyLines[i]);
             if (!header) continue;
             if (header.level <= headerLevel) {
@@ -190,7 +197,8 @@ export class TVFileBuilder {
     private static collectAllListItems(
         bodyLines: string[],
         sectionStart: number,
-        sectionEnd: number
+        sectionEnd: number,
+        fenceMask: boolean[]
     ): { lineIndices: number[] } {
         const lineIndices: number[] = [];
         const listRegex = /^(\s*)(?:[-*+]|\d+[.)])\s+/;
@@ -198,6 +206,7 @@ export class TVFileBuilder {
         let rootIndent: number | null = null;
 
         for (let i = sectionStart; i < sectionEnd; i++) {
+            if (fenceMask[i]) continue;
             const line = bodyLines[i];
             if (line.trim() === '') continue; // 空行をスキップ（停止しない）
 

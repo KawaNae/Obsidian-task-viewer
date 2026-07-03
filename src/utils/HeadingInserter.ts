@@ -1,3 +1,5 @@
+import { CodeFenceTracker } from './CodeFenceTracker';
+
 /**
  * Heading-based line insertion utility.
  * Pure function: takes content string, returns modified content string.
@@ -25,8 +27,11 @@ export class HeadingInserter {
         const headerPrefix = '#'.repeat(headerLevel) + ' ';
         const fullHeader = headerPrefix + header;
 
+        const fenceTracker = new CodeFenceTracker();
         let headerIndex = -1;
         for (let i = 0; i < lines.length; i++) {
+            const fenced = fenceTracker.feed(lines[i]);
+            if (fenced) continue;
             if (lines[i].trim() === fullHeader) {
                 headerIndex = i;
                 break;
