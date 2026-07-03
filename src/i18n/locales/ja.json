@@ -509,7 +509,9 @@
     "startRequiresDate": "開始: 時刻を指定する場合は日付が必要です。",
     "endRequiresDate": "終了: 開始日がない場合は終了日が必要です。",
     "dueRequiresDate": "期限: 時刻を指定する場合は日付が必要です。",
-    "frontmatterTimeOnly": "frontmatterに時刻のみの値があると、YAMLの六十進法解釈の問題が起きる可能性があります。"
+    "frontmatterTimeOnly": "frontmatterに時刻のみの値があると、YAMLの六十進法解釈の問題が起きる可能性があります。",
+    "tooManySeparators": "日付ブロックの'>'区切りが多すぎます。最大2個（start>end>due）のところ{{count}}個あります。",
+    "multipleDateBlocks": "日付ブロックが複数あります。最初のブロックを採用し{{count}}個を破棄しました。"
   },
   "validationHint": {
     "crossMidnight": "終了日を明示するか、時刻を修正してください。",

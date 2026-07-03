@@ -37,7 +37,7 @@ import { CheckboxMenuBuilder } from './interaction/menu/builders/CheckboxMenuBui
 import { ValidationMenuBuilder } from './interaction/menu/builders/ValidationMenuBuilder';
 import { MenuPresenter } from './interaction/menu/MenuPresenter';
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
-import { createFlowDiagnosticsExtension } from './editor/FlowDiagnosticsExtension';
+import { createDiagnosticsExtension } from './editor/DiagnosticsExtension';
 import { toDisplayTask } from './services/display/DisplayTaskConverter';
 import { registerCliHandlers } from './cli/CliRegistrar';
 import { TaskApi } from './api/TaskApi';
@@ -342,9 +342,9 @@ export default class TaskViewerPlugin extends Plugin {
         this.taskMenuCleanup = taskMenuResult.cleanup;
         this.taskMenuNotifySettingsChanged = taskMenuResult.notifySettingsChanged;
 
-        // Wavy-underline diagnostics for `==>` flow commands (typos, legacy
-        // syntax, type errors). Pure re-parse of visible lines — no TaskIndex.
-        this.registerEditorExtension(createFlowDiagnosticsExtension());
+        // Wavy-underline diagnostics for `==>` flow commands and `@date`
+        // blocks. Pure re-parse of visible lines — no TaskIndex.
+        this.registerEditorExtension(createDiagnosticsExtension());
 
         // File context menu integration for frontmatter tasks.
         // Frontmatter tasks have no inline anchor in the editor body (file menu is the only entry point),
@@ -542,6 +542,9 @@ export default class TaskViewerPlugin extends Plugin {
         logInfo(`[saveSettings] startHour=${this.settings.startHour} parsers=[${this.getEnabledParsers()}]`);
         await this.saveData(this.settings);
         this.taskIndex.updateSettings(this.settings);
+        // Reconfigure editor extensions so diagnostics pick up the rebuilt
+        // parser chain immediately (dp/tp toggles change line ownership).
+        this.app.workspace.updateOptions();
         this.readService.updateStartHour(this.settings.startHour);
         this.updateViewHeaderStyles();
 

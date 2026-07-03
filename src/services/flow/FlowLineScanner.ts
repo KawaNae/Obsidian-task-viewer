@@ -5,7 +5,7 @@
  * Pure, obsidian-free. This is the SINGLE implementation of "which child
  * lines carry a task's flow"; the extractor (TreeTaskExtractor), the write
  * layer (InlineTaskWriter / TaskCloner) and the editor diagnostics
- * (FlowDiagnosticsExtension) all share it — do not duplicate the judgment.
+ * (DiagnosticsExtension) all share it — do not duplicate the judgment.
  */
 
 /** `- ==> <tail>` with any list bullet. Group 1 = indent, group 2 = tail. */

@@ -102,7 +102,7 @@ const copyStaticFiles = {
           '_pinned-list.css',
           '_checkboxes.css',
           '_editor-task-menu.css',
-          '_flow-diagnostics.css',
+          '_diagnostics.css',
           '_menu.css',
           '_toolbar.css',
           '_section-toggle.css',

@@ -1,4 +1,5 @@
 import type { Task, TaskFlow } from '../../../types';
+import { t } from '../../../i18n';
 import { flowValidation, singleLineFlow } from '../../flow/FlowSegments';
 import { createBaseTask } from '../TaskFactory';
 import { LeafParserStrategy } from '../strategies/ParserStrategy';
@@ -8,6 +9,7 @@ import { TagExtractor } from '../utils/TagExtractor';
 import { parseDateTimeField } from '../utils/DateTimeFieldParser';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { validateDateTimeRules, DateTimeValidationResult } from '../utils/DateTimeRuleValidator';
+import { DATE_BLOCK_REGEX } from './DateBlockLocator';
 
 interface DateBlockResult {
     date: string;
@@ -34,11 +36,6 @@ export class TVInlineParser implements LeafParserStrategy {
     readonly id = 'tv-inline';
     readonly isReadOnly = false;
 
-    // Regex for locating the Date block: @start>end>due
-    // Each segment accepts: YYYY-MM-DD, YYYY-MM-DDTHH:mm, T?HH:mm, or empty
-    // Rejects non-date @ patterns like @user, @notation
-    private static readonly DATE_BLOCK_REGEX =
-        /(@(?=[\d>T])(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|T?\d{2}:\d{2})?(?:>(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|\d{2}:\d{2})?)*)/;
     parse(line: string, filePath: string, lineNumber: number): Task | null {
         // Extract trailing block ID (^id) before parsing task structure.
         const { text: lineForParse, blockId } = TaskLineClassifier.extractBlockId(line);
@@ -144,7 +141,7 @@ export class TVInlineParser implements LeafParserStrategy {
      * Returns null if no date block was found in the content.
      */
     private parseDateBlock(content: string): { fields: DateBlockResult; content: string } | null {
-        const dateBlockMatch = content.match(TVInlineParser.DATE_BLOCK_REGEX);
+        const dateBlockMatch = content.match(DATE_BLOCK_REGEX);
         if (!dateBlockMatch) {
             return null;
         }
@@ -155,7 +152,7 @@ export class TVInlineParser implements LeafParserStrategy {
         // して採用し、content 中に残る全 date-like トークンを除去する。これが
         // ないと format() の末尾再付与が次回 parse で先頭マッチを奪い、開始日が
         // 化ける(round-trip 破壊)。除去で生じた連続スペースは単一に畳む。
-        const globalRe = new RegExp(TVInlineParser.DATE_BLOCK_REGEX.source, 'g');
+        const globalRe = new RegExp(DATE_BLOCK_REGEX.source, 'g');
         let dateBlockCount = 0;
         const cleanedContent = content
             .replace(globalRe, (m) => {
@@ -217,12 +214,12 @@ export class TVInlineParser implements LeafParserStrategy {
 
         // --- Excess separator check ---
         if (parts.length > 3) {
-            validationWarning = `Too many '>' separators in date block. Expected at most 2 (start>end>due), found ${parts.length - 1}.`;
+            validationWarning = t('validation.tooManySeparators', { count: parts.length - 1 });
         }
 
         // --- Multiple date blocks check ---
         if (dateBlockCount > 1) {
-            const extra = `Multiple date blocks found; kept the first and discarded ${dateBlockCount - 1}.`;
+            const extra = t('validation.multipleDateBlocks', { count: dateBlockCount - 1 });
             validationWarning = validationWarning ? `${validationWarning} ${extra}` : extra;
         }
 

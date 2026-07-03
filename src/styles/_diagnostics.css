@@ -1,6 +1,6 @@
-/* Flow command diagnostics (==> mini-language) — editor underlines */
+/* Editor diagnostics (==> flow commands + @date blocks) — wavy underlines */
 
-.tv-flow-diag {
+.tv-diag {
     text-decoration-line: underline;
     text-decoration-style: wavy;
     text-decoration-skip-ink: none;
@@ -8,10 +8,10 @@
     cursor: help;
 }
 
-.tv-flow-diag--error {
+.tv-diag--error {
     text-decoration-color: var(--color-red);
 }
 
-.tv-flow-diag--warning {
+.tv-diag--warning {
     text-decoration-color: var(--color-yellow);
 }

@@ -5,6 +5,8 @@ import { joinSegments, parseFlowSegments, segmentIndexAt } from '../services/flo
 import { collectFlowLineIndices, isFlowLine, matchFlowLine } from '../services/flow/FlowLineScanner';
 import { diagnosticText } from '../services/flow/diagnosticText';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
+import { TaskParser } from '../services/parsing/TaskParser';
+import { dateBlockDiagnostics } from '../services/parsing/tv-inline/DateBlockDiagnostics';
 
 const FLOW_MARKER = '==>';
 /** Bound for the up/down document scans around the viewport. */
@@ -23,22 +25,29 @@ interface SegmentLoc {
 }
 
 /**
- * Editor diagnostics for `==>` flow commands: wavy underlines with hover
- * messages on typos, misordered clauses, legacy syntax, and type errors.
+ * Editor diagnostics: wavy underlines with hover messages, for both
+ * `==>` flow commands (typos, misordered clauses, legacy syntax, type
+ * errors) and `@start>end>due` date blocks (date/time constraint rules,
+ * structural warnings).
  *
- * Multi-line aware: a flow program is the task line's tail plus its direct
- * `- ==>` child lines, parsed as one joined source (mirrors
+ * Flow is multi-line aware: a flow program is the task line's tail plus
+ * its direct `- ==>` child lines, parsed as one joined source (mirrors
  * TreeTaskExtractor.mergeChildFlow). Groups are assembled around the
  * viewport with bounded scans, so a visible flow child line is diagnosed
  * correctly even when its task line is scrolled out of view — and a lone
  * `x3` child segment is NOT a false orphan-modifier.
  *
- * Deliberately TaskIndex-independent — lines are re-parsed with the pure
- * flow parser, so diagnostics track unsaved text immediately. Results are
- * memoized by the joined source, so scrolling costs no re-parses.
+ * Date blocks are strictly per-line: each visible task line is re-parsed
+ * through the real parser chain (see dateBlockDiagnostics), so ownership
+ * and verdicts match the scanner exactly.
+ *
+ * Deliberately TaskIndex-independent — lines are re-parsed, so diagnostics
+ * track unsaved text immediately. Results are memoized by source text;
+ * both caches are dropped when the parser chain is rebuilt (settings).
  */
-export function createFlowDiagnosticsExtension(): Extension {
+export function createDiagnosticsExtension(): Extension {
     const cache = new Map<string, Diagnostic[]>();
+    const dateCache = new Map<string, Diagnostic[]>();
     const CACHE_CAP = 500;
 
     const diagnosticsFor = (raws: string[]): Diagnostic[] => {
@@ -48,6 +57,15 @@ export function createFlowDiagnosticsExtension(): Extension {
         if (cache.size >= CACHE_CAP) cache.clear();
         const diagnostics = parseFlowSegments(raws).diagnostics;
         cache.set(key, diagnostics);
+        return diagnostics;
+    };
+
+    const dateDiagnosticsFor = (lineText: string): Diagnostic[] => {
+        const hit = dateCache.get(lineText);
+        if (hit) return hit;
+        if (dateCache.size >= CACHE_CAP) dateCache.clear();
+        const diagnostics = dateBlockDiagnostics(lineText);
+        dateCache.set(lineText, diagnostics);
         return diagnostics;
     };
 
@@ -131,8 +149,29 @@ export function createFlowDiagnosticsExtension(): Extension {
                 const line = view.state.doc.lineAt(pos);
                 pos = line.to + 1;
 
+                const isTaskLine = TaskLineClassifier.isTaskLine(line.text);
+
+                // Date-block diagnostics: strictly per-line, so they run for
+                // every visible task line — BEFORE the flow-root shortcuts
+                // below (a task line without flow continues out early there).
+                if (isTaskLine) {
+                    for (const d of dateDiagnosticsFor(line.text)) {
+                        const from = line.from + d.span.start;
+                        const to = Math.min(line.from + d.span.end, line.to);
+                        if (to <= from) continue;
+                        marks.push({
+                            from,
+                            to,
+                            deco: Decoration.mark({
+                                class: `tv-diag tv-diag--${d.severity}`,
+                                attributes: { title: diagnosticText(d) },
+                            }),
+                        });
+                    }
+                }
+
                 let rootNumber: number | null = null;
-                if (TaskLineClassifier.isTaskLine(line.text)) {
+                if (isTaskLine) {
                     rootNumber = line.number;
                 } else if (isFlowLine(line.text)) {
                     rootNumber = findOwnerTaskLine(view, line.number);
@@ -181,7 +220,7 @@ export function createFlowDiagnosticsExtension(): Extension {
                         from: fromPos,
                         to: toPos,
                         deco: Decoration.mark({
-                            class: `tv-flow-diag tv-flow-diag--${d.severity}`,
+                            class: `tv-diag tv-diag--${d.severity}`,
                             attributes: { title: diagnosticText(d) },
                         }),
                     });
@@ -196,13 +235,23 @@ export function createFlowDiagnosticsExtension(): Extension {
     return ViewPlugin.fromClass(
         class {
             decorations: DecorationSet;
+            chainGeneration = TaskParser.getChainGeneration();
 
             constructor(view: EditorView) {
                 this.decorations = buildDecorations(view);
             }
 
             update(update: ViewUpdate) {
-                if (update.docChanged || update.viewportChanged) {
+                // A parser-chain rebuild (settings change) invalidates date
+                // ownership/verdicts — drop both caches and redecorate.
+                // Clearing shared caches from multiple editors is idempotent.
+                const generation = TaskParser.getChainGeneration();
+                if (generation !== this.chainGeneration) {
+                    this.chainGeneration = generation;
+                    cache.clear();
+                    dateCache.clear();
+                    this.decorations = buildDecorations(update.view);
+                } else if (update.docChanged || update.viewportChanged) {
                     this.decorations = buildDecorations(update.view);
                 }
             }
