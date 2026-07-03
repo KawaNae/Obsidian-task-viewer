@@ -12,8 +12,15 @@ import type { FilterState } from '../services/filter/FilterTypes';
 import type { SortState, SortProperty } from '../services/sort/SortTypes';
 import { DateUtils } from '../utils/DateUtils';
 import { parseDateTimeFlag } from '../cli/CliFilterBuilder';
-import { buildFilterFromParams } from './FilterParamsBuilder';
+import { buildFilterFromParams, assertValidFilterState } from './FilterParamsBuilder';
 import { loadFilterFile } from './FilterFileLoader';
+import {
+    assertParams,
+    LIST_SCHEMA, TODAY_SCHEMA, GET_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA,
+    DELETE_SCHEMA, DUPLICATE_SCHEMA, CONVERT_SCHEMA,
+    TASKS_FOR_DATE_RANGE_SCHEMA, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA,
+    INSERT_CHILD_TASK_SCHEMA, CREATE_TV_FILE_SCHEMA,
+} from './OperationSchemas';
 import {
     TaskApiError,
     type NormalizedTask,
@@ -321,6 +328,9 @@ function buildSortState(rules?: ApiSortRule[]): SortState | undefined {
                 `Unknown sort property: ${r.property}. Available: ${[...VALID_SORT_PROPERTIES].join(', ')}`,
             );
         }
+        if (r.direction !== undefined && r.direction !== 'asc' && r.direction !== 'desc') {
+            throw new TaskApiError(`Invalid sort direction: ${r.direction}. Use asc or desc`);
+        }
     }
     return {
         rules: rules.map((r, i) => ({
@@ -363,6 +373,7 @@ export class TaskApi {
      * List tasks with optional filters, sort, and pagination.
      */
     async list(params?: ListParams): Promise<TaskListResult> {
+        assertParams(params ?? {}, LIST_SCHEMA, 'list');
         const p = { ...(params ?? {}) };
 
         // Resolve filterFile → filter (async file read)
@@ -393,6 +404,7 @@ export class TaskApi {
      * List tasks active today.
      */
     today(params?: TodayParams): TaskListResult {
+        assertParams(params ?? {}, TODAY_SCHEMA, 'today');
         const p = params ?? {};
         const readService = this.readService;
         const { startHour } = this.plugin.settings;
@@ -426,7 +438,7 @@ export class TaskApi {
      * Get a single task by ID.
      */
     get(params: GetParams): NormalizedTask {
-        if (!params.id) throw new TaskApiError('Missing required parameter: id');
+        assertParams(params, GET_SCHEMA, 'get');
 
         const dt = this.readService.getDisplayTask(params.id);
         if (!dt) throw new TaskApiError(`Task not found: ${params.id}`);
@@ -437,8 +449,7 @@ export class TaskApi {
      * Create a new inline task.
      */
     async create(params: CreateParams): Promise<MutationResult> {
-        if (!params.file) throw new TaskApiError('Missing required parameter: file');
-        if (!params.content) throw new TaskApiError('Missing required parameter: content');
+        assertParams(params, CREATE_SCHEMA, 'create');
 
         const file = this.plugin.app.vault.getAbstractFileByPath(params.file);
         if (!(file instanceof TFile)) throw new TaskApiError(`File not found: ${params.file}`);
@@ -492,7 +503,7 @@ export class TaskApi {
      * Update an existing task's fields.
      */
     async update(params: UpdateParams): Promise<MutationResult> {
-        if (!params.id) throw new TaskApiError('Missing required parameter: id');
+        assertParams(params, UPDATE_SCHEMA, 'update');
 
         const task = this.readService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
@@ -547,7 +558,7 @@ export class TaskApi {
      * Delete a task.
      */
     async delete(params: DeleteParams): Promise<DeleteResult> {
-        if (!params.id) throw new TaskApiError('Missing required parameter: id');
+        assertParams(params, DELETE_SCHEMA, 'delete');
 
         const task = this.readService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
@@ -560,7 +571,7 @@ export class TaskApi {
      * Duplicate a task with optional date shifting.
      */
     async duplicate(params: DuplicateParams): Promise<DuplicateResult> {
-        if (!params.id) throw new TaskApiError('Missing required parameter: id');
+        assertParams(params, DUPLICATE_SCHEMA, 'duplicate');
         const task = this.readService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
         await this.writeService.duplicateTask(params.id, {
@@ -574,7 +585,7 @@ export class TaskApi {
      * Convert a tv-inline task to a tv-file (frontmatter) task.
      */
     async convertToTvFile(params: ConvertParams): Promise<ConvertResult> {
-        if (!params.id) throw new TaskApiError('Missing required parameter: id');
+        assertParams(params, CONVERT_SCHEMA, 'convertToTvFile');
         const task = this.readService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
         const newPath = await this.writeService.convertToTvFile(params.id);
@@ -585,8 +596,8 @@ export class TaskApi {
      * List tasks in a date range with optional filter, sort, and pagination.
      */
     async tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult> {
-        if (!params.start) throw new TaskApiError('Missing required parameter: start');
-        if (!params.end) throw new TaskApiError('Missing required parameter: end');
+        assertParams(params, TASKS_FOR_DATE_RANGE_SCHEMA, 'tasksForDateRange');
+        if (params.filter) assertValidFilterState(params.filter);
         let tasks = this.readService.getTasksForDateRange(params.start, params.end, params.filter);
         const sortState = buildSortState(params.sort);
         if (sortState) {
@@ -601,8 +612,8 @@ export class TaskApi {
      * Get tasks in a date range, categorized into allDay/timed/dueOnly per date.
      */
     categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): CategorizedTasksForDateRangeResult {
-        if (!params.start) throw new TaskApiError('Missing required parameter: start');
-        if (!params.end) throw new TaskApiError('Missing required parameter: end');
+        assertParams(params, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA, 'categorizedTasksForDateRange');
+        if (params.filter) assertValidFilterState(params.filter);
         const startHour = this.plugin.settings.startHour;
         const tasks = this.readService.getTasksForDateRange(params.start, params.end, params.filter);
         const split = splitTasks(tasks, { type: 'visual-date', startHour });
@@ -623,8 +634,7 @@ export class TaskApi {
      * Insert a child task under a parent task.
      */
     async insertChildTask(params: InsertChildTaskParams): Promise<InsertChildTaskResult> {
-        if (!params.parentId) throw new TaskApiError('Missing required parameter: parentId');
-        if (!params.content) throw new TaskApiError('Missing required parameter: content');
+        assertParams(params, INSERT_CHILD_TASK_SCHEMA, 'insertChildTask');
         const task = this.readService.getTask(params.parentId);
         if (!task) throw new TaskApiError(`Task not found: ${params.parentId}`);
         await this.writeService.insertChildTask(params.parentId, `- [ ] ${params.content}`);
@@ -635,7 +645,7 @@ export class TaskApi {
      * Create a new tv-file (frontmatter) task from structured data.
      */
     async createTvFile(params: CreateTvFileParams): Promise<CreateTvFileResult> {
-        if (!params.content) throw new TaskApiError('Missing required parameter: content');
+        assertParams(params, CREATE_TV_FILE_SCHEMA, 'createTvFile');
         const parsed = params.start ? parseDateTimeFlag(params.start) : null;
         const parsedEnd = params.end ? parseDateTimeFlag(params.end) : null;
         const newFile = await this.writeService.createTvFileFromData({

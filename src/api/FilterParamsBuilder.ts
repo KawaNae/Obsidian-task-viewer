@@ -1,8 +1,32 @@
-import type { FilterState, FilterCondition, FilterGroup } from '../services/filter/FilterTypes';
+import type { FilterState, FilterCondition, FilterGroup, FilterProperty } from '../services/filter/FilterTypes';
+import { getAllConditions, PROPERTY_OPERATORS } from '../services/filter/FilterTypes';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
 import { parseDatePreset } from '../cli/CliDatePresetParser';
 import { TaskApiError } from './TaskApiTypes';
 import type { ListParams } from './TaskApiTypes';
+
+/**
+ * Boundary validation for externally supplied FilterState (API `filter`
+ * param, CLI `filter-file`). The filter engine silently passes unknown
+ * properties/operators through as all-match, so typos in a filter JSON
+ * would otherwise go undetected. Internal (UI-built) filters don't pass
+ * through here.
+ */
+export function assertValidFilterState(state: FilterState): void {
+    for (const cond of getAllConditions(state)) {
+        const ops = PROPERTY_OPERATORS[cond.property as FilterProperty];
+        if (!ops) {
+            throw new TaskApiError(
+                `Unknown filter property: ${String(cond.property)}. Available: ${Object.keys(PROPERTY_OPERATORS).join(', ')}`,
+            );
+        }
+        if (!ops.includes(cond.operator)) {
+            throw new TaskApiError(
+                `Invalid operator '${String(cond.operator)}' for filter property '${String(cond.property)}'. Available: ${ops.join(', ')}`,
+            );
+        }
+    }
+}
 
 // ── Internal helpers ──
 
@@ -32,8 +56,11 @@ export function normalizeStringArray(value: string | string[] | undefined, strip
  */
 export function buildFilterFromParams(params: ListParams): FilterState | null {
     if (params.filter) {
-        if ('filters' in params.filter) return params.filter;
-        return FilterSerializer.fromJSON(params.filter);
+        const state = 'filters' in params.filter
+            ? params.filter
+            : FilterSerializer.fromJSON(params.filter);
+        assertValidFilterState(state);
+        return state;
     }
 
     const conditions: FilterCondition[] = [];

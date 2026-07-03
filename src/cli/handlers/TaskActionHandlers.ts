@@ -2,22 +2,9 @@ import type { CliData } from 'obsidian';
 import type TaskViewerPlugin from '../../main';
 import { TaskApiError } from '../../api/TaskApiTypes';
 import { formatOutput, resolveFields, cliOk, cliError, type OutputFormat } from '../CliOutputFormatter';
-import type { ApiSortRule } from '../../api/TaskApiTypes';
+import { parseSortFlag } from '../CliFilterBuilder';
 
 const VALID_FORMATS = new Set(['json', 'tsv', 'jsonl']);
-
-function parseSortFlag(sortFlag: string): ApiSortRule[] {
-    return sortFlag.split(',')
-        .map(s => s.trim())
-        .filter(Boolean)
-        .map(segment => {
-            const [prop, dir] = segment.split(':');
-            return {
-                property: prop as ApiSortRule['property'],
-                direction: (dir === 'desc' ? 'desc' : 'asc') as ApiSortRule['direction'],
-            };
-        });
-}
 
 export function createDuplicateHandler(plugin: TaskViewerPlugin) {
     return async (params: CliData): Promise<string> => {
