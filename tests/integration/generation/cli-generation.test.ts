@@ -119,7 +119,7 @@ describe('schedule (at)', () => {
         cliUpdate({ id: task!.id as string, status: 'x' });
 
         const newTask = await waitForTask(
-            { file: TEST_FILE, outputFields: 'id,content,status,startDate' },
+            { file: TEST_FILE, 'output-fields': 'id,content,status,startDate' },
             t => (t.content as string).includes('flow-shift-A')
                 && t.status === ' '
                 && t.startDate === '2026-04-02',
@@ -151,7 +151,7 @@ describe('schedule (at)', () => {
         cliUpdate({ id: task!.id as string, status: 'x' });
 
         const newTask = await waitForTask(
-            { file: TEST_FILE, outputFields: 'id,content,status,startDate,endDate' },
+            { file: TEST_FILE, 'output-fields': 'id,content,status,startDate,endDate' },
             t => (t.content as string).includes('flow-range-B')
                 && t.status === ' '
                 && t.startDate === '2026-04-08',
@@ -177,7 +177,7 @@ describe('telomere (xN)', () => {
         cliUpdate({ id: task!.id as string, status: 'x' });
 
         const newTask = await waitForTask(
-            { file: TEST_FILE, outputFields: 'id,content,status,startDate' },
+            { file: TEST_FILE, 'output-fields': 'id,content,status,startDate' },
             t => (t.content as string).includes('flow-telomere-C')
                 && t.status === ' '
                 && t.startDate === '2026-04-04',
@@ -211,7 +211,7 @@ describe('until (expired)', () => {
         expect(consumed).toBe(true);
 
         // ...and no new instance exists
-        const stillOne = cliList({ file: TEST_FILE, content: 'flow-until-D', outputFields: 'id,status' });
+        const stillOne = cliList({ file: TEST_FILE, content: 'flow-until-D', 'output-fields': 'id,status' });
         expect(stillOne.count).toBe(1);
     }, 20000);
 });
@@ -229,7 +229,7 @@ describe('move', () => {
         cliUpdate({ id: task!.id as string, status: 'x' });
 
         const gone = await waitForTaskGone(
-            { file: TEST_FILE, outputFields: 'id,content' },
+            { file: TEST_FILE, 'output-fields': 'id,content' },
             t => (t.content as string).includes('flow-move-E'),
             5000,
         );
@@ -238,7 +238,7 @@ describe('move', () => {
         const archiveResult = cliList({
             file: ARCHIVE_FILE,
             content: 'flow-move-E',
-            outputFields: 'id,content,status',
+            'output-fields': 'id,content,status',
         });
         expect(archiveResult.count).toBeGreaterThanOrEqual(1);
     }, 20000);
@@ -253,7 +253,7 @@ describe('move', () => {
 
         // Next instance appears in the source file
         const newTask = await waitForTask(
-            { file: TEST_FILE, outputFields: 'id,content,status,startDate' },
+            { file: TEST_FILE, 'output-fields': 'id,content,status,startDate' },
             t => (t.content as string).includes('flow-combo-F')
                 && t.status === ' '
                 && t.startDate === '2026-04-02',
@@ -265,12 +265,12 @@ describe('move', () => {
         const archived = cliList({
             file: ARCHIVE_FILE,
             content: 'flow-combo-F',
-            outputFields: 'id,content,status',
+            'output-fields': 'id,content,status',
         });
         expect(archived.count).toBeGreaterThanOrEqual(1);
 
         // Exactly one instance remains in the source (the new one)
-        const remaining = cliList({ file: TEST_FILE, content: 'flow-combo-F', outputFields: 'id,status' });
+        const remaining = cliList({ file: TEST_FILE, content: 'flow-combo-F', 'output-fields': 'id,status' });
         expect(remaining.count).toBe(1);
     }, 20000);
 });
@@ -288,7 +288,7 @@ describe('multi-line flows', () => {
         cliUpdate({ id: task!.id as string, status: 'x' });
 
         const newTask = await waitForTask(
-            { file: TEST_FILE, outputFields: 'id,content,status,startDate' },
+            { file: TEST_FILE, 'output-fields': 'id,content,status,startDate' },
             t => (t.content as string).includes('flow-multi-G')
                 && t.status === ' '
                 && t.startDate === '2026-04-02',
@@ -325,7 +325,7 @@ describe('multi-line flows', () => {
         cliUpdate({ id: task!.id as string, status: 'x' });
 
         const newTask = await waitForTask(
-            { file: TEST_FILE, outputFields: 'id,content,status,startDate' },
+            { file: TEST_FILE, 'output-fields': 'id,content,status,startDate' },
             t => (t.content as string).includes('flow-multi-H')
                 && t.status === ' '
                 && t.startDate === '2026-04-03',
@@ -352,7 +352,7 @@ describe('multi-line flows', () => {
         cliUpdate({ id: task!.id as string, status: 'x' });
 
         const newTask = await waitForTask(
-            { file: TEST_FILE, outputFields: 'id,content,status,startDate' },
+            { file: TEST_FILE, 'output-fields': 'id,content,status,startDate' },
             t => (t.content as string).includes('flow-multi-I')
                 && t.status === ' '
                 && t.startDate === '2026-04-02',
@@ -378,7 +378,7 @@ describe('multi-line flows', () => {
         cliUpdate({ id: task!.id as string, status: 'x' });
 
         const gone = await waitForTaskGone(
-            { file: TEST_FILE, outputFields: 'id,content' },
+            { file: TEST_FILE, 'output-fields': 'id,content' },
             t => (t.content as string).includes('flow-multi-J'),
             5000,
         );
@@ -387,7 +387,7 @@ describe('multi-line flows', () => {
         const archived = cliList({
             file: ARCHIVE_FILE,
             content: 'flow-multi-J',
-            outputFields: 'id,content,status',
+            'output-fields': 'id,content,status',
         });
         expect(archived.count).toBeGreaterThanOrEqual(1);
 

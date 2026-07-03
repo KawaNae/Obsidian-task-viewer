@@ -36,7 +36,7 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
         limit:   { value: '<number>',        description: 'Max results (default: 100)' },
         offset:  { value: '<number>',        description: 'Skip first N results' },
         format:  { value: 'json|tsv|jsonl',  description: 'Output format (default: json)' },
-        outputFields: { value: '<key,key,...>', description: 'Output fields (default: id only). e.g. content,status,startDate' },
+        'output-fields': { value: '<key,key,...>', description: 'Output fields (default: id only). e.g. content,status,startDate' },
     };
 
     plugin.registerCliHandler(
@@ -52,7 +52,7 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
         limit:  { value: '<number>',        description: 'Max results' },
         offset: { value: '<number>',        description: 'Skip first N' },
         format: { value: 'json|tsv|jsonl',  description: 'Output format' },
-        outputFields: { value: '<key,key,...>', description: 'Output fields (default: id only)' },
+        'output-fields': { value: '<key,key,...>', description: 'Output fields (default: id only)' },
     };
 
     plugin.registerCliHandler(
@@ -65,7 +65,7 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
     const getFlags: CliFlags = {
         id:     { value: '<taskId>',        description: 'Task ID', required: true },
         format: { value: 'json|tsv|jsonl',  description: 'Output format' },
-        outputFields: { value: '<key,key,...>', description: 'Output fields (default: id only)' },
+        'output-fields': { value: '<key,key,...>', description: 'Output fields (default: id only)' },
     };
 
     plugin.registerCliHandler(
@@ -85,7 +85,7 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
         due:     { value: '<YYYY-MM-DD>',    description: 'Due date' },
         status:  { value: '<char>',          description: 'Status character (default: space)' },
         heading: { value: '<heading>',      description: 'Insert under heading (default: end of file)' },
-        outputFields: { value: '<key,key,...>', description: 'Output fields (default: id only)' },
+        'output-fields': { value: '<key,key,...>', description: 'Output fields (default: id only)' },
     };
 
     plugin.registerCliHandler(
@@ -105,7 +105,7 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
             end:     { value: '<date|datetime|none>', description: 'New end date/datetime ("none" to clear)' },
             due:     { value: '<YYYY-MM-DD|none>',    description: 'New due date ("none" to clear)' },
             status:  { value: '<char|none>',          description: 'New status character ("none" to uncheck)' },
-            outputFields: { value: '<key,key,...>', description: 'Output fields (default: id only)' },
+            'output-fields': { value: '<key,key,...>', description: 'Output fields (default: id only)' },
         },
         createUpdateHandler(plugin),
     );
@@ -143,13 +143,13 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
         'obsidian-task-viewer:tasks-for-date-range',
         'List tasks in a date range. Details: obsidian obsidian-task-viewer:help',
         {
-            start:        { value: '<YYYY-MM-DD>',   description: 'Start date (inclusive)', required: true },
-            end:          { value: '<YYYY-MM-DD>',   description: 'End date (inclusive)', required: true },
+            from:         { value: '<date|preset>',  description: 'Query window start (inclusive)', required: true },
+            to:           { value: '<date|preset>',  description: 'Query window end (inclusive)', required: true },
             sort:         { value: '<prop[:dir],..>', description: 'Sort (e.g. startDate:asc,due:desc)' },
             limit:        { value: '<number>',        description: 'Max results' },
             offset:       { value: '<number>',        description: 'Skip first N' },
             format:       { value: 'json|tsv|jsonl',  description: 'Output format (default: json)' },
-            outputFields: { value: '<key,key,...>',   description: 'Output fields (default: id only)' },
+            'output-fields': { value: '<key,key,...>',   description: 'Output fields (default: id only)' },
         },
         createTasksForDateRangeHandler(plugin),
     );
@@ -160,8 +160,8 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
         'obsidian-task-viewer:categorized-tasks-for-date-range',
         'Get tasks in a date range, categorized into allDay/timed/dueOnly per date. Details: obsidian obsidian-task-viewer:help',
         {
-            start: { value: '<YYYY-MM-DD>', description: 'Start date (inclusive)', required: true },
-            end:   { value: '<YYYY-MM-DD>', description: 'End date (inclusive)', required: true },
+            from: { value: '<date|preset>', description: 'Query window start (inclusive)', required: true },
+            to:   { value: '<date|preset>', description: 'Query window end (inclusive)', required: true },
         },
         createCategorizedTasksForDateRangeHandler(plugin),
     );

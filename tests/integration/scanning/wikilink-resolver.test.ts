@@ -67,11 +67,11 @@ describe('frontmatter wikilink resolution', () => {
     });
 
     it('resolves wikilink ref to existing file (parent → child)', () => {
-        const parentResult = cliList({ file: PARENT_FILE, outputFields: OUTPUT_FIELDS });
+        const parentResult = cliList({ file: PARENT_FILE, 'output-fields': OUTPUT_FIELDS });
         const parentTask = parentResult.tasks.find(t => t.parserId === 'tv-file');
         expect(parentTask).toBeDefined();
 
-        const childResult = cliList({ file: CHILD_FILE, outputFields: OUTPUT_FIELDS });
+        const childResult = cliList({ file: CHILD_FILE, 'output-fields': OUTPUT_FIELDS });
         const childTask = childResult.tasks.find(t => t.parserId === 'tv-file');
         expect(childTask).toBeDefined();
 
@@ -119,10 +119,10 @@ describe('wikilink with .md extension', () => {
     });
 
     it('resolves wikilink target that includes .md extension', () => {
-        const parentResult = cliList({ file: PARENT_FILE, outputFields: OUTPUT_FIELDS });
+        const parentResult = cliList({ file: PARENT_FILE, 'output-fields': OUTPUT_FIELDS });
         const parentTask = parentResult.tasks.find(t => t.parserId === 'tv-file');
 
-        const childResult = cliList({ file: CHILD_FILE, outputFields: OUTPUT_FIELDS });
+        const childResult = cliList({ file: CHILD_FILE, 'output-fields': OUTPUT_FIELDS });
         const childTask = childResult.tasks.find(t => t.parserId === 'tv-file');
 
         expect(parentTask).toBeDefined();
@@ -152,7 +152,7 @@ describe('unresolvable wikilink', () => {
     afterAll(() => fixture.teardown());
 
     it('does not add unresolvable target to childIds', () => {
-        const r = cliList({ file: FILE, outputFields: OUTPUT_FIELDS });
+        const r = cliList({ file: FILE, 'output-fields': OUTPUT_FIELDS });
         const task = r.tasks.find(t => t.parserId === 'tv-file');
         expect(task).toBeDefined();
         const childIds = (task!.childIds as string[]) ?? [];
@@ -179,7 +179,7 @@ describe('self-link prevention', () => {
     afterAll(() => fixture.teardown());
 
     it('does not resolve self-link', () => {
-        const r = cliList({ file: FILE, outputFields: OUTPUT_FIELDS });
+        const r = cliList({ file: FILE, 'output-fields': OUTPUT_FIELDS });
         const task = r.tasks.find(t => t.parserId === 'tv-file');
         expect(task).toBeDefined();
         const childIds = (task!.childIds as string[]) ?? [];
@@ -222,10 +222,10 @@ describe('inline childLine wikilinks', () => {
     });
 
     it('resolves wikilink from inline task childLines', () => {
-        const parentResult = cliList({ file: PARENT_FILE, outputFields: OUTPUT_FIELDS });
+        const parentResult = cliList({ file: PARENT_FILE, 'output-fields': OUTPUT_FIELDS });
         const parentTask = parentResult.tasks.find(t => t.content === 'Inline parent');
 
-        const childResult = cliList({ file: CHILD_FILE, outputFields: OUTPUT_FIELDS });
+        const childResult = cliList({ file: CHILD_FILE, 'output-fields': OUTPUT_FIELDS });
         const childTask = childResult.tasks.find(t => t.parserId === 'tv-file');
 
         expect(parentTask).toBeDefined();
@@ -253,7 +253,7 @@ describe('non-wikilink childLines', () => {
     afterAll(() => fixture.teardown());
 
     it('does not create wikilink-based childIds for non-wikilink childLines', () => {
-        const r = cliList({ file: FILE, outputFields: OUTPUT_FIELDS });
+        const r = cliList({ file: FILE, 'output-fields': OUTPUT_FIELDS });
         const parent = r.tasks.find(t => t.content === 'Parent with plain children');
         expect(parent).toBeDefined();
         // The checkbox child may appear as a separate @notation task with parentId,
@@ -261,7 +261,7 @@ describe('non-wikilink childLines', () => {
         const childIds = (parent!.childIds as string[]) ?? [];
         // Should only contain the checkbox child (nested @notation), not any wikilink-resolved tasks
         for (const cid of childIds) {
-            const child = cliGet(cid, { outputFields: 'parserId,content' });
+            const child = cliGet(cid, { 'output-fields': 'parserId,content' });
             // Any childId should be from inline parsing, not wikilink resolution
             expect(child.parserId).toBe('tv-inline');
         }
@@ -304,10 +304,10 @@ describe('pipe alias handling', () => {
     });
 
     it('strips pipe alias from wikilink target and resolves correctly', () => {
-        const parentResult = cliList({ file: PARENT_FILE, outputFields: OUTPUT_FIELDS });
+        const parentResult = cliList({ file: PARENT_FILE, 'output-fields': OUTPUT_FIELDS });
         const parentTask = parentResult.tasks.find(t => t.parserId === 'tv-file');
 
-        const childResult = cliList({ file: CHILD_FILE, outputFields: OUTPUT_FIELDS });
+        const childResult = cliList({ file: CHILD_FILE, 'output-fields': OUTPUT_FIELDS });
         const childTask = childResult.tasks.find(t => t.parserId === 'tv-file');
 
         expect(parentTask).toBeDefined();
@@ -376,15 +376,15 @@ describe('childIds ordering', () => {
     });
 
     it('sorts childIds by bodyLine order', () => {
-        const parentResult = cliList({ file: PARENT_FILE, outputFields: OUTPUT_FIELDS });
+        const parentResult = cliList({ file: PARENT_FILE, 'output-fields': OUTPUT_FIELDS });
         const parentTask = parentResult.tasks.find(t => t.parserId === 'tv-file');
         expect(parentTask).toBeDefined();
 
-        const c1Result = cliList({ file: CHILD1_FILE, outputFields: OUTPUT_FIELDS });
+        const c1Result = cliList({ file: CHILD1_FILE, 'output-fields': OUTPUT_FIELDS });
         const c1 = c1Result.tasks.find(t => t.parserId === 'tv-file');
-        const c2Result = cliList({ file: CHILD2_FILE, outputFields: OUTPUT_FIELDS });
+        const c2Result = cliList({ file: CHILD2_FILE, 'output-fields': OUTPUT_FIELDS });
         const c2 = c2Result.tasks.find(t => t.parserId === 'tv-file');
-        const c3Result = cliList({ file: CHILD3_FILE, outputFields: OUTPUT_FIELDS });
+        const c3Result = cliList({ file: CHILD3_FILE, 'output-fields': OUTPUT_FIELDS });
         const c3 = c3Result.tasks.find(t => t.parserId === 'tv-file');
 
         expect(c1).toBeDefined();
@@ -446,14 +446,14 @@ describe('direct children only (indent filtering)', () => {
     });
 
     it('only resolves direct children at minimum indent level', () => {
-        const parentResult = cliList({ file: PARENT_FILE, outputFields: OUTPUT_FIELDS });
+        const parentResult = cliList({ file: PARENT_FILE, 'output-fields': OUTPUT_FIELDS });
         const parentTask = parentResult.tasks.find(t => t.content === 'Indent parent');
         expect(parentTask).toBeDefined();
 
-        const childResult = cliList({ file: CHILD_FILE, outputFields: OUTPUT_FIELDS });
+        const childResult = cliList({ file: CHILD_FILE, 'output-fields': OUTPUT_FIELDS });
         const childTask = childResult.tasks.find(t => t.parserId === 'tv-file');
 
-        const grandchildResult = cliList({ file: GRANDCHILD_FILE, outputFields: OUTPUT_FIELDS });
+        const grandchildResult = cliList({ file: GRANDCHILD_FILE, 'output-fields': OUTPUT_FIELDS });
         const grandchildTask = grandchildResult.tasks.find(t => t.parserId === 'tv-file');
 
         expect(childTask).toBeDefined();
@@ -506,10 +506,10 @@ describe('wikilink without heading', () => {
     });
 
     it('resolves wikilink from body without configured heading', () => {
-        const parentResult = cliList({ file: PARENT_FILE, outputFields: OUTPUT_FIELDS });
+        const parentResult = cliList({ file: PARENT_FILE, 'output-fields': OUTPUT_FIELDS });
         const parentTask = parentResult.tasks.find(t => t.parserId === 'tv-file');
 
-        const childResult = cliList({ file: CHILD_FILE, outputFields: OUTPUT_FIELDS });
+        const childResult = cliList({ file: CHILD_FILE, 'output-fields': OUTPUT_FIELDS });
         const childTask = childResult.tasks.find(t => t.parserId === 'tv-file');
 
         expect(parentTask).toBeDefined();
@@ -559,9 +559,9 @@ describe('wikilink dangling cleanup on child delete', () => {
 
     it('removes the deleted child from parent childIds', async () => {
         // Precondition: parent links child
-        const before = cliList({ file: PARENT_FILE, outputFields: OUTPUT_FIELDS });
+        const before = cliList({ file: PARENT_FILE, 'output-fields': OUTPUT_FIELDS });
         const parentBefore = before.tasks.find(t => t.parserId === 'tv-file');
-        const childRes = cliList({ file: CHILD_FILE, outputFields: OUTPUT_FIELDS });
+        const childRes = cliList({ file: CHILD_FILE, 'output-fields': OUTPUT_FIELDS });
         const childTask = childRes.tasks.find(t => t.parserId === 'tv-file');
         expect(parentBefore).toBeDefined();
         expect(childTask).toBeDefined();
@@ -573,7 +573,7 @@ describe('wikilink dangling cleanup on child delete', () => {
         await waitForFileDeindexed(CHILD_FILE);
         await sleep(2000);
 
-        const after = cliList({ file: PARENT_FILE, outputFields: OUTPUT_FIELDS });
+        const after = cliList({ file: PARENT_FILE, 'output-fields': OUTPUT_FIELDS });
         const parentAfter = after.tasks.find(t => t.parserId === 'tv-file');
         expect(parentAfter).toBeDefined();
         const childIdsAfter = (parentAfter!.childIds as string[]) ?? [];
@@ -628,13 +628,13 @@ describe('ambiguous basename wikilink', () => {
     });
 
     it('resolves to the lexicographically first path among duplicate basenames', () => {
-        const parentResult = cliList({ file: PARENT_FILE, outputFields: OUTPUT_FIELDS });
+        const parentResult = cliList({ file: PARENT_FILE, 'output-fields': OUTPUT_FIELDS });
         const parentTask = parentResult.tasks.find(t => t.parserId === 'tv-file');
         expect(parentTask).toBeDefined();
 
-        const aResult = cliList({ file: DUP_A, outputFields: OUTPUT_FIELDS });
+        const aResult = cliList({ file: DUP_A, 'output-fields': OUTPUT_FIELDS });
         const aTask = aResult.tasks.find(t => t.parserId === 'tv-file');
-        const bResult = cliList({ file: DUP_B, outputFields: OUTPUT_FIELDS });
+        const bResult = cliList({ file: DUP_B, 'output-fields': OUTPUT_FIELDS });
         const bTask = bResult.tasks.find(t => t.parserId === 'tv-file');
         expect(aTask).toBeDefined();
         expect(bTask).toBeDefined();

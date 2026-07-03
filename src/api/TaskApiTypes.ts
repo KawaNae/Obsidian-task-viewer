@@ -158,8 +158,10 @@ export interface ConvertResult {
 }
 
 export interface TasksForDateRangeParams extends PaginationParams {
-    start: string;
-    end: string;
+    /** Query window start (inclusive). YYYY-MM-DD or a date preset. */
+    from: string;
+    /** Query window end (inclusive). YYYY-MM-DD or a date preset. */
+    to: string;
     filter?: FilterState;
     sort?: ApiSortRule[];
 }
@@ -167,8 +169,10 @@ export interface TasksForDateRangeParams extends PaginationParams {
 // ── categorizedTasksForDateRange ──
 
 export interface CategorizedTasksForDateRangeParams {
-    start: string;
-    end: string;
+    /** Query window start (inclusive). YYYY-MM-DD or a date preset. */
+    from: string;
+    /** Query window end (inclusive). YYYY-MM-DD or a date preset. */
+    to: string;
     filter?: FilterState;
 }
 

@@ -12,6 +12,8 @@ import type { FilterState } from '../services/filter/FilterTypes';
 import type { SortState, SortProperty } from '../services/sort/SortTypes';
 import { DateUtils } from '../utils/DateUtils';
 import { parseDateTimeFlag } from '../cli/CliFilterBuilder';
+import { parseDatePreset } from '../cli/CliDatePresetParser';
+import { DateResolver } from '../services/filter/DateResolver';
 import { buildFilterFromParams, assertValidFilterState } from './FilterParamsBuilder';
 import { loadFilterFile } from './FilterFileLoader';
 import {
@@ -598,7 +600,9 @@ export class TaskApi {
     async tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult> {
         assertParams(params, TASKS_FOR_DATE_RANGE_SCHEMA, 'tasksForDateRange');
         if (params.filter) assertValidFilterState(params.filter);
-        let tasks = this.readService.getTasksForDateRange(params.start, params.end, params.filter);
+        const from = this.resolveWindowBound(params.from, 'from');
+        const to = this.resolveWindowBound(params.to, 'to');
+        let tasks = this.readService.getTasksForDateRange(from, to, params.filter);
         const sortState = buildSortState(params.sort);
         if (sortState) {
             tasks = [...tasks];
@@ -615,9 +619,11 @@ export class TaskApi {
         assertParams(params, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA, 'categorizedTasksForDateRange');
         if (params.filter) assertValidFilterState(params.filter);
         const startHour = this.plugin.settings.startHour;
-        const tasks = this.readService.getTasksForDateRange(params.start, params.end, params.filter);
+        const from = this.resolveWindowBound(params.from, 'from');
+        const to = this.resolveWindowBound(params.to, 'to');
+        const tasks = this.readService.getTasksForDateRange(from, to, params.filter);
         const split = splitTasks(tasks, { type: 'visual-date', startHour });
-        const dates = DateUtils.getDateRange(params.start, params.end);
+        const dates = DateUtils.getDateRange(from, to);
         const map = categorizeTasksByDate(split, dates, startHour);
         const result: CategorizedTasksForDateRangeResult = {};
         for (const [date, cats] of map) {
@@ -658,6 +664,23 @@ export class TaskApi {
             due: params.due,
         });
         return { newFile };
+    }
+
+    /**
+     * Resolve a window-bound value (YYYY-MM-DD or date preset) to a concrete
+     * date: `from` takes the start of the preset's window, `to` its end, so
+     * `from=thisweek to=thisweek` covers the whole week.
+     */
+    private resolveWindowBound(value: string, side: 'from' | 'to'): string {
+        const parsed = parseDatePreset(value);
+        if (!parsed) {
+            throw new TaskApiError(
+                `Invalid date value for ${side}: ${value}. Use YYYY-MM-DD or a preset (today, thisWeek, pastWeek, nextWeek, thisMonth, thisYear, nextNdays)`,
+            );
+        }
+        const { weekStartDay, startHour } = this.plugin.settings;
+        const window = DateResolver.resolve(parsed, weekStartDay, startHour);
+        return side === 'from' ? window.start : window.end;
     }
 
     /**

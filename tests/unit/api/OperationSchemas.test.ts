@@ -38,7 +38,7 @@ describe('assertParams', () => {
         expect(() => assertParams({ id: 'task-1' }, GET_SCHEMA, 'get')).not.toThrow();
         expect(() => assertParams({}, LIST_SCHEMA, 'list')).not.toThrow();
         expect(() => assertParams(
-            { start: '2026-03-01', end: '2026-03-31', limit: 5 },
+            { from: '2026-03-01', to: '2026-03-31', limit: 5 },
             TASKS_FOR_DATE_RANGE_SCHEMA, 'tasksForDateRange',
         )).not.toThrow();
     });

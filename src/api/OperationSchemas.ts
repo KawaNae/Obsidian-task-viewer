@@ -104,8 +104,8 @@ export const CONVERT_SCHEMA = {
 } as const satisfies ParamMap<ConvertParams>;
 
 export const TASKS_FOR_DATE_RANGE_SCHEMA = {
-    start:  { value: '<YYYY-MM-DD>',    description: 'Start date (inclusive)', required: true },
-    end:    { value: '<YYYY-MM-DD>',    description: 'End date (inclusive)', required: true },
+    from:   { value: '<date|preset>',   description: 'Query window start (inclusive)', required: true },
+    to:     { value: '<date|preset>',   description: 'Query window end (inclusive)', required: true },
     filter: { cli: 'hidden',            description: 'FilterState object (API only)' },
     sort:   { value: '<prop[:dir],..>', description: 'Sort (e.g. startDate:asc,due:desc)' },
     limit:  { value: '<number>',        description: 'Max results' },
@@ -113,9 +113,9 @@ export const TASKS_FOR_DATE_RANGE_SCHEMA = {
 } as const satisfies ParamMap<TasksForDateRangeParams>;
 
 export const CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA = {
-    start:  { value: '<YYYY-MM-DD>', description: 'Start date (inclusive)', required: true },
-    end:    { value: '<YYYY-MM-DD>', description: 'End date (inclusive)', required: true },
-    filter: { cli: 'hidden',         description: 'FilterState object (API only)' },
+    from:   { value: '<date|preset>', description: 'Query window start (inclusive)', required: true },
+    to:     { value: '<date|preset>', description: 'Query window end (inclusive)', required: true },
+    filter: { cli: 'hidden',          description: 'FilterState object (API only)' },
 } as const satisfies ParamMap<CategorizedTasksForDateRangeParams>;
 
 export const INSERT_CHILD_TASK_SCHEMA = {

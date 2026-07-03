@@ -48,7 +48,7 @@ describe('inline task extraction', () => {
     afterAll(() => fixture.teardown());
 
     it('extracts basic @notation task with correct content and date', () => {
-        const r = cliList({ file: FILE, outputFields: OUTPUT_FIELDS });
+        const r = cliList({ file: FILE, 'output-fields': OUTPUT_FIELDS });
         const task = r.tasks.find(t => t.content === 'Buy groceries');
         expect(task).toBeDefined();
         expect(task!.startDate).toBe('2026-03-11');
@@ -56,14 +56,14 @@ describe('inline task extraction', () => {
     });
 
     it('extracts multiple tasks from body', () => {
-        const r = cliList({ file: FILE, outputFields: OUTPUT_FIELDS });
+        const r = cliList({ file: FILE, 'output-fields': OUTPUT_FIELDS });
         // Should have exactly 3 @notation tasks
         const atTasks = r.tasks.filter(t => t.parserId === 'tv-inline');
         expect(atTasks).toHaveLength(3);
     });
 
     it('skips non-task lines (headings, plain text, regular bullets)', () => {
-        const r = cliList({ file: FILE, outputFields: OUTPUT_FIELDS });
+        const r = cliList({ file: FILE, 'output-fields': OUTPUT_FIELDS });
         // No task should have content matching non-task lines
         const contents = r.tasks.map(t => t.content as string);
         expect(contents).not.toContain('Test inline scanning');
@@ -89,7 +89,7 @@ describe('time-only on non-daily note', () => {
     afterAll(() => fixture.teardown());
 
     it('skips time-only task on non-daily note (no date context)', () => {
-        const r = cliList({ file: 'test-int-scanner-timeonly', outputFields: OUTPUT_FIELDS });
+        const r = cliList({ file: 'test-int-scanner-timeonly', 'output-fields': OUTPUT_FIELDS });
         // Time-only without daily note context should produce no tasks
         expect(r.count).toBe(0);
     });
@@ -119,7 +119,7 @@ describe('daily note date inheritance', () => {
         // for round-trip fidelity — raw/cascade/effective 3層分離)
         const r = cliList({
             file: 'DailyNotes/2026-08-15',
-            outputFields: OUTPUT_FIELDS + ',effectiveStartDate',
+            'output-fields': OUTPUT_FIELDS + ',effectiveStartDate',
         });
         const standup = r.tasks.find(t => (t.content as string).includes('Morning standup'));
         expect(standup).toBeDefined();
@@ -129,7 +129,7 @@ describe('daily note date inheritance', () => {
     });
 
     it('does not override explicit startDate on daily note', () => {
-        const r = cliList({ file: 'DailyNotes/2026-08-15', outputFields: OUTPUT_FIELDS });
+        const r = cliList({ file: 'DailyNotes/2026-08-15', 'output-fields': OUTPUT_FIELDS });
         const future = r.tasks.find(t => (t.content as string).includes('Future task'));
         expect(future).toBeDefined();
         expect(future!.startDate).toBe('2026-04-01');
@@ -153,7 +153,7 @@ describe('frontmatter tasks', () => {
     afterAll(() => fixture.teardown());
 
     it('creates frontmatter task when tv-start is present', () => {
-        const r = cliList({ file: FILE, outputFields: OUTPUT_FIELDS });
+        const r = cliList({ file: FILE, 'output-fields': OUTPUT_FIELDS });
         const fmTask = r.tasks.find(t => t.parserId === 'tv-file');
         expect(fmTask).toBeDefined();
         expect(fmTask!.startDate).toBe('2026-03-11');
@@ -174,7 +174,7 @@ describe('no frontmatter task when no tv-start/end/due', () => {
     afterAll(() => fixture.teardown());
 
     it('has no frontmatter task', () => {
-        const r = cliList({ file: FILE, outputFields: OUTPUT_FIELDS });
+        const r = cliList({ file: FILE, 'output-fields': OUTPUT_FIELDS });
         const fmTasks = r.tasks.filter(t => t.parserId === 'tv-file');
         expect(fmTasks).toHaveLength(0);
         // But inline task should still be found
@@ -205,7 +205,7 @@ describe('child task extraction', () => {
     afterAll(() => fixture.teardown());
 
     it('parent-child relationship for nested @notation tasks', () => {
-        const r = cliList({ file: FILE, outputFields: OUTPUT_FIELDS });
+        const r = cliList({ file: FILE, 'output-fields': OUTPUT_FIELDS });
         const parent = r.tasks.find(t => t.content === 'Nested parent');
         const child = r.tasks.find(t => t.content === 'Child task');
         expect(parent).toBeDefined();
@@ -215,7 +215,7 @@ describe('child task extraction', () => {
     });
 
     it('stops child collection at blank line', () => {
-        const r = cliList({ file: FILE, outputFields: OUTPUT_FIELDS });
+        const r = cliList({ file: FILE, 'output-fields': OUTPUT_FIELDS });
         const stopsAtBlank = r.tasks.find(t => t.content === 'Stops at blank');
         const afterBlank = r.tasks.find(t => t.content === 'After blank');
         expect(stopsAtBlank).toBeDefined();
@@ -249,7 +249,7 @@ describe('ignore frontmatter', () => {
     });
 
     it('skips file when tv-ignore: true in frontmatter', () => {
-        const r = cliList({ file: 'test-int-scanner-ignore', outputFields: OUTPUT_FIELDS });
+        const r = cliList({ file: 'test-int-scanner-ignore', 'output-fields': OUTPUT_FIELDS });
         expect(r.count).toBe(0);
     });
 });
@@ -270,7 +270,7 @@ describe('shared tags', () => {
     afterAll(() => fixture.teardown());
 
     it('merges shared tags from frontmatter into task tags', () => {
-        const r = cliList({ file: FILE, outputFields: OUTPUT_FIELDS });
+        const r = cliList({ file: FILE, 'output-fields': OUTPUT_FIELDS });
         const task = r.tasks.find(t => t.parserId === 'tv-inline');
         expect(task).toBeDefined();
         const tags = task!.tags as string[];
@@ -295,7 +295,7 @@ describe('file-level styling', () => {
     afterAll(() => fixture.teardown());
 
     it('applies tv-color from frontmatter to task', () => {
-        const r = cliList({ file: FILE, outputFields: OUTPUT_FIELDS });
+        const r = cliList({ file: FILE, 'output-fields': OUTPUT_FIELDS });
         expect(r.count).toBeGreaterThan(0);
         const task = r.tasks.find(t => t.parserId === 'tv-inline');
         expect(task).toBeDefined();

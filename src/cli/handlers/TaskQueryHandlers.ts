@@ -89,7 +89,7 @@ export function createListHandler(plugin: TaskViewerPlugin) {
             const listResult = await plugin.api.list(apiParams);
 
             const format = (params.format as OutputFormat) || 'json';
-            const fields = resolveFields(params.outputFields);
+            const fields = resolveFields(params['output-fields']);
             return formatOutput(listResult.tasks, format, fields);
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));
@@ -107,7 +107,7 @@ export function createTodayHandler(plugin: TaskViewerPlugin) {
             const result = plugin.api.today(apiParams);
 
             const format = (params.format as OutputFormat) || 'json';
-            const fields = resolveFields(params.outputFields);
+            const fields = resolveFields(params['output-fields']);
             return formatOutput(result.tasks, format, fields);
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));
@@ -124,7 +124,7 @@ export function createGetHandler(plugin: TaskViewerPlugin) {
         try {
             const displayTask = plugin.api.get({ id: params.id });
             const format = (params.format as OutputFormat) || 'json';
-            const fields = resolveFields(params.outputFields);
+            const fields = resolveFields(params['output-fields']);
             return formatSingleTask(displayTask, format, fields);
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));

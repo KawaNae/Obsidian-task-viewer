@@ -44,11 +44,11 @@ export function createConvertHandler(plugin: TaskViewerPlugin) {
 
 export function createCategorizedTasksForDateRangeHandler(plugin: TaskViewerPlugin) {
     return (params: CliData): string => {
-        if (!params.start) return cliError('Missing required flag: --start');
-        if (!params.end) return cliError('Missing required flag: --end');
+        if (!params.from) return cliError('Missing required flag: --from');
+        if (!params.to) return cliError('Missing required flag: --to');
 
         try {
-            const result = plugin.api.categorizedTasksForDateRange({ start: params.start, end: params.end });
+            const result = plugin.api.categorizedTasksForDateRange({ from: params.from, to: params.to });
             return cliOk(result);
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to categorize tasks: ${e instanceof Error ? e.message : String(e)}`);
@@ -101,8 +101,8 @@ export function createGetStartHourHandler(plugin: TaskViewerPlugin) {
 
 export function createTasksForDateRangeHandler(plugin: TaskViewerPlugin) {
     return async (params: CliData): Promise<string> => {
-        if (!params.start) return cliError('Missing required flag: --start');
-        if (!params.end) return cliError('Missing required flag: --end');
+        if (!params.from) return cliError('Missing required flag: --from');
+        if (!params.to) return cliError('Missing required flag: --to');
 
         if (params.format && !VALID_FORMATS.has(params.format)) {
             return cliError(`Invalid format: ${params.format}. Must be json, tsv, or jsonl`);
@@ -118,15 +118,15 @@ export function createTasksForDateRangeHandler(plugin: TaskViewerPlugin) {
             }
 
             const result = await plugin.api.tasksForDateRange({
-                start: params.start,
-                end: params.end,
+                from: params.from,
+                to: params.to,
                 sort,
                 limit,
                 offset: offset !== undefined ? Math.max(0, offset || 0) : undefined,
             });
 
             const format = (params.format as OutputFormat) || 'json';
-            const fields = resolveFields(params.outputFields);
+            const fields = resolveFields(params['output-fields']);
             return formatOutput(result.tasks, format, fields);
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to query date range: ${e instanceof Error ? e.message : String(e)}`);
