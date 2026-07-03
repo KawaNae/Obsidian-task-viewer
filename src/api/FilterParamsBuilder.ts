@@ -84,25 +84,27 @@ export function buildFilterFromParams(params: ListParams): FilterState | null {
         conditions.push(condition('content', 'contains', params.content));
     }
 
-    if (params.date) {
-        if (params.from || params.to) {
-            throw new TaskApiError("Cannot use 'date' together with 'from'/'to'. Use either 'date' for a specific date, or 'from'/'to' for a range.");
-        }
-        const dateValue = parseDatePreset(params.date);
-        if (!dateValue) throw new TaskApiError(`Invalid date value: ${params.date}. Use YYYY-MM-DD or a preset (today, thisWeek, pastWeek, nextWeek, thisMonth, thisYear, next7days)`);
-        conditions.push(condition('startDate', 'onOrBefore', dateValue));
-        conditions.push(condition('endDate', 'onOrAfter', dateValue));
-    } else {
-        if (params.from) {
-            const fromValue = parseDatePreset(params.from);
-            if (!fromValue) throw new TaskApiError(`Invalid date value for from: ${params.from}. Use YYYY-MM-DD or a preset`);
-            conditions.push(condition('startDate', 'onOrAfter', fromValue));
-        }
-        if (params.to) {
-            const toValue = parseDatePreset(params.to);
-            if (!toValue) throw new TaskApiError(`Invalid date value for to: ${params.to}. Use YYYY-MM-DD or a preset`);
-            conditions.push(condition('endDate', 'onOrBefore', toValue));
-        }
+    // Query window (inclusive overlap): a task matches when its effective
+    // span intersects [from, to]. `date` is sugar for a single-day window
+    // (from=X to=X), presets included, so the whole family shares one rule:
+    //   from → the task must not end before the window starts
+    //   to   → the task must not start after the window ends
+    if (params.date && (params.from || params.to)) {
+        throw new TaskApiError("Cannot use 'date' together with 'from'/'to'. Use either 'date' for a single-day window, or 'from'/'to' for a range.");
+    }
+    const windowFrom = params.date ?? params.from;
+    const windowTo = params.date ?? params.to;
+    const windowFromName = params.date ? 'date' : 'from';
+    const windowToName = params.date ? 'date' : 'to';
+    if (windowFrom) {
+        const fromValue = parseDatePreset(windowFrom);
+        if (!fromValue) throw new TaskApiError(`Invalid date value for ${windowFromName}: ${windowFrom}. Use YYYY-MM-DD or a preset (today, thisWeek, pastWeek, nextWeek, thisMonth, thisYear, nextNdays)`);
+        conditions.push(condition('endDate', 'onOrAfter', fromValue));
+    }
+    if (windowTo) {
+        const toValue = parseDatePreset(windowTo);
+        if (!toValue) throw new TaskApiError(`Invalid date value for ${windowToName}: ${windowTo}. Use YYYY-MM-DD or a preset (today, thisWeek, pastWeek, nextWeek, thisMonth, thisYear, nextNdays)`);
+        conditions.push(condition('startDate', 'onOrBefore', toValue));
     }
 
     if (params.due) {
