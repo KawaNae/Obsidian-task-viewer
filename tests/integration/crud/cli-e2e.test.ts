@@ -593,3 +593,45 @@ describe('help', () => {
         expect(r).toContain('get-start-hour');
     });
 });
+
+// ────────────────────────────────────────────
+// 18. strict flag validation
+// ────────────────────────────────────────────
+describe('strict flag validation', () => {
+    it('unknown flag returns error with did-you-mean', () => {
+        const r = obsidianCli('list', { statuss: 'x' }) as Record<string, unknown>;
+        expect(r).toHaveProperty('error');
+        expect(String(r.error)).toContain('statuss');
+        expect(String(r.error)).toContain('status');
+    });
+
+    it('old range key start= is rejected', () => {
+        const r = obsidianCli('tasks-for-date-range', {
+            from: '2026-03-15', to: '2026-03-17', start: '2026-03-15',
+        }) as Record<string, unknown>;
+        expect(r).toHaveProperty('error');
+        expect(String(r.error)).toContain('start');
+    });
+
+    it('boolean flag with a value is rejected', () => {
+        const r = obsidianCli('list', { leaf: '1' }) as Record<string, unknown>;
+        expect(r).toHaveProperty('error');
+        expect(String(r.error)).toContain('boolean');
+    });
+
+    it('no-flag command rejects any argument', () => {
+        const r = obsidianCli('get-start-hour', { anything: 'x' }) as Record<string, unknown>;
+        expect(r).toHaveProperty('error');
+    });
+
+    it('get-start-hour with no args still succeeds (framework-key canary)', () => {
+        const r = obsidianCli('get-start-hour') as Record<string, unknown>;
+        expect(r).toHaveProperty('startHour');
+    });
+
+    it('date preset is accepted as a range window bound', () => {
+        const r = cliTasksForDateRange({ from: 'today', to: 'today', 'output-fields': 'id' });
+        expect(r).toHaveProperty('count');
+        expect(r).not.toHaveProperty('error');
+    });
+});

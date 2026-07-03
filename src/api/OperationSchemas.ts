@@ -131,6 +131,52 @@ export const CREATE_TV_FILE_SCHEMA = {
     status:  { value: '<char>',          description: 'Status character (default: space)' },
 } as const satisfies ParamMap<CreateTvFileParams>;
 
+// ── CLI derivation ──
+
+/**
+ * CLI-only output-shaping flags, shared by every command that prints tasks.
+ * These have no API-param counterpart (the API returns structured data).
+ */
+export const CLI_OUTPUT_SCHEMA: Record<string, ParamSpec> = {
+    format:       { value: 'json|tsv|jsonl',   description: 'Output format (default: json)' },
+    outputFields: { value: '<key,key,...>',    description: 'Output fields (default: id only). e.g. content,status,startDate' },
+};
+
+/** Rule, not data: CLI flag name = kebab-case of the API key. */
+export function toCliName(apiKey: string): string {
+    return apiKey.replace(/[A-Z]/g, c => '-' + c.toLowerCase());
+}
+
+export interface CliFlagDecl {
+    value?: string;
+    description: string;
+    required?: boolean;
+}
+
+/**
+ * Derive the CLI flag declarations for a command from its operation schema.
+ * Hidden (API-only) params are skipped; boolean params become value-less
+ * flags; multi-word keys become kebab-case.
+ */
+export function toCliFlags(
+    schema: Record<string, ParamSpec>,
+    opts: { output?: boolean } = {},
+): Record<string, CliFlagDecl> {
+    const flags: Record<string, CliFlagDecl> = {};
+    const add = (source: Record<string, ParamSpec>) => {
+        for (const [key, spec] of Object.entries(source)) {
+            if (spec.cli === 'hidden') continue;
+            const decl: CliFlagDecl = { description: spec.description };
+            if (!spec.boolean && spec.value) decl.value = spec.value;
+            if (spec.required) decl.required = true;
+            flags[toCliName(key)] = decl;
+        }
+    };
+    add(schema);
+    if (opts.output) add(CLI_OUTPUT_SCHEMA);
+    return flags;
+}
+
 // ── Validation ──
 
 /**

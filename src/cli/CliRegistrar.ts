@@ -1,7 +1,14 @@
-import type { CliFlags } from 'obsidian';
+import type { CliFlags, CliHandler } from 'obsidian';
 import type TaskViewerPlugin from '../main';
+import {
+    toCliFlags,
+    LIST_SCHEMA, TODAY_SCHEMA, GET_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA,
+    DELETE_SCHEMA, DUPLICATE_SCHEMA, CONVERT_SCHEMA,
+    TASKS_FOR_DATE_RANGE_SCHEMA, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA,
+    INSERT_CHILD_TASK_SCHEMA, CREATE_TV_FILE_SCHEMA,
+} from '../api/OperationSchemas';
+import { validateCliParams } from './CliParamValidator';
 import { createListHandler, createTodayHandler, createGetHandler } from './handlers/TaskQueryHandlers';
-
 import { createCreateHandler, createUpdateHandler, createDeleteHandler } from './handlers/TaskCrudHandlers';
 import { createDuplicateHandler, createConvertHandler, createTasksForDateRangeHandler, createCategorizedTasksForDateRangeHandler, createInsertChildTaskHandler, createCreateTvFileHandler, createGetStartHourHandler } from './handlers/TaskActionHandlers';
 import { createHelpHandler } from './handlers/HelpHandler';
@@ -10,198 +17,70 @@ import { createHelpHandler } from './handlers/HelpHandler';
  * Register all CLI handlers for the Task Viewer plugin.
  * Call once from plugin.onload() after TaskIndex is initialized.
  *
+ * Flag declarations are derived from OperationSchemas (the single source of
+ * truth for the CLI/API parameter surface), and every handler is wrapped
+ * with strict validation: unknown flags error with a did-you-mean
+ * suggestion instead of being silently ignored.
+ *
  * Commands (14): list, today, get, create, update, delete, duplicate, convert, tasks-for-date-range,
  *                 categorized-tasks-for-date-range, insert-child-task, create-tv-file, get-start-hour, help
  */
 export function registerCliHandlers(plugin: TaskViewerPlugin): void {
+    function register(action: string, description: string, flags: CliFlags | null, handler: CliHandler): void {
+        const wrapped: CliHandler = (params) => {
+            const err = validateCliParams(params, flags, action);
+            if (err) return err;
+            return handler(params);
+        };
+        plugin.registerCliHandler(`obsidian-task-viewer:${action}`, description, flags, wrapped);
+    }
+
     // ── Query commands (read-only) ──
 
-    const listFlags: CliFlags = {
-        file:    { value: '<path>',          description: 'Filter by file path' },
-        status:  { value: '<chars>',         description: 'Filter by status char(s), comma-separated' },
-        date:    { value: '<date|preset>',   description: 'Tasks active on date (spans and single-day)' },
-        tag:     { value: '<tags>',          description: 'Filter by tag(s), comma-separated' },
-        content: { value: '<text>',          description: 'Filter by content (contains)' },
-        from:    { value: '<date|preset>',   description: 'Filter: startDate >= value' },
-        to:      { value: '<date|preset>',   description: 'Filter: endDate <= value (null endDate excluded)' },
-        due:     { value: '<date|preset>',   description: 'Due date equals' },
-        leaf:    { description: 'Only leaf tasks (no children)' },
-        property: { value: '<key:value>',   description: 'Filter by custom property (e.g. "優先度:高")' },
-        color:   { value: '<colors>',        description: 'Filter by color(s), comma-separated' },
-        type:    { value: '<types>',          description: 'Filter by task notation (taskviewer, tasks, dayplanner)' },
-        root:    { description: 'Only root tasks (no parent)' },
-        'filter-file': { value: '<path>',     description: 'FilterState JSON (.json) or view template (.md). Overrides simple filter flags' },
-        list:    { value: '<name>',          description: 'Pinned list name (for .md templates with pinnedLists)' },
-        sort:    { value: '<prop[:dir],..>', description: 'Sort (e.g. startDate:asc,due:desc)' },
-        limit:   { value: '<number>',        description: 'Max results (default: 100)' },
-        offset:  { value: '<number>',        description: 'Skip first N results' },
-        format:  { value: 'json|tsv|jsonl',  description: 'Output format (default: json)' },
-        'output-fields': { value: '<key,key,...>', description: 'Output fields (default: id only). e.g. content,status,startDate' },
-    };
+    register('list', 'List tasks with optional filters. Details: obsidian obsidian-task-viewer:help',
+        toCliFlags(LIST_SCHEMA, { output: true }), createListHandler(plugin));
 
-    plugin.registerCliHandler(
-        'obsidian-task-viewer:list',
-        'List tasks with optional filters. Details: obsidian obsidian-task-viewer:help',
-        listFlags,
-        createListHandler(plugin),
-    );
+    register('today', 'List tasks active today (visual-date aware). Details: obsidian obsidian-task-viewer:help',
+        toCliFlags(TODAY_SCHEMA, { output: true }), createTodayHandler(plugin));
 
-    const todayFlags: CliFlags = {
-        leaf:   { description: 'Only leaf tasks (no children)' },
-        sort:   { value: '<prop[:dir],..>', description: 'Sort' },
-        limit:  { value: '<number>',        description: 'Max results' },
-        offset: { value: '<number>',        description: 'Skip first N' },
-        format: { value: 'json|tsv|jsonl',  description: 'Output format' },
-        'output-fields': { value: '<key,key,...>', description: 'Output fields (default: id only)' },
-    };
-
-    plugin.registerCliHandler(
-        'obsidian-task-viewer:today',
-        'List tasks active today (visual-date aware). Details: obsidian obsidian-task-viewer:help',
-        todayFlags,
-        createTodayHandler(plugin),
-    );
-
-    const getFlags: CliFlags = {
-        id:     { value: '<taskId>',        description: 'Task ID', required: true },
-        format: { value: 'json|tsv|jsonl',  description: 'Output format' },
-        'output-fields': { value: '<key,key,...>', description: 'Output fields (default: id only)' },
-    };
-
-    plugin.registerCliHandler(
-        'obsidian-task-viewer:get',
-        'Get a single task by ID. Details: obsidian obsidian-task-viewer:help',
-        getFlags,
-        createGetHandler(plugin),
-    );
+    register('get', 'Get a single task by ID. Details: obsidian obsidian-task-viewer:help',
+        toCliFlags(GET_SCHEMA, { output: true }), createGetHandler(plugin));
 
     // ── CRUD commands ──
 
-    const createFlags: CliFlags = {
-        file:    { value: '<path>',          description: 'Target file path', required: true },
-        content: { value: '<text>',          description: 'Task content', required: true },
-        start:   { value: '<date|datetime>', description: 'Start date (YYYY-MM-DD or YYYY-MM-DD HH:mm)' },
-        end:     { value: '<date|datetime>', description: 'End date/datetime' },
-        due:     { value: '<YYYY-MM-DD>',    description: 'Due date' },
-        status:  { value: '<char>',          description: 'Status character (default: space)' },
-        heading: { value: '<heading>',      description: 'Insert under heading (default: end of file)' },
-        'output-fields': { value: '<key,key,...>', description: 'Output fields (default: id only)' },
-    };
+    register('create', 'Create a new inline task. Details: obsidian obsidian-task-viewer:help',
+        toCliFlags(CREATE_SCHEMA, { output: true }), createCreateHandler(plugin));
 
-    plugin.registerCliHandler(
-        'obsidian-task-viewer:create',
-        'Create a new inline task. Details: obsidian obsidian-task-viewer:help',
-        createFlags,
-        createCreateHandler(plugin),
-    );
+    register('update', 'Update an existing task. Details: obsidian obsidian-task-viewer:help',
+        toCliFlags(UPDATE_SCHEMA, { output: true }), createUpdateHandler(plugin));
 
-    plugin.registerCliHandler(
-        'obsidian-task-viewer:update',
-        'Update an existing task. Details: obsidian obsidian-task-viewer:help',
-        {
-            id:      { value: '<taskId>',        description: 'Task ID', required: true },
-            content: { value: '<text>',          description: 'New content' },
-            start:   { value: '<date|datetime|none>', description: 'New start date/datetime ("none" to clear)' },
-            end:     { value: '<date|datetime|none>', description: 'New end date/datetime ("none" to clear)' },
-            due:     { value: '<YYYY-MM-DD|none>',    description: 'New due date ("none" to clear)' },
-            status:  { value: '<char|none>',          description: 'New status character ("none" to uncheck)' },
-            'output-fields': { value: '<key,key,...>', description: 'Output fields (default: id only)' },
-        },
-        createUpdateHandler(plugin),
-    );
-
-    plugin.registerCliHandler(
-        'obsidian-task-viewer:delete',
-        'Delete a task. Details: obsidian obsidian-task-viewer:help',
-        { id: { value: '<taskId>', description: 'Task ID', required: true } },
-        createDeleteHandler(plugin),
-    );
+    register('delete', 'Delete a task. Details: obsidian obsidian-task-viewer:help',
+        toCliFlags(DELETE_SCHEMA), createDeleteHandler(plugin));
 
     // ── Action commands ──
 
-    plugin.registerCliHandler(
-        'obsidian-task-viewer:duplicate',
-        'Duplicate a task with optional date shifting. Details: obsidian obsidian-task-viewer:help',
-        {
-            id:           { value: '<taskId>', description: 'Task ID', required: true },
-            'day-offset': { value: '<number>', description: 'Days to shift dates (default: 0)' },
-            count:        { value: '<number>', description: 'Number of copies (default: 1)' },
-        },
-        createDuplicateHandler(plugin),
-    );
+    register('duplicate', 'Duplicate a task with optional date shifting. Details: obsidian obsidian-task-viewer:help',
+        toCliFlags(DUPLICATE_SCHEMA), createDuplicateHandler(plugin));
 
-    plugin.registerCliHandler(
-        'obsidian-task-viewer:convert',
-        'Convert tv-inline task to tv-file (frontmatter) task. Details: obsidian obsidian-task-viewer:help',
-        {
-            id: { value: '<taskId>', description: 'Task ID', required: true },
-        },
-        createConvertHandler(plugin),
-    );
+    register('convert', 'Convert tv-inline task to tv-file (frontmatter) task. Details: obsidian obsidian-task-viewer:help',
+        toCliFlags(CONVERT_SCHEMA), createConvertHandler(plugin));
 
-    plugin.registerCliHandler(
-        'obsidian-task-viewer:tasks-for-date-range',
-        'List tasks in a date range. Details: obsidian obsidian-task-viewer:help',
-        {
-            from:         { value: '<date|preset>',  description: 'Query window start (inclusive)', required: true },
-            to:           { value: '<date|preset>',  description: 'Query window end (inclusive)', required: true },
-            sort:         { value: '<prop[:dir],..>', description: 'Sort (e.g. startDate:asc,due:desc)' },
-            limit:        { value: '<number>',        description: 'Max results' },
-            offset:       { value: '<number>',        description: 'Skip first N' },
-            format:       { value: 'json|tsv|jsonl',  description: 'Output format (default: json)' },
-            'output-fields': { value: '<key,key,...>',   description: 'Output fields (default: id only)' },
-        },
-        createTasksForDateRangeHandler(plugin),
-    );
+    register('tasks-for-date-range', 'List tasks in a date range. Details: obsidian obsidian-task-viewer:help',
+        toCliFlags(TASKS_FOR_DATE_RANGE_SCHEMA, { output: true }), createTasksForDateRangeHandler(plugin));
 
-    // ── Additional query/action commands ──
+    register('categorized-tasks-for-date-range', 'Get tasks in a date range, categorized into allDay/timed/dueOnly per date. Details: obsidian obsidian-task-viewer:help',
+        toCliFlags(CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA), createCategorizedTasksForDateRangeHandler(plugin));
 
-    plugin.registerCliHandler(
-        'obsidian-task-viewer:categorized-tasks-for-date-range',
-        'Get tasks in a date range, categorized into allDay/timed/dueOnly per date. Details: obsidian obsidian-task-viewer:help',
-        {
-            from: { value: '<date|preset>', description: 'Query window start (inclusive)', required: true },
-            to:   { value: '<date|preset>', description: 'Query window end (inclusive)', required: true },
-        },
-        createCategorizedTasksForDateRangeHandler(plugin),
-    );
+    register('insert-child-task', 'Insert a child task under a parent. Details: obsidian obsidian-task-viewer:help',
+        toCliFlags(INSERT_CHILD_TASK_SCHEMA), createInsertChildTaskHandler(plugin));
 
-    plugin.registerCliHandler(
-        'obsidian-task-viewer:insert-child-task',
-        'Insert a child task under a parent. Details: obsidian obsidian-task-viewer:help',
-        {
-            'parent-id': { value: '<taskId>', description: 'Parent task ID', required: true },
-            content:     { value: '<text>',   description: 'Child task content', required: true },
-        },
-        createInsertChildTaskHandler(plugin),
-    );
+    register('create-tv-file', 'Create a new tv-file (frontmatter) task. Details: obsidian obsidian-task-viewer:help',
+        toCliFlags(CREATE_TV_FILE_SCHEMA), createCreateTvFileHandler(plugin));
 
-    plugin.registerCliHandler(
-        'obsidian-task-viewer:create-tv-file',
-        'Create a new tv-file (frontmatter) task. Details: obsidian obsidian-task-viewer:help',
-        {
-            content: { value: '<text>',          description: 'Task content', required: true },
-            start:   { value: '<date|datetime>', description: 'Start date/datetime' },
-            end:     { value: '<date|datetime>', description: 'End date/datetime' },
-            due:     { value: '<YYYY-MM-DD>',    description: 'Due date' },
-            status:  { value: '<char>',          description: 'Status character (default: space)' },
-        },
-        createCreateTvFileHandler(plugin),
-    );
-
-    plugin.registerCliHandler(
-        'obsidian-task-viewer:get-start-hour',
-        'Get the current startHour setting (visual day boundary)',
-        null,
-        createGetStartHourHandler(plugin),
-    );
+    register('get-start-hour', 'Get the current startHour setting (visual day boundary)',
+        null, createGetStartHourHandler(plugin));
 
     // ── Help ──
 
-    plugin.registerCliHandler(
-        'obsidian-task-viewer:help',
-        'Show detailed CLI reference',
-        null,
-        createHelpHandler(),
-    );
+    register('help', 'Show detailed CLI reference', null, createHelpHandler());
 }
