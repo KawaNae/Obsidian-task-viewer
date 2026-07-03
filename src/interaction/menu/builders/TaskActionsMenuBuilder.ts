@@ -8,6 +8,7 @@ import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent'
 import { openFileInExistingOrNewTab } from '../../../views/sharedLogic/NavigationUtils';
 import { DateUtils } from '../../../utils/DateUtils';
 import { t } from '../../../i18n';
+import { getEffectiveColor } from '../../../services/data/EffectiveProperties';
 
 /**
  * Task操作メニューの構築
@@ -28,7 +29,7 @@ export class TaskActionsMenuBuilder {
     }
 
     /**
-     * G2: 子のデータ操作 — Record as Child / Add Child Task
+     * G3: 子のデータ操作 — Record as Child / Add Child Task
      */
     addChildActions(menu: Menu, task: Task): void {
         this.addRecordAsChildSubmenu(menu, task);
@@ -36,14 +37,14 @@ export class TaskActionsMenuBuilder {
     }
 
     /**
-     * G3: 複製 — Duplicate
+     * G4: 複製 — Duplicate
      */
     addDuplicateActions(menu: Menu, task: Task): void {
         this.addDuplicateSubmenu(menu, task);
     }
 
     /**
-     * G4: 破壊的変更 — Open in Editor / Convert to File / Delete
+     * G5: 破壊的変更 — Open in Editor / Convert to File / Delete
      * onDestructive が渡されているとき各アクション実行後に invoke する。
      */
     addDestructiveActions(menu: Menu, task: Task, onDestructive?: () => void): void {
@@ -69,7 +70,7 @@ export class TaskActionsMenuBuilder {
                 taskName: displayName,
                 taskOriginalText: task.originalText,
                 taskFile: task.file,
-                taskColor: task.color ?? '',
+                taskColor: getEffectiveColor(task) ?? '',
                 recordMode: 'child' as const,
                 parserId: task.parserId,
                 timerTargetId: task.timerTargetId ?? task.blockId,

@@ -1,9 +1,10 @@
+import { DateUtils } from '../../../utils/DateUtils';
+
 /**
- * Shared date/time field parsing utilities.
- *
- * Extracted from TVFileBuilder so that BuiltinPropertyExtractor and
- * FilePropertyResolver can reuse the same logic without depending on
- * the tv-file layer.
+ * Shared date/time field parsing utilities — the single implementation of
+ * "what counts as a date/time fragment" for BOTH notation surfaces
+ * (@block via TVInlineParser and frontmatter/section/builtin-property via
+ * TVFileBuilder / FilePropertyResolver / BuiltinPropertyExtractor).
  */
 
 /**
@@ -45,14 +46,28 @@ export function normalizeYamlDate(value: unknown): string | null {
 
 /**
  * Extract date (`YYYY-MM-DD`) and/or time (`HH:mm`) fragments from a
- * normalized string.  Returns only the components that are present.
+ * normalized string.  Returns only the components that are present AND
+ * valid: month 1-12 / day 1-31, hour 0-23 / minute 0-59. Shape-matching
+ * but out-of-range tokens (`2026-13-40`, `99:99`) are rejected the same
+ * way on every parse surface.
  */
 export function parseDateTimeField(normalized: string | null): { date?: string; time?: string } {
     if (!normalized) return {};
-    const dateMatch = normalized.match(/(\d{4}-\d{2}-\d{2})/);
+
+    let date: string | undefined;
+    const dateMatch = normalized.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (dateMatch) {
+        const month = Number(dateMatch[2]), day = Number(dateMatch[3]);
+        if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+            date = dateMatch[0];
+        }
+    }
+
+    let time: string | undefined;
     const timeMatch = normalized.match(/(\d{2}:\d{2})/);
-    return {
-        date: dateMatch ? dateMatch[1] : undefined,
-        time: timeMatch ? timeMatch[1] : undefined,
-    };
+    if (timeMatch && DateUtils.isValidTimeString(timeMatch[1])) {
+        time = timeMatch[1];
+    }
+
+    return { date, time };
 }

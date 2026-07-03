@@ -1,5 +1,14 @@
 import type { CliData } from 'obsidian';
+import {
+    renderFlagTable,
+    LIST_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA, DUPLICATE_SCHEMA, CONVERT_SCHEMA,
+    TASKS_FOR_DATE_RANGE_SCHEMA, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA,
+    INSERT_CHILD_TASK_SCHEMA, CREATE_TV_FILE_SCHEMA,
+} from '../../api/OperationSchemas';
 
+// Per-command flag tables are generated from OperationSchemas (the same
+// source as the actual flag declarations); the surrounding prose is
+// hand-written.
 const HELP_TEXT = `
 Task Viewer CLI Reference
 =========================
@@ -23,10 +32,20 @@ Commands
 
 Run "obsidian help obsidian-task-viewer:<command>" for each command's flags.
 
+Vocabulary
+----------
+  from / to        = query window (inclusive overlap). A task matches when
+                     its span intersects [from, to].
+  date             = single-day window, sugar for from=X to=X
+  start / end / due = the task's own fields (create / update / create-tv-file)
+
+  Unknown flags are errors (with a did-you-mean suggestion) — they are
+  never silently ignored.
+
 Common Flags
 ------------
-  format=json|tsv|jsonl    Output format (default: json)
-  outputFields=key,key,... Output fields (default: id only)
+  format=json|tsv|jsonl        Output format (default: json)
+  output-fields=key,key,...    Output fields (default: id only)
     Available fields:
       id, file, line, content, status, startDate, startTime, endDate, endTime,
       due, tags, parserId, parentId, childIds, color, linestyle,
@@ -40,6 +59,8 @@ Date Formats
   Time only: HH:mm (e.g. 14:00, inherits date from context)
   Presets:   today, thisWeek, pastWeek, nextWeek, thisMonth, thisYear,
              next7days, next30days
+             (usable on all window flags: date, from, to, due — including
+              the range commands)
 
 Sort
 ----
@@ -53,90 +74,57 @@ Boolean Flags
 
 list: Filter Flags
 ------------------
-  file=<path>          File path (.md auto-appended)
-  status=<chars>       Status char(s), comma-separated
-  tag=<tags>           Tag(s), comma-separated (# auto-stripped, hierarchy match)
-  content=<text>       Content partial match
-  date=<date|preset>   Tasks active on date (cannot combine with from/to)
-  from=<date|preset>   startDate >= value
-  to=<date|preset>     endDate <= value
-  due=<date|preset>    Due date equals
-  leaf                 Only leaf tasks (no children)
-  root                 Only root tasks (no parent)
-  color=<colors>       Card color(s), comma-separated
-  type=<types>         Task notation (taskviewer, tasks, dayplanner)
-  property=<key:value> Custom property (e.g. "priority:high")
-  filter-file=<path>   FilterState JSON file (.json) or view template (.md)
-                       Overrides all simple filter flags above (see below)
-  list=<name>          Pinned list name (when filter-file is a .md template)
+${renderFlagTable(LIST_SCHEMA)}
+
+  Window note: list's from/to window matches against the task's effective
+  (calendar) dates and excludes due-only tasks; the range commands below
+  use the visual (startHour-adjusted) window and include due-only tasks,
+  mirroring the timeline rendering.
 
 create: Flags
 -------------
-  file=<path>          Target file path (.md auto-appended) [required]
-  content=<text>       Task content [required]
-  start=<date|datetime> Start date/datetime
-  end=<date|datetime>  End date/datetime
-  due=<YYYY-MM-DD>     Due date
-  status=<char>        Status character (default: space)
-  heading=<heading>    Insert under heading (default: end of file)
+${renderFlagTable(CREATE_SCHEMA)}
 
 update: Flags
 -------------
-  id=<taskId>          Task ID [required]
-  content=<text>       New content
-  start=<date|datetime> New start date/datetime
-  end=<date|datetime>  New end date/datetime
-  due=<YYYY-MM-DD>     New due date
-  status=<char>        New status character
+${renderFlagTable(UPDATE_SCHEMA)}
 
 duplicate: Flags
 ----------------
-  id=<taskId>          Task ID [required]
-  day-offset=<n>       Days to shift all dates (positive=future, negative=past, default: 0)
-  count=<n>            Number of copies to create (default: 1)
+${renderFlagTable(DUPLICATE_SCHEMA)}
 
 convert: Flags
 --------------
-  id=<taskId>          Task ID [required]
+${renderFlagTable(CONVERT_SCHEMA)}
                        Converts the tv-inline task to a new tv-file (frontmatter) task.
                        Returns the path of the newly created file.
 
+tasks-for-date-range: Flags
+---------------------------
+${renderFlagTable(TASKS_FOR_DATE_RANGE_SCHEMA, { output: true })}
+                       Includes tasks whose visual span overlaps [from, to].
+                       Due-only tasks (no start/end) are included if due falls in range.
+
 categorized-tasks-for-date-range: Flags
 ---------------------------------------
-  start=<YYYY-MM-DD>  Start date (inclusive) [required]
-  end=<YYYY-MM-DD>    End date (inclusive) [required]
+${renderFlagTable(CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA)}
                       Returns { "YYYY-MM-DD": { allDay: [...], timed: [...], dueOnly: [...] }, ... }
+                      allDay/timed membership follows the visual span; dueOnly
+                      follows the calendar due date.
 
 insert-child-task: Flags
 ------------------------
-  parent-id=<taskId> Parent task ID [required]
-  content=<text>     Child task content [required]
+${renderFlagTable(INSERT_CHILD_TASK_SCHEMA)}
                      Inserts a new child task (- [ ] content) under the parent.
 
 create-tv-file: Flags
 ---------------------
-  content=<text>       Task content [required]
-  start=<date|datetime> Start date/datetime
-  end=<date|datetime>  End date/datetime
-  due=<YYYY-MM-DD>     Due date
-  status=<char>        Status character (default: space)
+${renderFlagTable(CREATE_TV_FILE_SCHEMA)}
                        Creates a new tv-file (frontmatter) task. Returns the new file path.
 
 get-start-hour: Flags
 ---------------------
   (no flags)           Returns the current startHour setting (visual day boundary).
-
-tasks-for-date-range: Flags
----------------------------
-  start=<YYYY-MM-DD>   Start date (inclusive) [required]
-  end=<YYYY-MM-DD>     End date (inclusive) [required]
-  sort=<prop[:dir],..> Sort (e.g. startDate:asc,due:desc)
-  limit=<number>       Max results
-  offset=<number>      Skip first N results
-  format=json|tsv|jsonl Output format (default: json)
-  outputFields=<key,..> Output fields (default: id only)
-                       Includes tasks whose effective start..end range overlaps [start, end].
-                       Due-only tasks (no start/end) are included if due falls in range.
 
 filter-file: File-based Filtering
 ==================================
@@ -146,6 +134,9 @@ Two file types are supported:
 
   .json — Raw FilterState JSON (standard JSON with double quotes).
   .md   — View template saved from the plugin UI.
+
+Filter files are validated on load: an unknown property or an operator
+not valid for its property is an error (see the reference below).
 
 .json files
 -----------

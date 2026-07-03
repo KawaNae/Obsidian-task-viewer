@@ -15,7 +15,6 @@ function makeTask(overrides: Partial<Task>): Task {
         indent: 0,
         childIds: [],
         childLines: [],
-        childLineBodyOffsets: [],
         tags: [],
         originalText: '- [ ] task @2026-01-01',
         parserId: 'tv-inline',
@@ -82,19 +81,27 @@ describe('TVInlineParser', () => {
             expect(result!.statusChar).toBe('x');
         });
 
-        it('parses flow commands', () => {
-            const result = parser.parse('- [ ] task @2026-01-15 ==> move(target)', 'test.md', 0);
+        it('parses flow commands into an executable program', () => {
+            const result = parser.parse('- [ ] task @2026-01-15 ==> move([[target]])', 'test.md', 0);
             expect(result).not.toBeNull();
-            expect(result!.commands).toHaveLength(1);
-            expect(result!.commands![0].name).toBe('move');
-            expect(result!.commands![0].args).toEqual(['target']);
+            expect(result!.flow?.raw).toBe('move([[target]])');
+            expect(result!.flow?.program?.move).toBeDefined();
+            expect(result!.validation).toBeUndefined();
         });
 
-        it('parses flow command with modifiers', () => {
-            const result = parser.parse('- [ ] task @2026-01-15 ==> cmd(a).mod(b)', 'test.md', 0);
+        it('keeps raw and surfaces diagnostics for invalid flow', () => {
+            const result = parser.parse('- [ ] task @2026-01-15 ==> evry mon', 'test.md', 0);
             expect(result).not.toBeNull();
-            expect(result!.commands![0].modifiers).toHaveLength(1);
-            expect(result!.commands![0].modifiers[0].name).toBe('mod');
+            expect(result!.flow?.raw).toBe('evry mon');
+            expect(result!.flow?.program).toBeNull();
+            expect(result!.flow?.diagnostics.length).toBeGreaterThan(0);
+            expect(result!.validation?.severity).toBe('error');
+        });
+
+        it('flags legacy repeat() syntax as an unknown clause', () => {
+            const result = parser.parse('- [ ] task @2026-01-15 ==> repeat(weekly)', 'test.md', 0);
+            expect(result!.flow?.program).toBeNull();
+            expect(result!.flow?.diagnostics.some(d => d.code === 'flow.unknown-head')).toBe(true);
         });
 
         it('parses block id', () => {
@@ -125,7 +132,7 @@ describe('TVInlineParser', () => {
             expect(result!.endDate).toBeUndefined();
             expect(result!.endTime).toBeUndefined();
             expect(result!.due).toBeUndefined();
-            expect(result!.commands).toHaveLength(0);
+            expect(result!.flow).toBeUndefined();
         });
 
         it('parses with asterisk marker', () => {
@@ -148,9 +155,9 @@ describe('TVInlineParser', () => {
         });
 
         it('parses flow-command-only task (no date)', () => {
-            const result = parser.parse('- [ ] task ==> cmd(arg)', 'test.md', 0);
+            const result = parser.parse('- [ ] task ==> at(today + 3d)', 'test.md', 0);
             expect(result).not.toBeNull();
-            expect(result!.commands).toHaveLength(1);
+            expect(result!.flow?.program?.schedule).toMatchObject({ kind: 'at' });
             expect(result!.startDate).toBe('');
         });
 
@@ -210,13 +217,14 @@ describe('TVInlineParser', () => {
             expect(parser.format(task)).toBe('- [ ] multi-day @2026-01-15>2026-01-17');
         });
 
-        it('formats task with flow commands', () => {
+        it('formats flow raw verbatim (round-trip contract)', () => {
             const task = makeTask({
                 content: 'task',
                 startDate: '2026-01-15',
-                commands: [{ name: 'move', args: ['target'], modifiers: [] }],
+                // Deliberately non-canonical order — format must NOT normalize
+                flow: { raw: 'x3 every mon', childSegments: [], program: null, diagnostics: [] },
             });
-            expect(parser.format(task)).toBe('- [ ] task @2026-01-15 ==> move(target)');
+            expect(parser.format(task)).toBe('- [ ] task @2026-01-15 ==> x3 every mon');
         });
 
         it('formats task with block id', () => {

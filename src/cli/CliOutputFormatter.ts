@@ -7,7 +7,7 @@ export type OutputFormat = 'json' | 'tsv' | 'jsonl';
 // ── Field selection ──
 
 /**
- * Resolve the `outputFields` flag into a list of field names.
+ * Resolve the `output-fields` flag into a list of field names.
  * - undefined → ['id'] (id only)
  * - 'content,status' → ['id', 'content', 'status'] (id always included)
  * - Throws TaskApiError for unknown field names.

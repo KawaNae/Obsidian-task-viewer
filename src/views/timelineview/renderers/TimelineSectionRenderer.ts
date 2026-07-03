@@ -5,6 +5,7 @@ import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { TouchLongPressBinder } from '../../../interaction/menu/TouchLongPressBinder';
 import { DateUtils } from '../../../utils/DateUtils';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
+import { getEffectiveColor, getEffectiveLinestyle } from '../../../services/data/EffectiveProperties';
 import { TaskLayout } from '../TaskLayout';
 import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { HandleManager } from '../HandleManager';
@@ -103,8 +104,8 @@ export class TimelineSectionRenderer {
 
         el.dataset.id = task.id;
 
-        TaskStyling.applyTaskColor(el, task.color ?? null);
-        TaskStyling.applyTaskLinestyle(el, task.linestyle ?? null);
+        TaskStyling.applyTaskColor(el, getEffectiveColor(task) ?? null);
+        TaskStyling.applyTaskLinestyle(el, getEffectiveLinestyle(task) ?? null);
         TaskStyling.applyReadOnly(el, task);
 
         // Position math (mirrors the previous in-line code; isolated here for

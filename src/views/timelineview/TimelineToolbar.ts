@@ -115,7 +115,6 @@ export class TimelineToolbar extends ViewToolbarBase {
             pinnedLists: this.viewState.pinnedLists,
             daysToShow: this.viewState.daysToShow as TimelineConfig['daysToShow'],
             zoomLevel: this.viewState.zoomLevel,
-            showHabits: this.viewState.showHabits,
             showAllDay: this.viewState.showAllDay,
             showTimeline: this.viewState.showTimeline,
         };
@@ -143,7 +142,6 @@ export class TimelineToolbar extends ViewToolbarBase {
         this.viewState.pinnedLists = next.pinnedLists;
         if (next.daysToShow !== undefined) this.viewState.daysToShow = next.daysToShow;
         if (next.zoomLevel !== undefined) this.viewState.zoomLevel = next.zoomLevel;
-        this.viewState.showHabits = next.showHabits;
         this.viewState.showAllDay = next.showAllDay;
         this.viewState.showTimeline = next.showTimeline;
     }
@@ -258,17 +256,6 @@ export class TimelineToolbar extends ViewToolbarBase {
     }
 
     private appendSectionToggles(menu: Menu): void {
-        const effectiveHabits = this.viewState.showHabits ?? this.plugin.settings.showHabits;
-        menu.addItem((item) => {
-            item.setTitle(t('viewOptions.toggleHabits'))
-                .setChecked(effectiveHabits)
-                .onClick(() => {
-                    this.viewState.showHabits = !effectiveHabits;
-                    this.callbacks.onRender();
-                    this.app.workspace.requestSaveLayout();
-                });
-        });
-
         const effectiveAllDay = this.viewState.showAllDay ?? this.plugin.settings.showAllDay;
         menu.addItem((item) => {
             item.setTitle(t('viewOptions.toggleAllDay'))
@@ -295,16 +282,14 @@ export class TimelineToolbar extends ViewToolbarBase {
     private appendFollowGlobal(menu: Menu): void {
         const hasAstroOverride = this.viewState.astronomyDisplay != null
             && Object.keys(this.viewState.astronomyDisplay).length > 0;
-        const hasHabitsOverride = this.viewState.showHabits !== undefined;
         const hasAllDayOverride = this.viewState.showAllDay !== undefined;
         const hasTimelineOverride = this.viewState.showTimeline !== undefined;
         menu.addItem((item) => {
             item.setTitle(t('viewOptions.followGlobal'))
                 .setIcon('rotate-ccw')
-                .setDisabled(!hasAstroOverride && !hasHabitsOverride && !hasAllDayOverride && !hasTimelineOverride)
+                .setDisabled(!hasAstroOverride && !hasAllDayOverride && !hasTimelineOverride)
                 .onClick(() => {
                     this.viewState.astronomyDisplay = undefined;
-                    this.viewState.showHabits = undefined;
                     this.viewState.showAllDay = undefined;
                     this.viewState.showTimeline = undefined;
                     this.callbacks.onRender();

@@ -96,7 +96,7 @@
       "showSunInFront": "Sunrise / sunset lines in front",
       "showSunInFrontDesc": "When on, the lines layer in front of task cards. When off (default) they sit behind all cards. Each view can override this from its options menu.",
       "showMoonPhase": "Show moon phase row",
-      "showMoonPhaseDesc": "Show a per-date moon phase icon above the habits row.",
+      "showMoonPhaseDesc": "Show a per-date moon phase icon below the date header.",
       "homeLatitude": "Latitude",
       "homeLatitudeDesc": "-90 to 90. Used to compute sunrise / sunset times.",
       "homeLongitude": "Longitude",
@@ -113,8 +113,6 @@
       "display": "Display",
       "hideViewHeader": "Hide view header",
       "hideViewHeaderDesc": "Hide the view header (navigation bar) in task viewer panels.",
-      "showHabits": "Show habit tracker",
-      "showHabitsDesc": "Default visibility of the habit tracker row. Can be overridden per view.",
       "showAllDay": "Show all-day section",
       "showAllDayDesc": "Default visibility of the all-day task section. Can be overridden per view.",
       "showTimeline": "Show timeline",
@@ -200,10 +198,6 @@
       "lineStyleSuggest": "Line style suggest",
       "lineStyleSuggestDesc": "Enable custom line style suggestions for the linestyle property."
     },
-    "habits": {
-      "excludeKeys": "Exclude keys",
-      "excludeKeysDesc": "Frontmatter keys to exclude from the habits section (comma-separated). Keys starting with _ and task-related keys are always excluded."
-    },
     "parsers": {
       "heading": "External Parser Support",
       "description": "Enable read-only support for external task formats. Tasks parsed by these parsers are displayed but cannot be edited.",
@@ -272,7 +266,6 @@
   "viewOptions": {
     "toggleSunTimes": "Show sunrise / sunset lines",
     "toggleMoonPhase": "Show moon phase",
-    "toggleHabits": "Habit tracker",
     "toggleAllDay": "All-day section",
     "toggleTimeline": "Timeline",
     "followGlobal": "Follow global setting"
@@ -509,7 +502,9 @@
     "startRequiresDate": "Start: date is required when time is specified.",
     "endRequiresDate": "End: date is required when there is no start date.",
     "dueRequiresDate": "Due: date is required when time is specified.",
-    "frontmatterTimeOnly": "Time-only value in frontmatter may cause YAML parsing issues."
+    "frontmatterTimeOnly": "Time-only value in frontmatter may cause YAML parsing issues.",
+    "tooManySeparators": "Too many '>' separators in date block. Expected at most 2 (start>end>due), found {{count}}.",
+    "multipleDateBlocks": "Multiple date blocks found; kept the first and discarded {{count}}."
   },
   "validationHint": {
     "crossMidnight": "Specify an explicit end date, or correct the time.",
@@ -642,12 +637,6 @@
     "w": "W",
     "due": "Due"
   },
-  "habits": {
-    "habits": "Habits",
-    "toggleHabits": "Toggle Habits section",
-    "expandHabits": "Expand Habits",
-    "collapseHabits": "Collapse Habits"
-  },
   "astronomy": {
     "sunrise": "Sunrise",
     "sunset": "Sunset"
@@ -674,5 +663,59 @@
     "title": "Task Viewer CLI Reference",
     "commands": "Commands",
     "commonFlags": "Common Flags"
+  }  ,
+  "flowDiag": {
+    "lex": {
+      "unterminated-wikilink": "Unterminated wikilink",
+      "unterminated-string": "Unterminated string",
+      "unknown-unit": "Unknown duration unit '{{unit}}' (expected {{units}})",
+      "unexpected-char": "Unexpected character '{{char}}'"
+    },
+    "expr": {
+      "expected-colon": "Expected ':' in conditional expression",
+      "expected-rparen": "Expected ')'",
+      "expected-rparen-call": "Expected ')' to close {{fn}}(...)",
+      "unexpected-token": "Unexpected token '{{token}}'",
+      "unexpected-eof": "Unexpected end of expression",
+      "unknown-property": "Unknown property '{{name}}'",
+      "file-needs-member": "Property 'file' requires a member (file.name)",
+      "unknown-ident": "Unknown identifier '{{name}}'"
+    },
+    "type": {
+      "unknown-property": "Property '{{name}}' is not available here",
+      "bang-expects-bool": "'!' expects bool, got {{actual}}",
+      "unary-minus-operand": "Unary '-' expects number or duration, got {{actual}}",
+      "logic-expects-bool": "'{{op}}' expects bool operands, got {{left}} and {{right}}",
+      "cannot-combine": "'{{op}}' cannot combine {{left}} and {{right}}",
+      "cannot-compare": "Cannot compare {{left}} with {{right}}",
+      "cond-not-bool": "Condition must be bool, got {{actual}}",
+      "branch-mismatch": "Conditional branches have different types ({{thenType}} vs {{elseType}})",
+      "arg-count": "{{fn}}() expects {{expected}} argument(s), got {{actual}}",
+      "arg-mismatch": "{{fn}}() argument {{index}} expects {{expected}}, got {{actual}}",
+      "bad-unit-keyword": "Expected week, month or year, got '{{actual}}'",
+      "at-not-datish": "at() expects a date or datetime expression, got {{actual}}",
+      "set-content-not-string": "{{fn}}(...) expects string, got {{actual}}",
+      "set-date-mismatch": "{{fn}}(...) expects date or datetime, got {{actual}}",
+      "datetime-plus-time": "Adding a time to a {{left}} is ambiguous — truncate first: date(x) + 14:00",
+      "move-target": "move() expects a wikilink or string target, got {{actual}}"
+    },
+    "flow": {
+      "unknown-head": "Unknown clause '{{head}}' — clauses start with every / + / at(...) / xN / until / nochildren / setContent|setStart|setEnd|setDue(...) / move(...)",
+      "zero-lifetime": "xN requires N >= 1",
+      "duplicate-schedule": "Only one schedule clause (every / + / at) is allowed",
+      "duplicate-node": "Duplicate '{{clause}}' clause",
+      "expected-date": "Expected a date after 'until' (e.g. until 2026-09-28)",
+      "expected-lparen": "Expected '(' after '{{fn}}'",
+      "expected-rparen": "Expected ')' to close {{fn}}(...)",
+      "expected-weekday": "Expected a weekday (mon..sun), got '{{token}}'",
+      "expected-monthday": "Expected '@' after 'mo' (e.g. every mo@25, every mo@last)",
+      "expected-cadence": "Expected a cadence after 'every' (weekday, interval like 2w, or mo@N)",
+      "bad-monthday-range": "Day of month must be 1-31, got {{day}}",
+      "bad-monthday": "Expected a day number or 'last' after '@'",
+      "orphan-modifier": "'{{clause}}' requires a schedule clause (every / + / at)",
+      "empty": "Flow command is empty",
+      "bad-date": "'{{date}}' is not a valid calendar date",
+      "node-spans-lines": "A clause must be written within a single line"
+    }
   }
 }

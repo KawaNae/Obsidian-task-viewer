@@ -1,11 +1,15 @@
-import type { Task, FlowCommand, FlowModifier } from '../../../types';
+import type { Task, TaskFlow } from '../../../types';
+import { t } from '../../../i18n';
+import { flowValidation, singleLineFlow } from '../../flow/FlowSegments';
+import { createBaseTask } from '../TaskFactory';
 import { LeafParserStrategy } from '../strategies/ParserStrategy';
 import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';
-import { DateUtils } from '../../../utils/DateUtils';
+import { parseDateTimeField } from '../utils/DateTimeFieldParser';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { validateDateTimeRules, DateTimeValidationResult } from '../utils/DateTimeRuleValidator';
+import { DATE_BLOCK_REGEX } from './DateBlockLocator';
 
 interface DateBlockResult {
     date: string;
@@ -32,28 +36,10 @@ export class TVInlineParser implements LeafParserStrategy {
     readonly id = 'tv-inline';
     readonly isReadOnly = false;
 
-    // Regex for locating the Date block: @start>end>due
-    // Each segment accepts: YYYY-MM-DD, YYYY-MM-DDTHH:mm, T?HH:mm, or empty
-    // Rejects non-date @ patterns like @user, @notation
-    private static readonly DATE_BLOCK_REGEX =
-        /(@(?=[\d>T])(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|T?\d{2}:\d{2})?(?:>(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|\d{2}:\d{2})?)*)/;
-    // Regex for Command: Name(Args)
-    private static readonly COMMAND_REGEX = /([a-zA-Z0-9_]+)\((.*?)\)((?:\.[a-zA-Z0-9_]+\(.*?\))*)/g;
-    private static readonly MODIFIER_REGEX = /\.([a-zA-Z0-9_]+)\((.*?)\)/g;
-
     parse(line: string, filePath: string, lineNumber: number): Task | null {
         // Extract trailing block ID (^id) before parsing task structure.
-        let lineForParse = line;
-        let blockId: string | undefined;
-        let timerTargetId: string | undefined;
-        const blockIdMatch = lineForParse.match(/\s\^([A-Za-z0-9-]+)\s*$/);
-        if (blockIdMatch) {
-            blockId = blockIdMatch[1];
-            if (isTimerTargetId(blockId)) {
-                timerTargetId = blockId;
-            }
-            lineForParse = lineForParse.slice(0, blockIdMatch.index).trimEnd();
-        }
+        const { text: lineForParse, blockId } = TaskLineClassifier.extractBlockId(line);
+        const timerTargetId = blockId && isTimerTargetId(blockId) ? blockId : undefined;
 
         // 1. Split flow commands (==>)
         const flowSplit = lineForParse.split(/==>(.+)/);
@@ -67,11 +53,15 @@ export class TVInlineParser implements LeafParserStrategy {
 
         const { statusChar, rawContent } = classified;
 
-        // 2. Parse flow commands. If a non-empty flow segment yields zero
-        // commands (e.g. a URL or prose), keep it verbatim so format() can
-        // re-emit it instead of silently dropping it on the next write.
-        const commands = flowPart ? this.parseFlowCommands(flowPart) : [];
-        const rawFlow = (flowPart && commands.length === 0) ? flowPart.trim() : undefined;
+        // 2. Parse the flow command. `raw` always carries the verbatim text
+        // so format() re-emits it losslessly even when parsing failed;
+        // `program` is non-null only when the command is executable.
+        // Line-level view only: `- ==>` child segments are merged (and the
+        // program re-parsed from the joined source) by TreeTaskExtractor.
+        const trimmedFlow = flowPart.trim();
+        const flow: TaskFlow | undefined = trimmedFlow
+            ? singleLineFlow(trimmedFlow)
+            : undefined;
 
         // 3. Parse date block (@start>end>due)
         let content = rawContent;
@@ -106,9 +96,16 @@ export class TVInlineParser implements LeafParserStrategy {
                 message: parseWarning,
                 hint: '',
             };
+        } else if (flow) {
+            // Surface the first flow diagnostic through the existing
+            // validation channel so a typo'd command is not a silent no-op
+            // for users who never see editor decorations. May be superseded
+            // when TreeTaskExtractor merges `- ==>` child segments and
+            // re-validates the joined program.
+            validation = flowValidation(flow);
         }
 
-        return {
+        return createBaseTask({
             id: TaskIdGenerator.generate(
                 this.id,
                 filePath,
@@ -123,25 +120,20 @@ export class TVInlineParser implements LeafParserStrategy {
             line: lineNumber,
             content: content.trim(),
             statusChar,
-            indent: 0,          // Will be set by TaskScanner
-            childIds: [],       // Will be set by TaskScanner
+            parserId: this.id,
+            originalText: line,
+        }, {
             startDate: date,
             startTime,
             endDate,
             endTime,
             due,
-            commands,
-            rawFlow,
+            flow,
             tags: TagExtractor.fromContent(content.trim()),
-            originalText: line,
-            childLines: [],
-            childLineBodyOffsets: [],
-            parserId: this.id,
             blockId,
             timerTargetId,
             validation,
-            properties: {},     // Will be populated by TaskScanner from childLines
-        };
+        });
     }
 
     /**
@@ -149,7 +141,7 @@ export class TVInlineParser implements LeafParserStrategy {
      * Returns null if no date block was found in the content.
      */
     private parseDateBlock(content: string): { fields: DateBlockResult; content: string } | null {
-        const dateBlockMatch = content.match(TVInlineParser.DATE_BLOCK_REGEX);
+        const dateBlockMatch = content.match(DATE_BLOCK_REGEX);
         if (!dateBlockMatch) {
             return null;
         }
@@ -160,7 +152,7 @@ export class TVInlineParser implements LeafParserStrategy {
         // して採用し、content 中に残る全 date-like トークンを除去する。これが
         // ないと format() の末尾再付与が次回 parse で先頭マッチを奪い、開始日が
         // 化ける(round-trip 破壊)。除去で生じた連続スペースは単一に畳む。
-        const globalRe = new RegExp(TVInlineParser.DATE_BLOCK_REGEX.source, 'g');
+        const globalRe = new RegExp(DATE_BLOCK_REGEX.source, 'g');
         let dateBlockCount = 0;
         const cleanedContent = content
             .replace(globalRe, (m) => {
@@ -183,7 +175,7 @@ export class TVInlineParser implements LeafParserStrategy {
         // --- Start segment ---
         const rawStart = parts[0];
         if (rawStart !== '') {
-            const parsed = this.parseDateTime(rawStart);
+            const parsed = parseDateTimeField(rawStart);
             if (parsed.date) {
                 date = parsed.date;
             }
@@ -201,7 +193,7 @@ export class TVInlineParser implements LeafParserStrategy {
             if (!rawEnd) {
                 // Empty end (@start>>due): endDate stays undefined
             } else {
-                const parsed = this.parseDateTime(rawEnd);
+                const parsed = parseDateTimeField(rawEnd);
                 if (parsed.date) {
                     endDate = parsed.date;
                 }
@@ -213,7 +205,7 @@ export class TVInlineParser implements LeafParserStrategy {
 
         // --- Due segment ---
         if (parts.length > 2 && parts[2]) {
-            const parsed = this.parseDateTime(parts[2]);
+            const parsed = parseDateTimeField(parts[2]);
             due = parsed.date;
             if (parsed.date && parsed.time) {
                 due += `T${parsed.time}`;
@@ -222,12 +214,12 @@ export class TVInlineParser implements LeafParserStrategy {
 
         // --- Excess separator check ---
         if (parts.length > 3) {
-            validationWarning = `Too many '>' separators in date block. Expected at most 2 (start>end>due), found ${parts.length - 1}.`;
+            validationWarning = t('validation.tooManySeparators', { count: parts.length - 1 });
         }
 
         // --- Multiple date blocks check ---
         if (dateBlockCount > 1) {
-            const extra = `Multiple date blocks found; kept the first and discarded ${dateBlockCount - 1}.`;
+            const extra = t('validation.multipleDateBlocks', { count: dateBlockCount - 1 });
             validationWarning = validationWarning ? `${validationWarning} ${extra}` : extra;
         }
 
@@ -255,60 +247,6 @@ export class TVInlineParser implements LeafParserStrategy {
             startTime, endDate, endTime, due,
             endDateImplicit: !endDate,
         });
-    }
-
-    private parseDateTime(str: string): { date?: string, time?: string } {
-        const dateMatch = str.match(/(\d{4}-\d{2}-\d{2})/);
-        const timeMatch = str.match(/(\d{2}:\d{2})/);
-
-        let date: string | undefined;
-        if (dateMatch) {
-            const parts = dateMatch[1].match(/(\d{4})-(\d{2})-(\d{2})/)!;
-            const month = Number(parts[2]), day = Number(parts[3]);
-            if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                date = dateMatch[1];
-            }
-        }
-
-        let time: string | undefined;
-        if (timeMatch && DateUtils.isValidTimeString(timeMatch[1])) {
-            time = timeMatch[1];
-        }
-
-        return { date, time };
-    }
-
-    private parseFlowCommands(flowStr: string): FlowCommand[] {
-        const commands: FlowCommand[] = [];
-        let match;
-
-        // Reset lastIndex because regex is global
-        TVInlineParser.COMMAND_REGEX.lastIndex = 0;
-
-        while ((match = TVInlineParser.COMMAND_REGEX.exec(flowStr)) !== null) {
-            const name = match[1];
-            const argsStr = match[2];
-            const modifiersStr = match[3];
-
-            const args = argsStr.split(',').map(s => s.trim()).filter(s => s !== '');
-            const modifiers: FlowModifier[] = [];
-
-            if (modifiersStr) {
-                let modMatch;
-                // Reset modifier regex
-                TVInlineParser.MODIFIER_REGEX.lastIndex = 0;
-                while ((modMatch = TVInlineParser.MODIFIER_REGEX.exec(modifiersStr)) !== null) {
-                    modifiers.push({
-                        name: modMatch[1],
-                        args: modMatch[2].split(',').map(s => s.trim()).filter(s => s !== '')
-                    });
-                }
-            }
-
-            commands.push({ name, args, modifiers });
-        }
-
-        return commands;
     }
 
     format(task: Task): string {
@@ -368,29 +306,15 @@ export class TVInlineParser implements LeafParserStrategy {
             }
         }
 
-        let flowStr = '';
-        if (task.commands && task.commands.length > 0) {
-            const cmdStrs = task.commands.map(cmd => {
-                let s = `${cmd.name}(${cmd.args.join(', ')})`;
-                if (cmd.modifiers && cmd.modifiers.length > 0) {
-                    s += cmd.modifiers.map(m => `.${m.name}(${m.args.join(', ')})`).join('');
-                }
-                return s;
-            });
-            flowStr = ` ==> ${cmdStrs.join(' ')}`;
-        } else if (task.rawFlow) {
-            // Unrecognized flow text preserved verbatim (round-trip safety).
-            flowStr = ` ==> ${task.rawFlow}`;
-        }
+        // Flow text is always re-emitted verbatim (round-trip safety, even
+        // for unparseable commands). Canonical re-serialization happens only
+        // when a fire generates the next instance (FlowPlanner). Only the
+        // task-line segment is emitted here — `- ==>` child segments are
+        // physical lines of their own and are never rewritten by format().
+        const flowStr = task.flow?.raw ? ` ==> ${task.flow.raw}` : '';
 
         const blockIdStr = task.blockId ? ` ^${task.blockId}` : '';
         const marker = TaskLineClassifier.extractMarker(task.originalText);
         return `${marker} [${statusChar}] ${task.content}${metaStr}${flowStr}${blockIdStr}`;
-    }
-
-    isTriggerableStatus(task: Task): boolean {
-        // Trigger for any status that is not todo (space)
-        // e.g. x, X, -, !, etc.
-        return task.statusChar !== ' ';
     }
 }

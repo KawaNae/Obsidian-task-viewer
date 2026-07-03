@@ -31,14 +31,14 @@ const OUTPUT_FIELDS = 'content,status,startDate,startTime,endDate,endTime,due,ta
 
 /** Find a task by content substring within our test file. */
 function findTask(content: string): Record<string, unknown> | undefined {
-    const r = cliList({ file: TEST_FILE, outputFields: OUTPUT_FIELDS });
+    const r = cliList({ file: TEST_FILE, 'output-fields': OUTPUT_FIELDS });
     return r.tasks.find(t => (t.content as string).includes(content));
 }
 
 /** Find a task by content, retrying until indexed. */
 async function findTaskWait(content: string, timeoutMs = 8000): Promise<Record<string, unknown> | null> {
     return waitForTask(
-        { file: TEST_FILE, outputFields: OUTPUT_FIELDS },
+        { file: TEST_FILE, 'output-fields': OUTPUT_FIELDS },
         t => (t.content as string).includes(content),
         timeoutMs,
     );
@@ -83,7 +83,7 @@ describe('update inline task', () => {
     it('updates task content', async () => {
         const id = freshId('Original task');
 
-        const r = cliUpdate({ id, content: 'Updated content', outputFields: OUTPUT_FIELDS });
+        const r = cliUpdate({ id, content: 'Updated content', 'output-fields': OUTPUT_FIELDS });
         expect(r).not.toHaveProperty('error');
         expect(r.task.content).toContain('Updated content');
 
@@ -96,7 +96,7 @@ describe('update inline task', () => {
     it('updates task start date', async () => {
         const id = freshId('Updated content');
 
-        const r = cliUpdate({ id, start: '2026-06-15', outputFields: OUTPUT_FIELDS });
+        const r = cliUpdate({ id, start: '2026-06-15', 'output-fields': OUTPUT_FIELDS });
         expect(r).not.toHaveProperty('error');
         expect(r.task.startDate).toBe('2026-06-15');
 
@@ -107,7 +107,7 @@ describe('update inline task', () => {
     it('updates task start datetime', async () => {
         const id = freshId('Updated content');
 
-        const r = cliUpdate({ id, start: '2026-06-15T10:30', outputFields: OUTPUT_FIELDS });
+        const r = cliUpdate({ id, start: '2026-06-15T10:30', 'output-fields': OUTPUT_FIELDS });
         expect(r).not.toHaveProperty('error');
         expect(r.task.startDate).toBe('2026-06-15');
         expect(r.task.startTime).toBe('10:30');
@@ -119,7 +119,7 @@ describe('update inline task', () => {
     it('updates task due date', async () => {
         const id = freshId('Second task');
 
-        const r = cliUpdate({ id, due: '2026-07-01', outputFields: OUTPUT_FIELDS });
+        const r = cliUpdate({ id, due: '2026-07-01', 'output-fields': OUTPUT_FIELDS });
         expect(r).not.toHaveProperty('error');
         expect(r.task.due).toBe('2026-07-01');
 
@@ -130,7 +130,7 @@ describe('update inline task', () => {
     it('updates task status to done', async () => {
         const id = freshId('Third task');
 
-        const r = cliUpdate({ id, status: 'x', outputFields: OUTPUT_FIELDS });
+        const r = cliUpdate({ id, status: 'x', 'output-fields': OUTPUT_FIELDS });
         expect(r).not.toHaveProperty('error');
         expect(r.task.status).toBe('x');
 
@@ -178,7 +178,7 @@ describe('delete inline task', () => {
 
     it('does not affect other tasks when deleting', async () => {
         // Verify the remaining tasks are still in the index
-        const remaining = cliList({ file: TEST_FILE, outputFields: 'content' });
+        const remaining = cliList({ file: TEST_FILE, 'output-fields': 'content' });
         const contents = remaining.tasks.map(t => t.content as string);
         expect(contents.some(c => c.includes('Keep me'))).toBe(true);
         expect(contents.some(c => c.includes('Also keep'))).toBe(true);
@@ -228,7 +228,7 @@ describe('create inline task', () => {
             file: TEST_FILE,
             content: 'Newly created task',
             start: '2026-06-01',
-            outputFields: OUTPUT_FIELDS,
+            'output-fields': OUTPUT_FIELDS,
         });
         expect(r).not.toHaveProperty('error');
         expect(r.task.content).toContain('Newly created task');
@@ -253,7 +253,7 @@ describe('create inline task', () => {
             content: 'Ranged task',
             start: '2026-06-01',
             end: '2026-06-03',
-            outputFields: OUTPUT_FIELDS,
+            'output-fields': OUTPUT_FIELDS,
         });
         expect(r).not.toHaveProperty('error');
         expect(r.task.startDate).toBe('2026-06-01');
@@ -268,7 +268,7 @@ describe('create inline task', () => {
             file: TEST_FILE,
             content: 'Task with deadline',
             due: '2026-07-15',
-            outputFields: OUTPUT_FIELDS,
+            'output-fields': OUTPUT_FIELDS,
         });
         expect(r).not.toHaveProperty('error');
         expect(r.task.due).toBe('2026-07-15');
@@ -283,7 +283,7 @@ describe('create inline task', () => {
             content: 'Done task',
             start: '2026-06-01',
             status: 'x',
-            outputFields: OUTPUT_FIELDS,
+            'output-fields': OUTPUT_FIELDS,
         });
         expect(r).not.toHaveProperty('error');
         expect(r.task.status).toBe('x');
@@ -310,7 +310,7 @@ describe('create task in empty file', () => {
             file: NEW_FILE,
             content: 'TaskInNewFile',
             start: '2026-08-01',
-            outputFields: OUTPUT_FIELDS,
+            'output-fields': OUTPUT_FIELDS,
         });
         expect(r).not.toHaveProperty('error');
         expect(r.task.content).toContain('TaskInNewFile');
@@ -345,7 +345,7 @@ describe('create under heading', () => {
             content: 'Heading task',
             start: '2026-05-15',
             heading: 'Tasks',
-            outputFields: OUTPUT_FIELDS,
+            'output-fields': OUTPUT_FIELDS,
         });
         expect(r).not.toHaveProperty('error');
         expect(r.task.content).toContain('Heading task');
@@ -379,7 +379,7 @@ describe('full round-trip', () => {
             file: TEST_FILE,
             content: 'Round-trip task',
             start: '2026-09-01',
-            outputFields: OUTPUT_FIELDS,
+            'output-fields': OUTPUT_FIELDS,
         });
         expect(created).not.toHaveProperty('error');
         const createId = created.task.id as string;
@@ -394,7 +394,7 @@ describe('full round-trip', () => {
             id: currentId,
             content: 'Round-trip updated',
             start: '2026-09-15',
-            outputFields: OUTPUT_FIELDS,
+            'output-fields': OUTPUT_FIELDS,
         });
         expect(updated).not.toHaveProperty('error');
         expect(updated.task.content).toContain('Round-trip updated');
@@ -432,7 +432,7 @@ describe('clear status via none sentinel', () => {
         expect(task!.status).toBe('x');
 
         const id = task!.id as string;
-        const r = cliUpdate({ id, status: 'none', outputFields: OUTPUT_FIELDS });
+        const r = cliUpdate({ id, status: 'none', 'output-fields': OUTPUT_FIELDS });
         expect(r).not.toHaveProperty('error');
         expect(r.task.status).toBe(' ');
 

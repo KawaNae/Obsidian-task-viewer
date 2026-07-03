@@ -20,8 +20,6 @@ export interface TimelineConfig {
     pinnedLists?: PinnedListDefinition[];
     daysToShow?: 1 | 3 | 7;
     zoomLevel?: number;
-    /** Per-view override of habit tracker visibility. undefined = follow global. */
-    showHabits?: boolean;
     /** Per-view override of all-day section visibility. undefined = follow global. */
     showAllDay?: boolean;
     /** Per-view override of timeline section visibility. undefined = follow global. */
@@ -53,7 +51,6 @@ export const TimelineSchema: ViewSchema<TimelineConfig, TimelineTransient> = {
         pinnedLists:      F.pinnedLists('pinnedLists'),
         daysToShow:       F.intEnum('daysToShow', [1, 3, 7], { legacyKeys: ['days'] }),
         zoomLevel:        F.float('zoomLevel', { min: 0.25, max: 10, legacyKeys: ['zoom'] }),
-        showHabits:       F.boolean('showHabits'),
         showAllDay:       F.boolean('showAllDay'),
         showTimeline:     F.boolean('showTimeline'),
     },

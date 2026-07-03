@@ -15,6 +15,23 @@ export class TaskParser {
         new TVInlineParser(),
     ]);
 
+    /** Bumped on every strategy swap — cache invalidation signal for consumers. */
+    private static generation = 0;
+
+    private static swapStrategy(strategy: ParserStrategy): void {
+        this.strategy = strategy;
+        this.generation++;
+    }
+
+    /**
+     * Monotonic counter identifying the active chain. Consumers that memoize
+     * parse results (e.g. editor diagnostics) compare this to detect a
+     * settings-driven chain rebuild and drop their caches.
+     */
+    static getChainGeneration(): number {
+        return this.generation;
+    }
+
     /**
      * Rebuild the parser chain based on current settings.
      *
@@ -32,7 +49,7 @@ export class TaskParser {
             parsers.push(new TasksPluginParser(settings.tasksPluginMapping));
         }
         parsers.push(new TVInlineParser());
-        this.strategy = new ParserChain(parsers);
+        this.swapStrategy(new ParserChain(parsers));
         logDebug(`[TaskParser:rebuildChain] parsers=[${parsers.map(p => p.id)}]`);
     }
 
@@ -41,7 +58,23 @@ export class TaskParser {
      * @param strategy The parser strategy to use
      */
     static setStrategy(strategy: ParserStrategy): void {
-        this.strategy = strategy;
+        this.swapStrategy(strategy);
+    }
+
+    /**
+     * Run `fn` with a chain built from `settings`, then restore the previous
+     * strategy — even on throw. Test-only scoping helper: the static
+     * strategy is process-global, so tests that need a non-default chain
+     * (e.g. day-planner enabled) must not leak it into later tests.
+     */
+    static withChain<T>(settings: TaskViewerSettings, fn: () => T): T {
+        const previous = this.strategy;
+        this.rebuildChain(settings);
+        try {
+            return fn();
+        } finally {
+            this.swapStrategy(previous);
+        }
     }
 
     /**
@@ -63,12 +96,5 @@ export class TaskParser {
      */
     static format(task: Task): string {
         return this.strategy.format(task);
-    }
-
-    /**
-     * Check if the task's status should trigger commands.
-     */
-    static isTriggerableStatus(task: Task): boolean {
-        return this.strategy.isTriggerableStatus(task);
     }
 }

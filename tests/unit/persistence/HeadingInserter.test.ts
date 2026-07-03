@@ -74,5 +74,39 @@ describe('HeadingInserter', () => {
             expect(lines[1]).toBe('inserted');
             expect(lines[2]).toBe('first');
         });
+
+        it('ignores heading inside code fence and matches real one after it', () => {
+            const content = '```\n## Tasks\n```\n## Tasks\nunder';
+            const result = HeadingInserter.insertUnderHeading(content, 'inserted', 'Tasks', 2);
+            const lines = result.split('\n');
+            expect(lines[3]).toBe('## Tasks');
+            expect(lines[4]).toBe('inserted');
+            expect(lines[5]).toBe('under');
+        });
+
+        it('creates heading at EOF when the only match is fenced', () => {
+            const content = '```\n## Tasks\n```';
+            const result = HeadingInserter.insertUnderHeading(content, '- [ ] task', 'Tasks', 2);
+            const lines = result.split('\n');
+            // fenced occurrence untouched, new heading appended at end
+            expect(lines[1]).toBe('## Tasks');
+            expect(lines[lines.length - 2]).toBe('## Tasks');
+            expect(lines[lines.length - 1]).toBe('- [ ] task');
+        });
+
+        it('ignores heading inside tilde fence', () => {
+            const content = '~~~\n## Tasks\n~~~\n## Tasks\nunder';
+            const result = HeadingInserter.insertUnderHeading(content, 'inserted', 'Tasks', 2);
+            const lines = result.split('\n');
+            expect(lines[4]).toBe('inserted');
+        });
+
+        it('does not close a longer fence with a shorter delimiter', () => {
+            const content = '````\n```\n## Tasks\n````\n## Tasks\nunder';
+            const result = HeadingInserter.insertUnderHeading(content, 'inserted', 'Tasks', 2);
+            const lines = result.split('\n');
+            expect(lines[4]).toBe('## Tasks');
+            expect(lines[5]).toBe('inserted');
+        });
     });
 });

@@ -4,9 +4,12 @@
  * These tests call the real Obsidian CLI via PowerShell and assert on JSON responses.
  * Prerequisites:
  *   - Obsidian is running with the Dev vault (C:\Obsidian\Dev) open
- *   - test-tags-properties.md exists in the vault root with the expected test data
  *
- * Run:  npx vitest run tests/e2e/cli-e2e.test.ts
+ * The tag/property fixture (test-tags-properties.md) is written by this
+ * suite itself — it used to be a manually-maintained vault file and got
+ * destroyed at some point, so the data now lives here as code.
+ *
+ * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/crud/cli-e2e.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
@@ -19,13 +22,44 @@ import { deleteTestFile, writeTestFile, waitForFileIndexed, readTestFile } from 
 
 const TEST_FILE = 'test-tags-properties.md';
 
-beforeAll(() => {
+// Contract encoded in the assertions below: 10 tasks / tag=支出 → 7
+// (食費3 + ゲーム3 + 日用品1) / 支払/クレカ → 4 / 収入 → 1 / 優先度:高 → 3 /
+// 金額:2000 → 1 / 店舗:コンビニ → 1 / content 課金 → 3 / all unchecked.
+const FIXTURE_CONTENT = [
+    '---',
+    'customProperty: 継承テスト',
+    '---',
+    '',
+    '# タグ・プロパティ フィルタテスト',
+    '',
+    '- [ ] 食料品の買い出し #支出/食費 @2026-03-15',
+    '- [ ] 外食ランチ #支出/食費 #支払/クレカ @2026-03-16',
+    '- [ ] スーパー特売 #支出/食費 @2026-03-16>2026-03-17',
+    '    - 店舗:: コンビニ',
+    '- [ ] ゲーム課金テスト #支出/ゲーム #支払/クレカ @2026-03-16',
+    '    - 優先度:: 高',
+    '- [ ] 課金A #支出/ゲーム #支払/クレカ @2026-03-16',
+    '    - 金額:: 2000',
+    '    - 優先度:: 高',
+    '    - メモ:: 月パス',
+    '- [ ] ゲーム月次購読 #支出/ゲーム @2026-03-17',
+    '    - 優先度:: 高',
+    '- [ ] 洗剤の購入 #支出/日用品 @2026-03-15',
+    '- [ ] 高額課金E #支払/クレカ @2026-03-18',
+    '    - 金額:: 50000',
+    '- [ ] 給与振込 #収入 @2026-03-25',
+    '- [ ] タグなしテスト @2026-03-16',
+].join('\n');
+
+beforeAll(async () => {
     if (!isObsidianRunning()) {
         throw new Error(
             'Obsidian is not running or CLI is unreachable. ' +
             'Start Obsidian with the Dev vault before running E2E tests.',
         );
     }
+    writeTestFile(TEST_FILE, FIXTURE_CONTENT);
+    await waitForFileIndexed(TEST_FILE);
 });
 
 // ────────────────────────────────────────────
@@ -40,8 +74,8 @@ describe('list — basics', () => {
         expect(r.tasks).toHaveLength(3);
     });
 
-    it('respects outputFields', () => {
-        const r = cliList({ limit: '1', outputFields: 'content,tags' });
+    it('respects output-fields', () => {
+        const r = cliList({ limit: '1', 'output-fields': 'content,tags' });
         const task = r.tasks[0];
         expect(task).toHaveProperty('id');
         expect(task).toHaveProperty('content');
@@ -71,7 +105,7 @@ describe('list — hierarchical tag filter', () => {
     });
 
     it('leaf tag matches only that tag (tag=支出/食費)', () => {
-        const r = cliList({ tag: '支出/食費', file: TEST_FILE, outputFields: 'content,tags' });
+        const r = cliList({ tag: '支出/食費', file: TEST_FILE, 'output-fields': 'content,tags' });
         expect(r.count).toBe(3);
         for (const t of r.tasks) {
             expect((t.tags as string[]).some(tag => tag === '支出/食費')).toBe(true);
@@ -84,13 +118,13 @@ describe('list — hierarchical tag filter', () => {
     });
 
     it('tag=収入 matches 1 task', () => {
-        const r = cliList({ tag: '収入', file: TEST_FILE, outputFields: 'content,tags' });
+        const r = cliList({ tag: '収入', file: TEST_FILE, 'output-fields': 'content,tags' });
         expect(r.count).toBe(1);
         expect(r.tasks[0].content).toContain('給与');
     });
 
     it('tasks without matching tags are excluded', () => {
-        const r = cliList({ tag: '支出', file: TEST_FILE, outputFields: 'content,tags' });
+        const r = cliList({ tag: '支出', file: TEST_FILE, 'output-fields': 'content,tags' });
         for (const t of r.tasks) {
             const tags = t.tags as string[];
             expect(tags.some(tag => tag.startsWith('支出'))).toBe(true);
@@ -118,7 +152,7 @@ describe('list — custom property filter', () => {
     });
 
     it('properties field is populated correctly', () => {
-        const r = cliList({ content: '課金A', outputFields: 'content,properties' });
+        const r = cliList({ content: '課金A', 'output-fields': 'content,properties' });
         expect(r.count).toBe(1);
         const props = r.tasks[0].properties as Record<string, unknown>;
         expect(props['金額']).toBe(2000);
@@ -127,7 +161,7 @@ describe('list — custom property filter', () => {
     });
 
     it('tasks with only inherited properties have frontmatter properties', () => {
-        const r = cliList({ content: 'タグなしテスト', outputFields: 'content,properties' });
+        const r = cliList({ content: 'タグなしテスト', 'output-fields': 'content,properties' });
         expect(r.count).toBe(1);
         // タグなしテスト has no inline properties, but inherits frontmatter customProperty
         expect(r.tasks[0].properties).toHaveProperty('customProperty');
@@ -143,7 +177,7 @@ describe('list — combined filters', () => {
             tag: '支出/ゲーム',
             property: '優先度:高',
             file: TEST_FILE,
-            outputFields: 'content,tags,properties',
+            'output-fields': 'content,tags,properties',
         });
         expect(r.count).toBe(3);
         for (const t of r.tasks) {
@@ -168,7 +202,7 @@ describe('list — date, status, content filters', () => {
     });
 
     it('content filter with partial match', () => {
-        const r = cliList({ content: '課金', file: TEST_FILE, outputFields: 'content' });
+        const r = cliList({ content: '課金', file: TEST_FILE, 'output-fields': 'content' });
         // ゲーム課金テスト, 課金A, 高額課金E = 3 tasks
         expect(r.count).toBe(3);
         for (const t of r.tasks) {
@@ -182,7 +216,7 @@ describe('list — date, status, content filters', () => {
 // ────────────────────────────────────────────
 describe('today', () => {
     it('returns tasks in { count, tasks } format', () => {
-        const r = cliToday({ limit: '5', outputFields: 'content' });
+        const r = cliToday({ limit: '5', 'output-fields': 'content' });
         expect(r).toHaveProperty('count');
         expect(r).toHaveProperty('tasks');
         expect(Array.isArray(r.tasks)).toBe(true);
@@ -197,7 +231,7 @@ describe('get', () => {
         const list = cliList({ file: TEST_FILE, limit: '1' });
         const id = list.tasks[0].id as string;
 
-        const task = cliGet(id, { outputFields: 'id,content,file,tags,properties' });
+        const task = cliGet(id, { 'output-fields': 'id,content,file,tags,properties' });
         expect(task.id).toBe(id);
         expect(task).toHaveProperty('content');
         expect(task).toHaveProperty('file');
@@ -220,7 +254,7 @@ describe('CRUD lifecycle', () => {
             file: TEST_FILE,
             content: 'E2E-test-task',
             start: '2026-04-01',
-            outputFields: 'id,content,startDate',
+            'output-fields': 'id,content,startDate',
         });
         expect(r).not.toHaveProperty('error');
         expect(r.task.content).toContain('E2E-test-task');
@@ -230,7 +264,7 @@ describe('CRUD lifecycle', () => {
     });
 
     it('get — retrieves the created task', () => {
-        const task = cliGet(createdId, { outputFields: 'id,content,startDate' });
+        const task = cliGet(createdId, { 'output-fields': 'id,content,startDate' });
         expect(task.id).toBe(createdId);
         expect(task.content).toContain('E2E-test-task');
         expect(task.startDate).toBe('2026-04-01');
@@ -238,14 +272,14 @@ describe('CRUD lifecycle', () => {
 
     it('update — modifies content and status', () => {
         // Re-fetch ID in case it changed after create (line number shift)
-        const fresh = cliList({ content: 'E2E-test-task', outputFields: 'id' });
+        const fresh = cliList({ content: 'E2E-test-task', 'output-fields': 'id' });
         if (fresh.count > 0) createdId = fresh.tasks[0].id as string;
 
         const r = cliUpdate({
             id: createdId,
             content: 'E2E-updated',
             status: 'x',
-            outputFields: 'id,content,status',
+            'output-fields': 'id,content,status',
         });
         expect(r).not.toHaveProperty('error');
         expect(r.task.content).toContain('E2E-updated');
@@ -256,7 +290,7 @@ describe('CRUD lifecycle', () => {
 
     it('delete — removes the task', () => {
         // Re-fetch ID in case it changed after update
-        const fresh = cliList({ content: 'E2E-updated', outputFields: 'id' });
+        const fresh = cliList({ content: 'E2E-updated', 'output-fields': 'id' });
         if (fresh.count > 0) createdId = fresh.tasks[0].id as string;
 
         const r = cliDelete(createdId);
@@ -289,8 +323,8 @@ describe('error cases', () => {
         expect(r).toHaveProperty('error');
     });
 
-    it('invalid outputFields returns error', () => {
-        const r = obsidianCli('list', { outputFields: 'nonexistent', limit: '1' }) as Record<string, unknown>;
+    it('invalid output-fields returns error', () => {
+        const r = obsidianCli('list', { 'output-fields': 'nonexistent', limit: '1' }) as Record<string, unknown>;
         expect(r).toHaveProperty('error');
     });
 });
@@ -312,7 +346,7 @@ describe('duplicate', () => {
     });
 
     it('duplicates a task', async () => {
-        const src = cliList({ file: MUTATION_FILE, outputFields: 'id,content' });
+        const src = cliList({ file: MUTATION_FILE, 'output-fields': 'id,content' });
         expect(src.count).toBe(1);
         const srcId = src.tasks[0].id as string;
 
@@ -322,11 +356,11 @@ describe('duplicate', () => {
 
         // Wait for the duplicate to appear
         await waitForTask(
-            { file: MUTATION_FILE, outputFields: 'id' },
+            { file: MUTATION_FILE, 'output-fields': 'id' },
             () => true,
             5000,
         );
-        const all = cliList({ file: MUTATION_FILE, outputFields: 'id' });
+        const all = cliList({ file: MUTATION_FILE, 'output-fields': 'id' });
         expect(all.count).toBe(2);
     });
 
@@ -335,13 +369,13 @@ describe('duplicate', () => {
         writeTestFile(MUTATION_FILE, '- [ ] E2E-dup-offset @2026-04-01\n');
         await waitForFileIndexed(MUTATION_FILE);
 
-        const src = cliList({ file: MUTATION_FILE, outputFields: 'id' });
+        const src = cliList({ file: MUTATION_FILE, 'output-fields': 'id' });
         const srcId = src.tasks[0].id as string;
 
         cliDuplicate({ id: srcId, 'day-offset': '3' });
 
         const dup = await waitForTask(
-            { file: MUTATION_FILE, outputFields: 'id,startDate' },
+            { file: MUTATION_FILE, 'output-fields': 'id,startDate' },
             t => t.startDate === '2026-04-04',
             5000,
         );
@@ -374,7 +408,7 @@ describe('convert', () => {
     });
 
     it('converts inline task to frontmatter file', () => {
-        const src = cliList({ file: MUTATION_FILE, outputFields: 'id' });
+        const src = cliList({ file: MUTATION_FILE, 'output-fields': 'id' });
         expect(src.count).toBe(1);
         const id = src.tasks[0].id as string;
 
@@ -398,20 +432,20 @@ describe('tasks-for-date-range', () => {
     it('returns tasks in date range', () => {
         // TEST_FILE has tasks spanning 2026-03-09 to 2026-04-02
         const r = cliTasksForDateRange({
-            start: '2026-03-15',
-            end: '2026-03-17',
-            outputFields: 'id,content,startDate',
+            from: '2026-03-15',
+            to: '2026-03-17',
+            'output-fields': 'id,content,startDate',
         });
         expect(r).toHaveProperty('count');
         expect(r).toHaveProperty('tasks');
         expect(r.count).toBeGreaterThan(0);
     });
 
-    it('respects outputFields', () => {
+    it('respects output-fields', () => {
         const r = cliTasksForDateRange({
-            start: '2026-03-01',
-            end: '2026-03-31',
-            outputFields: 'content,startDate',
+            from: '2026-03-01',
+            to: '2026-03-31',
+            'output-fields': 'content,startDate',
             limit: '2',
         });
         expect(r.count).toBeLessThanOrEqual(2);
@@ -422,8 +456,8 @@ describe('tasks-for-date-range', () => {
         }
     });
 
-    it('missing start returns error', () => {
-        const r = obsidianCli('tasks-for-date-range', { end: '2026-03-31' }) as Record<string, unknown>;
+    it('missing from returns error', () => {
+        const r = obsidianCli('tasks-for-date-range', { to: '2026-03-31' }) as Record<string, unknown>;
         expect(r).toHaveProperty('error');
     });
 });
@@ -454,8 +488,8 @@ describe('categorized-tasks-for-date-range', () => {
         expect(Object.keys(r)).toContain('2026-03-17');
     });
 
-    it('missing start returns error', () => {
-        const r = obsidianCli('categorized-tasks-for-date-range', { end: '2026-03-16' }) as Record<string, unknown>;
+    it('missing from returns error', () => {
+        const r = obsidianCli('categorized-tasks-for-date-range', { to: '2026-03-16' }) as Record<string, unknown>;
         expect(r).toHaveProperty('error');
     });
 });
@@ -476,7 +510,7 @@ describe('insert-child-task', () => {
     });
 
     it('inserts child under parent', () => {
-        const src = cliList({ file: MUTATION_FILE, outputFields: 'id,content' });
+        const src = cliList({ file: MUTATION_FILE, 'output-fields': 'id,content' });
         expect(src.count).toBe(1);
         const parentId = src.tasks[0].id as string;
 
@@ -557,5 +591,47 @@ describe('help', () => {
         expect(r).toContain('categorized-tasks-for-date-range');
         expect(r).toContain('insert-child-task');
         expect(r).toContain('get-start-hour');
+    });
+});
+
+// ────────────────────────────────────────────
+// 18. strict flag validation
+// ────────────────────────────────────────────
+describe('strict flag validation', () => {
+    it('unknown flag returns error with did-you-mean', () => {
+        const r = obsidianCli('list', { statuss: 'x' }) as Record<string, unknown>;
+        expect(r).toHaveProperty('error');
+        expect(String(r.error)).toContain('statuss');
+        expect(String(r.error)).toContain('status');
+    });
+
+    it('old range key start= is rejected', () => {
+        const r = obsidianCli('tasks-for-date-range', {
+            from: '2026-03-15', to: '2026-03-17', start: '2026-03-15',
+        }) as Record<string, unknown>;
+        expect(r).toHaveProperty('error');
+        expect(String(r.error)).toContain('start');
+    });
+
+    it('boolean flag with a value is rejected', () => {
+        const r = obsidianCli('list', { leaf: '1' }) as Record<string, unknown>;
+        expect(r).toHaveProperty('error');
+        expect(String(r.error)).toContain('boolean');
+    });
+
+    it('no-flag command rejects any argument', () => {
+        const r = obsidianCli('get-start-hour', { anything: 'x' }) as Record<string, unknown>;
+        expect(r).toHaveProperty('error');
+    });
+
+    it('get-start-hour with no args still succeeds (framework-key canary)', () => {
+        const r = obsidianCli('get-start-hour') as Record<string, unknown>;
+        expect(r).toHaveProperty('startHour');
+    });
+
+    it('date preset is accepted as a range window bound', () => {
+        const r = cliTasksForDateRange({ from: 'today', to: 'today', 'output-fields': 'id' });
+        expect(r).toHaveProperty('count');
+        expect(r).not.toHaveProperty('error');
     });
 });

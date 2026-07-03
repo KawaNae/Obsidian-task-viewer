@@ -13,7 +13,6 @@ function makeTask(overrides: Partial<Task> = {}): Task {
         indent: 0,
         childIds: [],
         childLines: [],
-        childLineBodyOffsets: [],
         tags: [],
         originalText: '- [ ] test',
         parserId: 'tv-inline',

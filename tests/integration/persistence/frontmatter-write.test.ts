@@ -32,14 +32,14 @@ const OUTPUT_FIELDS = 'content,status,startDate,startTime,endDate,endTime,due,ta
 
 /** Find the frontmatter task in our test file (parserId=frontmatter). */
 function findFmTask(): Record<string, unknown> | undefined {
-    const r = cliList({ file: TEST_FILE, outputFields: OUTPUT_FIELDS });
+    const r = cliList({ file: TEST_FILE, 'output-fields': OUTPUT_FIELDS });
     return r.tasks.find(t => t.parserId === 'tv-file');
 }
 
 /** Wait for the frontmatter task to appear in the index. */
 async function waitForFmTask(timeoutMs = 8000): Promise<Record<string, unknown> | null> {
     return waitForTask(
-        { file: TEST_FILE, outputFields: OUTPUT_FIELDS },
+        { file: TEST_FILE, 'output-fields': OUTPUT_FIELDS },
         t => t.parserId === 'tv-file',
         timeoutMs,
     );
@@ -88,7 +88,7 @@ describe('update frontmatter task — status', () => {
         expect(task).not.toBeNull();
 
         const id = task!.id as string;
-        const r = cliUpdate({ id, status: 'x', outputFields: OUTPUT_FIELDS });
+        const r = cliUpdate({ id, status: 'x', 'output-fields': OUTPUT_FIELDS });
         expect(r).not.toHaveProperty('error');
         expect(r.task.status).toBe('x');
 
@@ -117,7 +117,7 @@ describe('update frontmatter task — start datetime', () => {
         expect(task).not.toBeNull();
 
         const id = task!.id as string;
-        const r = cliUpdate({ id, start: '2026-06-01T09:00', outputFields: OUTPUT_FIELDS });
+        const r = cliUpdate({ id, start: '2026-06-01T09:00', 'output-fields': OUTPUT_FIELDS });
         expect(r).not.toHaveProperty('error');
         expect(r.task.startDate).toBe('2026-06-01');
         expect(r.task.startTime).toBe('09:00');
@@ -145,7 +145,7 @@ describe('update frontmatter task — start date only', () => {
         expect(task).not.toBeNull();
 
         const id = task!.id as string;
-        const r = cliUpdate({ id, start: '2026-07-01', outputFields: OUTPUT_FIELDS });
+        const r = cliUpdate({ id, start: '2026-07-01', 'output-fields': OUTPUT_FIELDS });
         expect(r).not.toHaveProperty('error');
         expect(r.task.startDate).toBe('2026-07-01');
 
@@ -171,7 +171,7 @@ describe('update frontmatter task — end and due', () => {
         expect(task).not.toBeNull();
 
         const id = task!.id as string;
-        const r = cliUpdate({ id, end: '2026-07-05', outputFields: OUTPUT_FIELDS });
+        const r = cliUpdate({ id, end: '2026-07-05', 'output-fields': OUTPUT_FIELDS });
         expect(r).not.toHaveProperty('error');
         expect(r.task.endDate).toBe('2026-07-05');
 
@@ -181,7 +181,7 @@ describe('update frontmatter task — end and due', () => {
 
     it('updates due date', async () => {
         const id = fmTaskId();
-        const r = cliUpdate({ id, due: '2026-08-15', outputFields: OUTPUT_FIELDS });
+        const r = cliUpdate({ id, due: '2026-08-15', 'output-fields': OUTPUT_FIELDS });
         expect(r).not.toHaveProperty('error');
         expect(r.task.due).toBe('2026-08-15');
 
@@ -210,7 +210,7 @@ describe('update frontmatter task — content', () => {
         expect(task).not.toBeNull();
 
         const id = task!.id as string;
-        const r = cliUpdate({ id, content: 'Renamed Project', outputFields: OUTPUT_FIELDS });
+        const r = cliUpdate({ id, content: 'Renamed Project', 'output-fields': OUTPUT_FIELDS });
         expect(r).not.toHaveProperty('error');
         expect(r.task.content).toContain('Renamed Project');
 
@@ -242,7 +242,7 @@ describe('surgical edit — preserves non-task keys', () => {
         expect(task).not.toBeNull();
 
         const id = task!.id as string;
-        const r = cliUpdate({ id, start: '2026-06-01', status: 'x', outputFields: OUTPUT_FIELDS });
+        const r = cliUpdate({ id, start: '2026-06-01', status: 'x', 'output-fields': OUTPUT_FIELDS });
         expect(r).not.toHaveProperty('error');
 
         await sleep(500);
@@ -287,7 +287,7 @@ describe('key ordering preserved', () => {
         expect(task).not.toBeNull();
 
         const id = task!.id as string;
-        cliUpdate({ id, start: '2026-06-15', outputFields: OUTPUT_FIELDS });
+        cliUpdate({ id, start: '2026-06-15', 'output-fields': OUTPUT_FIELDS });
 
         await sleep(500);
 
@@ -360,7 +360,7 @@ describe('delete frontmatter task', () => {
 
     it('task disappears from index after delete', async () => {
         const gone = await waitForTaskGone(
-            { file: TEST_FILE, outputFields: 'parserId' },
+            { file: TEST_FILE, 'output-fields': 'parserId' },
             t => t.parserId === 'tv-file',
             5000,
         );
@@ -392,7 +392,7 @@ describe('mixed file — frontmatter + inline coexistence', () => {
         expect(fmTask).not.toBeNull();
 
         const id = fmTask!.id as string;
-        cliUpdate({ id, content: 'FM Updated', outputFields: OUTPUT_FIELDS });
+        cliUpdate({ id, content: 'FM Updated', 'output-fields': OUTPUT_FIELDS });
 
         await sleep(500);
 
@@ -405,7 +405,7 @@ describe('mixed file — frontmatter + inline coexistence', () => {
     });
 
     it('can update inline task without affecting frontmatter task', async () => {
-        const r = cliList({ file: TEST_FILE, outputFields: OUTPUT_FIELDS });
+        const r = cliList({ file: TEST_FILE, 'output-fields': OUTPUT_FIELDS });
         const inlineTask = r.tasks.find(
             t => t.parserId === 'tv-inline' && (t.content as string).includes('Inline task A'),
         );
@@ -414,7 +414,7 @@ describe('mixed file — frontmatter + inline coexistence', () => {
         cliUpdate({
             id: inlineTask!.id as string,
             content: 'Inline Updated',
-            outputFields: OUTPUT_FIELDS,
+            'output-fields': OUTPUT_FIELDS,
         });
 
         await sleep(500);
@@ -451,19 +451,19 @@ describe('frontmatter round-trip', () => {
         let id = task!.id as string;
 
         // Update 1: change start date
-        cliUpdate({ id, start: '2026-06-01', outputFields: OUTPUT_FIELDS });
+        cliUpdate({ id, start: '2026-06-01', 'output-fields': OUTPUT_FIELDS });
         await sleep(500);
         expectFrontmatterKey(TEST_FILE, 'tv-start', '2026-06-01');
 
         // Update 2: add due date
         id = fmTaskId();
-        cliUpdate({ id, due: '2026-06-30', outputFields: OUTPUT_FIELDS });
+        cliUpdate({ id, due: '2026-06-30', 'output-fields': OUTPUT_FIELDS });
         await sleep(500);
         expectFrontmatterKey(TEST_FILE, 'tv-due', '2026-06-30');
 
         // Update 3: change content
         id = fmTaskId();
-        cliUpdate({ id, content: 'Final Name', outputFields: OUTPUT_FIELDS });
+        cliUpdate({ id, content: 'Final Name', 'output-fields': OUTPUT_FIELDS });
         await sleep(500);
         expectFrontmatterKey(TEST_FILE, 'tv-content', 'Final Name');
 
@@ -501,7 +501,7 @@ describe('clear fields via none sentinel', () => {
         expect(task!.status).toBe('x');
 
         const id = task!.id as string;
-        const r = cliUpdate({ id, status: 'none', outputFields: OUTPUT_FIELDS });
+        const r = cliUpdate({ id, status: 'none', 'output-fields': OUTPUT_FIELDS });
         expect(r).not.toHaveProperty('error');
         expect(r.task.status).toBe(' ');
 
@@ -514,7 +514,7 @@ describe('clear fields via none sentinel', () => {
 
     it('clears due via none sentinel', async () => {
         const id = fmTaskId();
-        const r = cliUpdate({ id, due: 'none', outputFields: OUTPUT_FIELDS });
+        const r = cliUpdate({ id, due: 'none', 'output-fields': OUTPUT_FIELDS });
         expect(r).not.toHaveProperty('error');
 
         await sleep(500);

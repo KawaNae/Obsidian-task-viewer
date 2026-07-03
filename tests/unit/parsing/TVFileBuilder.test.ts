@@ -171,6 +171,53 @@ describe('TVFileBuilder', () => {
             const result = TVFileBuilder.parse('file.md', fm, bodyLines, 0, keys, defaultHeader, defaultHeaderLevel);
             expect(result!.task.childLines).toHaveLength(0);
         });
+
+        it('ignores heading inside code fence', () => {
+            const fm = { [keys.start]: '2026-01-15' };
+            const bodyLines = [
+                '```',
+                '## Tasks',
+                '- [ ] not a child',
+                '```',
+                '## Tasks',
+                '- [ ] real child',
+            ];
+            const result = TVFileBuilder.parse('file.md', fm, bodyLines, 0, keys, defaultHeader, defaultHeaderLevel);
+            expect(result!.task.childLines).toHaveLength(1);
+            expect(result!.task.childLines[0].bodyLine).toBe(5);
+        });
+
+        it('ignores list items inside code fence within the section', () => {
+            const fm = { [keys.start]: '2026-01-15' };
+            const bodyLines = [
+                '## Tasks',
+                '- [ ] real child',
+                '```',
+                '- [ ] fenced item',
+                '```',
+                '- [x] another real child',
+            ];
+            const result = TVFileBuilder.parse('file.md', fm, bodyLines, 0, keys, defaultHeader, defaultHeaderLevel);
+            expect(result!.task.childLines).toHaveLength(2);
+            expect(result!.task.childLines.map(c => c.bodyLine)).toEqual([1, 5]);
+        });
+
+        it('does not end section at fenced heading', () => {
+            const fm = { [keys.start]: '2026-01-15' };
+            const bodyLines = [
+                '## Tasks',
+                '- [ ] child before fence',
+                '```',
+                '# fenced heading',
+                '```',
+                '- [ ] child after fence',
+                '## Other',
+                '- [ ] outside section',
+            ];
+            const result = TVFileBuilder.parse('file.md', fm, bodyLines, 0, keys, defaultHeader, defaultHeaderLevel);
+            expect(result!.task.childLines).toHaveLength(2);
+            expect(result!.task.childLines.map(c => c.bodyLine)).toEqual([1, 5]);
+        });
     });
 
     describe('normalizeYamlDate', () => {

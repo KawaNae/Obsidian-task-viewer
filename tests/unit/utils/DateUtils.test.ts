@@ -214,4 +214,40 @@ describe('DateUtils', () => {
             expect(tue).toBe(fri);
         });
     });
+
+    describe('isAllDayTask', () => {
+        const startHour = 5;
+
+        it('startTime なしは常に all-day', () => {
+            expect(DateUtils.isAllDayTask('2026-01-15', undefined, undefined, undefined, startHour)).toBe(true);
+            expect(DateUtils.isAllDayTask('2026-01-15', undefined, '2026-01-15', '10:00', startHour)).toBe(true);
+        });
+
+        it('ちょうど 23h30m は all-day（閾値は ≥）', () => {
+            expect(DateUtils.isAllDayTask('2026-01-15', '06:00', '2026-01-16', '05:30', startHour)).toBe(true);
+        });
+
+        it('23h29m は all-day ではない', () => {
+            expect(DateUtils.isAllDayTask('2026-01-15', '06:00', '2026-01-16', '05:29', startHour)).toBe(false);
+        });
+
+        it('endDate なしで end < start は翌日繰上げで duration 計算する', () => {
+            // 22:00 → 01:00 = 3h → not all-day
+            expect(DateUtils.isAllDayTask('2026-01-15', '22:00', undefined, '01:00', startHour)).toBe(false);
+            // 06:00 → 05:30 = 23h30m → all-day
+            expect(DateUtils.isAllDayTask('2026-01-15', '06:00', undefined, '05:30', startHour)).toBe(true);
+        });
+
+        it('endTime がフル ISO のときはそのまま解釈する', () => {
+            expect(DateUtils.isAllDayTask('2026-01-15', '10:00', undefined, '2026-01-16T10:00', startHour)).toBe(true);
+            expect(DateUtils.isAllDayTask('2026-01-15', '10:00', undefined, '2026-01-15T12:00', startHour)).toBe(false);
+        });
+
+        it('endDate 違い + endTime なしは endDate の startHour-1:59 まで', () => {
+            // Jan15 06:00 → Jan16 04:59 = 22h59m → not all-day
+            expect(DateUtils.isAllDayTask('2026-01-15', '06:00', '2026-01-16', undefined, startHour)).toBe(false);
+            // Jan15 05:00 → Jan16 04:59 = 23h59m → all-day
+            expect(DateUtils.isAllDayTask('2026-01-15', '05:00', '2026-01-16', undefined, startHour)).toBe(true);
+        });
+    });
 });

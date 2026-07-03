@@ -1,5 +1,7 @@
 import type { FilterState } from '../services/filter/FilterTypes';
 import type { SortState } from '../services/sort/SortTypes';
+import type { Diagnostic } from '../services/lang/Diagnostic';
+import type { FlowProgram } from '../services/flow/FlowAst';
 
 export interface StatusDefinition {
     char: string;
@@ -26,17 +28,7 @@ export function isCompleteStatusChar(statusChar: string, defs: StatusDefinition[
     return defs.some(d => d.char === statusChar && d.isComplete);
 }
 
-export type HabitType = 'boolean' | 'number' | 'string';
-
 export type NoteType = 'daily' | 'weekly' | 'monthly' | 'yearly';
-
-export interface HabitDefinition {
-    // Frontmatter key name used to store habit value.
-    name: string;
-    type: HabitType;
-    // Optional display unit for number habits.
-    unit?: string;
-}
 
 export type PropertyType = 'string' | 'number' | 'boolean' | 'array';
 
@@ -47,6 +39,11 @@ export interface PropertyValue {
 
 export interface ChildLine {
     text: string;
+    /**
+     * Absolute 0-indexed file line this child line lives on
+     * (same convention as `Task.line`; `-1` = no valid body line).
+     */
+    bodyLine: number;
     indent: string;
     checkboxChar: string | null;
     wikilinkTarget: string | null;
@@ -105,15 +102,11 @@ export interface Task {
      */
     childIds: string[];
     /**
-     * @internal Parser-emitted raw body lines. Substrate for
-     * `buildChildEntries`; render/write consume via `DisplayTask.childEntries`.
+     * @internal Parser-emitted raw body lines (each carries its absolute
+     * file line in `ChildLine.bodyLine`). Substrate for `buildChildEntries`;
+     * render/write consume via `DisplayTask.childEntries`.
      */
     childLines: ChildLine[];
-    /**
-     * @internal Absolute file line per `childLines` entry. Substrate for
-     * `buildChildEntries`; render/write consume via `DisplayTask.childEntries`.
-     */
-    childLineBodyOffsets: number[];
 
     // Date/time fields.
     startDate?: string;
@@ -137,10 +130,15 @@ export interface Task {
     due?: string;
 
     /**
-     * Date/time values inherited from the File → Section cascade rather than
-     * from the task's own @notation or frontmatter.  Set by TreeTaskExtractor;
-     * consumed by DisplayTaskConverter (merged as effective values) and ignored
-     * by format() (which reads only raw fields for round-trip fidelity).
+     * Values inherited from the File → Section cascade rather than from the
+     * task's own lines / frontmatter.  Set by TreeTaskExtractor; never
+     * serialized — format() and all writers read only raw fields for
+     * round-trip fidelity.
+     *
+     * Dates are merged into `DisplayTask.effective*` by DisplayTaskConverter
+     * (needs display context: startHour). Properties/tags/style close over
+     * the Task alone, so they merge via the `getEffective*` derived helpers
+     * (`services/data/EffectiveProperties.ts`).
      */
     cascadeContext?: {
         startDate?: string;
@@ -148,6 +146,11 @@ export interface Task {
         endDate?: string;
         endTime?: string;
         due?: string;
+        color?: string;
+        linestyle?: string;
+        mask?: string;
+        tags?: string[];
+        properties?: Record<string, PropertyValue>;
     };
 
     // Original parsed text and stable IDs.
@@ -155,21 +158,25 @@ export interface Task {
     blockId?: string;
     timerTargetId?: string;
 
-    // Tags extracted from task content and/or frontmatter.
+    /**
+     * Raw tags: the task's own declaration only (content `#tags` + own
+     * child-line / own-frontmatter `tags`). Section-inherited tags live in
+     * `cascadeContext.tags`; consumers read the merged view via
+     * `getEffectiveTags()`.
+     */
     tags: string[];
 
-    // Parsed flow commands.
-    commands?: FlowCommand[];
-
-    // Verbatim text after `==>` that parsed to zero commands (e.g. a URL or
-    // prose). Preserved so format() can re-emit it losslessly; ignored when
-    // `commands` is non-empty.
-    rawFlow?: string;
+    /**
+     * Flow command (`==> ...`), parsed by the flow language core.
+     * format() always re-emits `raw` verbatim; canonical re-serialization
+     * happens only when a fire generates the next instance.
+     */
+    flow?: TaskFlow;
 
     // Parse-time validation result (error or warning).
     validation?: {
         severity: 'error' | 'warning';
-        rule: string;
+        rule: ValidationRule;
         message: string;
         hint: string;
     };
@@ -180,17 +187,25 @@ export interface Task {
      */
     parserId: ParserId;
 
-    // Resolved styling (from child lines or parent-task inheritance).
+    /**
+     * Raw styling: the task's own child lines / own frontmatter only.
+     * Section-inherited style lives in `cascadeContext`; consumers read the
+     * merged view via `getEffectiveColor()` / `getEffectiveLinestyle()`.
+     */
     color?: string;
     linestyle?: string;
 
-    // Resolved mask for export masking.
+    /** Raw mask (own declaration only; merged view via `getEffectiveMask()`). */
     mask?: string;
 
     /** True when parsed by a read-only parser (no writeback support). */
     isReadOnly?: boolean;
 
-    /** Custom properties parsed from childLines / frontmatter. Read-only. */
+    /**
+     * Raw custom properties: the task's own child lines / own frontmatter
+     * only. Section-inherited properties live in `cascadeContext.properties`;
+     * consumers read the merged view via `getEffectiveProperties()`.
+     */
     properties: Record<string, PropertyValue>;
 }
 
@@ -302,21 +317,69 @@ export interface DisplayTask extends Task {
     splitContinuesAfter?: boolean;
     /**
      * Materialized child entries (body 順、1 行 1 オーナー)。
-     * Task.childIds / childLines / childLineBodyOffsets から
+     * Task.childIds / childLines から
      * `buildChildEntries` で derive。render / write の唯一の入口。
      */
     childEntries: ChildEntry[];
 }
 
-export interface FlowCommand {
-    name: string;
-    args: string[];
-    modifiers: FlowModifier[];
+/**
+ * Date/time constraint rules emitted by DateTimeRuleValidator (the
+ * canonical list — the validator's result type references this union).
+ */
+export type DateTimeRule =
+    | 'cross-midnight' | 'same-day-inversion' | 'end-before-start'
+    | 'end-time-without-start' | 'due-without-date' | 'frontmatter-time-only';
+
+/**
+ * Lang/flow diagnostic codes (Diagnostic.code): namespaced by layer.
+ * The prefixes keep this space disjoint from DateTimeRule, which the
+ * validation-freshness logic in TreeTaskExtractor relies on when clearing
+ * stale flow-origin validations.
+ */
+export type DiagnosticCode = `${'flow' | 'lex' | 'expr' | 'type'}.${string}`;
+
+/**
+ * The three code spaces that may appear in Task.validation.rule:
+ * date/time constraint rules, the @block parse error, and joined-flow
+ * diagnostics.
+ */
+export type ValidationRule = DateTimeRule | 'parse-error' | DiagnosticCode;
+
+/**
+ * One `- ==> ...` child line owned by the task's flow program.
+ * `raw` is the verbatim text after the line's `==>` marker (trimmed);
+ * `bodyLine` is the absolute file line (same convention as
+ * ChildLine.bodyLine), or -1 for a not-yet-written new instance.
+ */
+export interface FlowChildSegment {
+    raw: string;
+    bodyLine: number;
 }
 
-export interface FlowModifier {
-    name: string;
-    args: string[];
+/**
+ * Parsed flow command state carried on a Task.
+ *
+ * A flow program is physically written across a group of lines: the task
+ * line's `==>` tail plus any direct `- ==> ...` child lines. The program is
+ * parsed from all segments joined in document order (grammar is order-free,
+ * so splitting is purely presentational).
+ *
+ * Invariants:
+ * - `raw` is the verbatim task-line text after `==>` (trimmed; '' when the
+ *   flow lives only in child lines). format() re-emits it unchanged for
+ *   round-trip safety, even when parsing failed. Child segments are never
+ *   rewritten by format() — they are physical lines of their own.
+ * - `program` is non-null iff parsing AND checking the joined source
+ *   produced no error diagnostics — i.e. the command is executable.
+ * - `diagnostics` spans are offsets into the joined source (see
+ *   services/flow/FlowSegments.ts for the segment table mapping).
+ */
+export interface TaskFlow {
+    raw: string;
+    childSegments: FlowChildSegment[];
+    program: FlowProgram | null;
+    diagnostics: Diagnostic[];
 }
 
 export interface ViewState {
@@ -334,8 +397,6 @@ export interface ViewState {
     /** Per-instance override of astronomy display flags. undefined fields fall
      *  back to settings.astronomy.display. */
     astronomyDisplay?: Partial<AstronomyDisplay>;
-    /** Per-view override of habit tracker visibility. undefined = follow global. */
-    showHabits?: boolean;
     /** Per-view override of all-day section visibility. undefined = follow global. */
     showAllDay?: boolean;
     /** Per-view override of timeline section visibility. undefined = follow global. */
@@ -474,7 +535,6 @@ export interface TaskViewerSettings {
     countdownMinutes: number;
     pastDaysToShow: number;
     startFromOldestOverdue: boolean;
-    habitExcludeKeys: string[];
     tvFileChildHeader: string;
     tvFileChildHeaderLevel: number;
     doubleTapAction: DoubleTapAction;
@@ -513,7 +573,6 @@ export interface TaskViewerSettings {
     hideViewHeader: boolean;
     mobileTopOffset: number;
     fixMobileGradientWidth: boolean;
-    showHabits: boolean;
     showAllDay: boolean;
     showTimeline: boolean;
     showWeekRow: boolean;
@@ -589,7 +648,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     countdownMinutes: 25,
     pastDaysToShow: 0,
     startFromOldestOverdue: true,
-    habitExcludeKeys: ['tags', 'cssclasses', 'aliases'],
     tvFileChildHeader: 'Tasks',
     tvFileChildHeaderLevel: 2,
     doubleTapAction: 'detail',
@@ -627,7 +685,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     hideViewHeader: true,
     mobileTopOffset: 32,
     fixMobileGradientWidth: true,
-    showHabits: true,
     showAllDay: true,
     showTimeline: true,
     showWeekRow: true,

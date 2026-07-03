@@ -1,5 +1,8 @@
 import type { DisplayTask, PropertyValue } from '../types';
 import type { NormalizedTask } from './TaskApiTypes';
+import {
+    getEffectiveColor, getEffectiveLinestyle, getEffectiveTags, getEffectiveProperties,
+} from '../services/data/EffectiveProperties';
 
 // ── Field extractors ──
 
@@ -14,12 +17,12 @@ const FIELD_EXTRACTORS: Record<string, (task: DisplayTask) => unknown> = {
     endDate:     t => t.endDate ?? null,
     endTime:     t => t.endTime ?? null,
     due:         t => t.due ?? null,
-    tags:        t => t.tags,
+    tags:        t => getEffectiveTags(t),
     parserId:    t => t.parserId,
     parentId:    t => t.parentId ?? null,
     childIds:    t => t.childIds,
-    color:       t => t.color ?? null,
-    linestyle:   t => t.linestyle ?? null,
+    color:       t => getEffectiveColor(t) ?? null,
+    linestyle:   t => getEffectiveLinestyle(t) ?? null,
     effectiveStartDate: t => t.effectiveStartDate || null,
     effectiveStartTime: t => t.effectiveStartTime ?? null,
     effectiveEndDate:   t => t.effectiveEndDate ?? null,
@@ -27,7 +30,7 @@ const FIELD_EXTRACTORS: Record<string, (task: DisplayTask) => unknown> = {
     durationMinutes:    t => computeDurationMinutes(t),
     properties:         t => {
         const result: Record<string, unknown> = {};
-        for (const [k, v] of Object.entries(t.properties ?? {})) {
+        for (const [k, v] of Object.entries(getEffectiveProperties(t))) {
             result[k] = toNativeValue(v);
         }
         return result;

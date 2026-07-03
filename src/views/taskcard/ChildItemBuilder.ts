@@ -71,7 +71,7 @@ export class ChildItemBuilder {
             return;
         }
 
-        // 'plain'
+        // 'line'
         out.push(this.mapper.createPlainItem(entry.line, entry.bodyLine, parent, indent));
     }
 

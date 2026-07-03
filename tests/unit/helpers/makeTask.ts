@@ -14,7 +14,6 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
         indent: 0,
         childIds: [],
         childLines: [],
-        childLineBodyOffsets: [],
         originalText: '- [ ] Test task @2026-03-11',
         tags: [],
         parserId: 'tv-inline',
@@ -24,7 +23,6 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
         endDate: undefined,
         endTime: undefined,
         due: undefined,
-        commands: [],
         properties: {},
         ...overrides,
     };

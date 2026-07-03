@@ -12,6 +12,10 @@ import { openFileInExistingOrNewTab } from '../../../views/sharedLogic/Navigatio
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { t } from '../../../i18n';
 import { TaskStyling } from '../../../views/sharedUI/TaskStyling';
+import {
+    getEffectiveColor, getEffectiveLinestyle, getEffectiveMask,
+    getEffectiveTags, getEffectiveProperties,
+} from '../../../services/data/EffectiveProperties';
 
 type ChangePropertiesFocusField = 'name' | 'start' | 'end' | 'due';
 
@@ -45,7 +49,7 @@ export class PropertiesMenuBuilder {
             };
 
             // Requested order:
-            // file / --- / name / start / end / due / --- / length
+            // file / --- / name / start / end / due / --- / length / tags / color / linestyle / mask / custom
             // (Status is now added at root level by the caller)
             this.addFileItem(subMenu, task, menu);
             subMenu.addSeparator();
@@ -121,8 +125,9 @@ export class PropertiesMenuBuilder {
                     titleEl.appendText(t('menu.filePrefix'));
                     const nameSpan = titleEl.createSpan();
                     nameSpan.setText(fileName);
-                    if (task.color) {
-                        const hsl = TaskStyling.hexToHSL(task.color);
+                    const color = getEffectiveColor(task);
+                    if (color) {
+                        const hsl = TaskStyling.hexToHSL(color);
                         if (hsl) {
                             nameSpan.style.color = `hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`;
                         }
@@ -135,7 +140,7 @@ export class PropertiesMenuBuilder {
     }
 
     /**
-     * Add Start, End, Due, Length items.
+     * Add Start, End, Due, Length, Tags, Color, Linestyle, Mask, and Custom Properties items.
      */
     private addPropertyItems(menu: Menu, task: DisplayTask, viewStartDate: string | null, openModal: (focusField: ChangePropertiesFocusField) => void): void {
         const context: PropertyCalculationContext = {
@@ -272,7 +277,8 @@ export class PropertiesMenuBuilder {
     }
 
     private addTagsItem(menu: Menu, task: Task): void {
-        const tagsText = task.tags.length > 0 ? task.tags.join(', ') : '-';
+        const tags = getEffectiveTags(task);
+        const tagsText = tags.length > 0 ? tags.join(', ') : '-';
         menu.addItem((item) => {
             item.setTitle(t('menu.tagsLabel', { value: tagsText }))
                 .setIcon('tag')
@@ -281,21 +287,22 @@ export class PropertiesMenuBuilder {
     }
 
     private addColorItem(menu: Menu, task: Task): void {
+        const color = getEffectiveColor(task);
         menu.addItem((item) => {
-            item.setTitle(t('menu.colorLabel', { value: task.color || '-' }))
+            item.setTitle(t('menu.colorLabel', { value: color || '-' }))
                 .setIcon('palette')
                 .setDisabled(true);
 
-            if (task.color && item.dom) {
+            if (color && item.dom) {
                 const titleEl = item.dom.querySelector('.menu-item-title');
                 if (titleEl) {
                     titleEl.empty();
                     titleEl.appendText(t('menu.colorPrefix'));
                     const swatch = titleEl.createSpan('menu-color-swatch');
-                    swatch.style.backgroundColor = /^[0-9a-fA-F]{3,6}$/.test(task.color)
-                        ? '#' + task.color
-                        : task.color;
-                    titleEl.appendText(task.color);
+                    swatch.style.backgroundColor = /^[0-9a-fA-F]{3,6}$/.test(color)
+                        ? '#' + color
+                        : color;
+                    titleEl.appendText(color);
                 }
             }
         });
@@ -303,7 +310,7 @@ export class PropertiesMenuBuilder {
 
     private addLinestyleItem(menu: Menu, task: Task): void {
         menu.addItem((item) => {
-            item.setTitle(t('menu.linestyleLabel', { value: task.linestyle || '-' }))
+            item.setTitle(t('menu.linestyleLabel', { value: getEffectiveLinestyle(task) || '-' }))
                 .setIcon('minus')
                 .setDisabled(true);
         });
@@ -311,19 +318,20 @@ export class PropertiesMenuBuilder {
 
     private addMaskItem(menu: Menu, task: Task): void {
         menu.addItem((item) => {
-            item.setTitle(t('menu.maskLabel', { value: task.mask || '-' }))
+            item.setTitle(t('menu.maskLabel', { value: getEffectiveMask(task) || '-' }))
                 .setIcon('eye-off')
                 .setDisabled(true);
         });
     }
 
     private addCustomPropertiesItems(menu: Menu, task: Task): void {
-        const keys = Object.keys(task.properties);
+        const properties = getEffectiveProperties(task);
+        const keys = Object.keys(properties);
         if (keys.length === 0) return;
 
         menu.addSeparator();
         for (const key of keys) {
-            const prop = task.properties[key];
+            const prop = properties[key];
             menu.addItem((item) => {
                 item.setTitle(`${key}: ${prop.value}`)
                     .setIcon(this.getPropertyTypeIcon(prop.type))

@@ -5,6 +5,7 @@ import { TaskStyling } from '../views/sharedUI/TaskStyling';
 import { MenuHandler } from '../interaction/menu/MenuHandler';
 import type { TaskReadService } from '../services/data/TaskReadService';
 import { toDisplayTask } from '../services/display/DisplayTaskConverter';
+import { getEffectiveColor, getEffectiveLinestyle } from '../services/data/EffectiveProperties';
 
 export class TaskDetailModal extends Modal {
     private unsubscribe: (() => void) | null = null;
@@ -54,8 +55,8 @@ export class TaskDetailModal extends Modal {
         contentEl.addClass('task-detail-modal');
 
         const card = contentEl.createDiv('task-card');
-        TaskStyling.applyTaskColor(card, this.task.color ?? null);
-        TaskStyling.applyTaskLinestyle(card, this.task.linestyle ?? null);
+        TaskStyling.applyTaskColor(card, getEffectiveColor(this.task) ?? null);
+        TaskStyling.applyTaskLinestyle(card, getEffectiveLinestyle(this.task) ?? null);
         TaskStyling.applyReadOnly(card, this.task);
         const closeModal = () => this.close();
         this.menuHandler.addTaskContextMenu(card, this.task, { onDestructiveAction: closeModal });

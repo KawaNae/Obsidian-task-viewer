@@ -22,7 +22,7 @@
 
 /* Timeline Grid Container (Flex Column of Rows)
    Acts as the single scroll container for the entire timeline (date-header,
-   habits-section, allday-section, and timed grid all scroll within it).
+   allday-section, and timed grid all scroll within it).
    Scroll responsibility lives here so saveScrollPosition / restore can rely
    on a single scrollTop value without offsetTop arithmetic — fixes iPad
    WebKit deferred-layout drift. */
@@ -75,7 +75,7 @@
    border treatment.
 
    !important: per-cell rules in _timeline-date-header.css / _periodic-header
-   .css / _timeline-allday.css / _habits.css load AFTER this file and several
+   .css / _timeline-allday.css load AFTER this file and several
    use (0,0,2,0) specificity, so source-order would otherwise let them
    re-introduce the outer borders. Single source of truth wins via important. */
 .tv-grid-row > :nth-child(1 of :not(.task-card)) {

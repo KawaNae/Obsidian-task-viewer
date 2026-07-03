@@ -7,6 +7,13 @@ import { DisplayTask, Task } from '../../types';
  * Defined structurally rather than as `Task | DisplayTask` so child Task
  * objects (resolved from TaskIndex without conversion) and DisplayTask
  * parents both pass without a cast.
+ *
+ * CONTRACT — the raw fallback is load-bearing, do not remove: child-task
+ * notation labels are built from raw Tasks (ChildItemBuilder walks children
+ * via TaskReadService.getTask, which never converts to DisplayTask). The
+ * label intentionally shows what is WRITTEN on the line (raw notation),
+ * not the resolved schedule; parent-side callers pass raw startDate for
+ * the same reason (one coordinate system for parent and children).
  */
 type NotationInput =
     Pick<Task, 'startDate' | 'startTime' | 'endDate' | 'endTime'>

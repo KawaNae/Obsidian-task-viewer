@@ -4,6 +4,10 @@ import { FileOperations } from './utils/FileOperations';
 import { FrontmatterLineEditor } from './utils/FrontmatterLineEditor';
 import { DateUtils } from '../../utils/DateUtils';
 import { TagExtractor } from '../parsing/utils/TagExtractor';
+import {
+    getEffectiveColor, getEffectiveLinestyle, getEffectiveMask,
+    getEffectiveTags, getEffectiveProperties,
+} from '../data/EffectiveProperties';
 
 /**
  * tv-inline タスクを tv-file タスク（frontmatter ベース）に変換する。
@@ -120,33 +124,39 @@ export class TaskConverter {
             lines.push(`${frontmatterKeys.status}: ${FrontmatterLineEditor.escapeYamlScalar(task.statusChar)}`);
         }
 
-        // color (タスクの解決済み値を優先、ソースファイルをフォールバック)
-        const effectiveColor = task.color || color;
-        if (effectiveColor) {
-            lines.push(`${frontmatterKeys.color}: ${FrontmatterLineEditor.escapeYamlScalar(effectiveColor)}`);
+        // 変換で新ファイルはセクション文脈を離れるため、継承込みの effective
+        // 値を焼き込んで見た目を保存する（従来挙動の維持）。
+
+        // color (タスクの effective 値を優先、ソースファイルをフォールバック)
+        const taskColor = getEffectiveColor(task) || color;
+        if (taskColor) {
+            lines.push(`${frontmatterKeys.color}: ${FrontmatterLineEditor.escapeYamlScalar(taskColor)}`);
         }
 
         // linestyle
-        if (task.linestyle) {
-            lines.push(`${frontmatterKeys.linestyle}: ${FrontmatterLineEditor.escapeYamlScalar(task.linestyle)}`);
+        const taskLinestyle = getEffectiveLinestyle(task);
+        if (taskLinestyle) {
+            lines.push(`${frontmatterKeys.linestyle}: ${FrontmatterLineEditor.escapeYamlScalar(taskLinestyle)}`);
         }
 
         // mask
-        if (task.mask) {
-            lines.push(`${frontmatterKeys.mask}: ${FrontmatterLineEditor.escapeYamlScalar(task.mask)}`);
+        const taskMask = getEffectiveMask(task);
+        if (taskMask) {
+            lines.push(`${frontmatterKeys.mask}: ${FrontmatterLineEditor.escapeYamlScalar(taskMask)}`);
         }
 
         // tags
+        const taskTags = getEffectiveTags(task);
         const allTags = sharedTags && sharedTags.length > 0
-            ? TagExtractor.merge(task.tags, sharedTags)
-            : task.tags;
+            ? TagExtractor.merge(taskTags, sharedTags)
+            : taskTags;
         if (allTags.length > 0) {
             const tagItems = allTags.map(t => FrontmatterLineEditor.escapeYamlScalar(t)).join(', ');
             lines.push(`tags: [${tagItems}]`);
         }
 
         // custom properties
-        for (const [key, prop] of Object.entries(task.properties)) {
+        for (const [key, prop] of Object.entries(getEffectiveProperties(task))) {
             lines.push(`${key}: ${this.formatPropertyValueForYaml(prop)}`);
         }
 

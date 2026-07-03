@@ -1,15 +1,15 @@
 /* =============================================================================
    Moon Phase Section
-   A single-row grid showing the moon phase per visible date. Sits between
-   the date-header and the habits row in the sticky header stack.
+   A single-row grid showing the moon phase per visible date. Sits below
+   the date-header in the sticky header stack.
 ============================================================================= */
 
 .moon-section {
-    background-color: var(--tv-bg-habits);
+    background-color: var(--tv-bg-moon);
     flex-shrink: 0;
     position: sticky;
     top: var(--moon-section-sticky-top, var(--header-height));
-    z-index: var(--z-timeline-habits-section);
+    z-index: var(--z-timeline-moon-section);
     border-bottom: 1px solid var(--tv-border);
 }
 
@@ -26,7 +26,7 @@
     padding: 2px 0;
     min-height: 22px;
     color: var(--tv-text-muted, var(--text-muted));
-    /* Matches date-header / habits-section: each cell owns its right
+    /* Matches date-header: each cell owns its right
        border; the axis owns the left edge. No `is-first-cell` border-left,
        otherwise it doubles with the axis border-right into 2px. */
     border-right: 1px solid var(--tv-border);

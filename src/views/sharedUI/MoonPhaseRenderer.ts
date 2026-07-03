@@ -2,8 +2,8 @@ import { t } from '../../i18n';
 import { attachMoonPhase } from './AstronomyCellAdorner';
 
 /**
- * Timeline-specific grid row renderer for the moon phase strip. Sits between
- * the date header and the habits row. Calendar / Schedule reach the same
+ * Timeline-specific grid row renderer for the moon phase strip. Sits below
+ * the date header. Calendar / Schedule reach the same
  * underlying SVG by calling `attachMoonPhase` directly on their own day cells
  * — only Timeline benefits from a dedicated axis row, so this renderer stays
  * Timeline-only.

@@ -3,7 +3,8 @@ import type TaskViewerPlugin from '../../main';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { loadFilterFile } from '../../api/FilterFileLoader';
 import { TaskApiError } from '../../api/TaskApiTypes';
-import type { ListParams, TodayParams, ApiSortRule } from '../../api/TaskApiTypes';
+import type { ListParams, TodayParams } from '../../api/TaskApiTypes';
+import { parseSortFlag } from '../CliFilterBuilder';
 import {
     formatOutput, formatSingleTask, resolveFields, cliError,
     type OutputFormat,
@@ -12,19 +13,6 @@ import {
 const VALID_FORMATS = new Set(['json', 'tsv', 'jsonl']);
 
 // ── CliData → typed params converters ──
-
-function parseSortFlag(sortFlag: string): ApiSortRule[] {
-    return sortFlag.split(',')
-        .map(s => s.trim())
-        .filter(Boolean)
-        .map(segment => {
-            const [prop, dir] = segment.split(':');
-            return {
-                property: prop as ApiSortRule['property'],
-                direction: (dir === 'desc' ? 'desc' : 'asc') as ApiSortRule['direction'],
-            };
-        });
-}
 
 function cliDataToListParams(params: CliData, preloadedFilter?: FilterState): ListParams {
     const result: ListParams = {};
@@ -101,7 +89,7 @@ export function createListHandler(plugin: TaskViewerPlugin) {
             const listResult = await plugin.api.list(apiParams);
 
             const format = (params.format as OutputFormat) || 'json';
-            const fields = resolveFields(params.outputFields);
+            const fields = resolveFields(params['output-fields']);
             return formatOutput(listResult.tasks, format, fields);
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));
@@ -119,7 +107,7 @@ export function createTodayHandler(plugin: TaskViewerPlugin) {
             const result = plugin.api.today(apiParams);
 
             const format = (params.format as OutputFormat) || 'json';
-            const fields = resolveFields(params.outputFields);
+            const fields = resolveFields(params['output-fields']);
             return formatOutput(result.tasks, format, fields);
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));
@@ -136,7 +124,7 @@ export function createGetHandler(plugin: TaskViewerPlugin) {
         try {
             const displayTask = plugin.api.get({ id: params.id });
             const format = (params.format as OutputFormat) || 'json';
-            const fields = resolveFields(params.outputFields);
+            const fields = resolveFields(params['output-fields']);
             return formatSingleTask(displayTask, format, fields);
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));

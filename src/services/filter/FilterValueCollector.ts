@@ -1,14 +1,19 @@
 import type { Task } from '../../types';
 import { getTaskNotation } from './parserTaxonomy';
+import {
+    getEffectiveColor, getEffectiveLinestyle, getEffectiveTags, getEffectiveProperties,
+} from '../data/EffectiveProperties';
 
 /**
  * Collects available filter values from a set of tasks (for populating filter menus).
+ * Reads effective (inheritance-merged) values so that offered candidates
+ * always match what TaskFilterEngine evaluates against.
  */
 export class FilterValueCollector {
     static collectTags(tasks: Task[]): string[] {
         const set = new Set<string>();
         for (const task of tasks) {
-            for (const tag of task.tags) {
+            for (const tag of getEffectiveTags(task)) {
                 set.add(tag);
             }
         }
@@ -34,7 +39,8 @@ export class FilterValueCollector {
     static collectColors(tasks: Task[]): string[] {
         const set = new Set<string>();
         for (const task of tasks) {
-            if (task.color) set.add(task.color);
+            const color = getEffectiveColor(task);
+            if (color) set.add(color);
         }
         return Array.from(set).sort();
     }
@@ -42,7 +48,8 @@ export class FilterValueCollector {
     static collectLineStyles(tasks: Task[]): string[] {
         const set = new Set<string>();
         for (const task of tasks) {
-            if (task.linestyle) set.add(task.linestyle);
+            const linestyle = getEffectiveLinestyle(task);
+            if (linestyle) set.add(linestyle);
         }
         return Array.from(set).sort();
     }
@@ -58,8 +65,7 @@ export class FilterValueCollector {
     static collectPropertyKeys(tasks: Task[]): string[] {
         const set = new Set<string>();
         for (const task of tasks) {
-            if (!task.properties) continue;
-            for (const key of Object.keys(task.properties)) {
+            for (const key of Object.keys(getEffectiveProperties(task))) {
                 set.add(key);
             }
         }
@@ -70,7 +76,7 @@ export class FilterValueCollector {
         if (!key) return [];
         const set = new Set<string>();
         for (const task of tasks) {
-            const v = task.properties?.[key]?.value;
+            const v = getEffectiveProperties(task)[key]?.value;
             if (v != null && v !== '') set.add(v);
         }
         return Array.from(set).sort();

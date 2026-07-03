@@ -6,8 +6,10 @@ import { DateUtils } from '../../../utils/DateUtils';
  * Read-only parser for Day Planner format.
  * Parses: `- [ ] HH:MM - HH:MM content` or `- [ ] HH:MM content`
  *
- * Date is not encoded in the line — it comes from daily note filename
- * inheritance handled by TaskScanner.
+ * Date is not encoded in the line. If a start date is needed, it comes from
+ * the File→Section cascade (SectionPropertyResolver → TreeTaskExtractor's
+ * cascadeContext), same as any other inline task — there is no filename-based
+ * date inheritance in the parse path.
  */
 export class DayPlannerParser extends ReadOnlyParserBase {
     readonly id = 'day-planner';

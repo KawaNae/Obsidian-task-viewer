@@ -18,7 +18,7 @@ export function createCreateHandler(plugin: TaskViewerPlugin) {
                 status: params.status,
                 heading: params.heading,
             });
-            return cliOk({ task: pickFields(result.task, resolveFields(params.outputFields)) });
+            return cliOk({ task: pickFields(result.task, resolveFields(params['output-fields'])) });
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to create task: ${e instanceof Error ? e.message : String(e)}`);
         }
@@ -38,7 +38,7 @@ export function createUpdateHandler(plugin: TaskViewerPlugin) {
                 due: params.due,
                 status: params.status,
             });
-            return cliOk({ task: pickFields(result.task, resolveFields(params.outputFields)) });
+            return cliOk({ task: pickFields(result.task, resolveFields(params['output-fields'])) });
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to update task: ${e instanceof Error ? e.message : String(e)}`);
         }

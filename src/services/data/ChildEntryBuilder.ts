@@ -3,8 +3,8 @@ import type { Task, ChildEntry, ChildLine } from '../../types';
 /**
  * Derives a Task's ordered ChildEntry[] from its parser-emitted fields:
  *   - childIds (independent child tasks)
- *   - childLines (raw lines under the parent)
- *   - childLineBodyOffsets (parallel array, absolute file line per childLine)
+ *   - childLines (raw lines under the parent, each carrying its absolute
+ *     file line in ChildLine.bodyLine)
  *
  * Guarantees:
  *   - Each entry carries an absolute `bodyLine`, so render/write layers
@@ -23,16 +23,12 @@ export function buildChildEntries(
 ): ChildEntry[] {
     const entries: ChildEntry[] = [];
 
-    const offsets = parent.childLineBodyOffsets;
-    const childLines = parent.childLines;
-    for (let i = 0; i < childLines.length; i++) {
-        const cl = childLines[i];
-        const bodyLine = offsets[i];
-        if (typeof bodyLine !== 'number' || bodyLine < 0) continue;
+    for (const cl of parent.childLines) {
+        if (cl.bodyLine < 0) continue;
         if (cl.wikilinkTarget) {
-            entries.push({ kind: 'wikilink', target: cl.wikilinkTarget, bodyLine, line: cl });
+            entries.push({ kind: 'wikilink', target: cl.wikilinkTarget, bodyLine: cl.bodyLine, line: cl });
         } else {
-            entries.push({ kind: 'line', line: cl, bodyLine });
+            entries.push({ kind: 'line', line: cl, bodyLine: cl.bodyLine });
         }
     }
 
@@ -81,8 +77,15 @@ function collectSubtreeLines(
     visited.add(task.id);
 
     if (task.line >= 0) out.add(`${task.file}:${task.line}`);
-    for (const off of task.childLineBodyOffsets) {
-        if (typeof off === 'number' && off >= 0) out.add(`${task.file}:${off}`);
+    for (const cl of task.childLines) {
+        if (cl.bodyLine >= 0) out.add(`${task.file}:${cl.bodyLine}`);
+    }
+    // Flow child lines (`- ==>`) are excluded from childLines by the
+    // extractor but are still body lines owned by this task — without
+    // them here, an ancestor (e.g. a tv-file card) would surface them as
+    // plain text child entries.
+    for (const seg of task.flow?.childSegments ?? []) {
+        if (seg.bodyLine >= 0) out.add(`${task.file}:${seg.bodyLine}`);
     }
     for (const cid of task.childIds) {
         const c = getTask(cid);

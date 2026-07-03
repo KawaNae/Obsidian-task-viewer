@@ -138,7 +138,7 @@ export class FileOperations {
 
         // Strategy 0: Stored line number (O(1), correct when no line shift has occurred)
         // Must run before Strategy 1 to avoid returning the first duplicate when
-        // multiple lines share the same originalText (e.g. inherited-date child tasks).
+        // multiple lines share the same originalText (e.g. duplicate bare-checkbox child lines).
         if (hasBodyLine(task) && task.line < lines.length && lines[task.line] === task.originalText) {
             return task.line;
         }

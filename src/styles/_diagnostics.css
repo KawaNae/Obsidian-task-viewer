@@ -1,0 +1,17 @@
+/* Editor diagnostics (==> flow commands + @date blocks) — wavy underlines */
+
+.tv-diag {
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+    text-decoration-skip-ink: none;
+    text-decoration-thickness: 1px;
+    cursor: help;
+}
+
+.tv-diag--error {
+    text-decoration-color: var(--color-red);
+}
+
+.tv-diag--warning {
+    text-decoration-color: var(--color-yellow);
+}

@@ -18,6 +18,9 @@ export class TimelineHandleStrategy implements HandleStrategy {
         const isSplitTail = taskEl.classList.contains('task-card--split-continues-before');
         const isSplitHead = taskEl.classList.contains('task-card--split-continues-after');
 
+        // Raw times are correct here: timeline handles render only for timed
+        // tasks, whose start/end times are explicit (no implicit inheritance)
+        // — raw and effective coincide by construction.
         const [startH, startM] = (task.startTime || '00:00').split(':').map(Number);
         const isTouchingTop = isSplitTail || (startH === startHour && startM === 0);
 

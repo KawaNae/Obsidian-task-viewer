@@ -52,6 +52,10 @@ export class TaskRepository {
         return this.inlineWriter.deleteTaskFromFile(task);
     }
 
+    async stripFlow(task: Task): Promise<void> {
+        return this.inlineWriter.stripFlow(task);
+    }
+
     async insertLineAfterTask(task: Task, lineContent: string): Promise<number> {
         return this.inlineWriter.insertLineAfterTask(task, lineContent);
     }
@@ -96,8 +100,8 @@ export class TaskRepository {
         return this.cloner.duplicateTvFile(task, keys, options);
     }
 
-    async insertRecurrenceForTask(task: Task, content: string, newTask?: Task, copyChildren = true): Promise<void> {
-        return this.cloner.insertRecurrenceForTask(task, content, newTask, copyChildren);
+    async insertRecurrenceForTask(task: Task, content: string, copyChildren = true, flowLines: string[] = []): Promise<void> {
+        return this.cloner.insertRecurrenceForTask(task, content, copyChildren, flowLines);
     }
 
     // --- Task Conversion Operations ---
@@ -143,7 +147,7 @@ export class TaskRepository {
         const childIndent = firstChild ? (firstChild.match(/^\s*/)?.[0] ?? '') : '';
         const normalized = FileOperations.adjustChildIndentation(childrenLines, childIndent);
         // property 行 (- key:: value) は frontmatter へ昇格済みのため body から除外
-        return normalized.filter(line => ChildLineClassifier.classify(line).propertyKey === null);
+        return normalized.filter(line => !ChildLineClassifier.isPropertyLine(line));
     }
 
     /**

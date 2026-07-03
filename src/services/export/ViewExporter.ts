@@ -34,8 +34,8 @@ export class ViewExporter {
                 const restoreFns: (() => void)[] = [];
 
                 // Expand each declared scroll area to its full scrollHeight.
-                // expandScrollAreaSelf(true) so a selector matching the
-                // container itself (Timeline's historical contract) still works.
+                // Match both the container itself and its descendants (Timeline's
+                // historical contract passes a selector matching the container).
                 for (const sel of spec.scrollAreas) {
                     const matches = clone.matches(sel) ? [clone] : [];
                     const descendants = Array.from(clone.querySelectorAll<HTMLElement>(sel));

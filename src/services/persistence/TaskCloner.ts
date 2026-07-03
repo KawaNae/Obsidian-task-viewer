@@ -1,6 +1,7 @@
 import { App, TFile } from 'obsidian';
 import type { DuplicateOptions, TvFileKeys, Task } from '../../types';
 import { TaskParser } from '../parsing/TaskParser';
+import { collectFlowLineIndices, formatFlowLine } from '../flow/FlowLineScanner';
 import { DateUtils } from '../../utils/DateUtils';
 import { FileOperations } from './utils/FileOperations';
 import { FrontmatterLineEditor } from './utils/FrontmatterLineEditor';
@@ -104,8 +105,11 @@ export class TaskCloner {
     /**
      * タスクの再発処理：元タスク+子行の直後に新しいタスク（+子行コピー）を挿入する。
      * 既存タスクがある場合はその直後に、なければ新しいタスクとして追加する。
+     * `content` は呼び出し側（FlowExecutor interpreter）が format 済みの行文字列。
+     * `flowLines` は新インスタンスの `- ==>` フロー子行の raw 列（行単位
+     * canonical、FlowPlanner 産）。タスク行直後に正規化位置で挿入する。
      */
-    async insertRecurrenceForTask(task: Task, content: string, newTask?: Task, copyChildren = true): Promise<void> {
+    async insertRecurrenceForTask(task: Task, content: string, copyChildren = true, flowLines: string[] = []): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;
 
@@ -116,24 +120,36 @@ export class TaskCloner {
             if (currentLine < 0 || currentLine >= lines.length) {
                 // Task not found: append to end
                 const prefix = fileContent.length > 0 && !fileContent.endsWith('\n') ? '\n' : '';
-                return fileContent + prefix + content;
+                const appended = [content, ...flowLines.map(raw => formatFlowLine('\t', raw))].join('\n');
+                return fileContent + prefix + appended;
             }
 
-            // Format new parent line with original indentation
+            // Re-indent the formatted line to match the original task line
             const originalLine = lines[currentLine];
             const originalIndent = originalLine.match(/^(\s*)/)?.[1] || '';
-            const newContent = TaskParser.format(newTask || task);
-            const newParentLine = originalIndent + newContent.trim();
+            const newParentLine = originalIndent + content.trim();
+
+            // 元タスクの直下 flow 行は発火で消費される側 — コピーすると未減算
+            // xN の stale 複製 + 新タスク行の canonical と二重化するため除外。
+            // 子孫タスクの flow 行は直下でない（構造親規則）のでテンプレート
+            // として自然に残る。
+            const flowAbs = new Set(collectFlowLineIndices(lines, currentLine));
+            const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
+            const keptChildren = childrenLines.filter((_, i) => !flowAbs.has(currentLine + 1 + i));
+
+            // 新インスタンスの flow 行インデント: 既存子行に揃え、なければタブ
+            const childIndent = keptChildren.find(l => l.trim() !== '')?.match(/^\s*/)?.[0]
+                ?? childrenLines.find(l => l.trim() !== '')?.match(/^\s*/)?.[0]
+                ?? originalIndent + '\t';
+            const newFlowLines = flowLines.map(raw => formatFlowLine(childIndent, raw));
 
             const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
             if (copyChildren) {
-                // Collect children, strip block IDs, and reset checkboxes
-                const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
-                const cleaned = this.fileOps.stripBlockIds(childrenLines);
+                const cleaned = this.fileOps.stripBlockIds(keptChildren);
                 const reset = this.resetChildCheckboxes(cleaned);
-                lines.splice(insertAt, 0, newParentLine, ...reset);
+                lines.splice(insertAt, 0, newParentLine, ...newFlowLines, ...reset);
             } else {
-                lines.splice(insertAt, 0, newParentLine);
+                lines.splice(insertAt, 0, newParentLine, ...newFlowLines);
             }
 
             return lines.join('\n');

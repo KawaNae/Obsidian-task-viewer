@@ -1,4 +1,5 @@
 import { TvFileKeys, Task, WikilinkRef, ChildLine } from '../../../types';
+import { createBaseTask } from '../TaskFactory';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
@@ -6,6 +7,7 @@ import { validateDateTimeRules } from '../utils/DateTimeRuleValidator';
 import { isTaskBearingFile } from '../utils/FrontmatterPolicy';
 import { FilePropertyResolver } from '../FilePropertyResolver';
 import { normalizeYamlDate, parseDateTimeField } from '../utils/DateTimeFieldParser';
+import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
 
 export interface FrontmatterParseResult {
     task: Task;
@@ -70,34 +72,32 @@ export class TVFileBuilder {
         }
 
         const childLines: ChildLine[] = [];
-        const childBodyIndices: number[] = [];
 
         // Collect childLines from configured heading section (for card display)
+        const fenceMask = CodeFenceTracker.mask(bodyLines);
         const section = this.findHeaderSection(
             bodyLines,
             tvFileChildHeader,
-            tvFileChildHeaderLevel
+            tvFileChildHeaderLevel,
+            fenceMask
         );
         if (section) {
             const block = this.collectAllListItems(
                 bodyLines,
                 section.start,
-                section.end
+                section.end,
+                fenceMask
             );
             for (const relIndex of block.lineIndices) {
-                const line = bodyLines[relIndex];
-                const absoluteLine = bodyStartIndex + relIndex;
-                childLines.push(ChildLineClassifier.classify(line));
-                childBodyIndices.push(absoluteLine);
+                childLines.push(ChildLineClassifier.classify(bodyLines[relIndex], bodyStartIndex + relIndex));
             }
         }
 
         // Extract wikilinkRefs from entire body (for parent-child resolution)
         // Safe because WikiLinkResolver.wireChild() validates the target exists as a frontmatter task
         const wikilinkRefs: WikilinkRef[] = [];
-        const wikiRegex = /^\s*(?:[-*+]|\d+[.)])\s+\[\[([^\]]+)\]\]\s*$/;
         for (let i = 0; i < bodyLines.length; i++) {
-            const wikiMatch = bodyLines[i].match(wikiRegex);
+            const wikiMatch = bodyLines[i].match(ChildLineClassifier.WIKILINK_CHILD);
             if (wikiMatch) {
                 wikilinkRefs.push({ target: wikiMatch[1].trim(), bodyLine: bodyStartIndex + i });
             }
@@ -120,32 +120,29 @@ export class TVFileBuilder {
             : undefined;
 
         return {
-            task: {
+            task: createBaseTask({
                 id: TaskIdGenerator.generate('tv-file', filePath, 'fm-root'),
                 file: filePath,
                 line: -1,
                 content,
                 statusChar,
-                indent: 0,
-                childIds: [],
+                parserId: 'tv-file',
+                originalText: '',
+            }, {
                 childLines,
-                childLineBodyOffsets: childBodyIndices,
                 startDate: start.date,
                 startTime: start.time,
                 endDate: end.date,
                 endTime: end.time,
                 due,
                 tags: TagExtractor.merge(contentTags, fmExtracted.tags ?? []),
-                originalText: '',
-                commands: [],
                 timerTargetId,
-                parserId: 'tv-file',
                 properties: fmExtracted.properties,
                 color: fmExtracted.color,
                 linestyle: fmExtracted.linestyle,
                 mask: fmExtracted.mask,
                 validation,
-            },
+            }),
             wikilinkRefs,
         };
     }
@@ -159,13 +156,15 @@ export class TVFileBuilder {
     private static findHeaderSection(
         bodyLines: string[],
         headerName: string,
-        headerLevel: number
+        headerLevel: number,
+        fenceMask: boolean[]
     ): { start: number; end: number } | null {
         const expected = headerName.trim();
         if (!expected || headerLevel < 1 || headerLevel > 6) return null;
 
         let start = -1;
         for (let i = 0; i < bodyLines.length; i++) {
+            if (fenceMask[i]) continue;
             const header = this.parseHeaderLine(bodyLines[i]);
             if (!header) continue;
             if (header.level === headerLevel && header.text.trim() === expected) {
@@ -177,6 +176,7 @@ export class TVFileBuilder {
 
         let end = bodyLines.length;
         for (let i = start; i < bodyLines.length; i++) {
+            if (fenceMask[i]) continue;
             const header = this.parseHeaderLine(bodyLines[i]);
             if (!header) continue;
             if (header.level <= headerLevel) {
@@ -197,7 +197,8 @@ export class TVFileBuilder {
     private static collectAllListItems(
         bodyLines: string[],
         sectionStart: number,
-        sectionEnd: number
+        sectionEnd: number,
+        fenceMask: boolean[]
     ): { lineIndices: number[] } {
         const lineIndices: number[] = [];
         const listRegex = /^(\s*)(?:[-*+]|\d+[.)])\s+/;
@@ -205,6 +206,7 @@ export class TVFileBuilder {
         let rootIndent: number | null = null;
 
         for (let i = sectionStart; i < sectionEnd; i++) {
+            if (fenceMask[i]) continue;
             const line = bodyLines[i];
             if (line.trim() === '') continue; // 空行をスキップ（停止しない）
 

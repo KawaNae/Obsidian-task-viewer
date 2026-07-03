@@ -3,6 +3,7 @@ import { t } from '../../i18n';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TouchLongPressBinder } from '../../interaction/menu/TouchLongPressBinder';
 import { TaskStyling } from './TaskStyling';
+import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { HandleManager } from '../timelineview/HandleManager';
 import { DisplayTask } from '../../types';
@@ -147,8 +148,8 @@ export class AllDaySectionRenderer {
         }
         el.toggleClass('is-selected', originalTaskId === this.handleManager.getSelectedTaskId());
 
-        TaskStyling.applyTaskColor(el, dt.color ?? null);
-        TaskStyling.applyTaskLinestyle(el, dt.linestyle ?? null);
+        TaskStyling.applyTaskColor(el, getEffectiveColor(dt) ?? null);
+        TaskStyling.applyTaskLinestyle(el, getEffectiveLinestyle(dt) ?? null);
         TaskStyling.applyReadOnly(el, dt);
 
         // Grid 座標を dataset で公開し、drag move/resize が style.gridColumn の

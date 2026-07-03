@@ -156,8 +156,6 @@ export class WikiLinkResolver {
             parentTask.childIds.push(childTaskId);
         }
 
-        // 日付継承はデイリーノートベースに移行（TaskScanner側で処理済み）
-
         return childTaskId;
     }
 

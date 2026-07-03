@@ -12,6 +12,7 @@ import { combineFilterStates, hasConditions, type FilterState } from '../../serv
 import { hasSortRules } from '../../services/sort/SortTypes';
 import TaskViewerPlugin from '../../main';
 import { TaskStyling } from './TaskStyling';
+import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { TaskPagingController } from './TaskPagingController';
 import { CardReconciler } from './CardReconciler';
 import { shouldRenderForChanges } from './RenderScheduler';
@@ -410,8 +411,8 @@ export class PinnedListRenderer {
     private decoratePinnedCard(card: HTMLElement, task: DisplayTask): void {
         card.dataset.id = task.id;
 
-        TaskStyling.applyTaskColor(card, task.color ?? null);
-        TaskStyling.applyTaskLinestyle(card, task.linestyle ?? null);
+        TaskStyling.applyTaskColor(card, getEffectiveColor(task) ?? null);
+        TaskStyling.applyTaskLinestyle(card, getEffectiveLinestyle(task) ?? null);
         TaskStyling.applyReadOnly(card, task);
     }
 }

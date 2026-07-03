@@ -3,8 +3,9 @@ import { Task } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
 import { DateUtils } from '../../../utils/DateUtils';
-import { TaskParser } from '../../../services/parsing/TaskParser';
+import { canTriggerFlow } from '../../../services/flow/FlowTrigger';
 import { t } from '../../../i18n';
+import { getEffectiveColor } from '../../../services/data/EffectiveProperties';
 
 /**
  * Builder for timer-related menu items.
@@ -18,7 +19,7 @@ export class TimerMenuBuilder {
      */
     addTrackSelfItems(menu: Menu, task: Task): void {
         // 非オープンかつコマンド付きタスクではselfモードを提供しない（startDate変更でコマンド再発火するため）
-        if (TaskParser.isTriggerableStatus(task) && task.commands && task.commands.length > 0) {
+        if (canTriggerFlow(task, this.plugin.settings.statusDefinitions)) {
             return;
         }
 
@@ -28,7 +29,7 @@ export class TimerMenuBuilder {
             taskName: displayName,
             taskOriginalText: task.originalText,
             taskFile: task.file,
-            taskColor: task.color ?? '',
+            taskColor: getEffectiveColor(task) ?? '',
             recordMode: 'self' as const,
             parserId: task.parserId,
             timerTargetId: task.timerTargetId ?? task.blockId,

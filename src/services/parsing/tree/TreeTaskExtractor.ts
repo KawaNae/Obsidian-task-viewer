@@ -1,15 +1,28 @@
 import type { Task, TvFileKeys, PropertyValue } from '../../../types';
+import { isTvInline } from '../../../types';
 import type { DocumentNode, SectionNode, TaskBlock } from './DocumentTree';
 import { BuiltinPropertyExtractor } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TagExtractor } from '../utils/TagExtractor';
 import { TaskParser } from '../TaskParser';
+import { collectFlowLineIndices, flowLineTail } from '../../flow/FlowLineScanner';
+import { flowValidation, parseFlowSegments } from '../../flow/FlowSegments';
 
 export interface TaskExtractionContext {
     filePath: string;
     hasTvFileParent: boolean;
     tvFileKeys: TvFileKeys;
 }
+
+/**
+ * classifyBlock の結果: この block は Task になるか、それとも行群として
+ * 親の childLines に残るか。`task` は Task 化した場合の（style 未適用の）
+ * インスタンス、`flowLineIndices` はその block の childRawLines 相対の
+ * `- ==>` フロー行 index。
+ */
+type BlockOutcome =
+    | { kind: 'task'; task: Task; flowLineIndices: Set<number> }
+    | { kind: 'lines' };
 
 /**
  * ドキュメントツリーから Task[] を抽出する。
@@ -21,79 +34,93 @@ export class TreeTaskExtractor {
         for (const section of this.allSections(doc.sections)) {
             for (const block of section.blocks) {
                 if (block.type === 'task-block') {
-                    const tasks = this.extractFromTaskBlock(block, section, ctx);
-                    allTasks.push(...tasks);
+                    const outcome = this.classifyBlock(block, section, ctx, /*hasAncestorTask=*/false);
+                    this.processTaskBlock(block, outcome, section, ctx, allTasks, false);
                 }
             }
         }
         return allTasks;
     }
 
-    private static extractFromTaskBlock(
-        block: TaskBlock,
-        section: SectionNode,
-        ctx: TaskExtractionContext
-    ): Task[] {
-        const extracted: Task[] = [];
-        this.processTaskBlock(block, section, ctx, extracted);
-        return extracted;
-    }
-
     /**
-     * TaskBlock を再帰的に処理してタスクを抽出する。
-     * hasAncestorTask: 祖先のどこかに既に Task 化したブロックがあるか。
-     *   - true のとき、このブロックが日付・コマンド共に持たない bare checkbox なら
-     *     カードの ChildLine として親に残すため Task 化せず null にする。
+     * 「この block は Task になるか」の唯一の実装（判定は block あたり 1 回、
+     * 結果は BlockOutcome として伝搬する — 親の childLines 除外と子の再帰が
+     * 同じ結果オブジェクトを共有するので、判定の非対称バグは構造的に起きない）。
+     *
+     * 順序契約（この順でなければ壊れる）:
+     * 1. mergeChildFlow — bare 判定より前。子行だけに flow を書いた
+     *    チェックボックスはここで program を得てタスクに昇格する
+     * 2. cascade 日時継承（cascadeContext に格納、raw fields は触れない）
+     * 3. 抑制判定 — 非 task-bearing ファイルの日付/コマンドなし checkbox、
+     *    および祖先 Task ありの bare checkbox は行群として親に残す
      */
-    private static processTaskBlock(
+    private static classifyBlock(
         block: TaskBlock,
         section: SectionNode,
         ctx: TaskExtractionContext,
+        hasAncestorTask: boolean
+    ): BlockOutcome {
+        const task = TaskParser.parse(block.rawLine, ctx.filePath, block.line);
+        if (!task) return { kind: 'lines' };
+
+        const flowLineIndices = this.mergeChildFlow(task, block);
+
+        const cc: NonNullable<Task['cascadeContext']> = {};
+        if (!task.startDate && section.resolvedStartDate) cc.startDate = section.resolvedStartDate;
+        if (!task.startTime && section.resolvedStartTime) cc.startTime = section.resolvedStartTime;
+        if (!task.endDate && section.resolvedEndDate) cc.endDate = section.resolvedEndDate;
+        if (!task.endTime && section.resolvedEndTime) cc.endTime = section.resolvedEndTime;
+        if (!task.due && section.resolvedDue) cc.due = section.resolvedDue;
+        if (Object.keys(cc).length > 0) task.cascadeContext = cc;
+
+        const hasCascadeDates = !!(task.cascadeContext?.startDate || task.cascadeContext?.endDate || task.cascadeContext?.due);
+        if (!ctx.hasTvFileParent && !hasCascadeDates
+            && !task.startDate && !task.endDate && !task.due
+            && !task.flow?.program) {
+            return { kind: 'lines' };
+        }
+
+        if (hasAncestorTask && this.isBareCheckbox(task)) {
+            return { kind: 'lines' };
+        }
+
+        return { kind: 'task', task, flowLineIndices };
+    }
+
+    /**
+     * TaskBlock を再帰的に処理してタスクを抽出する。自分の判定結果
+     * （outcome）は呼び出し元が classifyBlock 済み。子 block の判定は
+     * ここで 1 回だけ行い、childLines 除外と再帰の両方が同じ結果を使う。
+     */
+    private static processTaskBlock(
+        block: TaskBlock,
+        outcome: BlockOutcome,
+        section: SectionNode,
+        ctx: TaskExtractionContext,
         output: Task[],
-        parentStyle?: { color?: string; linestyle?: string; mask?: string },
         hasAncestorTask: boolean = false
     ): void {
-        let task = TaskParser.parse(block.rawLine, ctx.filePath, block.line);
-
-        // Section/File カスケードから日時を継承（cascadeContext に格納、raw fields は触れない）
-        if (task) {
-            const cc: NonNullable<Task['cascadeContext']> = {};
-            if (!task.startDate && section.resolvedStartDate) cc.startDate = section.resolvedStartDate;
-            if (!task.startTime && section.resolvedStartTime) cc.startTime = section.resolvedStartTime;
-            if (!task.endDate && section.resolvedEndDate) cc.endDate = section.resolvedEndDate;
-            if (!task.endTime && section.resolvedEndTime) cc.endTime = section.resolvedEndTime;
-            if (!task.due && section.resolvedDue) cc.due = section.resolvedDue;
-            if (Object.keys(cc).length > 0) task.cascadeContext = cc;
-        }
-
-        // 非デイリーノートかつ task-bearing でないファイルで、
-        // 日付・コマンドを持たない bare checkbox は表出させない。
-        if (task) {
-            const hasCascadeDates = !!(task.cascadeContext?.startDate || task.cascadeContext?.endDate || task.cascadeContext?.due);
-            if (!ctx.hasTvFileParent && !hasCascadeDates
-                && !task.startDate && !task.endDate && !task.due
-                && (!task.commands || task.commands.length === 0)) {
-                task = null;
-            }
-        }
-
-        // 祖先に Task がある bare checkbox（日付・コマンドなし）は
-        // ChildLine として親カードに残すため Task 化しない。
-        if (task && hasAncestorTask && this.isBareCheckbox(task)) {
-            task = null;
-        }
-
-        if (!task) {
+        if (outcome.kind === 'lines') {
             // 親はプレーンチェックボックスだが、子タスクブロックは再帰処理する
             for (const childBlock of block.childTaskBlocks) {
-                this.processTaskBlock(childBlock, section, ctx, output, parentStyle, hasAncestorTask);
+                const childOutcome = this.classifyBlock(childBlock, section, ctx, hasAncestorTask);
+                this.processTaskBlock(childBlock, childOutcome, section, ctx, output, hasAncestorTask);
             }
             return;
         }
 
+        const task = outcome.task;
+
         // インデントを設定
         task.indent = block.indent;
         task.childIds = [];
+
+        // 子 block の判定を一括で 1 回だけ（除外と再帰の共有ソース）。
+        // 自分が Task 化したので、子から見ると祖先 Task が存在する。
+        const childOutcomes = block.childTaskBlocks.map(cb => ({
+            block: cb,
+            outcome: this.classifyBlock(cb, section, ctx, /*hasAncestorTask=*/true),
+        }));
 
         // childLines 設定: まず子タスク行を特定するため childRawLines を処理
         const children = block.childRawLines;
@@ -101,13 +128,15 @@ export class TreeTaskExtractor {
         // 実際にタスクを生成する childTaskBlocks のみ childLines から除外する
         // （plain `- [ ]` は祖先に Task（＝自分）がいるため Task 化されず childLines に残す）
         const taskProducingLines = new Set<number>();
-        for (const cb of block.childTaskBlocks) {
-            if (this.isTaskProducing(cb.rawLine, ctx.filePath, cb.line, ctx, section, /*hasAncestorTask=*/true)) {
-                taskProducingLines.add(cb.line);
+        for (const co of childOutcomes) {
+            if (co.outcome.kind === 'task') {
+                taskProducingLines.add(co.block.line);
             }
         }
 
-        const excludeIndices = new Set<number>();
+        // フロー子行はコンテンツではなくコマンドの物理表現なので
+        // childLines（描画・コピー・プロパティ収集の substrate）から除外する
+        const excludeIndices = new Set<number>(outcome.flowLineIndices);
         for (let k = 0; k < children.length; k++) {
             const absLine = block.childLineNumbers[k];
             if (!taskProducingLines.has(absLine)) continue;
@@ -125,7 +154,7 @@ export class TreeTaskExtractor {
             }
         }
 
-        // インデント正規化 + タスク生成行除外 + childLineBodyOffsets 構築
+        // インデント正規化 + タスク生成行除外 + 絶対行番号の付与
         const nonEmptyChildren = children.filter(c => c.trim() !== '');
         if (nonEmptyChildren.length > 0) {
             const minIndent = Math.min(...nonEmptyChildren.map(c => c.search(/\S|$/)));
@@ -142,11 +171,9 @@ export class TreeTaskExtractor {
                 ownLineNumbers.push(block.childLineNumbers[k]);
             }
 
-            task.childLines = ChildLineClassifier.classifyLines(ownLines);
-            task.childLineBodyOffsets = ownLineNumbers;
+            task.childLines = ChildLineClassifier.classifyLines(ownLines, ownLineNumbers);
         } else {
-            task.childLines = ChildLineClassifier.classifyLines(children);
-            task.childLineBodyOffsets = [...block.childLineNumbers];
+            task.childLines = ChildLineClassifier.classifyLines(children, block.childLineNumbers);
         }
 
         // 子行プロパティを収集
@@ -155,27 +182,36 @@ export class TreeTaskExtractor {
         // 組み込みプロパティを専用フィールドに分離
         const extracted = BuiltinPropertyExtractor.extract(rawProps, ctx.tvFileKeys);
 
-        // セクションプロパティ → 子行プロパティの順でマージ（child-wins）
-        task.properties = { ...section.resolvedProperties, ...extracted.properties };
-
-        // カスケード: 子行 > 親タスクブロック > セクション（FM含む）
-        task.color = extracted.color ?? parentStyle?.color ?? section.resolvedColor;
-        task.linestyle = extracted.linestyle ?? parentStyle?.linestyle ?? section.resolvedLinestyle;
-        task.mask = extracted.mask ?? parentStyle?.mask ?? section.resolvedMask;
-
-        // タグのマージ: section resolved + childLine property + content tags（union）
-        const sectionTags = section.resolvedTags ?? [];
+        // raw = 自分の宣言のみ（子行プロパティ + content タグ）。
+        // section 継承分は日付と同様 cascadeContext に別置きし、合成は
+        // getEffective*（services/data/EffectiveProperties.ts）が担う。
+        task.properties = extracted.properties;
+        task.color = extracted.color;
+        task.linestyle = extracted.linestyle;
+        task.mask = extracted.mask;
         const propertyTags = extracted.tags ?? [];
-        if (sectionTags.length > 0 || propertyTags.length > 0) {
-            task.tags = TagExtractor.merge(sectionTags, propertyTags, task.tags);
+        if (propertyTags.length > 0) {
+            task.tags = TagExtractor.merge(propertyTags, task.tags);
         }
 
-        // 子タスクブロックを再帰的に処理（effective style を伝播）
-        // 自分が Task 化したので、子から見ると祖先 Task が存在する。
-        const style = { color: task.color, linestyle: task.linestyle, mask: task.mask };
+        // cascade 側: tags/properties は部分的に透過（union / キー単位
+        // child-wins）するため無条件で格納。上書きセマンティクスの style は
+        // 日付と同じ「raw が無いときのみ」の guard（effective は等価）。
+        const cc: NonNullable<Task['cascadeContext']> = task.cascadeContext ?? {};
+        if (!task.color && section.resolvedColor) cc.color = section.resolvedColor;
+        if (!task.linestyle && section.resolvedLinestyle) cc.linestyle = section.resolvedLinestyle;
+        if (!task.mask && section.resolvedMask) cc.mask = section.resolvedMask;
+        if (section.resolvedTags && section.resolvedTags.length > 0) cc.tags = section.resolvedTags;
+        if (section.resolvedProperties && Object.keys(section.resolvedProperties).length > 0) {
+            cc.properties = section.resolvedProperties;
+        }
+        if (Object.keys(cc).length > 0) task.cascadeContext = cc;
+
+        // 子タスクブロックを再帰的に処理（判定は上で計算済みの outcome を
+        // 再利用 — 再パースしない）
         const childTasks: Task[] = [];
-        for (const childBlock of block.childTaskBlocks) {
-            this.processTaskBlock(childBlock, section, ctx, childTasks, style, /*hasAncestorTask=*/true);
+        for (const co of childOutcomes) {
+            this.processTaskBlock(co.block, co.outcome, section, ctx, childTasks, /*hasAncestorTask=*/true);
         }
 
         // 親子関係を設定（直接の子のみ: インデント差 +1/+2/+4）
@@ -193,32 +229,45 @@ export class TreeTaskExtractor {
         output.push(...childTasks);
     }
 
-    /** childTaskBlock がタスクを生成するかを判定する */
-    private static isTaskProducing(
-        rawLine: string,
-        filePath: string,
-        lineNumber: number,
-        ctx: TaskExtractionContext,
-        section: SectionNode,
-        hasAncestorTask: boolean = false
-    ): boolean {
-        let task = TaskParser.parse(rawLine, filePath, lineNumber);
-        if (task) {
-            const hasCascadeDates = !!(
-                (!task.startDate && section.resolvedStartDate)
-                || (!task.endDate && section.resolvedEndDate)
-                || (!task.due && section.resolvedDue)
-            );
-            if (!ctx.hasTvFileParent && !hasCascadeDates
-                && !task.startDate && !task.endDate && !task.due
-                && (!task.commands || task.commands.length === 0)) {
-                task = null;
-            }
+    /**
+     * 直下の `- ==>` フロー子行を task.flow に merge し、joined ソースで
+     * プログラムを再パースする。戻り値は childRawLines 相対の flow 行 index
+     * （childLines からの除外用）。
+     *
+     * flow 行の所有判定は FlowLineScanner に一元化されている（構造上の親が
+     * タスク行である行のみ）。ネストした checkbox 配下の flow 行はその
+     * checkbox 自身の merge が拾う。
+     */
+    private static mergeChildFlow(task: Task, block: TaskBlock): Set<number> {
+        if (!isTvInline(task)) return new Set();
+
+        const indices = collectFlowLineIndices([block.rawLine, ...block.childRawLines], 0)
+            .map(i => i - 1);
+        if (indices.length === 0) return new Set();
+
+        const oldFlow = task.flow;
+        const childSegments = indices.map(k => ({
+            raw: flowLineTail(block.childRawLines[k]) ?? '',
+            bodyLine: block.childLineNumbers[k],
+        }));
+        const { program, diagnostics } = parseFlowSegments([
+            oldFlow?.raw ?? '',
+            ...childSegments.map(s => s.raw),
+        ]);
+        task.flow = { raw: oldFlow?.raw ?? '', childSegments, program, diagnostics };
+
+        // validation の鮮度: line-level パースが載せた flow 診断は joined で
+        // 解消され得る（例: タスク行単体では orphan-modifier）。旧 flow 診断
+        // 由来の validation はクリアし、joined の結果から再導出する。
+        // 日付ルール等 flow 以外の validation は温存。
+        const oldFlowCodes = new Set((oldFlow?.diagnostics ?? []).map(d => d.code));
+        if (task.validation && oldFlowCodes.has(task.validation.rule)) {
+            task.validation = undefined;
         }
-        if (task && hasAncestorTask && this.isBareCheckbox(task)) {
-            task = null;
+        if (!task.validation) {
+            task.validation = flowValidation(task.flow);
         }
-        return task !== null;
+        return new Set(indices);
     }
 
     /**
@@ -230,7 +279,7 @@ export class TreeTaskExtractor {
         return !task.startDate && !task.startTime
             && !task.endDate && !task.endTime
             && !task.due
-            && (!task.commands || task.commands.length === 0);
+            && !task.flow?.program;
     }
 
     /** セクションツリーを深さ優先でフラットに展開 */

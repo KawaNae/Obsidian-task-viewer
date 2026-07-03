@@ -3,7 +3,7 @@ import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
 import { isTvFile, isTvInline, hasBodyLine } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { createTempTask } from '../data/createTempTask';
-import { TaskCommandExecutor } from '../../commands/TaskCommandExecutor';
+import { FlowExecutor } from '../flow/FlowExecutor';
 import { WikiLinkResolver } from './WikiLinkResolver';
 import { TaskStore } from './TaskStore';
 import { TaskScanner } from './TaskScanner';
@@ -39,7 +39,7 @@ export class TaskIndex {
     private editorObserver: EditorObserver;
     private repository: TaskRepository;
     private tvInlineToTvFileConverter: TvInlineToTvFileConverter;
-    private commandExecutor: TaskCommandExecutor;
+    private commandExecutor: FlowExecutor;
     private settings: TaskViewerSettings;
     private draggingFilePath: string | null = null;  // ドラッグ中のファイルパス
     private notifyDebounceTimer: NodeJS.Timeout | null = null;
@@ -66,7 +66,10 @@ export class TaskIndex {
         this.syncDetector = new SyncDetector();
         this.repository = new TaskRepository(app);
         this.tvInlineToTvFileConverter = new TvInlineToTvFileConverter(app, this.repository);
-        this.commandExecutor = new TaskCommandExecutor(this.repository, this, app);
+        // Settings getter (not a snapshot): updateSettings replaces the
+        // settings object, and trigger judgment must always see the latest
+        // statusDefinitions.
+        this.commandExecutor = new FlowExecutor(this.repository, this, app, () => this.settings);
         this.editorObserver = new EditorObserver(app, this.syncDetector);
         this.scanner = new TaskScanner(
             app, this.store, this.validator,

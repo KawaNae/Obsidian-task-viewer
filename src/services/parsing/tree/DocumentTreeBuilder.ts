@@ -221,6 +221,7 @@ export class DocumentTreeBuilder {
         ownRanges: [number, number][]
     ): BlockNode[] {
         const blocks: BlockNode[] = [];
+        const identityLineNumbers = allLines.map((_, idx) => idx);
         for (const [rangeStart, rangeEnd] of ownRanges) {
             let i = rangeStart;
             while (i < rangeEnd) {
@@ -228,7 +229,7 @@ export class DocumentTreeBuilder {
                 const line = allLines[i];
                 if (line.trim() === '') { i++; continue; }
                 if (TaskLineClassifier.isTaskLine(line)) {
-                    const taskBlock = this.collectTaskBlock(allLines, i, rangeEnd);
+                    const taskBlock = this.collectBlock(allLines, identityLineNumbers, i, rangeEnd);
                     blocks.push(taskBlock);
                     i = taskBlock.line + 1 + taskBlock.childRawLines.length;
                 } else {
@@ -259,25 +260,31 @@ export class DocumentTreeBuilder {
         return ranges;
     }
 
-    /** タスクブロックを収集（タスク行 + インデントされた子行） */
-    private static collectTaskBlock(
-        allLines: string[],
-        taskLine: number,
-        rangeEnd: number
+    /**
+     * タスクブロックを収集（タスク行 + インデントされた子行 + ネスト再帰）。
+     * `lines[i]` の絶対行番号を `lineNumbers[i]` が与える一般形 — トップ
+     * レベル（絶対行配列 + 連番）とネスト（相対子行配列 + 行番号マップ）を
+     * 同じ 1 実装で賄う。走査規則: タスク行より深い非空行の連続、空行で停止。
+     */
+    private static collectBlock(
+        lines: string[],
+        lineNumbers: number[],
+        startIndex: number,
+        endIndex: number
     ): TaskBlock {
-        const rawLine = allLines[taskLine];
+        const rawLine = lines[startIndex];
         const indent = rawLine.search(/\S|$/);
         const childRawLines: string[] = [];
         const childLineNumbers: number[] = [];
-        let j = taskLine + 1;
+        let j = startIndex + 1;
 
-        while (j < rangeEnd) {
-            const nextLine = allLines[j];
+        while (j < endIndex) {
+            const nextLine = lines[j];
             if (nextLine.trim() === '') break;
             const nextIndent = nextLine.search(/\S|$/);
             if (nextIndent > indent) {
                 childRawLines.push(nextLine);
-                childLineNumbers.push(j);
+                childLineNumbers.push(lineNumbers[j]);
                 j++;
             } else {
                 break;
@@ -289,59 +296,8 @@ export class DocumentTreeBuilder {
         let ci = 0;
         while (ci < childRawLines.length) {
             if (TaskLineClassifier.isTaskLine(childRawLines[ci])) {
-                const childBlock = this.collectTaskBlockFromChildren(
-                    childRawLines, childLineNumbers, ci
-                );
-                childTaskBlocks.push(childBlock);
-                ci += 1 + childBlock.childRawLines.length;
-            } else {
-                ci++;
-            }
-        }
-
-        return {
-            type: 'task-block',
-            line: taskLine,
-            rawLine,
-            indent,
-            childRawLines,
-            childLineNumbers,
-            childTaskBlocks,
-        };
-    }
-
-    /** 子行配列内でネストしたタスクブロックを収集 */
-    private static collectTaskBlockFromChildren(
-        childLines: string[],
-        lineNumbers: number[],
-        startIndex: number
-    ): TaskBlock {
-        const rawLine = childLines[startIndex];
-        const indent = rawLine.search(/\S|$/);
-        const nestedChildLines: string[] = [];
-        const nestedLineNumbers: number[] = [];
-        let j = startIndex + 1;
-
-        while (j < childLines.length) {
-            const nextLine = childLines[j];
-            if (nextLine.trim() === '') break;
-            const nextIndent = nextLine.search(/\S|$/);
-            if (nextIndent > indent) {
-                nestedChildLines.push(nextLine);
-                nestedLineNumbers.push(lineNumbers[j]);
-                j++;
-            } else {
-                break;
-            }
-        }
-
-        // さらに再帰
-        const childTaskBlocks: TaskBlock[] = [];
-        let ci = 0;
-        while (ci < nestedChildLines.length) {
-            if (TaskLineClassifier.isTaskLine(nestedChildLines[ci])) {
-                const childBlock = this.collectTaskBlockFromChildren(
-                    nestedChildLines, nestedLineNumbers, ci
+                const childBlock = this.collectBlock(
+                    childRawLines, childLineNumbers, ci, childRawLines.length
                 );
                 childTaskBlocks.push(childBlock);
                 ci += 1 + childBlock.childRawLines.length;
@@ -355,8 +311,8 @@ export class DocumentTreeBuilder {
             line: lineNumbers[startIndex],
             rawLine,
             indent,
-            childRawLines: nestedChildLines,
-            childLineNumbers: nestedLineNumbers,
+            childRawLines,
+            childLineNumbers,
             childTaskBlocks,
         };
     }

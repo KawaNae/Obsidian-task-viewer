@@ -1,5 +1,6 @@
 import type { Task, DisplayTask, ChildEntry } from '../../types';
-import type { FilterState, FilterContext } from '../filter/FilterTypes';
+import type { FilterState } from '../filter/FilterTypes';
+import type { FilterContext } from '../filter/FilterContext';
 import { hasConditions } from '../filter/FilterTypes';
 import type { SortState } from '../sort/SortTypes';
 import type { TaskIndex } from '../core/TaskIndex';

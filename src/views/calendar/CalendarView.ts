@@ -28,6 +28,7 @@ import {
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import TaskViewerPlugin from '../../main';
 import { TaskStyling } from '../sharedUI/TaskStyling';
+import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
@@ -876,8 +877,8 @@ export class CalendarView extends ItemView {
 
         this.applyCalendarGridPosition(el, entry, colOffset);
 
-        TaskStyling.applyTaskColor(el, entry.task.color ?? null);
-        TaskStyling.applyTaskLinestyle(el, entry.task.linestyle ?? null);
+        TaskStyling.applyTaskColor(el, getEffectiveColor(entry.task) ?? null);
+        TaskStyling.applyTaskLinestyle(el, getEffectiveLinestyle(entry.task) ?? null);
         TaskStyling.applyReadOnly(el, entry.task);
     }
 
@@ -890,8 +891,8 @@ export class CalendarView extends ItemView {
 
         this.applyCalendarGridPosition(el, entry, colOffset);
 
-        TaskStyling.applyTaskColor(el, entry.task.color ?? null);
-        TaskStyling.applyTaskLinestyle(el, entry.task.linestyle ?? null);
+        TaskStyling.applyTaskColor(el, getEffectiveColor(entry.task) ?? null);
+        TaskStyling.applyTaskLinestyle(el, getEffectiveLinestyle(entry.task) ?? null);
         TaskStyling.applyReadOnly(el, entry.task);
     }
 
