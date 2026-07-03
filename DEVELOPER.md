@@ -1260,13 +1260,17 @@ DataviewJS  →                TaskApi method → typed result (used directly)
 src/api/
   TaskApi.ts             # Public API class (15 methods)
   TaskApiTypes.ts        # Param/result interfaces + TaskApiError
+  OperationSchemas.ts    # Single source of truth for the CLI/API parameter surface
+                         #   (per-operation ParamSpec, satisfies-bound to the param types;
+                         #    derives CLI flags, both validators, and help flag tables)
   TaskNormalizer.ts      # Task → NormalizedTask conversion
-  FilterParamsBuilder.ts # ListParams → FilterState conversion
+  FilterParamsBuilder.ts # ListParams → FilterState conversion + FilterState boundary validation
   FilterFileLoader.ts    # Vault filter file (.json/.md) loading
 
 src/cli/
-  CliRegistrar.ts        # Registers 14 CLI handlers with Obsidian
-  CliFilterBuilder.ts    # String flags → FilterState
+  CliRegistrar.ts        # Registers 14 CLI handlers (flags derived from OperationSchemas)
+  CliParamValidator.ts   # Strict flag validation (unknown flags error with did-you-mean)
+  CliFilterBuilder.ts    # Flag value parsers (date/datetime, sort)
   CliDatePresetParser.ts # Date preset parsing (today, thisWeek, etc.)
   CliOutputFormatter.ts  # Field selection + JSON/TSV/JSONL formatting
   handlers/
@@ -1302,8 +1306,8 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `delete({ id })` | async | `DeleteResult { deleted: string }` |
 | `duplicate({ id, ... })` | async | `DuplicateResult { duplicated: string }` |
 | `convertToTvFile({ id })` | async | `ConvertResult { convertedFrom, newFile }` |
-| `tasksForDateRange({ start, end, ... })` | async | `TaskListResult` |
-| `categorizedTasksForDateRange({ start, end, ... })` | sync | `CategorizedTasksForDateRangeResult` (`Record<date, { allDay, timed, dueOnly }>`) |
+| `tasksForDateRange({ from, to, ... })` | async | `TaskListResult` |
+| `categorizedTasksForDateRange({ from, to, ... })` | sync | `CategorizedTasksForDateRangeResult` (`Record<date, { allDay, timed, dueOnly }>`) |
 | `insertChildTask({ parentId, content })` | async | `InsertChildTaskResult { parentId }` |
 | `createTvFile({ content, ... })` | async | `CreateTvFileResult { newFile }` |
 | `getStartHour()` | sync | `StartHourResult { startHour }` |
@@ -1322,8 +1326,8 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `delete` | Delete task | id (required) |
 | `duplicate` | Duplicate task | id (req), day-offset, count |
 | `convert` | Inline → frontmatter | id (required) |
-| `tasks-for-date-range` | Tasks in date range | start (req), end (req), sort, limit, offset |
-| `categorized-tasks-for-date-range` | Categorized tasks for date range | start (req), end (req) |
+| `tasks-for-date-range` | Tasks in date range | from (req), to (req), sort, limit, offset |
+| `categorized-tasks-for-date-range` | Categorized tasks for date range | from (req), to (req) |
 | `insert-child-task` | Insert child task | parent-id (req), content (req) |
 | `create-tv-file` | Create tv-file (frontmatter) task | content (req), start, end, due, status |
 | `get-start-hour` | Get startHour setting | *(none)* |

@@ -42,9 +42,9 @@ export const LIST_SCHEMA = {
     status:   { value: '<chars>',         description: 'Filter by status char(s), comma-separated' },
     tag:      { value: '<tags>',          description: 'Filter by tag(s), comma-separated' },
     content:  { value: '<text>',          description: 'Filter by content (contains)' },
-    date:     { value: '<date|preset>',   description: 'Tasks active on date (spans and single-day)' },
-    from:     { value: '<date|preset>',   description: 'Filter: startDate >= value' },
-    to:       { value: '<date|preset>',   description: 'Filter: endDate <= value' },
+    date:     { value: '<date|preset>',   description: 'Single-day query window (= from=X to=X)' },
+    from:     { value: '<date|preset>',   description: 'Query window start: tasks ending on or after (inclusive overlap)' },
+    to:       { value: '<date|preset>',   description: 'Query window end: tasks starting on or before (inclusive overlap)' },
     due:      { value: '<date|preset>',   description: 'Due date equals' },
     leaf:     { boolean: true,            description: 'Only leaf tasks (no children)' },
     property: { value: '<key:value>',     description: 'Filter by custom property (e.g. "優先度:高")' },
@@ -175,6 +175,38 @@ export function toCliFlags(
     add(schema);
     if (opts.output) add(CLI_OUTPUT_SCHEMA);
     return flags;
+}
+
+// ── Help rendering ──
+
+/**
+ * Render a command's CLI flag table for help output (kebab-case names,
+ * derived from the same schema as the flag declarations — cannot drift).
+ */
+export function renderFlagTable(
+    schema: Record<string, ParamSpec>,
+    opts: { output?: boolean } = {},
+): string {
+    const flags = toCliFlags(schema, opts);
+    const rows = Object.entries(flags).map(([name, f]) => ({
+        left: f.value ? `${name}=${f.value}` : name,
+        right: f.description + (f.required ? ' [required]' : ''),
+    }));
+    const width = Math.max(...rows.map(r => r.left.length)) + 2;
+    return rows.map(r => `  ${r.left.padEnd(width)}${r.right}`).join('\n');
+}
+
+/**
+ * Render an operation's API parameter table for api.help() (camelCase keys,
+ * including API-only params like `filter`).
+ */
+export function renderParamTable(schema: Record<string, ParamSpec>): string {
+    const rows = Object.entries(schema).map(([key, spec]) => ({
+        left: spec.boolean ? `${key} (boolean)` : `${key} ${spec.value ?? '(object)'}`,
+        right: spec.description + (spec.required ? ' [required]' : ''),
+    }));
+    const width = Math.max(...rows.map(r => r.left.length)) + 2;
+    return rows.map(r => `  ${r.left.padEnd(width)}${r.right}`).join('\n');
 }
 
 // ── Validation ──

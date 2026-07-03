@@ -17,7 +17,7 @@ import { DateResolver } from '../services/filter/DateResolver';
 import { buildFilterFromParams, assertValidFilterState } from './FilterParamsBuilder';
 import { loadFilterFile } from './FilterFileLoader';
 import {
-    assertParams,
+    assertParams, renderParamTable,
     LIST_SCHEMA, TODAY_SCHEMA, GET_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA,
     DELETE_SCHEMA, DUPLICATE_SCHEMA, CONVERT_SCHEMA,
     TASKS_FOR_DATE_RANGE_SCHEMA, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA,
@@ -58,6 +58,17 @@ Task Viewer API Reference
 
 Access: app.plugins.plugins['obsidian-task-viewer'].api
 
+Vocabulary
+----------
+  from / to        = query window (inclusive overlap). A task matches when
+                     its span intersects [from, to].
+  date             = single-day window, sugar for from=X to=X (list only)
+  start / end / due = the task's own fields (create / update / createTvFile)
+
+  Unknown parameter keys are errors (with a did-you-mean suggestion) —
+  they are never silently ignored. Params documented as comma-separated
+  strings (status, tag, color, type) also accept string arrays.
+
 Methods
 -------
 
@@ -65,25 +76,7 @@ Methods
     List tasks with optional filters, sort, and pagination.
 
     ListParams:
-      file?: string               File path (.md auto-appended)
-      status?: string | string[]   Status char(s) (e.g. 'x' or ['x', '-'])
-      tag?: string | string[]      Tag(s) (# auto-stripped, hierarchy match)
-      content?: string             Content partial match
-      date?: string                Tasks active on date (YYYY-MM-DD or preset)
-      from?: string                startDate >= value
-      to?: string                  endDate <= value
-      due?: string                 Due date equals
-      leaf?: boolean               Only leaf tasks (no children)
-      root?: boolean               Only root tasks (no parent)
-      property?: string            Custom property ("key:value")
-      color?: string | string[]    Card color(s)
-      type?: string | string[]     Task notation (taskviewer, tasks, dayplanner)
-      filter?: FilterState         FilterState object (overrides simple fields)
-      filterFile?: string          Vault file path (.json or .md template)
-      list?: string                Pinned list name (for .md templates)
-      sort?: ApiSortRule[]         Sort rules [{property, direction?}]
-      limit?: number               Max results (default: 100)
-      offset?: number              Skip first N results
+${renderParamTable(LIST_SCHEMA).replace(/^/gm, '    ')}
 
     Returns: { count: number, tasks: NormalizedTask[] }
 
@@ -91,45 +84,31 @@ Methods
     List tasks active today (visual-date aware).
 
     TodayParams:
-      leaf?: boolean               Only leaf tasks
-      sort?: ApiSortRule[]         Sort rules
-      limit?: number               Max results (default: 100)
-      offset?: number              Skip first N results
+${renderParamTable(TODAY_SCHEMA).replace(/^/gm, '    ')}
 
   get(params: GetParams): NormalizedTask
     Get a single task by ID.
 
     GetParams:
-      id: string                   Task ID (required)
+${renderParamTable(GET_SCHEMA).replace(/^/gm, '    ')}
 
   create(params: CreateParams): Promise<MutationResult>
     Create a new inline task.
 
     CreateParams:
-      file: string                 Target file path (required)
-      content: string              Task content (required)
-      start?: string               Start date (YYYY-MM-DD, YYYY-MM-DD HH:mm, HH:mm)
-      end?: string                 End date/datetime
-      due?: string                 Due date (YYYY-MM-DD)
-      status?: string              Status character (default: ' ')
-      heading?: string             Insert under heading (default: end of file)
+${renderParamTable(CREATE_SCHEMA).replace(/^/gm, '    ')}
 
   update(params: UpdateParams): Promise<MutationResult>
     Update an existing task.
 
     UpdateParams:
-      id: string                   Task ID (required)
-      content?: string             New content
-      start?: string               New start date/datetime
-      end?: string                 New end date/datetime
-      due?: string                 New due date
-      status?: string              New status character
+${renderParamTable(UPDATE_SCHEMA).replace(/^/gm, '    ')}
 
   delete(params: DeleteParams): Promise<DeleteResult>
     Delete a task.
 
     DeleteParams:
-      id: string                   Task ID (required)
+${renderParamTable(DELETE_SCHEMA).replace(/^/gm, '    ')}
 
   help(): string
     Show this reference.
@@ -138,34 +117,27 @@ Methods
     Duplicate a task with optional date shifting.
 
     DuplicateParams:
-      id: string                   Task ID (required)
-      dayOffset?: number           Days to shift dates (default: 0)
-      count?: number               Number of copies (default: 1)
+${renderParamTable(DUPLICATE_SCHEMA).replace(/^/gm, '    ')}
 
   convertToTvFile(params: ConvertParams): Promise<ConvertResult>
     Convert a tv-inline task to a tv-file (frontmatter) task.
 
     ConvertParams:
-      id: string                   Task ID (required)
+${renderParamTable(CONVERT_SCHEMA).replace(/^/gm, '    ')}
 
   tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult>
-    List tasks in a date range.
+    List tasks whose visual span overlaps the window [from, to].
+    Due-only tasks are included when due falls in the window.
 
     TasksForDateRangeParams:
-      start: string                Start date YYYY-MM-DD (required)
-      end: string                  End date YYYY-MM-DD (required)
-      filter?: FilterState         FilterState object
-      sort?: ApiSortRule[]         Sort rules
-      limit?: number               Max results (default: 100)
-      offset?: number              Skip first N results
+${renderParamTable(TASKS_FOR_DATE_RANGE_SCHEMA).replace(/^/gm, '    ')}
 
   categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): CategorizedTasksForDateRangeResult
     Get tasks in a date range, categorized into allDay/timed/dueOnly per date.
+    allDay/timed membership follows the visual span; dueOnly the calendar due.
 
     CategorizedTasksForDateRangeParams:
-      start: string                Start date YYYY-MM-DD (required)
-      end: string                  End date YYYY-MM-DD (required)
-      filter?: FilterState         FilterState object
+${renderParamTable(CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA).replace(/^/gm, '    ')}
 
     Returns: Record<date, { allDay: NormalizedTask[], timed: NormalizedTask[], dueOnly: NormalizedTask[] }>
 
@@ -173,18 +145,13 @@ Methods
     Insert a child task under a parent task.
 
     InsertChildTaskParams:
-      parentId: string             Parent task ID (required)
-      content: string              Child task content (required)
+${renderParamTable(INSERT_CHILD_TASK_SCHEMA).replace(/^/gm, '    ')}
 
   createTvFile(params: CreateTvFileParams): Promise<CreateTvFileResult>
     Create a new tv-file (frontmatter) task from structured data.
 
     CreateTvFileParams:
-      content: string              Task content (required)
-      start?: string               Start date/datetime
-      end?: string                 End date/datetime
-      due?: string                 Due date (YYYY-MM-DD)
-      status?: string              Status character (default: ' ')
+${renderParamTable(CREATE_TV_FILE_SCHEMA).replace(/^/gm, '    ')}
 
     Returns: { newFile: string }
 
@@ -287,18 +254,19 @@ Examples
   // Convert a tv-inline task to a tv-file (frontmatter) task
   await api.convertToTvFile({ id: 'tv-inline:daily/2026-03-15.md:ln:5' });
 
-  // List tasks in a date range
-  await api.tasksForDateRange({ start: '2026-03-01', end: '2026-03-31' });
+  // List tasks in a date range (window bounds accept presets too)
+  await api.tasksForDateRange({ from: '2026-03-01', to: '2026-03-31' });
+  await api.tasksForDateRange({ from: 'today', to: 'today' });
 
   // List tasks in a date range with sort
   await api.tasksForDateRange({
-    start: '2026-03-01',
-    end: '2026-03-31',
+    from: '2026-03-01',
+    to: '2026-03-31',
     sort: [{ property: 'startDate', direction: 'asc' }],
   });
 
   // Get categorized tasks for a date range (or single date)
-  api.categorizedTasksForDateRange({ start: '2026-03-23', end: '2026-03-29' });
+  api.categorizedTasksForDateRange({ from: '2026-03-23', to: '2026-03-29' });
 
   // Insert a child task
   await api.insertChildTask({ parentId: 'tv-inline:daily/2026-03-15.md:ln:5', content: 'Sub-task' });

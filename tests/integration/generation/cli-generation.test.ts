@@ -59,7 +59,7 @@ const FIXTURE_CONTENT = [
 
 /** Find a task by content substring in the test file */
 function findTask(contentSubstr: string, outputFields = 'id,content,status,startDate,endDate') {
-    const r = cliList({ file: TEST_FILE, outputFields });
+    const r = cliList({ file: TEST_FILE, 'output-fields': outputFields });
     return r.tasks.find(t => (t.content as string).includes(contentSubstr));
 }
 
