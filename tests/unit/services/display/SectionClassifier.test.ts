@@ -54,7 +54,7 @@ describe('classifyForSection', () => {
     });
 
     it('S-AllDay（日付のみ、解決後 05:00→翌 04:59 = 23h59m） → allday', () => {
-        expect(classifyForSection(dt({ startDate: '2026-01-15' }), startHour)).toBe('allday');
+        expect(classifyForSection(dt({ startDate: '2026-01-15' }), startHour)).toBe('allDay');
     });
 
     it('S-Timed（暗黙 +1h） → timed', () => {
@@ -66,7 +66,7 @@ describe('classifyForSection', () => {
             startDate: '2026-01-15', startTime: '06:00',
             endDate: '2026-01-16', endTime: '05:30',
         });
-        expect(classifyForSection(task, startHour)).toBe('allday');
+        expect(classifyForSection(task, startHour)).toBe('allDay');
     });
 
     it('23h29m → timed', () => {
@@ -90,13 +90,13 @@ describe('classifyForSection', () => {
             startDate: '2026-01-15', startTime: '06:00',
             endDate: '2026-01-16', endTime: '05:29',
         }, 0);
-        expect(classifyForSection(allday, 0)).toBe('allday');
+        expect(classifyForSection(allday, 0)).toBe('allDay');
         expect(classifyForSection(timed, 0)).toBe('timed');
     });
 
     it('防御分岐: effectiveStartTime 不在の手組み task → allday', () => {
         const task = makeDisplayTask({ effectiveStartDate: '2026-01-15' });
-        expect(classifyForSection(task, startHour)).toBe('allday');
+        expect(classifyForSection(task, startHour)).toBe('allDay');
     });
 
     it('防御分岐: effectiveStartDate 空 + raw startDate あり → null', () => {
@@ -118,11 +118,11 @@ describe('bucketBySection', () => {
 
         const buckets = bucketBySection([dueOnly, allday, timed, boundary, none], startHour);
 
-        expect(buckets.allday).toEqual([allday, boundary]);
+        expect(buckets.allDay).toEqual([allday, boundary]);
         expect(buckets.timed).toEqual([timed]);
         expect(buckets.dueOnly).toEqual([dueOnly]);
         // none はどのバケツにも入らない
-        const total = buckets.allday.length + buckets.timed.length + buckets.dueOnly.length;
+        const total = buckets.allDay.length + buckets.timed.length + buckets.dueOnly.length;
         expect(total).toBe(4);
     });
 });

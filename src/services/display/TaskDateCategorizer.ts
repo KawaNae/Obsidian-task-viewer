@@ -1,6 +1,7 @@
 import type { DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { getTaskDateRange } from './VisualDateRange';
+import type { Section } from './SectionClassifier';
 import {
     compareAllDayForRender,
     compareTimedForRender,
@@ -8,7 +9,7 @@ import {
 } from './TaskRenderOrder';
 
 /**
- * 日付ごとのタスクバケツ。
+ * 日付ごとのタスクバケツ。キー集合は SectionKind（null 除く）と型で一致する。
  * 各バケツ (allDay / timed / dueOnly) は canonical render order でソート済みで返る:
  *   - allDay:  effectiveStartDate ASC, id ASC
  *   - timed:   effectiveStartTime ASC, id ASC
@@ -17,11 +18,7 @@ import {
  * この不変条件により、同一列内の `.task-card` DOM 兄弟順が決定論となり、
  * `position: absolute` 下の paint 順（document 順）も安定する。
  */
-export interface CategorizedTasks {
-    allDay: DisplayTask[];
-    timed: DisplayTask[];
-    dueOnly: DisplayTask[];
-}
+export type CategorizedTasks = Record<Section, DisplayTask[]>;
 
 function sortBuckets(buckets: CategorizedTasks, startHour: number): void {
     buckets.allDay.sort(compareAllDayForRender);

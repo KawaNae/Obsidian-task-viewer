@@ -131,7 +131,7 @@ export class GridRenderer {
                 allDayRenderer.addEmptySpaceContextMenu(cell, date);
             });
 
-            allDayRenderer.render(allDayRow, dates, buckets.allday, reconciler);
+            allDayRenderer.render(allDayRow, dates, buckets.allDay, reconciler);
         }
 
         // 6.2. Timeline Grid (time axis + day columns)
