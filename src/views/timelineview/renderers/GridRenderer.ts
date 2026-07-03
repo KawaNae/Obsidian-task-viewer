@@ -10,7 +10,6 @@ import { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
 import { TimelineSectionRenderer } from './TimelineSectionRenderer';
 import { isDisplayTaskOnVisualDate } from '../../../services/display/DisplayTaskConverter';
 import type { DisplayTask } from '../../../types';
-import { HabitTrackerRenderer } from '../../sharedUI/HabitTrackerRenderer';
 import { MoonPhaseRenderer } from '../../sharedUI/MoonPhaseRenderer';
 import { getEffectiveAstronomyDisplay } from '../../../services/astronomy/AstronomyService';
 import { attachSunAxisArrows } from '../../sharedUI/AstronomyCellAdorner';
@@ -36,7 +35,6 @@ export class GridRenderer {
         parentContainer: HTMLElement,
         allDayRenderer: AllDaySectionRenderer,
         timelineRenderer: TimelineSectionRenderer,
-        habitRenderer: HabitTrackerRenderer,
         moonRenderer: MoonPhaseRenderer,
         handleManager: HandleManager,
         dates: string[],
@@ -95,20 +93,12 @@ export class GridRenderer {
 
         const showAllDay = this.viewState.showAllDay ?? this.plugin.settings.showAllDay;
         const showTimeline = this.viewState.showTimeline ?? this.plugin.settings.showTimeline;
-        const showHabits = this.viewState.showHabits ?? this.plugin.settings.showHabits;
 
-        // 5. Habits Row
-        if (showHabits) {
-            const habitsRow = grid.createDiv('tv-grid-row habits-section');
-            habitsRow.style.gridTemplateColumns = colTemplate;
-            habitRenderer.render(habitsRow, dates);
-        }
-
-        // 6. Scroll Area (allday + timeline grid)
+        // 5. Scroll Area (allday + timeline grid)
         const scrollArea = grid.createDiv('timeline-scroll-area');
         const buckets = bucketBySection(filteredTasks, startHour);
 
-        // 6.1. All-Day Row
+        // 5.1. All-Day Row
         if (showAllDay) {
             const allDayRow = scrollArea.createDiv('tv-grid-row allday-section');
             allDayRow.style.gridTemplateColumns = colTemplate;
@@ -134,7 +124,7 @@ export class GridRenderer {
             allDayRenderer.render(allDayRow, dates, buckets.allDay, reconciler);
         }
 
-        // 6.2. Timeline Grid (time axis + day columns)
+        // 5.2. Timeline Grid (time axis + day columns)
         if (showTimeline) {
             const timelineGrid = scrollArea.createDiv('tv-grid-row timeline-scroll-area__grid');
             timelineGrid.style.gridTemplateColumns = colTemplate;

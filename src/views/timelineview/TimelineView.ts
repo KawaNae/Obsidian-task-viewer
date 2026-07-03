@@ -33,7 +33,6 @@ import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState } from '../../services/sort/SortTypes';
-import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { openTaskInEditor } from '../sharedLogic/NavigationUtils';
@@ -85,7 +84,6 @@ export class TimelineView extends ItemView {
     private pinnedListRenderer: PinnedListRenderer;
     private sidebarFilterMenu = new FilterMenuComponent();
     private sidebarSortMenu = new SortMenuComponent();
-    private habitRenderer: HabitTrackerRenderer;
     private moonRenderer: MoonPhaseRenderer;
     private dateHeaderRenderer: DateHeaderRenderer;
     private periodicHeaderRenderer: PeriodicHeaderRenderer;
@@ -354,7 +352,6 @@ export class TimelineView extends ItemView {
             callbacks: this.getPinnedListCallbacks(),
             viewId: VIEW_ID,
         });
-        this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
         this.moonRenderer = new MoonPhaseRenderer();
         this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.sidebarFilterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
@@ -621,7 +618,7 @@ export class TimelineView extends ItemView {
      *  `Element.scrollIntoView({ block: 'center' })` so that JS never reads a
      *  transient `clientHeight` mid-render — the browser uses the fully
      *  resolved layout each time it executes the call. To absorb post-render
-     *  settle (allday/habits/header height), the caller invokes this across
+     *  settle (allday/header height), the caller invokes this across
      *  two `requestAnimationFrame` ticks ("last write wins"). */
     private scrollToCurrentTime(): void {
         const scrollArea = this.container.querySelector('.timeline-grid') as HTMLElement | null;
@@ -688,15 +685,11 @@ export class TimelineView extends ItemView {
         if (!grid) return;
         const periodic = grid.querySelector('.periodic-header') as HTMLElement | null;
         const dateHeader = grid.querySelector('.date-header') as HTMLElement | null;
-        const moon = grid.querySelector('.moon-section') as HTMLElement | null;
-        const habits = grid.querySelector('.habits-section') as HTMLElement | null;
         const periodicH = periodic?.offsetHeight ?? 0;
         const dateH = dateHeader?.offsetHeight ?? 0;
-        const moonH = moon?.offsetHeight ?? 0;
         grid.style.setProperty('--periodic-header-sticky-top', `0px`);
         grid.style.setProperty('--date-header-sticky-top', `${periodicH}px`);
         grid.style.setProperty('--moon-section-sticky-top', `${periodicH + dateH}px`);
-        grid.style.setProperty('--habits-section-sticky-top', `${periodicH + dateH + moonH}px`);
     }
 
     private rebindStickyAnchorObserver(): void {
@@ -705,13 +698,9 @@ export class TimelineView extends ItemView {
         if (!grid) return;
         const periodic = grid.querySelector('.periodic-header') as HTMLElement | null;
         const dateHeader = grid.querySelector('.date-header') as HTMLElement | null;
-        const moon = grid.querySelector('.moon-section') as HTMLElement | null;
-        const habits = grid.querySelector('.habits-section') as HTMLElement | null;
         this.stickyAnchorObserver.disconnect();
         if (periodic) this.stickyAnchorObserver.observe(periodic);
         if (dateHeader) this.stickyAnchorObserver.observe(dateHeader);
-        if (moon) this.stickyAnchorObserver.observe(moon);
-        if (habits) this.stickyAnchorObserver.observe(habits);
     }
 
     private getPinnedListCallbacks(): PinnedListCallbacks {
@@ -878,7 +867,6 @@ export class TimelineView extends ItemView {
             main,
             this.allDayRenderer,
             this.timelineRenderer,
-            this.habitRenderer,
             this.moonRenderer,
             this.handleManager,
             dates,

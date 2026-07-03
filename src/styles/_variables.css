@@ -73,8 +73,8 @@
        in-scroll elements (selected task card 200, current-time-indicator
        200, allday-handle 100) cannot bleed through the sticky layers
        when their natural y-position falls inside a sticky region.
-       Internal ordering: periodic > date-header > moon > habits. */
-    --z-timeline-habits-section: 245;
+       Internal ordering: periodic > date-header > moon. */
+    --z-timeline-moon-section: 245;
     --z-timeline-date-header: 250;
     --z-timeline-periodic-header: 255;
     --z-allday-cell-drag-over: 50;
@@ -138,7 +138,7 @@ body {
     --tv-radius-s: var(--radius-s);
 
     /* Role tokens */
-    --tv-bg-habits: var(--tv-bg-primary);
+    --tv-bg-moon: var(--tv-bg-primary);
     --tv-bg-allday: var(--tv-bg-primary);
     --tv-bg-timeline: var(--tv-bg-primary);
 

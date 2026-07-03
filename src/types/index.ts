@@ -28,17 +28,7 @@ export function isCompleteStatusChar(statusChar: string, defs: StatusDefinition[
     return defs.some(d => d.char === statusChar && d.isComplete);
 }
 
-export type HabitType = 'boolean' | 'number' | 'string';
-
 export type NoteType = 'daily' | 'weekly' | 'monthly' | 'yearly';
-
-export interface HabitDefinition {
-    // Frontmatter key name used to store habit value.
-    name: string;
-    type: HabitType;
-    // Optional display unit for number habits.
-    unit?: string;
-}
 
 export type PropertyType = 'string' | 'number' | 'boolean' | 'array';
 
@@ -407,8 +397,6 @@ export interface ViewState {
     /** Per-instance override of astronomy display flags. undefined fields fall
      *  back to settings.astronomy.display. */
     astronomyDisplay?: Partial<AstronomyDisplay>;
-    /** Per-view override of habit tracker visibility. undefined = follow global. */
-    showHabits?: boolean;
     /** Per-view override of all-day section visibility. undefined = follow global. */
     showAllDay?: boolean;
     /** Per-view override of timeline section visibility. undefined = follow global. */
@@ -547,7 +535,6 @@ export interface TaskViewerSettings {
     countdownMinutes: number;
     pastDaysToShow: number;
     startFromOldestOverdue: boolean;
-    habitExcludeKeys: string[];
     tvFileChildHeader: string;
     tvFileChildHeaderLevel: number;
     doubleTapAction: DoubleTapAction;
@@ -586,7 +573,6 @@ export interface TaskViewerSettings {
     hideViewHeader: boolean;
     mobileTopOffset: number;
     fixMobileGradientWidth: boolean;
-    showHabits: boolean;
     showAllDay: boolean;
     showTimeline: boolean;
     showWeekRow: boolean;
@@ -662,7 +648,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     countdownMinutes: 25,
     pastDaysToShow: 0,
     startFromOldestOverdue: true,
-    habitExcludeKeys: ['tags', 'cssclasses', 'aliases'],
     tvFileChildHeader: 'Tasks',
     tvFileChildHeaderLevel: 2,
     doubleTapAction: 'detail',
@@ -700,7 +685,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     hideViewHeader: true,
     mobileTopOffset: 32,
     fixMobileGradientWidth: true,
-    showHabits: true,
     showAllDay: true,
     showTimeline: true,
     showWeekRow: true,

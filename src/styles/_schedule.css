@@ -58,7 +58,6 @@
 }
 
 .schedule-view__fixed-rows .date-header,
-.schedule-view .habits-section,
 .schedule-view .allday-section {
     overflow: hidden;
 }

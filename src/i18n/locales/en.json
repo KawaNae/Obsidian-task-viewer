@@ -96,7 +96,7 @@
       "showSunInFront": "Sunrise / sunset lines in front",
       "showSunInFrontDesc": "When on, the lines layer in front of task cards. When off (default) they sit behind all cards. Each view can override this from its options menu.",
       "showMoonPhase": "Show moon phase row",
-      "showMoonPhaseDesc": "Show a per-date moon phase icon above the habits row.",
+      "showMoonPhaseDesc": "Show a per-date moon phase icon below the date header.",
       "homeLatitude": "Latitude",
       "homeLatitudeDesc": "-90 to 90. Used to compute sunrise / sunset times.",
       "homeLongitude": "Longitude",
@@ -113,8 +113,6 @@
       "display": "Display",
       "hideViewHeader": "Hide view header",
       "hideViewHeaderDesc": "Hide the view header (navigation bar) in task viewer panels.",
-      "showHabits": "Show habit tracker",
-      "showHabitsDesc": "Default visibility of the habit tracker row. Can be overridden per view.",
       "showAllDay": "Show all-day section",
       "showAllDayDesc": "Default visibility of the all-day task section. Can be overridden per view.",
       "showTimeline": "Show timeline",
@@ -200,10 +198,6 @@
       "lineStyleSuggest": "Line style suggest",
       "lineStyleSuggestDesc": "Enable custom line style suggestions for the linestyle property."
     },
-    "habits": {
-      "excludeKeys": "Exclude keys",
-      "excludeKeysDesc": "Frontmatter keys to exclude from the habits section (comma-separated). Keys starting with _ and task-related keys are always excluded."
-    },
     "parsers": {
       "heading": "External Parser Support",
       "description": "Enable read-only support for external task formats. Tasks parsed by these parsers are displayed but cannot be edited.",
@@ -272,7 +266,6 @@
   "viewOptions": {
     "toggleSunTimes": "Show sunrise / sunset lines",
     "toggleMoonPhase": "Show moon phase",
-    "toggleHabits": "Habit tracker",
     "toggleAllDay": "All-day section",
     "toggleTimeline": "Timeline",
     "followGlobal": "Follow global setting"
@@ -643,12 +636,6 @@
     "wk": "Wk",
     "w": "W",
     "due": "Due"
-  },
-  "habits": {
-    "habits": "Habits",
-    "toggleHabits": "Toggle Habits section",
-    "expandHabits": "Expand Habits",
-    "collapseHabits": "Collapse Habits"
   },
   "astronomy": {
     "sunrise": "Sunrise",

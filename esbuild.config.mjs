@@ -91,7 +91,6 @@ const copyStaticFiles = {
           '_timeline-date-header.css',
           '_periodic-header.css',
           '_timeline-allday.css',
-          '_habits.css',
           '_moon-section.css',
           '_timeline-drag.css',
           '_schedule.css',

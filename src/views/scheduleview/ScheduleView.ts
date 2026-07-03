@@ -21,7 +21,6 @@ import { openTaskInEditor } from '../sharedLogic/NavigationUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { HabitTrackerRenderer } from '../sharedUI/HabitTrackerRenderer';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { attachSunIndicators, attachSunAxisArrows } from '../sharedUI/AstronomyCellAdorner';
 import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
@@ -59,7 +58,6 @@ export class ScheduleView extends ItemView {
     private readonly writeService: TaskWriteService;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
-    private readonly habitRenderer: HabitTrackerRenderer;
     private readonly moonRenderer: MoonPhaseRenderer;
     private readonly dateHeaderRenderer: DateHeaderRenderer;
     private readonly periodicHeaderRenderer: PeriodicHeaderRenderer;
@@ -101,7 +99,6 @@ export class ScheduleView extends ItemView {
         }, () => this.plugin.settings, () => this.maskMode);
         this.addChild(this.taskRenderer);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
-        this.habitRenderer = new HabitTrackerRenderer(this.app, this.plugin);
         this.moonRenderer = new MoonPhaseRenderer();
         this.dateHeaderRenderer = new DateHeaderRenderer({
             app: this.app,
@@ -407,12 +404,11 @@ export class ScheduleView extends ItemView {
 
         this.renderDateHeader(fixedContainer, date);
 
-        // Moon-phase row between date header and habits — mirrors Timeline's
+        // Moon-phase row below the date header — mirrors Timeline's
         // placement so the two time-axis views look symmetric.
         this.renderMoonSection(fixedContainer, date);
 
-        // Habits in fixed area (always visible), allday in scroll body (sticky on PC)
-        this.renderHabitsSection(fixedContainer, date);
+        // Allday in scroll body (sticky on PC)
         await this.sectionRenderer.renderAllDaySection(bodyContainer, categorized.allDay, reconciler);
 
         await this.renderTimelineMain(bodyContainer, categorized.timed, reconciler);
@@ -500,14 +496,8 @@ export class ScheduleView extends ItemView {
         });
     }
 
-    private renderHabitsSection(container: HTMLElement, date: string): void {
-        const row = container.createDiv('tv-grid-row habits-section');
-        row.style.gridTemplateColumns = this.getScheduleRowColumns();
-        this.habitRenderer.render(row, [date]);
-    }
-
     /**
-     * Moon-phase grid row above the habits row. Symmetric with Timeline's
+     * Moon-phase grid row below the date header. Symmetric with Timeline's
      * `MoonPhaseRenderer` usage — same axis/cell shape, just a single date.
      */
     private renderMoonSection(container: HTMLElement, date: string): void {
