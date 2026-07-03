@@ -229,8 +229,9 @@ describe('TreeTaskExtractor', () => {
             // B3: 子行 tv-color がセクション色をオーバーライド
             expect(b3.color).toBe('4ecdc4');
 
-            // B4: 親ブロック B3 の effective color を継承
-            expect(b4.color).toBe('4ecdc4');
+            // B4: 親タスクの色は継承しない（タスク親子間継承は廃止、
+            // 日付と同一原則）。セクション色にフォールバックする
+            expect(b4.color).toBe('ff6b6b');
 
             // customProp が全タスクに継承
             expect(b1.properties['customProp']).toEqual({ value: 'section-B', type: 'string' });

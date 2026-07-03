@@ -5,7 +5,6 @@ import { DocumentTreeBuilder } from './tree/DocumentTreeBuilder';
 import { SectionPropertyResolver } from './tree/SectionPropertyResolver';
 import { TreeTaskExtractor } from './tree/TreeTaskExtractor';
 import { TVFileBuilder } from './tv-file/TVFileBuilder';
-import { TaskPropertyResolver } from './TaskPropertyResolver';
 
 export interface FileParseResult {
     /** tv-ignore'd file: produce no tasks (caller clears existing state). */
@@ -24,7 +23,7 @@ export interface FileParseResult {
  *
  *   frontmatter boundary → ignore check → TVFileBuilder (file-level task)
  *   → DocumentTreeBuilder → SectionPropertyResolver → TreeTaskExtractor
- *   → orphan re-parent → TaskPropertyResolver
+ *   → orphan re-parent
  *
  * build → resolve → extract mutate one shared DocumentNode in that exact
  * order; wrapping them here means callers cannot get it wrong. Pure with
@@ -113,9 +112,6 @@ export class FileParsePipeline {
             }
         }
         tasks.push(...inlineTasks);
-
-        // Task scope: cross-block parent → child properties/tags BFS
-        TaskPropertyResolver.resolve(tasks);
 
         return { ignored: false, tasks, fmTask, wikilinkRefs };
     }

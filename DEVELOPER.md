@@ -219,7 +219,6 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskSplitter** | `services/display/TaskSplitter.ts` | Visual-date / date-range task splitting |
 | **TaskDateCategorizer** | `services/display/TaskDateCategorizer.ts` | Categorizes tasks into allDay / timed / dueOnly |
 | **ViewExporter** | `services/export/ViewExporter.ts` | View data export with per-view ExportStrategy |
-| **TaskPropertyResolver** | `services/parsing/TaskPropertyResolver.ts` | Task-scope parent→child property/tag inheritance (BFS); see "Inheritance pipeline" |
 | **FilePropertyResolver** | `services/parsing/FilePropertyResolver.ts` | File-scope frontmatter → ExtractedProperties; shared by TVFileBuilder and SectionPropertyResolver |
 | **TaskValidator** | `services/core/TaskValidator.ts` | Task validation |
 | **DocumentTreeBuilder** | `services/parsing/tree/DocumentTreeBuilder.ts` | Document structure tree for section property inheritance |
@@ -252,23 +251,21 @@ Quick reference for locating the right layer when implementing a feature.
 ```
 1. DocumentTreeBuilder.build()         — Parse file into heading-based hierarchy tree
 2. SectionPropertyResolver.resolve()   — Cascade properties through section nesting (delegates FM extraction to FilePropertyResolver)
-3. TreeTaskExtractor.extract()         — Extract Task[] from tree with section properties attached (in-block parent→child style propagated via parentStyle arg)
-4. TaskPropertyResolver.resolve()      — BFS parent→child property/tag inheritance across tasks
+3. TreeTaskExtractor.extract()         — Extract Task[] from tree with section properties attached
 ```
 
-### Inheritance pipeline (File / Section / Task)
+### Inheritance pipeline (File / Section)
 
-Properties / tags / styling cascade through three scopes, each with a dedicated resolver:
+Properties / tags / styling cascade through two scopes, each with a dedicated resolver:
 
 | Scope | Resolver | Basis | Responsibility |
 |-------|----------|-------|----------------|
 | **File** | `FilePropertyResolver` | Frontmatter object | Extract builtin keys (`color`/`linestyle`/`mask`) with validation, normalize tags, separate custom properties. Used as the cascade root by both `SectionPropertyResolver` and `TVFileBuilder`. |
 | **Section** | `SectionPropertyResolver` | Heading hierarchy (`## A` → `### B`) + section property blocks | FM → root section → nested sections, child-wins cascade for `color`/`linestyle`/`mask`/`tags`/custom properties. Output stored on `SectionNode.resolvedX`. |
-| **Task** | `TaskPropertyResolver` (post-pass) + `TreeTaskExtractor.parentStyle` (in-block) | `parentId` / `childIds` graph | Cross-block parent→child inheritance for `tags` and custom `properties` via BFS. Style fields (`color`/`linestyle`/`mask`) are resolved during extraction by `TreeTaskExtractor`'s `parentStyle` argument — semantically Task-scope inheritance, kept inline as an in-block optimization. |
+
+**Tasks do not inherit from parent tasks.** Inheritance flows exclusively from document structure (frontmatter → sections); the task tree (`parentId`/`childIds`) never contributes properties, tags, or styling — the same principle dates established with `cascadeContext`. A task's values are fully determined by its own lines plus its section context, so property resolution completes locally during extraction with no cross-task post-pass. (Task-scope inheritance — `TaskPropertyResolver` BFS + `parentStyle` propagation — was removed 2026-07-03.)
 
 **Builtin vs custom properties.** Builtin (`color`/`linestyle`/`mask`/`tags`) have a fixed schema, validation, and dedicated UI rendering; their FM keys are configurable via `TvFileKeys`. Custom properties are user-defined free-form key-value pairs stored in `task.properties: Record<string, PropertyValue>`. Both inherit with child-wins precedence at every layer; the only structural difference is type-level (separate Task fields vs `Record`).
-
-**Style asymmetry rationale.** `TaskPropertyResolver` does not re-merge style fields because (a) within-block parent→child style is already handled by `parentStyle` propagation in `TreeTaskExtractor`, and (b) the only cross-block style relationship — fmTask (tv-file) → its tv-inline children — pulls from the same FM source via the section path, so a BFS re-merge would be a no-op.
 
 ### Inline child line extraction
 

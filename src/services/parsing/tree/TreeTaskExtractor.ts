@@ -35,7 +35,7 @@ export class TreeTaskExtractor {
             for (const block of section.blocks) {
                 if (block.type === 'task-block') {
                     const outcome = this.classifyBlock(block, section, ctx, /*hasAncestorTask=*/false);
-                    this.processTaskBlock(block, outcome, section, ctx, allTasks, undefined, false);
+                    this.processTaskBlock(block, outcome, section, ctx, allTasks, false);
                 }
             }
         }
@@ -98,14 +98,13 @@ export class TreeTaskExtractor {
         section: SectionNode,
         ctx: TaskExtractionContext,
         output: Task[],
-        parentStyle?: { color?: string; linestyle?: string; mask?: string },
         hasAncestorTask: boolean = false
     ): void {
         if (outcome.kind === 'lines') {
             // 親はプレーンチェックボックスだが、子タスクブロックは再帰処理する
             for (const childBlock of block.childTaskBlocks) {
                 const childOutcome = this.classifyBlock(childBlock, section, ctx, hasAncestorTask);
-                this.processTaskBlock(childBlock, childOutcome, section, ctx, output, parentStyle, hasAncestorTask);
+                this.processTaskBlock(childBlock, childOutcome, section, ctx, output, hasAncestorTask);
             }
             return;
         }
@@ -186,10 +185,10 @@ export class TreeTaskExtractor {
         // セクションプロパティ → 子行プロパティの順でマージ（child-wins）
         task.properties = { ...section.resolvedProperties, ...extracted.properties };
 
-        // カスケード: 子行 > 親タスクブロック > セクション（FM含む）
-        task.color = extracted.color ?? parentStyle?.color ?? section.resolvedColor;
-        task.linestyle = extracted.linestyle ?? parentStyle?.linestyle ?? section.resolvedLinestyle;
-        task.mask = extracted.mask ?? parentStyle?.mask ?? section.resolvedMask;
+        // カスケード: 子行 > セクション（FM含む）。タスク親子間は継承しない（日付と同一原則）
+        task.color = extracted.color ?? section.resolvedColor;
+        task.linestyle = extracted.linestyle ?? section.resolvedLinestyle;
+        task.mask = extracted.mask ?? section.resolvedMask;
 
         // タグのマージ: section resolved + childLine property + content tags（union）
         const sectionTags = section.resolvedTags ?? [];
@@ -198,12 +197,11 @@ export class TreeTaskExtractor {
             task.tags = TagExtractor.merge(sectionTags, propertyTags, task.tags);
         }
 
-        // 子タスクブロックを再帰的に処理（effective style を伝播、判定は
-        // 上で計算済みの outcome を再利用 — 再パースしない）
-        const style = { color: task.color, linestyle: task.linestyle, mask: task.mask };
+        // 子タスクブロックを再帰的に処理（判定は上で計算済みの outcome を
+        // 再利用 — 再パースしない）
         const childTasks: Task[] = [];
         for (const co of childOutcomes) {
-            this.processTaskBlock(co.block, co.outcome, section, ctx, childTasks, style, /*hasAncestorTask=*/true);
+            this.processTaskBlock(co.block, co.outcome, section, ctx, childTasks, /*hasAncestorTask=*/true);
         }
 
         // 親子関係を設定（直接の子のみ: インデント差 +1/+2/+4）
