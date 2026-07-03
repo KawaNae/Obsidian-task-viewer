@@ -35,12 +35,14 @@ function emptyBuckets(): CategorizedTasks {
  * The kind decision tree lives in classifyForSection (single source of
  * truth); this module only owns the per-kind date membership rules:
  *   - dueOnly: calendar date of the raw due (deadline = calendarDate semantics)
- *   - allDay:  calendar range [effectiveStartDate, effectiveEndDate]
- *              (an inverted range belongs to no date)
+ *   - allDay:  inclusive visual range from getTaskDateRange — the same
+ *              function the AllDay lane uses for card spans, so bucket
+ *              membership and lane rendering agree by construction
+ *              (an inverted effective range is clamped to a single day)
  *   - timed:   the task's visual date (startHour-adjusted)
  */
 type TaskPlacement =
-    | { kind: 'allDay'; calendarStart: string; calendarEnd: string }
+    | { kind: 'allDay'; visualStart: string; visualEnd: string }
     | { kind: 'timed'; visualDate: string }
     | { kind: 'dueOnly'; dueDate: string }
     | null;
@@ -50,12 +52,11 @@ function placeTask(dt: DisplayTask, startHour: number): TaskPlacement {
     switch (kind) {
         case 'dueOnly':
             return { kind, dueDate: (dt.due ?? '').split('T')[0] };
-        case 'allDay':
-            return {
-                kind,
-                calendarStart: dt.effectiveStartDate,
-                calendarEnd: dt.effectiveEndDate || dt.effectiveStartDate,
-            };
+        case 'allDay': {
+            const range = getTaskDateRange(dt, startHour);
+            const visualStart = range.effectiveStart || dt.effectiveStartDate;
+            return { kind, visualStart, visualEnd: range.effectiveEnd || visualStart };
+        }
         case 'timed': {
             const range = getTaskDateRange(dt, startHour);
             return { kind, visualDate: range.effectiveStart || dt.effectiveStartDate };
@@ -68,7 +69,7 @@ function placeTask(dt: DisplayTask, startHour: number): TaskPlacement {
 function belongsToDate(placement: NonNullable<TaskPlacement>, date: string): boolean {
     switch (placement.kind) {
         case 'dueOnly': return placement.dueDate === date;
-        case 'allDay': return placement.calendarStart <= date && placement.calendarEnd >= date;
+        case 'allDay': return placement.visualStart <= date && placement.visualEnd >= date;
         case 'timed': return placement.visualDate === date;
     }
 }
