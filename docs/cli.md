@@ -179,7 +179,7 @@ obsidian obsidian-task-viewer:tasks-for-date-range start=2026-03-01 end=2026-03-
 
 ### categorized-tasks-for-date-range — 日付範囲のタスク（分類済み）
 
-日付範囲のタスクを日付ごとに allDay / timed / dueOnly に分類して返します。
+日付範囲のタスクを日付ごとに allDay / timed / dueOnly に分類して返します。日付への所属は、allDay と timed が startHour を考慮した visual な日付（タイムラインの表示と同じ基準）、dueOnly が締切のカレンダー日付で判定されます。
 
 ```bash
 obsidian obsidian-task-viewer:categorized-tasks-for-date-range start=2026-03-01 end=2026-03-31

@@ -208,6 +208,8 @@ const result = api.categorizedTasksForDateRange({
 
 日付範囲のタスクを日付ごとに allDay（終日）/ timed（時刻あり）/ dueOnly（締切のみ）に分類して返します。
 
+日付への所属は、allDay と timed が startHour を考慮した visual な日付（タイムラインのカード表示と同じ基準）、dueOnly が締切のカレンダー日付で判定されます。
+
 **CategorizedTasksForDateRangeParams:**
 
 | パラメータ | 必須 | 型 | 説明 |
