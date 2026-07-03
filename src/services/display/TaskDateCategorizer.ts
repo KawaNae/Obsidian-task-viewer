@@ -1,7 +1,6 @@
 import type { DisplayTask } from '../../types';
-import { DateUtils } from '../../utils/DateUtils';
 import { getTaskDateRange } from './VisualDateRange';
-import type { Section } from './SectionClassifier';
+import { classifyForSection, type Section } from './SectionClassifier';
 import {
     compareAllDayForRender,
     compareTimedForRender,
@@ -31,43 +30,47 @@ function emptyBuckets(): CategorizedTasks {
 }
 
 /**
- * Categorizes a single DisplayTask into the appropriate bucket for the given date.
- * Returns the category name, or null if the task does not belong to this date.
+ * Placement of a task: its section kind plus the date span it belongs to.
+ *
+ * The kind decision tree lives in classifyForSection (single source of
+ * truth); this module only owns the per-kind date membership rules:
+ *   - dueOnly: calendar date of the raw due (deadline = calendarDate semantics)
+ *   - allDay:  calendar range [effectiveStartDate, effectiveEndDate]
+ *              (an inverted range belongs to no date)
+ *   - timed:   the task's visual date (startHour-adjusted)
  */
-function categorizeForDate(
-    dt: DisplayTask,
-    date: string,
-    startHour: number
-): keyof CategorizedTasks | null {
-    // D type: no start/end dates, only due
-    if (!dt.effectiveStartDate && !dt.startDate && !dt.endDate) {
-        if (dt.due && dt.due.split('T')[0] === date) return 'dueOnly';
-        return null;
+type TaskPlacement =
+    | { kind: 'allDay'; calendarStart: string; calendarEnd: string }
+    | { kind: 'timed'; visualDate: string }
+    | { kind: 'dueOnly'; dueDate: string }
+    | null;
+
+function placeTask(dt: DisplayTask, startHour: number): TaskPlacement {
+    const kind = classifyForSection(dt, startHour);
+    switch (kind) {
+        case 'dueOnly':
+            return { kind, dueDate: (dt.due ?? '').split('T')[0] };
+        case 'allDay':
+            return {
+                kind,
+                calendarStart: dt.effectiveStartDate,
+                calendarEnd: dt.effectiveEndDate || dt.effectiveStartDate,
+            };
+        case 'timed': {
+            const range = getTaskDateRange(dt, startHour);
+            return { kind, visualDate: range.effectiveStart || dt.effectiveStartDate };
+        }
+        default:
+            return null;
     }
+}
 
-    if (!dt.effectiveStartDate) return null;
-
-    // All-day check
-    const isAllDay = DateUtils.isAllDayTask(
-        dt.effectiveStartDate,
-        dt.effectiveStartTime,
-        dt.effectiveEndDate,
-        dt.effectiveEndTime,
-        startHour
-    );
-
-    if (isAllDay) {
-        const taskEnd = dt.effectiveEndDate || dt.effectiveStartDate;
-        if (dt.effectiveStartDate <= date && taskEnd >= date) return 'allDay';
-        return null;
+function belongsToDate(placement: NonNullable<TaskPlacement>, date: string): boolean {
+    switch (placement.kind) {
+        case 'dueOnly': return placement.dueDate === date;
+        case 'allDay': return placement.calendarStart <= date && placement.calendarEnd >= date;
+        case 'timed': return placement.visualDate === date;
     }
-
-    // Timed
-    if (!dt.effectiveStartTime) return null;
-
-    const range = getTaskDateRange(dt, startHour);
-    const visualDate = range.effectiveStart || dt.effectiveStartDate;
-    return visualDate === date ? 'timed' : null;
 }
 
 /** Single date: DisplayTask[] → 3 categories */
@@ -78,8 +81,10 @@ export function categorizeTasksForDate(
 ): CategorizedTasks {
     const buckets = emptyBuckets();
     for (const dt of tasks) {
-        const category = categorizeForDate(dt, date, startHour);
-        if (category) buckets[category].push(dt);
+        const placement = placeTask(dt, startHour);
+        if (placement && belongsToDate(placement, date)) {
+            buckets[placement.kind].push(dt);
+        }
     }
     sortBuckets(buckets, startHour);
     return buckets;
@@ -97,42 +102,23 @@ export function categorizeTasksByDate(
     }
 
     for (const dt of tasks) {
-        // D type: belongs to at most one date (its due date)
-        if (!dt.effectiveStartDate && !dt.startDate && !dt.endDate) {
-            if (dt.due) {
-                const dueDate = dt.due.split('T')[0];
-                const bucket = map.get(dueDate);
-                if (bucket) bucket.dueOnly.push(dt);
-            }
-            continue;
-        }
-
-        if (!dt.effectiveStartDate) continue;
-
-        const isAllDay = DateUtils.isAllDayTask(
-            dt.effectiveStartDate,
-            dt.effectiveStartTime,
-            dt.effectiveEndDate,
-            dt.effectiveEndTime,
-            startHour
-        );
-
-        if (isAllDay) {
-            const taskEnd = dt.effectiveEndDate || dt.effectiveStartDate;
-            for (const date of dates) {
-                if (dt.effectiveStartDate <= date && taskEnd >= date) {
-                    map.get(date)!.allDay.push(dt);
+        const placement = placeTask(dt, startHour);
+        if (!placement) continue;
+        switch (placement.kind) {
+            case 'dueOnly':
+                map.get(placement.dueDate)?.dueOnly.push(dt);
+                break;
+            case 'timed':
+                map.get(placement.visualDate)?.timed.push(dt);
+                break;
+            case 'allDay':
+                for (const date of dates) {
+                    if (belongsToDate(placement, date)) {
+                        map.get(date)!.allDay.push(dt);
+                    }
                 }
-            }
-            continue;
+                break;
         }
-
-        if (!dt.effectiveStartTime) continue;
-
-        const range = getTaskDateRange(dt, startHour);
-        const visualDate = range.effectiveStart || dt.effectiveStartDate;
-        const bucket = map.get(visualDate);
-        if (bucket) bucket.timed.push(dt);
     }
 
     for (const buckets of map.values()) {
