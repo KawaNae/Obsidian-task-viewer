@@ -291,8 +291,7 @@
 }
 
 /* Compact card child-count bar (non-clickable label).
-   Detail modal is opened via card double-click or the detail-handle,
-   not by clicking this bar. */
+   Detail modal is opened via card double-click, not by clicking this bar. */
 .task-card__child-count {
     color: var(--tv-text-muted);
     font-size: 0.85em;
@@ -436,26 +435,12 @@
     left: 0;
 }
 
-.task-card__handle--detail {
-    top: calc(var(--handle-overlap) - var(--handle-size));
-    left: 0;
-}
-
 /* --- Grid inset override (allday / calendar, unless handles-out) ---
    Handles inside the card box, bleeding out sideways by --handle-overlap.
-   detail sits at the exact card CENTRE (edge columns hold resize + move,
-   so the centre column is free at any x; centring also keeps the left
-   column at 2 stacked handles → h ≥ 2×handle-size suffices — allday's
-   min-height 58px fits). The resize y is centred but clamped to keep a
-   full handle-size clearance above the bottom move handles on short
-   cards. */
-
-.task-card--allday:not(.task-card--handles-out) > .task-card__handle--detail,
-.cal-week-row > .task-card:not(.task-card--handles-out) > .task-card__handle--detail {
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-}
+   Each side column stacks resize + move, so h ≥ 2×handle-size suffices —
+   allday's min-height 58px fits. The resize y is centred but clamped to
+   keep a full handle-size clearance above the bottom move handles on
+   short cards. */
 
 .task-card--allday:not(.task-card--handles-out) > .task-card__handle--resize-left,
 .cal-week-row > .task-card:not(.task-card--handles-out) > .task-card__handle--resize-left {
@@ -481,15 +466,6 @@
 .cal-week-row > .task-card:not(.task-card--handles-out) > .task-card__handle--move-bottom-right {
     bottom: 0;
     right: calc(-1 * var(--handle-overlap));
-}
-
-.task-card__handle--detail .task-card__handle-btn {
-    cursor: pointer;
-}
-
-.task-card__handle--detail .svg-icon {
-    width: 14px;
-    height: 14px;
 }
 
 .task-card__handle-btn {
@@ -714,8 +690,7 @@
    cut 辺が一致しないケースがある (例: source=split-after で handle が top
    に並ぶ → day-2 ghost に split-before が付くと top が cut 辺になり、
    handle が sawtooth の上に乗る)。CSS で cut 辺 handle を抑止することで
-   clone の整合性を JS なしに吸収する。
-   detail handle はタスク同定 / open-modal の入口として cut 辺でも残す。 */
+   clone の整合性を JS なしに吸収する。 */
 .task-card--split-continues-before:not(.task-card--multi-day) .task-card__handle--resize-top,
 .task-card--split-continues-before:not(.task-card--multi-day) .task-card__handle--move-top-left,
 .task-card--split-continues-before:not(.task-card--multi-day) .task-card__handle--move-top-right,

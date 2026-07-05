@@ -31,9 +31,8 @@ export class TimelineHandleStrategy implements HandleStrategy {
             if (endH === startHour && endM === 0) isTouchingBottom = true;
         }
 
-        // 上端 boundary 以外: detail + resize-top + move-top-right
+        // 上端 boundary 以外: resize-top + move-top-right
         if (!isTouchingTop) {
-            HandleRenderer.createDetail(taskEl, taskId);
             HandleRenderer.createResize(taskEl, taskId, 'top', '↕');
             HandleRenderer.createMove(taskEl, taskId, 'top-right');
         }

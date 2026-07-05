@@ -372,10 +372,6 @@ export class TimelineView extends ItemView {
             () => DateUtils.addDays(this.viewState.startDate, this.viewState.daysToShow - 1),
             () => this.getEffectiveZoomLevel()
         );
-        this.dragHandler.onDetailClick = (taskId: string) => {
-            const task = this.readService.getTask(taskId);
-            if (task) this.openDetailModal(task);
-        };
 
         // Background click → deselect、UI 経由 delete → deselect。両方 SelectionController に集約。
         // External-editor deletions are not tracked here by design — if that

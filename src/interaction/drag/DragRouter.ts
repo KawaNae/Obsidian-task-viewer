@@ -9,15 +9,12 @@ import { GridResizeGesture } from './strategies/grid/GridResizeGesture';
  * pointerdown を受けて、その対象 (handle / card / 背景) を解析し、適切な
  * Strategy を生成して DragSession を起動する責務。
  *
- * Strategy 生成の判断（move か resize か）と、taskEl / taskId の解決、detail
- * handle の特別扱い、handle 以外の card click の selection 動作までをここに
- * 集約する。listener bind や lifecycle 管理は持たない（それらは DragHandler /
+ * Strategy 生成の判断（move か resize か）と、taskEl / taskId の解決、
+ * handle 以外の card click の selection 動作までをここに集約する。
+ * listener bind や lifecycle 管理は持たない（それらは DragHandler /
  * DragSession の責務）。
  */
 export class DragRouter {
-    /** detail handle がタップされたとき呼ばれる。modal を開くなど。 */
-    public onDetailClick: ((taskId: string) => void) | null = null;
-
     constructor(
         private readonly context: DragContext,
         private readonly session: DragSession,
@@ -29,7 +26,6 @@ export class DragRouter {
      *
      * 帰結は次のいずれか:
      *   - pinned-list 内 / 解決不能 → 何もしない (early return)
-     *   - detail handle → onDetailClick(taskId) （drag に進まない）
      *   - card 本体 (handle 以外) → context.onTaskClick(taskId) で selection
      *   - resize/move handle → DragSession.start で Strategy 起動
      */
@@ -58,14 +54,6 @@ export class DragRouter {
                     taskId = taskEl.dataset.splitOriginalId;
                 }
             }
-
-            // detail-handle: open detail modal, no drag.
-            if (taskId && target.closest('.task-card__handle--detail')) {
-                e.preventDefault();
-                e.stopPropagation();
-                this.onDetailClick?.(taskId);
-                return;
-            }
         } else {
             taskEl = target.closest('.task-card') as HTMLElement;
             if (taskEl) {
@@ -80,7 +68,7 @@ export class DragRouter {
         if (task.isReadOnly && isFromHandle) return;
 
         // Non-handle click: select the card. Detail modal is opened via
-        // double-click (TaskCardRenderer) or detail-handle, never single click.
+        // double-click (TaskCardRenderer), never single click.
         if (!isFromHandle) {
             this.context.onTaskClick(taskId);
             return;

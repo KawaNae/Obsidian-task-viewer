@@ -369,10 +369,6 @@ export class CalendarView extends ItemView {
             () => this.getViewEndDateString(),
             () => this.plugin.settings.zoomLevel
         );
-        this.dragHandler.onDetailClick = (taskId: string) => {
-            const task = this.readService.getTask(taskId);
-            if (task) this.openDetailModal(task);
-        };
 
         this.selectionController.attachBackgroundClick(this.container);
 
