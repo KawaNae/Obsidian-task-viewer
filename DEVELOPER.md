@@ -242,7 +242,10 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskCardRenderer** | `views/taskcard/TaskCardRenderer.ts` | Task card rendering orchestrator (see section above) |
 | **TaskLinkInteractionManager** | `views/taskcard/TaskLinkInteractionManager.ts` | Internal link click/hover handling within task cards |
 | **SidebarManager** | `views/sidebar/SidebarManager.ts` | Sidebar visibility and pinned list management |
-| **CreateTaskModal** | `modals/CreateTaskModal.ts` | Task creation modal UI |
+| **CreateTaskModal** | `modals/CreateTaskModal.ts` | Task creation / conversion modal UI (shared form widgets live in `modals/form/`) |
+| **TaskHubModal** | `modals/hub/TaskHubModal.ts` | Single "open task" destination: live card preview + per-field instant-save property form (content/status/dates/tags/color/linestyle/mask/custom). Entry: card double-tap, menu Properties items (with field focus) |
+| **PropertyUpdatePlanner** | `services/persistence/PropertyUpdatePlanner.ts` | Pure diff: `Partial<Task>` updates → normalized PropertyOp[] for non-time properties (canonical-location / clear semantics) |
+| **ChildPropertyLineEditor** | `services/persistence/utils/ChildPropertyLineEditor.ts` | Surgical CRUD for inline child property lines (`- key:: value`), representation-preserving |
 | **TaskParser** | `services/parsing/TaskParser.ts` | Static facade wrapping active ParserChain; rebuilt on settings change |
 | **TvInlineToTvFileConverter** | `services/core/TvInlineToTvFileConverter.ts` | Inline task → frontmatter file conversion (creates file, replaces original with wikilink) |
 

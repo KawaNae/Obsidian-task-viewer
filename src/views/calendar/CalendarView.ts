@@ -53,7 +53,7 @@ import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
-import { TaskDetailModal } from '../../modals/TaskDetailModal';
+import { TaskHubModal, type TaskHubModalOptions } from '../../modals/hub/TaskHubModal';
 import { openTaskInEditor } from '../sharedLogic/NavigationUtils';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
@@ -129,7 +129,7 @@ export class CalendarView extends ItemView {
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings, () => this.maskMode);
         this.addChild(this.taskRenderer);
-        this.taskRenderer.setDetailCallback((task) => this.openDetailModal(task));
+        this.taskRenderer.setDetailCallback((task) => this.openTaskHub(task));
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.sidebarManager = new SidebarManager({
             mobileBreakpointPx: MOBILE_BREAKPOINT_PX,
@@ -330,8 +330,11 @@ export class CalendarView extends ItemView {
         });
         this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
         this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
-        this.taskRenderer.setOpenPropertiesCallback((task) => this.menuHandler.openTaskProperties(task));
         this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);
+        this.menuHandler.setTaskHubOpener((taskId, opts) => {
+            const task = this.readService.getTask(taskId);
+            if (task) this.openTaskHub(task, opts);
+        });
         this.pinnedListRenderer = new PinnedListRenderer(
             this.taskRenderer, this.plugin, this.menuHandler, this.readService,
         );
@@ -417,12 +420,18 @@ export class CalendarView extends ItemView {
     }
 
     /**
-     * Detail modal を開く 2 経路 (dblclick / detail handle) の共通エントリ。
+     * タスクハブモーダルを開く共通エントリ (dblclick / menu 経由)。
      * modal が出た時点で card の選択状態は不要なので解除する。
-     * defer の理由は TimelineView.openDetailModal を参照。
+     * defer の理由は TimelineView.openTaskHub を参照。
      */
-    private openDetailModal(task: Task): void {
-        new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
+    private openTaskHub(task: Task, options?: TaskHubModalOptions): void {
+        new TaskHubModal(this.app, task, {
+            taskRenderer: this.taskRenderer,
+            menuHandler: this.menuHandler,
+            readService: this.readService,
+            writeService: this.writeService,
+            plugin: this.plugin,
+        }, options).open();
         setTimeout(() => this.handleManager?.selectTask(null), 0);
     }
 

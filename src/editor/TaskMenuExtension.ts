@@ -12,6 +12,7 @@ import type { TaskActionsMenuBuilder } from '../interaction/menu/builders/TaskAc
 import type { CheckboxMenuBuilder, CheckboxLineOps } from '../interaction/menu/builders/CheckboxMenuBuilder';
 import type { ValidationMenuBuilder } from '../interaction/menu/builders/ValidationMenuBuilder';
 import type { MenuPresenter } from '../interaction/menu/MenuPresenter';
+import type { TaskHubOpener } from '../interaction/menu/MenuHandler';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { getTaskNotation } from '../services/filter/parserTaxonomy';
 
@@ -74,7 +75,8 @@ export function createTaskMenuExtension(
     checkboxBuilder: CheckboxMenuBuilder,
     validationBuilder: ValidationMenuBuilder,
     menuPresenter: MenuPresenter,
-    getSettings: () => TaskViewerSettings
+    getSettings: () => TaskViewerSettings,
+    openTaskHub: TaskHubOpener
 ): TaskMenuExtensionResult {
 
     const showMenu = (view: EditorView, lineNumber: number, btnEl: HTMLElement) => {
@@ -94,7 +96,8 @@ export function createTaskMenuExtension(
                 // G1: 自身のデータ操作
                 propertiesBuilder.addStatusSubmenu(menu, task);
                 actionsBuilder.addOwnDataActions(menu, task);
-                propertiesBuilder.buildPropertiesSubmenu(menu, dt, null);
+                propertiesBuilder.buildPropertiesSubmenu(menu, dt, null,
+                    (field) => openTaskHub(task.id, { focusField: field }));
                 menu.addSeparator();
                 // G2: 自身を記録
                 timerBuilder.addTrackSelfItems(menu, task);

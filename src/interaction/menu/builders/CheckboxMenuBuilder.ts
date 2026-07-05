@@ -123,7 +123,7 @@ export class CheckboxMenuBuilder {
                             await ops.updateLine(newLine);
                         },
                         { content, startDate: today },
-                        { title: t('menu.convertToInline'), submitLabel: t('modal.convert'), focusField: 'start', startHour: this.getStartHour(), dailyNoteDate }
+                        { title: t('menu.convertToInline'), submitLabel: t('modal.convert'), startHour: this.getStartHour(), dailyNoteDate }
                     ).open();
                 });
         });
@@ -157,7 +157,7 @@ export class CheckboxMenuBuilder {
                             await ops.updateLine(`${indent}${marker} [[${linkTarget}|${fileName}]]`);
                         },
                         { content, startDate: today },
-                        { title: t('menu.convertToFile'), submitLabel: t('modal.convert'), focusField: 'start', startHour: this.getStartHour(), dailyNoteDate }
+                        { title: t('menu.convertToFile'), submitLabel: t('modal.convert'), startHour: this.getStartHour(), dailyNoteDate }
                     ).open();
                 });
         });

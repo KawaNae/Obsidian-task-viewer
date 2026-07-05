@@ -11,11 +11,20 @@ import { TimerMenuBuilder } from './builders/TimerMenuBuilder';
 import { TaskActionsMenuBuilder } from './builders/TaskActionsMenuBuilder';
 import { ValidationMenuBuilder } from './builders/ValidationMenuBuilder';
 import { toDisplayTask, getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
+import type { TaskHubFocusField } from '../../modals/hub/TaskHubForm';
 
 export type TaskMenuHooks = {
     /** Invoked after a destructive action (open in editor / convert to file / delete). */
     onDestructiveAction?: () => void;
+    /**
+     * Properties 項目の行き先の差し替え。タスクハブモーダル内のカードから
+     * 開いたメニューでは、新しいモーダルを積まず自フォームの該当フィールド
+     * へ focus する（modal on modal の解消）。
+     */
+    onOpenPropertiesFocus?: (field: TaskHubFocusField) => void;
 };
+
+export type TaskHubOpener = (taskId: string, options?: { focusField?: TaskHubFocusField }) => void;
 
 /**
  * MenuHandler - タスクコンテキストメニューの統括ファサード
@@ -30,6 +39,7 @@ export class MenuHandler {
     private validationMenuBuilder: ValidationMenuBuilder;
 
     private viewStartDate: string | null = null;
+    private taskHubOpener: TaskHubOpener | null = null;
 
     // 同じ要素に二度 bind しない (TouchLongPressBinder は dispose を返すが
     // call site が 1-shot 想定で受け取らないため、reconcile で要素を再利用
@@ -68,6 +78,15 @@ export class MenuHandler {
     }
 
     /**
+     * メニューの Properties 項目からタスクハブモーダルを開くための opener を
+     * 登録する（ビューが自分のモーダル生成関数を束ねる — setDetailCallback と
+     * 同型の配線）。
+     */
+    setTaskHubOpener(opener: TaskHubOpener) {
+        this.taskHubOpener = opener;
+    }
+
+    /**
      * Add context menu to task element
      */
     addTaskContextMenu(el: HTMLElement, task: Task, hooks?: TaskMenuHooks) {
@@ -103,18 +122,6 @@ export class MenuHandler {
     }
 
     /**
-     * Open the properties modal for a task object. Resolves split → original
-     * internally.
-     */
-    openTaskProperties(task: Task): void {
-        const originalId = getOriginalTaskId(task);
-        const resolved = this.readService.getTask(originalId);
-        if (!resolved || resolved.isReadOnly) return;
-        const displayTask = toDisplayTask(resolved, this.plugin.settings.startHour, (id) => this.readService.getTask(id));
-        this.propertiesMenuBuilder.openChangePropertiesModal(displayTask, 'name', this.viewStartDate);
-    }
-
-    /**
      * Show context menu
      */
     private showContextMenu(x: number, y: number, taskInput: Task, hooks?: TaskMenuHooks) {
@@ -131,6 +138,16 @@ export class MenuHandler {
         // Convert to DisplayTask for property display (implicit/explicit flags)
         const displayTask = toDisplayTask(task, this.plugin.settings.startHour, (id) => this.readService.getTask(id));
 
+        // Properties 項目の行き先: hub 内メニューなら自フォームへ focus、
+        // それ以外はビュー登録の opener でタスクハブモーダルを開く。
+        const openHub = (field: TaskHubFocusField) => {
+            if (hooks?.onOpenPropertiesFocus) {
+                hooks.onOpenPropertiesFocus(field);
+                return;
+            }
+            this.taskHubOpener?.(task.id, { focusField: field });
+        };
+
         this.plugin.menuPresenter.present((menu) => {
             // 0. Validation warning (if any)
             this.validationMenuBuilder.addValidationWarning(menu, task);
@@ -138,7 +155,7 @@ export class MenuHandler {
             // G1: 自身のデータ操作 — status / switch to / properties
             this.propertiesMenuBuilder.addStatusSubmenu(menu, task);
             this.taskActionsMenuBuilder.addOwnDataActions(menu, task);
-            this.propertiesMenuBuilder.buildPropertiesSubmenu(menu, displayTask, this.viewStartDate);
+            this.propertiesMenuBuilder.buildPropertiesSubmenu(menu, displayTask, this.viewStartDate, openHub);
             menu.addSeparator();
 
             // G2: 自身を記録 — countup / pomodoro / countdown

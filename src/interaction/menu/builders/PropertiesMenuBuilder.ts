@@ -1,23 +1,22 @@
 import { App, Menu } from 'obsidian';
-import { Task, DisplayTask, PropertyType, isTvFile } from '../../../types';
+import { Task, DisplayTask, PropertyType } from '../../../types';
 import { TaskWriteService } from '../../../services/data/TaskWriteService';
 import TaskViewerPlugin from '../../../main';
 import { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } from '../PropertyCalculator';
 import { PropertyFormatter } from '../PropertyFormatter';
-import { CreateTaskModal, CreateTaskResult } from '../../../modals/CreateTaskModal';
 import { DateUtils } from '../../../utils/DateUtils';
 import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
 import { openFileInExistingOrNewTab } from '../../../views/sharedLogic/NavigationUtils';
-import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { t } from '../../../i18n';
 import { TaskStyling } from '../../../views/sharedUI/TaskStyling';
+import type { TaskHubFocusField } from '../../../modals/hub/TaskHubForm';
 import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveMask,
     getEffectiveTags, getEffectiveProperties,
 } from '../../../services/data/EffectiveProperties';
 
-type ChangePropertiesFocusField = 'name' | 'start' | 'end' | 'due';
+type OpenHub = (field: TaskHubFocusField) => void;
 
 /**
  * Properties sub menu builder.
@@ -32,20 +31,21 @@ export class PropertiesMenuBuilder {
     ) { }
 
     /**
-     * Build Properties submenu.
+     * Build Properties submenu. 各項目はタスクハブモーダルの該当フィールドに
+     * focus した状態で開く（openHub は MenuHandler が配線）。
      */
-    buildPropertiesSubmenu(menu: Menu, task: DisplayTask, viewStartDate: string | null): void {
+    buildPropertiesSubmenu(menu: Menu, task: DisplayTask, viewStartDate: string | null, openHub: OpenHub): void {
         menu.addItem((item) => {
             const subMenu = item
                 .setTitle(t('menu.properties'))
                 .setIcon('settings')
                 .setSubmenu();
 
-            // Closure that closes the root menu before opening a modal.
+            // Closure that closes the root menu before opening the hub.
             // On mobile, Obsidian menus stay open until explicitly closed.
-            const openModal = (focusField: ChangePropertiesFocusField) => {
+            const openModal = (focusField: TaskHubFocusField) => {
                 menu.close();
-                this.openChangePropertiesModal(task, focusField, viewStartDate);
+                openHub(focusField);
             };
 
             // Requested order:
@@ -61,7 +61,7 @@ export class PropertiesMenuBuilder {
     /**
      * Add Name item.
      */
-    private addNameItem(menu: Menu, task: Task, openModal: (focusField: ChangePropertiesFocusField) => void): void {
+    private addNameItem(menu: Menu, task: Task, openModal: (focusField: TaskHubFocusField) => void): void {
         menu.addItem((sub) => {
             const taskName = getTaskDisplayName(task);
             sub.setTitle(t('menu.name', { name: taskName.substring(0, 20) + (taskName.length > 20 ? '...' : '') }))
@@ -142,7 +142,7 @@ export class PropertiesMenuBuilder {
     /**
      * Add Start, End, Due, Length, Tags, Color, Linestyle, Mask, and Custom Properties items.
      */
-    private addPropertyItems(menu: Menu, task: DisplayTask, viewStartDate: string | null, openModal: (focusField: ChangePropertiesFocusField) => void): void {
+    private addPropertyItems(menu: Menu, task: DisplayTask, viewStartDate: string | null, openModal: (focusField: TaskHubFocusField) => void): void {
         const context: PropertyCalculationContext = {
             task,
             startHour: this.plugin.settings.startHour,
@@ -158,17 +158,17 @@ export class PropertiesMenuBuilder {
         this.addDueItem(menu, task, dueParts, openModal);
         menu.addSeparator();
         this.addLengthItem(menu, startParts, endParts, context.startHour);
-        this.addTagsItem(menu, task);
-        this.addColorItem(menu, task);
-        this.addLinestyleItem(menu, task);
-        this.addMaskItem(menu, task);
-        this.addCustomPropertiesItems(menu, task);
+        this.addTagsItem(menu, task, openModal);
+        this.addColorItem(menu, task, openModal);
+        this.addLinestyleItem(menu, task, openModal);
+        this.addMaskItem(menu, task, openModal);
+        this.addCustomPropertiesItems(menu, task, openModal);
     }
 
     /**
      * Add Start item.
      */
-    private addStartItem(menu: Menu, task: Task, parts: CalculatedProperty, openModal: (focusField: ChangePropertiesFocusField) => void): void {
+    private addStartItem(menu: Menu, task: Task, parts: CalculatedProperty, openModal: (focusField: TaskHubFocusField) => void): void {
         menu.addItem((item) => {
             item.setTitle(this.propertyFormatter.createPropertyTitle(t('menu.startLabel'), parts))
                 .setIcon('play')
@@ -181,7 +181,7 @@ export class PropertiesMenuBuilder {
     /**
      * Add End item.
      */
-    private addEndItem(menu: Menu, task: Task, parts: CalculatedProperty, openModal: (focusField: ChangePropertiesFocusField) => void): void {
+    private addEndItem(menu: Menu, task: Task, parts: CalculatedProperty, openModal: (focusField: TaskHubFocusField) => void): void {
         menu.addItem((item) => {
             item.setTitle(this.propertyFormatter.createPropertyTitle(t('menu.endLabel'), parts))
                 .setIcon('square')
@@ -194,7 +194,7 @@ export class PropertiesMenuBuilder {
     /**
      * Add Due item.
      */
-    private addDueItem(menu: Menu, task: Task, parts: CalculatedProperty, openModal: (focusField: ChangePropertiesFocusField) => void): void {
+    private addDueItem(menu: Menu, task: Task, parts: CalculatedProperty, openModal: (focusField: TaskHubFocusField) => void): void {
         menu.addItem((item) => {
             item.setTitle(this.propertyFormatter.createPropertyTitle(t('menu.dueLabel'), parts))
                 .setIcon('alert-circle')
@@ -204,94 +204,22 @@ export class PropertiesMenuBuilder {
         });
     }
 
-    openChangePropertiesModal(task: DisplayTask, focusField: ChangePropertiesFocusField, viewStartDate: string | null = null): void {
-        // Build implicit placeholders from PropertyCalculator results
-        const context: PropertyCalculationContext = {
-            task,
-            startHour: this.plugin.settings.startHour,
-            viewStartDate
-        };
-        const startCalc = this.propertyCalculator.calculateStart(context);
-        const endCalc = this.propertyCalculator.calculateEnd(context);
-
-        // initialValues: explicit values only (implicit values excluded → shown as placeholders)
-        const initialValues: Partial<CreateTaskResult> = {
-            content: task.content ?? '',
-            startDate: startCalc.dateImplicit ? undefined : task.startDate,
-            startTime: startCalc.timeImplicit ? undefined : task.startTime,
-            endDate: endCalc.dateImplicit ? undefined : task.endDate,
-            endTime: endCalc.timeImplicit ? undefined : task.endTime,
-            due: task.due,
-        };
-
-        new CreateTaskModal(
-            this.app,
-            async (result) => {
-                await this.writeService.updateTask(
-                    task.id,
-                    this.buildTaskUpdatesFromResult(result, task, startCalc, endCalc)
-                );
-            },
-            initialValues,
-            {
-                title: t('modal.changeProperties'),
-                submitLabel: t('modal.save'),
-                focusField,
-                startHour: this.plugin.settings.startHour,
-                dailyNoteDate: DailyNoteUtils.parseDateFromFilePath(this.app, task.file) ?? undefined,
-            }
-        ).open();
-    }
-
-    private buildTaskUpdatesFromResult(
-        result: CreateTaskResult,
-        task: DisplayTask,
-        startCalc: CalculatedProperty,
-        endCalc: CalculatedProperty
-    ): Partial<Task> {
-        const startDate = result.startDate?.trim() || undefined;
-        const startTime = result.startTime?.trim() || undefined;
-        const endDate = result.endDate?.trim() || undefined;
-        const endTime = result.endTime?.trim() || undefined;
-        const due = result.due?.trim() || undefined;
-
-        const updates: Partial<Task> = { content: result.content ?? '' };
-
-        if (isTvFile(task)) {
-            // frontmatter: 常に解決済み値を書く（空欄→暗黙値で埋める）
-            updates.startDate = startDate ?? startCalc.date;
-            updates.startTime = startTime ?? startCalc.time;
-            updates.endDate = endDate ?? endCalc.date;
-            updates.endTime = endTime ?? endCalc.time;
-            if (due !== undefined) updates.due = due;
-        } else {
-            // inline: 空欄は省略維持（cascadeContext 保護）
-            if (startDate !== undefined) updates.startDate = startDate;
-            if (startTime !== undefined) updates.startTime = startTime;
-            if (endDate !== undefined) updates.endDate = endDate;
-            if (endTime !== undefined) updates.endTime = endTime;
-            if (due !== undefined) updates.due = due;
-        }
-
-        return updates;
-    }
-
-    private addTagsItem(menu: Menu, task: Task): void {
+    private addTagsItem(menu: Menu, task: Task, openModal: (focusField: TaskHubFocusField) => void): void {
         const tags = getEffectiveTags(task);
         const tagsText = tags.length > 0 ? tags.join(', ') : '-';
         menu.addItem((item) => {
             item.setTitle(t('menu.tagsLabel', { value: tagsText }))
                 .setIcon('tag')
-                .setDisabled(true);
+                .onClick(() => openModal('tags'));
         });
     }
 
-    private addColorItem(menu: Menu, task: Task): void {
+    private addColorItem(menu: Menu, task: Task, openModal: (focusField: TaskHubFocusField) => void): void {
         const color = getEffectiveColor(task);
         menu.addItem((item) => {
             item.setTitle(t('menu.colorLabel', { value: color || '-' }))
                 .setIcon('palette')
-                .setDisabled(true);
+                .onClick(() => openModal('color'));
 
             if (color && item.dom) {
                 const titleEl = item.dom.querySelector('.menu-item-title');
@@ -308,23 +236,23 @@ export class PropertiesMenuBuilder {
         });
     }
 
-    private addLinestyleItem(menu: Menu, task: Task): void {
+    private addLinestyleItem(menu: Menu, task: Task, openModal: (focusField: TaskHubFocusField) => void): void {
         menu.addItem((item) => {
             item.setTitle(t('menu.linestyleLabel', { value: getEffectiveLinestyle(task) || '-' }))
                 .setIcon('minus')
-                .setDisabled(true);
+                .onClick(() => openModal('linestyle'));
         });
     }
 
-    private addMaskItem(menu: Menu, task: Task): void {
+    private addMaskItem(menu: Menu, task: Task, openModal: (focusField: TaskHubFocusField) => void): void {
         menu.addItem((item) => {
             item.setTitle(t('menu.maskLabel', { value: getEffectiveMask(task) || '-' }))
                 .setIcon('eye-off')
-                .setDisabled(true);
+                .onClick(() => openModal('mask'));
         });
     }
 
-    private addCustomPropertiesItems(menu: Menu, task: Task): void {
+    private addCustomPropertiesItems(menu: Menu, task: Task, openModal: (focusField: TaskHubFocusField) => void): void {
         const properties = getEffectiveProperties(task);
         const keys = Object.keys(properties);
         if (keys.length === 0) return;
@@ -335,7 +263,7 @@ export class PropertiesMenuBuilder {
             menu.addItem((item) => {
                 item.setTitle(`${key}: ${prop.value}`)
                     .setIcon(this.getPropertyTypeIcon(prop.type))
-                    .setDisabled(true);
+                    .onClick(() => openModal('properties'));
             });
         }
     }

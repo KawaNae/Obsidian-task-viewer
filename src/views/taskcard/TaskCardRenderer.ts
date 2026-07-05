@@ -48,7 +48,6 @@ export class TaskCardRenderer extends Component {
     private onDetailClick: ((task: Task) => void) | null = null;
     private onContextMenu: ((task: Task, x: number, y: number) => void) | null = null;
     private onOpenInEditor: ((task: Task) => void) | null = null;
-    private onOpenProperties: ((task: Task) => void) | null = null;
     private getDoubleTapAction: () => DoubleTapAction = () => 'detail';
     private cardComponents: WeakMap<HTMLElement, Component> = new WeakMap();
     private unsubscribeTaskDeleted: (() => void) | null = null;
@@ -119,10 +118,6 @@ export class TaskCardRenderer extends Component {
         this.onOpenInEditor = cb;
     }
 
-    setOpenPropertiesCallback(cb: (task: Task) => void): void {
-        this.onOpenProperties = cb;
-    }
-
     setDoubleTapActionGetter(getter: () => DoubleTapAction): void {
         this.getDoubleTapAction = getter;
     }
@@ -180,8 +175,6 @@ export class TaskCardRenderer extends Component {
                         this.onContextMenu?.(task, x, y);
                     } else if (action === 'open') {
                         this.onOpenInEditor?.(task);
-                    } else if (action === 'properties') {
-                        this.onOpenProperties?.(task);
                     } else {
                         this.onDetailClick?.(task);
                     }

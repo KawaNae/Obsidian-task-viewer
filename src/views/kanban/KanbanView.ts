@@ -3,7 +3,7 @@ import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { TaskDetailModal } from '../../modals/TaskDetailModal';
+import { TaskHubModal, type TaskHubModalOptions } from '../../modals/hub/TaskHubModal';
 import TaskViewerPlugin from '../../main';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
@@ -24,7 +24,7 @@ import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
-import type { PinnedListDefinition, DisplayTask } from '../../types';
+import type { PinnedListDefinition, DisplayTask, Task } from '../../types';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { KanbanSchema, type KanbanConfig, type KanbanTransient } from './KanbanSchema';
 import type { TaskReadService } from '../../services/data/TaskReadService';
@@ -79,13 +79,23 @@ export class KanbanView extends ItemView {
         this.taskRenderer.setChildLineEditCallback((parentTask, line, bodyLine, x, y) => {
             childLineMenuBuilder.showMenu(parentTask, line, bodyLine, x, y);
         });
-        this.taskRenderer.setDetailCallback((task) => {
-            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
-        });
+        const openTaskHub = (task: Task, opts?: TaskHubModalOptions) => {
+            new TaskHubModal(this.app, task, {
+                taskRenderer: this.taskRenderer,
+                menuHandler: this.menuHandler,
+                readService: this.readService,
+                writeService: this.writeService,
+                plugin: this.plugin,
+            }, opts).open();
+        };
+        this.taskRenderer.setDetailCallback((task) => openTaskHub(task));
         this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
         this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
-        this.taskRenderer.setOpenPropertiesCallback((task) => this.menuHandler.openTaskProperties(task));
         this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);
+        this.menuHandler.setTaskHubOpener((taskId, opts) => {
+            const task = this.readService.getTask(taskId);
+            if (task) openTaskHub(task, opts);
+        });
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);

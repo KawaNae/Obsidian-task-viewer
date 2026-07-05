@@ -69,31 +69,31 @@
    Create Task Modal Styles
    ====================================================== */
 
-.create-task-modal__name-section {
+.tv-form__name-section {
     display: flex;
     flex-direction: column;
     gap: 4px;
     margin-bottom: 12px;
 }
 
-.create-task-modal__name-section label {
+.tv-form__name-section label {
     font-size: 0.9em;
     color: var(--tv-text-muted);
 }
 
-.create-task-modal__section-label {
+.tv-form__section-label {
     margin-top: 16px;
     margin-bottom: 4px;
     font-size: 0.9em;
     color: var(--tv-text-muted);
 }
 
-.create-task-modal__date-row {
+.tv-form__date-row {
     display: flex;
     gap: 8px;
 }
 
-.create-task-modal__date-row__field {
+.tv-form__date-row__field {
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -101,12 +101,12 @@
     margin-bottom: 12px;
 }
 
-.create-task-modal__date-row__field label {
+.tv-form__date-row__field label {
     font-size: 0.9em;
     color: var(--tv-text-muted);
 }
 
-.create-task-modal__text-input {
+.tv-form__text-input {
     padding: 8px 12px;
     border: 1px solid var(--tv-border);
     border-radius: var(--tv-radius-s);
@@ -117,16 +117,16 @@
     width: 100%;
 }
 
-.create-task-modal__input-with-picker {
+.tv-form__input-with-picker {
     position: relative;
 }
 
-.create-task-modal__input-with-picker .create-task-modal__text-input {
+.tv-form__input-with-picker .tv-form__text-input {
     padding-left: 46px;
     padding-right: 28px;
 }
 
-.create-task-modal__picker-button {
+.tv-form__picker-button {
     position: absolute;
     top: 0;
     left: 0;
@@ -145,7 +145,7 @@
     -webkit-appearance: none;
 }
 
-.create-task-modal__picker-button::before {
+.tv-form__picker-button::before {
     content: '';
     position: absolute;
     right: 0;
@@ -155,18 +155,18 @@
     background-color: var(--tv-text-muted);
 }
 
-.create-task-modal__picker-button .svg-icon {
+.tv-form__picker-button .svg-icon {
     width: 14px;
     height: 14px;
     flex-shrink: 0;
 }
 
-.create-task-modal__picker-button:hover {
+.tv-form__picker-button:hover {
     color: var(--tv-text);
     background-color: var(--tv-bg-hover);
 }
 
-.create-task-modal__picker-button:focus-visible {
+.tv-form__picker-button:focus-visible {
     outline: 2px solid var(--tv-accent);
     outline-offset: 1px;
 }
@@ -174,8 +174,8 @@
 /* Native picker input: transparent overlay on the picker-button area.
    pointer-events: auto so iPad users can directly tap to open the native picker
    (iOS Safari rejects programmatic showPicker — WebKit Bug #261703). */
-.create-task-modal__input-with-picker > input.create-task-modal__native-picker-input[type='date'],
-.create-task-modal__input-with-picker > input.create-task-modal__native-picker-input[type='time'] {
+.tv-form__input-with-picker > input.tv-form__native-picker-input[type='date'],
+.tv-form__input-with-picker > input.tv-form__native-picker-input[type='time'] {
     position: absolute !important;
     top: 0 !important;
     left: 0 !important;
@@ -192,7 +192,7 @@
 }
 
 /* Clear button (right side, visible only when input has a value) */
-.create-task-modal__clear-button {
+.tv-form__clear-button {
     position: absolute;
     top: 0;
     right: 0;
@@ -208,23 +208,23 @@
     border-radius: 0 var(--tv-radius-s) var(--tv-radius-s) 0;
 }
 
-.create-task-modal__clear-button:hover {
+.tv-form__clear-button:hover {
     color: var(--tv-text);
     background-color: var(--tv-bg-hover);
 }
 
-.create-task-modal__clear-button .svg-icon {
+.tv-form__clear-button .svg-icon {
     width: 12px;
     height: 12px;
 }
 
-.create-task-modal__text-input:focus {
+.tv-form__text-input:focus {
     outline: none;
     border-color: var(--tv-accent);
     box-shadow: 0 0 0 2px var(--tv-accent-hover);
 }
 
-.create-task-modal__text-input::placeholder {
+.tv-form__text-input::placeholder {
     color: var(--tv-text-faint);
 }
 
@@ -238,34 +238,185 @@
 }
 
 /* Invalid state */
-.create-task-modal__input--invalid {
+.tv-form__input--invalid {
     border-color: var(--tv-text-danger) !important;
     background-color: var(--tv-danger-bg-subtle);
 }
 
 /* Error message */
-.create-task-modal__error {
+.tv-form__error {
     color: var(--tv-text-danger);
     font-size: 0.85em;
     margin-bottom: 12px;
 }
 
 /* Warning message */
-.create-task-modal__warning {
+.tv-form__warning {
     color: var(--tv-text-warning);
     font-size: 0.85em;
     margin-bottom: 12px;
 }
 
 /* ======================================================
-   Task Detail Modal
+   Task Hub Modal (カードプレビュー + プロパティ編集フォーム)
    ====================================================== */
-.task-detail-modal {
-    /* Push the card below the modal's top-right close button (×, ~32px tall
-       at top: 12px) so the button does not overlap the card content
-       (especially the top-right time display). Keep horizontal padding 0
-       so the card stays flush with the modal frame. */
+.modal.tv-hub-modal {
+    width: min(34em, calc(100vw - 32px));
+}
+
+.task-hub-modal {
+    /* Push the preview card below the modal's top-right close button
+       (×, ~32px tall at top: 12px) so the button does not overlap the card
+       content (especially the top-right time display). Keep horizontal
+       padding 0 so the card stays flush with the modal frame. */
     padding: 20px 0 0 0;
+}
+
+.task-hub-modal__form {
+    padding: 12px 4px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.task-hub-modal__status-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.task-hub-modal__status-row label {
+    font-size: 0.85em;
+    color: var(--text-muted);
+}
+
+.task-hub-modal__read-only-notice {
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: var(--background-secondary);
+    color: var(--text-muted);
+    font-size: 0.85em;
+}
+
+/* --- Tags chips --- */
+.task-hub-modal__tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.task-hub-modal__tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    background: var(--tag-background, var(--background-secondary));
+    color: var(--tag-color, var(--text-accent));
+    font-size: 0.85em;
+    line-height: 1.6;
+}
+
+.task-hub-modal__tag-chip--locked {
+    opacity: 0.75;
+}
+
+.task-hub-modal__tag-chip--cascade {
+    background: var(--background-secondary);
+    color: var(--text-muted);
+    border: 1px dashed var(--background-modifier-border);
+}
+
+/* WebKit: setIcon は span ラッパー経由 + appearance/padding/background 明示
+   (inline-flex ボタン直下 SVG 非描画対策、参考: filter-popover more-btn) */
+.task-hub-modal__chip-remove {
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-muted);
+}
+
+.task-hub-modal__chip-remove:hover {
+    color: var(--text-normal);
+}
+
+.task-hub-modal__chip-remove .svg-icon {
+    width: 12px;
+    height: 12px;
+}
+
+.task-hub-modal__tag-add {
+    flex: 0 1 10em;
+    min-width: 6em;
+    border: none;
+    background: transparent;
+    font-size: 0.85em;
+    padding: 2px 4px;
+}
+
+.task-hub-modal__tag-add:focus {
+    outline: none;
+    box-shadow: 0 1px 0 0 var(--interactive-accent);
+}
+
+/* --- Style rows (color / linestyle / mask) & custom property rows --- */
+.task-hub-modal__prop-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.task-hub-modal__prop-row .tv-form__text-input {
+    flex: 1;
+    width: auto;
+}
+
+.task-hub-modal__prop-label,
+.task-hub-modal__prop-key {
+    flex: 0 0 7em;
+    font-size: 0.85em;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.task-hub-modal__prop-row--cascade .tv-form__text-input {
+    color: var(--text-muted);
+}
+
+.task-hub-modal__prop-key-input {
+    flex: 0 0 7em !important;
+}
+
+.task-hub-modal__color-swatch {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.task-hub-modal__source {
+    flex: 0 0 auto;
+    font-size: 0.75em;
+    color: var(--text-faint);
+    cursor: pointer;
+    text-decoration: underline dotted;
+}
+
+.task-hub-modal__source:hover {
+    color: var(--text-muted);
 }
 
 /* Phone close-animation correction (fade-out + slide-down combination).
@@ -310,10 +461,38 @@
     animation: tv-modal-close-fade 100ms cubic-bezier(0.33, 1, 0.68, 1) forwards;
 }
 
-.task-detail-modal .task-card {
+.task-hub-modal__preview .task-card {
     position: relative;
     margin: 0;
     font-size: var(--task-card-font-size);
+}
+
+/* Phone: プレビュー折りたたみトグル。Obsidian の phone modal は元々
+   フルスクリーン相当なので幅指定を既定に戻す */
+.is-phone .modal.tv-hub-modal {
+    width: auto;
+}
+
+.task-hub-modal__preview-toggle {
+    display: flex;
+    justify-content: center;
+    padding: 2px 0;
+    cursor: pointer;
+    color: var(--text-faint);
+}
+
+.task-hub-modal__preview-toggle .svg-icon {
+    width: 16px;
+    height: 16px;
+    transition: transform 150ms ease;
+}
+
+.task-hub-modal__preview-toggle.is-collapsed .svg-icon {
+    transform: rotate(180deg);
+}
+
+.task-hub-modal__preview.is-collapsed {
+    display: none;
 }
 
 /* `.task-card--in-detail-modal` modifier: applied by TaskCardRenderer when

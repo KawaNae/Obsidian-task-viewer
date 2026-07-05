@@ -519,7 +519,7 @@ export function validateTvFileKeys(keys: TvFileKeys): string | null {
 
 export type DefaultLeafPosition = 'left' | 'right' | 'tab' | 'window';
 
-export type DoubleTapAction = 'detail' | 'open' | 'menu' | 'properties';
+export type DoubleTapAction = 'detail' | 'open' | 'menu';
 
 export interface TaskViewerSettings {
     startHour: number;

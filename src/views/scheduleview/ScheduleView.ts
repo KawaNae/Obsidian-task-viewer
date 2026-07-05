@@ -4,10 +4,10 @@ import { t } from '../../i18n';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { isCompleteStatusChar } from '../../types';
-import type { DisplayTask, AstronomyDisplay } from '../../types';
+import type { DisplayTask, AstronomyDisplay, Task } from '../../types';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { TaskDetailModal } from '../../modals/TaskDetailModal';
+import { TaskHubModal, type TaskHubModalOptions } from '../../modals/hub/TaskHubModal';
 import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
@@ -118,13 +118,23 @@ export class ScheduleView extends ItemView {
         this.taskRenderer.setChildLineEditCallback((parentTask, line, bodyLine, x, y) => {
             childLineMenuBuilder.showMenu(parentTask, line, bodyLine, x, y);
         });
-        this.taskRenderer.setDetailCallback((task) => {
-            new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
-        });
+        const openTaskHub = (task: Task, opts?: TaskHubModalOptions) => {
+            new TaskHubModal(this.app, task, {
+                taskRenderer: this.taskRenderer,
+                menuHandler: this.menuHandler,
+                readService: this.readService,
+                writeService: this.writeService,
+                plugin: this.plugin,
+            }, opts).open();
+        };
+        this.taskRenderer.setDetailCallback((task) => openTaskHub(task));
         this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
         this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
-        this.taskRenderer.setOpenPropertiesCallback((task) => this.menuHandler.openTaskProperties(task));
         this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);
+        this.menuHandler.setTaskHubOpener((taskId, opts) => {
+            const task = this.readService.getTask(taskId);
+            if (task) openTaskHub(task, opts);
+        });
         this.gridCalculator = new ScheduleGridCalculator({
             getStartHour: () => this.plugin.settings.startHour,
             hoursPerDay: ScheduleView.HOURS_PER_DAY,
