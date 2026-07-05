@@ -30,8 +30,7 @@ export const HandleRenderer = {
         const container = taskEl.createDiv('task-card__handle task-card__handle--detail');
         const btn = container.createDiv('task-card__handle-btn');
         // setIcon needs a span wrapper for WebKit to render reliably inside
-        // an inline-flex button. 'info' (i in a circle) over 'expand' which
-        // visually bleeds into the card's top-left corner due to -12px outset.
+        // an inline-flex button.
         setIcon(btn.createSpan(), 'info');
         btn.dataset.taskId = taskId;
         btn.dataset.handleType = 'detail';

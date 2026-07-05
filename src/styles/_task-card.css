@@ -358,6 +358,22 @@
 
 /* ==========================================================================
    4. HANDLES (Resize/Move Controls)
+
+   Placement principle: handles may only occupy territory the card owns.
+   Horizontally that is always the card box (protruding sideways would
+   cross into the neighbouring day column / cell and get clipped at the
+   view edge), so x is inset everywhere.
+
+   Vertically there are two regimes:
+   - Base geometry (below): fully OUTSIDE the card (offset = -handle-size).
+     Used by timed timeline cards, whose height is unbounded below
+     (15 min ≈ 12px) — outside placement never collides no matter how
+     short the card gets, and the vertical neighbourhood is the card's
+     own day column. Grid cards shorter than 2×handle-size fall back to
+     this geometry via `task-card--handles-out` (set by GridHandleStrategy).
+   - Grid inset override (further below): fully INSIDE the card for
+     allday / calendar cards, whose vertical neighbours (sticky moon row,
+     adjacent week rows) are foreign territory.
    ========================================================================== */
 
 .task-card__handle {
@@ -369,53 +385,98 @@
     pointer-events: auto;
 }
 
+/* --- Base geometry: y fully outside, x inset --- */
+
 .task-card__handle--resize-top {
-    top: -12px;
+    top: calc(-1 * var(--handle-size));
     left: 50%;
     transform: translateX(-50%);
 }
 
 .task-card__handle--resize-bottom {
-    bottom: -12px;
+    bottom: calc(-1 * var(--handle-size));
     left: 50%;
     transform: translateX(-50%);
 }
 
+/* Horizontal resize stays vertically centred in both regimes; only the
+   grid inset override adjusts its y to clear the bottom move handles. */
 .task-card__handle--resize-left {
-    left: -12px;
+    left: 0;
     top: 50%;
     transform: translateY(-50%);
 }
 
 .task-card__handle--resize-right {
-    right: -12px;
+    right: 0;
     top: 50%;
     transform: translateY(-50%);
 }
 
 .task-card__handle--move-top-right {
-    top: -12px;
-    right: -12px;
+    top: calc(-1 * var(--handle-size));
+    right: 0;
 }
 
 .task-card__handle--move-top-left {
-    top: -12px;
-    left: -12px;
+    top: calc(-1 * var(--handle-size));
+    left: 0;
 }
 
 .task-card__handle--move-bottom-right {
-    bottom: -12px;
-    right: -12px;
+    bottom: calc(-1 * var(--handle-size));
+    right: 0;
 }
 
 .task-card__handle--move-bottom-left {
-    bottom: -12px;
-    left: -12px;
+    bottom: calc(-1 * var(--handle-size));
+    left: 0;
 }
 
 .task-card__handle--detail {
-    top: -12px;
-    left: -12px;
+    top: calc(-1 * var(--handle-size));
+    left: 0;
+}
+
+/* --- Grid inset override (allday / calendar, unless handles-out) ---
+   All handles inside the card box. detail sits top-CENTRE (not top-left:
+   detail + centred resize + bottom move would need h ≥ 3×handle-size in
+   one column; centre-x frees the left column so h ≥ 2×handle-size
+   suffices — allday's min-height 58px fits). The resize y is centred but
+   clamped to keep a full handle-size clearance above the bottom move
+   handles on short cards. */
+
+.task-card--allday:not(.task-card--handles-out) > .task-card__handle--detail,
+.cal-week-row > .task-card:not(.task-card--handles-out) > .task-card__handle--detail {
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.task-card--allday:not(.task-card--handles-out) > .task-card__handle--resize-left,
+.cal-week-row > .task-card:not(.task-card--handles-out) > .task-card__handle--resize-left {
+    left: 0;
+    top: clamp(0px, calc(50% - var(--handle-size) / 2), calc(100% - 2 * var(--handle-size)));
+    transform: none;
+}
+
+.task-card--allday:not(.task-card--handles-out) > .task-card__handle--resize-right,
+.cal-week-row > .task-card:not(.task-card--handles-out) > .task-card__handle--resize-right {
+    right: 0;
+    top: clamp(0px, calc(50% - var(--handle-size) / 2), calc(100% - 2 * var(--handle-size)));
+    transform: none;
+}
+
+.task-card--allday:not(.task-card--handles-out) > .task-card__handle--move-bottom-left,
+.cal-week-row > .task-card:not(.task-card--handles-out) > .task-card__handle--move-bottom-left {
+    bottom: 0;
+    left: 0;
+}
+
+.task-card--allday:not(.task-card--handles-out) > .task-card__handle--move-bottom-right,
+.cal-week-row > .task-card:not(.task-card--handles-out) > .task-card__handle--move-bottom-right {
+    bottom: 0;
+    right: 0;
 }
 
 .task-card__handle--detail .task-card__handle-btn {
@@ -431,15 +492,15 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: var(--handle-size);
+    height: var(--handle-size);
     font-family: monospace;
     font-size: 14px;
     line-height: 1;
     color: var(--tv-text-muted);
     background-color: var(--tv-bg-task-handle);
     border: 1px solid var(--tv-border);
-    border-radius: 4px;
+    border-radius: var(--handle-border-radius);
     box-shadow: 0 2px 4px var(--tv-shadow-medium);
     cursor: pointer;
     touch-action: none;
