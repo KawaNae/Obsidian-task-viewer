@@ -48,6 +48,11 @@
 
     /* Handles */
     --handle-size: 24px;
+    /* Outside-placed handles sink this far into the card (covering the 2px
+       selection frame), and inset grid handles bleed this far past the edge.
+       Keep <= 3px: the calendar card's horizontal slack to the view edge is
+       3px (margin 2px + cell border), allday's is 4px. */
+    --handle-overlap: 3px;
     --handle-border-radius: 4px;
 
     /* Spacing */

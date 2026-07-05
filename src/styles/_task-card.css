@@ -365,15 +365,18 @@
    view edge), so x is inset everywhere.
 
    Vertically there are two regimes:
-   - Base geometry (below): fully OUTSIDE the card (offset = -handle-size).
+   - Base geometry (below): OUTSIDE the card, sunk in by --handle-overlap
+     so the handle visually connects with the 2px selection frame.
      Used by timed timeline cards, whose height is unbounded below
      (15 min ≈ 12px) — outside placement never collides no matter how
      short the card gets, and the vertical neighbourhood is the card's
      own day column. Grid cards shorter than 2×handle-size fall back to
      this geometry via `task-card--handles-out` (set by GridHandleStrategy).
-   - Grid inset override (further below): fully INSIDE the card for
-     allday / calendar cards, whose vertical neighbours (sticky moon row,
-     adjacent week rows) are foreign territory.
+   - Grid inset override (further below): INSIDE the card for allday /
+     calendar cards, whose vertical neighbours (sticky moon row, adjacent
+     week rows) are foreign territory. Horizontally these bleed out by
+     --handle-overlap for the same frame-connection look — the card's own
+     margin (2-4px slack to the view edge) absorbs it, so nothing clips.
    ========================================================================== */
 
 .task-card__handle {
@@ -388,13 +391,13 @@
 /* --- Base geometry: y fully outside, x inset --- */
 
 .task-card__handle--resize-top {
-    top: calc(-1 * var(--handle-size));
+    top: calc(var(--handle-overlap) - var(--handle-size));
     left: 50%;
     transform: translateX(-50%);
 }
 
 .task-card__handle--resize-bottom {
-    bottom: calc(-1 * var(--handle-size));
+    bottom: calc(var(--handle-overlap) - var(--handle-size));
     left: 50%;
     transform: translateX(-50%);
 }
@@ -414,55 +417,56 @@
 }
 
 .task-card__handle--move-top-right {
-    top: calc(-1 * var(--handle-size));
+    top: calc(var(--handle-overlap) - var(--handle-size));
     right: 0;
 }
 
 .task-card__handle--move-top-left {
-    top: calc(-1 * var(--handle-size));
+    top: calc(var(--handle-overlap) - var(--handle-size));
     left: 0;
 }
 
 .task-card__handle--move-bottom-right {
-    bottom: calc(-1 * var(--handle-size));
+    bottom: calc(var(--handle-overlap) - var(--handle-size));
     right: 0;
 }
 
 .task-card__handle--move-bottom-left {
-    bottom: calc(-1 * var(--handle-size));
+    bottom: calc(var(--handle-overlap) - var(--handle-size));
     left: 0;
 }
 
 .task-card__handle--detail {
-    top: calc(-1 * var(--handle-size));
+    top: calc(var(--handle-overlap) - var(--handle-size));
     left: 0;
 }
 
 /* --- Grid inset override (allday / calendar, unless handles-out) ---
-   All handles inside the card box. detail sits top-CENTRE (not top-left:
-   detail + centred resize + bottom move would need h ≥ 3×handle-size in
-   one column; centre-x frees the left column so h ≥ 2×handle-size
-   suffices — allday's min-height 58px fits). The resize y is centred but
-   clamped to keep a full handle-size clearance above the bottom move
-   handles on short cards. */
+   Handles inside the card box, bleeding out sideways by --handle-overlap.
+   detail sits at the exact card CENTRE (edge columns hold resize + move,
+   so the centre column is free at any x; centring also keeps the left
+   column at 2 stacked handles → h ≥ 2×handle-size suffices — allday's
+   min-height 58px fits). The resize y is centred but clamped to keep a
+   full handle-size clearance above the bottom move handles on short
+   cards. */
 
 .task-card--allday:not(.task-card--handles-out) > .task-card__handle--detail,
 .cal-week-row > .task-card:not(.task-card--handles-out) > .task-card__handle--detail {
-    top: 0;
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translate(-50%, -50%);
 }
 
 .task-card--allday:not(.task-card--handles-out) > .task-card__handle--resize-left,
 .cal-week-row > .task-card:not(.task-card--handles-out) > .task-card__handle--resize-left {
-    left: 0;
+    left: calc(-1 * var(--handle-overlap));
     top: clamp(0px, calc(50% - var(--handle-size) / 2), calc(100% - 2 * var(--handle-size)));
     transform: none;
 }
 
 .task-card--allday:not(.task-card--handles-out) > .task-card__handle--resize-right,
 .cal-week-row > .task-card:not(.task-card--handles-out) > .task-card__handle--resize-right {
-    right: 0;
+    right: calc(-1 * var(--handle-overlap));
     top: clamp(0px, calc(50% - var(--handle-size) / 2), calc(100% - 2 * var(--handle-size)));
     transform: none;
 }
@@ -470,13 +474,13 @@
 .task-card--allday:not(.task-card--handles-out) > .task-card__handle--move-bottom-left,
 .cal-week-row > .task-card:not(.task-card--handles-out) > .task-card__handle--move-bottom-left {
     bottom: 0;
-    left: 0;
+    left: calc(-1 * var(--handle-overlap));
 }
 
 .task-card--allday:not(.task-card--handles-out) > .task-card__handle--move-bottom-right,
 .cal-week-row > .task-card:not(.task-card--handles-out) > .task-card__handle--move-bottom-right {
     bottom: 0;
-    right: 0;
+    right: calc(-1 * var(--handle-overlap));
 }
 
 .task-card__handle--detail .task-card__handle-btn {
