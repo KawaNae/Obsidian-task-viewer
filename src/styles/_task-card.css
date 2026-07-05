@@ -724,7 +724,7 @@
    neighbours. The overlay drops the instant .is-selected is removed, leaving
    the inline base z-index (always current from the latest render) intact — no
    stale save/restore. Ghosts inherit .is-selected for the frame but must keep
-   their own drag z-index (9999 / 10), so they are excluded here. */
+   their own drag z-index (210 / 10), so they are excluded here. */
 .task-card.is-selected:not(.task-card--ghost-positioned):not(.task-card--ghost-grid) {
     z-index: var(--z-task-card-selected) !important;
 }
@@ -783,7 +783,6 @@
     left: 4px;
     width: calc(100% - 8px);
     padding: 4px 2px 4px 8px;
-    z-index: var(--z-task-card-allday);
 }
 
 .timeline-view .allday-section .task-card > .task-card__content {
@@ -792,10 +791,6 @@
 
 .timeline-view .allday-section .task-card--multi-day {
     height: auto !important;
-}
-
-.timeline-view .allday-section .task-card__handle {
-    z-index: var(--z-task-card-allday-handle);
 }
 
 /* --- Pinned Lists --- */

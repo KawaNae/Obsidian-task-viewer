@@ -68,22 +68,27 @@
     --z-sun-indicator-front: 195;
     --z-current-time-indicator: 200;
     --z-task-card-handle: 20;
-    --z-task-card-allday: 25;
-    /* Sticky header stack — kept in the 200+ band so high-priority
-       in-scroll elements (selected task card 200, current-time-indicator
-       200, allday-handle 100) cannot bleed through the sticky layers
-       when their natural y-position falls inside a sticky region.
+    /* Sticky header stack — kept above the scroll-content band (≤210:
+       normal cards ≤190 < selected card / current-time-indicator 200
+       < drag ghost 210) so nothing scrolling underneath can bleed
+       through the sticky layers. This ordering is an invariant: no
+       scroll-content element may exceed 210, and the timeline grid
+       wrapper must NOT create its own stacking context (see
+       _timeline-grid.css) so the comparison actually happens here.
        Internal ordering: periodic > date-header > moon. */
     --z-timeline-moon-section: 245;
     --z-timeline-date-header: 250;
     --z-timeline-periodic-header: 255;
     --z-allday-cell-drag-over: 50;
     --z-timer-widget: 65;
-    --z-task-card-allday-handle: 100;
     --z-task-card-selected: 200;
     --z-overlay: 1000;
-    --z-task-card-drag-ghost: 9999;
-    --z-ghost-factory: 2147483647;
+    /* 210 = above selected card / now-line (200), below the sticky band
+       (245+). The absolute (in-grid) ghost thus stays under sticky
+       headers while covering all cards. The fixed ghost is relocated to
+       document.body, whose stacking context is independent of the leaf,
+       so cross-view drag visibility is unaffected by this value. */
+    --z-task-card-drag-ghost: 210;
 }
 
 body {

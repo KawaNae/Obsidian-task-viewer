@@ -114,7 +114,6 @@ export class GridResizeGesture extends BaseDragStrategy {
         }
 
         el.addClass('is-dragging');
-        el.style.zIndex = '1000';
     }
 
     onMove(e: PointerEvent, context: DragContext): void {

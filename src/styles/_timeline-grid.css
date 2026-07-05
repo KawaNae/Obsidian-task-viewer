@@ -92,12 +92,17 @@
     position: relative;
 }
 
-/* Grid wrapper inside scroll area (time axis + day columns) */
+/* Grid wrapper inside scroll area (time axis + day columns).
+   position: relative is required — drag ghosts use this as their absolute
+   containing block (TimelineMoveGesture). Deliberately NO z-index and NO
+   overflow here: a local stacking context would trap the selected card
+   (z 200) below sibling rows, and overflow would clip handles that extend
+   above a card's top edge near the allday boundary. The z invariant
+   (sticky headers 245+ > all scroll content ≤210) relies on grid content
+   competing in the same stacking context as the sticky rows. */
 .timeline-scroll-area__grid {
     width: 100%;
     position: relative;
-    z-index: 0;
-    overflow: hidden;
 }
 
 /* Webkit browsers (Chrome, Safari, Obsidian) */

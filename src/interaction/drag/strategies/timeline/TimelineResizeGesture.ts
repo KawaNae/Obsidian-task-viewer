@@ -63,7 +63,6 @@ export class TimelineResizeGesture extends BaseDragStrategy {
         this.currentDayDate = dayCol?.dataset.date || task.startDate || null;
 
         el.addClass('is-dragging');
-        el.style.zIndex = '1000';
     }
 
     onMove(e: PointerEvent, _context: DragContext): void {
