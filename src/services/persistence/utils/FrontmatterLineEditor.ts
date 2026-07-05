@@ -48,10 +48,12 @@ export class FrontmatterLineEditor {
      *
      * - value: null → キー削除（継続行含む）
      * - value: string → キー更新（既存なら置換、なければ閉じ --- の直前に挿入）
+     * - value: string[] → キー行 + 継続行の完全な生行列（マルチライン値。
+     *   先頭要素が `key:` 行であること）。既存範囲を丸ごと差し替え / 挿入
      *
      * @returns 編集後のコンテンツ文字列
      */
-    static applyUpdates(lines: string[], fmEnd: number, updates: Record<string, string | null>): string {
+    static applyUpdates(lines: string[], fmEnd: number, updates: Record<string, string | string[] | null>): string {
         const result = [...lines];
         let currentFmEnd = fmEnd;
 
@@ -65,17 +67,20 @@ export class FrontmatterLineEditor {
                     result.splice(range[0], count);
                     currentFmEnd -= count;
                 }
-            } else if (range) {
-                // 更新: キー行 + 継続行を単一行に置換
-                const newLine = value === '' ? `${key}:` : `${key}: ${value}`;
-                const count = range[1] - range[0];
-                result.splice(range[0], count, newLine);
-                currentFmEnd -= (count - 1);
             } else {
-                // 挿入: 閉じ --- の直前に追加
-                const newLine = value === '' ? `${key}:` : `${key}: ${value}`;
-                result.splice(currentFmEnd, 0, newLine);
-                currentFmEnd++;
+                const newLines = Array.isArray(value)
+                    ? value
+                    : [value === '' ? `${key}:` : `${key}: ${value}`];
+                if (range) {
+                    // 更新: キー行 + 継続行を新しい行列に置換
+                    const count = range[1] - range[0];
+                    result.splice(range[0], count, ...newLines);
+                    currentFmEnd += newLines.length - count;
+                } else {
+                    // 挿入: 閉じ --- の直前に追加
+                    result.splice(currentFmEnd, 0, ...newLines);
+                    currentFmEnd += newLines.length;
+                }
             }
         }
 

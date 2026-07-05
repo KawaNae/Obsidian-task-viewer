@@ -8,6 +8,7 @@ import { TaskConverter } from './TaskConverter';
 import { getFileBaseName } from '../parsing/utils/TaskContent';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { ChildLineClassifier } from '../parsing/utils/ChildLineClassifier';
+import type { PropertyOp } from './PropertyUpdatePlanner';
 
 /**
  * TaskRepository - タスクのファイル操作を統括するファサードクラス
@@ -32,8 +33,8 @@ export class TaskRepository {
 
     // --- Inline Task Operations ---
 
-    async updateTaskInFile(task: Task, updatedTask: Task): Promise<void> {
-        return this.inlineWriter.updateTaskInFile(task, updatedTask);
+    async updateTaskInFile(task: Task, updatedTask: Task, childOps: PropertyOp[] = []): Promise<void> {
+        return this.inlineWriter.updateTaskInFile(task, updatedTask, childOps);
     }
 
     async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
@@ -77,9 +78,10 @@ export class TaskRepository {
     async updateTvFile(
         task: Task,
         updates: Partial<Task>,
-        frontmatterKeys: TvFileKeys
+        frontmatterKeys: TvFileKeys,
+        propertyOps: PropertyOp[] = []
     ): Promise<void> {
-        return this.frontmatterWriter.updateTvFile(task, updates, frontmatterKeys);
+        return this.frontmatterWriter.updateTvFile(task, updates, frontmatterKeys, propertyOps);
     }
 
     async deleteTvFile(task: Task, frontmatterKeys: TvFileKeys): Promise<void> {
