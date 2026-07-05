@@ -149,15 +149,17 @@ export class CreateTaskModal extends Modal {
 
         const row = container.createDiv({ cls: 'tv-form__date-row' });
 
+        // 視覚ラベルは置かない（picker アイコンと placeholder が型と形式を
+        // 示すため冗長）。スクリーンリーダー向けに aria-label のみ付与。
         // Date field (placeholder set later by updatePlaceholders())
         const dateDiv = row.createDiv({ cls: 'tv-form__date-row__field' });
-        dateDiv.createEl('label', { text: t('modal.date') });
         const dateInput = createPickerTextField(dateDiv, 'date', 'YYYY-MM-DD', initialDate || '');
+        dateInput.setAttribute('aria-label', `${label} — ${t('modal.date')}`);
 
         // Time field (placeholder set later by updatePlaceholders())
         const timeDiv = row.createDiv({ cls: 'tv-form__date-row__field' });
-        timeDiv.createEl('label', { text: t('modal.time') });
         const timeInput = createPickerTextField(timeDiv, 'time', 'HH:mm', initialTime || '');
+        timeInput.setAttribute('aria-label', `${label} — ${t('modal.time')}`);
 
         // Store refs
         if (section === 'start') { this.startDateInput = dateInput; this.startTimeInput = timeInput; }

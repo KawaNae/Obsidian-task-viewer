@@ -101,11 +101,6 @@
     margin-bottom: 12px;
 }
 
-.tv-form__date-row__field label {
-    font-size: 0.9em;
-    color: var(--tv-text-muted);
-}
-
 .tv-form__text-input {
     padding: 8px 12px;
     border: 1px solid var(--tv-border);
