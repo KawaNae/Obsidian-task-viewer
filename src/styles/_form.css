@@ -103,7 +103,10 @@
     padding: 8px 12px;
     border: 1px solid var(--tv-border);
     border-radius: var(--tv-radius-s);
-    background-color: var(--tv-bg-input);
+    /* tv-ctrl__text-input（色/線種/マスク/プロパティ欄）と背景色を揃える。
+       --tv-bg-input（form-field token）はテーマによって --tv-bg-primary と
+       異なる色になり、同一フォーム内で入力欄の背景がまちまちに見えるため */
+    background-color: var(--tv-bg-primary);
     color: var(--tv-text);
     font-size: 1em;
     font-family: var(--tv-font-mono);
