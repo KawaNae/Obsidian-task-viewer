@@ -104,10 +104,12 @@
 }
 
 /* --- Tags chips --- */
-/* レイアウトは共有 .tv-ctrl__pills（_controls.css）を併載。ここは行内の
-   縦位置補正のみ */
+/* chips 行 + 追加 input 行を縦に積む。chip の増減で input の位置がずれない
+   よう常に別行に固定する（chip 行は共有 .tv-ctrl__pills、_controls.css） */
 .task-hub__tags {
-    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
 /* chip 本体は共有部品 tv-ctrl__pill（_controls.css）。ここは hub 固有の
@@ -122,25 +124,25 @@
     border: 1px dashed var(--tv-border);
 }
 
-.task-hub__tag-add-wrap {
-    flex: 0 1 12em;
-    min-width: 8em;
-}
-
 /* status pill はクリックで suggest を開くセレクタ。実 <button> のため、
-   Obsidian / テーマの button 既定（border / box-shadow / height / font）を
-   `.tv-ctrl .tv-ctrl__*` と同じ二重セレクタで打ち消す */
+   Obsidian / テーマの button 既定（border / box-shadow / height / font /
+   丸い border-radius）を `.tv-ctrl .tv-ctrl__*` と同じ二重セレクタで打ち消す。
+   .tv-ctrl__pill（バッジ形状 = border-radius:99px）は流用せず、他の行の
+   text-input と揃う四角い見た目にする */
 .tv-ctrl .task-hub__status-pill {
     appearance: none;
     -webkit-appearance: none;
     height: auto;
-    border: none;
+    border: 1px solid var(--tv-border);
+    background: var(--tv-bg-input);
     box-shadow: none;
+    border-radius: var(--tv-radius-s);
+    color: var(--tv-text);
     font-family: inherit;
     font-weight: inherit;
     cursor: pointer;
     gap: 6px;
-    padding: 2px 10px;
+    padding: 4px 8px;
 }
 
 .task-hub__status-pill:focus-visible {

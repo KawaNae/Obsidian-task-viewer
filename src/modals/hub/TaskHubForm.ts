@@ -183,7 +183,7 @@ export class TaskHubForm {
 
         // --- Tags ---
         const { row: tagsRow } = createFormRow(c, t('modal.hub.tags'), { alignStart: true });
-        this.tagsSectionEl = tagsRow.createDiv({ cls: 'tv-ctrl__pills task-hub__tags tv-form__control' });
+        this.tagsSectionEl = tagsRow.createDiv({ cls: 'task-hub__tags tv-form__control' });
         this.rebuildTagsSection(true);
 
         // --- Color / Linestyle / Mask ---
@@ -294,8 +294,13 @@ export class TaskHubForm {
         const ownTags = new Set(this.task.tags);
         const keys = this.deps.plugin.settings.tvFileKeys;
 
+        // chips と追加 input を別行にする — 同じ行だと chip の増減で
+        // 追加 input の位置がずれる（タイプ中にタグが増えると入力欄が
+        // 動いて打ちにくい）ため常に固定位置に置く
+        const chipsEl = this.tagsSectionEl.createDiv({ cls: 'tv-ctrl__pills' });
+
         for (const tag of getEffectiveTags(this.task)) {
-            const chip = this.tagsSectionEl.createSpan({ cls: 'tv-ctrl__pill task-hub__tag-chip' });
+            const chip = chipsEl.createSpan({ cls: 'tv-ctrl__pill task-hub__tag-chip' });
             chip.createSpan({ text: `#${tag}` });
             if (contentTags.has(tag)) {
                 chip.addClass('task-hub__tag-chip--locked');

@@ -66,7 +66,9 @@ export class CreateTaskModal extends Modal {
     onOpen() {
         this.containerEl.addClass('mod-tv-modal');
         const { contentEl } = this;
-        contentEl.addClass('tv-form');
+        // tv-ctrl: _form.css の tv-form__text-input 等が Obsidian mobile の
+        // input 既定スタイル（丸い border-radius）に詳細度で勝つための祖先クラス
+        contentEl.addClass('tv-form tv-ctrl');
 
         contentEl.createEl('h2', { text: this.options.title ?? t('modal.createTask') });
 
