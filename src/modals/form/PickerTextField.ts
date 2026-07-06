@@ -25,7 +25,9 @@ export function createPickerTextField(
     });
     pickerButton.setAttribute('aria-label',
         pickerType === 'date' ? t('modal.openDatePicker') : t('modal.openTimePicker'));
-    setIcon(pickerButton, pickerType === 'date' ? 'calendar' : 'clock');
+    // WebKit は inline-flex 要素直下の SVG を描画しないことがあるため
+    // span ラッパー経由で挿す（プロジェクト共通ルール）
+    setIcon(pickerButton.createSpan(), pickerType === 'date' ? 'calendar' : 'clock');
 
     // Hidden native picker input — pointer-events: auto (CSS) so iPad users
     // can directly tap to open the native picker (WebKit Bug #261703).
@@ -70,7 +72,7 @@ export function createPickerTextField(
         cls: 'tv-form__clear-button'
     });
     clearButton.setAttribute('aria-label', 'Clear');
-    setIcon(clearButton, 'x');
+    setIcon(clearButton.createSpan(), 'x');
     clearButton.style.display = initialValue ? '' : 'none';
     clearButton.addEventListener('click', () => {
         textInput.value = '';

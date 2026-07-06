@@ -150,6 +150,12 @@
     background-color: var(--tv-text-muted);
 }
 
+/* setIcon は span ラッパー経由（WebKit の inline-flex 直下 SVG 非描画対策） */
+.tv-form__picker-button > span,
+.tv-form__clear-button > span {
+    display: inline-flex;
+}
+
 .tv-form__picker-button .svg-icon {
     width: 14px;
     height: 14px;
