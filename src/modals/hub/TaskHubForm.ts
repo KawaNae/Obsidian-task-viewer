@@ -486,6 +486,10 @@ export class TaskHubForm {
         if (!force && this.propsSectionEl.contains(document.activeElement)) return;
         this.propsSectionEl.empty();
 
+        // render 時スナップショット。表示判定（isOwn / pv）専用 — commit の
+        // merge base には使わない。focus ガードで rebuild がスキップされる間に
+        // 他行の commit が echo されると陳腐化するため、各 closure は
+        // this.task.properties を発火時に読む（tags と同じ規則）。
         const own = this.task.properties ?? {};
         const effective = getEffectiveProperties(this.task);
         const keys = this.deps.plugin.settings.tvFileKeys;
@@ -505,9 +509,10 @@ export class TaskHubForm {
 
             const commitValue = () => {
                 const raw = valueInput.value;
-                if (isOwn && raw === own[key]?.value) return;
+                const live = this.task.properties ?? {};
+                if (isOwn && raw === live[key]?.value) return;
                 if (!isOwn && raw === pv.value) return; // cascade 値のまま → 上書きを作らない
-                this.commitProps({ ...own, [key]: { value: raw, type: ChildLineClassifier.inferType(raw) } });
+                this.commitProps({ ...live, [key]: { value: raw, type: ChildLineClassifier.inferType(raw) } });
             };
             if (!arrayReadOnly) {
                 this.attachSuggest(valueInput, valueInput, {
@@ -528,7 +533,7 @@ export class TaskHubForm {
                 removeBtn.setAttribute('aria-label', t('modal.hub.removeProperty', { key }));
                 removeBtn.disabled = this.missing;
                 removeBtn.addEventListener('click', () => {
-                    const next = { ...own };
+                    const next = { ...(this.task.properties ?? {}) };
                     delete next[key];
                     this.commitProps(next);
                 });
@@ -587,7 +592,7 @@ export class TaskHubForm {
                 return;
             }
             const raw = valueInput.value;
-            this.commitProps({ ...own, [key]: { value: raw, type: ChildLineClassifier.inferType(raw) } });
+            this.commitProps({ ...(this.task.properties ?? {}), [key]: { value: raw, type: ChildLineClassifier.inferType(raw) } });
         };
         for (const input of [keyInput, valueInput]) {
             input.addEventListener('keydown', (e: KeyboardEvent) => {
