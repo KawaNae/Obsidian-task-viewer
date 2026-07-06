@@ -4,13 +4,12 @@ import { isTvFile, type PropertyValue, type Task } from '../../types';
 import type TaskViewerPlugin from '../../main';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
-import { toDisplayTask } from '../../services/display/DisplayTaskConverter';
+import { DateFieldGroup } from '../form/DateFieldGroup';
 import { buildStatusOptions, getStatusLabel } from '../../constants/statusOptions';
 import { VALID_LINE_STYLES } from '../../constants/style';
 import { TaskNameSuggest } from '../../suggest/TaskNameSuggest';
 import { filterColors, renderColorSuggestion } from '../../suggest/color/colorUtils';
 import { filterLineStyles, renderLineStyleSuggestion } from '../../suggest/line/lineStyleUtils';
-import { createPickerTextField } from '../form/PickerTextField';
 import { createFormRow } from '../form/formRow';
 import { attachBracketPairing, BracketPairingHandle } from '../form/bracketPairing';
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
@@ -22,10 +21,7 @@ import { FilterValueCollector } from '../../services/filter/FilterValueCollector
 import { openFileInExistingOrNewTab } from '../../views/sharedLogic/NavigationUtils';
 import { SuggestController } from '../../views/customMenus/SuggestController';
 import type { PopoverStack } from '../../views/sharedUI/PopoverStack';
-import {
-    validateDateTimeFormats, validateDateRequirements, validateDateRange,
-    type DateValidationError,
-} from '../TaskDateValidator';
+import type { DateGroupKey } from '../form/DateFieldGroup';
 import { logError } from '../../log/log';
 
 export type TaskHubFocusField =
@@ -42,8 +38,6 @@ export interface TaskHubFormDeps {
     /** 継承ラベルクリック等でファイルへ遷移した後に呼ぶ（パネルを閉じる） */
     onNavigate?: () => void;
 }
-
-type DateGroup = 'start' | 'end' | 'due';
 
 /**
  * タスクハブのプロパティ編集フォーム。
@@ -66,12 +60,7 @@ export class TaskHubForm {
     private nameInput: HTMLInputElement;
     private pairing: BracketPairingHandle;
     private statusPill: HTMLButtonElement;
-    private startDateInput: HTMLInputElement;
-    private startTimeInput: HTMLInputElement;
-    private endDateInput: HTMLInputElement;
-    private endTimeInput: HTMLInputElement;
-    private dueDateInput: HTMLInputElement;
-    private dueTimeInput: HTMLInputElement;
+    private dateGroup: DateFieldGroup;
     private colorInput: HTMLInputElement;
     private colorSwatch: HTMLElement;
     private linestyleInput: HTMLInputElement;
@@ -163,10 +152,34 @@ export class TaskHubForm {
         });
 
         // --- Start / End / Due ---
-        this.renderDateGroup(c, t('modal.start'), 'start', this.task.startDate, this.task.startTime);
-        this.renderDateGroup(c, t('modal.end'), 'end', this.task.endDate, this.task.endTime);
-        const dl = this.splitDue(this.task.due);
-        this.renderDateGroup(c, t('modal.due'), 'due', dl.date, dl.time);
+        const dl = DateFieldGroup.splitDue(this.task.due);
+        this.dateGroup = new DateFieldGroup(c, {
+            labels: { start: t('modal.start'), end: t('modal.end'), due: t('modal.due') },
+            initial: {
+                startDate: this.task.startDate || '',
+                startTime: this.task.startTime || '',
+                endDate: this.task.endDate || '',
+                endTime: this.task.endTime || '',
+                dueDate: dl.date || '',
+                dueTime: dl.time || '',
+            },
+            buildOverlayTask: (f) => ({
+                ...this.task,
+                startDate: f.startDate || undefined,
+                startTime: f.startTime || undefined,
+                endDate: f.endDate || undefined,
+                endTime: f.endTime || undefined,
+                due: f.dueDate ? (f.dueTime ? `${f.dueDate}T${f.dueTime}` : f.dueDate) : undefined,
+            }),
+            getStartHour: () => this.deps.plugin.settings.startHour,
+            taskLookup: (id) => this.deps.readService.getTask(id),
+            getValidationCtx: () => ({
+                hasImplicitStartDate: !!this.task.cascadeContext?.startDate,
+                implicitStartDate: this.task.cascadeContext?.startDate,
+            }),
+            isSuspended: () => this.refreshing,
+            onCommit: (group) => this.commitDates(group),
+        });
 
         // --- Tags ---
         const { row: tagsRow } = createFormRow(c, t('modal.hub.tags'), { alignStart: true });
@@ -186,52 +199,11 @@ export class TaskHubForm {
         // --- Error / notice ---
         this.errorEl = c.createDiv({ cls: 'tv-form__error' });
         this.errorEl.style.display = 'none';
+        this.dateGroup.bindErrorEl(this.errorEl);
         this.noticeEl = c.createDiv({ cls: 'tv-form__warning' });
         this.noticeEl.style.display = 'none';
 
-        this.updatePlaceholders();
-    }
-
-    private renderDateGroup(
-        container: HTMLElement,
-        label: string,
-        group: DateGroup,
-        initialDate: string | undefined,
-        initialTime: string | undefined,
-    ): void {
-        container.createEl('h4', { text: label, cls: 'tv-form__section-label' });
-        const row = container.createDiv({ cls: 'tv-form__date-row' });
-
-        // 視覚ラベルは置かない（picker アイコンと placeholder が型と形式を
-        // 示すため冗長）。スクリーンリーダー向けに aria-label のみ付与。
-        const dateDiv = row.createDiv({ cls: 'tv-form__date-row__field' });
-        const dateInput = createPickerTextField(dateDiv, 'date', 'YYYY-MM-DD', initialDate || '');
-        dateInput.setAttribute('aria-label', `${label} — ${t('modal.date')}`);
-
-        const timeDiv = row.createDiv({ cls: 'tv-form__date-row__field' });
-        const timeInput = createPickerTextField(timeDiv, 'time', 'HH:mm', initialTime || '');
-        timeInput.setAttribute('aria-label', `${label} — ${t('modal.time')}`);
-
-        if (group === 'start') { this.startDateInput = dateInput; this.startTimeInput = timeInput; }
-        else if (group === 'end') { this.endDateInput = dateInput; this.endTimeInput = timeInput; }
-        else { this.dueDateInput = dateInput; this.dueTimeInput = timeInput; }
-
-        for (const input of [dateInput, timeInput]) {
-            input.addEventListener('input', (e: Event) => {
-                this.updatePlaceholders();
-                this.validate();
-                // picker 選択 / clear ボタンは synthetic input（isTrusted=false）
-                // で届く。blur を経ないのでここで確定する。refresh() 由来の
-                // synthetic は refreshing ガードで除外。
-                if (!e.isTrusted && !this.refreshing) {
-                    this.commitDates(group);
-                }
-            });
-            input.addEventListener('blur', () => this.commitDates(group));
-            input.addEventListener('keydown', (e: KeyboardEvent) => {
-                if (e.key === 'Enter') this.commitDates(group);
-            });
-        }
+        this.dateGroup.updatePlaceholders();
     }
 
     // ==================== suggest 共通（filter-popover と同機構） ====================
@@ -659,13 +631,14 @@ export class TaskHubForm {
         this.renderStatusPill(); // 楽観 model から pill を即時更新
     }
 
-    private commitDates(group: DateGroup): void {
+    private commitDates(group: DateGroupKey): void {
         if (this.missing) return;
-        if (!this.validate()) return;
+        if (!this.dateGroup.validate()) return;
+        const f = this.dateGroup.collect();
         const updates =
-            group === 'start' ? TaskUpdateBuilder.dateGroup(this.task, 'start', this.startDateInput.value, this.startTimeInput.value)
-            : group === 'end' ? TaskUpdateBuilder.dateGroup(this.task, 'end', this.endDateInput.value, this.endTimeInput.value)
-            : TaskUpdateBuilder.due(this.task, this.dueDateInput.value, this.dueTimeInput.value);
+            group === 'start' ? TaskUpdateBuilder.dateGroup(this.task, 'start', f.startDate, f.startTime)
+            : group === 'end' ? TaskUpdateBuilder.dateGroup(this.task, 'end', f.endDate, f.endTime)
+            : TaskUpdateBuilder.due(this.task, f.dueDate, f.dueTime);
         this.queue(updates);
     }
 
@@ -713,17 +686,17 @@ export class TaskHubForm {
         try {
             this.setInputValue(this.nameInput, fresh.content ?? '', this.pairing.isComposing());
             this.renderStatusPill();
-            this.setInputValue(this.startDateInput, fresh.startDate ?? '');
-            this.setInputValue(this.startTimeInput, fresh.startTime ?? '');
-            this.setInputValue(this.endDateInput, fresh.endDate ?? '');
-            this.setInputValue(this.endTimeInput, fresh.endTime ?? '');
-            const dl = this.splitDue(fresh.due);
-            this.setInputValue(this.dueDateInput, dl.date ?? '');
-            this.setInputValue(this.dueTimeInput, dl.time ?? '');
+            const dl = DateFieldGroup.splitDue(fresh.due);
+            this.dateGroup.setInputValue(this.dateGroup.getInput('startDate'), fresh.startDate ?? '');
+            this.dateGroup.setInputValue(this.dateGroup.getInput('startTime'), fresh.startTime ?? '');
+            this.dateGroup.setInputValue(this.dateGroup.getInput('endDate'), fresh.endDate ?? '');
+            this.dateGroup.setInputValue(this.dateGroup.getInput('endTime'), fresh.endTime ?? '');
+            this.dateGroup.setInputValue(this.dateGroup.getInput('dueDate'), dl.date ?? '');
+            this.dateGroup.setInputValue(this.dateGroup.getInput('dueTime'), dl.time ?? '');
             this.setInputValue(this.colorInput, fresh.color ?? '');
             this.setInputValue(this.linestyleInput, fresh.linestyle ?? '');
             this.setInputValue(this.maskInput, fresh.mask ?? '');
-            this.updatePlaceholders();
+            this.dateGroup.updatePlaceholders();
             this.updateStyleDecoration('color');
             this.updateStyleDecoration('linestyle');
             this.updateStyleDecoration('mask');
@@ -752,14 +725,9 @@ export class TaskHubForm {
     }
 
     private setEnabled(enabled: boolean): void {
-        const inputs = [
-            this.nameInput,
-            this.startDateInput, this.startTimeInput,
-            this.endDateInput, this.endTimeInput,
-            this.dueDateInput, this.dueTimeInput,
-            this.colorInput, this.linestyleInput, this.maskInput,
-        ];
+        const inputs = [this.nameInput, this.colorInput, this.linestyleInput, this.maskInput];
         for (const i of inputs) { if (i) i.disabled = !enabled; }
+        this.dateGroup?.setEnabled(enabled);
         if (this.statusPill) {
             this.statusPill.disabled = !enabled;
             this.statusPill.toggleClass('is-disabled', !enabled);
@@ -781,9 +749,9 @@ export class TaskHubForm {
         switch (field) {
             case 'name': return this.nameInput;
             case 'status': return this.statusPill ?? null;
-            case 'start': return this.startDateInput;
-            case 'end': return this.endDateInput;
-            case 'due': return this.dueDateInput;
+            case 'start': return this.dateGroup?.getInput('startDate');
+            case 'end': return this.dateGroup?.getInput('endDate');
+            case 'due': return this.dateGroup?.getInput('dueDate');
             case 'tags': return this.tagAddInput;
             case 'color': return this.colorInput;
             case 'linestyle': return this.linestyleInput;
@@ -793,98 +761,4 @@ export class TaskHubForm {
         }
     }
 
-    // ==================== バリデーション / placeholder ====================
-
-    private collectFields() {
-        return {
-            startDate: this.startDateInput?.value.trim() || '',
-            startTime: this.startTimeInput?.value.trim() || '',
-            endDate: this.endDateInput?.value.trim() || '',
-            endTime: this.endTimeInput?.value.trim() || '',
-            dueDate: this.dueDateInput?.value.trim() || '',
-            dueTime: this.dueTimeInput?.value.trim() || '',
-        };
-    }
-
-    private validate(): boolean {
-        const inputs = [
-            this.startDateInput, this.startTimeInput,
-            this.endDateInput, this.endTimeInput,
-            this.dueDateInput, this.dueTimeInput,
-        ];
-        inputs.forEach(el => el?.classList.remove('tv-form__input--invalid'));
-        this.errorEl.style.display = 'none';
-
-        const fields = this.collectFields();
-        const cascadeStart = this.task.cascadeContext?.startDate;
-        const ctx = {
-            hasImplicitStartDate: !!cascadeStart,
-            implicitStartDate: cascadeStart,
-        };
-
-        const err = validateDateTimeFormats(fields)
-            ?? validateDateRequirements(fields, ctx)
-            ?? validateDateRange(fields, ctx);
-        if (err) return this.applyValidationError(err);
-        return true;
-    }
-
-    private applyValidationError(err: DateValidationError): false {
-        const inputMap: Record<string, HTMLInputElement> = {
-            startDate: this.startDateInput, startTime: this.startTimeInput,
-            endDate: this.endDateInput, endTime: this.endTimeInput,
-            dueDate: this.dueDateInput, dueTime: this.dueTimeInput,
-        };
-        inputMap[err.field]?.classList.add('tv-form__input--invalid');
-        this.errorEl.empty();
-        this.errorEl.setText(err.message);
-        if (err.hint) {
-            this.errorEl.createEl('br');
-            this.errorEl.appendText(err.hint);
-        }
-        this.errorEl.style.display = 'block';
-        return false;
-    }
-
-    /**
-     * 暗黙値プレースホルダの再計算。フォーム値を task に overlay して
-     * toDisplayTask に通す — cascadeContext を保持したまま解決するので
-     * section / file 継承の暗黙値もそのまま placeholder に現れる。
-     */
-    private updatePlaceholders(): void {
-        const f = this.collectFields();
-        const overlay: Task = {
-            ...this.task,
-            startDate: f.startDate || undefined,
-            startTime: f.startTime || undefined,
-            endDate: f.endDate || undefined,
-            endTime: f.endTime || undefined,
-            due: f.dueDate ? (f.dueTime ? `${f.dueDate}T${f.dueTime}` : f.dueDate) : undefined,
-        };
-        const dt = toDisplayTask(overlay, this.deps.plugin.settings.startHour, (id) => this.deps.readService.getTask(id));
-
-        if (this.startDateInput) {
-            this.startDateInput.placeholder = (dt.startDateImplicit && dt.effectiveStartDate) || 'YYYY-MM-DD';
-        }
-        if (this.startTimeInput) {
-            this.startTimeInput.placeholder =
-                (dt.startTimeImplicit && dt.effectiveStartDate && dt.effectiveStartTime) || 'HH:mm';
-        }
-        if (this.endDateInput) {
-            this.endDateInput.placeholder = (dt.endDateImplicit && dt.effectiveEndDate) || 'YYYY-MM-DD';
-        }
-        if (this.endTimeInput) {
-            this.endTimeInput.placeholder =
-                (dt.endTimeImplicit && dt.effectiveEndDate && dt.effectiveEndTime) || 'HH:mm';
-        }
-    }
-
-    private splitDue(due: string | undefined): { date: string | undefined; time: string | undefined } {
-        if (!due) return { date: undefined, time: undefined };
-        if (due.includes('T')) {
-            const [date, time] = due.split('T');
-            return { date, time };
-        }
-        return { date: due, time: undefined };
-    }
 }

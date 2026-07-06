@@ -50,6 +50,30 @@
     min-width: 0;
 }
 
+/* 日付/時刻フィールドラッパ — date:time = 2:1 配分 */
+.tv-form__field {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.tv-form__field--date {
+    flex: 2 1 0;
+}
+
+.tv-form__field--time {
+    flex: 1 1 0;
+}
+
+/* phone: picker chrome（74px 固定費）で 2:1 が破綻 → 日付行はラベルを上段に折る */
+.is-phone .tv-form__row--dates {
+    flex-wrap: wrap;
+}
+
+.is-phone .tv-form__row--dates > .tv-form__label {
+    flex: 1 1 100%;
+    padding-top: 0;
+}
+
 .tv-form__name-section {
     display: flex;
     flex-direction: column;
