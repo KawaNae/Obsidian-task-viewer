@@ -1,4 +1,4 @@
-import { App, Platform, setIcon } from 'obsidian';
+import { App, Platform, setIcon, TFile, type EventRef } from 'obsidian';
 import { t } from '../../i18n';
 import type { Task } from '../../types';
 import type TaskViewerPlugin from '../../main';
@@ -8,6 +8,7 @@ import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import { toDisplayTask, getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
+import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { PopoverStack } from '../../views/sharedUI/PopoverStack';
 import { TaskHubForm, type TaskHubFocusField } from './TaskHubForm';
@@ -46,6 +47,7 @@ export class TaskHubPanel {
     private previewEl: HTMLElement | null = null;
     private form: TaskHubForm | null = null;
     private unsubscribe: (() => void) | null = null;
+    private renameRef: EventRef | null = null;
     private hostDoc: Document | null = null;
     private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
     /** フォーム内 suggest（SuggestController）が子ポップオーバーを積む先 */
@@ -150,6 +152,19 @@ export class TaskHubPanel {
                 this.form?.setMissing();
             }
         });
+
+        // rename 追従: task id にはファイルパスが焼き込まれているため、
+        // 追従しないと rename 後の lookup が永久に失敗し setMissing に
+        // 固定される。TimerWidget.handleFileRename と同じ renameFile 方式。
+        // ln: 等の anchor は rename で不変なので rescan 後の新 id と一致し、
+        // TaskIndex の full 通知 → 上の onChange で復帰する。
+        this.renameRef = this.app.vault.on('rename', (file, oldPath) => {
+            if (!(file instanceof TFile) || file.extension !== 'md') return;
+            const newId = TaskIdGenerator.renameFile(this.task.id, oldPath, file.path);
+            if (newId === this.task.id) return;
+            this.task = { ...this.task, id: newId, file: file.path };
+            this.form?.handleFileRename(newId, file.path);
+        });
     }
 
     private async renderPreview(): Promise<void> {
@@ -185,6 +200,10 @@ export class TaskHubPanel {
         this.stack.closeAll();
         this.unsubscribe?.();
         this.unsubscribe = null;
+        if (this.renameRef) {
+            this.app.vault.offref(this.renameRef);
+            this.renameRef = null;
+        }
 
         if (this.keydownHandler && this.hostDoc) {
             this.hostDoc.removeEventListener('keydown', this.keydownHandler, true);

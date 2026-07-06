@@ -680,6 +680,16 @@ export class TaskHubForm {
             .catch((e) => logError(`[TaskHubForm] commit failed: ${e instanceof Error ? e.message : String(e)}`));
     }
 
+    /**
+     * ファイル rename に伴う id / path の付け替え（パネルの rename 追従から
+     * 呼ばれる）。以降の commit は新 id 宛てに発行される。rename 直前に
+     * enqueue 済みの commit は旧 id のまま失敗し得る（ms 窓、queue の
+     * catch がログする既存挙動）。
+     */
+    handleFileRename(newId: string, newPath: string): void {
+        this.task = { ...this.task, id: newId, file: newPath };
+    }
+
     // ==================== 外部変更の取り込み ====================
 
     /**
