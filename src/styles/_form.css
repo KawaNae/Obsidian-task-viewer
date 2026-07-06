@@ -5,6 +5,51 @@
    _controls.css（tv-ctrl__*）。
    ====================================================== */
 
+/* --- 行文法: 左固定幅ラベル列 + コントロール領域 --- */
+.tv-form {
+    --tv-form-label-width: 7em;
+}
+
+.tv-form__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+/* pill 等が折り返す行はラベルを上端揃え */
+.tv-form__row--start {
+    align-items: flex-start;
+}
+
+.tv-form__row--start > .tv-form__label {
+    padding-top: 4px; /* 1 行目の pill / input と光学的に揃える */
+}
+
+.tv-form__label {
+    flex: 0 0 var(--tv-form-label-width, 7em);
+    font-size: var(--font-ui-small);
+    color: var(--tv-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 行内の直置きコントロール。`.tv-ctrl .tv-ctrl__text-input` の width:100%
+   （0,2,0）に読み込み順で勝つため、同じ 0,2,0 詳細度で定義する */
+.tv-ctrl .tv-form__control {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+}
+
+/* 追加行の key input: ラベル列幅にスナップして値列と桁を揃える */
+.tv-ctrl .tv-form__control--key {
+    flex: 0 0 var(--tv-form-label-width, 7em);
+    width: auto;
+    min-width: 0;
+}
+
 .tv-form__name-section {
     display: flex;
     flex-direction: column;
@@ -17,10 +62,13 @@
     color: var(--tv-text-muted);
 }
 
+/* グループ見出し（行ラベルでなく、複数行のセクションを束ねる）。
+   太字は h4 の UA 既定に頼らず意図として明示する */
 .tv-form__section-label {
     margin-top: 16px;
     margin-bottom: 4px;
-    font-size: 0.9em;
+    font-size: var(--font-ui-small);
+    font-weight: 600;
     color: var(--tv-text-muted);
 }
 

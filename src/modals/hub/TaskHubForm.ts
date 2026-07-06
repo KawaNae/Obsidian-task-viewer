@@ -11,6 +11,7 @@ import { TaskNameSuggest } from '../../suggest/TaskNameSuggest';
 import { filterColors, renderColorSuggestion } from '../../suggest/color/colorUtils';
 import { filterLineStyles, renderLineStyleSuggestion } from '../../suggest/line/lineStyleUtils';
 import { createPickerTextField } from '../form/PickerTextField';
+import { createFormRow } from '../form/formRow';
 import { attachBracketPairing, BracketPairingHandle } from '../form/bracketPairing';
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
 import { CascadeSource, type CascadeSourceKind } from './CascadeSource';
@@ -64,7 +65,7 @@ export class TaskHubForm {
 
     private nameInput: HTMLInputElement;
     private pairing: BracketPairingHandle;
-    private statusPill: HTMLElement;
+    private statusPill: HTMLButtonElement;
     private startDateInput: HTMLInputElement;
     private startTimeInput: HTMLInputElement;
     private endDateInput: HTMLInputElement;
@@ -96,6 +97,7 @@ export class TaskHubForm {
 
     private render(): void {
         const c = this.container;
+        c.addClass('tv-form'); // _form.css の行文法（ラベル列幅など）の適用ルート
 
         // --- Name ---
         const nameSection = c.createDiv({ cls: 'tv-form__name-section' });
@@ -117,11 +119,10 @@ export class TaskHubForm {
 
         // --- Status ---
         // filter-popover と同型: pill 表示 + SuggestController（選択で即置換）
-        const statusRow = c.createDiv({ cls: 'task-hub__status-row' });
-        statusRow.createEl('label', { text: t('modal.hub.status') });
-        this.statusPill = statusRow.createDiv({
+        const { row: statusRow } = createFormRow(c, t('modal.hub.status'));
+        this.statusPill = statusRow.createEl('button', {
             cls: 'tv-ctrl__pill task-hub__status-pill',
-            attr: { tabindex: '0', role: 'button' },
+            attr: { type: 'button' },
         });
         this.renderStatusPill();
 
@@ -143,18 +144,21 @@ export class TaskHubForm {
             );
         };
         this.statusPill.addEventListener('click', openStatusSuggest);
+        // 素の Enter / Space は native button click → openStatusSuggest。
+        // ここではハイライト操作（矢印移動・確定）だけを扱う。
         this.statusPill.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+            if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                if (statusSuggest.isOpen && e.key === 'ArrowDown') statusSuggest.moveHighlight(1);
-                else if (statusSuggest.isOpen && e.key === 'Enter' && statusSuggest.highlightedValue !== null) {
-                    const char = statusSuggest.highlightedValue;
-                    statusSuggest.close();
-                    this.commitStatus(char);
-                } else openStatusSuggest();
+                if (statusSuggest.isOpen) statusSuggest.moveHighlight(1);
+                else openStatusSuggest();
             } else if (e.key === 'ArrowUp' && statusSuggest.isOpen) {
                 e.preventDefault();
                 statusSuggest.moveHighlight(-1);
+            } else if (e.key === 'Enter' && statusSuggest.isOpen && statusSuggest.highlightedValue !== null) {
+                e.preventDefault(); // native click（suggest 再オープン）を抑止して確定
+                const char = statusSuggest.highlightedValue;
+                statusSuggest.close();
+                this.commitStatus(char);
             }
         });
 
@@ -165,8 +169,8 @@ export class TaskHubForm {
         this.renderDateGroup(c, t('modal.due'), 'due', dl.date, dl.time);
 
         // --- Tags ---
-        c.createEl('h4', { text: t('modal.hub.tags'), cls: 'tv-form__section-label' });
-        this.tagsSectionEl = c.createDiv({ cls: 'task-hub__tags' });
+        const { row: tagsRow } = createFormRow(c, t('modal.hub.tags'), { alignStart: true });
+        this.tagsSectionEl = tagsRow.createDiv({ cls: 'tv-ctrl__pills task-hub__tags tv-form__control' });
         this.rebuildTagsSection(true);
 
         // --- Color / Linestyle / Mask ---
@@ -319,7 +323,7 @@ export class TaskHubForm {
         const keys = this.deps.plugin.settings.tvFileKeys;
 
         for (const tag of getEffectiveTags(this.task)) {
-            const chip = this.tagsSectionEl.createSpan({ cls: 'tv-ctrl__pill' });
+            const chip = this.tagsSectionEl.createSpan({ cls: 'tv-ctrl__pill task-hub__tag-chip' });
             chip.createSpan({ text: `#${tag}` });
             if (contentTags.has(tag)) {
                 chip.addClass('task-hub__tag-chip--locked');
@@ -394,14 +398,13 @@ export class TaskHubForm {
     // ==================== 非時刻プロパティ: color / linestyle / mask ====================
 
     private renderStyleRow(container: HTMLElement, field: 'color' | 'linestyle' | 'mask', label: string): void {
-        const row = container.createDiv({ cls: 'task-hub__prop-row' });
-        row.createEl('label', { text: label, cls: 'task-hub__prop-label' });
+        const { row } = createFormRow(container, label);
 
         if (field === 'color') {
             this.colorSwatch = row.createSpan({ cls: 'tv-ctrl__color-swatch task-hub__color-swatch' });
         }
 
-        const input = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input' });
+        const input = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-form__control' });
         input.value = this.task[field] ?? '';
 
         const sourceEl = row.createSpan({ cls: 'task-hub__source' });
@@ -504,11 +507,10 @@ export class TaskHubForm {
             const isOwn = key in own;
             const arrayReadOnly = isOwn && isTvFile(this.task) && pv.type === 'array';
 
-            const row = this.propsSectionEl.createDiv({ cls: 'task-hub__prop-row' });
-            if (!isOwn) row.addClass('task-hub__prop-row--cascade');
-            row.createSpan({ text: key, cls: 'task-hub__prop-key' });
+            const { row } = createFormRow(this.propsSectionEl, key);
+            if (!isOwn) row.addClass('task-hub__row--cascade');
 
-            const valueInput = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input' });
+            const valueInput = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-form__control' });
             valueInput.value = pv.value;
             valueInput.disabled = this.missing || arrayReadOnly;
             if (arrayReadOnly) valueInput.setAttribute('aria-label', t('modal.hub.arrayReadOnly'));
@@ -534,7 +536,7 @@ export class TaskHubForm {
             });
 
             if (isOwn && !arrayReadOnly) {
-                const removeBtn = row.createEl('button', { cls: 'task-hub__chip-remove' });
+                const removeBtn = row.createEl('button', { cls: 'tv-ctrl__pill-remove' });
                 setIcon(removeBtn.createSpan(), 'x');
                 removeBtn.setAttribute('aria-label', t('modal.hub.removeProperty', { key }));
                 removeBtn.disabled = this.missing;
@@ -553,15 +555,15 @@ export class TaskHubForm {
             }
         }
 
-        // 追加行
-        const addRow = this.propsSectionEl.createDiv({ cls: 'task-hub__prop-row task-hub__prop-add' });
+        // 追加行 — key input がラベル列（tv-form__control--key）を占める
+        const addRow = this.propsSectionEl.createDiv({ cls: 'tv-form__row task-hub__prop-add' });
         const keyInput = addRow.createEl('input', {
             type: 'text', placeholder: t('modal.hub.propertyKey'),
-            cls: 'tv-ctrl__text-input task-hub__prop-key-input',
+            cls: 'tv-ctrl__text-input tv-form__control--key',
         });
         const valueInput = addRow.createEl('input', {
             type: 'text', placeholder: t('modal.hub.propertyValue'),
-            cls: 'tv-ctrl__text-input',
+            cls: 'tv-ctrl__text-input tv-form__control',
         });
         keyInput.disabled = this.missing;
         valueInput.disabled = this.missing;
@@ -758,7 +760,10 @@ export class TaskHubForm {
             this.colorInput, this.linestyleInput, this.maskInput,
         ];
         for (const i of inputs) { if (i) i.disabled = !enabled; }
-        this.statusPill?.toggleClass('is-disabled', !enabled);
+        if (this.statusPill) {
+            this.statusPill.disabled = !enabled;
+            this.statusPill.toggleClass('is-disabled', !enabled);
+        }
         // tags / props の動的セクションは missing フラグを見て再構築する
         this.rebuildTagsSection(true);
         this.rebuildPropsSection(true);

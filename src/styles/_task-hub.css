@@ -80,33 +80,20 @@
     gap: 4px;
 }
 
-.task-hub__status-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-top: 8px;
-}
-
-.task-hub__status-row label {
-    font-size: 0.85em;
-    color: var(--text-muted);
-}
-
 .task-hub__read-only-notice {
     margin-top: 12px;
     padding: 8px 12px;
     border-radius: 6px;
-    background: var(--background-secondary);
-    color: var(--text-muted);
-    font-size: 0.85em;
+    background: var(--tv-bg-secondary);
+    color: var(--tv-text-muted);
+    font-size: var(--font-ui-small);
 }
 
 /* --- Tags chips --- */
+/* レイアウトは共有 .tv-ctrl__pills（_controls.css）を併載。ここは行内の
+   縦位置補正のみ */
 .task-hub__tags {
-    display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 6px;
 }
 
 /* chip 本体は共有部品 tv-ctrl__pill（_controls.css）。ここは hub 固有の
@@ -116,9 +103,9 @@
 }
 
 .task-hub__tag-chip--cascade {
-    background: var(--background-secondary);
-    color: var(--text-muted);
-    border: 1px dashed var(--background-modifier-border);
+    background: var(--tv-bg-secondary);
+    color: var(--tv-text-muted);
+    border: 1px dashed var(--tv-border);
 }
 
 .task-hub__tag-add-wrap {
@@ -126,8 +113,17 @@
     min-width: 8em;
 }
 
-/* status pill はクリックで suggest を開くセレクタ */
-.task-hub__status-pill {
+/* status pill はクリックで suggest を開くセレクタ。実 <button> のため、
+   Obsidian / テーマの button 既定（border / box-shadow / height / font）を
+   `.tv-ctrl .tv-ctrl__*` と同じ二重セレクタで打ち消す */
+.tv-ctrl .task-hub__status-pill {
+    appearance: none;
+    -webkit-appearance: none;
+    height: auto;
+    border: none;
+    box-shadow: none;
+    font-family: inherit;
+    font-weight: inherit;
     cursor: pointer;
     gap: 6px;
     padding: 2px 10px;
@@ -144,34 +140,10 @@
 }
 
 /* --- Style rows (color / linestyle / mask) & custom property rows --- */
-.task-hub__prop-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 6px;
-}
-
-.task-hub__prop-row .tv-ctrl__text-input {
-    flex: 1;
-    width: auto;
-}
-
-.task-hub__prop-label,
-.task-hub__prop-key {
-    flex: 0 0 7em;
-    font-size: 0.85em;
-    color: var(--text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.task-hub__prop-row--cascade .tv-ctrl__text-input {
-    color: var(--text-muted);
-}
-
-.task-hub__prop-key-input {
-    flex: 0 0 7em !important;
+/* 行の scaffold は _form.css の tv-form__row / tv-form__label。ここは
+   cascade（継承値）行の視覚修飾のみ */
+.task-hub__row--cascade .tv-ctrl__text-input {
+    color: var(--tv-text-muted);
 }
 
 /* 共有 tv-ctrl__color-swatch (12px) を hub では一回り大きく */
@@ -184,14 +156,14 @@
 
 .task-hub__source {
     flex: 0 0 auto;
-    font-size: 0.75em;
-    color: var(--text-faint);
+    font-size: 0.75em; /* 補助情報 — ラベル（--font-ui-small）より意図的に小さく */
+    color: var(--tv-text-faint);
     cursor: pointer;
     text-decoration: underline dotted;
 }
 
 .task-hub__source:hover {
-    color: var(--text-muted);
+    color: var(--tv-text-muted);
 }
 
 /* --- Phone --- */
@@ -213,7 +185,7 @@
     justify-content: center;
     padding: 2px 0;
     cursor: pointer;
-    color: var(--text-faint);
+    color: var(--tv-text-faint);
 }
 
 .task-hub__preview-toggle .svg-icon {
