@@ -109,18 +109,8 @@
     gap: 6px;
 }
 
-.task-hub__tag-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    border-radius: 12px;
-    background: var(--tag-background, var(--background-secondary));
-    color: var(--tag-color, var(--text-accent));
-    font-size: 0.85em;
-    line-height: 1.6;
-}
-
+/* chip 本体は共有部品 tv-ctrl__pill（_controls.css）。ここは hub 固有の
+   ロック/継承の視覚修飾のみ */
 .task-hub__tag-chip--locked {
     opacity: 0.75;
 }
@@ -131,41 +121,26 @@
     border: 1px dashed var(--background-modifier-border);
 }
 
-/* WebKit: setIcon は span ラッパー経由 + appearance/padding/background 明示 */
-.task-hub .task-hub__chip-remove {
-    appearance: none;
-    -webkit-appearance: none;
-    padding: 0 !important;
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
+.task-hub__tag-add-wrap {
+    flex: 0 1 12em;
+    min-width: 8em;
+}
+
+/* status pill はクリックで suggest を開くセレクタ */
+.task-hub__status-pill {
     cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    color: var(--text-muted);
+    gap: 6px;
+    padding: 2px 10px;
 }
 
-.task-hub .task-hub__chip-remove:hover {
-    color: var(--text-normal);
+.task-hub__status-pill:focus-visible {
+    outline: 2px solid var(--tv-accent);
+    outline-offset: 1px;
 }
 
-.task-hub__chip-remove .svg-icon {
-    width: 12px;
-    height: 12px;
-}
-
-.task-hub .task-hub__tag-add {
-    flex: 0 1 10em;
-    min-width: 6em;
-    border: none;
-    background: transparent;
-    font-size: 0.85em;
-    padding: 2px 4px;
-}
-
-.task-hub .task-hub__tag-add:focus {
-    outline: none;
-    box-shadow: 0 1px 0 0 var(--interactive-accent);
+.task-hub__status-pill.is-disabled {
+    opacity: 0.5;
+    pointer-events: none;
 }
 
 /* --- Style rows (color / linestyle / mask) & custom property rows --- */
@@ -176,7 +151,7 @@
     margin-top: 6px;
 }
 
-.task-hub__prop-row .tv-form__text-input {
+.task-hub__prop-row .tv-ctrl__text-input {
     flex: 1;
     width: auto;
 }
@@ -191,7 +166,7 @@
     white-space: nowrap;
 }
 
-.task-hub__prop-row--cascade .tv-form__text-input {
+.task-hub__prop-row--cascade .tv-ctrl__text-input {
     color: var(--text-muted);
 }
 
@@ -199,12 +174,12 @@
     flex: 0 0 7em !important;
 }
 
+/* 共有 tv-ctrl__color-swatch (12px) を hub では一回り大きく */
 .task-hub__color-swatch {
     flex: 0 0 auto;
     width: 16px;
     height: 16px;
     border-radius: 4px;
-    border: 1px solid var(--background-modifier-border);
 }
 
 .task-hub__source {

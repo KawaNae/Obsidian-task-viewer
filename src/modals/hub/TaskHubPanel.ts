@@ -111,6 +111,7 @@ export class TaskHubPanel {
                 plugin: this.deps.plugin,
                 readService: this.deps.readService,
                 writeService: this.deps.writeService,
+                stack: this.stack,
                 onNavigate: () => this.close(),
             });
         }

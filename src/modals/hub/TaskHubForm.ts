@@ -1,15 +1,15 @@
-import { App, DropdownComponent, setIcon } from 'obsidian';
+import { App, setIcon } from 'obsidian';
 import { t } from '../../i18n';
 import { isTvFile, type PropertyValue, type Task } from '../../types';
 import type TaskViewerPlugin from '../../main';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import { toDisplayTask } from '../../services/display/DisplayTaskConverter';
-import { buildStatusOptions } from '../../constants/statusOptions';
+import { buildStatusOptions, getStatusLabel } from '../../constants/statusOptions';
 import { VALID_LINE_STYLES } from '../../constants/style';
 import { TaskNameSuggest } from '../../suggest/TaskNameSuggest';
-import { FormColorSuggest } from '../../suggest/color/FormColorSuggest';
-import { FormLineStyleSuggest } from '../../suggest/line/FormLineStyleSuggest';
+import { filterColors, renderColorSuggestion } from '../../suggest/color/colorUtils';
+import { filterLineStyles, renderLineStyleSuggestion } from '../../suggest/line/lineStyleUtils';
 import { createPickerTextField } from '../form/PickerTextField';
 import { attachBracketPairing, BracketPairingHandle } from '../form/bracketPairing';
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
@@ -17,7 +17,10 @@ import { CascadeSource, type CascadeSourceKind } from './CascadeSource';
 import { getEffectiveTags, getEffectiveProperties } from '../../services/data/EffectiveProperties';
 import { TagExtractor } from '../../services/parsing/utils/TagExtractor';
 import { ChildLineClassifier } from '../../services/parsing/utils/ChildLineClassifier';
+import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 import { openFileInExistingOrNewTab } from '../../views/sharedLogic/NavigationUtils';
+import { SuggestController } from '../../views/customMenus/SuggestController';
+import type { PopoverStack } from '../../views/sharedUI/PopoverStack';
 import {
     validateDateTimeFormats, validateDateRequirements, validateDateRange,
     type DateValidationError,
@@ -33,7 +36,9 @@ export interface TaskHubFormDeps {
     plugin: TaskViewerPlugin;
     readService: TaskReadService;
     writeService: TaskWriteService;
-    /** 継承ラベルクリック等でファイルへ遷移した後に呼ぶ（モーダルを閉じる） */
+    /** suggest（SuggestController）の子ポップオーバーを積む先（パネル所有） */
+    stack: PopoverStack;
+    /** 継承ラベルクリック等でファイルへ遷移した後に呼ぶ（パネルを閉じる） */
     onNavigate?: () => void;
 }
 
@@ -59,7 +64,7 @@ export class TaskHubForm {
 
     private nameInput: HTMLInputElement;
     private pairing: BracketPairingHandle;
-    private statusDropdown: DropdownComponent;
+    private statusPill: HTMLElement;
     private startDateInput: HTMLInputElement;
     private startTimeInput: HTMLInputElement;
     private endDateInput: HTMLInputElement;
@@ -111,14 +116,47 @@ export class TaskHubForm {
         });
 
         // --- Status ---
+        // filter-popover と同型: pill 表示 + SuggestController（選択で即置換）
         const statusRow = c.createDiv({ cls: 'task-hub__status-row' });
         statusRow.createEl('label', { text: t('modal.hub.status') });
-        this.statusDropdown = new DropdownComponent(statusRow);
-        for (const opt of buildStatusOptions(this.deps.plugin.settings.statusDefinitions)) {
-            this.statusDropdown.addOption(opt.char, `[${opt.char === ' ' ? ' ' : opt.char}] ${opt.label}`);
-        }
-        this.statusDropdown.setValue(this.task.statusChar);
-        this.statusDropdown.onChange((value) => this.commitStatus(value));
+        this.statusPill = statusRow.createDiv({
+            cls: 'tv-ctrl__pill task-hub__status-pill',
+            attr: { tabindex: '0', role: 'button' },
+        });
+        this.renderStatusPill();
+
+        const statusSuggest = new SuggestController(this.deps.stack, this.statusPill, '', 'min');
+        const openStatusSuggest = () => {
+            if (this.missing) return;
+            this.deps.stack.closeAll();
+            const defs = this.deps.plugin.settings.statusDefinitions;
+            statusSuggest.show(
+                buildStatusOptions(defs).map(o => o.char),
+                (item, char) => {
+                    this.renderStatusPreview(item, char);
+                    item.createSpan().setText(getStatusLabel(char, defs));
+                },
+                (char) => {
+                    statusSuggest.close();
+                    this.commitStatus(char);
+                },
+            );
+        };
+        this.statusPill.addEventListener('click', openStatusSuggest);
+        this.statusPill.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (statusSuggest.isOpen && e.key === 'ArrowDown') statusSuggest.moveHighlight(1);
+                else if (statusSuggest.isOpen && e.key === 'Enter' && statusSuggest.highlightedValue !== null) {
+                    const char = statusSuggest.highlightedValue;
+                    statusSuggest.close();
+                    this.commitStatus(char);
+                } else openStatusSuggest();
+            } else if (e.key === 'ArrowUp' && statusSuggest.isOpen) {
+                e.preventDefault();
+                statusSuggest.moveHighlight(-1);
+            }
+        });
 
         // --- Start / End / Due ---
         this.renderDateGroup(c, t('modal.start'), 'start', this.task.startDate, this.task.startTime);
@@ -192,6 +230,78 @@ export class TaskHubForm {
         }
     }
 
+    // ==================== suggest 共通（filter-popover と同機構） ====================
+
+    /** status の checkbox プレビュー（filter-popover の pill / suggest item と同型） */
+    private renderStatusPreview(container: HTMLElement, char: string): void {
+        const checkbox = container.createEl('input', { cls: 'task-list-item-checkbox tv-ctrl__status-checkbox' });
+        checkbox.type = 'checkbox';
+        checkbox.checked = char !== ' ';
+        checkbox.readOnly = true;
+        checkbox.tabIndex = -1;
+        if (char !== ' ') checkbox.dataset.task = char;
+    }
+
+    private renderStatusPill(): void {
+        this.statusPill.empty();
+        this.renderStatusPreview(this.statusPill, this.task.statusChar);
+        this.statusPill.createSpan().setText(
+            getStatusLabel(this.task.statusChar, this.deps.plugin.settings.statusDefinitions),
+        );
+    }
+
+    /**
+     * text input に SuggestController（候補ドロップダウン）を取り付ける。
+     * FilterConditionRenderer.renderSuggestInput と同じイベント設計
+     * （input / focus で候補表示、ArrowDown/Up でハイライト移動）。
+     *
+     * Enter は「ハイライトがあれば input.value に反映して閉じるだけ」に
+     * 留める — 各フィールドの既存 Enter コミットハンドラ（この後に登録
+     * される）が反映後の値を読んで確定する。Escape はパネル側の capture
+     * ハンドラが stack を閉じるのでここでは扱わない。
+     */
+    private attachSuggest(
+        input: HTMLInputElement,
+        anchorEl: HTMLElement,
+        opts: {
+            getCandidates: (query: string) => string[];
+            renderItem?: (itemEl: HTMLElement, value: string) => void;
+            onPick: (value: string) => void;
+        },
+    ): void {
+        const suggest = new SuggestController(this.deps.stack, anchorEl, '', 'min');
+        const render = opts.renderItem
+            ?? ((item: HTMLElement, val: string) => { item.createSpan().setText(val); });
+        const show = (showAll: boolean) => {
+            if (this.missing) return;
+            // hub の stack は suggest しか持たない（root popover なし）ので、
+            // closeAll = 「他フィールドの suggest を閉じる」。
+            this.deps.stack.closeAll();
+            suggest.show(opts.getCandidates(showAll ? '' : input.value), render, (val) => {
+                suggest.close();
+                opts.onPick(val);
+            });
+        };
+        input.addEventListener('input', (e: Event) => {
+            if (!(e as InputEvent).isComposing && !this.refreshing) show(false);
+        });
+        input.addEventListener('focus', () => show(!input.value));
+        input.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (!suggest.isOpen) show(!input.value);
+                else suggest.moveHighlight(1);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                suggest.moveHighlight(-1);
+            } else if (e.key === 'Enter' && !e.isComposing) {
+                const hl = suggest.highlightedValue;
+                if (hl !== null) input.value = hl;
+                suggest.close();
+            }
+        });
+    }
+
     // ==================== 非時刻プロパティ: tags ====================
 
     /**
@@ -209,13 +319,13 @@ export class TaskHubForm {
         const keys = this.deps.plugin.settings.tvFileKeys;
 
         for (const tag of getEffectiveTags(this.task)) {
-            const chip = this.tagsSectionEl.createSpan({ cls: 'task-hub__tag-chip' });
+            const chip = this.tagsSectionEl.createSpan({ cls: 'tv-ctrl__pill' });
             chip.createSpan({ text: `#${tag}` });
             if (contentTags.has(tag)) {
                 chip.addClass('task-hub__tag-chip--locked');
                 chip.setAttribute('aria-label', t('modal.hub.contentTagLocked'));
             } else if (ownTags.has(tag)) {
-                const removeBtn = chip.createEl('button', { cls: 'task-hub__chip-remove' });
+                const removeBtn = chip.createEl('button', { cls: 'tv-ctrl__pill-remove' });
                 setIcon(removeBtn.createSpan(), 'x');
                 removeBtn.setAttribute('aria-label', t('modal.hub.removeTag', { tag }));
                 removeBtn.disabled = this.missing;
@@ -228,20 +338,45 @@ export class TaskHubForm {
             }
         }
 
-        this.tagAddInput = this.tagsSectionEl.createEl('input', {
+        // 追加 input（filter-popover の pill selector と同型: 候補 suggest 付き）
+        const inputWrap = this.tagsSectionEl.createDiv({ cls: 'tv-ctrl__input-wrap task-hub__tag-add-wrap' });
+        const input = inputWrap.createEl('input', {
             type: 'text',
             placeholder: t('modal.hub.addTag'),
-            cls: 'task-hub__tag-add',
+            cls: 'tv-ctrl__input',
         });
-        this.tagAddInput.disabled = this.missing;
-        this.tagAddInput.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (e.key !== 'Enter' || e.isComposing) return;
-            const raw = this.tagAddInput!.value.trim();
-            if (!raw) return;
+        this.tagAddInput = input;
+        input.disabled = this.missing;
+
+        const addTags = (raw: string) => {
             const added = raw.split(/\s+/).map(s => s.replace(/^#/, '')).filter(s => s.length > 0);
             if (added.length === 0) return;
-            this.tagAddInput!.value = '';
+            input.value = '';
             this.commitTags([...this.task.tags, ...added]);
+        };
+
+        this.attachSuggest(input, inputWrap, {
+            getCandidates: (query) => {
+                const q = query.toLowerCase().replace(/^#/, '');
+                const selected = new Set(getEffectiveTags(this.task));
+                return FilterValueCollector.collectTags(this.deps.readService.getTasks())
+                    .filter(v => !selected.has(v))
+                    .filter(v => !q || v.toLowerCase().includes(q));
+            },
+            renderItem: (item, val) => { item.createSpan().setText(`#${val}`); },
+            onPick: (val) => addTags(val),
+        });
+        input.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key === 'Enter' && !e.isComposing) {
+                const raw = input.value.trim();
+                if (raw) addTags(raw);
+            } else if (e.key === 'Backspace' && !input.value) {
+                // 空入力での Backspace は末尾の削除可能タグ（own 宣言かつ
+                // content 由来でない）を除去する — filter pill と同じ操作感
+                const removable = this.task.tags.filter(x => !contentTags.has(x));
+                const last = removable[removable.length - 1];
+                if (last) this.commitTags(this.task.tags.filter(x => x !== last));
+            }
         });
     }
 
@@ -257,10 +392,10 @@ export class TaskHubForm {
         row.createEl('label', { text: label, cls: 'task-hub__prop-label' });
 
         if (field === 'color') {
-            this.colorSwatch = row.createSpan({ cls: 'task-hub__color-swatch' });
+            this.colorSwatch = row.createSpan({ cls: 'tv-ctrl__color-swatch task-hub__color-swatch' });
         }
 
-        const input = row.createEl('input', { type: 'text', cls: 'tv-form__text-input' });
+        const input = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input' });
         input.value = this.task[field] ?? '';
 
         const sourceEl = row.createSpan({ cls: 'task-hub__source' });
@@ -270,11 +405,19 @@ export class TaskHubForm {
         const commit = () => this.commitStyleField(field);
         if (field === 'color') {
             this.colorInput = input;
-            new FormColorSuggest(this.deps.app, input, commit);
+            this.attachSuggest(input, input, {
+                getCandidates: (q) => (q.trim() === '' ? filterColors('', 20) : filterColors(q)),
+                renderItem: (item, val) => renderColorSuggestion(val, item),
+                onPick: (val) => { input.value = val; this.updateColorSwatch(); commit(); },
+            });
             input.addEventListener('input', () => this.updateColorSwatch());
         } else if (field === 'linestyle') {
             this.linestyleInput = input;
-            new FormLineStyleSuggest(this.deps.app, input, commit);
+            this.attachSuggest(input, input, {
+                getCandidates: (q) => filterLineStyles(q),
+                renderItem: (item, val) => renderLineStyleSuggestion(val, item),
+                onPick: (val) => { input.value = val; commit(); },
+            });
         } else {
             this.maskInput = input;
         }
@@ -355,7 +498,7 @@ export class TaskHubForm {
             if (!isOwn) row.addClass('task-hub__prop-row--cascade');
             row.createSpan({ text: key, cls: 'task-hub__prop-key' });
 
-            const valueInput = row.createEl('input', { type: 'text', cls: 'tv-form__text-input' });
+            const valueInput = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input' });
             valueInput.value = pv.value;
             valueInput.disabled = this.missing || arrayReadOnly;
             if (arrayReadOnly) valueInput.setAttribute('aria-label', t('modal.hub.arrayReadOnly'));
@@ -366,6 +509,14 @@ export class TaskHubForm {
                 if (!isOwn && raw === pv.value) return; // cascade 値のまま → 上書きを作らない
                 this.commitProps({ ...own, [key]: { value: raw, type: ChildLineClassifier.inferType(raw) } });
             };
+            if (!arrayReadOnly) {
+                this.attachSuggest(valueInput, valueInput, {
+                    getCandidates: (q) => FilterValueCollector
+                        .collectPropertyValuesForKey(this.deps.readService.getTasks(), key)
+                        .filter(v => !q || v.toLowerCase().includes(q.toLowerCase())),
+                    onPick: (val) => { valueInput.value = val; commitValue(); },
+                });
+            }
             valueInput.addEventListener('blur', commitValue);
             valueInput.addEventListener('keydown', (e: KeyboardEvent) => {
                 if (e.key === 'Enter' && !e.isComposing) commitValue();
@@ -392,15 +543,36 @@ export class TaskHubForm {
         const addRow = this.propsSectionEl.createDiv({ cls: 'task-hub__prop-row task-hub__prop-add' });
         const keyInput = addRow.createEl('input', {
             type: 'text', placeholder: t('modal.hub.propertyKey'),
-            cls: 'tv-form__text-input task-hub__prop-key-input',
+            cls: 'tv-ctrl__text-input task-hub__prop-key-input',
         });
         const valueInput = addRow.createEl('input', {
             type: 'text', placeholder: t('modal.hub.propertyValue'),
-            cls: 'tv-form__text-input',
+            cls: 'tv-ctrl__text-input',
         });
         keyInput.disabled = this.missing;
         valueInput.disabled = this.missing;
         this.propAddKeyInput = keyInput;
+
+        // 候補: 既存キー（vault 全体）から未使用のもの / 値はキーに応じて
+        this.attachSuggest(keyInput, keyInput, {
+            getCandidates: (q) => {
+                const used = new Set(Object.keys(effective));
+                return FilterValueCollector.collectPropertyKeys(this.deps.readService.getTasks())
+                    .filter(k => !used.has(k))
+                    .filter(k => !q || k.toLowerCase().includes(q.toLowerCase()));
+            },
+            onPick: (val) => { keyInput.value = val; valueInput.focus(); },
+        });
+        this.attachSuggest(valueInput, valueInput, {
+            getCandidates: (q) => {
+                const key = keyInput.value.trim();
+                if (!key) return [];
+                return FilterValueCollector
+                    .collectPropertyValuesForKey(this.deps.readService.getTasks(), key)
+                    .filter(v => !q || v.toLowerCase().includes(q.toLowerCase()));
+            },
+            onPick: (val) => { valueInput.value = val; },
+        });
 
         const commitAdd = () => {
             const key = keyInput.value.trim();
@@ -497,9 +669,7 @@ export class TaskHubForm {
         this.refreshing = true;
         try {
             this.setInputValue(this.nameInput, fresh.content ?? '', this.pairing.isComposing());
-            if (document.activeElement !== this.statusDropdown.selectEl) {
-                this.statusDropdown.setValue(fresh.statusChar);
-            }
+            this.renderStatusPill();
             this.setInputValue(this.startDateInput, fresh.startDate ?? '');
             this.setInputValue(this.startTimeInput, fresh.startTime ?? '');
             this.setInputValue(this.endDateInput, fresh.endDate ?? '');
@@ -547,7 +717,7 @@ export class TaskHubForm {
             this.colorInput, this.linestyleInput, this.maskInput,
         ];
         for (const i of inputs) { if (i) i.disabled = !enabled; }
-        this.statusDropdown?.setDisabled(!enabled);
+        this.statusPill?.toggleClass('is-disabled', !enabled);
         // tags / props の動的セクションは missing フラグを見て再構築する
         this.rebuildTagsSection(true);
         this.rebuildPropsSection(true);
@@ -564,7 +734,7 @@ export class TaskHubForm {
     protected resolveFocusTarget(field: TaskHubFocusField): HTMLElement | null {
         switch (field) {
             case 'name': return this.nameInput;
-            case 'status': return this.statusDropdown?.selectEl ?? null;
+            case 'status': return this.statusPill ?? null;
             case 'start': return this.startDateInput;
             case 'end': return this.endDateInput;
             case 'due': return this.dueDateInput;

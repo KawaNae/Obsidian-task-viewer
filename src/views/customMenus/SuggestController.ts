@@ -81,8 +81,12 @@ export class SuggestController {
         renderItem: (itemEl: HTMLElement, value: string) => void,
         onPick: (value: string) => void,
     ): void {
+        // 自分の旧シェルは常に置き換える。openChild の「index 1 以降を閉じる」
+        // 規則は root popover がスタックに居る前提（filter-popover）で、root の
+        // 無い面（task hub）では自シェルが index 0 に座るため頼れない。
+        this.close();
+
         if (values.length === 0) {
-            this.close();
             return;
         }
 
@@ -98,6 +102,11 @@ export class SuggestController {
                 for (const val of values) {
                     const item = suggestEl.createDiv(ITEM_CLASS);
                     renderItem(item, val);
+                    // preventDefault on pointerdown keeps focus on the anchor
+                    // input — otherwise the click would blur it first, and
+                    // blur-commit surfaces (task hub) would persist the
+                    // half-typed value before onPick delivers the real one.
+                    item.addEventListener('pointerdown', (e) => e.preventDefault());
                     item.addEventListener('click', (e) => {
                         e.stopPropagation();
                         onPick(val);
