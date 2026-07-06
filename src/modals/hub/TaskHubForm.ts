@@ -383,6 +383,12 @@ export class TaskHubForm {
     private commitTags(tags: string[]): void {
         if (this.missing) return;
         this.queue(TaskUpdateBuilder.tags(this.task, tags));
+        // 構造コミット（chip の増減）は楽観 model から即時再描画する。
+        // echo 待ちだと focus がセクション内にある間 chip が現れ/消えない。
+        const restoreFocus = document.activeElement === this.tagAddInput;
+        this.deps.stack.closeAll();
+        this.rebuildTagsSection(true);
+        if (restoreFocus) this.tagAddInput?.focus();
     }
 
     // ==================== 非時刻プロパティ: color / linestyle / mask ====================
@@ -536,6 +542,9 @@ export class TaskHubForm {
                     const next = { ...(this.task.properties ?? {}) };
                     delete next[key];
                     this.commitProps(next);
+                    // 構造コミット: 楽観 model から行を即時再構築
+                    this.deps.stack.closeAll();
+                    this.rebuildPropsSection(true);
                 });
             } else if (!isOwn) {
                 const source = CascadeSource.forProperty(this.deps.app, this.task, keys, key, pv.value);
@@ -576,7 +585,7 @@ export class TaskHubForm {
                     .collectPropertyValuesForKey(this.deps.readService.getTasks(), key)
                     .filter(v => !q || v.toLowerCase().includes(q.toLowerCase()));
             },
-            onPick: (val) => { valueInput.value = val; },
+            onPick: (val) => { valueInput.value = val; commitAdd(); },
         });
 
         const commitAdd = () => {
@@ -593,13 +602,20 @@ export class TaskHubForm {
             }
             const raw = valueInput.value;
             this.commitProps({ ...(this.task.properties ?? {}), [key]: { value: raw, type: ChildLineClassifier.inferType(raw) } });
+            // 追加成立: input をクリアして行を即時再構築し、次の入力へ focus を
+            // 戻す（tags の addTags と同じ操作感）。blur コミットは持たない —
+            // 途中でフォーカスを外しただけで空値プロパティが生まれるのを防ぐ。
+            keyInput.value = '';
+            valueInput.value = '';
+            this.deps.stack.closeAll();
+            this.rebuildPropsSection(true);
+            this.propAddKeyInput?.focus();
         };
         for (const input of [keyInput, valueInput]) {
             input.addEventListener('keydown', (e: KeyboardEvent) => {
                 if (e.key === 'Enter' && !e.isComposing) commitAdd();
             });
         }
-        valueInput.addEventListener('blur', commitAdd);
     }
 
     private commitProps(props: Record<string, PropertyValue>): void {
@@ -638,6 +654,7 @@ export class TaskHubForm {
     private commitStatus(value: string): void {
         if (this.missing) return;
         this.queue(TaskUpdateBuilder.status(this.task, value));
+        this.renderStatusPill(); // 楽観 model から pill を即時更新
     }
 
     private commitDates(group: DateGroup): void {
@@ -653,6 +670,10 @@ export class TaskHubForm {
     /** コミットを直列化して発行する（vault.process の競合防止） */
     protected queue(updates: Partial<Task> | null): void {
         if (!updates) return;
+        // 楽観更新: echo（refresh）到着前に次のコミットが組み立てられても
+        // 陳腐な base を掴まないよう、ローカル model へ先に反映する。
+        // echo は refresh(fresh) が正として上書きする。
+        this.task = { ...this.task, ...updates };
         const id = this.task.id;
         this.commitChain = this.commitChain
             .then(() => this.deps.writeService.updateTask(id, updates))
@@ -667,9 +688,14 @@ export class TaskHubForm {
      */
     refresh(fresh: Task): void {
         this.task = fresh;
-        this.missing = false;
-        this.noticeEl.style.display = 'none';
-        this.setEnabled(true);
+        if (this.missing) {
+            // missing からの復帰時のみ全体を再有効化する。毎 echo で
+            // setEnabled(true) を通すと force rebuild が focus 中の入力を
+            // 破壊し、focus ガードの意味がなくなる。
+            this.missing = false;
+            this.noticeEl.style.display = 'none';
+            this.setEnabled(true);
+        }
 
         this.refreshing = true;
         try {
