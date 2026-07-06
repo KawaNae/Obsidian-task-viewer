@@ -134,7 +134,13 @@ export class TaskHubPanel {
             requestAnimationFrame(() => this.form?.focusField(field));
         }
 
-        this.unsubscribe = this.deps.readService.onChange(() => {
+        this.unsubscribe = this.deps.readService.onChange((taskId) => {
+            // 他タスク単独の変更は無視する（プレビュー全再構築の抑制）。
+            // 同一ファイルの rescan / rename は mergeNotify が taskId 未指定の
+            // full 通知に降格させるため、cascade（file/section 継承）由来の
+            // 変化はこのフィルタを必ず通過する。notify の粒度をタスク単位に
+            // 細分化する場合は、同一ファイルの taskId も通す必要がある。
+            if (taskId !== undefined && taskId !== this.task.id) return;
             const fresh = this.deps.readService.getTask(this.task.id);
             if (fresh) {
                 this.task = fresh;
