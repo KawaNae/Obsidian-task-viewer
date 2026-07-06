@@ -111,7 +111,7 @@ export class TaskHubForm {
         });
 
         // --- Status ---
-        const statusRow = c.createDiv({ cls: 'task-hub-modal__status-row' });
+        const statusRow = c.createDiv({ cls: 'task-hub__status-row' });
         statusRow.createEl('label', { text: t('modal.hub.status') });
         this.statusDropdown = new DropdownComponent(statusRow);
         for (const opt of buildStatusOptions(this.deps.plugin.settings.statusDefinitions)) {
@@ -128,7 +128,7 @@ export class TaskHubForm {
 
         // --- Tags ---
         c.createEl('h4', { text: t('modal.hub.tags'), cls: 'tv-form__section-label' });
-        this.tagsSectionEl = c.createDiv({ cls: 'task-hub-modal__tags' });
+        this.tagsSectionEl = c.createDiv({ cls: 'task-hub__tags' });
         this.rebuildTagsSection(true);
 
         // --- Color / Linestyle / Mask ---
@@ -138,7 +138,7 @@ export class TaskHubForm {
 
         // --- Custom properties ---
         c.createEl('h4', { text: t('modal.hub.properties'), cls: 'tv-form__section-label' });
-        this.propsSectionEl = c.createDiv({ cls: 'task-hub-modal__props' });
+        this.propsSectionEl = c.createDiv({ cls: 'task-hub__props' });
         this.rebuildPropsSection(true);
 
         // --- Error / notice ---
@@ -209,21 +209,21 @@ export class TaskHubForm {
         const keys = this.deps.plugin.settings.tvFileKeys;
 
         for (const tag of getEffectiveTags(this.task)) {
-            const chip = this.tagsSectionEl.createSpan({ cls: 'task-hub-modal__tag-chip' });
+            const chip = this.tagsSectionEl.createSpan({ cls: 'task-hub__tag-chip' });
             chip.createSpan({ text: `#${tag}` });
             if (contentTags.has(tag)) {
-                chip.addClass('task-hub-modal__tag-chip--locked');
+                chip.addClass('task-hub__tag-chip--locked');
                 chip.setAttribute('aria-label', t('modal.hub.contentTagLocked'));
             } else if (ownTags.has(tag)) {
-                const removeBtn = chip.createEl('button', { cls: 'task-hub-modal__chip-remove' });
+                const removeBtn = chip.createEl('button', { cls: 'task-hub__chip-remove' });
                 setIcon(removeBtn.createSpan(), 'x');
                 removeBtn.setAttribute('aria-label', t('modal.hub.removeTag', { tag }));
                 removeBtn.disabled = this.missing;
                 removeBtn.addEventListener('click', () => this.commitTags(this.task.tags.filter(x => x !== tag)));
             } else {
                 const source = CascadeSource.forTag(this.deps.app, this.task, keys, tag);
-                chip.addClass('task-hub-modal__tag-chip--locked');
-                chip.addClass('task-hub-modal__tag-chip--cascade');
+                chip.addClass('task-hub__tag-chip--locked');
+                chip.addClass('task-hub__tag-chip--cascade');
                 chip.setAttribute('aria-label', t('modal.hub.cascadeTagLocked', { source: this.sourceLabel(source) }));
             }
         }
@@ -231,7 +231,7 @@ export class TaskHubForm {
         this.tagAddInput = this.tagsSectionEl.createEl('input', {
             type: 'text',
             placeholder: t('modal.hub.addTag'),
-            cls: 'task-hub-modal__tag-add',
+            cls: 'task-hub__tag-add',
         });
         this.tagAddInput.disabled = this.missing;
         this.tagAddInput.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -253,17 +253,17 @@ export class TaskHubForm {
     // ==================== 非時刻プロパティ: color / linestyle / mask ====================
 
     private renderStyleRow(container: HTMLElement, field: 'color' | 'linestyle' | 'mask', label: string): void {
-        const row = container.createDiv({ cls: 'task-hub-modal__prop-row' });
-        row.createEl('label', { text: label, cls: 'task-hub-modal__prop-label' });
+        const row = container.createDiv({ cls: 'task-hub__prop-row' });
+        row.createEl('label', { text: label, cls: 'task-hub__prop-label' });
 
         if (field === 'color') {
-            this.colorSwatch = row.createSpan({ cls: 'task-hub-modal__color-swatch' });
+            this.colorSwatch = row.createSpan({ cls: 'task-hub__color-swatch' });
         }
 
         const input = row.createEl('input', { type: 'text', cls: 'tv-form__text-input' });
         input.value = this.task[field] ?? '';
 
-        const sourceEl = row.createSpan({ cls: 'task-hub-modal__source' });
+        const sourceEl = row.createSpan({ cls: 'task-hub__source' });
         sourceEl.addEventListener('click', () => this.jumpToFile());
         this.styleSourceEls[field] = sourceEl;
 
@@ -351,9 +351,9 @@ export class TaskHubForm {
             const isOwn = key in own;
             const arrayReadOnly = isOwn && isTvFile(this.task) && pv.type === 'array';
 
-            const row = this.propsSectionEl.createDiv({ cls: 'task-hub-modal__prop-row' });
-            if (!isOwn) row.addClass('task-hub-modal__prop-row--cascade');
-            row.createSpan({ text: key, cls: 'task-hub-modal__prop-key' });
+            const row = this.propsSectionEl.createDiv({ cls: 'task-hub__prop-row' });
+            if (!isOwn) row.addClass('task-hub__prop-row--cascade');
+            row.createSpan({ text: key, cls: 'task-hub__prop-key' });
 
             const valueInput = row.createEl('input', { type: 'text', cls: 'tv-form__text-input' });
             valueInput.value = pv.value;
@@ -372,7 +372,7 @@ export class TaskHubForm {
             });
 
             if (isOwn && !arrayReadOnly) {
-                const removeBtn = row.createEl('button', { cls: 'task-hub-modal__chip-remove' });
+                const removeBtn = row.createEl('button', { cls: 'task-hub__chip-remove' });
                 setIcon(removeBtn.createSpan(), 'x');
                 removeBtn.setAttribute('aria-label', t('modal.hub.removeProperty', { key }));
                 removeBtn.disabled = this.missing;
@@ -383,16 +383,16 @@ export class TaskHubForm {
                 });
             } else if (!isOwn) {
                 const source = CascadeSource.forProperty(this.deps.app, this.task, keys, key, pv.value);
-                const sourceEl = row.createSpan({ cls: 'task-hub-modal__source', text: this.sourceLabel(source) });
+                const sourceEl = row.createSpan({ cls: 'task-hub__source', text: this.sourceLabel(source) });
                 sourceEl.addEventListener('click', () => this.jumpToFile());
             }
         }
 
         // 追加行
-        const addRow = this.propsSectionEl.createDiv({ cls: 'task-hub-modal__prop-row task-hub-modal__prop-add' });
+        const addRow = this.propsSectionEl.createDiv({ cls: 'task-hub__prop-row task-hub__prop-add' });
         const keyInput = addRow.createEl('input', {
             type: 'text', placeholder: t('modal.hub.propertyKey'),
-            cls: 'tv-form__text-input task-hub-modal__prop-key-input',
+            cls: 'tv-form__text-input task-hub__prop-key-input',
         });
         const valueInput = addRow.createEl('input', {
             type: 'text', placeholder: t('modal.hub.propertyValue'),

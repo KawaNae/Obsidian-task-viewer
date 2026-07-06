@@ -39,7 +39,7 @@ import { MenuPresenter } from './interaction/menu/MenuPresenter';
 import { MenuHandler } from './interaction/menu/MenuHandler';
 import { TaskCardRenderer } from './views/taskcard/TaskCardRenderer';
 import { TaskViewHoverParent } from './views/taskcard/TaskViewHoverParent';
-import { TaskHubModal, type TaskHubModalOptions } from './modals/hub/TaskHubModal';
+import { TaskHubPanel, type TaskHubPanelOptions } from './modals/hub/TaskHubPanel';
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 import { createDiagnosticsExtension } from './editor/DiagnosticsExtension';
 import { toDisplayTask } from './services/display/DisplayTaskConverter';
@@ -602,7 +602,7 @@ export default class TaskViewerPlugin extends Plugin {
      * モーダルを開く。ビュー内はビュー自身の openTaskHub（自前の
      * TaskCardRenderer / MenuHandler を使用）を通る。
      */
-    openTaskHub(taskId: string, options?: TaskHubModalOptions): void {
+    openTaskHub(taskId: string, options?: TaskHubPanelOptions): void {
         const task = this.readService.getTask(taskId);
         if (!task) return;
 
@@ -623,7 +623,7 @@ export default class TaskViewerPlugin extends Plugin {
             this.hubMenuHandler.setTaskHubOpener((id, opts) => this.openTaskHub(id, opts));
         }
 
-        new TaskHubModal(this.app, task, {
+        new TaskHubPanel(this.app, task, {
             taskRenderer: this.hubTaskRenderer,
             menuHandler: this.hubMenuHandler,
             readService: this.readService,

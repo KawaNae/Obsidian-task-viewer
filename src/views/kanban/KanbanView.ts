@@ -3,7 +3,7 @@ import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { TaskHubModal, type TaskHubModalOptions } from '../../modals/hub/TaskHubModal';
+import { TaskHubPanel, type TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
 import TaskViewerPlugin from '../../main';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
@@ -79,8 +79,8 @@ export class KanbanView extends ItemView {
         this.taskRenderer.setChildLineEditCallback((parentTask, line, bodyLine, x, y) => {
             childLineMenuBuilder.showMenu(parentTask, line, bodyLine, x, y);
         });
-        const openTaskHub = (task: Task, opts?: TaskHubModalOptions) => {
-            new TaskHubModal(this.app, task, {
+        const openTaskHub = (task: Task, opts?: TaskHubPanelOptions) => {
+            new TaskHubPanel(this.app, task, {
                 taskRenderer: this.taskRenderer,
                 menuHandler: this.menuHandler,
                 readService: this.readService,

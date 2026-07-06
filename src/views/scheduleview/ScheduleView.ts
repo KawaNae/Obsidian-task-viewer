@@ -7,7 +7,7 @@ import { isCompleteStatusChar } from '../../types';
 import type { DisplayTask, AstronomyDisplay, Task } from '../../types';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { TaskHubModal, type TaskHubModalOptions } from '../../modals/hub/TaskHubModal';
+import { TaskHubPanel, type TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
 import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
@@ -118,8 +118,8 @@ export class ScheduleView extends ItemView {
         this.taskRenderer.setChildLineEditCallback((parentTask, line, bodyLine, x, y) => {
             childLineMenuBuilder.showMenu(parentTask, line, bodyLine, x, y);
         });
-        const openTaskHub = (task: Task, opts?: TaskHubModalOptions) => {
-            new TaskHubModal(this.app, task, {
+        const openTaskHub = (task: Task, opts?: TaskHubPanelOptions) => {
+            new TaskHubPanel(this.app, task, {
                 taskRenderer: this.taskRenderer,
                 menuHandler: this.menuHandler,
                 readService: this.readService,

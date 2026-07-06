@@ -53,7 +53,7 @@ import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
-import { TaskHubModal, type TaskHubModalOptions } from '../../modals/hub/TaskHubModal';
+import { TaskHubPanel, type TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
 import { openTaskInEditor } from '../sharedLogic/NavigationUtils';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
@@ -424,8 +424,8 @@ export class CalendarView extends ItemView {
      * modal が出た時点で card の選択状態は不要なので解除する。
      * defer の理由は TimelineView.openTaskHub を参照。
      */
-    private openTaskHub(task: Task, options?: TaskHubModalOptions): void {
-        new TaskHubModal(this.app, task, {
+    private openTaskHub(task: Task, options?: TaskHubPanelOptions): void {
+        new TaskHubPanel(this.app, task, {
             taskRenderer: this.taskRenderer,
             menuHandler: this.menuHandler,
             readService: this.readService,

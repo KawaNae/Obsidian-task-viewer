@@ -1,0 +1,256 @@
+/* ── Task Hub Panel ──
+ *
+ * 「タスクを開く」の単一の目的地。Obsidian Modal を使わない自前パネル
+ * （filter-popover と同系統: 自前 DOM + PopoverStack）。root に `tv-ctrl` を
+ * 併載し、_controls.css の共有部品（pill / suggest / input）の詳細度保護を
+ * 受ける。
+ */
+
+.task-hub {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-overlay);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.task-hub__backdrop {
+    position: absolute;
+    inset: 0;
+    background: var(--background-modifier-cover);
+}
+
+.task-hub__panel {
+    position: relative;
+    width: min(34em, calc(100vw - 32px));
+    max-height: calc(100% - 64px);
+    overflow-y: auto;
+    background: var(--modal-background, var(--tv-bg-secondary));
+    border: 1px solid var(--tv-border);
+    border-radius: var(--modal-radius, var(--tv-radius-s));
+    box-shadow: 0 12px 40px var(--tv-shadow-medium);
+    padding: 40px 16px 16px;
+}
+
+/* × ボタン。WebKit: setIcon は span ラッパー経由 + appearance/padding/
+   background 明示（inline-flex ボタン直下 SVG 非描画対策） */
+.task-hub .task-hub__close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: var(--tv-radius-s);
+    color: var(--tv-text-muted);
+    cursor: pointer;
+}
+
+.task-hub .task-hub__close:hover {
+    color: var(--tv-text);
+    background: var(--tv-bg-hover) !important;
+}
+
+.task-hub__close .svg-icon {
+    width: 16px;
+    height: 16px;
+}
+
+/* --- Preview --- */
+.task-hub__preview .task-card {
+    position: relative;
+    margin: 0;
+    font-size: var(--task-card-font-size);
+}
+
+/* --- Form --- */
+.task-hub__form {
+    padding: 12px 4px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.task-hub__status-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.task-hub__status-row label {
+    font-size: 0.85em;
+    color: var(--text-muted);
+}
+
+.task-hub__read-only-notice {
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: var(--background-secondary);
+    color: var(--text-muted);
+    font-size: 0.85em;
+}
+
+/* --- Tags chips --- */
+.task-hub__tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.task-hub__tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    background: var(--tag-background, var(--background-secondary));
+    color: var(--tag-color, var(--text-accent));
+    font-size: 0.85em;
+    line-height: 1.6;
+}
+
+.task-hub__tag-chip--locked {
+    opacity: 0.75;
+}
+
+.task-hub__tag-chip--cascade {
+    background: var(--background-secondary);
+    color: var(--text-muted);
+    border: 1px dashed var(--background-modifier-border);
+}
+
+/* WebKit: setIcon は span ラッパー経由 + appearance/padding/background 明示 */
+.task-hub .task-hub__chip-remove {
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-muted);
+}
+
+.task-hub .task-hub__chip-remove:hover {
+    color: var(--text-normal);
+}
+
+.task-hub__chip-remove .svg-icon {
+    width: 12px;
+    height: 12px;
+}
+
+.task-hub .task-hub__tag-add {
+    flex: 0 1 10em;
+    min-width: 6em;
+    border: none;
+    background: transparent;
+    font-size: 0.85em;
+    padding: 2px 4px;
+}
+
+.task-hub .task-hub__tag-add:focus {
+    outline: none;
+    box-shadow: 0 1px 0 0 var(--interactive-accent);
+}
+
+/* --- Style rows (color / linestyle / mask) & custom property rows --- */
+.task-hub__prop-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.task-hub__prop-row .tv-form__text-input {
+    flex: 1;
+    width: auto;
+}
+
+.task-hub__prop-label,
+.task-hub__prop-key {
+    flex: 0 0 7em;
+    font-size: 0.85em;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.task-hub__prop-row--cascade .tv-form__text-input {
+    color: var(--text-muted);
+}
+
+.task-hub__prop-key-input {
+    flex: 0 0 7em !important;
+}
+
+.task-hub__color-swatch {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.task-hub__source {
+    flex: 0 0 auto;
+    font-size: 0.75em;
+    color: var(--text-faint);
+    cursor: pointer;
+    text-decoration: underline dotted;
+}
+
+.task-hub__source:hover {
+    color: var(--text-muted);
+}
+
+/* --- Phone --- */
+.is-phone .task-hub {
+    align-items: stretch;
+    justify-content: stretch;
+}
+
+.is-phone .task-hub__panel {
+    width: 100%;
+    max-height: none;
+    border: none;
+    border-radius: 0;
+    padding-top: 32px;
+}
+
+.task-hub__preview-toggle {
+    display: flex;
+    justify-content: center;
+    padding: 2px 0;
+    cursor: pointer;
+    color: var(--text-faint);
+}
+
+.task-hub__preview-toggle .svg-icon {
+    width: 16px;
+    height: 16px;
+    transition: transform 150ms ease;
+}
+
+.task-hub__preview-toggle.is-collapsed .svg-icon {
+    transform: rotate(180deg);
+}
+
+.task-hub__preview.is-collapsed {
+    display: none;
+}

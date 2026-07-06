@@ -111,6 +111,7 @@ const copyStaticFiles = {
           '_template-creator.css',
           '_timer-widget.css',
           '_modal.css',
+          '_task-hub.css',
           '_filter-popover.css',
           '_sort-popover.css',
           '_kanban.css',

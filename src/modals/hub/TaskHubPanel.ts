@@ -1,4 +1,4 @@
-import { App, Modal, Platform, setIcon } from 'obsidian';
+import { App, Platform, setIcon } from 'obsidian';
 import { t } from '../../i18n';
 import type { Task } from '../../types';
 import type TaskViewerPlugin from '../../main';
@@ -9,6 +9,7 @@ import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import { toDisplayTask, getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
+import { PopoverStack } from '../../views/sharedUI/PopoverStack';
 import { TaskHubForm, type TaskHubFocusField } from './TaskHubForm';
 
 export interface TaskHubDeps {
@@ -19,54 +20,72 @@ export interface TaskHubDeps {
     plugin: TaskViewerPlugin;
 }
 
-export interface TaskHubModalOptions {
+export interface TaskHubPanelOptions {
     /** 開いた直後にフォーカスするフォームフィールド */
     focusField?: TaskHubFocusField;
 }
 
 /**
- * タスクハブモーダル — 「タスクを開く」の単一の目的地。
- * 上部にカードプレビュー（旧 TaskDetailModal 相当、readService.onChange で
- * ライブ再描画）、下部にプロパティ編集フォーム（フィールド確定で即保存）を
- * 持つ。read-only タスク（外部プラグイン記法）はプレビューのみに縮退する。
+ * タスクハブパネル — 「タスクを開く」の単一の目的地。
+ * 上部にカードプレビュー（readService.onChange でライブ再描画）、下部に
+ * プロパティ編集フォーム（フィールド確定で即保存）を持つ。read-only
+ * タスク（外部プラグイン記法）はプレビューのみに縮退する。
+ *
+ * Obsidian Modal を継承しない自前実装（filter-popover と同じ系統）。
+ * これにより:
+ * - `.tv-ctrl` 詳細度パターンで filter-popover と UI 部品（pill / suggest /
+ *   input）を共有できる
+ * - Modal の auto-focus 奪取（tabindex + rAF ハック）と close アニメーション
+ *   崩れ（mod-tv-modal ハック）が構造ごと消える
+ * - フォーム内の suggest（SuggestController）用の PopoverStack を
+ *   パネルが所有し、close 時に一括破棄する
  */
-export class TaskHubModal extends Modal {
-    private unsubscribe: (() => void) | null = null;
+export class TaskHubPanel {
     private task: Task;
+    private rootEl: HTMLElement | null = null;
     private previewEl: HTMLElement | null = null;
     private form: TaskHubForm | null = null;
+    private unsubscribe: (() => void) | null = null;
+    private hostDoc: Document | null = null;
+    private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
+    /** フォーム内 suggest（SuggestController）が子ポップオーバーを積む先 */
+    readonly stack = new PopoverStack();
 
     constructor(
-        app: App,
+        private app: App,
         task: Task,
         private deps: TaskHubDeps,
-        private options: TaskHubModalOptions = {},
+        private options: TaskHubPanelOptions = {},
     ) {
-        super(app);
         // split segment → original 解決（MenuHandler.showContextMenu と同規約）
         const originalId = getOriginalTaskId(task);
         this.task = deps.readService.getTask(originalId) ?? task;
     }
 
-    async onOpen(): Promise<void> {
-        // Obsidian の Modal.open() は最初の focusable 子要素 (= プレビュー
-        // カード内の checkbox) へ自動フォーカスする。modalEl 自身は既定では
-        // tabindex 属性を持たず programmatic に focus 不可なので、tabindex="-1"
-        // を付与した上で、auto-focus 後に rAF で focus を制御する。
-        this.modalEl.setAttribute('tabindex', '-1');
-        this.modalEl.addClass('tv-hub-modal');
+    open(): void {
+        if (this.rootEl) return;
 
-        // CSS hook for the shared close-animation fix (`mod-tv-modal`);
-        // see `_modal.css`.
-        this.containerEl.addClass('mod-tv-modal');
+        // Modal と同じく「操作が起きたウィンドウ」に出す（popout 対応）。
+        const hostDoc: Document = (globalThis as { activeDocument?: Document }).activeDocument ?? document;
+        this.hostDoc = hostDoc;
 
-        const { contentEl } = this;
-        contentEl.addClass('task-hub-modal');
+        const root = hostDoc.body.createDiv({ cls: 'task-hub tv-ctrl' });
+        this.rootEl = root;
+
+        const backdrop = root.createDiv({ cls: 'task-hub__backdrop' });
+        backdrop.addEventListener('click', () => this.close());
+
+        const panel = root.createDiv({ cls: 'task-hub__panel' });
+
+        const closeBtn = panel.createEl('button', { cls: 'task-hub__close' });
+        setIcon(closeBtn.createSpan(), 'x');
+        closeBtn.setAttribute('aria-label', t('modal.cancel'));
+        closeBtn.addEventListener('click', () => this.close());
 
         // モバイル: プレビュー折りたたみトグル（初期展開）。縦空間が限られる
         // phone でフォームの視認領域を確保する。
         if (Platform.isPhone) {
-            const toggle = contentEl.createDiv({ cls: 'task-hub-modal__preview-toggle' });
+            const toggle = panel.createDiv({ cls: 'task-hub__preview-toggle' });
             setIcon(toggle.createSpan(), 'chevron-up');
             toggle.setAttribute('aria-label', t('modal.hub.togglePreview'));
             toggle.addEventListener('click', () => {
@@ -76,14 +95,14 @@ export class TaskHubModal extends Modal {
             });
         }
 
-        this.previewEl = contentEl.createDiv('task-hub-modal__preview');
-        const formHost = contentEl.createDiv('task-hub-modal__form');
+        this.previewEl = panel.createDiv({ cls: 'task-hub__preview' });
+        const formHost = panel.createDiv({ cls: 'task-hub__form' });
 
-        await this.renderPreview();
+        void this.renderPreview();
 
         if (this.task.isReadOnly) {
             formHost.createDiv({
-                cls: 'task-hub-modal__read-only-notice',
+                cls: 'task-hub__read-only-notice',
                 text: t('modal.hub.readOnlyNotice'),
             });
         } else {
@@ -96,13 +115,23 @@ export class TaskHubModal extends Modal {
             });
         }
 
-        requestAnimationFrame(() => {
-            if (this.options.focusField && this.form) {
-                this.form.focusField(this.options.focusField);
+        // Escape: suggest が開いていればそれを閉じ、なければパネルを閉じる。
+        // capture で受けて Obsidian 側へのフォールスルーを止める。
+        this.keydownHandler = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape') return;
+            e.stopPropagation();
+            if (this.stack.isOpen()) {
+                this.stack.closeAll();
             } else {
-                this.modalEl.focus();
+                this.close();
             }
-        });
+        };
+        hostDoc.addEventListener('keydown', this.keydownHandler, true);
+
+        if (this.options.focusField && this.form) {
+            const field = this.options.focusField;
+            requestAnimationFrame(() => this.form?.focusField(field));
+        }
 
         this.unsubscribe = this.deps.readService.onChange(() => {
             const fresh = this.deps.readService.getTask(this.task.id);
@@ -128,25 +157,39 @@ export class TaskHubModal extends Modal {
         TaskStyling.applyTaskLinestyle(card, getEffectiveLinestyle(this.task) ?? null);
         TaskStyling.applyReadOnly(card, this.task);
 
-        const closeModal = () => this.close();
+        const closePanel = () => this.close();
         this.deps.menuHandler.addTaskContextMenu(card, this.task, {
-            onDestructiveAction: closeModal,
-            // hub 内メニューの Properties 項目は modal を積まず自フォームへ focus
+            onDestructiveAction: closePanel,
+            // hub 内メニューの Properties 項目はパネルを積まず自フォームへ focus
             onOpenPropertiesFocus: (field) => this.form?.focusField(field),
         });
 
         const dt = toDisplayTask(this.task, settings.startHour, (id) => this.deps.readService.getTask(id));
         await this.deps.taskRenderer.render(card, dt, settings, {
-            cardInstanceId: `modal::hub::${dt.id}`,
+            cardInstanceId: `hub::${dt.id}`,
             context: 'detail-modal',
-            hooks: { onNavigate: closeModal },
+            hooks: { onNavigate: closePanel },
         });
     }
 
-    onClose(): void {
+    close(): void {
+        if (!this.rootEl) return;
+
+        this.stack.closeAll();
         this.unsubscribe?.();
         this.unsubscribe = null;
+
+        if (this.keydownHandler && this.hostDoc) {
+            this.hostDoc.removeEventListener('keydown', this.keydownHandler, true);
+        }
+        this.keydownHandler = null;
+        this.hostDoc = null;
+
         if (this.previewEl) this.deps.taskRenderer.disposeInside(this.previewEl);
-        this.contentEl.empty();
+        this.previewEl = null;
+        this.form = null;
+
+        this.rootEl.remove();
+        this.rootEl = null;
     }
 }

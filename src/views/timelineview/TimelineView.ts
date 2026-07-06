@@ -6,7 +6,7 @@ import { Task, ViewState, PinnedListDefinition } from '../../types';
 import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { TaskHubModal, type TaskHubModalOptions } from '../../modals/hub/TaskHubModal';
+import { TaskHubPanel, type TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
 import { logDebug, logError } from '../../log/log';
 
 import { DateUtils } from '../../utils/DateUtils';
@@ -542,8 +542,8 @@ export class TimelineView extends ItemView {
      * 触る。modal は selection ring を視覚的に覆い隠すので、close 後に ring が
      * 残らないという元 commit (7c43222) の意図はそのまま満たされる。
      */
-    private openTaskHub(task: Task, options?: TaskHubModalOptions): void {
-        new TaskHubModal(this.app, task, {
+    private openTaskHub(task: Task, options?: TaskHubPanelOptions): void {
+        new TaskHubPanel(this.app, task, {
             taskRenderer: this.taskRenderer,
             menuHandler: this.menuHandler,
             readService: this.readService,
