@@ -6,7 +6,8 @@ import { Task, ViewState, PinnedListDefinition } from '../../types';
 import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { TaskHubPanel, type TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
+import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
+import type { TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
 import { logDebug, logError } from '../../log/log';
 
 import { DateUtils } from '../../utils/DateUtils';
@@ -543,14 +544,13 @@ export class TimelineView extends ItemView {
      * 残らないという元 commit (7c43222) の意図はそのまま満たされる。
      */
     private openTaskHub(task: Task, options?: TaskHubPanelOptions): void {
-        new TaskHubPanel(this.app, task, {
+        createTaskHubOpener(this.app, {
             taskRenderer: this.taskRenderer,
             menuHandler: this.menuHandler,
             readService: this.readService,
             writeService: this.writeService,
             plugin: this.plugin,
-        }, options).open();
-        setTimeout(() => this.handleManager.selectTask(null), 0);
+        }, () => setTimeout(() => this.handleManager.selectTask(null), 0))(task, options);
     }
 
     /**

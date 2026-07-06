@@ -3,7 +3,8 @@ import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { TaskHubPanel, type TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
+import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
+import type { TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
 import TaskViewerPlugin from '../../main';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
@@ -79,15 +80,13 @@ export class KanbanView extends ItemView {
         this.taskRenderer.setChildLineEditCallback((parentTask, line, bodyLine, x, y) => {
             childLineMenuBuilder.showMenu(parentTask, line, bodyLine, x, y);
         });
-        const openTaskHub = (task: Task, opts?: TaskHubPanelOptions) => {
-            new TaskHubPanel(this.app, task, {
-                taskRenderer: this.taskRenderer,
-                menuHandler: this.menuHandler,
-                readService: this.readService,
-                writeService: this.writeService,
-                plugin: this.plugin,
-            }, opts).open();
-        };
+        const openTaskHub = createTaskHubOpener(this.app, {
+            taskRenderer: this.taskRenderer,
+            menuHandler: this.menuHandler,
+            readService: this.readService,
+            writeService: this.writeService,
+            plugin: this.plugin,
+        });
         this.taskRenderer.setDetailCallback((task) => openTaskHub(task));
         this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
         this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));

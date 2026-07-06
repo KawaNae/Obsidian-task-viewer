@@ -110,12 +110,4 @@
     animation: tv-modal-close-fade 100ms cubic-bezier(0.33, 1, 0.68, 1) forwards;
 }
 
-/* `.task-card--in-detail-modal` modifier: applied by TaskCardRenderer when
-   the card is rendered inside the detail modal. The modal is a
-   presentational surface, so we suppress all interactive visual treatments
-   here in one place. Hover is opted-out via `:not(...)` on the hover rule
-   itself in _task-card.css. */
-.task-card--in-detail-modal .task-card__shape {
-    box-shadow: none;
-    filter: none;
-}
+/* hub-preview card styling → _task-hub.css */

@@ -73,6 +73,13 @@
 }
 
 /* --- Preview --- */
+/* hub-preview カードの視覚修飾（hover frame / shadow / filter を抑止）。
+   hover は _task-card.css 側で :where(:not(.task-card--in-hub-preview)) 除外 */
+.task-card--in-hub-preview .task-card__shape {
+    box-shadow: none;
+    filter: none;
+}
+
 .task-hub__preview .task-card {
     position: relative;
     margin: 0;

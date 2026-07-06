@@ -53,7 +53,8 @@ import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
-import { TaskHubPanel, type TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
+import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
+import type { TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
 import { openTaskInEditor } from '../sharedLogic/NavigationUtils';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
@@ -419,20 +420,14 @@ export class CalendarView extends ItemView {
         this.render();
     }
 
-    /**
-     * タスクハブモーダルを開く共通エントリ (dblclick / menu 経由)。
-     * modal が出た時点で card の選択状態は不要なので解除する。
-     * defer の理由は TimelineView.openTaskHub を参照。
-     */
     private openTaskHub(task: Task, options?: TaskHubPanelOptions): void {
-        new TaskHubPanel(this.app, task, {
+        createTaskHubOpener(this.app, {
             taskRenderer: this.taskRenderer,
             menuHandler: this.menuHandler,
             readService: this.readService,
             writeService: this.writeService,
             plugin: this.plugin,
-        }, options).open();
-        setTimeout(() => this.handleManager?.selectTask(null), 0);
+        }, () => setTimeout(() => this.handleManager?.selectTask(null), 0))(task, options);
     }
 
     /**

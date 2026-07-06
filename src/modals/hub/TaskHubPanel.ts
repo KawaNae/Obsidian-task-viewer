@@ -200,7 +200,7 @@ export class TaskHubPanel {
         const dt = toDisplayTask(this.task, settings.startHour, (id) => this.deps.readService.getTask(id));
         await this.deps.taskRenderer.render(card, dt, settings, {
             cardInstanceId: `hub::${dt.id}`,
-            context: 'detail-modal',
+            context: 'hub-preview',
             hooks: { onNavigate: closePanel },
         });
     }

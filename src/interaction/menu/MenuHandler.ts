@@ -170,7 +170,7 @@ export class MenuHandler {
             this.taskActionsMenuBuilder.addDuplicateActions(menu, task);
             menu.addSeparator();
 
-            // G5: 破壊的変更 — open in editor / convert to file / delete (closes detail-modal)
+            // G5: 破壊的変更 — open in editor / convert to file / delete (closes hub panel)
             this.taskActionsMenuBuilder.addDestructiveActions(menu, task, hooks?.onDestructiveAction);
         }, { kind: 'position', x, y });
     }
