@@ -56,6 +56,7 @@ export class TaskHubPanel {
     private form: TaskHubForm | null = null;
     private unsubscribe: (() => void) | null = null;
     private renameRef: EventRef | null = null;
+    private closing = false;
     private hostDoc: Document | null = null;
     private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
     /** フォーム内 suggest（SuggestController）が子ポップオーバーを積む先 */
@@ -205,9 +206,11 @@ export class TaskHubPanel {
     }
 
     close(): void {
-        if (!this.rootEl) return;
+        if (!this.rootEl || this.closing) return;
+        this.closing = true;
         if (TaskHubPanel.active === this) TaskHubPanel.active = null;
 
+        // 論理破棄（リスナー/購読/renderer）は即時 — 以降パネルは inert
         this.stack.closeAll();
         this.unsubscribe?.();
         this.unsubscribe = null;
@@ -215,18 +218,23 @@ export class TaskHubPanel {
             this.app.vault.offref(this.renameRef);
             this.renameRef = null;
         }
-
         if (this.keydownHandler && this.hostDoc) {
             this.hostDoc.removeEventListener('keydown', this.keydownHandler, true);
         }
         this.keydownHandler = null;
         this.hostDoc = null;
-
         if (this.previewEl) this.deps.taskRenderer.disposeInside(this.previewEl);
         this.previewEl = null;
         this.form = null;
 
-        this.rootEl.remove();
+        // 視覚破棄はアニメーション完了後（reduced-motion / detach 用に timer fallback）
+        const root = this.rootEl;
         this.rootEl = null;
+        const panel = root.querySelector<HTMLElement>('.task-hub__panel');
+        root.addClass('is-closing');
+        let done = false;
+        const finish = () => { if (done) return; done = true; root.remove(); };
+        panel?.addEventListener('animationend', finish);
+        window.setTimeout(finish, 200);
     }
 }

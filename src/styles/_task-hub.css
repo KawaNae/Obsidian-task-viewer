@@ -15,10 +15,16 @@
     justify-content: center;
 }
 
+/* --- Open / close animations --- */
+@keyframes tv-hub-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tv-hub-pop  { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes tv-hub-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+
 .task-hub__backdrop {
     position: absolute;
     inset: 0;
     background: var(--background-modifier-cover);
+    animation: tv-hub-fade 150ms ease-out;
 }
 
 .task-hub__panel {
@@ -31,6 +37,7 @@
     border-radius: var(--modal-radius, var(--tv-radius-s));
     box-shadow: 0 12px 40px var(--tv-shadow-medium);
     padding: 40px 16px 16px;
+    animation: tv-hub-pop 150ms cubic-bezier(0.33, 1, 0.68, 1);
 }
 
 /* × ボタン。WebKit: setIcon は span ラッパー経由 + appearance/padding/
@@ -200,4 +207,15 @@
 
 .task-hub__preview.is-collapsed {
     display: none;
+}
+
+/* --- Close animation --- */
+.task-hub.is-closing { pointer-events: none; }
+.task-hub.is-closing .task-hub__backdrop { animation: tv-hub-fade 120ms ease-in reverse forwards; }
+.task-hub.is-closing .task-hub__panel    { animation: tv-hub-pop  120ms ease-in reverse forwards; }
+.is-phone .task-hub__panel               { animation-name: tv-hub-rise; }
+.is-phone .task-hub.is-closing .task-hub__panel { animation-name: tv-hub-rise; }
+
+@media (prefers-reduced-motion: reduce) {
+    .task-hub__panel, .task-hub__backdrop { animation: none !important; }
 }
