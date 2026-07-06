@@ -121,7 +121,7 @@ export class FilterMenuComponent {
 
         const shell = this.stack.openRoot({
             anchor,
-            className: 'filter-popover',
+            className: 'filter-popover tv-ctrl',
             build: (el) => {
                 this.rootEl = el;
                 this.renderContent();

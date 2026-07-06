@@ -1,0 +1,159 @@
+/* ── Shared UI Controls (tv-ctrl) ──
+ *
+ * filter-popover とタスクハブパネルが共有する UI 部品（pill / suggest /
+ * input / swatch / checkbox）。
+ *
+ * 詳細度の設計:
+ * Obsidian は button / input[type="text"] に border・padding・background・
+ * box-shadow を既定で与える。これを打ち消すため、input / button 系のルールは
+ * `.tv-ctrl .tv-ctrl__*` の二重セレクタで詳細度を上げる（旧 filter-popover の
+ * `.filter-popover .filter-popover__*` パターンの一般化）。利用側は表面の
+ * root 要素に `tv-ctrl` クラスを付けるだけでこの保護を得る。
+ * div ベースの部品（pill / suggest-item / swatch）は Obsidian 既定と競合
+ * しないため単一クラスで定義する。
+ *
+ * suggest コンテナは PopoverShell が document.body 直下に生成するため
+ * `.tv-ctrl` の子孫にならない。SuggestController がコンテナ自身に
+ * `tv-ctrl tv-ctrl__suggest` を付けて自己完結させる。
+ */
+
+/* --- Text input (bordered, standalone) --- */
+.tv-ctrl .tv-ctrl__text-input {
+    font-size: var(--font-ui-small);
+    padding: 4px 8px;
+    border: 1px solid var(--tv-border);
+    border-radius: var(--tv-radius-s);
+    background: var(--tv-bg-primary);
+    color: var(--tv-text);
+    width: 100%;
+    min-width: 0;
+}
+
+.tv-ctrl .tv-ctrl__text-input:focus {
+    border-color: var(--tv-accent);
+    outline: none;
+}
+
+/* --- Input wrap (bordered container) + borderless inner input --- */
+.tv-ctrl .tv-ctrl__input-wrap {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--tv-border);
+    border-radius: var(--tv-radius-s);
+    background: var(--tv-bg-primary);
+    min-width: 0;
+}
+.tv-ctrl .tv-ctrl__input-wrap:focus-within {
+    border-color: var(--tv-accent);
+    outline: none;
+}
+
+.tv-ctrl .tv-ctrl__input {
+    flex: 1;
+    font-size: var(--font-ui-small);
+    padding: 4px 8px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--tv-text);
+    outline: none;
+    box-shadow: none;
+    width: 100%;
+    min-width: 0;
+}
+.tv-ctrl .tv-ctrl__input:hover {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+/* --- Pills --- */
+.tv-ctrl__pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.tv-ctrl__pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 4px 2px 8px;
+    font-size: var(--font-ui-small);
+    background: var(--tv-bg-hover);
+    border-radius: 99px;
+    color: var(--tv-text);
+    white-space: nowrap;
+}
+
+.tv-ctrl .tv-ctrl__pill-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    padding: 0 !important;
+    border: none;
+    background: transparent !important;
+    color: var(--tv-text-muted);
+    cursor: pointer;
+    border-radius: 50%;
+    appearance: none;
+    -webkit-appearance: none;
+    box-shadow: none;
+}
+.tv-ctrl .tv-ctrl__pill-remove:hover {
+    color: var(--tv-text);
+    background: var(--tv-bg-primary) !important;
+    box-shadow: none;
+}
+.tv-ctrl__pill-remove .svg-icon {
+    width: 10px;
+    height: 10px;
+}
+
+/* --- Value previews (pill & suggest item) --- */
+.tv-ctrl__color-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    border: 1px solid var(--tv-border);
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+
+.tv-ctrl__status-checkbox {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    flex-shrink: 0;
+    pointer-events: none;
+}
+
+/* --- Suggest dropdown (PopoverShell 生成、body 直下・fixed) --- */
+.tv-ctrl__suggest {
+    position: fixed;
+    z-index: calc(var(--z-overlay) + 1);
+    background: var(--tv-bg-secondary);
+    border: 1px solid var(--tv-border);
+    border-radius: var(--tv-radius-s);
+    box-shadow: 0 4px 12px var(--tv-shadow-medium);
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 4px 0;
+    min-width: 160px;
+}
+
+.tv-ctrl__suggest-item {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: var(--font-ui-small);
+    color: var(--tv-text);
+}
+.tv-ctrl__suggest-item:hover,
+.tv-ctrl__suggest-item--active {
+    background: var(--tv-bg-hover);
+}

@@ -1,11 +1,12 @@
 import type { PopoverStack } from '../sharedUI/PopoverStack';
 import type { PopoverShell } from '../sharedUI/PopoverShell';
 
-const ITEM_CLASS = 'filter-popover__tag-suggest-item';
-const ACTIVE_CLASS = 'filter-popover__tag-suggest-item--active';
+const ITEM_CLASS = 'tv-ctrl__suggest-item';
+const ACTIVE_CLASS = 'tv-ctrl__suggest-item--active';
 
 /**
- * filter-popover の suggest（候補ドロップダウン）共通機構。
+ * suggest（候補ドロップダウン）共通機構。filter-popover とタスクハブ
+ * パネルが共有する。
  *
  * `renderSuggestInput`（単一値・自由入力）と `renderPillValueSelector`（複数値 Pill）
  * が同じ state 管理・ハイライト・PopoverStack 越しの開閉を別々に持っていたため、
@@ -88,7 +89,7 @@ export class SuggestController {
         const newItems: { el: HTMLElement; value: string }[] = [];
         this.shell = this.stack.openChild({
             anchor: { kind: 'element', element: this.inputWrap },
-            className: `filter-popover__tag-suggest ${this.suggestClassName}`.trim(),
+            className: `tv-ctrl tv-ctrl__suggest ${this.suggestClassName}`.trim(),
             extraContains: [this.inputWrap],
             build: (suggestEl) => {
                 const w = `${this.inputWrap.getBoundingClientRect().width}px`;
