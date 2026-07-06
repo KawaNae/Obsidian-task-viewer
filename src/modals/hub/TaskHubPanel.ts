@@ -42,6 +42,14 @@ export interface TaskHubPanelOptions {
  *   パネルが所有し、close 時に一括破棄する
  */
 export class TaskHubPanel {
+    /**
+     * 開いているパネル（高々 1 つ、popout 含め全ウィンドウで単一）。
+     * 多重オープンは hostDoc への keydown capture リスナーと onChange 購読を
+     * 重複させる（Escape 1 回で両方が反応し、片方がリークする）ため、
+     * open() は既存パネルを置換する。ガードは call site でなくクラスが持つ。
+     */
+    private static active: TaskHubPanel | null = null;
+
     private task: Task;
     private rootEl: HTMLElement | null = null;
     private previewEl: HTMLElement | null = null;
@@ -66,6 +74,8 @@ export class TaskHubPanel {
 
     open(): void {
         if (this.rootEl) return;
+        TaskHubPanel.active?.close();
+        TaskHubPanel.active = this;
 
         // Modal と同じく「操作が起きたウィンドウ」に出す（popout 対応）。
         const hostDoc: Document = (globalThis as { activeDocument?: Document }).activeDocument ?? document;
@@ -196,6 +206,7 @@ export class TaskHubPanel {
 
     close(): void {
         if (!this.rootEl) return;
+        if (TaskHubPanel.active === this) TaskHubPanel.active = null;
 
         this.stack.closeAll();
         this.unsubscribe?.();
