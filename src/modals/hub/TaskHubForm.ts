@@ -532,12 +532,12 @@ export class TaskHubForm {
             }
         }
 
-        // 追加行 — createFormRow で空ラベルを置き、値 input の左端を既存行と揃える
-        const { row: addRow } = createFormRow(this.propsSectionEl, '');
+        // 追加行 — キーはラベル列に収め、値 input の左端を上の行と揃える
+        const { row: addRow, labelEl: addLabelEl } = createFormRow(this.propsSectionEl, '');
         addRow.addClass('task-hub__prop-add');
-        const keyInput = addRow.createEl('input', {
+        const keyInput = addLabelEl.createEl('input', {
             type: 'text', placeholder: t('modal.hub.propertyKey'),
-            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control--key',
+            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow',
         });
         const valueInput = addRow.createEl('input', {
             type: 'text', placeholder: t('modal.hub.propertyValue'),
