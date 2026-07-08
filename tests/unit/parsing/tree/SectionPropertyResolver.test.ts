@@ -288,4 +288,31 @@ describe('SectionPropertyResolver', () => {
 
         expect(doc.sections[0].resolvedTags).toBeUndefined();
     });
+
+    it('3段ネストでタグがカスケードしても兄弟間で独立', () => {
+        const doc = buildAndResolve([
+            '## Expenses',                      // 0
+            '### EPOS',                          // 1
+            '#### 普通',                         // 2
+            '- [ ] task1 @2026-03-24',          // 3
+            '#### 特殊',                         // 4
+            '- tags:: #出/クレカ/EPOS',          // 5
+            '- [ ] task2 @2026-03-25',          // 6
+            '### りそな',                        // 7
+            '- tags:: #出/りそな',               // 8
+            '- [ ] task3 @2026-03-26',          // 9
+        ]);
+
+        const expenses = doc.sections[0];
+        const epos = expenses.children[0];
+        const normal = epos.children[0];
+        const special = epos.children[1];
+        const risona = expenses.children[1];
+
+        expect(expenses.resolvedTags).toBeUndefined();
+        expect(epos.resolvedTags).toBeUndefined();
+        expect(normal.resolvedTags).toBeUndefined();
+        expect(special.resolvedTags).toEqual(['出/クレカ/EPOS']);
+        expect(risona.resolvedTags).toEqual(['出/りそな']);
+    });
 });

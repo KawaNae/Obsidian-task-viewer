@@ -81,7 +81,19 @@ export class DocumentTreeBuilder {
             stack.push(section);
         }
 
+        this.adjustEndLines(result);
         return result;
+    }
+
+    /** ツリー構築後に endLine を子孫の最大値に調整する（ボトムアップ） */
+    private static adjustEndLines(sections: SectionNode[]): void {
+        for (const section of sections) {
+            this.adjustEndLines(section.children);
+            if (section.children.length > 0) {
+                const lastChild = section.children[section.children.length - 1];
+                section.endLine = Math.max(section.endLine, lastChild.endLine);
+            }
+        }
     }
 
     private static createSection(

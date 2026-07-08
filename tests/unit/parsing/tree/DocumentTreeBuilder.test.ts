@@ -109,6 +109,38 @@ describe('DocumentTreeBuilder', () => {
             expect(doc.sections[1].children).toHaveLength(0);
         });
 
+        it('endLine が子孫の範囲を含む（3段ネスト）', () => {
+            const doc = buildFromBody([
+                '## L2',       // 0
+                '### L3',      // 1
+                '#### L4',     // 2
+                '- [ ] deep @2026-03-24', // 3
+            ]);
+            const l2 = doc.sections[0];
+            const l3 = l2.children[0];
+            const l4 = l3.children[0];
+            expect(l2.endLine).toBe(4);
+            expect(l3.endLine).toBe(4);
+            expect(l4.endLine).toBe(4);
+        });
+
+        it('兄弟孫セクション間の endLine', () => {
+            const doc = buildFromBody([
+                '## Parent',   // 0
+                '### Child',   // 1
+                '#### GrandA', // 2
+                '- [ ] a @2026-03-24', // 3
+                '#### GrandB', // 4
+                '- [ ] b @2026-03-25', // 5
+            ]);
+            const parent = doc.sections[0];
+            const child = parent.children[0];
+            expect(parent.endLine).toBe(6);
+            expect(child.endLine).toBe(6);
+            expect(child.children[0].endLine).toBe(4); // GrandA
+            expect(child.children[1].endLine).toBe(6); // GrandB
+        });
+
         it('frontmatter offset を考慮', () => {
             const lines = [
                 '---',
@@ -366,6 +398,52 @@ describe('DocumentTreeBuilder', () => {
             expect((parent.blocks[0] as any).rawLine).toBe('- [ ] parent-task @2026-03-24');
             expect(child.blocks).toHaveLength(1);
             expect((child.blocks[0] as any).rawLine).toBe('- [ ] child-task @2026-03-25');
+        });
+
+        it('3段ネストでブロックが正しく分離（孫のプロパティが親に漏れない）', () => {
+            const doc = buildFromBody([
+                '## Expenses',                        // 0
+                '- [ ] expense @2026-03-24',          // 1
+                '### EPOS',                            // 2
+                '#### 普通',                           // 3
+                '- [ ] normal @2026-03-25',           // 4
+                '#### 特殊',                           // 5
+                '- tags:: #出/クレカ/EPOS',            // 6
+                '- [ ] special @2026-03-26',          // 7
+                '### りそな',                          // 8
+                '- tags:: #出/りそな',                 // 9
+                '- [ ] risona @2026-03-27',           // 10
+            ]);
+            const expenses = doc.sections[0];
+            const epos = expenses.children[0];
+            const normal = epos.children[0];
+            const special = epos.children[1];
+            const risona = expenses.children[1];
+
+            // Expenses 自身は 1 タスクのみ、propertyBlock なし
+            expect(expenses.blocks).toHaveLength(1);
+            expect((expenses.blocks[0] as any).rawLine).toContain('expense');
+            expect(expenses.propertyBlock).toBeNull();
+
+            // EPOS 自身はタスクなし・プロパティなし
+            expect(epos.blocks).toHaveLength(0);
+            expect(epos.propertyBlock).toBeNull();
+
+            // #### 普通 に 1 タスク
+            expect(normal.blocks).toHaveLength(1);
+            expect((normal.blocks[0] as any).rawLine).toContain('normal');
+
+            // #### 特殊 に tags プロパティ + 1 タスク
+            expect(special.propertyBlock).not.toBeNull();
+            expect(special.propertyBlock!.entries[0].key).toBe('tags');
+            expect(special.blocks).toHaveLength(1);
+            expect((special.blocks[0] as any).rawLine).toContain('special');
+
+            // ### りそな に tags プロパティ + 1 タスク
+            expect(risona.propertyBlock).not.toBeNull();
+            expect(risona.propertyBlock!.entries[0].key).toBe('tags');
+            expect(risona.blocks).toHaveLength(1);
+            expect((risona.blocks[0] as any).rawLine).toContain('risona');
         });
     });
 });
