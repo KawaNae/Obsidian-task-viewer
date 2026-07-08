@@ -113,13 +113,14 @@
     font-size: var(--font-ui-small);
 }
 
-/* --- Tags chips --- */
-/* chips 行 + 追加 input 行を縦に積む。chip の増減で input の位置がずれない
-   よう常に別行に固定する（chip 行は共有 .tv-ctrl__pills、_controls.css） */
+/* --- Tags --- */
+/* pills（フル幅）+ label+input 行（中央揃え）を縦に積む。
+   label と input は tv-form__row の中央揃えで他フィールドと統一 */
 .task-hub__tags {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    margin-top: 6px;
 }
 
 /* chip 本体は共有部品 tv-ctrl__pill（_controls.css）。ここは hub 固有の

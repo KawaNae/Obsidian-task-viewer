@@ -184,8 +184,8 @@ export class TaskHubForm {
         });
 
         // --- Tags ---
-        const { row: tagsRow } = createFormRow(c, t('modal.hub.tags'), { alignStart: true, icon: 'tags' });
-        this.tagsSectionEl = tagsRow.createDiv({ cls: 'task-hub__tags tv-form__control' });
+        // pills はフル幅、label+input の行は中央揃え（他フィールドと同じ）
+        this.tagsSectionEl = c.createDiv({ cls: 'task-hub__tags' });
         this.rebuildTagsSection(true);
 
         // --- Color / Linestyle / Mask ---
@@ -296,33 +296,34 @@ export class TaskHubForm {
         const ownTags = new Set(this.task.tags);
         const keys = this.deps.plugin.settings.tvFileKeys;
 
-        // chips と追加 input を別行にする — 同じ行だと chip の増減で
-        // 追加 input の位置がずれる（タイプ中にタグが増えると入力欄が
-        // 動いて打ちにくい）ため常に固定位置に置く
-        const chipsEl = this.tagsSectionEl.createDiv({ cls: 'tv-ctrl__pills' });
-
-        for (const tag of getEffectiveTags(this.task)) {
-            const chip = chipsEl.createSpan({ cls: 'tv-ctrl__pill task-hub__tag-chip' });
-            chip.createSpan({ text: `#${tag}` });
-            if (contentTags.has(tag)) {
-                chip.addClass('task-hub__tag-chip--locked');
-                chip.setAttribute('aria-label', t('modal.hub.contentTagLocked'));
-            } else if (ownTags.has(tag)) {
-                const removeBtn = chip.createEl('button', { cls: 'tv-ctrl__pill-remove' });
-                setIcon(removeBtn.createSpan(), 'x');
-                removeBtn.setAttribute('aria-label', t('modal.hub.removeTag', { tag }));
-                removeBtn.disabled = this.missing;
-                removeBtn.addEventListener('click', () => this.commitTags(this.task.tags.filter(x => x !== tag)));
-            } else {
-                const source = CascadeSource.forTag(this.deps.app, this.task, keys, tag);
-                chip.addClass('task-hub__tag-chip--locked');
-                chip.addClass('task-hub__tag-chip--cascade');
-                chip.setAttribute('aria-label', t('modal.hub.cascadeTagLocked', { source: this.sourceLabel(source) }));
+        // pills（フル幅、行の外）
+        const effectiveTags = getEffectiveTags(this.task);
+        if (effectiveTags.length > 0) {
+            const chipsEl = this.tagsSectionEl.createDiv({ cls: 'tv-ctrl__pills task-hub__tag-pills' });
+            for (const tag of effectiveTags) {
+                const chip = chipsEl.createSpan({ cls: 'tv-ctrl__pill task-hub__tag-chip' });
+                chip.createSpan({ text: `#${tag}` });
+                if (contentTags.has(tag)) {
+                    chip.addClass('task-hub__tag-chip--locked');
+                    chip.setAttribute('aria-label', t('modal.hub.contentTagLocked'));
+                } else if (ownTags.has(tag)) {
+                    const removeBtn = chip.createEl('button', { cls: 'tv-ctrl__pill-remove' });
+                    setIcon(removeBtn.createSpan(), 'x');
+                    removeBtn.setAttribute('aria-label', t('modal.hub.removeTag', { tag }));
+                    removeBtn.disabled = this.missing;
+                    removeBtn.addEventListener('click', () => this.commitTags(this.task.tags.filter(x => x !== tag)));
+                } else {
+                    const source = CascadeSource.forTag(this.deps.app, this.task, keys, tag);
+                    chip.addClass('task-hub__tag-chip--locked');
+                    chip.addClass('task-hub__tag-chip--cascade');
+                    chip.setAttribute('aria-label', t('modal.hub.cascadeTagLocked', { source: this.sourceLabel(source) }));
+                }
             }
         }
 
-        // 追加 input（filter-popover の pill selector と同型: 候補 suggest 付き）
-        const inputWrap = this.tagsSectionEl.createDiv({ cls: 'tv-ctrl__input-wrap task-hub__tag-add-wrap' });
+        // label + input の行（中央揃え — 他フィールドと同じ）
+        const { row } = createFormRow(this.tagsSectionEl, t('modal.hub.tags'), { icon: 'tags' });
+        const inputWrap = row.createDiv({ cls: 'tv-ctrl__input-wrap task-hub__tag-add-wrap tv-form__control' });
         const input = inputWrap.createEl('input', {
             type: 'text',
             placeholder: t('modal.hub.addTag'),
