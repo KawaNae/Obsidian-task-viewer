@@ -88,7 +88,8 @@
 }
 .tv-ctrl .tv-ctrl__input:hover {
     border: none;
-    border-radius: 0;
+    border-radius: inherit;
+    background: transparent;
     box-shadow: none;
 }
 

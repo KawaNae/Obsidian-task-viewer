@@ -139,7 +139,7 @@
    丸い border-radius）を `.tv-ctrl .tv-ctrl__*` と同じ二重セレクタで打ち消す。
    .tv-ctrl__pill（バッジ形状 = border-radius:99px）は流用せず、他の行の
    text-input と揃う四角い見た目にする */
-.tv-ctrl .task-hub__status-pill {
+.tv-ctrl .tv-ctrl__pill.task-hub__status-pill {
     appearance: none;
     -webkit-appearance: none;
     height: auto;
@@ -149,7 +149,11 @@
     border-radius: var(--input-radius, var(--tv-radius-s));
     color: var(--tv-text);
     font-family: inherit;
+    font-size: 1em;
     font-weight: inherit;
+    /* native input は appearance:auto で内部 min-height を持つ。
+       appearance:none の button は持たないので line-height で揃える */
+    line-height: 1.6;
     cursor: pointer;
     gap: 6px;
     padding: 8px 12px;
@@ -172,12 +176,16 @@
     color: var(--tv-text-muted);
 }
 
-/* 共有 tv-ctrl__color-swatch (12px) を hub では一回り大きく */
-.task-hub__color-swatch {
-    flex: 0 0 auto;
+/* swatch: picker ボタンの右、テキスト入力の左にインライン配置 */
+.tv-form__input-with-picker--color .task-hub__color-swatch {
+    position: absolute;
+    left: 44px;
+    top: 50%;
+    transform: translateY(-50%);
     width: 16px;
     height: 16px;
     border-radius: 4px;
+    pointer-events: none;
 }
 
 .task-hub__source {

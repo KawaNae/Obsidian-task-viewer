@@ -22,6 +22,7 @@ export interface DateFieldValues {
 
 export interface DateFieldGroupOptions {
     labels: { start: string; end: string; due: string };
+    icons?: Partial<Record<DateGroupKey, string>>;
     initial: Partial<DateFieldValues>;
     buildOverlayTask: (f: DateFieldValues) => Task;
     getStartHour: () => number;
@@ -73,7 +74,7 @@ export class DateFieldGroup {
         initialDate: string | undefined,
         initialTime: string | undefined,
     ): { dateInput: HTMLInputElement; timeInput: HTMLInputElement } {
-        const { row } = createFormRow(container, label, { dates: true });
+        const { row } = createFormRow(container, label, { dates: true, icon: this.opts.icons?.[group] });
 
         const dateField = row.createDiv({ cls: 'tv-form__field tv-form__field--date' });
         const dateInput = createPickerTextField(dateField, 'date', 'YYYY-MM-DD', initialDate || '');

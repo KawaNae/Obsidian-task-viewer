@@ -63,6 +63,7 @@ export class TaskHubForm {
     private dateGroup: DateFieldGroup;
     private colorInput: HTMLInputElement;
     private colorSwatch: HTMLElement;
+    private nativeColorInput?: HTMLInputElement;
     private linestyleInput: HTMLInputElement;
     private maskInput: HTMLInputElement;
     private styleSourceEls: Partial<Record<'color' | 'linestyle' | 'mask', HTMLElement>> = {};
@@ -108,7 +109,7 @@ export class TaskHubForm {
 
         // --- Status ---
         // filter-popover と同型: pill 表示 + SuggestController（選択で即置換）
-        const { row: statusRow } = createFormRow(c, t('modal.hub.status'));
+        const { row: statusRow } = createFormRow(c, t('modal.hub.status'), { icon: 'circle-check' });
         this.statusPill = statusRow.createEl('button', {
             cls: 'tv-ctrl__pill task-hub__status-pill',
             attr: { type: 'button' },
@@ -155,6 +156,7 @@ export class TaskHubForm {
         const dl = DateFieldGroup.splitDue(this.task.due);
         this.dateGroup = new DateFieldGroup(c, {
             labels: { start: t('modal.start'), end: t('modal.end'), due: t('modal.due') },
+            icons: { start: 'play', end: 'square', due: 'flag' },
             initial: {
                 startDate: this.task.startDate || '',
                 startTime: this.task.startTime || '',
@@ -182,7 +184,7 @@ export class TaskHubForm {
         });
 
         // --- Tags ---
-        const { row: tagsRow } = createFormRow(c, t('modal.hub.tags'), { alignStart: true });
+        const { row: tagsRow } = createFormRow(c, t('modal.hub.tags'), { alignStart: true, icon: 'tags' });
         this.tagsSectionEl = tagsRow.createDiv({ cls: 'task-hub__tags tv-form__control' });
         this.rebuildTagsSection(true);
 
@@ -375,13 +377,39 @@ export class TaskHubForm {
     // ==================== 非時刻プロパティ: color / linestyle / mask ====================
 
     private renderStyleRow(container: HTMLElement, field: 'color' | 'linestyle' | 'mask', label: string): void {
-        const { row } = createFormRow(container, label);
+        const STYLE_ICONS: Record<string, string> = { color: 'palette', linestyle: 'pen-line', mask: 'eye-off' };
+        const { row } = createFormRow(container, label, { icon: STYLE_ICONS[field] });
+
+        let input: HTMLInputElement;
 
         if (field === 'color') {
-            this.colorSwatch = row.createSpan({ cls: 'tv-ctrl__color-swatch task-hub__color-swatch' });
-        }
+            // 日付/時刻 picker と同じ構造: 左端アイコンボタン + native overlay + [swatch]text input
+            const wrapper = row.createDiv({ cls: 'tv-form__input-with-picker tv-form__input-with-picker--color tv-form__control' });
 
-        const input = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
+            const pickerButton = wrapper.createDiv({ cls: 'tv-form__picker-button' });
+            setIcon(pickerButton.createSpan(), 'palette');
+
+            this.nativeColorInput = wrapper.createEl('input', { cls: 'tv-form__native-picker-input' });
+            this.nativeColorInput.type = 'color';
+            this.nativeColorInput.setAttribute('aria-hidden', 'true');
+
+            this.nativeColorInput.addEventListener('click', () => {
+                try { this.nativeColorInput!.showPicker(); } catch { /* iPad: direct tap opens */ }
+            });
+            pickerButton.addEventListener('click', () => {
+                try { this.nativeColorInput!.showPicker(); } catch {
+                    this.nativeColorInput!.focus();
+                    this.nativeColorInput!.click();
+                }
+            });
+
+            // swatch はテキスト入力内の左端にインライン配置
+            this.colorSwatch = wrapper.createSpan({ cls: 'tv-ctrl__color-swatch task-hub__color-swatch' });
+
+            input = wrapper.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow' });
+        } else {
+            input = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
+        }
         input.value = this.task[field] ?? '';
 
         const sourceEl = row.createSpan({ cls: 'task-hub__source' });
@@ -391,6 +419,23 @@ export class TaskHubForm {
         const commit = () => this.commitStyleField(field);
         if (field === 'color') {
             this.colorInput = input;
+            if (this.nativeColorInput) {
+                const nci = this.nativeColorInput;
+                nci.value = this.resolveColorForPicker(input.value);
+                // ドラッグ中は swatch とテキストだけ更新し、nci.value への
+                // 書き戻し（updateColorSwatch 内）を避ける — 書き戻すと
+                // ピッカーの内部状態が壊れるフィードバックループになる
+                nci.addEventListener('input', () => {
+                    input.value = nci.value.replace(/^#/, '');
+                    if (this.colorSwatch) {
+                        this.colorSwatch.style.backgroundColor = nci.value;
+                    }
+                });
+                nci.addEventListener('change', () => {
+                    this.updateColorSwatch();
+                    commit();
+                });
+            }
             this.attachSuggest(input, input, {
                 getCandidates: (q) => (q.trim() === '' ? filterColors('', 20) : filterColors(q)),
                 renderItem: (item, val) => renderColorSuggestion(val, item),
@@ -458,6 +503,26 @@ export class TaskHubForm {
         this.colorSwatch.style.backgroundColor = value
             ? (/^[0-9a-fA-F]{3,6}$/.test(value) ? `#${value}` : value)
             : 'transparent';
+        if (this.nativeColorInput) {
+            this.nativeColorInput.value = this.resolveColorForPicker(value);
+        }
+    }
+
+    private resolveColorForPicker(raw: string): string {
+        const v = raw.trim();
+        if (!v) return '#000000';
+        if (/^[0-9a-fA-F]{6}$/.test(v)) return `#${v}`;
+        if (/^[0-9a-fA-F]{3}$/.test(v)) {
+            return `#${v[0]}${v[0]}${v[1]}${v[1]}${v[2]}${v[2]}`;
+        }
+        // CSS 色名 → canvas で正規化（'red' → '#ff0000'）
+        const ctx = document.createElement('canvas').getContext('2d');
+        if (ctx) {
+            ctx.fillStyle = '#000000';
+            ctx.fillStyle = v;
+            return ctx.fillStyle;
+        }
+        return '#000000';
     }
 
     // ==================== 非時刻プロパティ: custom properties ====================
