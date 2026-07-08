@@ -41,6 +41,7 @@ export class PopoverShell {
     private onCloseCb: (() => void) | null = null;
     private onEscapeCb: (() => void) | null = null;
     private resizeHandler: (() => void) | null = null;
+    private vvResizeHandler: (() => void) | null = null;
     private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
     private pageHideHandler: (() => void) | null = null;
     private extraContains: HTMLElement[] = [];
@@ -65,6 +66,12 @@ export class PopoverShell {
         this.resizeHandler = () => this.reposition();
         hostWin.addEventListener('resize', this.resizeHandler);
 
+        const vv = hostWin.visualViewport;
+        if (vv) {
+            this.vvResizeHandler = () => this.reposition();
+            vv.addEventListener('resize', this.vvResizeHandler);
+        }
+
         // Auto-close when the host window is being unloaded (popout closed).
         // Fires before document destruction so cleanup callbacks still run.
         this.pageHideHandler = () => this.close();
@@ -87,6 +94,10 @@ export class PopoverShell {
         if (this.resizeHandler) {
             this.hostWin.removeEventListener('resize', this.resizeHandler);
             this.resizeHandler = null;
+        }
+        if (this.vvResizeHandler && this.hostWin.visualViewport) {
+            this.hostWin.visualViewport.removeEventListener('resize', this.vvResizeHandler);
+            this.vvResizeHandler = null;
         }
         if (this.pageHideHandler) {
             this.hostWin.removeEventListener('pagehide', this.pageHideHandler);
@@ -168,7 +179,8 @@ function positionElement(el: HTMLElement, anchor: PopoverAnchor, hostWin: Window
     // because positionElement is only invoked after open()/refresh().
     const rect = el.getBoundingClientRect();
     const winW = Math.max(0, hostWin.innerWidth);
-    const winH = Math.max(0, hostWin.innerHeight);
+    const vvH = hostWin.visualViewport?.height ?? hostWin.innerHeight;
+    const winH = Math.max(0, Math.min(hostWin.innerHeight, vvH));
 
     let x: number;
     let y: number;

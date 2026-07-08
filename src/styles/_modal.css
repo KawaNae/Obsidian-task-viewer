@@ -26,38 +26,6 @@
     color: var(--tv-text-muted);
 }
 
-.datetime-input-modal__text-input {
-    padding: 8px 12px;
-    border: 1px solid var(--tv-border);
-    border-radius: var(--tv-radius-s);
-    background-color: var(--tv-bg-input);
-    color: var(--tv-text);
-    font-size: 1em;
-    font-family: var(--tv-font-mono);
-    width: 100%;
-}
-
-.datetime-input-modal__text-input:focus {
-    outline: none;
-    border-color: var(--tv-accent);
-    box-shadow: 0 0 0 2px var(--tv-accent-hover);
-}
-
-.datetime-input-modal__text-input:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.datetime-input-modal__text-input::placeholder {
-    color: var(--tv-text-faint);
-}
-
-/* Invalid state */
-.datetime-input-modal__input--invalid {
-    border-color: var(--tv-text-danger) !important;
-    background-color: var(--tv-danger-bg-subtle);
-}
-
 /* Error message */
 .datetime-input-modal__error {
     color: var(--tv-text-danger);

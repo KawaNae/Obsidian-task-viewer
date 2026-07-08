@@ -11,6 +11,7 @@ import { toDisplayTask, getOriginalTaskId } from '../../services/display/Display
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { PopoverStack } from '../../views/sharedUI/PopoverStack';
+import { KeyboardAwareContainer } from '../../utils/KeyboardAwareContainer';
 import { TaskHubForm, type TaskHubFocusField } from './TaskHubForm';
 
 export interface TaskHubDeps {
@@ -61,6 +62,7 @@ export class TaskHubPanel {
     private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
     /** フォーム内 suggest（SuggestController）が子ポップオーバーを積む先 */
     readonly stack = new PopoverStack();
+    private kbAware: KeyboardAwareContainer | null = null;
 
     constructor(
         private app: App,
@@ -84,6 +86,10 @@ export class TaskHubPanel {
 
         const root = hostDoc.body.createDiv({ cls: 'task-hub tv-ctrl' });
         this.rootEl = root;
+
+        const hostWin = hostDoc.defaultView ?? window;
+        this.kbAware = new KeyboardAwareContainer(root, hostWin);
+        this.kbAware.attach();
 
         const backdrop = root.createDiv({ cls: 'task-hub__backdrop' });
         backdrop.addEventListener('click', () => this.close());
@@ -211,6 +217,8 @@ export class TaskHubPanel {
         if (TaskHubPanel.active === this) TaskHubPanel.active = null;
 
         // 論理破棄（リスナー/購読/renderer）は即時 — 以降パネルは inert
+        this.kbAware?.detach();
+        this.kbAware = null;
         this.stack.closeAll();
         this.unsubscribe?.();
         this.unsubscribe = null;

@@ -94,7 +94,7 @@ export class TaskHubForm {
         this.nameInput = nameSection.createEl('input', {
             type: 'text',
             placeholder: t('modal.taskName'),
-            cls: 'tv-form__text-input',
+            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--mono tv-ctrl__text-input--glow',
         });
         this.nameInput.value = this.task.content ?? '';
         new TaskNameSuggest(this.deps.app, this.nameInput);
@@ -421,9 +421,9 @@ export class TaskHubForm {
         const input = field === 'color' ? this.colorInput : field === 'linestyle' ? this.linestyleInput : this.maskInput;
         const value = input.value.trim();
 
-        input.classList.remove('tv-form__input--invalid');
+        input.classList.remove('tv-ctrl__text-input--invalid');
         if (field === 'linestyle' && value && !VALID_LINE_STYLES.has(value.toLowerCase())) {
-            input.classList.add('tv-form__input--invalid');
+            input.classList.add('tv-ctrl__text-input--invalid');
             return;
         }
 
@@ -573,9 +573,9 @@ export class TaskHubForm {
             const reserved = new Set<string>(Object.values(this.deps.plugin.settings.tvFileKeys));
             reserved.add('tags');
             reserved.add('position');
-            keyInput.classList.remove('tv-form__input--invalid');
+            keyInput.classList.remove('tv-ctrl__text-input--invalid');
             if (reserved.has(key)) {
-                keyInput.classList.add('tv-form__input--invalid');
+                keyInput.classList.add('tv-ctrl__text-input--invalid');
                 this.showFormError(t('modal.hub.reservedKey', { key }));
                 return;
             }

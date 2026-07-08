@@ -284,34 +284,8 @@
 }
 
 .filter-popover .filter-popover__date-input {
-    font-size: var(--font-ui-small);
-    padding: 4px 6px;
-    border: 1px solid var(--tv-border);
-    border-radius: var(--tv-radius-s);
-    background: var(--tv-bg-primary);
-    color: var(--tv-text);
     min-width: 0;
     flex: 1;
-}
-
-.filter-popover .filter-popover__date-input:focus {
-    border-color: var(--tv-accent);
-    outline: none;
-}
-
-.filter-popover .filter-popover__n-input {
-    width: 52px;
-    font-size: var(--font-ui-small);
-    padding: 4px 6px;
-    border: 1px solid var(--tv-border);
-    border-radius: var(--tv-radius-s);
-    background: var(--tv-bg-primary);
-    color: var(--tv-text);
-}
-
-.filter-popover .filter-popover__n-input:focus {
-    border-color: var(--tv-accent);
-    outline: none;
 }
 
 /* Number Value Selector (Length filter) */

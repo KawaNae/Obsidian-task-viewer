@@ -130,7 +130,7 @@ export class DateFieldGroup {
             this.endDateInput, this.endTimeInput,
             this.dueDateInput, this.dueTimeInput,
         ];
-        inputs.forEach(el => el?.classList.remove('tv-form__input--invalid'));
+        inputs.forEach(el => el?.classList.remove('tv-ctrl__text-input--invalid'));
         if (this.errorEl) this.errorEl.style.display = 'none';
 
         const fields = this.collect();
@@ -149,7 +149,7 @@ export class DateFieldGroup {
             endDate: this.endDateInput, endTime: this.endTimeInput,
             dueDate: this.dueDateInput, dueTime: this.dueTimeInput,
         };
-        inputMap[err.field]?.classList.add('tv-form__input--invalid');
+        inputMap[err.field]?.classList.add('tv-ctrl__text-input--invalid');
         if (this.errorEl) {
             this.errorEl.empty();
             this.errorEl.setText(err.message);

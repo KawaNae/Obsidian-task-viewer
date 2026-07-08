@@ -63,7 +63,7 @@ export function createPickerTextField(
     const textInput = wrapper.createEl('input', {
         type: 'text',
         placeholder,
-        cls: 'tv-form__text-input'
+        cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--mono tv-ctrl__text-input--glow'
     });
     textInput.value = initialValue;
 

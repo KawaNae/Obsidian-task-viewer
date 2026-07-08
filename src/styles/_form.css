@@ -96,28 +96,11 @@
     color: var(--tv-text-muted);
 }
 
-/* input 系ルールは `.tv-ctrl .tv-form__*` の二重セレクタで詳細度を上げる
-   （_controls.css と同じ理由: iOS/Obsidian mobile が input[type=text] に
-   丸い border-radius 等を既定で与え、単一クラスでは負ける） */
-.tv-ctrl .tv-form__text-input {
-    padding: 8px 12px;
-    border: 1px solid var(--tv-border);
-    border-radius: var(--tv-radius-s);
-    /* tv-ctrl__text-input（色/線種/マスク/プロパティ欄）と背景色を揃える。
-       --tv-bg-input（form-field token）はテーマによって --tv-bg-primary と
-       異なる色になり、同一フォーム内で入力欄の背景がまちまちに見えるため */
-    background-color: var(--tv-bg-primary);
-    color: var(--tv-text);
-    font-size: 1em;
-    font-family: var(--tv-font-mono);
-    width: 100%;
-}
-
 .tv-form__input-with-picker {
     position: relative;
 }
 
-.tv-ctrl .tv-form__input-with-picker .tv-form__text-input {
+.tv-ctrl .tv-form__input-with-picker .tv-ctrl__text-input {
     padding-left: 46px;
     padding-right: 28px;
 }
@@ -220,16 +203,6 @@
     height: 12px;
 }
 
-.tv-ctrl .tv-form__text-input:focus {
-    outline: none;
-    border-color: var(--tv-accent);
-    box-shadow: 0 0 0 2px var(--tv-accent-hover);
-}
-
-.tv-ctrl .tv-form__text-input::placeholder {
-    color: var(--tv-text-faint);
-}
-
 /* Task name suggest hint footer */
 .task-name-suggest__footer {
     padding: 4px 8px;
@@ -237,12 +210,6 @@
     color: var(--tv-text-faint);
     border-top: 1px solid var(--tv-border);
     text-align: center;
-}
-
-/* Invalid state */
-.tv-ctrl .tv-form__input--invalid {
-    border-color: var(--tv-text-danger) !important;
-    background-color: var(--tv-danger-bg-subtle);
 }
 
 /* Error message */

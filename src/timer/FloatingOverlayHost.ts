@@ -31,6 +31,7 @@ export class FloatingOverlayHost {
     private win: Window | null = null;
     private doc: Document | null = null;
     private resizeHandler: (() => void) | null = null;
+    private vvResizeHandler: (() => void) | null = null;
     private dragging = false;
     private dragOffset = { x: 0, y: 0 };
     private onDragEndCb: (() => void) | null = null;
@@ -56,6 +57,12 @@ export class FloatingOverlayHost {
         this.setupDrag();
         this.resizeHandler = () => this.clampToViewport();
         win.addEventListener('resize', this.resizeHandler);
+
+        const vv = win.visualViewport;
+        if (vv) {
+            this.vvResizeHandler = () => this.clampToViewport();
+            vv.addEventListener('resize', this.vvResizeHandler);
+        }
         // Clamp once after attach in case the new viewport is smaller than
         // the old one and the user-position would land off-screen.
         // Defer to next frame so layout (size) is stable.
@@ -67,6 +74,10 @@ export class FloatingOverlayHost {
         if (this.win && this.resizeHandler) {
             this.win.removeEventListener('resize', this.resizeHandler);
         }
+        if (this.win?.visualViewport && this.vvResizeHandler) {
+            this.win.visualViewport.removeEventListener('resize', this.vvResizeHandler);
+        }
+        this.vvResizeHandler = null;
         if (this.container) {
             this.container.remove();
         }
@@ -105,7 +116,8 @@ export class FloatingOverlayHost {
         if (!this.container || !this.win || !this.userPosition) return;
         const rect = this.container.getBoundingClientRect();
         const winW = Math.max(rect.width + 16, this.win.innerWidth);
-        const winH = Math.max(rect.height + 16, this.win.innerHeight);
+        const vvH = this.win.visualViewport?.height ?? this.win.innerHeight;
+        const winH = Math.max(rect.height + 16, Math.min(this.win.innerHeight, vvH));
         let { left, top } = this.userPosition;
         if (left + rect.width > winW - 8) left = winW - rect.width - 8;
         if (top + rect.height > winH - 8) top = winH - rect.height - 8;

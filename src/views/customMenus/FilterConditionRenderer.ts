@@ -365,9 +365,10 @@ export class FilterConditionRenderer {
             // Number input for nextNDays
             if (relVal.preset === 'nextNDays') {
                 const nInput = container.createEl('input', {
-                    cls: 'filter-popover__n-input',
+                    cls: 'tv-ctrl__text-input',
                     type: 'number',
                 });
+                nInput.style.width = '52px';
                 nInput.value = String(relVal.n ?? 7);
                 nInput.min = '1';
                 nInput.placeholder = 'N';
@@ -382,7 +383,7 @@ export class FilterConditionRenderer {
         } else {
             // Absolute date: native date input
             const dateInput = container.createEl('input', {
-                cls: 'filter-popover__date-input',
+                cls: 'tv-ctrl__text-input filter-popover__date-input',
                 type: 'date',
             });
             dateInput.value = (typeof dateVal === 'string' ? dateVal : '') || getToday();
@@ -436,9 +437,10 @@ export class FilterConditionRenderer {
 
         // Number input
         const input = container.createEl('input', {
-            cls: 'filter-popover__n-input',
+            cls: 'tv-ctrl__text-input',
             type: 'number',
         });
+        input.style.width = '52px';
         input.value = String(condition.value);
         input.min = '0';
         input.step = unit === 'hours' ? '0.5' : '1';

@@ -71,7 +71,7 @@ export class IntervalTemplateCreator {
     private openPopover(anchorEl: HTMLElement): void {
         this.stack.openRoot({
             anchor: { kind: 'element', element: anchorEl },
-            className: 'template-creator',
+            className: 'template-creator tv-ctrl',
             build: (el) => {
                 this.rootEl = el;
                 this.renderContent();
@@ -122,7 +122,7 @@ export class IntervalTemplateCreator {
         const field = parent.createDiv('template-creator__field');
         field.createEl('label', { cls: 'template-creator__label', text: t('timer.templateName') });
         const input = field.createEl('input', {
-            cls: 'template-creator__input',
+            cls: 'tv-ctrl__text-input',
             type: 'text',
             placeholder: 'Template name',
         });
@@ -137,7 +137,7 @@ export class IntervalTemplateCreator {
         const row = field.createDiv('template-creator__icon-row');
 
         const input = row.createEl('input', {
-            cls: 'template-creator__input',
+            cls: 'tv-ctrl__text-input',
             type: 'text',
             placeholder: 'rotate-cw',
         });
@@ -244,7 +244,7 @@ export class IntervalTemplateCreator {
         repeatWrap.createSpan({ cls: 'template-creator__repeat-label', text: 'Repeat' });
         const repeatInput = this.createNumericInput(repeatWrap, {
             value: group.repeatCount, min: 0, placeholder: '1',
-            cls: 'template-creator__repeat-input',
+            cls: 'tv-ctrl__text-input template-creator__repeat-input',
             onChange: (v) => { group.repeatCount = v; },
         });
 
@@ -279,7 +279,7 @@ export class IntervalTemplateCreator {
 
         // Label
         const labelInput = row.createEl('input', {
-            cls: 'template-creator__input template-creator__seg-label',
+            cls: 'tv-ctrl__text-input template-creator__seg-label',
             type: 'text',
             placeholder: 'Label',
         });
@@ -377,7 +377,7 @@ export class IntervalTemplateCreator {
         opts: { value: number; min?: number; max?: number; placeholder?: string; cls?: string; onChange: (v: number) => void },
     ): HTMLInputElement {
         const input = parent.createEl('input', {
-            cls: opts.cls ?? 'template-creator__dur-input',
+            cls: opts.cls ?? 'tv-ctrl__text-input template-creator__dur-input',
             type: 'number',
         });
         input.value = String(opts.value);
