@@ -157,6 +157,17 @@ export class PopoverShell {
     reposition(): void {
         if (!this.el || !this.hostWin || !this.anchor) return;
         positionElement(this.el, this.anchor, this.hostWin);
+
+        // maxHeight クランプで popover が縮んだとき、フォーカス中の入力が
+        // 内部スクロールの折り返しの下に隠れることがある（mobile はキーボード
+        // 表示でも browser が自動スクロールしない）。nearest なので見えて
+        // いれば no-op。
+        const active = this.hostDoc?.activeElement;
+        if (active && this.el.contains(active) &&
+            (active instanceof HTMLInputElement ||
+             active instanceof HTMLTextAreaElement)) {
+            active.scrollIntoView({ block: 'nearest' });
+        }
     }
 
     contains(target: Node): boolean {
@@ -195,11 +206,20 @@ function resolveHost(anchor: PopoverAnchor): { hostDoc: Document; hostWin: Windo
 function positionElement(el: HTMLElement, anchor: PopoverAnchor, hostWin: Window): void {
     // Element must be in DOM with content to measure. Caller guarantees this
     // because positionElement is only invoked after open()/refresh().
-    const rect = el.getBoundingClientRect();
     const winW = Math.max(0, hostWin.innerWidth);
     // keyboardTop は visualViewport と Capacitor（Obsidian mobile）の両検知源
     // を統合したキーボード上端。キーボードなしなら innerHeight に一致する。
     const winH = Math.max(0, Math.min(hostWin.innerHeight, keyboardTop(hostWin)));
+
+    // 自然高さ（CSS max-height まで）が利用可能高さを超える場合のみ inline
+    // max-height で縮める。毎回リセットしてから測ることで、キーボードが
+    // 閉じたときの reposition で自然高さに戻る。
+    el.style.maxHeight = '';
+    if (el.getBoundingClientRect().height > winH - 16) {
+        el.style.maxHeight = `${winH - 16}px`;
+    }
+
+    const rect = el.getBoundingClientRect();
 
     let x: number;
     let y: number;

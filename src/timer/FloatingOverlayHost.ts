@@ -15,6 +15,8 @@
  * new viewport in case the destination window is smaller).
  */
 
+import { trackKeyboard, keyboardTop } from '../utils/KeyboardState';
+
 const DEFAULT_OFFSET = 24;
 
 export interface FloatingOverlayHostOptions {
@@ -32,6 +34,7 @@ export class FloatingOverlayHost {
     private doc: Document | null = null;
     private resizeHandler: (() => void) | null = null;
     private vvResizeHandler: (() => void) | null = null;
+    private kbHandler: (() => void) | null = null;
     private dragging = false;
     private dragOffset = { x: 0, y: 0 };
     private onDragEndCb: (() => void) | null = null;
@@ -58,11 +61,21 @@ export class FloatingOverlayHost {
         this.resizeHandler = () => this.clampToViewport();
         win.addEventListener('resize', this.resizeHandler);
 
+        // 仮想キーボード退避: 被る分だけ transform で持ち上げ、閉じたら復元。
+        // clampToViewport（left/top の恒久書き換え）とは独立に動く。
+        // 検知は KeyboardState と同じ二本立て（vv = Windows/Safari、
+        // Capacitor イベント = Obsidian mobile）。
+        trackKeyboard(win);
+        this.kbHandler = () => this.avoidKeyboard();
         const vv = win.visualViewport;
         if (vv) {
-            this.vvResizeHandler = () => this.clampToViewport();
+            this.vvResizeHandler = () => this.avoidKeyboard();
             vv.addEventListener('resize', this.vvResizeHandler);
         }
+        win.addEventListener('keyboardWillShow', this.kbHandler);
+        win.addEventListener('keyboardDidShow', this.kbHandler);
+        win.addEventListener('keyboardWillHide', this.kbHandler);
+        win.addEventListener('keyboardDidHide', this.kbHandler);
         // Clamp once after attach in case the new viewport is smaller than
         // the old one and the user-position would land off-screen.
         // Defer to next frame so layout (size) is stable.
@@ -78,6 +91,13 @@ export class FloatingOverlayHost {
             this.win.visualViewport.removeEventListener('resize', this.vvResizeHandler);
         }
         this.vvResizeHandler = null;
+        if (this.win && this.kbHandler) {
+            this.win.removeEventListener('keyboardWillShow', this.kbHandler);
+            this.win.removeEventListener('keyboardDidShow', this.kbHandler);
+            this.win.removeEventListener('keyboardWillHide', this.kbHandler);
+            this.win.removeEventListener('keyboardDidHide', this.kbHandler);
+        }
+        this.kbHandler = null;
         if (this.container) {
             this.container.remove();
         }
@@ -112,12 +132,31 @@ export class FloatingOverlayHost {
         this.onDragEndCb = cb;
     }
 
+    /**
+     * キーボードが widget に被る分だけ transform で持ち上げる。被らなければ
+     * transform なし。left/top（ドラッグ座標）は触らないので、キーボードが
+     * 閉じれば自然に元の位置へ戻る。
+     */
+    private avoidKeyboard(): void {
+        if (!this.container || !this.win) return;
+        // 素の位置で測るため一旦リセット（同期処理内なので描画は挟まらない）
+        this.container.style.transform = '';
+        const kbTop = keyboardTop(this.win);
+        const rect = this.container.getBoundingClientRect();
+        // 上端が画面外に出ない範囲で持ち上げる
+        const shift = Math.min(rect.bottom - kbTop + 8, rect.top - 8);
+        if (shift > 0) {
+            this.container.style.transform = `translateY(-${shift}px)`;
+        }
+    }
+
     clampToViewport(): void {
         if (!this.container || !this.win || !this.userPosition) return;
         const rect = this.container.getBoundingClientRect();
         const winW = Math.max(rect.width + 16, this.win.innerWidth);
-        const vvH = this.win.visualViewport?.height ?? this.win.innerHeight;
-        const winH = Math.max(rect.height + 16, Math.min(this.win.innerHeight, vvH));
+        // キーボードは avoidKeyboard が transform で退避するため、ここでは
+        // 見ない（vv を混ぜると Windows でドラッグ座標が恒久的に書き換わる）
+        const winH = Math.max(rect.height + 16, this.win.innerHeight);
         let { left, top } = this.userPosition;
         if (left + rect.width > winW - 8) left = winW - rect.width - 8;
         if (top + rect.height > winH - 8) top = winH - rect.height - 8;
@@ -157,7 +196,12 @@ export class FloatingOverlayHost {
             }
 
             this.dragging = true;
+            // キーボード退避 transform を除いた layout 座標で掴む（transform は
+            // ドラッグ中も維持され、drag 終了時に再計算される）
+            const t = this.container!.style.transform;
+            this.container!.style.transform = '';
             const rect = this.container!.getBoundingClientRect();
+            this.container!.style.transform = t;
             this.dragOffset.x = e.clientX - rect.left;
             this.dragOffset.y = e.clientY - rect.top;
             this.container!.style.cursor = 'grabbing';
@@ -182,6 +226,7 @@ export class FloatingOverlayHost {
                 // Capture may already be released if pointer left the window.
             }
             this.clampToViewport();
+            this.avoidKeyboard();
             this.onDragEndCb?.();
         };
         header.addEventListener('pointerup', endDrag);
