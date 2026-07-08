@@ -532,8 +532,9 @@ export class TaskHubForm {
             }
         }
 
-        // 追加行 — key input がラベル列（tv-form__control--key）を占める
-        const addRow = this.propsSectionEl.createDiv({ cls: 'tv-form__row task-hub__prop-add' });
+        // 追加行 — createFormRow で空ラベルを置き、値 input の左端を既存行と揃える
+        const { row: addRow } = createFormRow(this.propsSectionEl, '');
+        addRow.addClass('task-hub__prop-add');
         const keyInput = addRow.createEl('input', {
             type: 'text', placeholder: t('modal.hub.propertyKey'),
             cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control--key',

@@ -22,7 +22,7 @@
     font-size: var(--font-ui-small);
     padding: 4px 8px;
     border: 1px solid var(--tv-border);
-    border-radius: var(--tv-radius-s);
+    border-radius: var(--input-radius, var(--tv-radius-s));
     background: var(--tv-bg-input);
     color: var(--tv-text);
     width: 100%;
@@ -63,7 +63,7 @@
     display: flex;
     align-items: center;
     border: 1px solid var(--tv-border);
-    border-radius: var(--tv-radius-s);
+    border-radius: var(--input-radius, var(--tv-radius-s));
     background: var(--tv-bg-input);
     min-width: 0;
 }

@@ -146,7 +146,7 @@
     border: 1px solid var(--tv-border);
     background: var(--tv-bg-input);
     box-shadow: none;
-    border-radius: var(--tv-radius-s);
+    border-radius: var(--input-radius, var(--tv-radius-s));
     color: var(--tv-text);
     font-family: inherit;
     font-weight: inherit;
