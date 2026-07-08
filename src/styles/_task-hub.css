@@ -141,7 +141,7 @@
     box-shadow: none;
     border-radius: var(--tv-radius-s);
     color: var(--tv-text);
-    font-family: var(--tv-font-mono);
+    font-family: inherit;
     font-weight: inherit;
     cursor: pointer;
     gap: 6px;

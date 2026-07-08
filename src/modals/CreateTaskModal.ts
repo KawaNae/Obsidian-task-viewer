@@ -77,7 +77,7 @@ export class CreateTaskModal extends Modal {
         this.nameInput = nameSection.createEl('input', {
             type: 'text',
             placeholder: t('modal.taskName'),
-            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--mono tv-ctrl__text-input--glow',
+            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow',
         });
         this.nameInput.value = this.result.content ?? '';
         new TaskNameSuggest(this.app, this.nameInput);

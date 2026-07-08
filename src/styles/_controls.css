@@ -49,10 +49,6 @@
     font-size: 1em;
 }
 
-.tv-ctrl .tv-ctrl__text-input--mono {
-    font-family: var(--tv-font-mono);
-}
-
 .tv-ctrl .tv-ctrl__text-input--glow:focus {
     box-shadow: 0 0 0 2px var(--tv-accent-hover);
 }
@@ -80,7 +76,6 @@
 .tv-ctrl .tv-ctrl__input {
     flex: 1;
     font-size: 1em;
-    font-family: var(--tv-font-mono);
     padding: 8px 12px;
     border: none;
     border-radius: 0;

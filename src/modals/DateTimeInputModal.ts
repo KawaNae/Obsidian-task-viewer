@@ -60,7 +60,7 @@ export class DateTimeInputModal extends Modal {
         this.dateInput = dateContainer.createEl('input', {
             type: 'text',
             placeholder: 'YYYY-MM-DD',
-            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--mono tv-ctrl__text-input--glow'
+            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow'
         });
         this.dateInput.value = this.currentValue.date || '';
         this.dateInput.addEventListener('input', () => this.validateInputs());
@@ -70,7 +70,7 @@ export class DateTimeInputModal extends Modal {
         this.timeInput = timeContainer.createEl('input', {
             type: 'text',
             placeholder: 'HH:mm',
-            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--mono tv-ctrl__text-input--glow'
+            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow'
         });
         this.timeInput.value = this.currentValue.time || '';
         this.timeInput.addEventListener('input', () => this.validateInputs());
