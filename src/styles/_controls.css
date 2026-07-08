@@ -23,7 +23,7 @@
     padding: 4px 8px;
     border: 1px solid var(--tv-border);
     border-radius: var(--tv-radius-s);
-    background: var(--tv-bg-primary);
+    background: var(--tv-bg-input);
     color: var(--tv-text);
     width: 100%;
     min-width: 0;
@@ -64,7 +64,7 @@
     align-items: center;
     border: 1px solid var(--tv-border);
     border-radius: var(--tv-radius-s);
-    background: var(--tv-bg-primary);
+    background: var(--tv-bg-input);
     min-width: 0;
 }
 .tv-ctrl .tv-ctrl__input-wrap:focus-within {

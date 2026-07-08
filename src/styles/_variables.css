@@ -222,3 +222,9 @@ body.theme-dark {
     --tv-shadow-a-medium: 0.28;
     --tv-shadow-a-light: 0.22;
 }
+
+/* Obsidian mobile はダークモードで --background-modifier-form-field を
+   #363636 に上書きする。デスクトップ（#2a2a2a）と揃えて統一する */
+body.is-mobile.theme-dark {
+    --tv-bg-input: #2a2a2a;
+}

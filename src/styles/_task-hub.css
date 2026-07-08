@@ -144,7 +144,7 @@
     -webkit-appearance: none;
     height: auto;
     border: 1px solid var(--tv-border);
-    background: var(--tv-bg-primary);
+    background: var(--tv-bg-input);
     box-shadow: none;
     border-radius: var(--tv-radius-s);
     color: var(--tv-text);
