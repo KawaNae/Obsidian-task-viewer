@@ -21,6 +21,7 @@ import { ColorSuggest } from './suggest/color/ColorSuggest';
 import { LineStyleSuggest } from './suggest/line/LineStyleSuggest';
 import { PropertySuggestObserver } from './suggest/PropertySuggestObserver';
 import { DateUtils } from './utils/DateUtils';
+import { untrackAllKeyboards } from './utils/KeyboardState';
 import { registerWeekStartLocales } from './utils/momentWeekLocale';
 import { AudioUtils } from './timer/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
@@ -752,6 +753,7 @@ export default class TaskViewerPlugin extends Plugin {
         this.logManager?.stop();
         this.logStorage?.close();
         this.taskMenuCleanup?.();
+        untrackAllKeyboards();
         this.taskIndex?.dispose();
         AudioUtils.dispose();
         document.body.classList.remove('task-viewer-global-styles');

@@ -95,6 +95,7 @@ export class TaskHubPanel {
         backdrop.addEventListener('click', () => this.close());
 
         const panel = root.createDiv({ cls: 'task-hub__panel' });
+        if (this.kbAware) this.kbAware.scrollTarget = panel;
 
         const closeBtn = panel.createEl('button', { cls: 'task-hub__close' });
         setIcon(closeBtn.createSpan(), 'x');

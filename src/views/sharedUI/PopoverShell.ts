@@ -12,6 +12,7 @@
  * explicitly, which prevents the popout-blindness regression where a popover
  * leaks back to the main window.
  */
+import { trackKeyboard, keyboardTop } from '../../utils/KeyboardState';
 
 export type PopoverAnchor =
     | { kind: 'element'; element: HTMLElement; placement?: 'below' }
@@ -42,6 +43,7 @@ export class PopoverShell {
     private onEscapeCb: (() => void) | null = null;
     private resizeHandler: (() => void) | null = null;
     private vvResizeHandler: (() => void) | null = null;
+    private kbHandler: (() => void) | null = null;
     private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
     private pageHideHandler: (() => void) | null = null;
     private extraContains: HTMLElement[] = [];
@@ -72,6 +74,15 @@ export class PopoverShell {
             vv.addEventListener('resize', this.vvResizeHandler);
         }
 
+        // Obsidian mobile: キーボード開閉は visualViewport に現れず Capacitor
+        // イベントのみ（KeyboardState 参照）。開閉に追従して上下反転し直す。
+        trackKeyboard(hostWin);
+        this.kbHandler = () => this.reposition();
+        hostWin.addEventListener('keyboardWillShow', this.kbHandler);
+        hostWin.addEventListener('keyboardDidShow', this.kbHandler);
+        hostWin.addEventListener('keyboardWillHide', this.kbHandler);
+        hostWin.addEventListener('keyboardDidHide', this.kbHandler);
+
         // Auto-close when the host window is being unloaded (popout closed).
         // Fires before document destruction so cleanup callbacks still run.
         this.pageHideHandler = () => this.close();
@@ -98,6 +109,13 @@ export class PopoverShell {
         if (this.vvResizeHandler && this.hostWin.visualViewport) {
             this.hostWin.visualViewport.removeEventListener('resize', this.vvResizeHandler);
             this.vvResizeHandler = null;
+        }
+        if (this.kbHandler) {
+            this.hostWin.removeEventListener('keyboardWillShow', this.kbHandler);
+            this.hostWin.removeEventListener('keyboardDidShow', this.kbHandler);
+            this.hostWin.removeEventListener('keyboardWillHide', this.kbHandler);
+            this.hostWin.removeEventListener('keyboardDidHide', this.kbHandler);
+            this.kbHandler = null;
         }
         if (this.pageHideHandler) {
             this.hostWin.removeEventListener('pagehide', this.pageHideHandler);
@@ -179,8 +197,9 @@ function positionElement(el: HTMLElement, anchor: PopoverAnchor, hostWin: Window
     // because positionElement is only invoked after open()/refresh().
     const rect = el.getBoundingClientRect();
     const winW = Math.max(0, hostWin.innerWidth);
-    const vvH = hostWin.visualViewport?.height ?? hostWin.innerHeight;
-    const winH = Math.max(0, Math.min(hostWin.innerHeight, vvH));
+    // keyboardTop は visualViewport と Capacitor（Obsidian mobile）の両検知源
+    // を統合したキーボード上端。キーボードなしなら innerHeight に一致する。
+    const winH = Math.max(0, Math.min(hostWin.innerHeight, keyboardTop(hostWin)));
 
     let x: number;
     let y: number;
