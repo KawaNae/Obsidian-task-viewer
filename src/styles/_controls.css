@@ -74,12 +74,14 @@
 .tv-ctrl .tv-ctrl__input-wrap:focus-within {
     border-color: var(--tv-accent);
     outline: none;
+    box-shadow: 0 0 0 2px var(--tv-accent-hover);
 }
 
 .tv-ctrl .tv-ctrl__input {
     flex: 1;
-    font-size: var(--font-ui-small);
-    padding: 4px 8px;
+    font-size: 1em;
+    font-family: var(--tv-font-mono);
+    padding: 8px 12px;
     border: none;
     border-radius: 0;
     background: transparent;

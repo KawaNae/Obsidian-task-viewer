@@ -381,7 +381,7 @@ export class TaskHubForm {
             this.colorSwatch = row.createSpan({ cls: 'tv-ctrl__color-swatch task-hub__color-swatch' });
         }
 
-        const input = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-form__control' });
+        const input = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--mono tv-ctrl__text-input--glow tv-form__control' });
         input.value = this.task[field] ?? '';
 
         const sourceEl = row.createSpan({ cls: 'task-hub__source' });
@@ -487,7 +487,7 @@ export class TaskHubForm {
             const { row } = createFormRow(this.propsSectionEl, key);
             if (!isOwn) row.addClass('task-hub__row--cascade');
 
-            const valueInput = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-form__control' });
+            const valueInput = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--mono tv-ctrl__text-input--glow tv-form__control' });
             valueInput.value = pv.value;
             valueInput.disabled = this.missing || arrayReadOnly;
             if (arrayReadOnly) valueInput.setAttribute('aria-label', t('modal.hub.arrayReadOnly'));
@@ -536,11 +536,11 @@ export class TaskHubForm {
         const addRow = this.propsSectionEl.createDiv({ cls: 'tv-form__row task-hub__prop-add' });
         const keyInput = addRow.createEl('input', {
             type: 'text', placeholder: t('modal.hub.propertyKey'),
-            cls: 'tv-ctrl__text-input tv-form__control--key',
+            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--mono tv-ctrl__text-input--glow tv-form__control--key',
         });
         const valueInput = addRow.createEl('input', {
             type: 'text', placeholder: t('modal.hub.propertyValue'),
-            cls: 'tv-ctrl__text-input tv-form__control',
+            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--mono tv-ctrl__text-input--glow tv-form__control',
         });
         keyInput.disabled = this.missing;
         valueInput.disabled = this.missing;
