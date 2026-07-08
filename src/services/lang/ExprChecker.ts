@@ -69,6 +69,8 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[]): 
             const et = checkExpr(expr.else, env, diagnostics);
             if (tt === 'error' || et === 'error') return 'error';
             if (tt === et) return tt;
+            if (tt === 'none') return et;
+            if (et === 'none') return tt;
             if (isDatishType(tt) && isDatishType(et)) return 'datish';
             diagnostics.push(error('type.branch-mismatch', `Conditional branches have different types (${tt} vs ${et})`, expr.span, { thenType: tt, elseType: et }));
             return 'error';
@@ -124,6 +126,11 @@ function checkBinary(
         if (op === '+' && lt === 'duration' && isDatishType(rt)) return rt;
         if (lt === 'duration' && rt === 'duration') return 'duration';
         if (lt === 'number' && rt === 'number') return 'number';
+        if ((lt === 'time' && rt === 'duration') || (lt === 'duration' && rt === 'time')) {
+            return fail('type.time-arithmetic',
+                'Time arithmetic is not supported — apply duration to a date first: time(start + 2h)',
+                { left: lt, right: rt });
+        }
         // date + time attaches a time-of-day. Only plain dates qualify —
         // adding a time to a datetime would be ambiguous (add vs replace),
         // so datetime/datish operands must be truncated first via date(x).

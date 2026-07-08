@@ -36,9 +36,13 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
         }
     }
 
-    if (program.until && !isValidDateString(program.until.date)) {
-        diagnostics.push(error('flow.bad-date', `'${program.until.date}' is not a valid calendar date`, program.until.span,
-            { date: program.until.date }));
+    if (program.until) {
+        const t = checkExpr(program.until.expr, FLOW_TYPE_ENV, diagnostics);
+        if (t !== 'error' && !isDatishType(t)) {
+            diagnostics.push(error('type.until-not-datish',
+                `until() expects a date or datetime expression, got ${t}`,
+                program.until.expr.span, { actual: t }));
+        }
     }
 
     if (program.schedule?.kind === 'at') {
@@ -50,6 +54,7 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
     }
 
     if (program.sets) {
+        const TIME_FIELDS: readonly string[] = ['startTime', 'endTime', 'dueTime'];
         for (const field of SET_FIELD_ORDER) {
             const node = program.sets[field];
             if (!node) continue;
@@ -57,13 +62,20 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
             if (t === 'error') continue;
             const fn = setHeadName(field);
             if (field === 'content') {
-                if (t !== 'string') {
+                if (t !== 'string' && t !== 'none') {
                     diagnostics.push(error('type.set-content-not-string',
-                        `${fn}(...) expects string, got ${t}`, node.expr.span, { fn, actual: t }));
+                        `${fn}(...) expects string or none, got ${t}`, node.expr.span, { fn, actual: t }));
                 }
-            } else if (!isDatishType(t)) {
-                diagnostics.push(error('type.set-date-mismatch',
-                    `${fn}(...) expects date or datetime, got ${t}`, node.expr.span, { fn, actual: t }));
+            } else if (TIME_FIELDS.includes(field)) {
+                if (t !== 'time' && t !== 'none') {
+                    diagnostics.push(error('type.set-time-mismatch',
+                        `${fn}(...) expects time or none, got ${t}`, node.expr.span, { fn, actual: t }));
+                }
+            } else {
+                if (!isDatishType(t) && t !== 'none') {
+                    diagnostics.push(error('type.set-date-mismatch',
+                        `${fn}(...) expects date, datetime or none, got ${t}`, node.expr.span, { fn, actual: t }));
+                }
             }
         }
     }
@@ -75,10 +87,4 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
                 program.move.target.span, { actual: t }));
         }
     }
-}
-
-function isValidDateString(s: string): boolean {
-    const [y, m, d] = s.split('-').map(n => parseInt(n, 10));
-    const date = new Date(y, m - 1, d);
-    return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
 }

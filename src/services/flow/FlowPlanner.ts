@@ -2,10 +2,9 @@ import { differenceInCalendarDays } from 'date-fns';
 import { Task, TaskFlow } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { PropName } from '../lang/ExprAst';
-import { EvalContext } from '../lang/ExprEvaluator';
-import { evalExpr } from '../lang/ExprEvaluator';
+import { EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
 import { EvalHost } from '../lang/functions';
-import { Value, parseDateStr, valueToDisplay } from '../lang/Value';
+import { Value, isDatishValue, parseDateStr, valueToDisplay } from '../lang/Value';
 import { FlowProgram, SET_FIELD_ORDER } from './FlowAst';
 import { FlowEffect } from './FlowEffects';
 import { flowRaws, joinSegments } from './FlowSegments';
@@ -47,7 +46,15 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
         const anchor = resolveAnchor(task);
         const next = nextOccurrence(program.schedule, anchor, { today: deps.today, now: deps.now }, preCtx);
 
-        const withinUntil = !program.until || next.date <= program.until.date;
+        let withinUntil = true;
+        if (program.until) {
+            const untilVal = evalExpr(program.until.expr, preCtx);
+            if (!isDatishValue(untilVal)) {
+                throw new EvalError(`until() must produce a date or datetime, got ${untilVal.type}`, program.until.expr.span);
+            }
+            const untilDate = untilVal.type === 'date' ? untilVal.value : untilVal.date;
+            withinUntil = next.date <= untilDate;
+        }
         const hasLife = !program.lifetime || program.lifetime.count >= 1;
 
         if (withinUntil && hasLife) {
@@ -147,10 +154,13 @@ function applySet(newTask: Task, program: FlowProgram, deps: FlowPlanDeps): void
     for (const { field, value } of results) {
         switch (field) {
             case 'content':
-                newTask.content = valueToDisplay(value);
+                newTask.content = value.type === 'none' ? '' : valueToDisplay(value);
                 break;
             case 'start':
-                if (value.type === 'datetime') {
+                if (value.type === 'none') {
+                    newTask.startDate = undefined;
+                    newTask.startTime = undefined;
+                } else if (value.type === 'datetime') {
                     newTask.startDate = value.date;
                     newTask.startTime = value.time;
                 } else if (value.type === 'date') {
@@ -158,8 +168,18 @@ function applySet(newTask: Task, program: FlowProgram, deps: FlowPlanDeps): void
                     newTask.startTime = undefined;
                 }
                 break;
+            case 'startTime':
+                if (value.type === 'none') {
+                    newTask.startTime = undefined;
+                } else if (value.type === 'time' && newTask.startDate) {
+                    newTask.startTime = value.value;
+                }
+                break;
             case 'end':
-                if (value.type === 'datetime') {
+                if (value.type === 'none') {
+                    newTask.endDate = undefined;
+                    newTask.endTime = undefined;
+                } else if (value.type === 'datetime') {
                     newTask.endDate = value.date;
                     newTask.endTime = value.time;
                 } else if (value.type === 'date') {
@@ -167,11 +187,30 @@ function applySet(newTask: Task, program: FlowProgram, deps: FlowPlanDeps): void
                     newTask.endTime = undefined;
                 }
                 break;
+            case 'endTime':
+                if (value.type === 'none') {
+                    newTask.endTime = undefined;
+                } else if (value.type === 'time' && newTask.endDate) {
+                    newTask.endTime = value.value;
+                }
+                break;
             case 'due':
-                if (value.type === 'datetime') {
+                if (value.type === 'none') {
+                    newTask.due = undefined;
+                } else if (value.type === 'datetime') {
                     newTask.due = `${value.date}T${value.time}`;
                 } else if (value.type === 'date') {
                     newTask.due = value.value;
+                }
+                break;
+            case 'dueTime':
+                if (newTask.due) {
+                    const dueDate = newTask.due.split('T')[0];
+                    if (value.type === 'none') {
+                        newTask.due = dueDate;
+                    } else if (value.type === 'time') {
+                        newTask.due = `${dueDate}T${value.value}`;
+                    }
                 }
                 break;
         }

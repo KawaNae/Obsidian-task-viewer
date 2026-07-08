@@ -63,8 +63,8 @@ describe('FlowParser', () => {
 
     describe('lifetime / options / move', () => {
         it('parses the full clause set order-free', () => {
-            const canonical = parseFlow('every mon x14 until 2026-09-28 nochildren move([[Log/Done]])');
-            const shuffled = parseFlow('nochildren until 2026-09-28 move([[Log/Done]]) x14 every mon');
+            const canonical = parseFlow('every mon x14 until(2026-09-28) nochildren move([[Log/Done]])');
+            const shuffled = parseFlow('nochildren until(2026-09-28) move([[Log/Done]]) x14 every mon');
             expect(canonical.diagnostics).toEqual([]);
             expect(shuffled.diagnostics).toEqual([]);
             expect(serializeFlow(shuffled.program!)).toBe(serializeFlow(canonical.program!));
@@ -112,7 +112,7 @@ describe('FlowParser', () => {
         it('rejects orphan modifiers without a schedule', () => {
             expect(errors('x5')).toContain('flow.orphan-modifier');
             expect(errors('nochildren')).toContain('flow.orphan-modifier');
-            expect(errors('until 2026-09-28')).toContain('flow.orphan-modifier');
+            expect(errors('until(2026-09-28)')).toContain('flow.orphan-modifier');
         });
 
         it('reports legacy syntax as an unknown clause', () => {
@@ -120,8 +120,8 @@ describe('FlowParser', () => {
             expect(errors('next(monday).as(text)')).toContain('flow.unknown-head');
         });
 
-        it('rejects invalid calendar dates in until', () => {
-            expect(errors('every mon until 2026-02-30')).toContain('flow.bad-date');
+        it('rejects bare until without parentheses', () => {
+            expect(errors('every mon until 2026-02-30')).toContain('flow.expected-lparen');
         });
 
         it('rejects bad set field types', () => {
@@ -162,12 +162,18 @@ describe('FlowParser', () => {
             'at(done + 30min)',
             'at(nextCycle(start, 3d))',
             'every mon x14',
-            'every mon until 2026-09-28',
-            'every mon x14 until 2026-09-28 nochildren',
+            'every mon until(2026-09-28)',
+            'every mon x14 until(2026-09-28) nochildren',
             'move([[Archive/Done]])',
             'every mon move([[Log]])',
             'at(startOf(month, done + 1mo) + 4d)',
             'every mon setContent("週報 " + format(start, "MM/DD")) setDue(start + 3d)',
+            'every mon until(endOf(year))',
+            'every mon setStartTime(14:00)',
+            '+3d setStartTime(none)',
+            '+3d setEndTime(time(start))',
+            '+3d setDueTime(none)',
+            '+3d setStart(none)',
         ])('parse → serialize → parse is stable: %s', (src) => {
             const first = parseFlow(src);
             expect(first.program).not.toBeNull();
@@ -178,8 +184,58 @@ describe('FlowParser', () => {
         });
 
         it('normalizes clause order canonically', () => {
-            const { program } = parseFlow('move([[A]]) until 2026-09-28 every mon x3');
-            expect(serializeFlow(program!)).toBe('every mon x3 until 2026-09-28 move([[A]])');
+            const { program } = parseFlow('move([[A]]) until(2026-09-28) every mon x3');
+            expect(serializeFlow(program!)).toBe('every mon x3 until(2026-09-28) move([[A]])');
+        });
+    });
+
+    describe('setStartTime / setEndTime / setDueTime', () => {
+        it('parses time patch clauses', () => {
+            const { program, diagnostics } = parseFlow('every mon setStartTime(14:00) setEndTime(17:00)');
+            expect(diagnostics).toEqual([]);
+            expect(program!.sets!.startTime).toBeDefined();
+            expect(program!.sets!.endTime).toBeDefined();
+        });
+
+        it('parses setStartTime(none)', () => {
+            const { program, diagnostics } = parseFlow('every mon setStartTime(none)');
+            expect(diagnostics).toEqual([]);
+            expect(program!.sets!.startTime).toBeDefined();
+        });
+
+        it('parses setDueTime with time() extractor', () => {
+            const { program, diagnostics } = parseFlow('every mon setDueTime(time(start))');
+            expect(diagnostics).toEqual([]);
+            expect(program!.sets!.dueTime).toBeDefined();
+        });
+
+        it('rejects non-time types in time patch clauses', () => {
+            expect(errors('every mon setStartTime("text")')).toContain('type.set-time-mismatch');
+            expect(errors('every mon setStartTime(2026-07-15)')).toContain('type.set-time-mismatch');
+        });
+    });
+
+    describe('until(expr)', () => {
+        it('parses until with expression', () => {
+            const { program, diagnostics } = parseFlow('every mon until(endOf(year))');
+            expect(diagnostics).toEqual([]);
+            expect(program!.until).toBeDefined();
+        });
+
+        it('rejects non-datish until expression', () => {
+            expect(errors('every mon until("text")')).toContain('type.until-not-datish');
+        });
+    });
+
+    describe('none literal in set clauses', () => {
+        it('accepts none for date fields', () => {
+            const { diagnostics } = parseFlow('every mon setStart(none)');
+            expect(diagnostics).toEqual([]);
+        });
+
+        it('accepts none for content', () => {
+            const { diagnostics } = parseFlow('every mon setContent(none)');
+            expect(diagnostics).toEqual([]);
         });
     });
 });

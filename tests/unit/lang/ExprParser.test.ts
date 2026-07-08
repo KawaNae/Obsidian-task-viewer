@@ -22,6 +22,7 @@ describe('ExprParser', () => {
         expect(parse('true').expr).toMatchObject({ kind: 'lit', value: { type: 'bool', value: true } });
         expect(parse('tue').expr).toMatchObject({ kind: 'lit', value: { type: 'weekday', value: 2 } });
         expect(parse('[[Archive]]').expr).toMatchObject({ kind: 'lit', value: { type: 'link', target: 'Archive' } });
+        expect(parse('none').expr).toMatchObject({ kind: 'lit', value: { type: 'none' } });
     });
 
     it('normalizes H:mm time literals', () => {
@@ -75,6 +76,12 @@ describe('ExprParser', () => {
             kind: 'call', fn: 'format',
             args: [{ kind: 'binary', op: '+' }, { kind: 'lit', value: { type: 'string', value: 'MM/DD' } }],
         });
+    });
+
+    it('parses time() function call', () => {
+        const { expr, diagnostics } = parse('time(start)');
+        expect(diagnostics).toEqual([]);
+        expect(expr).toMatchObject({ kind: 'call', fn: 'time', args: [{ kind: 'prop', name: 'start' }] });
     });
 
     it('parses nested calls', () => {

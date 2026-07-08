@@ -98,8 +98,8 @@ describe('FlowPlanner', () => {
         });
 
         it('inherits the command canonically when no telomere', () => {
-            const { newTask } = createNextOf(plan('until 2026-12-31 every mon', { startDate: '2026-06-29' }));
-            expect(newTask.flow?.raw).toBe('every mon until 2026-12-31');
+            const { newTask } = createNextOf(plan('until(2026-12-31) every mon', { startDate: '2026-06-29' }));
+            expect(newTask.flow?.raw).toBe('every mon until(2026-12-31)');
         });
     });
 
@@ -151,12 +151,12 @@ describe('FlowPlanner', () => {
 
     describe('until (inclusive, checked against next anchor date)', () => {
         it('generates when next date equals until', () => {
-            const effects = plan('every mon until 2026-07-06', { startDate: '2026-06-29' });
+            const effects = plan('every mon until(2026-07-06)', { startDate: '2026-06-29' });
             expect(effects.map(e => e.kind)).toEqual(['create-next', 'strip-flow']);
         });
 
         it('consumes without generating when next date exceeds until', () => {
-            const effects = plan('every mon until 2026-07-05', { startDate: '2026-06-29' });
+            const effects = plan('every mon until(2026-07-05)', { startDate: '2026-06-29' });
             expect(effects.map(e => e.kind)).toEqual(['strip-flow']);
         });
     });
@@ -208,6 +208,97 @@ describe('FlowPlanner', () => {
             }));
             expect(newTask.startDate).toBe('2026-07-17');
             expect(newTask.startTime).toBe('13:00');
+        });
+    });
+
+    describe('none — field clearing', () => {
+        it('clears start with setStart(none)', () => {
+            const { newTask } = createNextOf(plan('+3d setStart(none)', {
+                startDate: '2026-07-14', startTime: '09:00', endDate: '2026-07-15',
+            }));
+            expect(newTask.startDate).toBeUndefined();
+            expect(newTask.startTime).toBeUndefined();
+            expect(newTask.endDate).toBeDefined();
+        });
+
+        it('clears due with setDue(none)', () => {
+            const { newTask } = createNextOf(plan('+3d setDue(none)', {
+                startDate: '2026-07-14', due: '2026-07-17',
+            }));
+            expect(newTask.due).toBeUndefined();
+        });
+
+        it('clears content with setContent(none)', () => {
+            const { newTask } = createNextOf(plan('+3d setContent(none)', {
+                startDate: '2026-07-14', content: 'old text',
+            }));
+            expect(newTask.content).toBe('');
+        });
+    });
+
+    describe('setStartTime / setEndTime / setDueTime — time patch', () => {
+        it('patches start time, keeps date', () => {
+            const { newTask } = createNextOf(plan('+3d setStartTime(14:00)', {
+                startDate: '2026-07-14', startTime: '09:00',
+            }));
+            expect(newTask.startDate).toBe('2026-07-17');
+            expect(newTask.startTime).toBe('14:00');
+        });
+
+        it('clears start time with setStartTime(none)', () => {
+            const { newTask } = createNextOf(plan('+3d setStartTime(none)', {
+                startDate: '2026-07-14', startTime: '09:00',
+            }));
+            expect(newTask.startDate).toBe('2026-07-17');
+            expect(newTask.startTime).toBeUndefined();
+        });
+
+        it('patches due time', () => {
+            const { newTask } = createNextOf(plan('+3d setDueTime(14:00)', {
+                startDate: '2026-07-14', due: '2026-07-17',
+            }));
+            expect(newTask.due).toBe('2026-07-20T14:00');
+        });
+
+        it('clears due time with setDueTime(none)', () => {
+            const { newTask } = createNextOf(plan('+3d setDueTime(none)', {
+                startDate: '2026-07-14', due: '2026-07-17T18:00',
+            }));
+            expect(newTask.due).toBe('2026-07-20');
+        });
+
+        it('copies time from start to end with time()', () => {
+            const { newTask } = createNextOf(plan('+3d setEndTime(time(start))', {
+                startDate: '2026-07-14', startTime: '09:00',
+                endDate: '2026-07-14', endTime: '17:00',
+            }));
+            expect(newTask.endTime).toBe('09:00');
+        });
+
+        it('ignores time patch when no date exists', () => {
+            const { newTask } = createNextOf(plan('+3d setStartTime(14:00)', {
+                startDate: '2026-07-14',
+                endDate: '2026-07-14',
+            }));
+            expect(newTask.startTime).toBe('14:00');
+            // endTime patch without endDate having time — test with due that's undefined
+            const effects2 = plan('+3d setDueTime(14:00)', { startDate: '2026-07-14' });
+            const newTask2 = (effects2.find(e => e.kind === 'create-next') as any).newTask;
+            expect(newTask2.due).toBeUndefined();
+        });
+    });
+
+    describe('until(expr) — expression evaluation', () => {
+        it('evaluates until expression against pre-shift context', () => {
+            const effects = plan('every mon until(endOf(year))', { startDate: '2026-06-29' });
+            expect(effects.map(e => e.kind)).toEqual(['create-next', 'strip-flow']);
+        });
+
+        it('evaluates until with arithmetic', () => {
+            const effects = plan('every mon until(due + 30d)', {
+                startDate: '2026-06-29', due: '2026-07-01',
+            });
+            expect(effects.map(e => e.kind)).toEqual(['create-next', 'strip-flow']);
         });
     });
 

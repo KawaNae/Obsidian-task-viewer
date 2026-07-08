@@ -714,17 +714,19 @@
       "arg-mismatch": "{{fn}}() argument {{index}} expects {{expected}}, got {{actual}}",
       "bad-unit-keyword": "Expected week, month or year, got '{{actual}}'",
       "at-not-datish": "at() expects a date or datetime expression, got {{actual}}",
-      "set-content-not-string": "{{fn}}(...) expects string, got {{actual}}",
-      "set-date-mismatch": "{{fn}}(...) expects date or datetime, got {{actual}}",
+      "set-content-not-string": "{{fn}}(...) expects string or none, got {{actual}}",
+      "set-date-mismatch": "{{fn}}(...) expects date, datetime or none, got {{actual}}",
+      "set-time-mismatch": "{{fn}}(...) expects time or none, got {{actual}}",
+      "time-arithmetic": "Time arithmetic is not supported — apply duration to a date first: time(start + 2h)",
+      "until-not-datish": "until() expects a date or datetime expression, got {{actual}}",
       "datetime-plus-time": "Adding a time to a {{left}} is ambiguous — truncate first: date(x) + 14:00",
       "move-target": "move() expects a wikilink or string target, got {{actual}}"
     },
     "flow": {
-      "unknown-head": "Unknown clause '{{head}}' — clauses start with every / + / at(...) / xN / until / nochildren / setContent|setStart|setEnd|setDue(...) / move(...)",
+      "unknown-head": "Unknown clause '{{head}}' — clauses start with every / + / at(...) / xN / until(...) / nochildren / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)",
       "zero-lifetime": "xN requires N >= 1",
       "duplicate-schedule": "Only one schedule clause (every / + / at) is allowed",
       "duplicate-node": "Duplicate '{{clause}}' clause",
-      "expected-date": "Expected a date after 'until' (e.g. until 2026-09-28)",
       "expected-lparen": "Expected '(' after '{{fn}}'",
       "expected-rparen": "Expected ')' to close {{fn}}(...)",
       "expected-weekday": "Expected a weekday (mon..sun), got '{{token}}'",
@@ -734,7 +736,6 @@
       "bad-monthday": "Expected a day number or 'last' after '@'",
       "orphan-modifier": "'{{clause}}' requires a schedule clause (every / + / at)",
       "empty": "Flow command is empty",
-      "bad-date": "'{{date}}' is not a valid calendar date",
       "node-spans-lines": "A clause must be written within a single line"
     }
   }

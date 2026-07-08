@@ -21,9 +21,9 @@ export type ScheduleNode =
     // Completion-relative offsets are expressions: `at(today + 3d)`
     // (date-granular) / `at(done + 2h)` (time-granular).
 
-export type SetField = 'content' | 'start' | 'end' | 'due';
+export type SetField = 'content' | 'start' | 'startTime' | 'end' | 'endTime' | 'due' | 'dueTime';
 
-export const SET_FIELD_ORDER: readonly SetField[] = ['content', 'start', 'end', 'due'];
+export const SET_FIELD_ORDER: readonly SetField[] = ['content', 'start', 'startTime', 'end', 'endTime', 'due', 'dueTime'];
 
 /** Clause head for a setter field: 'content' → 'setContent'. */
 export function setHeadName(field: SetField): string {
@@ -39,8 +39,8 @@ export interface FlowProgram {
     schedule?: ScheduleNode;
     /** Telomere: remaining number of generations (`x14`). */
     lifetime?: { count: number; span: Span };
-    /** Generate only while next anchor date <= this date (inclusive). */
-    until?: { date: string; span: Span };
+    /** Generate only while next anchor date <= the evaluated date (inclusive). */
+    until?: { expr: Expr; span: Span };
     nochildren?: { span: Span };
     /**
      * setContent(...) / setStart(...) / setEnd(...) / setDue(...) — field

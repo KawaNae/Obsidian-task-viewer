@@ -109,7 +109,7 @@ describe('serializeFlowLines (line-level canonical)', () => {
     }
 
     it('degenerates to serializeFlow for a single segment', () => {
-        const { program, table } = parsed(['move([[A]]) until 2026-09-28 every mon x3']);
+        const { program, table } = parsed(['move([[A]]) until(2026-09-28) every mon x3']);
         const lines = serializeFlowLines(program, table);
         expect(lines.taskLine).toBe(serializeFlow(program));
         expect(lines.childLines).toEqual([]);
@@ -124,9 +124,9 @@ describe('serializeFlowLines (line-level canonical)', () => {
     });
 
     it('reorders nodes canonically WITHIN a line', () => {
-        const { program, table } = parsed(['every mon', 'until 2026-09-28 x3']);
+        const { program, table } = parsed(['every mon', 'until(2026-09-28) x3']);
         // canonical order: xN before until
-        expect(serializeFlowLines(program, table).childLines).toEqual(['x3 until 2026-09-28']);
+        expect(serializeFlowLines(program, table).childLines).toEqual(['x3 until(2026-09-28)']);
     });
 
     it('supports an empty task-line segment', () => {

@@ -18,6 +18,7 @@ export function isDatishType(t: StaticType): boolean {
 
 export function isAssignable(actual: StaticType, expected: StaticType): boolean {
     if (actual === 'error') return true;
+    if (actual === 'none') return true;
     if (expected === 'datish') return isDatishType(actual);
     return actual === expected;
 }
@@ -68,6 +69,7 @@ export const FN_SIGS: Record<FnName, FnSig> = {
     endOf: { name: 'endOf', minArgs: 1, params: ['string', 'datish'], result: 'date', checkArgs: requireUnitKeyword },
     nextCycle: { name: 'nextCycle', minArgs: 2, params: ['datish', 'duration'], result: 'datish' },
     date: { name: 'date', minArgs: 1, params: ['datish'], result: 'date' },
+    time: { name: 'time', minArgs: 1, params: ['datish'], result: 'time' },
 };
 
 // ---------------------------------------------------------------------------
@@ -125,9 +127,13 @@ export function callFn(fn: FnName, args: Value[], rt: EvalRuntime): Value {
         case 'date': {
             const [v] = args;
             if (!isDatishValue(v)) throw new FnCallError('date() expects a date or datetime');
-            // Truncate: drop the time-of-day. Pairs with `date + time` to
-            // form the time algebra (strip / attach / shift).
             return { type: 'date', value: v.type === 'date' ? v.value : v.date };
+        }
+        case 'time': {
+            const [v] = args;
+            if (!isDatishValue(v)) throw new FnCallError('time() expects a date or datetime');
+            if (v.type === 'date') return { type: 'none' };
+            return { type: 'time', value: v.time };
         }
     }
 }

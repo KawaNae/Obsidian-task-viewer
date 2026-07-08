@@ -84,4 +84,24 @@ describe('ExprChecker', () => {
         const { diagnostics } = check('(start + due) + 1d');
         expect(diagnostics.filter(d => d.severity === 'error')).toHaveLength(1);
     });
+
+    it('types none literal as none', () => {
+        expect(check('none')).toMatchObject({ type: 'none', diagnostics: [] });
+    });
+
+    it('types time() as time', () => {
+        expect(check('time(start)')).toMatchObject({ type: 'time', diagnostics: [] });
+    });
+
+    it('rejects time + duration with specific diagnostic', () => {
+        expect(check('14:00 + 2h').diagnostics.some(d => d.code === 'type.time-arithmetic')).toBe(true);
+        expect(check('2h + 14:00').diagnostics.some(d => d.code === 'type.time-arithmetic')).toBe(true);
+    });
+
+    it('absorbs none in conditional branches', () => {
+        expect(check('start < due ? none : start + 1d')).toMatchObject({ type: 'datish', diagnostics: [] });
+        expect(check('start < due ? start : none')).toMatchObject({ type: 'datish', diagnostics: [] });
+        expect(check('start < due ? none : 14:00')).toMatchObject({ type: 'time', diagnostics: [] });
+        expect(check('start < due ? none : none')).toMatchObject({ type: 'none', diagnostics: [] });
+    });
 });

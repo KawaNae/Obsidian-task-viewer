@@ -21,7 +21,7 @@ describe('diagnosticText', () => {
             'every mon at(today + 3d)',         // flow.duplicate-schedule
             'at(today + 1d) x5 x3',             // flow.duplicate-node
             'x5',                               // flow.orphan-modifier
-            'every mon until 2026-02-30',       // flow.bad-date
+            'every mon until 2026-02-30',       // flow.expected-lparen
             'at("text")',                       // type.at-not-datish
             'every mon setDue("x")',           // type.set-date-mismatch
             'every mon setContent(start + due)', // type.cannot-combine
@@ -29,6 +29,8 @@ describe('diagnosticText', () => {
             'at(starrt)',                       // expr.unknown-ident
             'at(format(start))',                // type.arg-count
             '+3x',                              // lex.unknown-unit
+            'every mon setStartTime("x")',     // type.set-time-mismatch
+            'every mon until("text")',          // type.until-not-datish
         ];
         for (const src of samples) {
             for (const d of parseFlow(src).diagnostics) {
