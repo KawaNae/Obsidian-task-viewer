@@ -1,4 +1,4 @@
-import { App, Platform, setIcon, TFile, type EventRef } from 'obsidian';
+import { App, setIcon, TFile, type EventRef } from 'obsidian';
 import { t } from '../../i18n';
 import type { Task } from '../../types';
 import type TaskViewerPlugin from '../../main';
@@ -95,28 +95,29 @@ export class TaskHubPanel {
         backdrop.addEventListener('click', () => this.close());
 
         const panel = root.createDiv({ cls: 'task-hub__panel' });
-        if (this.kbAware) this.kbAware.scrollTarget = panel;
+
+        const handle = panel.createDiv({ cls: 'task-hub__handle' });
 
         const closeBtn = panel.createEl('button', { cls: 'task-hub__close' });
         setIcon(closeBtn.createSpan(), 'x');
         closeBtn.setAttribute('aria-label', t('modal.cancel'));
         closeBtn.addEventListener('click', () => this.close());
 
-        // モバイル: プレビュー折りたたみトグル（初期展開）。縦空間が限られる
-        // phone でフォームの視認領域を確保する。
-        if (Platform.isPhone) {
-            const toggle = panel.createDiv({ cls: 'task-hub__preview-toggle' });
-            setIcon(toggle.createSpan(), 'chevron-up');
-            toggle.setAttribute('aria-label', t('modal.hub.togglePreview'));
-            toggle.addEventListener('click', () => {
-                const collapsed = !this.previewEl?.hasClass('is-collapsed');
-                this.previewEl?.toggleClass('is-collapsed', collapsed);
-                toggle.toggleClass('is-collapsed', collapsed);
-            });
-        }
+        const body = panel.createDiv({ cls: 'task-hub__body' });
+        if (this.kbAware) this.kbAware.scrollTarget = body;
+        this.setupSwipeToDismiss(handle, panel, backdrop, body);
 
-        this.previewEl = panel.createDiv({ cls: 'task-hub__preview' });
-        const formHost = panel.createDiv({ cls: 'task-hub__form' });
+        const toggle = body.createDiv({ cls: 'task-hub__preview-toggle' });
+        setIcon(toggle.createSpan(), 'chevron-up');
+        toggle.setAttribute('aria-label', t('modal.hub.togglePreview'));
+        toggle.addEventListener('click', () => {
+            const collapsed = !this.previewEl?.hasClass('is-collapsed');
+            this.previewEl?.toggleClass('is-collapsed', collapsed);
+            toggle.toggleClass('is-collapsed', collapsed);
+        });
+
+        this.previewEl = body.createDiv({ cls: 'task-hub__preview' });
+        const formHost = body.createDiv({ cls: 'task-hub__form' });
 
         void this.renderPreview();
 
@@ -210,6 +211,95 @@ export class TaskHubPanel {
             context: 'hub-preview',
             hooks: { onNavigate: closePanel },
         });
+    }
+
+    private setupSwipeToDismiss(
+        handle: HTMLElement,
+        panel: HTMLElement,
+        backdrop: HTMLElement,
+        body: HTMLElement,
+    ): void {
+        let startY = 0;
+        let dy = 0;
+        let dragging = false;
+
+        const beginDrag = (clientY: number) => {
+            startY = clientY;
+            dy = 0;
+            dragging = true;
+            panel.style.transition = 'none';
+            panel.style.animation = 'none';
+            backdrop.style.transition = 'none';
+        };
+
+        const moveDrag = (clientY: number) => {
+            dy = Math.max(0, clientY - startY);
+            panel.style.transform = `translateY(${dy}px)`;
+            backdrop.style.opacity = String(1 - Math.min(dy / 300, 0.6));
+        };
+
+        const endDrag = () => {
+            if (!dragging) return;
+            dragging = false;
+            if (dy > 80) {
+                panel.style.transition = 'transform 150ms ease-in';
+                panel.style.transform = 'translateY(100%)';
+                backdrop.style.transition = 'opacity 150ms ease-in';
+                backdrop.style.opacity = '0';
+                window.setTimeout(() => this.close(), 160);
+            } else {
+                panel.style.transition = 'transform 150ms ease-out';
+                panel.style.transform = '';
+                backdrop.style.transition = 'opacity 150ms ease-out';
+                backdrop.style.opacity = '';
+            }
+        };
+
+        // Handle: pointer drag で常に dismiss（phone 時のみ CSS で表示）
+        handle.addEventListener('pointerdown', (e: PointerEvent) => {
+            if (e.button !== 0) return;
+            beginDrag(e.clientY);
+            handle.setPointerCapture(e.pointerId);
+        });
+        handle.addEventListener('pointermove', (e: PointerEvent) => {
+            if (dragging) moveDrag(e.clientY);
+        });
+        handle.addEventListener('pointerup', endDrag);
+        handle.addEventListener('pointercancel', endDrag);
+
+        // Body: scrollTop=0 で下に引くと overscroll-to-dismiss（phone のみ）
+        let touchStartY = 0;
+        let overscrolling = false;
+        let isBottomSheet = false;
+
+        body.addEventListener('touchstart', (e) => {
+            touchStartY = e.touches[0].clientY;
+            overscrolling = false;
+            isBottomSheet = handle.offsetHeight > 0;
+        }, { passive: true });
+
+        body.addEventListener('touchmove', (e) => {
+            if (!isBottomSheet) return;
+            const currentY = e.touches[0].clientY;
+
+            if (overscrolling) {
+                e.preventDefault();
+                moveDrag(currentY);
+                return;
+            }
+
+            if (body.scrollTop <= 0 && currentY - touchStartY > 5) {
+                overscrolling = true;
+                beginDrag(currentY);
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        const onTouchEnd = () => {
+            if (overscrolling) { endDrag(); overscrolling = false; }
+        };
+        body.addEventListener('touchend', onTouchEnd);
+        body.addEventListener('touchcancel', onTouchEnd);
     }
 
     close(): void {

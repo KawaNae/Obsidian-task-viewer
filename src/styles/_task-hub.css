@@ -32,12 +32,11 @@
 
 .task-hub__panel {
     position: relative;
+    display: flex;
+    flex-direction: column;
     width: min(34em, calc(100vw - 32px));
     max-height: calc(100% - 64px);
-    overflow-y: auto;
-    /* キーボード退避（KeyboardAwareContainer）の padding 注入で overflow に
-       転じた瞬間にスクロールバーが出て内容幅がずれるのを防ぐ */
-    scrollbar-width: none;
+    overflow: hidden;
     background: var(--modal-background, var(--tv-bg-secondary));
     border: 1px solid var(--tv-border);
     border-radius: var(--modal-radius, var(--tv-radius-s));
@@ -46,7 +45,14 @@
     animation: tv-hub-pop 150ms cubic-bezier(0.33, 1, 0.68, 1);
 }
 
-.task-hub__panel::-webkit-scrollbar {
+.task-hub__body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+}
+
+.task-hub__body::-webkit-scrollbar {
     display: none;
 }
 
@@ -114,13 +120,22 @@
 }
 
 /* --- Tags --- */
-/* pills（フル幅）+ label+input 行（中央揃え）を縦に積む。
+/* pills + label+input 行を縦に積む。
    label と input は tv-form__row の中央揃えで他フィールドと統一 */
+.task-hub__section-spacer {
+    height: 20px;
+}
+
 .task-hub__tags {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    margin-top: 6px;
+}
+
+/* pills はラベル列の右から始める（input の左端と揃う）。
+   期限行との間に視覚的な区切りを入れる */
+.task-hub__tag-pills {
+    margin-left: calc(var(--tv-form-label-width, 7em) + 8px);
 }
 
 /* chip 本体は共有部品 tv-ctrl__pill（_controls.css）。ここは hub 固有の
@@ -210,16 +225,56 @@
 
 .is-phone .task-hub__panel {
     width: 100%;
-    max-height: calc(100% - 48px);
+    max-height: calc(100% - 120px);
     border: none;
     border-radius: 12px 12px 0 0;
-    padding-top: 32px;
-    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    padding: 32px 0 0;
     min-height: 0;
+    background: var(--background-secondary);
+}
+
+.is-phone .task-hub__body {
+    background: var(--modal-background, var(--background-primary));
+    padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+.is-phone .task-hub .task-hub__close {
+    display: none;
+}
+
+/* drag handle — swipe-to-dismiss の掴み領域（phone のみ表示） */
+.task-hub__handle {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+    z-index: 1;
+}
+
+.is-phone .task-hub__handle {
+    display: flex;
+}
+
+.is-phone .task-hub__preview-toggle {
+    display: flex;
+}
+
+.task-hub__handle::after {
+    content: '';
+    width: 72px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--tv-text-faint);
+    opacity: 0.5;
 }
 
 .task-hub__preview-toggle {
-    display: flex;
+    display: none;
     justify-content: center;
     padding: 2px 0;
     cursor: pointer;

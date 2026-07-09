@@ -183,8 +183,10 @@ export class TaskHubForm {
             onCommit: (group) => this.commitDates(group),
         });
 
+        // --- spacer: 日付セクションとタグセクションの区切り ---
+        c.createDiv({ cls: 'task-hub__section-spacer' });
+
         // --- Tags ---
-        // pills はフル幅、label+input の行は中央揃え（他フィールドと同じ）
         this.tagsSectionEl = c.createDiv({ cls: 'task-hub__tags' });
         this.rebuildTagsSection(true);
 
