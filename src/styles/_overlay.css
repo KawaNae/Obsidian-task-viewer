@@ -51,6 +51,7 @@
 
 .tv-overlay__handle::after {
     content: '';
+    display: block;
     width: 67px;
     height: 4px;
     border-radius: 18px;
