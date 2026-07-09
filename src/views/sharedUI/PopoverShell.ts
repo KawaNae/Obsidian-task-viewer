@@ -191,7 +191,7 @@ export class PopoverShell {
     }
 }
 
-function resolveHost(anchor: PopoverAnchor): { hostDoc: Document; hostWin: Window } {
+export function resolveHost(anchor: PopoverAnchor): { hostDoc: Document; hostWin: Window } {
     let node: Node | null = null;
     if (anchor.kind === 'element') {
         node = anchor.element;
@@ -203,7 +203,7 @@ function resolveHost(anchor: PopoverAnchor): { hostDoc: Document; hostWin: Windo
     return { hostDoc, hostWin };
 }
 
-function positionElement(el: HTMLElement, anchor: PopoverAnchor, hostWin: Window): void {
+export function positionElement(el: HTMLElement, anchor: PopoverAnchor, hostWin: Window): void {
     // Element must be in DOM with content to measure. Caller guarantees this
     // because positionElement is only invoked after open()/refresh().
     const winW = Math.max(0, hostWin.innerWidth);

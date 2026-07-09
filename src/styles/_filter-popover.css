@@ -1,16 +1,16 @@
-/* ── Filter Popover ── */
+/* ── Filter Popover ──
+ *
+ * Root chrome (position / z-index / background / border / shadow / radius)
+ * is provided by OverlayShell (_overlay.css). This file only defines
+ * content-specific sizing and the inner layout.
+ */
 
 .filter-popover {
-    position: fixed;
-    z-index: var(--z-overlay);
-    background: var(--tv-bg-secondary);
-    border: 1px solid var(--tv-border);
-    border-radius: var(--tv-radius-s);
-    box-shadow: 0 4px 12px var(--tv-shadow-medium);
     min-width: 280px;
-    max-width:  90%;
-    max-height: 80%;
-    overflow-y: auto;
+    max-width: min(90vw, 560px);
+}
+
+.filter-popover > .tv-overlay__body {
     padding: 4px 0;
 }
 

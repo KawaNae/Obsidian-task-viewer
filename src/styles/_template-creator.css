@@ -1,17 +1,11 @@
-/* ── Template Creator Popover ── */
+/* ── Template Creator Popover ──
+ *
+ * Root chrome provided by OverlayShell (_overlay.css).
+ */
 
 .template-creator {
-    position: fixed;
-    z-index: var(--z-overlay);
-    background: var(--tv-bg-secondary);
-    border: 1px solid var(--tv-border);
-    border-radius: var(--tv-radius-s);
-    box-shadow: 0 4px 12px var(--tv-shadow-medium);
     width: 340px;
     max-width: calc(100vw - 16px);
-    max-height: 480px;
-    display: flex;
-    flex-direction: column;
 }
 
 /* ── Header ── */

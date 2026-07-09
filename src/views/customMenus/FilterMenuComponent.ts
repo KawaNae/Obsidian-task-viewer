@@ -25,6 +25,7 @@ import { FilterDropdownMenus } from './FilterDropdownMenus';
 import type { SelectItem } from './FilterDropdownMenus';
 import { FilterConditionRenderer } from './FilterConditionRenderer';
 import { PopoverStack } from '../sharedUI/PopoverStack';
+import { OverlayShell } from '../sharedUI/OverlayShell';
 
 export interface FilterMenuCallbacks {
     onFilterChange: () => void;
@@ -38,6 +39,7 @@ export interface FilterMenuCallbacks {
  */
 export class FilterMenuComponent {
     private state: FilterState = createEmptyFilterState();
+    private overlay = new OverlayShell();
     private stack = new PopoverStack();
     private rootEl: HTMLElement | null = null;
     private lastTasks: Task[] = [];
@@ -101,7 +103,7 @@ export class FilterMenuComponent {
     }
 
     isOpen(): boolean {
-        return this.stack.isOpen();
+        return this.overlay.isOpen();
     }
 
     showMenuAtElement(anchorEl: HTMLElement, callbacks: FilterMenuCallbacks): void {
@@ -119,23 +121,24 @@ export class FilterMenuComponent {
         this.lastTasks = callbacks.getTasks();
         this.lastCallbacks = callbacks;
 
-        const shell = this.stack.openRoot({
+        this.overlay.open({
+            mode: 'anchored',
             anchor,
-            className: 'filter-popover tv-ctrl',
-            build: (el) => {
-                this.rootEl = el;
+            panelClass: 'filter-popover',
+            childStack: this.stack,
+            build: (bodyEl) => {
+                this.rootEl = bodyEl;
                 this.renderContent();
             },
             onClose: () => {
+                this.stack.closeAll();
                 this.rootEl = null;
             },
         });
-        // shell return is unused; root tracking is done via build/onClose.
-        void shell;
     }
 
     close(): void {
-        this.stack.closeAll();
+        this.overlay.close();
     }
 
     // ── Render ──

@@ -13,6 +13,7 @@ import type { IntervalGroup } from '../../timer/TimerInstance';
 import type { IntervalTemplate } from '../../timer/IntervalTemplateLoader';
 import { PopoverStack } from '../sharedUI/PopoverStack';
 import type { PopoverShell } from '../sharedUI/PopoverShell';
+import { OverlayShell } from '../sharedUI/OverlayShell';
 
 export interface TemplateCreatorCallbacks {
     onSaved: (filePath: string) => void;
@@ -38,6 +39,7 @@ interface FormState {
 }
 
 export class IntervalTemplateCreator {
+    private overlay = new OverlayShell();
     private stack = new PopoverStack();
     private rootEl: HTMLElement | null = null;
     private iconShell: PopoverShell | null = null;
@@ -49,7 +51,7 @@ export class IntervalTemplateCreator {
     constructor(private app: App) {}
 
     isOpen(): boolean {
-        return this.stack.isOpen();
+        return this.overlay.isOpen();
     }
 
     show(anchorEl: HTMLElement, folderPath: string, callbacks: TemplateCreatorCallbacks): void {
@@ -69,14 +71,17 @@ export class IntervalTemplateCreator {
     }
 
     private openPopover(anchorEl: HTMLElement): void {
-        this.stack.openRoot({
+        this.overlay.open({
+            mode: 'anchored',
             anchor: { kind: 'element', element: anchorEl },
-            className: 'template-creator tv-ctrl',
-            build: (el) => {
-                this.rootEl = el;
+            panelClass: 'template-creator',
+            childStack: this.stack,
+            build: (bodyEl) => {
+                this.rootEl = bodyEl;
                 this.renderContent();
             },
             onClose: () => {
+                this.stack.closeAll();
                 this.rootEl = null;
                 this.iconShell = null;
             },
@@ -84,7 +89,7 @@ export class IntervalTemplateCreator {
     }
 
     close(): void {
-        this.stack.closeAll();
+        this.overlay.close();
     }
 
     // ── Render ──

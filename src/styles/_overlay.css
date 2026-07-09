@@ -1,0 +1,212 @@
+/* ── OverlayShell ──
+ *
+ * Unified overlay surface for anchored popovers and centered dialogs.
+ * Two modes (`--anchored`, `--centered`) share a single DOM skeleton;
+ * CSS switches both to bottom-sheet on `.is-phone`.
+ */
+
+/* --- Animations --- */
+@keyframes tv-overlay-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tv-overlay-pop  { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes tv-overlay-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+
+/* --- Root --- */
+.tv-overlay {
+    position: fixed;
+    z-index: var(--z-overlay);
+}
+
+/* --- Backdrop --- */
+.tv-overlay__backdrop {
+    position: absolute;
+    inset: 0;
+    background: var(--background-modifier-cover);
+}
+
+/* --- Panel --- */
+.tv-overlay__panel {
+    display: flex;
+    flex-direction: column;
+    background: var(--modal-background, var(--tv-bg-secondary));
+    border: 1px solid var(--tv-border);
+    border-radius: var(--tv-radius-s);
+    box-shadow: 0 4px 12px var(--tv-shadow-medium);
+    overflow: hidden;
+}
+
+/* --- Body --- */
+.tv-overlay__body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* --- Handle (hidden by default, shown on phone) --- */
+.tv-overlay__handle {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+    z-index: 1;
+}
+
+.tv-overlay__handle::after {
+    content: '';
+    width: 72px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--tv-text-faint);
+    opacity: 0.5;
+}
+
+/* --- Close button --- */
+.tv-overlay .tv-overlay__close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: var(--tv-radius-s);
+    color: var(--tv-text-muted);
+    cursor: pointer;
+}
+
+.tv-overlay .tv-overlay__close:hover {
+    color: var(--tv-text);
+    background: var(--tv-bg-hover) !important;
+}
+
+.tv-overlay__close .svg-icon {
+    width: 16px;
+    height: 16px;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Mode: anchored (desktop)
+   Panel is position:fixed, JS sets left/top. No backdrop.
+   ═══════════════════════════════════════════════════════════════ */
+
+.tv-overlay--anchored .tv-overlay__backdrop {
+    display: none;
+}
+
+.tv-overlay--anchored .tv-overlay__panel {
+    position: fixed;
+}
+
+.tv-overlay--anchored .tv-overlay__close {
+    display: none;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Mode: centered (desktop)
+   Root covers viewport, panel centered via flexbox.
+   ═══════════════════════════════════════════════════════════════ */
+
+.tv-overlay--centered {
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tv-overlay--centered .tv-overlay__backdrop {
+    animation: tv-overlay-fade 150ms ease-out;
+}
+
+.tv-overlay--centered .tv-overlay__panel {
+    position: relative;
+    box-shadow: 0 12px 40px var(--tv-shadow-medium);
+    animation: tv-overlay-pop 150ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Phone: both modes → bottom-sheet
+   ═══════════════════════════════════════════════════════════════ */
+
+.is-phone .tv-overlay {
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: stretch;
+}
+
+.is-phone .tv-overlay .tv-overlay__backdrop {
+    display: block;
+    animation: tv-overlay-fade 150ms ease-out;
+}
+
+.is-phone .tv-overlay .tv-overlay__panel {
+    position: relative;
+    left: auto !important;
+    top: auto !important;
+    max-height: calc(100% - 120px) !important;
+    width: 100%;
+    max-width: 100%;
+    border: none;
+    border-radius: 12px 12px 0 0;
+    padding: 32px 0 0;
+    min-height: 0;
+    background: var(--background-secondary);
+    animation: tv-overlay-rise 150ms ease-out;
+}
+
+.is-phone .tv-overlay .tv-overlay__body {
+    background: var(--modal-background, var(--background-primary));
+    padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+.is-phone .tv-overlay .tv-overlay__handle {
+    display: flex;
+}
+
+.is-phone .tv-overlay .tv-overlay__close {
+    display: none;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Close animation
+   ═══════════════════════════════════════════════════════════════ */
+
+.tv-overlay.is-closing {
+    pointer-events: none;
+}
+
+.tv-overlay--centered.is-closing .tv-overlay__backdrop {
+    animation: tv-overlay-fade 120ms ease-in reverse forwards;
+}
+
+.tv-overlay--centered.is-closing .tv-overlay__panel {
+    animation: tv-overlay-pop 120ms ease-in reverse forwards;
+}
+
+.is-phone .tv-overlay.is-closing .tv-overlay__backdrop {
+    animation: tv-overlay-fade 120ms ease-in reverse forwards;
+}
+
+.is-phone .tv-overlay.is-closing .tv-overlay__panel {
+    animation: tv-overlay-rise 120ms ease-in reverse forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tv-overlay__panel, .tv-overlay__backdrop { animation: none !important; }
+}

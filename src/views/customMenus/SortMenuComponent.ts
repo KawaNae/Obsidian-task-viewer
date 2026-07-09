@@ -12,6 +12,7 @@ import {
 import { t } from '../../i18n';
 import { PopoverStack } from '../sharedUI/PopoverStack';
 import type { PopoverShell } from '../sharedUI/PopoverShell';
+import { OverlayShell } from '../sharedUI/OverlayShell';
 
 export interface SortMenuCallbacks {
     onSortChange: () => void;
@@ -31,6 +32,7 @@ interface SelectItem {
  */
 export class SortMenuComponent {
     private state: SortState = createEmptySortState();
+    private overlay = new OverlayShell();
     private stack = new PopoverStack();
     private rootEl: HTMLElement | null = null;
     private childShell: PopoverShell | null = null;
@@ -53,7 +55,7 @@ export class SortMenuComponent {
     }
 
     isOpen(): boolean {
-        return this.stack.isOpen();
+        return this.overlay.isOpen();
     }
 
     showMenuAtElement(anchorEl: HTMLElement, callbacks: SortMenuCallbacks): void {
@@ -69,14 +71,17 @@ export class SortMenuComponent {
         callbacks: SortMenuCallbacks,
     ): void {
         this.lastCallbacks = callbacks;
-        this.stack.openRoot({
+        this.overlay.open({
+            mode: 'anchored',
             anchor,
-            className: 'sort-popover',
-            build: (el) => {
-                this.rootEl = el;
+            panelClass: 'sort-popover',
+            childStack: this.stack,
+            build: (bodyEl) => {
+                this.rootEl = bodyEl;
                 this.renderContent();
             },
             onClose: () => {
+                this.stack.closeAll();
                 this.rootEl = null;
                 this.childShell = null;
             },
@@ -84,7 +89,7 @@ export class SortMenuComponent {
     }
 
     close(): void {
-        this.stack.closeAll();
+        this.overlay.close();
     }
 
     // ── Render ──
