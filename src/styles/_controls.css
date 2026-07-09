@@ -78,7 +78,7 @@
     font-size: 1em;
     padding: 8px 12px;
     border: none;
-    border-radius: 0;
+    border-radius: inherit;
     background: transparent;
     color: var(--tv-text);
     outline: none;
@@ -88,7 +88,6 @@
 }
 .tv-ctrl .tv-ctrl__input:hover {
     border: none;
-    border-radius: inherit;
     background: transparent;
     box-shadow: none;
 }

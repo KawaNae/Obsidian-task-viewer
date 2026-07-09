@@ -11,6 +11,7 @@ import { TaskNameSuggest } from '../../suggest/TaskNameSuggest';
 import { filterColors, renderColorSuggestion } from '../../suggest/color/colorUtils';
 import { filterLineStyles, renderLineStyleSuggestion } from '../../suggest/line/lineStyleUtils';
 import { createFormRow } from '../form/formRow';
+import { PROPERTY_ICONS } from '../../constants/propertyIcons';
 import { attachBracketPairing, BracketPairingHandle } from '../form/bracketPairing';
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
 import { CascadeSource, type CascadeSourceKind } from './CascadeSource';
@@ -90,7 +91,8 @@ export class TaskHubForm {
         c.addClass('tv-form'); // _form.css の行文法（ラベル列幅など）の適用ルート
 
         // --- Name ---
-        const nameSection = c.createDiv({ cls: 'tv-form__name-section' });
+        const nameGroup = c.createDiv({ cls: 'tv-form__group' });
+        const nameSection = nameGroup.createDiv({ cls: 'tv-form__name-section' });
         nameSection.createEl('label', { text: t('modal.taskName') });
         this.nameInput = nameSection.createEl('input', {
             type: 'text',
@@ -107,9 +109,9 @@ export class TaskHubForm {
             }
         });
 
-        // --- Status ---
-        // filter-popover と同型: pill 表示 + SuggestController（選択で即置換）
-        const { row: statusRow } = createFormRow(c, t('modal.hub.status'), { icon: 'circle-check' });
+        // --- Status + Dates ---
+        const scheduleGroup = c.createDiv({ cls: 'tv-form__group' });
+        const { row: statusRow } = createFormRow(scheduleGroup, t('modal.hub.status'), { icon: PROPERTY_ICONS.status });
         this.statusPill = statusRow.createEl('button', {
             cls: 'tv-ctrl__pill task-hub__status-pill',
             attr: { type: 'button' },
@@ -154,9 +156,9 @@ export class TaskHubForm {
 
         // --- Start / End / Due ---
         const dl = DateFieldGroup.splitDue(this.task.due);
-        this.dateGroup = new DateFieldGroup(c, {
+        this.dateGroup = new DateFieldGroup(scheduleGroup, {
             labels: { start: t('modal.start'), end: t('modal.end'), due: t('modal.due') },
-            icons: { start: 'play', end: 'square', due: 'flag' },
+            icons: { start: PROPERTY_ICONS.start, end: PROPERTY_ICONS.end, due: PROPERTY_ICONS.due },
             initial: {
                 startDate: this.task.startDate || '',
                 startTime: this.task.startTime || '',
@@ -183,21 +185,24 @@ export class TaskHubForm {
             onCommit: (group) => this.commitDates(group),
         });
 
-        // --- spacer: 日付セクションとタグセクションの区切り ---
+        // --- spacer: デスクトップ用（phone では非表示） ---
         c.createDiv({ cls: 'task-hub__section-spacer' });
 
         // --- Tags ---
-        this.tagsSectionEl = c.createDiv({ cls: 'task-hub__tags' });
+        const tagsGroup = c.createDiv({ cls: 'tv-form__group' });
+        this.tagsSectionEl = tagsGroup.createDiv({ cls: 'task-hub__tags' });
         this.rebuildTagsSection(true);
 
         // --- Color / Linestyle / Mask ---
-        this.renderStyleRow(c, 'color', t('modal.hub.color'));
-        this.renderStyleRow(c, 'linestyle', t('modal.hub.linestyle'));
-        this.renderStyleRow(c, 'mask', t('modal.hub.mask'));
+        const styleGroup = c.createDiv({ cls: 'tv-form__group' });
+        this.renderStyleRow(styleGroup, 'color', t('modal.hub.color'));
+        this.renderStyleRow(styleGroup, 'linestyle', t('modal.hub.linestyle'));
+        this.renderStyleRow(styleGroup, 'mask', t('modal.hub.mask'));
 
         // --- Custom properties ---
         c.createEl('h4', { text: t('modal.hub.properties'), cls: 'tv-form__section-label' });
-        this.propsSectionEl = c.createDiv({ cls: 'task-hub__props' });
+        const propsGroup = c.createDiv({ cls: 'tv-form__group' });
+        this.propsSectionEl = propsGroup.createDiv({ cls: 'task-hub__props' });
         this.rebuildPropsSection(true);
 
         // --- Error / notice ---
@@ -266,6 +271,7 @@ export class TaskHubForm {
             if (!(e as InputEvent).isComposing && !this.refreshing) show(false);
         });
         input.addEventListener('focus', () => show(!input.value));
+        input.addEventListener('blur', () => suggest.close());
         input.addEventListener('keydown', (e: KeyboardEvent) => {
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
@@ -324,7 +330,7 @@ export class TaskHubForm {
         }
 
         // label + input の行（中央揃え — 他フィールドと同じ）
-        const { row } = createFormRow(this.tagsSectionEl, t('modal.hub.tags'), { icon: 'tags' });
+        const { row } = createFormRow(this.tagsSectionEl, t('modal.hub.tags'), { icon: PROPERTY_ICONS.tags });
         const inputWrap = row.createDiv({ cls: 'tv-ctrl__input-wrap task-hub__tag-add-wrap tv-form__control' });
         const input = inputWrap.createEl('input', {
             type: 'text',
@@ -380,8 +386,7 @@ export class TaskHubForm {
     // ==================== 非時刻プロパティ: color / linestyle / mask ====================
 
     private renderStyleRow(container: HTMLElement, field: 'color' | 'linestyle' | 'mask', label: string): void {
-        const STYLE_ICONS: Record<string, string> = { color: 'palette', linestyle: 'pen-line', mask: 'eye-off' };
-        const { row } = createFormRow(container, label, { icon: STYLE_ICONS[field] });
+        const { row } = createFormRow(container, label, { icon: PROPERTY_ICONS[field] });
 
         let input: HTMLInputElement;
 
@@ -650,14 +655,10 @@ export class TaskHubForm {
             }
             const raw = valueInput.value;
             this.commitProps({ ...(this.task.properties ?? {}), [key]: { value: raw, type: ChildLineClassifier.inferType(raw) } });
-            // 追加成立: input をクリアして行を即時再構築し、次の入力へ focus を
-            // 戻す（tags の addTags と同じ操作感）。blur コミットは持たない —
-            // 途中でフォーカスを外しただけで空値プロパティが生まれるのを防ぐ。
             keyInput.value = '';
             valueInput.value = '';
             this.deps.stack.closeAll();
             this.rebuildPropsSection(true);
-            this.propAddKeyInput?.focus();
         };
         for (const input of [keyInput, valueInput]) {
             input.addEventListener('keydown', (e: KeyboardEvent) => {

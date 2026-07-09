@@ -15,6 +15,7 @@ import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveMask,
     getEffectiveTags, getEffectiveProperties,
 } from '../../../services/data/EffectiveProperties';
+import { PROPERTY_ICONS } from '../../../constants/propertyIcons';
 
 type OpenHub = (field: TaskHubFocusField) => void;
 
@@ -171,7 +172,7 @@ export class PropertiesMenuBuilder {
     private addStartItem(menu: Menu, task: Task, parts: CalculatedProperty, openModal: (focusField: TaskHubFocusField) => void): void {
         menu.addItem((item) => {
             item.setTitle(this.propertyFormatter.createPropertyTitle(t('menu.startLabel'), parts))
-                .setIcon('play')
+                .setIcon(PROPERTY_ICONS.start)
                 .onClick(() => {
                     openModal('start');
                 });
@@ -184,7 +185,7 @@ export class PropertiesMenuBuilder {
     private addEndItem(menu: Menu, task: Task, parts: CalculatedProperty, openModal: (focusField: TaskHubFocusField) => void): void {
         menu.addItem((item) => {
             item.setTitle(this.propertyFormatter.createPropertyTitle(t('menu.endLabel'), parts))
-                .setIcon('square')
+                .setIcon(PROPERTY_ICONS.end)
                 .onClick(() => {
                     openModal('end');
                 });
@@ -197,7 +198,7 @@ export class PropertiesMenuBuilder {
     private addDueItem(menu: Menu, task: Task, parts: CalculatedProperty, openModal: (focusField: TaskHubFocusField) => void): void {
         menu.addItem((item) => {
             item.setTitle(this.propertyFormatter.createPropertyTitle(t('menu.dueLabel'), parts))
-                .setIcon('alert-circle')
+                .setIcon(PROPERTY_ICONS.due)
                 .onClick(() => {
                     openModal('due');
                 });
@@ -209,7 +210,7 @@ export class PropertiesMenuBuilder {
         const tagsText = tags.length > 0 ? tags.join(', ') : '-';
         menu.addItem((item) => {
             item.setTitle(t('menu.tagsLabel', { value: tagsText }))
-                .setIcon('tag')
+                .setIcon(PROPERTY_ICONS.tags)
                 .onClick(() => openModal('tags'));
         });
     }
@@ -218,7 +219,7 @@ export class PropertiesMenuBuilder {
         const color = getEffectiveColor(task);
         menu.addItem((item) => {
             item.setTitle(t('menu.colorLabel', { value: color || '-' }))
-                .setIcon('palette')
+                .setIcon(PROPERTY_ICONS.color)
                 .onClick(() => openModal('color'));
 
             if (color && item.dom) {
@@ -239,7 +240,7 @@ export class PropertiesMenuBuilder {
     private addLinestyleItem(menu: Menu, task: Task, openModal: (focusField: TaskHubFocusField) => void): void {
         menu.addItem((item) => {
             item.setTitle(t('menu.linestyleLabel', { value: getEffectiveLinestyle(task) || '-' }))
-                .setIcon('minus')
+                .setIcon(PROPERTY_ICONS.linestyle)
                 .onClick(() => openModal('linestyle'));
         });
     }
@@ -247,7 +248,7 @@ export class PropertiesMenuBuilder {
     private addMaskItem(menu: Menu, task: Task, openModal: (focusField: TaskHubFocusField) => void): void {
         menu.addItem((item) => {
             item.setTitle(t('menu.maskLabel', { value: getEffectiveMask(task) || '-' }))
-                .setIcon('eye-off')
+                .setIcon(PROPERTY_ICONS.mask)
                 .onClick(() => openModal('mask'));
         });
     }

@@ -158,3 +158,39 @@
 .task-hub__preview.is-collapsed {
     display: none;
 }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Phone: inset-grouped sections (iOS-style)
+   Body is transparent; each group is a white rounded card.
+   ═══════════════════════════════════════════════════════════════ */
+
+.is-phone .task-hub__preview {
+    background: var(--modal-background, var(--background-primary));
+    border-radius: 16px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+}
+
+.is-phone .task-hub__form {
+    padding: 0;
+    gap: 8px;
+}
+
+.is-phone .task-hub__section-spacer {
+    display: none;
+}
+
+.is-phone .tv-form__group {
+    background: var(--modal-background, var(--background-primary));
+    border-radius: 16px;
+    padding: 12px 16px;
+}
+
+.is-phone .tv-form__group > :first-child {
+    margin-top: 0;
+}
+
+.is-phone .tv-form__group > .tv-form__name-section {
+    margin-bottom: 0;
+}
