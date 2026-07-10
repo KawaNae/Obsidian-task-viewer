@@ -144,7 +144,9 @@
     border: none;
     background: transparent;
     color: var(--tv-text-muted);
-    border-radius: var(--tv-radius-s) 0 0 var(--tv-radius-s);
+    /* hover 背景が親 input の角丸を貫通しないよう、外側の角は input と
+       同じ radius に追従させる（mobile の 44px pill でも clamp で一致） */
+    border-radius: var(--input-radius, var(--tv-radius-s)) 0 0 var(--input-radius, var(--tv-radius-s));
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -186,8 +188,10 @@
 }
 
 /* Native picker input: transparent overlay on the picker-button area.
-   pointer-events: auto so iPad users can directly tap to open the native picker
-   (iOS Safari rejects programmatic showPicker — WebKit Bug #261703). */
+   desktop では pointer-events: none — hover/cursor は下の pickerButton が
+   受け、click は pickerButton → showPicker() で開く。native input の
+   shadow DOM 内部フィールドは CSS の cursor 指定を無視するため、
+   オーバーレイをヒット対象にすると cursor が default に落ちる */
 .tv-form__input-with-picker > input.tv-form__native-picker-input[type='date'],
 .tv-form__input-with-picker > input.tv-form__native-picker-input[type='time'],
 .tv-form__input-with-picker > input.tv-form__native-picker-input[type='color'] {
@@ -200,10 +204,18 @@
     margin: 0 !important;
     padding: 0 !important;
     border: 0 !important;
-    pointer-events: auto !important;
+    pointer-events: none !important;
     cursor: pointer !important;
     -webkit-appearance: none !important;
     appearance: none !important;
+}
+
+/* Mobile (touch): iPad は programmatic showPicker が拒否される
+   （WebKit Bug #261703）ため、native input への直接タップで開く */
+.is-mobile .tv-form__input-with-picker > input.tv-form__native-picker-input[type='date'],
+.is-mobile .tv-form__input-with-picker > input.tv-form__native-picker-input[type='time'],
+.is-mobile .tv-form__input-with-picker > input.tv-form__native-picker-input[type='color'] {
+    pointer-events: auto !important;
 }
 
 /* Clear button (right side, visible only when input has a value) */
@@ -220,7 +232,7 @@
     color: var(--tv-text-muted);
     border: none;
     background: transparent;
-    border-radius: 0 var(--tv-radius-s) var(--tv-radius-s) 0;
+    border-radius: 0 var(--input-radius, var(--tv-radius-s)) var(--input-radius, var(--tv-radius-s)) 0;
 }
 
 .tv-form__clear-button:hover {
