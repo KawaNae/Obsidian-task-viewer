@@ -162,6 +162,28 @@ body:not(.theme-dark) .tv-overlay {
     animation: tv-overlay-pop 150ms cubic-bezier(0.33, 1, 0.68, 1);
 }
 
+/* --- Dialog panel（centered のフォームダイアログ共通寸法: task hub /
+   create task。phone ではサイズ系を .is-phone 規則が上書きする） --- */
+.tv-overlay__panel--dialog {
+    width: min(34em, calc(100vw - 32px));
+    max-height: calc(100% - 64px);
+    padding: 40px 24px 34px;
+    border-radius: var(--modal-radius, 16px);
+}
+
+.tv-overlay__panel--dialog .tv-overlay__body {
+    scrollbar-width: none;
+}
+
+.tv-overlay__panel--dialog .tv-overlay__body::-webkit-scrollbar {
+    display: none;
+}
+
+.is-phone .tv-overlay .tv-overlay__panel--dialog .tv-overlay__body {
+    margin: 0;
+    padding: 4px 24px calc(34px + env(safe-area-inset-bottom, 0px));
+}
+
 
 /* ═══════════════════════════════════════════════════════════════
    Phone: both modes → bottom-sheet

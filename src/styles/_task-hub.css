@@ -2,36 +2,13 @@
  *
  * DOM スケルトン・backdrop・handle・close button・swipe dismiss・close
  * animation・keyboard awareness は OverlayShell (_overlay.css) が提供。
- * このファイルはパネルのサイズ制約とコンテンツ固有のスタイルのみ定義する。
+ * パネル寸法も共通の tv-overlay__panel--dialog（_overlay.css）が持ち、
+ * このファイルはコンテンツ固有のスタイルのみ定義する。
  *
  * 面の設計: パネル面 = modal-background（OverlayShell 既定、light=白 /
  * dark=暗）、セクション = 透明 + 区切り線、入力面 = --tv-bg-input
  * （_overlay.css で一括定義）。
  */
-
-/* --- Panel --- */
-.task-hub {
-    width: min(34em, calc(100vw - 32px));
-    max-height: calc(100% - 64px);
-    padding: 40px 24px 34px;
-    border-radius: var(--modal-radius, 16px);
-}
-
-/* Phone (bottom-sheet): サイズ・角丸・padding: 0 は OverlayShell の
-   .is-phone 規則が上書きする。ここでは body の余白だけ差し替える。 */
-.is-phone .tv-overlay .task-hub .tv-overlay__body {
-    margin: 0;
-    padding: 4px 24px calc(34px + env(safe-area-inset-bottom, 0px));
-}
-
-/* --- Body (scrollbar hiding) --- */
-.task-hub .tv-overlay__body {
-    scrollbar-width: none;
-}
-
-.task-hub .tv-overlay__body::-webkit-scrollbar {
-    display: none;
-}
 
 /* --- Preview --- */
 .task-hub__preview {

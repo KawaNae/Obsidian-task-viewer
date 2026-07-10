@@ -1,0 +1,10 @@
+/* ── Create Task Panel ──
+ *
+ * OverlayShell (mode: centered → phone bottom-sheet) 上の新規タスク作成
+ * フォーム。パネル chrome・寸法は tv-overlay__panel--dialog（_overlay.css）、
+ * フォーム部品は tv-form / tv-ctrl（_form.css / _controls.css）。
+ */
+
+.create-task__title {
+    margin: 0 0 12px;
+}

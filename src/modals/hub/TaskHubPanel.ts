@@ -65,7 +65,7 @@ export class TaskHubPanel {
 
         this.overlay.open({
             mode: 'centered',
-            panelClass: 'task-hub',
+            panelClass: 'tv-overlay__panel--dialog task-hub',
             childStack: this.stack,
             build: (bodyEl) => this.buildContent(bodyEl),
             onClose: () => this.teardown(),

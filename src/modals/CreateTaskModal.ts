@@ -1,4 +1,4 @@
-import { App, Modal, Setting } from 'obsidian';
+import { App, Setting } from 'obsidian';
 import { t } from '../i18n';
 import { Task } from '../types';
 import { TaskParser } from '../services/parsing/TaskParser';
@@ -7,6 +7,7 @@ import { createTempTask } from '../services/data/createTempTask';
 import { TaskNameSuggest } from '../suggest/TaskNameSuggest';
 import { attachBracketPairing } from './form/bracketPairing';
 import { DateFieldGroup } from './form/DateFieldGroup';
+import { OverlayShell } from '../views/sharedUI/OverlayShell';
 
 export interface CreateTaskResult {
     content: string;
@@ -47,7 +48,16 @@ export interface CreateTaskModalOptions {
     startHour?: number;
 }
 
-export class CreateTaskModal extends Modal {
+/**
+ * 新規タスク作成フォーム。
+ *
+ * Obsidian Modal ではなく OverlayShell (mode: 'centered') に載せる —
+ * desktop は中央ダイアログ、phone は bottom-sheet（swipe dismiss・
+ * keyboard awareness・close animation 込み）。パネル寸法は共通の
+ * tv-overlay__panel--dialog（_overlay.css）。
+ */
+export class CreateTaskModal {
+    private overlay = new OverlayShell();
     private result: CreateTaskResult;
     private onSubmit: (result: CreateTaskResult) => void;
     private options: CreateTaskModalOptions;
@@ -56,23 +66,33 @@ export class CreateTaskModal extends Modal {
     private dateGroup: DateFieldGroup;
     private warningEl: HTMLElement;
 
-    constructor(app: App, onSubmit: (result: CreateTaskResult) => void, initialValues: Partial<CreateTaskResult> = {}, options: CreateTaskModalOptions = {}) {
-        super(app);
+    constructor(private app: App, onSubmit: (result: CreateTaskResult) => void, initialValues: Partial<CreateTaskResult> = {}, options: CreateTaskModalOptions = {}) {
         this.onSubmit = onSubmit;
         this.result = { content: '', ...initialValues };
         this.options = options;
     }
 
-    onOpen() {
-        this.containerEl.addClass('mod-tv-modal');
-        const { contentEl } = this;
-        // tv-ctrl: Obsidian mobile の input 既定スタイルに詳細度で勝つための祖先クラス
-        contentEl.addClass('tv-form', 'tv-ctrl');
+    open(): void {
+        if (this.overlay.isOpen()) return;
+        this.overlay.open({
+            mode: 'centered',
+            panelClass: 'tv-overlay__panel--dialog create-task',
+            build: (bodyEl) => this.buildContent(bodyEl),
+        });
+    }
 
-        contentEl.createEl('h2', { text: this.options.title ?? t('modal.createTask') });
+    close(): void {
+        this.overlay.close();
+    }
+
+    private buildContent(bodyEl: HTMLElement): void {
+        // tv-ctrl は overlay root に付与済み。行文法のルートだけ足す
+        bodyEl.addClass('tv-form');
+
+        bodyEl.createEl('h2', { text: this.options.title ?? t('modal.createTask'), cls: 'create-task__title' });
 
         // --- Task Name ---
-        const nameSection = contentEl.createDiv({ cls: 'tv-form__name-section' });
+        const nameSection = bodyEl.createDiv({ cls: 'tv-form__name-section' });
         nameSection.createEl('label', { text: t('modal.taskName') });
         this.nameInput = nameSection.createEl('input', {
             type: 'text',
@@ -91,7 +111,7 @@ export class CreateTaskModal extends Modal {
 
         // --- Start / End / Due ---
         const dlParts = DateFieldGroup.splitDue(this.result.due);
-        this.dateGroup = new DateFieldGroup(contentEl, {
+        this.dateGroup = new DateFieldGroup(bodyEl, {
             labels: { start: t('modal.start'), end: t('modal.end'), due: t('modal.due') },
             initial: {
                 startDate: this.result.startDate || '',
@@ -133,14 +153,14 @@ export class CreateTaskModal extends Modal {
         this.dateGroup.updatePlaceholders();
 
         // --- Error / Warning ---
-        const errorEl = contentEl.createDiv({ cls: 'tv-form__error' });
+        const errorEl = bodyEl.createDiv({ cls: 'tv-form__error' });
         errorEl.style.display = 'none';
         this.dateGroup.bindErrorEl(errorEl);
-        this.warningEl = contentEl.createDiv({ cls: 'tv-form__warning' });
+        this.warningEl = bodyEl.createDiv({ cls: 'tv-form__warning' });
         this.warningEl.style.display = 'none';
 
         // --- Create button ---
-        new Setting(contentEl)
+        new Setting(bodyEl)
             .addButton((btn) =>
                 btn
                     .setButtonText(this.options.submitLabel ?? t('modal.create'))
@@ -166,10 +186,5 @@ export class CreateTaskModal extends Modal {
 
         this.close();
         this.onSubmit(this.result);
-    }
-
-    onClose() {
-        const { contentEl } = this;
-        contentEl.empty();
     }
 }
