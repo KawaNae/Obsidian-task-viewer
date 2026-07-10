@@ -123,10 +123,10 @@
     font-family: inherit;
     font-size: 1em;
     font-weight: inherit;
-    line-height: 1.6;
+    line-height: normal;
     cursor: pointer;
     gap: 6px;
-    padding: 8px 12px;
+    padding: 4px 12px;
 }
 
 .task-hub__status-pill:focus-visible {
