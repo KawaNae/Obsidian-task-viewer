@@ -6,14 +6,45 @@
  */
 
 /* --- Animations --- */
-@keyframes tv-overlay-fade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes tv-overlay-pop  { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
-@keyframes tv-overlay-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+/* slide は Obsidian native bottom-sheet (mobile Menu) の実測に合わせる:
+   open = 全高スライドアップ 150ms easeOutCirc / close = 全高スライドダウン
+   150ms ease-in-out、パネル自体はフェードしない（backdrop のみ fade）。
+   close は open の `reverse` ではなく専用 keyframes を使う — CSS
+   アニメーションは animation-name が変わらないと再スタートせず、
+   finished 済みの open を reverse に変えても fill 状態へスナップするだけ */
+@keyframes tv-overlay-fade      { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tv-overlay-fade-out  { from { opacity: 1; } to { opacity: 0; } }
+@keyframes tv-overlay-pop       { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes tv-overlay-pop-out   { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(0.96); } }
+@keyframes tv-overlay-slide     { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes tv-overlay-slide-out { from { transform: none; } to { transform: translateY(100%); } }
 
 /* --- Root --- */
 .tv-overlay {
     position: fixed;
     z-index: var(--z-overlay);
+
+    /* 面トークン:
+       - パネル面 = --modal-background（light=白 / dark=暗、
+         .tv-overlay__panel が参照）。Obsidian 本体の非対称 —
+         light はパネルが最も明るい面、dark はパネルが最も暗い面 — に乗る
+       - 入力/ボタン面 = パネルから一段離れた不透明な面。dark は
+         interactive-normal(#363636)。light は下の theme fork 参照
+       - *-base は depth tint（filter の group）の color-mix 起点。
+         比率を混ぜた --tv-bg-input は group-body 側で再宣言される */
+    --tv-bg-input-base: var(--tv-interactive-normal);
+    --tv-bg-input-hover-base: var(--tv-interactive-hover);
+    --tv-bg-input: var(--tv-bg-input-base);
+    --tv-bg-input-hover: var(--tv-bg-input-hover-base);
+}
+
+/* Light: desktop の interactive-normal / interactive-hover は白系
+   （ボーダー前提のボタン面）で白パネルに消える。入力面は
+   bg-secondary(#f6f6f6 — mobile light では interactive-normal と同値)、
+   hover はそこへ text 色を 7% 混ぜて一段沈める */
+body:not(.theme-dark) .tv-overlay {
+    --tv-bg-input-base: var(--tv-bg-secondary);
+    --tv-bg-input-hover-base: color-mix(in srgb, var(--tv-text) 7%, var(--tv-bg-secondary));
 }
 
 /* --- Backdrop --- */
@@ -56,7 +87,6 @@
     height: 4px;
     border-radius: 18px;
     background: var(--tv-text-faint);
-    opacity: 0.5;
     margin: 8px auto 4px;
 }
 
@@ -147,7 +177,7 @@
 
 .is-phone .tv-overlay .tv-overlay__backdrop {
     display: block;
-    animation: tv-overlay-fade 150ms ease-out;
+    animation: tv-overlay-fade 150ms ease-in-out;
 }
 
 .is-phone .tv-overlay .tv-overlay__panel {
@@ -158,11 +188,10 @@
     width: 100%;
     max-width: 100%;
     border: none;
-    border-radius: 40px 40px 0 0;
+    border-radius: var(--touch-radius-xs, 30px) var(--touch-radius-xs, 30px) 0 0;
     padding: 0;
     min-height: 0;
-    background: var(--background-secondary);
-    animation: tv-overlay-rise 150ms ease-out;
+    animation: tv-overlay-slide 150ms cubic-bezier(0, 0.55, 0.45, 1);
 }
 
 .is-phone .tv-overlay .tv-overlay__body {
@@ -185,26 +214,29 @@
    Close animation
    ═══════════════════════════════════════════════════════════════ */
 
-.tv-overlay.is-closing {
+/* パネルだけ inert にする。backdrop は閉じアニメーション中もヒットテスト
+   対象に残す — root ごと pointer-events: none にすると、閉じタップの
+   pointerup / 合成 click が下の UI に素通りする（タップスルー） */
+.tv-overlay.is-closing .tv-overlay__panel {
     pointer-events: none;
 }
 
 .tv-overlay--centered.is-closing .tv-overlay__backdrop {
-    animation: tv-overlay-fade 120ms ease-in reverse forwards;
+    animation: tv-overlay-fade-out 120ms ease-in forwards;
 }
 
 .tv-overlay--centered.is-closing .tv-overlay__panel {
-    animation: tv-overlay-pop 120ms ease-in reverse forwards;
+    animation: tv-overlay-pop-out 120ms ease-in forwards;
 }
 
 .is-phone .tv-overlay.is-closing .tv-overlay__backdrop {
-    animation: tv-overlay-fade 120ms ease-in reverse forwards;
+    animation: tv-overlay-fade-out 150ms ease-in-out forwards;
 }
 
 .is-phone .tv-overlay.is-closing .tv-overlay__panel {
-    animation: tv-overlay-rise 120ms ease-in reverse forwards;
+    animation: tv-overlay-slide-out 150ms ease-in-out forwards;
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .tv-overlay__panel, .tv-overlay__backdrop { animation: none !important; }
-}
+/* prefers-reduced-motion は意図的に尊重しない — Obsidian 本体の
+   bottom-sheet (JS/WAAPI 駆動) が参照しないため、従うと同一アプリ内で
+   native は動き自前シートだけ止まる非一貫が生じる（2026-07-10 判断） */

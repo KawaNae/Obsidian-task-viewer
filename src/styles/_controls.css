@@ -70,6 +70,10 @@
 .tv-ctrl .tv-ctrl__input-wrap:focus-within {
     border-color: var(--tv-accent);
     outline: none;
+}
+
+/* glow は text-input と同じく modifier でオプトイン（focus 表現の統一） */
+.tv-ctrl .tv-ctrl__input-wrap--glow:focus-within {
     box-shadow: 0 0 0 2px var(--tv-accent-hover);
 }
 
@@ -160,7 +164,7 @@
 .tv-ctrl__suggest {
     position: fixed;
     z-index: calc(var(--z-overlay) + 1);
-    background: var(--tv-bg-secondary);
+    background: var(--modal-background, var(--tv-bg-secondary));
     border: 1px solid var(--tv-border);
     border-radius: var(--tv-radius-s);
     box-shadow: 0 4px 12px var(--tv-shadow-medium);

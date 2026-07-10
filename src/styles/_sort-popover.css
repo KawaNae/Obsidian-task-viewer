@@ -36,7 +36,8 @@
     height: 14px;
 }
 
-/* Dropdown buttons (property, direction) — same style as filter */
+/* Dropdown buttons (property, direction) — same style as filter
+   (面 = --tv-bg-input / radius = --button-radius、_filter-popover.css 参照) */
 .sort-popover .sort-popover__dropdown {
     display: inline-flex;
     align-items: center;
@@ -44,8 +45,8 @@
     font-size: var(--font-ui-small);
     padding: 4px 8px;
     border: none;
-    border-radius: var(--tv-radius-s);
-    background-color: var(--tv-bg-primary);
+    border-radius: var(--button-radius, var(--tv-radius-s));
+    background-color: var(--tv-bg-input);
     box-shadow: none;
     color: var(--tv-text);
     cursor: pointer;
@@ -55,8 +56,13 @@
 }
 
 .sort-popover .sort-popover__dropdown:hover {
-    background-color: var(--tv-bg-hover);
+    background-color: var(--tv-bg-input-hover, var(--tv-bg-hover));
     box-shadow: none;
+}
+
+/* Mobile (touch): filter と同じ密度制御（_filter-popover.css 参照） */
+.is-mobile .sort-popover .sort-popover__dropdown {
+    padding: 6px 12px;
 }
 
 /* Icon inside dropdown */
@@ -87,7 +93,7 @@
     box-shadow: none;
     color: var(--tv-text-muted);
     cursor: pointer;
-    border-radius: var(--tv-radius-s);
+    border-radius: var(--clickable-icon-radius, var(--tv-radius-s));
     flex-shrink: 0;
 }
 

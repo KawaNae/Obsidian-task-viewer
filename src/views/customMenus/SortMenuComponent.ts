@@ -154,7 +154,7 @@ export class SortMenuComponent {
 
         // Remove button (×)
         const removeBtn = row.createEl('button', { cls: 'sort-popover__remove-btn' });
-        setIcon(removeBtn, 'x');
+        setIcon(removeBtn.createSpan(), 'x');
         removeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.state.rules.splice(index, 1);

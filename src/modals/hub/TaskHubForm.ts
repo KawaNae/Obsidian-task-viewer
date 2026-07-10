@@ -185,9 +185,6 @@ export class TaskHubForm {
             onCommit: (group) => this.commitDates(group),
         });
 
-        // --- spacer: デスクトップ用（phone では非表示） ---
-        c.createDiv({ cls: 'task-hub__section-spacer' });
-
         // --- Tags ---
         const tagsGroup = c.createDiv({ cls: 'tv-form__group' });
         this.tagsSectionEl = tagsGroup.createDiv({ cls: 'task-hub__tags' });
@@ -331,7 +328,7 @@ export class TaskHubForm {
 
         // label + input の行（中央揃え — 他フィールドと同じ）
         const { row } = createFormRow(this.tagsSectionEl, t('modal.hub.tags'), { icon: PROPERTY_ICONS.tags });
-        const inputWrap = row.createDiv({ cls: 'tv-ctrl__input-wrap task-hub__tag-add-wrap tv-form__control' });
+        const inputWrap = row.createDiv({ cls: 'tv-ctrl__input-wrap tv-ctrl__input-wrap--glow task-hub__tag-add-wrap tv-form__control' });
         const input = inputWrap.createEl('input', {
             type: 'text',
             placeholder: t('modal.hub.addTag'),

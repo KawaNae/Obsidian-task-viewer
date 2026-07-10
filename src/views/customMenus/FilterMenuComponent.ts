@@ -209,7 +209,8 @@ export class FilterMenuComponent {
 
         // Group body with visual accent border and depth-based indentation
         const groupBody = groupEl.createDiv('filter-popover__group-body');
-        groupBody.style.setProperty('--depth', String(depth));
+        groupBody.style.setProperty('--depth', String(depth)); // indent calc 用
+        groupBody.dataset.depth = String(depth); // 背景シェーディングのセレクタ用
 
         // Render children recursively
         this.renderChildren(groupBody, group, depth);
@@ -244,7 +245,7 @@ export class FilterMenuComponent {
         // Group more menu (...) — only when parent has multiple children
         if (parentGroup.filters.length > 1) {
             const groupMoreBtn = groupFooter.createEl('button', { cls: 'filter-popover__more-btn' });
-            setIcon(groupMoreBtn, 'more-horizontal');
+            setIcon(groupMoreBtn.createSpan(), 'more-horizontal');
             groupMoreBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const items: SelectItem[] = [
@@ -348,7 +349,7 @@ export class FilterMenuComponent {
 
         // More menu button (...) — condition-level actions
         const moreBtn = headerLine.createEl('button', { cls: 'filter-popover__more-btn' });
-        setIcon(moreBtn, 'more-horizontal');
+        setIcon(moreBtn.createSpan(), 'more-horizontal');
         moreBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             const items: SelectItem[] = [

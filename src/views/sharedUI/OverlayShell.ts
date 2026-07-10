@@ -85,7 +85,16 @@ export class OverlayShell {
         const root = hostDoc.body.createDiv({ cls });
         this.rootEl = root;
 
-        root.createDiv({ cls: 'tv-overlay__backdrop' });
+        const backdrop = root.createDiv({ cls: 'tv-overlay__backdrop' });
+        // タップスルー防止: 閉じは document の pointerdown（capture）で始まる
+        // ため、その後の touchend / 合成 mouse click が下の UI に届かないよう
+        // backdrop で吸収する。touchend の preventDefault は合成 mouse
+        // イベント（mousedown/mouseup/click）の発生自体を抑止する
+        backdrop.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
+        backdrop.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
 
         const panelCls = opts.panelClass
             ? `tv-overlay__panel ${opts.panelClass}`

@@ -104,6 +104,7 @@ body {
     --tv-bg-input: var(--background-modifier-form-field);
 
     --tv-interactive-normal: var(--interactive-normal);
+    --tv-interactive-hover: var(--interactive-hover);
 
     --tv-border: var(--background-modifier-border);
     --tv-border-error: var(--background-modifier-error);

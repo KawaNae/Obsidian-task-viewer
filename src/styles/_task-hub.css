@@ -3,13 +3,25 @@
  * DOM スケルトン・backdrop・handle・close button・swipe dismiss・close
  * animation・keyboard awareness は OverlayShell (_overlay.css) が提供。
  * このファイルはパネルのサイズ制約とコンテンツ固有のスタイルのみ定義する。
+ *
+ * 面の設計: パネル面 = modal-background（OverlayShell 既定、light=白 /
+ * dark=暗）、セクション = 透明 + 区切り線、入力面 = --tv-bg-input
+ * （_overlay.css で一括定義）。
  */
 
-/* --- Panel sizing (desktop) --- */
+/* --- Panel --- */
 .task-hub {
     width: min(34em, calc(100vw - 32px));
     max-height: calc(100% - 64px);
-    padding: 40px 16px 16px;
+    padding: 40px 24px 34px;
+    border-radius: var(--modal-radius, 16px);
+}
+
+/* Phone (bottom-sheet): サイズ・角丸・padding: 0 は OverlayShell の
+   .is-phone 規則が上書きする。ここでは body の余白だけ差し替える。 */
+.is-phone .tv-overlay .task-hub .tv-overlay__body {
+    margin: 0;
+    padding: 4px 24px calc(34px + env(safe-area-inset-bottom, 0px));
 }
 
 /* --- Body (scrollbar hiding) --- */
@@ -22,9 +34,13 @@
 }
 
 /* --- Preview --- */
-.task-card--in-hub-preview .task-card__shape {
-    box-shadow: none;
-    filter: none;
+.task-hub__preview {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--tv-border);
+}
+
+.task-hub__preview.is-collapsed {
+    display: none;
 }
 
 .task-hub__preview .task-card {
@@ -33,28 +49,70 @@
     font-size: var(--task-card-font-size);
 }
 
-/* --- Form --- */
+.task-card--in-hub-preview .task-card__shape {
+    box-shadow: none;
+    filter: none;
+}
+
+/* --- Preview toggle (phone only) --- */
+.task-hub__preview-toggle {
+    display: none;
+    justify-content: center;
+    padding: 2px 0;
+    cursor: pointer;
+    color: var(--tv-text-faint);
+}
+
+.is-phone .task-hub__preview-toggle {
+    display: flex;
+}
+
+.task-hub__preview-toggle .svg-icon {
+    width: 16px;
+    height: 16px;
+    transition: transform 150ms ease;
+}
+
+.task-hub__preview-toggle.is-collapsed .svg-icon {
+    transform: rotate(180deg);
+}
+
+/* --- Form: flat sections with dividers --- */
 .task-hub__form {
-    padding: 12px 4px 4px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 8px;
+}
+
+.task-hub .tv-form__group {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--tv-border);
+}
+
+/* 最後のグループは区切り線なし。group の後ろに error / notice 要素が
+   並ぶため :last-child では届かない — 「後続に group がない group」で選ぶ */
+.task-hub .tv-form__group:not(:has(~ .tv-form__group)) {
+    border-bottom: none;
+}
+
+.task-hub .tv-form__group > :first-child {
+    margin-top: 0;
+}
+
+.task-hub .tv-form__group > .tv-form__name-section {
+    margin-bottom: 0;
 }
 
 .task-hub__read-only-notice {
     margin-top: 12px;
     padding: 8px 12px;
     border-radius: 6px;
-    background: var(--tv-bg-secondary);
+    background: var(--tv-bg-input);
     color: var(--tv-text-muted);
     font-size: var(--font-ui-small);
 }
 
 /* --- Tags --- */
-.task-hub__section-spacer {
-    height: 20px;
-}
-
 .task-hub__tags {
     display: flex;
     flex-direction: column;
@@ -130,67 +188,4 @@
 
 .task-hub__source:hover {
     color: var(--tv-text-muted);
-}
-
-/* --- Preview toggle (phone only) --- */
-.task-hub__preview-toggle {
-    display: none;
-    justify-content: center;
-    padding: 2px 0;
-    cursor: pointer;
-    color: var(--tv-text-faint);
-}
-
-.is-phone .task-hub__preview-toggle {
-    display: flex;
-}
-
-.task-hub__preview-toggle .svg-icon {
-    width: 16px;
-    height: 16px;
-    transition: transform 150ms ease;
-}
-
-.task-hub__preview-toggle.is-collapsed .svg-icon {
-    transform: rotate(180deg);
-}
-
-.task-hub__preview.is-collapsed {
-    display: none;
-}
-
-
-/* ═══════════════════════════════════════════════════════════════
-   Phone: inset-grouped sections (iOS-style)
-   Body is transparent; each group is a white rounded card.
-   ═══════════════════════════════════════════════════════════════ */
-
-.is-phone .task-hub__preview {
-    background: var(--modal-background, var(--background-primary));
-    border-radius: 16px;
-    padding: 8px 12px;
-    margin-bottom: 8px;
-}
-
-.is-phone .task-hub__form {
-    padding: 0;
-    gap: 8px;
-}
-
-.is-phone .task-hub__section-spacer {
-    display: none;
-}
-
-.is-phone .tv-form__group {
-    background: var(--modal-background, var(--background-primary));
-    border-radius: 16px;
-    padding: 12px 16px;
-}
-
-.is-phone .tv-form__group > :first-child {
-    margin-top: 0;
-}
-
-.is-phone .tv-form__group > .tv-form__name-section {
-    margin-bottom: 0;
 }
