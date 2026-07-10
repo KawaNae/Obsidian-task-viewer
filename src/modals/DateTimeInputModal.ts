@@ -43,7 +43,7 @@ export class DateTimeInputModal extends Modal {
         this.containerEl.addClass('mod-tv-modal');
         const { contentEl } = this;
         contentEl.empty();
-        contentEl.addClass('datetime-input-modal tv-ctrl');
+        contentEl.addClass('datetime-input-modal', 'tv-ctrl');
 
         // Title
         const typeLabel = this.type.charAt(0).toUpperCase() + this.type.slice(1);

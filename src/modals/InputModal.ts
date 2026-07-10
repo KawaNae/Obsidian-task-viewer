@@ -28,7 +28,7 @@ export class InputModal extends Modal {
         this.containerEl.addClass('mod-tv-modal');
         const { contentEl } = this;
         contentEl.empty();
-        contentEl.addClass('input-modal tv-ctrl');
+        contentEl.addClass('input-modal', 'tv-ctrl');
 
         contentEl.createEl('h3', { text: this.title });
 
