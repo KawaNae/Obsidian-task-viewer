@@ -39,7 +39,7 @@ export class FilterConditionRenderer {
 
     renderTextInput(row: HTMLElement, condition: FilterCondition): void {
         const input = row.createEl('input', {
-            cls: 'filter-popover__text-input',
+            cls: 'tv-ctrl__text-input',
             type: 'text',
             placeholder: t('filter.enterText'),
         });
@@ -87,8 +87,8 @@ export class FilterConditionRenderer {
         this.renderSuggestInput(row, {
             initialValue: condition.key ?? '',
             placeholder: t('filter.typePropertyKey'),
-            wrapClass: 'filter-popover__property-key-wrap',
-            inputClass: 'filter-popover__property-key-input',
+            wrapClass: 'tv-ctrl__input-wrap',
+            inputClass: 'tv-ctrl__input',
             suggestClass: 'filter-popover__property-key-suggest',
             getCandidates: () => FilterValueCollector.collectPropertyKeys(tasks),
             onCommit: (val) => {
@@ -108,7 +108,7 @@ export class FilterConditionRenderer {
             initialValue: typeof condition.value === 'string' ? condition.value : '',
             placeholder: t('filter.typePropertyValue'),
             wrapClass: 'filter-popover__property-value-wrap',
-            inputClass: 'filter-popover__text-input',
+            inputClass: 'tv-ctrl__text-input',
             suggestClass: 'filter-popover__property-value-suggest',
             getCandidates: () => key ? getPropertyValuesForKey(tasks, key) : [],
             onCommit: (val) => {
@@ -194,16 +194,16 @@ export class FilterConditionRenderer {
 
         // Pill群 (only if there are selected values)
         if (currentValues.length > 0) {
-            const pillContainer = container.createDiv('filter-popover__tag-pills');
+            const pillContainer = container.createDiv('tv-ctrl__pills');
             for (const val of currentValues) {
                 this.renderValuePill(pillContainer, val, condition);
             }
         }
 
         // Input + suggest
-        const inputWrap = container.createDiv('filter-popover__tag-input-wrap');
+        const inputWrap = container.createDiv('tv-ctrl__input-wrap');
         const input = inputWrap.createEl('input', {
-            cls: 'filter-popover__tag-input',
+            cls: 'tv-ctrl__input',
             type: 'text',
             attr: { placeholder: prop === 'tag' ? t('filter.typeTag') : t('filter.typeToFilter') },
         });
@@ -242,10 +242,10 @@ export class FilterConditionRenderer {
                 filtered,
                 (item, val) => {
                     if (prop === 'color') {
-                        const swatch = item.createSpan('filter-popover__color-swatch');
+                        const swatch = item.createSpan('tv-ctrl__color-swatch');
                         swatch.style.backgroundColor = val;
                     } else if (prop === 'status') {
-                        const checkbox = item.createEl('input', { cls: 'task-list-item-checkbox filter-popover__status-checkbox' });
+                        const checkbox = item.createEl('input', { cls: 'task-list-item-checkbox tv-ctrl__status-checkbox' });
                         checkbox.type = 'checkbox';
                         checkbox.checked = val !== ' ';
                         checkbox.readOnly = true;
@@ -298,12 +298,12 @@ export class FilterConditionRenderer {
 
     renderValuePill(container: HTMLElement, value: string, condition: FilterCondition): void {
         const statusDefs = this.getStatusDefs();
-        const pill = container.createDiv('filter-popover__tag-pill');
+        const pill = container.createDiv('tv-ctrl__pill');
         if (condition.property === 'color') {
-            const swatch = pill.createSpan('filter-popover__color-swatch');
+            const swatch = pill.createSpan('tv-ctrl__color-swatch');
             swatch.style.backgroundColor = value;
         } else if (condition.property === 'status') {
-            const checkbox = pill.createEl('input', { cls: 'task-list-item-checkbox filter-popover__status-checkbox' });
+            const checkbox = pill.createEl('input', { cls: 'task-list-item-checkbox tv-ctrl__status-checkbox' });
             checkbox.type = 'checkbox';
             checkbox.checked = value !== ' ';
             checkbox.readOnly = true;
@@ -311,7 +311,7 @@ export class FilterConditionRenderer {
             if (value !== ' ') checkbox.dataset.task = value;
         }
         pill.createSpan().setText(getValueDisplay(condition.property, value, statusDefs));
-        const removeBtn = pill.createEl('button', { cls: 'filter-popover__tag-pill-remove' });
+        const removeBtn = pill.createEl('button', { cls: 'tv-ctrl__pill-remove' });
         setIcon(removeBtn.createSpan(), 'x');
         removeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -365,9 +365,10 @@ export class FilterConditionRenderer {
             // Number input for nextNDays
             if (relVal.preset === 'nextNDays') {
                 const nInput = container.createEl('input', {
-                    cls: 'filter-popover__n-input',
+                    cls: 'tv-ctrl__text-input',
                     type: 'number',
                 });
+                nInput.style.width = '52px';
                 nInput.value = String(relVal.n ?? 7);
                 nInput.min = '1';
                 nInput.placeholder = 'N';
@@ -382,7 +383,7 @@ export class FilterConditionRenderer {
         } else {
             // Absolute date: native date input
             const dateInput = container.createEl('input', {
-                cls: 'filter-popover__date-input',
+                cls: 'tv-ctrl__text-input filter-popover__date-input',
                 type: 'date',
             });
             dateInput.value = (typeof dateVal === 'string' ? dateVal : '') || getToday();
@@ -436,9 +437,10 @@ export class FilterConditionRenderer {
 
         // Number input
         const input = container.createEl('input', {
-            cls: 'filter-popover__n-input',
+            cls: 'tv-ctrl__text-input',
             type: 'number',
         });
+        input.style.width = '52px';
         input.value = String(condition.value);
         input.min = '0';
         input.step = unit === 'hours' ? '0.5' : '1';

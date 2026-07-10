@@ -12,7 +12,7 @@ export interface ParseFlowResult {
     diagnostics: Diagnostic[];
 }
 
-const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until / nochildren / setContent|setStart|setEnd|setDue(...) / move(...)';
+const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until(...) / nochildren / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)';
 const SET_HEADS: Record<string, SetField> = Object.fromEntries(
     SET_FIELD_ORDER.map(field => [setHeadName(field), field])
 );
@@ -87,13 +87,12 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
         }
         case 'until': {
             cursor.next();
-            const date = cursor.tryEat('date');
-            if (!date) {
-                diagnostics.push(error('flow.expected-date', "Expected a date after 'until' (e.g. until 2026-09-28)", tokenSpan(cursor.peek())));
+            const expr = parseParenExpr(cursor, 'until', diagnostics);
+            if (expr) {
+                assignNode(program, 'until', { expr, span: { start: head.start, end: expr.span.end + 1 } }, diagnostics, tokenSpan(head));
+            } else {
                 skipToNextNode(cursor);
-                return;
             }
-            assignNode(program, 'until', { date: date.text, span: { start: head.start, end: date.end } }, diagnostics, tokenSpan(head));
             return;
         }
         case 'nochildren':

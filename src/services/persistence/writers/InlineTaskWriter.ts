@@ -3,6 +3,8 @@ import type { Task } from '../../../types';
 import { TaskParser } from '../../parsing/TaskParser';
 import { collectFlowLineIndices } from '../../flow/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
+import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
+import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { logWarn } from '../../../log/log';
 
 
@@ -16,7 +18,7 @@ export class InlineTaskWriter {
         private fileOps: FileOperations
     ) { }
 
-    async updateTaskInFile(task: Task, updatedTask: Task): Promise<void> {
+    async updateTaskInFile(task: Task, updatedTask: Task, childOps: PropertyOp[] = []): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
             logWarn(`[InlineTaskWriter] File not found: ${task.file}`);
@@ -39,6 +41,13 @@ export class InlineTaskWriter {
             // Preserve indentation if possible
             const originalIndent = lines[currentLine].match(/^(\s*)/)?.[1] || '';
             lines[currentLine] = originalIndent + newLine.trim();
+
+            // 子プロパティ行（- key:: value）の更新は同一 process 内で
+            // 連続適用する（別 process だと originalText 失効と行番号
+            // シフトが競合するため、タスク行と子行は1原子書き込み）。
+            if (childOps.length > 0) {
+                ChildPropertyLineEditor.applyOps(lines, currentLine, childOps);
+            }
 
             return lines.join('\n');
         });

@@ -26,7 +26,8 @@ export type Value =
     | { type: 'number'; value: number }
     | { type: 'bool'; value: boolean }
     | { type: 'weekday'; value: Weekday }
-    | { type: 'link'; target: string };
+    | { type: 'link'; target: string }
+    | { type: 'none' };
 
 export type LangType = Value['type'];
 
@@ -120,6 +121,8 @@ export function isDatishValue(v: Value): v is Value & { type: 'date' | 'datetime
  * or null when the pair is not comparable (e.g. durations in mo/y vs min).
  */
 export function compareValues(a: Value, b: Value): number | null {
+    if (a.type === 'none' && b.type === 'none') return 0;
+    if (a.type === 'none' || b.type === 'none') return null;
     if (isDatishValue(a) && isDatishValue(b)) {
         return datishKey(a).localeCompare(datishKey(b));
     }
@@ -154,6 +157,7 @@ export function valueToLiteral(v: Value): string {
         case 'bool': return v.value ? 'true' : 'false';
         case 'weekday': return WEEKDAY_NAMES[v.value];
         case 'link': return `[[${v.target}]]`;
+        case 'none': return 'none';
     }
 }
 
@@ -162,6 +166,7 @@ export function valueToDisplay(v: Value): string {
     switch (v.type) {
         case 'string': return v.value;
         case 'link': return `[[${v.target}]]`;
+        case 'none': return '';
         default: return valueToLiteral(v);
     }
 }

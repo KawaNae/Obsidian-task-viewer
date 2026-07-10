@@ -83,6 +83,9 @@ export class HandleManager {
         taskCards.forEach(el => {
             const htmlEl = el as HTMLElement;
             if (htmlEl.dataset.id === taskId || htmlEl.dataset.splitOriginalId === taskId) {
+                // handles-out は GridHandleStrategy が render 時に付ける
+                // 選択スコープの class なので、handle と同時に掃除する
+                htmlEl.classList.remove('task-card--handles-out');
                 const handles = htmlEl.querySelectorAll('.task-card__handle');
                 handles.forEach(h => h.remove());
             }

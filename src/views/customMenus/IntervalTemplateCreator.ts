@@ -13,6 +13,7 @@ import type { IntervalGroup } from '../../timer/TimerInstance';
 import type { IntervalTemplate } from '../../timer/IntervalTemplateLoader';
 import { PopoverStack } from '../sharedUI/PopoverStack';
 import type { PopoverShell } from '../sharedUI/PopoverShell';
+import { OverlayShell } from '../sharedUI/OverlayShell';
 
 export interface TemplateCreatorCallbacks {
     onSaved: (filePath: string) => void;
@@ -38,6 +39,7 @@ interface FormState {
 }
 
 export class IntervalTemplateCreator {
+    private overlay = new OverlayShell();
     private stack = new PopoverStack();
     private rootEl: HTMLElement | null = null;
     private iconShell: PopoverShell | null = null;
@@ -49,7 +51,7 @@ export class IntervalTemplateCreator {
     constructor(private app: App) {}
 
     isOpen(): boolean {
-        return this.stack.isOpen();
+        return this.overlay.isOpen();
     }
 
     show(anchorEl: HTMLElement, folderPath: string, callbacks: TemplateCreatorCallbacks): void {
@@ -69,14 +71,17 @@ export class IntervalTemplateCreator {
     }
 
     private openPopover(anchorEl: HTMLElement): void {
-        this.stack.openRoot({
+        this.overlay.open({
+            mode: 'anchored',
             anchor: { kind: 'element', element: anchorEl },
-            className: 'template-creator',
-            build: (el) => {
-                this.rootEl = el;
+            panelClass: 'template-creator',
+            childStack: this.stack,
+            build: (bodyEl) => {
+                this.rootEl = bodyEl;
                 this.renderContent();
             },
             onClose: () => {
+                this.stack.closeAll();
                 this.rootEl = null;
                 this.iconShell = null;
             },
@@ -84,7 +89,7 @@ export class IntervalTemplateCreator {
     }
 
     close(): void {
-        this.stack.closeAll();
+        this.overlay.close();
     }
 
     // ── Render ──
@@ -122,7 +127,7 @@ export class IntervalTemplateCreator {
         const field = parent.createDiv('template-creator__field');
         field.createEl('label', { cls: 'template-creator__label', text: t('timer.templateName') });
         const input = field.createEl('input', {
-            cls: 'template-creator__input',
+            cls: 'tv-ctrl__text-input',
             type: 'text',
             placeholder: 'Template name',
         });
@@ -137,7 +142,7 @@ export class IntervalTemplateCreator {
         const row = field.createDiv('template-creator__icon-row');
 
         const input = row.createEl('input', {
-            cls: 'template-creator__input',
+            cls: 'tv-ctrl__text-input',
             type: 'text',
             placeholder: 'rotate-cw',
         });
@@ -244,7 +249,7 @@ export class IntervalTemplateCreator {
         repeatWrap.createSpan({ cls: 'template-creator__repeat-label', text: 'Repeat' });
         const repeatInput = this.createNumericInput(repeatWrap, {
             value: group.repeatCount, min: 0, placeholder: '1',
-            cls: 'template-creator__repeat-input',
+            cls: 'tv-ctrl__text-input template-creator__repeat-input',
             onChange: (v) => { group.repeatCount = v; },
         });
 
@@ -279,7 +284,7 @@ export class IntervalTemplateCreator {
 
         // Label
         const labelInput = row.createEl('input', {
-            cls: 'template-creator__input template-creator__seg-label',
+            cls: 'tv-ctrl__text-input template-creator__seg-label',
             type: 'text',
             placeholder: 'Label',
         });
@@ -377,7 +382,7 @@ export class IntervalTemplateCreator {
         opts: { value: number; min?: number; max?: number; placeholder?: string; cls?: string; onChange: (v: number) => void },
     ): HTMLInputElement {
         const input = parent.createEl('input', {
-            cls: opts.cls ?? 'template-creator__dur-input',
+            cls: opts.cls ?? 'tv-ctrl__text-input template-creator__dur-input',
             type: 'number',
         });
         input.value = String(opts.value);

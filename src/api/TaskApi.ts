@@ -435,7 +435,7 @@ export class TaskApi {
             if (params.start) {
                 const parsed = parseDateTimeParam(params.start, 'start');
                 dateBlock = `@${parsed.date}`;
-                if (parsed.time) dateBlock += `T${parsed.time}`;
+                if (parsed.time) dateBlock += parsed.date ? `T${parsed.time}` : parsed.time;
             } else {
                 dateBlock = '@';
             }
@@ -443,7 +443,7 @@ export class TaskApi {
             if (params.end) {
                 const parsed = parseDateTimeParam(params.end, 'end');
                 dateBlock += `>${parsed.date}`;
-                if (parsed.time) dateBlock += `T${parsed.time}`;
+                if (parsed.time) dateBlock += parsed.date ? `T${parsed.time}` : parsed.time;
             }
 
             if (params.due) {

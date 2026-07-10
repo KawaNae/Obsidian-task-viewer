@@ -43,7 +43,7 @@ export class DateTimeInputModal extends Modal {
         this.containerEl.addClass('mod-tv-modal');
         const { contentEl } = this;
         contentEl.empty();
-        contentEl.addClass('datetime-input-modal');
+        contentEl.addClass('datetime-input-modal', 'tv-ctrl');
 
         // Title
         const typeLabel = this.type.charAt(0).toUpperCase() + this.type.slice(1);
@@ -60,7 +60,7 @@ export class DateTimeInputModal extends Modal {
         this.dateInput = dateContainer.createEl('input', {
             type: 'text',
             placeholder: 'YYYY-MM-DD',
-            cls: 'datetime-input-modal__text-input'
+            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow'
         });
         this.dateInput.value = this.currentValue.date || '';
         this.dateInput.addEventListener('input', () => this.validateInputs());
@@ -70,7 +70,7 @@ export class DateTimeInputModal extends Modal {
         this.timeInput = timeContainer.createEl('input', {
             type: 'text',
             placeholder: 'HH:mm',
-            cls: 'datetime-input-modal__text-input'
+            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow'
         });
         this.timeInput.value = this.currentValue.time || '';
         this.timeInput.addEventListener('input', () => this.validateInputs());
@@ -113,8 +113,8 @@ export class DateTimeInputModal extends Modal {
         const timeValue = this.timeInput.value.trim();
 
         // Reset styles
-        this.dateInput.removeClass('datetime-input-modal__input--invalid');
-        this.timeInput.removeClass('datetime-input-modal__input--invalid');
+        this.dateInput.removeClass('tv-ctrl__text-input--invalid');
+        this.timeInput.removeClass('tv-ctrl__text-input--invalid');
         this.errorEl.style.display = 'none';
 
         // Build fields for the target type only
@@ -132,7 +132,7 @@ export class DateTimeInputModal extends Modal {
         const formatErr = validateDateTimeFormats(fields);
         if (formatErr) {
             const input = formatErr.field.endsWith('Date') ? this.dateInput : this.timeInput;
-            input.addClass('datetime-input-modal__input--invalid');
+            input.addClass('tv-ctrl__text-input--invalid');
             this.showError(formatErr.message);
             return { valid: false, errorMessage: formatErr.message };
         }
@@ -140,7 +140,7 @@ export class DateTimeInputModal extends Modal {
         const reqErr = validateDateRequirements(fields);
         if (reqErr) {
             const input = reqErr.field.endsWith('Date') ? this.dateInput : this.timeInput;
-            input.addClass('datetime-input-modal__input--invalid');
+            input.addClass('tv-ctrl__text-input--invalid');
             this.showError(reqErr.message);
             return { valid: false, errorMessage: reqErr.message };
         }

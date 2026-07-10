@@ -181,7 +181,7 @@
    3 辺枠にする。線幅は --task-card-frame-width で hover (1px) / selected (2px)
    を共有。Ghost も `is-selected` を継承して clone されるためここに
    `--drag-preview` を列挙する必要は無い (旧列挙は撤廃済み)。 */
-.timeline-view .allday-section .task-card:where(:not(.task-card--in-detail-modal)).task-card--split-continues-after:hover .task-card__shape::after,
+.timeline-view .allday-section .task-card:where(:not(.task-card--in-hub-preview)).task-card--split-continues-after:hover .task-card__shape::after,
 .timeline-view .allday-section .task-card.is-selected.task-card--split-continues-after .task-card__shape::after {
     border-top: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
     border-bottom: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
@@ -191,7 +191,7 @@
     border-bottom-left-radius: var(--task-card-border-radius);
 }
 
-.timeline-view .allday-section .task-card:where(:not(.task-card--in-detail-modal)).task-card--split-continues-before:hover .task-card__shape::after,
+.timeline-view .allday-section .task-card:where(:not(.task-card--in-hub-preview)).task-card--split-continues-before:hover .task-card__shape::after,
 .timeline-view .allday-section .task-card.is-selected.task-card--split-continues-before .task-card__shape::after {
     border-top: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
     border-bottom: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
@@ -201,7 +201,7 @@
     border-top-right-radius: var(--task-card-border-radius);
 }
 
-.timeline-view .allday-section .task-card:where(:not(.task-card--in-detail-modal)).task-card--split-continues-before.task-card--split-continues-after:hover .task-card__shape::after,
+.timeline-view .allday-section .task-card:where(:not(.task-card--in-hub-preview)).task-card--split-continues-before.task-card--split-continues-after:hover .task-card__shape::after,
 .timeline-view .allday-section .task-card.is-selected.task-card--split-continues-before.task-card--split-continues-after .task-card__shape::after {
     border-top: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
     border-bottom: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));

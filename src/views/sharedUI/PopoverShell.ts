@@ -12,6 +12,7 @@
  * explicitly, which prevents the popout-blindness regression where a popover
  * leaks back to the main window.
  */
+import { trackKeyboard, keyboardTop } from '../../utils/KeyboardState';
 
 export type PopoverAnchor =
     | { kind: 'element'; element: HTMLElement; placement?: 'below' }
@@ -41,6 +42,8 @@ export class PopoverShell {
     private onCloseCb: (() => void) | null = null;
     private onEscapeCb: (() => void) | null = null;
     private resizeHandler: (() => void) | null = null;
+    private vvResizeHandler: (() => void) | null = null;
+    private kbHandler: (() => void) | null = null;
     private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
     private pageHideHandler: (() => void) | null = null;
     private extraContains: HTMLElement[] = [];
@@ -65,6 +68,21 @@ export class PopoverShell {
         this.resizeHandler = () => this.reposition();
         hostWin.addEventListener('resize', this.resizeHandler);
 
+        const vv = hostWin.visualViewport;
+        if (vv) {
+            this.vvResizeHandler = () => this.reposition();
+            vv.addEventListener('resize', this.vvResizeHandler);
+        }
+
+        // Obsidian mobile: キーボード開閉は visualViewport に現れず Capacitor
+        // イベントのみ（KeyboardState 参照）。開閉に追従して上下反転し直す。
+        trackKeyboard(hostWin);
+        this.kbHandler = () => this.reposition();
+        hostWin.addEventListener('keyboardWillShow', this.kbHandler);
+        hostWin.addEventListener('keyboardDidShow', this.kbHandler);
+        hostWin.addEventListener('keyboardWillHide', this.kbHandler);
+        hostWin.addEventListener('keyboardDidHide', this.kbHandler);
+
         // Auto-close when the host window is being unloaded (popout closed).
         // Fires before document destruction so cleanup callbacks still run.
         this.pageHideHandler = () => this.close();
@@ -87,6 +105,17 @@ export class PopoverShell {
         if (this.resizeHandler) {
             this.hostWin.removeEventListener('resize', this.resizeHandler);
             this.resizeHandler = null;
+        }
+        if (this.vvResizeHandler && this.hostWin.visualViewport) {
+            this.hostWin.visualViewport.removeEventListener('resize', this.vvResizeHandler);
+            this.vvResizeHandler = null;
+        }
+        if (this.kbHandler) {
+            this.hostWin.removeEventListener('keyboardWillShow', this.kbHandler);
+            this.hostWin.removeEventListener('keyboardDidShow', this.kbHandler);
+            this.hostWin.removeEventListener('keyboardWillHide', this.kbHandler);
+            this.hostWin.removeEventListener('keyboardDidHide', this.kbHandler);
+            this.kbHandler = null;
         }
         if (this.pageHideHandler) {
             this.hostWin.removeEventListener('pagehide', this.pageHideHandler);
@@ -128,6 +157,17 @@ export class PopoverShell {
     reposition(): void {
         if (!this.el || !this.hostWin || !this.anchor) return;
         positionElement(this.el, this.anchor, this.hostWin);
+
+        // maxHeight クランプで popover が縮んだとき、フォーカス中の入力が
+        // 内部スクロールの折り返しの下に隠れることがある（mobile はキーボード
+        // 表示でも browser が自動スクロールしない）。nearest なので見えて
+        // いれば no-op。
+        const active = this.hostDoc?.activeElement;
+        if (active && this.el.contains(active) &&
+            (active instanceof HTMLInputElement ||
+             active instanceof HTMLTextAreaElement)) {
+            active.scrollIntoView({ block: 'nearest' });
+        }
     }
 
     contains(target: Node): boolean {
@@ -151,7 +191,7 @@ export class PopoverShell {
     }
 }
 
-function resolveHost(anchor: PopoverAnchor): { hostDoc: Document; hostWin: Window } {
+export function resolveHost(anchor: PopoverAnchor): { hostDoc: Document; hostWin: Window } {
     let node: Node | null = null;
     if (anchor.kind === 'element') {
         node = anchor.element;
@@ -163,12 +203,23 @@ function resolveHost(anchor: PopoverAnchor): { hostDoc: Document; hostWin: Windo
     return { hostDoc, hostWin };
 }
 
-function positionElement(el: HTMLElement, anchor: PopoverAnchor, hostWin: Window): void {
+export function positionElement(el: HTMLElement, anchor: PopoverAnchor, hostWin: Window): void {
     // Element must be in DOM with content to measure. Caller guarantees this
     // because positionElement is only invoked after open()/refresh().
-    const rect = el.getBoundingClientRect();
     const winW = Math.max(0, hostWin.innerWidth);
-    const winH = Math.max(0, hostWin.innerHeight);
+    // keyboardTop は visualViewport と Capacitor（Obsidian mobile）の両検知源
+    // を統合したキーボード上端。キーボードなしなら innerHeight に一致する。
+    const winH = Math.max(0, Math.min(hostWin.innerHeight, keyboardTop(hostWin)));
+
+    // 自然高さ（CSS max-height まで）が利用可能高さを超える場合のみ inline
+    // max-height で縮める。毎回リセットしてから測ることで、キーボードが
+    // 閉じたときの reposition で自然高さに戻る。
+    el.style.maxHeight = '';
+    if (el.getBoundingClientRect().height > winH - 16) {
+        el.style.maxHeight = `${winH - 16}px`;
+    }
+
+    const rect = el.getBoundingClientRect();
 
     let x: number;
     let y: number;

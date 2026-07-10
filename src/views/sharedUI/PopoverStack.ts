@@ -61,6 +61,10 @@ export class PopoverStack {
         return this.shells[this.shells.length - 1] ?? null;
     }
 
+    containsTarget(target: Node): boolean {
+        return this.shells.some(s => s.contains(target));
+    }
+
     private pushShell(opts: PopoverOpenOpts): PopoverShell {
         const shell = new PopoverShell();
 

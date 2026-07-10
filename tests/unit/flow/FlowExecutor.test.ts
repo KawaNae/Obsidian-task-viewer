@@ -151,7 +151,7 @@ describe('FlowExecutor', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository);
 
-        await executor.handleTaskCompletion(flowTask('every mon until 2026-06-30'));
+        await executor.handleTaskCompletion(flowTask('every mon until(2026-06-30)'));
         await flush();
 
         expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();

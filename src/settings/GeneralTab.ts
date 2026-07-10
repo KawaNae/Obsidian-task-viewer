@@ -59,7 +59,6 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
             .addOption('detail', t('settings.general.doubleTapActionDetail'))
             .addOption('open', t('settings.general.doubleTapActionOpen'))
             .addOption('menu', t('settings.general.doubleTapActionMenu'))
-            .addOption('properties', t('settings.general.doubleTapActionProperties'))
             .setValue(plugin.settings.doubleTapAction)
             .onChange(async (value) => {
                 plugin.settings.doubleTapAction = value as DoubleTapAction;

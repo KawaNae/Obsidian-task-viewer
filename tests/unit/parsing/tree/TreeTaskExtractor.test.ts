@@ -543,6 +543,23 @@ describe('TreeTaskExtractor', () => {
             expect(tasks[0].tags).toContain('propTag');
             expect(tasks[0].properties['tags']).toBeUndefined();
         });
+
+        it('3段ネストで孫セクションのタグが兄弟セクションに漏れない', () => {
+            const tasks = extractTasks([
+                '## Expenses',
+                '### EPOS',
+                '#### 特殊',
+                '- tags:: #出/クレカ/EPOS',
+                '- [ ] epos-task @2026-03-24',
+                '### りそな',
+                '- tags:: #出/りそな',
+                '- [ ] risona-task @2026-03-25',
+            ]);
+            const eposTask = tasks.find(t => t.content === 'epos-task')!;
+            const risonaTask = tasks.find(t => t.content === 'risona-task')!;
+            expect(getEffectiveTags(eposTask)).toEqual(['出/クレカ/EPOS']);
+            expect(getEffectiveTags(risonaTask)).toEqual(['出/りそな']);
+        });
     });
 
     describe('bare-checkbox inbox tasks (task-bearing files)', () => {

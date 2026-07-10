@@ -80,14 +80,6 @@ export class DragHandler {
         this.currentDoc.addEventListener('lostpointercapture', this.boundPointerCancel);
     }
 
-    /** detail handle 押下時のハンドラ設定。内部で DragRouter に橋渡し。 */
-    set onDetailClick(cb: ((taskId: string) => void) | null) {
-        this.router.onDetailClick = cb;
-    }
-    get onDetailClick(): ((taskId: string) => void) | null {
-        return this.router.onDetailClick;
-    }
-
     destroy(): void {
         this.container.removeEventListener('pointerdown', this.boundPointerDown);
         this.container.removeEventListener('touchstart', this.boundTouchStart, { capture: true });

@@ -1,0 +1,289 @@
+/* ======================================================
+   Shared form widgets (tv-form__*)
+   TaskHubForm と CreateTaskModal（+ PickerTextField）が共有する
+   フォーム部品。モーダル chrome は _modal.css、コントロール原子は
+   _controls.css（tv-ctrl__*）。
+   ====================================================== */
+
+/* --- 行文法: 左固定幅ラベル列 + コントロール領域 --- */
+.tv-form {
+    --tv-form-label-width: 7em;
+}
+
+.tv-form__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+/* pill 等が折り返す行はラベルを上端揃え */
+.tv-form__row--start {
+    align-items: flex-start;
+}
+
+.tv-form__row--start > .tv-form__label {
+    padding-top: 4px; /* 1 行目の pill / input と光学的に揃える */
+}
+
+.tv-form__label {
+    flex: 0 0 var(--tv-form-label-width, 7em);
+    font-size: var(--font-ui-small);
+    color: var(--tv-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* アイコン付きラベル: flex で icon と text を上下中央揃え。
+   アイコンなしのラベルは text-overflow: ellipsis が効く既定のまま */
+.tv-form__label--with-icon {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.tv-form__label-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: var(--tv-text-faint);
+}
+.tv-form__label-icon .svg-icon {
+    width: 14px;
+    height: 14px;
+}
+
+/* 行内の直置きコントロール。`.tv-ctrl .tv-ctrl__text-input` の width:100%
+   （0,2,0）に読み込み順で勝つため、同じ 0,2,0 詳細度で定義する */
+.tv-ctrl .tv-form__control {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+}
+
+/* 追加行の key input: ラベル列幅にスナップして値列と桁を揃える */
+.tv-ctrl .tv-form__control--key {
+    flex: 0 0 var(--tv-form-label-width, 7em);
+    width: auto;
+    min-width: 0;
+}
+
+/* 日付/時刻フィールドラッパ — date:time = 2:1 配分 */
+.tv-form__field {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+/* 日付 input 右端の clear(×) と時刻 input 左端の picker が隣接して
+   誤タップしやすい → 日付・時刻の間を 1 文字分広げる（余白ぶんは
+   flex 配分 3:2 により主に date 側が縮む） */
+.tv-form__field--date {
+    flex: 3 1 0;
+    margin-right: 1ch;
+}
+
+.tv-form__field--time {
+    flex: 2 1 0;
+}
+
+/* phone: picker chrome（74px 固定費）で 2:1 が破綻 → 日付行はラベルを上段に折る */
+.is-phone .tv-form__row--dates {
+    flex-wrap: wrap;
+}
+
+.is-phone .tv-form__row--dates > .tv-form__label {
+    flex: 1 1 100%;
+    padding-top: 0;
+}
+
+.tv-form__name-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.tv-form__name-section label {
+    font-size: 0.9em;
+    color: var(--tv-text-muted);
+}
+
+/* グループ見出し（行ラベルでなく、複数行のセクションを束ねる）。
+   太字は h4 の UA 既定に頼らず意図として明示する */
+.tv-form__section-label {
+    margin-top: 16px;
+    margin-bottom: 4px;
+    font-size: var(--font-ui-small);
+    font-weight: 600;
+    color: var(--tv-text-muted);
+}
+
+.tv-form__input-with-picker {
+    position: relative;
+}
+
+.tv-ctrl .tv-form__input-with-picker .tv-ctrl__text-input {
+    padding-left: 46px;
+    padding-right: 28px;
+}
+
+/* color picker: swatch(16px) がボタン右に入るので padding-left を拡大、
+   clear ボタンなし → padding-right はデフォルトに戻す */
+.tv-ctrl .tv-form__input-with-picker--color .tv-ctrl__text-input {
+    padding-left: 66px;
+    padding-right: 12px;
+}
+
+.tv-form__picker-button {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 36px;
+    height: 100%;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--tv-text-muted);
+    /* hover 背景が親 input の角丸を貫通しないよう、外側の角は input と
+       同じ radius に追従させる（mobile の 44px pill でも clamp で一致） */
+    border-radius: var(--input-radius, var(--tv-radius-s)) 0 0 var(--input-radius, var(--tv-radius-s));
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.tv-form__picker-button::before {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 4px;
+    bottom: 4px;
+    width: 1px;
+    background-color: var(--tv-text-muted);
+}
+
+/* setIcon は span ラッパー経由（WebKit の inline-flex 直下 SVG 非描画対策） */
+.tv-form__picker-button > span,
+.tv-form__clear-button > span {
+    display: inline-flex;
+}
+
+.tv-form__picker-button .svg-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+/* is-mobile ではオーバーレイ（native input）がヒット対象のため :hover が
+   button に立たない — overlay の hover を :has() で button に接続する */
+.tv-form__picker-button:hover,
+.tv-form__input-with-picker:has(> .tv-form__native-picker-input:hover) .tv-form__picker-button {
+    color: var(--tv-text);
+    background-color: var(--tv-bg-hover);
+}
+
+.tv-form__picker-button:focus-visible {
+    outline: 2px solid var(--tv-accent);
+    outline-offset: 1px;
+}
+
+/* Native picker input: transparent overlay on the picker-button area.
+   desktop では pointer-events: none — hover/cursor は下の pickerButton が
+   受け、click は pickerButton → showPicker() で開く。native input の
+   shadow DOM 内部フィールドは CSS の cursor 指定を無視するため、
+   オーバーレイをヒット対象にすると cursor が default に落ちる */
+.tv-form__input-with-picker > input.tv-form__native-picker-input[type='date'],
+.tv-form__input-with-picker > input.tv-form__native-picker-input[type='time'],
+.tv-form__input-with-picker > input.tv-form__native-picker-input[type='color'] {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 36px !important;
+    height: 100% !important;
+    opacity: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    pointer-events: none !important;
+    cursor: pointer !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+}
+
+/* Mobile (touch): iPad は programmatic showPicker が拒否される
+   （WebKit Bug #261703）ため、native input への直接タップで開く */
+.is-mobile .tv-form__input-with-picker > input.tv-form__native-picker-input[type='date'],
+.is-mobile .tv-form__input-with-picker > input.tv-form__native-picker-input[type='time'],
+.is-mobile .tv-form__input-with-picker > input.tv-form__native-picker-input[type='color'] {
+    pointer-events: auto !important;
+}
+
+/* date/time input の shadow DOM 内部フィールドは input 側の cursor 指定を
+   継承しない（color にはこの内部構造がないため対称性が崩れる）。
+   オーバーレイがヒット対象になる is-mobile + ポインタ環境
+   （エミュレーション / iPad + トラックパッド）でも pointer を出す */
+.tv-form__native-picker-input::-webkit-datetime-edit,
+.tv-form__native-picker-input::-webkit-datetime-edit-fields-wrapper,
+.tv-form__native-picker-input::-webkit-datetime-edit-text,
+.tv-form__native-picker-input::-webkit-datetime-edit-year-field,
+.tv-form__native-picker-input::-webkit-datetime-edit-month-field,
+.tv-form__native-picker-input::-webkit-datetime-edit-day-field,
+.tv-form__native-picker-input::-webkit-datetime-edit-hour-field,
+.tv-form__native-picker-input::-webkit-datetime-edit-minute-field,
+.tv-form__native-picker-input::-webkit-datetime-edit-ampm-field,
+.tv-form__native-picker-input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+}
+
+/* Clear button (right side, visible only when input has a value) */
+.tv-form__clear-button {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 28px;
+    height: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--tv-text-muted);
+    border: none;
+    background: transparent;
+    border-radius: 0 var(--input-radius, var(--tv-radius-s)) var(--input-radius, var(--tv-radius-s)) 0;
+}
+
+.tv-form__clear-button:hover {
+    color: var(--tv-text);
+    background-color: var(--tv-bg-hover);
+}
+
+.tv-form__clear-button .svg-icon {
+    width: 12px;
+    height: 12px;
+}
+
+/* Task name suggest hint footer */
+.task-name-suggest__footer {
+    padding: 4px 8px;
+    font-size: 0.8em;
+    color: var(--tv-text-faint);
+    border-top: 1px solid var(--tv-border);
+    text-align: center;
+}
+
+/* Error message */
+.tv-form__error {
+    color: var(--tv-text-danger);
+    font-size: 0.85em;
+    margin-bottom: 12px;
+}
+
+/* Warning message */
+.tv-form__warning {
+    color: var(--tv-text-warning);
+    font-size: 0.85em;
+    margin-bottom: 12px;
+}

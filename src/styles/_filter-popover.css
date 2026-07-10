@@ -1,16 +1,19 @@
-/* ── Filter Popover ── */
+/* ── Filter Popover ──
+ *
+ * Root chrome (position / z-index / background / border / shadow / radius)
+ * is provided by OverlayShell (_overlay.css). This file only defines
+ * content-specific sizing and the inner layout.
+ *
+ * 原子部品（pill / suggest / text input / input-wrap / swatch /
+ * status-checkbox）は共有部品 tv-ctrl__*（_controls.css）を使う。
+ */
 
 .filter-popover {
-    position: fixed;
-    z-index: var(--z-overlay);
-    background: var(--tv-bg-secondary);
-    border: 1px solid var(--tv-border);
-    border-radius: var(--tv-radius-s);
-    box-shadow: 0 4px 12px var(--tv-shadow-medium);
     min-width: 280px;
-    max-width:  90%;
-    max-height: 80%;
-    overflow-y: auto;
+    max-width: min(90vw, 560px);
+}
+
+.filter-popover > .tv-overlay__body {
     padding: 4px 0;
 }
 
@@ -44,41 +47,8 @@
     white-space: nowrap;
 }
 
-/* Property key input wrap */
-.filter-popover__property-key-wrap {
-    display: inline-flex;
-    align-items: center;
-    border: 1px solid var(--tv-border);
-    border-radius: var(--tv-radius-s);
-    background: var(--tv-bg-primary);
-    min-width: 0;
-}
-.filter-popover__property-key-wrap:focus-within {
-    border-color: var(--tv-accent);
-    outline: none;
-}
-
-.filter-popover .filter-popover__property-key-input {
-    font-size: var(--font-ui-small);
-    padding: 4px 8px;
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    color: var(--tv-text);
-    outline: none;
-    box-shadow: none;
-    width: 100%;
-    min-width: 0;
-}
-.filter-popover .filter-popover__property-key-input:hover {
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-}
-
-/* Property value input wrap */
+/* Property value input wrap（grid セル内で潰れないように） */
 .filter-popover__property-value-wrap {
-    display: block;
     min-width: 0;
 }
 
@@ -99,20 +69,23 @@
     font-size: var(--font-ui-small);
     font-weight: 600;
     color: var(--tv-accent);
-    background-color: var(--tv-bg-primary);
+    background-color: var(--tv-bg-input);
     border: none;
     box-shadow: none;
     cursor: pointer;
-    padding: 2px 4px;
-    border-radius: var(--tv-radius-s);
+    padding: 2px 6px;
+    border-radius: var(--button-radius, var(--tv-radius-s));
 }
 
 .filter-popover .filter-popover__logic-btn:hover {
-    background-color: var(--tv-bg-hover);
+    background-color: var(--tv-bg-input-hover, var(--tv-bg-hover));
     box-shadow: none;
 }
 
-/* Dropdown buttons (property, operator, value) — flat Notion style */
+/* Dropdown buttons (property, operator, value) — Obsidian 標準ボタンに
+   合わせる: 面は --tv-bg-input（= interactive-normal 系、depth 面上では
+   アクセントが混ざる）、radius は --button-radius（desktop 5px /
+   mobile 44px の強い丸）。 */
 /* Specificity: override Obsidian's button:not(.clickable-icon) */
 .filter-popover .filter-popover__dropdown {
     display: inline-flex;
@@ -121,8 +94,8 @@
     font-size: var(--font-ui-small);
     padding: 4px 8px;
     border: none;
-    border-radius: var(--tv-radius-s);
-    background-color: var(--tv-bg-primary);
+    border-radius: var(--button-radius, var(--tv-radius-s));
+    background-color: var(--tv-bg-input);
     box-shadow: none;
     color: var(--tv-text);
     cursor: pointer;
@@ -132,13 +105,8 @@
 }
 
 .filter-popover .filter-popover__dropdown:hover {
-    background-color: var(--tv-bg-hover);
+    background-color: var(--tv-bg-input-hover, var(--tv-bg-hover));
     box-shadow: none;
-}
-
-.filter-popover__dropdown--placeholder {
-    color: var(--tv-text-muted);
-    font-style: italic;
 }
 
 /* Icon inside dropdown button */
@@ -153,35 +121,43 @@
     height: 14px;
 }
 
-/* Target selector: compact "self" state (icon only, muted) */
+/* Mobile (touch): タップターゲットを広げる。Obsidian mobile は
+   .is-phone/.is-tablet button:not(.clickable-icon)（0,2,1）で padding を
+   4px 20px にするため、.is-mobile スコープ（0,3,0）で密度を明示制御する */
+.is-mobile .filter-popover__row {
+    padding-top: 8px;
+    padding-bottom: 8px;
+}
+
+.is-mobile .filter-popover .filter-popover__dropdown {
+    padding: 6px 12px;
+}
+
+.is-mobile .filter-popover .filter-popover__logic-btn {
+    padding: 4px 10px;
+}
+
+.is-mobile .filter-popover .filter-popover__more-btn {
+    width: 28px;
+    height: 28px;
+}
+
+/* Target selector: compact "self" state (icon only, muted).
+   要素 opacity で薄めると背景色まで他のコントロールとずれるため、
+   muting はアイコン色だけに掛ける */
 .filter-popover__dropdown--target-self {
     padding: 4px !important;
-    opacity: 0.4;
 }
-.filter-popover__dropdown--target-self:hover {
-    opacity: 1;
+.filter-popover__dropdown--target-self .filter-popover__dropdown-icon {
+    color: var(--tv-text-faint);
+}
+.filter-popover__dropdown--target-self:hover .filter-popover__dropdown-icon {
+    color: var(--tv-text);
 }
 
 /* Target selector: active "parent" state */
 .filter-popover__dropdown--target {
     color: var(--tv-accent);
-}
-
-/* Text input for content filter */
-.filter-popover .filter-popover__text-input {
-    font-size: var(--font-ui-small);
-    padding: 4px 8px;
-    border: 1px solid var(--tv-border);
-    border-radius: var(--tv-radius-s);
-    background: var(--tv-bg-primary);
-    color: var(--tv-text);
-    width: 100%;
-    min-width: 0;
-}
-
-.filter-popover .filter-popover__text-input:focus {
-    border-color: var(--tv-accent);
-    outline: none;
 }
 
 /* More menu button (...) — pushed to right edge via margin-left: auto */
@@ -200,7 +176,7 @@
     box-shadow: none;
     color: var(--tv-text-muted);
     cursor: pointer;
-    border-radius: var(--tv-radius-s);
+    border-radius: var(--clickable-icon-radius, var(--tv-radius-s));
     flex-shrink: 0;
 }
 
@@ -280,20 +256,29 @@
     border-radius: 2px;
 }
 
-/* Depth-based background shading using color-mix (no -rgb variable needed) */
-.filter-popover__group-body[style*="--depth: 1"],
-.filter-popover__group-body[style*="--depth:1"] {
-    background: color-mix(in srgb, var(--tv-accent) 5%, transparent);
+/* Depth-based shading: group の面と、その上に載る入力/ボタン面
+   （--tv-bg-input / --tv-bg-input-hover）へ同じ比率でアクセントを混ぜて
+   載せ物ごと馴染ませる。depth は JS が data-depth と --depth（indent
+   calc 用）の両方で付与する。formula は group-body 自身に宣言する —
+   custom property は継承時に再評価されないため、--tv-accent-mix を
+   参照する式は同じ要素上に置く必要がある */
+.filter-popover__group-body[data-depth] {
+    background: color-mix(in srgb, var(--tv-accent) var(--tv-accent-mix, 0%), transparent);
+    --tv-bg-input: color-mix(in srgb, var(--tv-accent) var(--tv-accent-mix, 0%), var(--tv-bg-input-base));
+    --tv-bg-input-hover: color-mix(in srgb, var(--tv-accent) var(--tv-accent-mix, 0%), var(--tv-bg-input-hover-base));
 }
 
-.filter-popover__group-body[style*="--depth: 2"],
-.filter-popover__group-body[style*="--depth:2"] {
-    background: color-mix(in srgb, var(--tv-accent) 10%, transparent);
-}
+.filter-popover__group-body[data-depth="1"] { --tv-accent-mix: 5%; }
+.filter-popover__group-body[data-depth="2"] { --tv-accent-mix: 10%; }
+.filter-popover__group-body[data-depth="3"] { --tv-accent-mix: 15%; }
 
-.filter-popover__group-body[style*="--depth: 3"],
-.filter-popover__group-body[style*="--depth:3"] {
-    background: color-mix(in srgb, var(--tv-accent) 15%, transparent);
+/* Light: パネル→入力の段差が構造的に小さい（#fff→#f6f6f6 ≈ 3.5%。dark は
+   #1e1e1e→#363636 ≈ 9%）ため、tint 面では入力がほぼ同輝度になって溶ける。
+   tint の掛かる group（depth ≥ 1）だけ入力ベースを text 5% 混ぜで一段
+   沈めてから accent 混色し、dark と同じ「面から1段」の段差を作る */
+body:not(.theme-dark) .filter-popover__group-body[data-depth]:not([data-depth="0"]) {
+    --tv-bg-input-base: color-mix(in srgb, var(--tv-text) 5%, var(--tv-bg-secondary));
+    --tv-bg-input-hover-base: color-mix(in srgb, var(--tv-text) 12%, var(--tv-bg-secondary));
 }
 
 /* Group footer: [+ Add filter] [+ Add group] [...] */
@@ -328,34 +313,8 @@
 }
 
 .filter-popover .filter-popover__date-input {
-    font-size: var(--font-ui-small);
-    padding: 4px 6px;
-    border: 1px solid var(--tv-border);
-    border-radius: var(--tv-radius-s);
-    background: var(--tv-bg-primary);
-    color: var(--tv-text);
     min-width: 0;
     flex: 1;
-}
-
-.filter-popover .filter-popover__date-input:focus {
-    border-color: var(--tv-accent);
-    outline: none;
-}
-
-.filter-popover .filter-popover__n-input {
-    width: 52px;
-    font-size: var(--font-ui-small);
-    padding: 4px 6px;
-    border: 1px solid var(--tv-border);
-    border-radius: var(--tv-radius-s);
-    background: var(--tv-bg-primary);
-    color: var(--tv-text);
-}
-
-.filter-popover .filter-popover__n-input:focus {
-    border-color: var(--tv-accent);
-    outline: none;
 }
 
 /* Number Value Selector (Length filter) */
@@ -374,127 +333,6 @@
     gap: 4px;
 }
 
-.filter-popover__tag-pills {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-}
-
-.filter-popover__tag-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    padding: 2px 4px 2px 8px;
-    font-size: var(--font-ui-small);
-    background: var(--tv-bg-hover);
-    border-radius: 99px;
-    color: var(--tv-text);
-    white-space: nowrap;
-}
-
-/* Color swatch (pill & suggest item) */
-.filter-popover__color-swatch {
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    border-radius: 2px;
-    border: 1px solid var(--tv-border);
-    flex-shrink: 0;
-    vertical-align: middle;
-}
-
-/* Status checkbox preview (pill & suggest item) */
-.filter-popover__status-checkbox {
-    width: 14px;
-    height: 14px;
-    margin: 0;
-    flex-shrink: 0;
-    pointer-events: none;
-}
-
-.filter-popover .filter-popover__tag-pill-remove {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    padding: 0 !important;
-    border: none;
-    background: transparent !important;
-    color: var(--tv-text-muted);
-    cursor: pointer;
-    border-radius: 50%;
-    appearance: none;
-    -webkit-appearance: none;
-    box-shadow: none;
-}
-.filter-popover .filter-popover__tag-pill-remove:hover {
-    color: var(--tv-text);
-    background: var(--tv-bg-primary) !important;
-    box-shadow: none;
-}
-.filter-popover__tag-pill-remove .svg-icon {
-    width: 10px;
-    height: 10px;
-}
-
-.filter-popover .filter-popover__tag-input-wrap {
-    display: flex;
-    align-items: center;
-    border: 1px solid var(--tv-border);
-    border-radius: var(--tv-radius-s);
-    background: var(--tv-bg-primary);
-}
-.filter-popover .filter-popover__tag-input-wrap:focus-within {
-    border-color: var(--tv-accent);
-    outline: none;
-}
-
-.filter-popover .filter-popover__tag-input {
-    flex: 1;
-    font-size: var(--font-ui-small);
-    padding: 4px 8px;
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    color: var(--tv-text);
-    outline: none;
-    box-shadow: none;
-    min-width: 0;
-}
-.filter-popover .filter-popover__tag-input:hover {
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-}
-
-/* Suggest dropdown — fixed position, appended to body */
-.filter-popover__tag-suggest {
-    position: fixed;
-    z-index: calc(var(--z-overlay) + 1);
-    background: var(--tv-bg-secondary);
-    border: 1px solid var(--tv-border);
-    border-radius: var(--tv-radius-s);
-    box-shadow: 0 4px 12px var(--tv-shadow-medium);
-    max-height: 200px;
-    overflow-y: auto;
-    padding: 4px 0;
-    min-width: 160px;
-}
-
-.filter-popover__tag-suggest-item {
-    display: flex;
-    align-items: center;
-    padding: 4px 8px;
-    cursor: pointer;
-    font-size: var(--font-ui-small);
-    color: var(--tv-text);
-}
-.filter-popover__tag-suggest-item:hover,
-.filter-popover__tag-suggest-item--active {
-    background: var(--tv-bg-hover);
-}
-
 /* Empty state */
 .filter-popover__empty {
     padding: 12px 8px;
@@ -508,7 +346,7 @@
 .filter-child-popover {
     position: fixed;
     z-index: calc(var(--z-overlay) + 1);
-    background: var(--tv-bg-secondary);
+    background: var(--modal-background, var(--tv-bg-secondary));
     border: 1px solid var(--tv-border);
     border-radius: var(--tv-radius-s);
     box-shadow: 0 4px 12px var(--tv-shadow-medium);
@@ -569,33 +407,6 @@
     font-size: var(--font-ui-small);
     color: var(--tv-text-muted);
     text-align: center;
-}
-
-/* Tag search input */
-.filter-child-popover__search {
-    display: block;
-    width: 100%;
-    box-sizing: border-box;
-    padding: 6px 8px;
-    font-size: var(--font-ui-small);
-    color: var(--tv-text);
-    background: transparent;
-    border: none;
-    border-bottom: 1px solid var(--tv-border);
-    border-radius: 0;
-    outline: none;
-}
-.filter-child-popover__search:focus {
-    border-bottom-color: var(--tv-accent);
-}
-.filter-child-popover__search::placeholder {
-    color: var(--tv-text-muted);
-}
-
-/* Scrollable list within popover (used when search input is present) */
-.filter-child-popover__list {
-    max-height: 200px;
-    overflow-y: auto;
 }
 
 /* Danger item (Remove) — red text */

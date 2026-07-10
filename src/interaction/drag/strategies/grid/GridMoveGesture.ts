@@ -134,7 +134,6 @@ export class GridMoveGesture extends BaseDragStrategy {
         }
 
         this.initialGridColumn = el.style.gridColumn;
-        el.style.zIndex = '1000';
 
         const doc = context.container.ownerDocument || document;
         this.ghostRenderer = new GhostRenderer(el, doc);

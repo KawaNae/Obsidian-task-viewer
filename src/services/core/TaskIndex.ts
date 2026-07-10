@@ -2,6 +2,7 @@ import { App, TFile } from 'obsidian';
 import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
 import { isTvFile, isTvInline, hasBodyLine } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
+import { PropertyUpdatePlanner } from '../persistence/PropertyUpdatePlanner';
 import { createTempTask } from '../data/createTempTask';
 import { FlowExecutor } from '../flow/FlowExecutor';
 import { WikiLinkResolver } from './WikiLinkResolver';
@@ -467,6 +468,11 @@ export class TaskIndex {
         }
         if (task.isReadOnly) return;
 
+        // 非時刻プロパティ（color/tags/custom 等）の書き込み操作を導出。
+        // before スナップショット（Object.assign 前）との diff が必要なので
+        // ここで評価する。
+        const propertyOps = PropertyUpdatePlanner.plan(task, updates, this.settings.tvFileKeys);
+
         this.syncDetector.markLocalEdit(task.file);
         Object.assign(task, updates);
         this.store.bumpRevision();
@@ -477,14 +483,14 @@ export class TaskIndex {
         }
 
         if (isTvFile(task)) {
-            await this.repository.updateTvFile(task, updates, this.settings.tvFileKeys);
+            await this.repository.updateTvFile(task, updates, this.settings.tvFileKeys, propertyOps);
         } else {
             // All inline tasks route through InlineTaskWriter; TaskParser.format
             // dispatches by parserId. TVInlineParser.format() handles both
             // bare-checkbox and @notation-bearing output, so a task gaining or
             // losing date fields just produces the right line — no parserId
             // promotion/demotion needed.
-            await this.repository.updateTaskInFile(task, { ...task, ...updates });
+            await this.repository.updateTaskInFile(task, { ...task, ...updates }, propertyOps);
         }
     }
 

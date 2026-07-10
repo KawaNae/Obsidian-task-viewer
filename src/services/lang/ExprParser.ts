@@ -170,6 +170,11 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
         return { kind: 'lit', value: { type: 'bool', value: name === 'true' }, span };
     }
 
+    // None literal
+    if (name === 'none') {
+        return { kind: 'lit', value: { type: 'none' }, span };
+    }
+
     // Weekday literals
     const weekday = weekdayFromName(name);
     if (weekday !== null) {

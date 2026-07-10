@@ -1,0 +1,264 @@
+/* ── OverlayShell ──
+ *
+ * Unified overlay surface for anchored popovers and centered dialogs.
+ * Two modes (`--anchored`, `--centered`) share a single DOM skeleton;
+ * CSS switches both to bottom-sheet on `.is-phone`.
+ */
+
+/* --- Animations --- */
+/* slide は Obsidian native bottom-sheet (mobile Menu) の実測に合わせる:
+   open = 全高スライドアップ 150ms easeOutCirc / close = 全高スライドダウン
+   150ms ease-in-out、パネル自体はフェードしない（backdrop のみ fade）。
+   close は open の `reverse` ではなく専用 keyframes を使う — CSS
+   アニメーションは animation-name が変わらないと再スタートせず、
+   finished 済みの open を reverse に変えても fill 状態へスナップするだけ */
+@keyframes tv-overlay-fade      { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tv-overlay-fade-out  { from { opacity: 1; } to { opacity: 0; } }
+@keyframes tv-overlay-pop       { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes tv-overlay-pop-out   { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(0.96); } }
+@keyframes tv-overlay-slide     { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes tv-overlay-slide-out { from { transform: none; } to { transform: translateY(100%); } }
+
+/* --- Root --- */
+.tv-overlay {
+    position: fixed;
+    z-index: var(--z-overlay);
+
+    /* 面トークン:
+       - パネル面 = --modal-background（light=白 / dark=暗、
+         .tv-overlay__panel が参照）。Obsidian 本体の非対称 —
+         light はパネルが最も明るい面、dark はパネルが最も暗い面 — に乗る
+       - 入力/ボタン面 = パネルから一段離れた不透明な面。dark は
+         interactive-normal(#363636)。light は下の theme fork 参照
+       - *-base は depth tint（filter の group）の color-mix 起点。
+         比率を混ぜた --tv-bg-input は group-body 側で再宣言される */
+    --tv-bg-input-base: var(--tv-interactive-normal);
+    --tv-bg-input-hover-base: var(--tv-interactive-hover);
+    --tv-bg-input: var(--tv-bg-input-base);
+    --tv-bg-input-hover: var(--tv-bg-input-hover-base);
+}
+
+/* Light: desktop の interactive-normal / interactive-hover は白系
+   （ボーダー前提のボタン面）で白パネルに消える。入力面は
+   bg-secondary(#f6f6f6 — mobile light では interactive-normal と同値)、
+   hover はそこへ text 色を 7% 混ぜて一段沈める */
+body:not(.theme-dark) .tv-overlay {
+    --tv-bg-input-base: var(--tv-bg-secondary);
+    --tv-bg-input-hover-base: color-mix(in srgb, var(--tv-text) 7%, var(--tv-bg-secondary));
+}
+
+/* --- Backdrop --- */
+.tv-overlay__backdrop {
+    position: absolute;
+    inset: 0;
+    background: var(--background-modifier-cover);
+}
+
+/* --- Panel --- */
+.tv-overlay__panel {
+    display: flex;
+    flex-direction: column;
+    background: var(--modal-background, var(--tv-bg-secondary));
+    border: 1px solid var(--tv-border);
+    border-radius: var(--tv-radius-s);
+    box-shadow: 0 4px 12px var(--tv-shadow-medium);
+    overflow: hidden;
+}
+
+/* --- Body --- */
+.tv-overlay__body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* --- Handle (hidden by default, shown on phone) --- */
+.tv-overlay__handle {
+    display: none;
+    touch-action: none;
+    z-index: 1;
+    justify-content: center;
+}
+
+.tv-overlay__handle::after {
+    content: '';
+    display: block;
+    width: 67px;
+    height: 4px;
+    border-radius: 18px;
+    background: var(--tv-text-faint);
+    margin: 8px auto 4px;
+}
+
+/* --- Close button --- */
+.tv-overlay .tv-overlay__close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: var(--tv-radius-s);
+    color: var(--tv-text-muted);
+    cursor: pointer;
+}
+
+.tv-overlay .tv-overlay__close:hover {
+    color: var(--tv-text);
+    background: var(--tv-bg-hover) !important;
+}
+
+.tv-overlay__close .svg-icon {
+    width: 16px;
+    height: 16px;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Mode: anchored (desktop)
+   Panel is position:fixed, JS sets left/top. No backdrop.
+   ═══════════════════════════════════════════════════════════════ */
+
+.tv-overlay--anchored .tv-overlay__backdrop {
+    display: none;
+}
+
+.tv-overlay--anchored .tv-overlay__panel {
+    position: fixed;
+}
+
+.tv-overlay--anchored .tv-overlay__close {
+    display: none;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Mode: centered (desktop)
+   Root covers viewport, panel centered via flexbox.
+   ═══════════════════════════════════════════════════════════════ */
+
+.tv-overlay--centered {
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tv-overlay--centered .tv-overlay__backdrop {
+    animation: tv-overlay-fade 150ms ease-out;
+}
+
+.tv-overlay--centered .tv-overlay__panel {
+    position: relative;
+    box-shadow: 0 12px 40px var(--tv-shadow-medium);
+    animation: tv-overlay-pop 150ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+/* --- Dialog panel（centered のフォームダイアログ共通寸法: task hub /
+   create task。phone ではサイズ系を .is-phone 規則が上書きする） --- */
+.tv-overlay__panel--dialog {
+    width: min(34em, calc(100vw - 32px));
+    max-height: calc(100% - 64px);
+    padding: 40px 24px 34px;
+    border-radius: var(--modal-radius, 16px);
+}
+
+.tv-overlay__panel--dialog .tv-overlay__body {
+    scrollbar-width: none;
+}
+
+.tv-overlay__panel--dialog .tv-overlay__body::-webkit-scrollbar {
+    display: none;
+}
+
+.is-phone .tv-overlay .tv-overlay__panel--dialog .tv-overlay__body {
+    margin: 0;
+    padding: 4px 24px calc(34px + env(safe-area-inset-bottom, 0px));
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Phone: both modes → bottom-sheet
+   ═══════════════════════════════════════════════════════════════ */
+
+.is-phone .tv-overlay {
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: stretch;
+}
+
+.is-phone .tv-overlay .tv-overlay__backdrop {
+    display: block;
+    animation: tv-overlay-fade 150ms ease-in-out;
+}
+
+.is-phone .tv-overlay .tv-overlay__panel {
+    position: relative;
+    left: auto !important;
+    top: auto !important;
+    max-height: calc(100% - 120px) !important;
+    width: 100%;
+    max-width: 100%;
+    border: none;
+    border-radius: var(--touch-radius-xs, 30px) var(--touch-radius-xs, 30px) 0 0;
+    padding: 0;
+    min-height: 0;
+    animation: tv-overlay-slide 150ms cubic-bezier(0, 0.55, 0.45, 1);
+}
+
+.is-phone .tv-overlay .tv-overlay__body {
+    background: transparent;
+    border-radius: 0;
+    margin: 0 16px 16px;
+    padding: 4px 0 calc(8px + env(safe-area-inset-bottom, 0px));
+}
+
+.is-phone .tv-overlay .tv-overlay__handle {
+    display: block;
+}
+
+.is-phone .tv-overlay .tv-overlay__close {
+    display: none;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Close animation
+   ═══════════════════════════════════════════════════════════════ */
+
+/* パネルだけ inert にする。backdrop は閉じアニメーション中もヒットテスト
+   対象に残す — root ごと pointer-events: none にすると、閉じタップの
+   pointerup / 合成 click が下の UI に素通りする（タップスルー） */
+.tv-overlay.is-closing .tv-overlay__panel {
+    pointer-events: none;
+}
+
+.tv-overlay--centered.is-closing .tv-overlay__backdrop {
+    animation: tv-overlay-fade-out 120ms ease-in forwards;
+}
+
+.tv-overlay--centered.is-closing .tv-overlay__panel {
+    animation: tv-overlay-pop-out 120ms ease-in forwards;
+}
+
+.is-phone .tv-overlay.is-closing .tv-overlay__backdrop {
+    animation: tv-overlay-fade-out 150ms ease-in-out forwards;
+}
+
+.is-phone .tv-overlay.is-closing .tv-overlay__panel {
+    animation: tv-overlay-slide-out 150ms ease-in-out forwards;
+}
+
+/* prefers-reduced-motion は意図的に尊重しない — Obsidian 本体の
+   bottom-sheet (JS/WAAPI 駆動) が参照しないため、従うと同一アプリ内で
+   native は動き自前シートだけ止まる非一貫が生じる（2026-07-10 判断） */

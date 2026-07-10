@@ -592,7 +592,7 @@ export class MiniCalendarView extends ItemView {
         rowHeight: number,
     ): HTMLElement {
         const weekEl = document.createElement('div');
-        weekEl.addClass('cal-week-row cal-week-row--mini');
+        weekEl.addClass('cal-week-row', 'cal-week-row--mini');
         if (this.shouldShowWeekNumbers()) {
             weekEl.addClass('has-week-numbers');
         }

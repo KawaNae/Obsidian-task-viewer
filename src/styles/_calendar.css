@@ -140,7 +140,7 @@
    3 辺枠にする。線幅は --task-card-frame-width で hover (1px) / selected (2px)
    を共有。Ghost も `is-selected` を継承して clone されるため
    `--drag-preview` の列挙は不要 (旧列挙は撤廃済み)。 */
-.calendar-view .task-card:where(:not(.task-card--in-detail-modal)).task-card--split-continues-after:hover .task-card__shape::after,
+.calendar-view .task-card:where(:not(.task-card--in-hub-preview)).task-card--split-continues-after:hover .task-card__shape::after,
 .calendar-view .task-card.is-selected.task-card--split-continues-after .task-card__shape::after {
     border-top: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
     border-bottom: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
@@ -150,7 +150,7 @@
     border-bottom-left-radius: var(--task-card-border-radius);
 }
 
-.calendar-view .task-card:where(:not(.task-card--in-detail-modal)).task-card--split-continues-before:hover .task-card__shape::after,
+.calendar-view .task-card:where(:not(.task-card--in-hub-preview)).task-card--split-continues-before:hover .task-card__shape::after,
 .calendar-view .task-card.is-selected.task-card--split-continues-before .task-card__shape::after {
     border-top: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
     border-bottom: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
@@ -160,7 +160,7 @@
     border-top-right-radius: var(--task-card-border-radius);
 }
 
-.calendar-view .task-card:where(:not(.task-card--in-detail-modal)).task-card--split-continues-before.task-card--split-continues-after:hover .task-card__shape::after,
+.calendar-view .task-card:where(:not(.task-card--in-hub-preview)).task-card--split-continues-before.task-card--split-continues-after:hover .task-card__shape::after,
 .calendar-view .task-card.is-selected.task-card--split-continues-before.task-card--split-continues-after .task-card__shape::after {
     border-top: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
     border-bottom: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));

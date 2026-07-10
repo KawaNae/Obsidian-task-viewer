@@ -86,6 +86,8 @@ const copyStaticFiles = {
         const cssFiles = [
           '_variables.css',
           '_base.css',
+          '_controls.css',
+          '_form.css',
           '_sidebar.css',
           '_timeline-grid.css',
           '_timeline-date-header.css',
@@ -110,6 +112,9 @@ const copyStaticFiles = {
           '_template-creator.css',
           '_timer-widget.css',
           '_modal.css',
+          '_overlay.css',
+          '_task-hub.css',
+          '_create-task.css',
           '_filter-popover.css',
           '_sort-popover.css',
           '_kanban.css',

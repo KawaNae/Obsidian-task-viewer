@@ -381,21 +381,6 @@
     font-size: 0.9rem;
 }
 
-.input-modal__input {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid var(--tv-border);
-    border-radius: 4px;
-    background: var(--tv-bg-input);
-    color: var(--tv-text);
-    font-size: 1rem;
-}
-
-.input-modal__input:focus {
-    outline: none;
-    border-color: var(--tv-accent);
-}
-
 .timer-view__toolbar-host {
     flex-shrink: 0;
 }

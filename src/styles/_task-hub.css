@@ -1,0 +1,168 @@
+/* ── Task Hub Panel ──
+ *
+ * DOM スケルトン・backdrop・handle・close button・swipe dismiss・close
+ * animation・keyboard awareness は OverlayShell (_overlay.css) が提供。
+ * パネル寸法も共通の tv-overlay__panel--dialog（_overlay.css）が持ち、
+ * このファイルはコンテンツ固有のスタイルのみ定義する。
+ *
+ * 面の設計: パネル面 = modal-background（OverlayShell 既定、light=白 /
+ * dark=暗）、セクション = 透明 + 区切り線、入力面 = --tv-bg-input
+ * （_overlay.css で一括定義）。
+ */
+
+/* --- Preview --- */
+.task-hub__preview {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--tv-border);
+}
+
+.task-hub__preview.is-collapsed {
+    display: none;
+}
+
+.task-hub__preview .task-card {
+    position: relative;
+    margin: 0;
+    font-size: var(--task-card-font-size);
+}
+
+.task-card--in-hub-preview .task-card__shape {
+    box-shadow: none;
+    filter: none;
+}
+
+/* --- Preview toggle (phone only) --- */
+.task-hub__preview-toggle {
+    display: none;
+    justify-content: center;
+    padding: 2px 0;
+    cursor: pointer;
+    color: var(--tv-text-faint);
+}
+
+.is-phone .task-hub__preview-toggle {
+    display: flex;
+}
+
+.task-hub__preview-toggle .svg-icon {
+    width: 16px;
+    height: 16px;
+    transition: transform 150ms ease;
+}
+
+.task-hub__preview-toggle.is-collapsed .svg-icon {
+    transform: rotate(180deg);
+}
+
+/* --- Form: flat sections with dividers --- */
+.task-hub__form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.task-hub .tv-form__group {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--tv-border);
+}
+
+/* 最後のグループは区切り線なし。group の後ろに error / notice 要素が
+   並ぶため :last-child では届かない — 「後続に group がない group」で選ぶ */
+.task-hub .tv-form__group:not(:has(~ .tv-form__group)) {
+    border-bottom: none;
+}
+
+.task-hub .tv-form__group > :first-child {
+    margin-top: 0;
+}
+
+.task-hub .tv-form__group > .tv-form__name-section {
+    margin-bottom: 0;
+}
+
+.task-hub__read-only-notice {
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: var(--tv-bg-input);
+    color: var(--tv-text-muted);
+    font-size: var(--font-ui-small);
+}
+
+/* --- Tags --- */
+.task-hub__tags {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.task-hub__tag-pills {
+    margin-left: calc(var(--tv-form-label-width, 7em) + 8px);
+}
+
+.task-hub__tag-chip--locked {
+    opacity: 0.75;
+}
+
+.task-hub__tag-chip--cascade {
+    background: var(--tv-bg-secondary);
+    color: var(--tv-text-muted);
+    border: 1px dashed var(--tv-border);
+}
+
+/* --- Status pill --- */
+.tv-ctrl .tv-ctrl__pill.task-hub__status-pill {
+    appearance: none;
+    -webkit-appearance: none;
+    height: auto;
+    border: 1px solid var(--tv-border);
+    background: var(--tv-bg-input);
+    box-shadow: none;
+    border-radius: var(--input-radius, var(--tv-radius-s));
+    color: var(--tv-text);
+    font-family: inherit;
+    font-size: 1em;
+    font-weight: inherit;
+    line-height: 1.6;
+    cursor: pointer;
+    gap: 6px;
+    padding: 8px 12px;
+}
+
+.task-hub__status-pill:focus-visible {
+    outline: 2px solid var(--tv-accent);
+    outline-offset: 1px;
+}
+
+.task-hub__status-pill.is-disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* --- Style rows (color / linestyle / mask) & custom property rows --- */
+.task-hub__row--cascade .tv-ctrl__text-input {
+    color: var(--tv-text-muted);
+}
+
+.tv-form__input-with-picker--color .task-hub__color-swatch {
+    position: absolute;
+    left: 44px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    pointer-events: none;
+}
+
+.task-hub__source {
+    flex: 0 0 auto;
+    font-size: 0.75em;
+    color: var(--tv-text-faint);
+    cursor: pointer;
+    text-decoration: underline dotted;
+}
+
+.task-hub__source:hover {
+    color: var(--tv-text-muted);
+}

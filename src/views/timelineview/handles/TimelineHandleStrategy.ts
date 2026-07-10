@@ -8,8 +8,9 @@ import type { HandleStrategy } from './HandleStrategy';
  * 縦軸タスクなので resize は top/bottom、move は corner（top-right /
  * bottom-right）。 detail は top-left。
  *
- * boundary に接している edge には handle を出さない（-12px outset が view
- * 境界を跨ぐと隣の領域とぶつかるため）:
+ * ハンドルは縦方向に完全外側 (handle-size 分) へ出るため、grid の日境界
+ * (startHour:00) に接する edge ではハンドル全体が隣接領域（allday 欄 /
+ * grid 外）にはみ出してしまう。boundary に接している edge には出さない:
  * - touching top: split-continues-before、または開始時刻が startHour:00 ちょうど
  * - touching bottom: split-continues-after、または終了時刻が startHour:00 ちょうど
  */
@@ -30,9 +31,8 @@ export class TimelineHandleStrategy implements HandleStrategy {
             if (endH === startHour && endM === 0) isTouchingBottom = true;
         }
 
-        // 上端 boundary 以外: detail + resize-top + move-top-right
+        // 上端 boundary 以外: resize-top + move-top-right
         if (!isTouchingTop) {
-            HandleRenderer.createDetail(taskEl, taskId);
             HandleRenderer.createResize(taskEl, taskId, 'top', '↕');
             HandleRenderer.createMove(taskEl, taskId, 'top-right');
         }

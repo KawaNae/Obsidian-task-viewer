@@ -1,11 +1,12 @@
 import type { PopoverStack } from '../sharedUI/PopoverStack';
 import type { PopoverShell } from '../sharedUI/PopoverShell';
 
-const ITEM_CLASS = 'filter-popover__tag-suggest-item';
-const ACTIVE_CLASS = 'filter-popover__tag-suggest-item--active';
+const ITEM_CLASS = 'tv-ctrl__suggest-item';
+const ACTIVE_CLASS = 'tv-ctrl__suggest-item--active';
 
 /**
- * filter-popover の suggest（候補ドロップダウン）共通機構。
+ * suggest（候補ドロップダウン）共通機構。filter-popover とタスクハブ
+ * パネルが共有する。
  *
  * `renderSuggestInput`（単一値・自由入力）と `renderPillValueSelector`（複数値 Pill）
  * が同じ state 管理・ハイライト・PopoverStack 越しの開閉を別々に持っていたため、
@@ -80,15 +81,19 @@ export class SuggestController {
         renderItem: (itemEl: HTMLElement, value: string) => void,
         onPick: (value: string) => void,
     ): void {
+        // 自分の旧シェルは常に置き換える。openChild の「index 1 以降を閉じる」
+        // 規則は root popover がスタックに居る前提（filter-popover）で、root の
+        // 無い面（task hub）では自シェルが index 0 に座るため頼れない。
+        this.close();
+
         if (values.length === 0) {
-            this.close();
             return;
         }
 
         const newItems: { el: HTMLElement; value: string }[] = [];
         this.shell = this.stack.openChild({
             anchor: { kind: 'element', element: this.inputWrap },
-            className: `filter-popover__tag-suggest ${this.suggestClassName}`.trim(),
+            className: `tv-ctrl tv-ctrl__suggest ${this.suggestClassName}`.trim(),
             extraContains: [this.inputWrap],
             build: (suggestEl) => {
                 const w = `${this.inputWrap.getBoundingClientRect().width}px`;
@@ -97,6 +102,11 @@ export class SuggestController {
                 for (const val of values) {
                     const item = suggestEl.createDiv(ITEM_CLASS);
                     renderItem(item, val);
+                    // preventDefault on pointerdown keeps focus on the anchor
+                    // input — otherwise the click would blur it first, and
+                    // blur-commit surfaces (task hub) would persist the
+                    // half-typed value before onPick delivers the real one.
+                    item.addEventListener('pointerdown', (e) => e.preventDefault());
                     item.addEventListener('click', (e) => {
                         e.stopPropagation();
                         onPick(val);

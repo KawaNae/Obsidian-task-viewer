@@ -42,7 +42,9 @@
     border-bottom: 1px solid var(--tv-border);
     position: sticky;
     top: 0;
-    z-index: 2;
+    /* Same band as the timeline sticky date-header: must beat the selected
+       card (200) so cards scrolling underneath never pierce the header. */
+    z-index: var(--z-timeline-date-header);
 }
 
 .cal-weekday-header.has-week-numbers {

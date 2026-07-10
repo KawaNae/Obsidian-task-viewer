@@ -135,4 +135,27 @@ describe('ExprEvaluator', () => {
     it('rejects mixing calendar units in duration arithmetic', () => {
         expect(() => evaluate('1mo + 30min')).toThrow(EvalError);
     });
+
+    it('evaluates none literal', () => {
+        expect(evaluate('none')).toEqual({ type: 'none' });
+    });
+
+    it('evaluates time() on datetime', () => {
+        expect(evaluate('time(2026-07-15T14:30)')).toEqual({ type: 'time', value: '14:30' });
+    });
+
+    it('evaluates time() on date as none', () => {
+        expect(evaluate('time(2026-07-15)')).toEqual({ type: 'none' });
+    });
+
+    it('evaluates time() on a property', () => {
+        expect(evaluate('time(start)', { start: { type: 'datetime', date: '2026-07-15', time: '09:00' } }))
+            .toEqual({ type: 'time', value: '09:00' });
+        expect(evaluate('time(start)', { start: { type: 'date', value: '2026-07-15' } }))
+            .toEqual({ type: 'none' });
+    });
+
+    it('evaluates time() on arithmetic result', () => {
+        expect(evaluate('time(2026-07-15 + 2h)')).toEqual({ type: 'time', value: '02:00' });
+    });
 });

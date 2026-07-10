@@ -3,7 +3,7 @@ import { Task, DisplayTask, TaskViewerSettings, DoubleTapAction, isCompleteStatu
 
 interface RenderOptions {
     cardInstanceId: string;
-    context?: 'inline' | 'detail-modal';
+    context?: 'inline' | 'hub-preview';
     topRight?: 'time' | 'due' | 'none';
     compact?: boolean;
     hooks?: { onNavigate?: () => void };
@@ -48,7 +48,6 @@ export class TaskCardRenderer extends Component {
     private onDetailClick: ((task: Task) => void) | null = null;
     private onContextMenu: ((task: Task, x: number, y: number) => void) | null = null;
     private onOpenInEditor: ((task: Task) => void) | null = null;
-    private onOpenProperties: ((task: Task) => void) | null = null;
     private getDoubleTapAction: () => DoubleTapAction = () => 'detail';
     private cardComponents: WeakMap<HTMLElement, Component> = new WeakMap();
     private unsubscribeTaskDeleted: (() => void) | null = null;
@@ -119,10 +118,6 @@ export class TaskCardRenderer extends Component {
         this.onOpenInEditor = cb;
     }
 
-    setOpenPropertiesCallback(cb: (task: Task) => void): void {
-        this.onOpenProperties = cb;
-    }
-
     setDoubleTapActionGetter(getter: () => DoubleTapAction): void {
         this.getDoubleTapAction = getter;
     }
@@ -136,9 +131,9 @@ export class TaskCardRenderer extends Component {
         const cardInstanceId = options.cardInstanceId;
         const topRight = options.topRight ?? 'time';
         const compact = options.compact ?? false;
-        const isDetailModal = options.context === 'detail-modal';
-        const forceExpand = isDetailModal;
-        const enableLinks = isDetailModal || settings.enableCardFileLink;
+        const isHubPreview = options.context === 'hub-preview';
+        const forceExpand = isHubPreview;
+        const enableLinks = isHubPreview || settings.enableCardFileLink;
         const onNavigate = options.hooks?.onNavigate;
 
         // Tag the card with its instance id. `CardReconciler` indexes by this
@@ -146,8 +141,8 @@ export class TaskCardRenderer extends Component {
         // element is re-acquired and re-decorated in the next render.
         container.dataset.cardInstanceId = cardInstanceId;
 
-        if (isDetailModal) {
-            container.addClass('task-card--in-detail-modal');
+        if (isHubPreview) {
+            container.addClass('task-card--in-hub-preview');
         }
 
         // Idempotent re-render: remove only the renderer-owned direct children
@@ -172,7 +167,7 @@ export class TaskCardRenderer extends Component {
         this.cardComponents.set(container, cardComp);
 
         this.renderTopRightMeta(container, task, settings, topRight);
-        if (!isDetailModal) {
+        if (!isHubPreview) {
             bindTapIntents(container, {
                 onDoubleTap: (x, y) => {
                     const action = this.getDoubleTapAction();
@@ -180,8 +175,6 @@ export class TaskCardRenderer extends Component {
                         this.onContextMenu?.(task, x, y);
                     } else if (action === 'open') {
                         this.onOpenInEditor?.(task);
-                    } else if (action === 'properties') {
-                        this.onOpenProperties?.(task);
                     } else {
                         this.onDetailClick?.(task);
                     }
@@ -238,7 +231,7 @@ export class TaskCardRenderer extends Component {
         // Apply mask last so it overlays whatever child/inline renderer produced.
         // Detail modal opts out — the user explicitly asked to inspect this task.
         const mask = getEffectiveMask(task);
-        if (!isDetailModal && this.getMaskMode() && mask) {
+        if (!isHubPreview && this.getMaskMode() && mask) {
             TaskCardRenderer.applyMaskToContent(contentContainer, mask);
         }
     }

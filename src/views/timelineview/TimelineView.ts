@@ -6,7 +6,8 @@ import { Task, ViewState, PinnedListDefinition } from '../../types';
 import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { TaskDetailModal } from '../../modals/TaskDetailModal';
+import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
+import type { TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
 import { logDebug, logError } from '../../log/log';
 
 import { DateUtils } from '../../utils/DateUtils';
@@ -257,11 +258,14 @@ export class TimelineView extends ItemView {
         this.taskRenderer.setChildLineEditCallback((parentTask, line, bodyLine, x, y) => {
             childLineMenuBuilder.showMenu(parentTask, line, bodyLine, x, y);
         });
-        this.taskRenderer.setDetailCallback((task) => this.openDetailModal(task));
+        this.taskRenderer.setDetailCallback((task) => this.openTaskHub(task));
         this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
         this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
-        this.taskRenderer.setOpenPropertiesCallback((task) => this.menuHandler.openTaskProperties(task));
         this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);
+        this.menuHandler.setTaskHubOpener((taskId, opts) => {
+            const task = this.readService.getTask(taskId);
+            if (task) this.openTaskHub(task, opts);
+        });
 
         // Initialize HandleManager
         this.handleManager = new HandleManager(this.container, {
@@ -372,10 +376,6 @@ export class TimelineView extends ItemView {
             () => DateUtils.addDays(this.viewState.startDate, this.viewState.daysToShow - 1),
             () => this.getEffectiveZoomLevel()
         );
-        this.dragHandler.onDetailClick = (taskId: string) => {
-            const task = this.readService.getTask(taskId);
-            if (task) this.openDetailModal(task);
-        };
 
         // Background click → deselect、UI 経由 delete → deselect。両方 SelectionController に集約。
         // External-editor deletions are not tracked here by design — if that
@@ -530,7 +530,7 @@ export class TimelineView extends ItemView {
     }
 
     /**
-     * Detail modal を開く 2 経路 (dblclick / detail handle) の共通エントリ。
+     * タスクハブモーダルを開く共通エントリ (dblclick / menu 経由)。
      * modal が出た時点で card の選択状態は不要なので解除する。
      *
      * `selectTask(null)` は handle DOM ごと除去する破壊的操作なので、トリガと
@@ -543,9 +543,14 @@ export class TimelineView extends ItemView {
      * 触る。modal は selection ring を視覚的に覆い隠すので、close 後に ring が
      * 残らないという元 commit (7c43222) の意図はそのまま満たされる。
      */
-    private openDetailModal(task: Task): void {
-        new TaskDetailModal(this.app, task, this.taskRenderer, this.menuHandler, this.plugin.settings, this.readService).open();
-        setTimeout(() => this.handleManager.selectTask(null), 0);
+    private openTaskHub(task: Task, options?: TaskHubPanelOptions): void {
+        createTaskHubOpener(this.app, {
+            taskRenderer: this.taskRenderer,
+            menuHandler: this.menuHandler,
+            readService: this.readService,
+            writeService: this.writeService,
+            plugin: this.plugin,
+        }, () => setTimeout(() => this.handleManager.selectTask(null), 0))(task, options);
     }
 
     /**

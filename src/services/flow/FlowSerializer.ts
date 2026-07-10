@@ -45,7 +45,7 @@ function serializeParts(program: FlowProgram): { text: string; span: Span }[] {
     const parts: { text: string; span: Span }[] = [];
     if (program.schedule) parts.push({ text: serializeSchedule(program.schedule), span: program.schedule.span });
     if (program.lifetime) parts.push({ text: `x${program.lifetime.count}`, span: program.lifetime.span });
-    if (program.until) parts.push({ text: `until ${program.until.date}`, span: program.until.span });
+    if (program.until) parts.push({ text: `until(${printExpr(program.until.expr)})`, span: program.until.span });
     if (program.nochildren) parts.push({ text: 'nochildren', span: program.nochildren.span });
     if (program.sets) {
         for (const field of SET_FIELD_ORDER) {

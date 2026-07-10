@@ -34,7 +34,6 @@
       "doubleTapActionDetail": "詳細モーダル",
       "doubleTapActionOpen": "エディターで開く",
       "doubleTapActionMenu": "コンテキストメニュー",
-      "doubleTapActionProperties": "プロパティを変更",
       "showEditorMenuForTasks": "タスクにエディターメニューを表示",
       "showEditorMenuForTasksDesc": "エディター内のインラインタスク行に ··· メニューボタンを表示します。",
       "showEditorMenuForCheckboxes": "チェックボックスにエディターメニューを表示",
@@ -487,10 +486,31 @@
     "time": "時刻",
     "dateOptional": "日付（オプション）",
     "editType": "{{type}}を編集",
-    "changeProperties": "プロパティを変更",
     "emptyTaskWarning": "タスク名と日付が両方空です — このタスクはビューアーに表示されません。",
     "openDatePicker": "日付ピッカーを開く",
-    "openTimePicker": "時刻ピッカーを開く"
+    "openTimePicker": "時刻ピッカーを開く",
+    "hub": {
+      "status": "ステータス",
+      "readOnlyNotice": "このタスクは読み取り専用です（外部プラグイン記法）— 編集はできません。",
+      "taskMissing": "このタスクは存在しません。",
+      "tags": "タグ",
+      "color": "カラー",
+      "linestyle": "線種",
+      "mask": "マスク",
+      "properties": "プロパティ",
+      "addTag": "タグを追加…",
+      "removeTag": "タグ {{tag}} を削除",
+      "propertyKey": "キー",
+      "propertyValue": "値",
+      "removeProperty": "プロパティ {{key}} を削除",
+      "inheritedFromFile": "継承: ファイル",
+      "inheritedFromSection": "継承: セクション",
+      "contentTagLocked": "タスク名内の #タグ — 名前フィールドで編集してください",
+      "cascadeTagLocked": "継承タグ（{{source}}）— 削除するには継承元を編集してください",
+      "arrayReadOnly": "配列プロパティ — ファイル側で編集してください",
+      "reservedKey": "「{{key}}」は予約キーです",
+      "togglePreview": "プレビュー表示切替"
+    }
   },
   "validation": {
     "crossMidnight": "終了時刻（{{endTime}}）が開始時刻（{{startTime}}）より前です。",
@@ -694,17 +714,19 @@
       "arg-mismatch": "{{fn}}() の第{{index}}引数には {{expected}} が必要です（{{actual}} が渡されました）",
       "bad-unit-keyword": "week / month / year のいずれかが必要です（'{{actual}}' が渡されました）",
       "at-not-datish": "at() には日付/日時になる式が必要です（{{actual}} が渡されました）",
-      "set-content-not-string": "{{fn}}(...) には string が必要です（{{actual}} が渡されました）",
-      "set-date-mismatch": "{{fn}}(...) には日付/日時が必要です（{{actual}} が渡されました）",
+      "set-content-not-string": "{{fn}}(...) には string か none が必要です（{{actual}} が渡されました）",
+      "set-date-mismatch": "{{fn}}(...) には日付/日時か none が必要です（{{actual}} が渡されました）",
+      "set-time-mismatch": "{{fn}}(...) には時刻か none が必要です（{{actual}} が渡されました）",
+      "time-arithmetic": "時刻単体の算術はできません — 日付に対して演算してから抽出してください: time(start + 2h)",
+      "until-not-datish": "until() には日付/日時になる式が必要です（{{actual}} が渡されました）",
       "datetime-plus-time": "{{left}} への時刻の加算は曖昧です — date(x) + 14:00 のように日付に切り捨ててから足してください",
       "move-target": "move() の宛先には wikilink か string が必要です（{{actual}} が渡されました）"
     },
     "flow": {
-      "unknown-head": "不明な節 '{{head}}' — 節は every / + / at(...) / xN / until / nochildren / setContent|setStart|setEnd|setDue(...) / move(...) で始まります",
+      "unknown-head": "不明な節 '{{head}}' — 節は every / + / at(...) / xN / until(...) / nochildren / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...) で始まります",
       "zero-lifetime": "xN の N は 1 以上が必要です",
       "duplicate-schedule": "スケジュール節（every / + / at）は1つだけ書けます",
       "duplicate-node": "'{{clause}}' 節が重複しています",
-      "expected-date": "'until' の後には日付が必要です（例: until 2026-09-28）",
       "expected-lparen": "'{{fn}}' の後には '(' が必要です",
       "expected-rparen": "{{fn}}(...) を閉じる ')' が必要です",
       "expected-weekday": "曜日（mon..sun）が必要です（'{{token}}' が指定されました）",
@@ -714,7 +736,6 @@
       "bad-monthday": "'@' の後には日番号か 'last' が必要です",
       "orphan-modifier": "'{{clause}}' にはスケジュール節（every / + / at）が必要です",
       "empty": "フロー・コマンドが空です",
-      "bad-date": "'{{date}}' は存在しない日付です",
       "node-spans-lines": "節は行をまたいで書けません"
     }
   }
