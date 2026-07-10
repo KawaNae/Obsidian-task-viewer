@@ -74,8 +74,12 @@
     min-width: 0;
 }
 
+/* 日付 input 右端の clear(×) と時刻 input 左端の picker が隣接して
+   誤タップしやすい → 日付・時刻の間を 1 文字分広げる（余白ぶんは
+   flex 配分 3:2 により主に date 側が縮む） */
 .tv-form__field--date {
     flex: 3 1 0;
+    margin-right: 1ch;
 }
 
 .tv-form__field--time {
