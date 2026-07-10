@@ -177,7 +177,10 @@
     flex-shrink: 0;
 }
 
-.tv-form__picker-button:hover {
+/* is-mobile ではオーバーレイ（native input）がヒット対象のため :hover が
+   button に立たない — overlay の hover を :has() で button に接続する */
+.tv-form__picker-button:hover,
+.tv-form__input-with-picker:has(> .tv-form__native-picker-input:hover) .tv-form__picker-button {
     color: var(--tv-text);
     background-color: var(--tv-bg-hover);
 }
