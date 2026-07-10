@@ -218,6 +218,23 @@
     pointer-events: auto !important;
 }
 
+/* date/time input の shadow DOM 内部フィールドは input 側の cursor 指定を
+   継承しない（color にはこの内部構造がないため対称性が崩れる）。
+   オーバーレイがヒット対象になる is-mobile + ポインタ環境
+   （エミュレーション / iPad + トラックパッド）でも pointer を出す */
+.tv-form__native-picker-input::-webkit-datetime-edit,
+.tv-form__native-picker-input::-webkit-datetime-edit-fields-wrapper,
+.tv-form__native-picker-input::-webkit-datetime-edit-text,
+.tv-form__native-picker-input::-webkit-datetime-edit-year-field,
+.tv-form__native-picker-input::-webkit-datetime-edit-month-field,
+.tv-form__native-picker-input::-webkit-datetime-edit-day-field,
+.tv-form__native-picker-input::-webkit-datetime-edit-hour-field,
+.tv-form__native-picker-input::-webkit-datetime-edit-minute-field,
+.tv-form__native-picker-input::-webkit-datetime-edit-ampm-field,
+.tv-form__native-picker-input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+}
+
 /* Clear button (right side, visible only when input has a value) */
 .tv-form__clear-button {
     position: absolute;
