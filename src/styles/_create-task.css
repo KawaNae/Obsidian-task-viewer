@@ -8,3 +8,10 @@
 .create-task__title {
     margin: 0 0 12px;
 }
+
+.create-task .setting-item {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 24px 0 0;
+}
