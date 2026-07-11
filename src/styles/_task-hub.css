@@ -15,10 +15,6 @@
     padding: 8px 0;
 }
 
-.task-hub__preview.is-collapsed {
-    display: none;
-}
-
 .task-hub__preview .task-card {
     position: relative;
     margin: 0;
@@ -28,29 +24,6 @@
 .task-card--in-hub-preview .task-card__shape {
     box-shadow: none;
     filter: none;
-}
-
-/* --- Preview toggle (phone only) --- */
-.task-hub__preview-toggle {
-    display: none;
-    justify-content: center;
-    padding: 2px 0;
-    cursor: pointer;
-    color: var(--tv-text-faint);
-}
-
-.is-phone .task-hub__preview-toggle {
-    display: flex;
-}
-
-.task-hub__preview-toggle .svg-icon {
-    width: 16px;
-    height: 16px;
-    transition: transform 150ms ease;
-}
-
-.task-hub__preview-toggle.is-collapsed .svg-icon {
-    transform: rotate(180deg);
 }
 
 /* --- Form: flat sections with dividers --- */
