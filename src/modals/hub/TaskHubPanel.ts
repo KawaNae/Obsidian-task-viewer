@@ -1,4 +1,4 @@
-import { App, setIcon, TFile, type EventRef } from 'obsidian';
+import { App, TFile, type EventRef } from 'obsidian';
 import { t } from '../../i18n';
 import type { Task } from '../../types';
 import type TaskViewerPlugin from '../../main';
@@ -80,15 +80,6 @@ export class TaskHubPanel {
     }
 
     private buildContent(bodyEl: HTMLElement): void {
-        const toggle = bodyEl.createDiv({ cls: 'task-hub__preview-toggle' });
-        setIcon(toggle.createSpan(), 'chevron-up');
-        toggle.setAttribute('aria-label', t('modal.hub.togglePreview'));
-        toggle.addEventListener('click', () => {
-            const collapsed = !this.previewEl?.hasClass('is-collapsed');
-            this.previewEl?.toggleClass('is-collapsed', collapsed);
-            toggle.toggleClass('is-collapsed', collapsed);
-        });
-
         this.previewEl = bodyEl.createDiv({ cls: 'task-hub__preview' });
         const formHost = bodyEl.createDiv({ cls: 'task-hub__form' });
 

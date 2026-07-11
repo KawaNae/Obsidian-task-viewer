@@ -51,8 +51,6 @@ export interface ScheduleToolbarDeps {
  * so the filter button (and any open popover) survive container.empty().
  */
 export class ScheduleToolbar extends ViewToolbarBase {
-    private filterBtn: HTMLButtonElement | null = null;
-    private moreBtn: HTMLElement | null = null;
     private dateLabelHandle: { update: (year: number, month: number) => void } | null = null;
     private maskHandle: { update: () => void } | null = null;
 
@@ -109,7 +107,6 @@ export class ScheduleToolbar extends ViewToolbarBase {
                 getStartHour: () => deps.plugin.settings.startHour,
             });
         });
-        this.filterBtn = filterBtn;
 
         this.maskHandle = MaskToggleButton.render(actionZone, {
             getMaskMode: () => deps.getMaskMode(),
@@ -122,7 +119,6 @@ export class ScheduleToolbar extends ViewToolbarBase {
         const moreBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon view-toolbar__btn--more' });
         setIcon(moreBtn, 'more-vertical');
         moreBtn.setAttribute('aria-label', t('toolbar.viewSettings'));
-        this.moreBtn = moreBtn;
 
         moreBtn.onclick = (e) => {
             deps.plugin.menuPresenter.present((menu) => {
@@ -212,13 +208,6 @@ export class ScheduleToolbar extends ViewToolbarBase {
     override update(): void {
         const { year, month } = this.getDateYearMonth();
         this.dateLabelHandle?.update(year, month);
-        const hasFilters = this.deps.filterMenu.hasActiveFilters();
-        if (this.filterBtn) {
-            this.filterBtn.classList.toggle('is-filtered', hasFilters);
-        }
-        if (this.moreBtn) {
-            this.moreBtn.classList.toggle('is-filtered', hasFilters);
-        }
         this.maskHandle?.update();
     }
 }

@@ -167,11 +167,16 @@ body:not(.theme-dark) .tv-overlay {
 .tv-overlay__panel--dialog {
     width: min(34em, calc(100vw - 32px));
     max-height: calc(100% - 64px);
-    padding: 40px 24px 34px;
+    padding: 40px 0 34px;
     border-radius: var(--modal-radius, 16px);
 }
 
+/* 水平余白は panel でなく body（スクロールコンテナ）が持つ。
+   overflow-y: auto は overflow-x も auto に強制するため、余白が panel 側に
+   あると幅 100% の input がクリップ境界に接し、focus glow（box-shadow）や
+   端数 DPR での border が左右だけ切り落とされる */
 .tv-overlay__panel--dialog .tv-overlay__body {
+    padding: 0 24px;
     scrollbar-width: none;
 }
 

@@ -13,11 +13,6 @@
 /* --- Preview --- */
 .task-hub__preview {
     padding: 8px 0;
-    border-bottom: 1px solid var(--tv-border);
-}
-
-.task-hub__preview.is-collapsed {
-    display: none;
 }
 
 .task-hub__preview .task-card {
@@ -29,29 +24,6 @@
 .task-card--in-hub-preview .task-card__shape {
     box-shadow: none;
     filter: none;
-}
-
-/* --- Preview toggle (phone only) --- */
-.task-hub__preview-toggle {
-    display: none;
-    justify-content: center;
-    padding: 2px 0;
-    cursor: pointer;
-    color: var(--tv-text-faint);
-}
-
-.is-phone .task-hub__preview-toggle {
-    display: flex;
-}
-
-.task-hub__preview-toggle .svg-icon {
-    width: 16px;
-    height: 16px;
-    transition: transform 150ms ease;
-}
-
-.task-hub__preview-toggle.is-collapsed .svg-icon {
-    transform: rotate(180deg);
 }
 
 /* --- Form: flat sections with dividers --- */
@@ -111,10 +83,13 @@
 }
 
 /* --- Status pill --- */
+/* 高さは text input と同じ --input-height（desktop 30px / mobile 44px、
+   Obsidian が platform で切り替える）に追従させる — 固定 padding で
+   合わせると片方の platform で必ずズレる */
 .tv-ctrl .tv-ctrl__pill.task-hub__status-pill {
     appearance: none;
     -webkit-appearance: none;
-    height: auto;
+    height: var(--input-height);
     border: 1px solid var(--tv-border);
     background: var(--tv-bg-input);
     box-shadow: none;
@@ -126,7 +101,7 @@
     line-height: normal;
     cursor: pointer;
     gap: 6px;
-    padding: 4px 12px;
+    padding: 0 12px;
 }
 
 .task-hub__status-pill:focus-visible {

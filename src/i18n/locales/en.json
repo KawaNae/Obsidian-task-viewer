@@ -508,8 +508,7 @@
       "contentTagLocked": "#tag inside the task name — edit it in the name field",
       "cascadeTagLocked": "Inherited tag ({{source}}) — edit the source to remove it",
       "arrayReadOnly": "Array property — edit it in the file",
-      "reservedKey": "\"{{key}}\" is a reserved key",
-      "togglePreview": "Toggle preview"
+      "reservedKey": "\"{{key}}\" is a reserved key"
     }
   },
   "validation": {

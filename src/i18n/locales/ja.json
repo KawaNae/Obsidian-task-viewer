@@ -508,8 +508,7 @@
       "contentTagLocked": "タスク名内の #タグ — 名前フィールドで編集してください",
       "cascadeTagLocked": "継承タグ（{{source}}）— 削除するには継承元を編集してください",
       "arrayReadOnly": "配列プロパティ — ファイル側で編集してください",
-      "reservedKey": "「{{key}}」は予約キーです",
-      "togglePreview": "プレビュー表示切替"
+      "reservedKey": "「{{key}}」は予約キーです"
     }
   },
   "validation": {
