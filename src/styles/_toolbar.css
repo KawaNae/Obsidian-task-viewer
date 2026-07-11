@@ -132,10 +132,6 @@
     display: none;
 }
 
-.view-toolbar__btn--more.is-filtered {
-    color: var(--tv-text-accent);
-}
-
 /* Compact mode: hide inline action buttons, show ⋮ */
 @container (max-width: 500px) {
     .view-toolbar__action-zone {

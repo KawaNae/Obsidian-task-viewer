@@ -45,9 +45,7 @@ export interface ToolbarCallbacks {
  */
 export class TimelineToolbar extends ViewToolbarBase {
     private readonly filterMenu = new FilterMenuComponent();
-    private filterBtn: HTMLElement | null = null;
     private sidebarToggleBtn: HTMLElement | null = null;
-    private moreBtn: HTMLElement | null = null;
     private dateLabelHandle: { update: (year: number, month: number) => void } | null = null;
     private viewModeHandle: { update: () => void } | null = null;
     private zoomHandle: { update: () => void } | null = null;
@@ -170,13 +168,6 @@ export class TimelineToolbar extends ViewToolbarBase {
         this.viewModeHandle?.update();
         this.zoomHandle?.update();
         this.maskHandle?.update();
-        const hasFilters = this.filterMenu.hasActiveFilters();
-        if (this.filterBtn) {
-            this.filterBtn.classList.toggle('is-filtered', hasFilters);
-        }
-        if (this.moreBtn) {
-            this.moreBtn.classList.toggle('is-filtered', hasFilters);
-        }
         if (this.sidebarToggleBtn) {
             this.updateSidebarToggleBtn(this.sidebarToggleBtn);
         }
@@ -241,7 +232,6 @@ export class TimelineToolbar extends ViewToolbarBase {
         const moreBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon view-toolbar__btn--more' });
         setIcon(moreBtn, 'more-vertical');
         moreBtn.setAttribute('aria-label', t('toolbar.viewSettings'));
-        this.moreBtn = moreBtn;
 
         moreBtn.onclick = (e) => {
             this.plugin.menuPresenter.present((menu) => {
@@ -361,8 +351,6 @@ export class TimelineToolbar extends ViewToolbarBase {
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', t('toolbar.filter'));
-        filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
-        this.filterBtn = filterBtn;
 
         filterBtn.onclick = (e) => {
             const allTasks = this.readService.getTasks();
@@ -371,7 +359,6 @@ export class TimelineToolbar extends ViewToolbarBase {
                 onFilterChange: () => {
                     this.persistFilterState();
                     this.callbacks.onRender();
-                    filterBtn.classList.toggle('is-filtered', this.filterMenu.hasActiveFilters());
                 },
                 getTasks: () => allTasks,
                 getStartHour: () => this.plugin.settings.startHour,

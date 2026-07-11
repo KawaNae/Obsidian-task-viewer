@@ -40,7 +40,6 @@ export interface MiniCalendarToolbarDeps {
 
 export class MiniCalendarToolbar extends ViewToolbarBase {
     private dateLabelHandle: { update: (year: number, month: number) => void } | null = null;
-    private moreBtn: HTMLElement | null = null;
 
     constructor(private deps: MiniCalendarToolbarDeps) {
         super();
@@ -76,7 +75,6 @@ export class MiniCalendarToolbar extends ViewToolbarBase {
         const moreBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon view-toolbar__btn--more' });
         setIcon(moreBtn, 'more-vertical');
         moreBtn.setAttribute('aria-label', t('toolbar.viewSettings'));
-        this.moreBtn = moreBtn;
 
         moreBtn.onclick = (e) => {
             deps.plugin.menuPresenter.present((menu) => {
@@ -90,9 +88,6 @@ export class MiniCalendarToolbar extends ViewToolbarBase {
     override update(): void {
         const ref = this.deps.getReferenceMonth();
         this.dateLabelHandle?.update(ref.year, ref.month);
-        if (this.moreBtn) {
-            this.moreBtn.classList.toggle('is-filtered', this.deps.filterMenu.hasActiveFilters());
-        }
     }
 
     private appendCompactMenuItems(menu: Menu, moreBtn: HTMLElement): void {
