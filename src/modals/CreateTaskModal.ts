@@ -79,6 +79,9 @@ export class CreateTaskModal {
             panelClass: 'tv-overlay__panel--dialog create-task',
             build: (bodyEl) => this.buildContent(bodyEl),
         });
+        // open アニメーション中の focus は取りこぼすことがあるため 1 frame 遅らせる
+        // （TaskHubPanel.open() の focusField と同じパターン）
+        requestAnimationFrame(() => this.nameInput?.focus());
     }
 
     close(): void {
