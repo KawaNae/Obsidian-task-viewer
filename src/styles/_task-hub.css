@@ -13,7 +13,6 @@
 /* --- Preview --- */
 .task-hub__preview {
     padding: 8px 0;
-    border-bottom: 1px solid var(--tv-border);
 }
 
 .task-hub__preview.is-collapsed {
