@@ -182,19 +182,19 @@ function renderStatusDefinitionsList(container: HTMLElement, plugin: TaskViewerP
                     }
                 });
             text.inputEl.maxLength = 1;
-            text.inputEl.style.width = '3em';
-            text.inputEl.style.textAlign = 'center';
+            text.inputEl.addClass('tv-settings__status-char');
             if (isFixed) text.inputEl.readOnly = true;
         });
 
-        setting.addText(text => text
-            .setPlaceholder(t('settings.general.statusLabelPlaceholder'))
-            .setValue(def.label)
-            .onChange(async (value) => {
-                defs[i].label = value;
-                await plugin.saveSettings();
-            })
-        );
+        setting.addText(text => {
+            text.setPlaceholder(t('settings.general.statusLabelPlaceholder'))
+                .setValue(def.label)
+                .onChange(async (value) => {
+                    defs[i].label = value;
+                    await plugin.saveSettings();
+                });
+            text.inputEl.addClass('tv-settings__status-name');
+        });
 
         setting.addToggle(toggle => {
             toggle.setValue(def.isComplete)

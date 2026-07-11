@@ -75,15 +75,27 @@
     margin-top: 4px;
 }
 
+/* ─── Status definitions row widgets ──────────────────────── */
+
+/* 0,4,1 — Obsidian mobile の `.is-phone .modal .setting-item-control input`
+   (width:100%, 0,3,1) に確実に勝つため一段上の詳細度にする */
+.tv-settings .status-definitions-list-container .setting-item-control input.tv-settings__status-char {
+    width: 3em;
+    flex-shrink: 0;
+    text-align: center;
+}
+
 /* ─── Narrow-width responsive (popout / narrow window) ────── */
 /* When the modal is narrow enough that toggles risk dropping below their
  * name/desc, let setting-items wrap and yield the 48px tab-content
- * padding to the stacked content. Status-row controls also wrap because
- * they pack 6 items into a single flex line. */
+ * padding to the stacked content. */
 @media (max-width: 600px) {
-    .modal.mod-settings .vertical-tab-content.tv-settings {
-        padding-left: 0;
-        padding-right: 0;
+    /* Desktop narrow popout only: shrink the 48px side padding but keep a
+     * margin. Mobile is excluded — Obsidian itself gives the tab content
+     * a proper 16px side padding there, which a 0 here would destroy. */
+    body:not(.is-mobile) .modal.mod-settings .vertical-tab-content.tv-settings {
+        padding-left: 12px;
+        padding-right: 12px;
     }
 
     .tv-settings .setting-item {
@@ -104,16 +116,25 @@
         justify-content: flex-start;
     }
 
+    /* Status definitions — deterministic 2-row layout:
+     * row 1 = char + name (name eats the remaining width, so the rest
+     * always wraps), row 2 = complete toggle + reorder + delete,
+     * right-aligned by the control's default justify-content. */
     .tv-settings .status-definitions-list-container .setting-item-control {
         flex-wrap: wrap;
         gap: 4px;
         row-gap: 4px;
     }
 
+    .tv-settings .status-definitions-list-container .setting-item-control input.tv-settings__status-name {
+        flex: 1 1 auto;
+        width: auto;
+        min-width: 0;
+    }
+
     /* Obsidian only auto-stretches form controls to full width below
      * ~580px, so between 580 and the wrap point they stay at their
-     * default ~158px. Inline width:3em on status-char input keeps that
-     * one small. */
+     * default ~158px. */
     .tv-settings .setting-item-control input[type="text"],
     .tv-settings .setting-item-control input[type="number"],
     .tv-settings .setting-item-control select {
