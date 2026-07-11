@@ -111,10 +111,13 @@
 }
 
 /* --- Status pill --- */
+/* 高さは text input と同じ --input-height（desktop 30px / mobile 44px、
+   Obsidian が platform で切り替える）に追従させる — 固定 padding で
+   合わせると片方の platform で必ずズレる */
 .tv-ctrl .tv-ctrl__pill.task-hub__status-pill {
     appearance: none;
     -webkit-appearance: none;
-    height: auto;
+    height: var(--input-height);
     border: 1px solid var(--tv-border);
     background: var(--tv-bg-input);
     box-shadow: none;
@@ -126,7 +129,7 @@
     line-height: normal;
     cursor: pointer;
     gap: 6px;
-    padding: 4px 12px;
+    padding: 0 12px;
 }
 
 .task-hub__status-pill:focus-visible {
