@@ -647,7 +647,13 @@
     "pinnedLists": "Pinned Lists",
     "addList": "Add List",
     "newList": "New List",
-    "showMore": "Show more ({{remaining}})"
+    "showMore": "Show more ({{remaining}})",
+    "topRightLabel": "Display Label",
+    "topRightFields": "Fields",
+    "topRightSeparator": "Separator",
+    "topRightFieldPlaceholder": "Add field...",
+    "topRightPrefix": "Prefix",
+    "topRightSuffix": "Suffix"
   },
   "calendar": {
     "weekdaysShort": "Sun,Mon,Tue,Wed,Thu,Fri,Sat",

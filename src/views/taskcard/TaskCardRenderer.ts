@@ -1,10 +1,16 @@
 import { App, MarkdownRenderer, Component } from 'obsidian';
-import { Task, DisplayTask, TaskViewerSettings, DoubleTapAction, isCompleteStatusChar, isTvFile } from '../../types';
+import { Task, DisplayTask, TaskViewerSettings, DoubleTapAction, isCompleteStatusChar, isTvFile, TopRightConfig } from '../../types';
+import { resolveTopRightField } from './TopRightFieldResolver';
+
+export type TopRightSpec =
+    | { mode: 'time' }
+    | { mode: 'template'; config: TopRightConfig }
+    | { mode: 'none' };
 
 interface RenderOptions {
     cardInstanceId: string;
     context?: 'inline' | 'hub-preview';
-    topRight?: 'time' | 'due' | 'none';
+    topRight?: TopRightSpec;
     compact?: boolean;
     hooks?: { onNavigate?: () => void };
 }
@@ -129,7 +135,7 @@ export class TaskCardRenderer extends Component {
         options: RenderOptions
     ): Promise<void> {
         const cardInstanceId = options.cardInstanceId;
-        const topRight = options.topRight ?? 'time';
+        const topRight: TopRightSpec = options.topRight ?? { mode: 'time' };
         const compact = options.compact ?? false;
         const isHubPreview = options.context === 'hub-preview';
         const forceExpand = isHubPreview;
@@ -289,25 +295,35 @@ export class TaskCardRenderer extends Component {
         container: HTMLElement,
         task: DisplayTask,
         settings: TaskViewerSettings,
-        topRight: 'time' | 'due' | 'none'
+        spec: TopRightSpec,
     ): void {
-        if (topRight === 'time' && task.effectiveStartTime) {
-            const timeDisplay = container.createDiv('task-card__time');
-            let timeText = task.effectiveStartTime;
+        if (spec.mode === 'none') return;
 
-            if (task.effectiveEndTime) {
-                timeText = `${task.effectiveStartTime}>${task.effectiveEndTime}`;
+        if (spec.mode === 'time') {
+            if (!task.effectiveStartTime || task.startTimeImplicit) return;
+            const el = container.createDiv('task-card__time');
+            el.createSpan('task-card__time-start').textContent = task.effectiveStartTime;
+            if (task.effectiveEndTime && !task.endTimeImplicit) {
+                el.createSpan('task-card__time-end').textContent = `>${task.effectiveEndTime}`;
             }
-
-            timeDisplay.innerText = timeText;
             return;
         }
 
-        if (topRight === 'due' && task.due) {
-            const timeDisplay = container.createDiv('task-card__time');
-            const parts = task.due.split('T');
-            timeDisplay.innerText = parts[1] ? `${parts[0]} ${parts[1]}` : parts[0];
+        const { fields, separator, prefix, suffix } = spec.config;
+        const segments = fields
+            .map(f => resolveTopRightField(task, f, settings))
+            .filter((v): v is string => v != null && v !== '');
+        if (segments.length === 0) return;
+
+        const el = container.createDiv('task-card__time');
+        if (prefix) el.createSpan('task-card__time-seg').textContent = prefix;
+        for (let i = 0; i < segments.length; i++) {
+            if (i > 0 && separator) {
+                el.createSpan('task-card__time-sep').textContent = separator;
+            }
+            el.createSpan('task-card__time-seg').textContent = segments[i];
         }
+        if (suffix) el.createSpan('task-card__time-seg').textContent = suffix;
     }
 
     private buildParentMarkdown(task: DisplayTask, settings: TaskViewerSettings): string {

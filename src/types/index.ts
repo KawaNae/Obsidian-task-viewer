@@ -403,12 +403,20 @@ export interface ViewState {
     showTimeline?: boolean;
 }
 
+export interface TopRightConfig {
+    fields: string[];
+    separator: string;
+    prefix?: string;
+    suffix?: string;
+}
+
 export interface PinnedListDefinition {
     id: string;
     name: string;
     filterState: FilterState;
     sortState?: SortState;
     applyViewFilter?: boolean;
+    topRight?: TopRightConfig;
 }
 
 export interface ViewTemplateSummary {

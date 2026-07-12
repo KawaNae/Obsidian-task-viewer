@@ -56,6 +56,8 @@ import { splitTasks } from '../../services/display/TaskSplitter';
 import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
 import type { TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
 import { openTaskInEditor } from '../sharedLogic/NavigationUtils';
+import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
+import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
 
@@ -102,6 +104,7 @@ export class CalendarView extends ItemView {
      */
     private pinnedHost: HTMLElement;
     private sidebarFilterMenu = new FilterMenuComponent();
+    private topRightEditor = new TopRightConfigEditor();
     private toolbar: CalendarToolbar;
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
@@ -637,6 +640,19 @@ export class CalendarView extends ItemView {
             onRename: () => {
                 this.app.workspace.requestSaveLayout();
             },
+            onTopRightEdit: (listDef: PinnedListDefinition, anchorEl: HTMLElement) => {
+                const tasks = this.readService.getTasks();
+                const propertyKeys = FilterValueCollector.collectPropertyKeys(tasks);
+                this.topRightEditor.open(anchorEl, {
+                    config: listDef.topRight,
+                    propertyKeys,
+                    onChange: (config) => {
+                        listDef.topRight = config;
+                        this.app.workspace.requestSaveLayout();
+                        this.pinnedListRenderer.refresh();
+                    },
+                });
+            },
         };
     }
 
@@ -837,7 +853,7 @@ export class CalendarView extends ItemView {
             this.decorateCalendarBar(barEl, entry, colOffset);
             await this.taskRenderer.render(barEl, entry.task as DisplayTask, this.plugin.settings, {
                 cardInstanceId,
-                topRight: 'none',
+                topRight: { mode: 'none' },
                 compact: true,
             });
             if (!reused) this.menuHandler.addTaskContextMenu(barEl, entry.task);
@@ -852,6 +868,7 @@ export class CalendarView extends ItemView {
         this.decorateCalendarCell(card, entry, colOffset);
         await this.taskRenderer.render(card, entry.task as DisplayTask, this.plugin.settings, {
             cardInstanceId,
+            topRight: { mode: 'time' },
             compact: true,
         });
         if (!reused) this.menuHandler.addTaskContextMenu(card, entry.task);

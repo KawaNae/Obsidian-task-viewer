@@ -186,3 +186,39 @@
 .tv-ctrl__suggest-item--active {
     background: var(--tv-bg-hover);
 }
+
+/* ── TopRight Config Editor ── */
+.top-right-config-editor .tv-overlay__body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    min-width: 240px;
+}
+
+.top-right-config-editor__label {
+    font-size: var(--font-ui-small);
+    font-weight: 600;
+    color: var(--tv-text-muted);
+}
+
+.top-right-config-editor .tv-ctrl__input-wrap,
+.top-right-config-editor .tv-ctrl__text-input {
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.top-right-config-editor__affix-row {
+    display: flex;
+    gap: 8px;
+}
+
+.top-right-config-editor__affix {
+    flex: 1;
+    min-width: 0;
+}
+
+.top-right-config-editor__affix .tv-ctrl__text-input {
+    width: 100%;
+}
+

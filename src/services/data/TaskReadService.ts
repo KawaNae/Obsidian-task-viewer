@@ -159,12 +159,12 @@ export class TaskReadService {
         const all = this.getAllDisplayTasks();
         if (!hasConditions(filter)) {
             const result = [...all];
-            if (sort) TaskSorter.sort(result, sort);
+            TaskSorter.sort(result, sort);
             return result;
         }
         const context = this.createFilterContext();
         const result = all.filter(t => TaskFilterEngine.evaluate(t, filter, context));
-        if (sort) TaskSorter.sort(result, sort);
+        TaskSorter.sort(result, sort);
         return result;
     }
 

@@ -227,23 +227,37 @@
     text-decoration: underline;
 }
 
-/* --- Time Display --- */
+/* --- Time Display (topRight meta) --- */
 .task-card__time {
     position: absolute;
     top: 2px;
     right: 6px;
+    display: flex;
+    align-items: baseline;
     font-family: var(--tv-font-mono);
     font-size: 0.75em;
     color: var(--tv-text-muted);
-    background-color: transparent;
     opacity: 0.8;
     pointer-events: none;
-    text-align: right;
+    white-space: nowrap;
+    max-width: 50%;
+    overflow: hidden;
 }
 
-/* Vertical top cut (timeline grid 同日内 split) では time-label を sawtooth
-   分だけ下げる。horizontal layout (allday/calendar) は view 別ファイルで
-   元位置に戻す。 */
+.task-card__time-start,
+.task-card__time-end,
+.task-card__time-seg,
+.task-card__time-sep {
+    flex-shrink: 0;
+    white-space: pre;
+}
+
+@container (max-width: 120px) {
+    .task-card__time-end {
+        display: none;
+    }
+}
+
 .task-card--split-continues-before .task-card__time {
     top: calc(2px + var(--task-card-split-zig));
 }
@@ -844,6 +858,7 @@
     transform: none;
     min-height: auto;
     overflow: visible;
+    container-type: inline-size;
 }
 
 /* ==========================================================================

@@ -647,7 +647,13 @@
     "pinnedLists": "ピン留めリスト",
     "addList": "リストを追加",
     "newList": "新しいリスト",
-    "showMore": "さらに表示（残り{{remaining}}件）"
+    "showMore": "さらに表示（残り{{remaining}}件）",
+    "topRightLabel": "表示ラベル",
+    "topRightFields": "フィールド",
+    "topRightSeparator": "区切り文字",
+    "topRightFieldPlaceholder": "フィールドを追加...",
+    "topRightPrefix": "接頭辞",
+    "topRightSuffix": "接尾辞"
   },
   "calendar": {
     "weekdaysShort": "日,月,火,水,木,金,土",

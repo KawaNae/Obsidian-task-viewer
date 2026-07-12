@@ -28,6 +28,7 @@ export interface PinnedListCallbacks {
     onRename?: (listDef: PinnedListDefinition, newName: string) => void;
     onMoveUp?: (listDef: PinnedListDefinition) => void;
     onMoveDown?: (listDef: PinnedListDefinition) => void;
+    onTopRightEdit?: (listDef: PinnedListDefinition, anchorEl: HTMLElement) => void;
 }
 
 /**
@@ -61,6 +62,7 @@ export class PinnedListRenderer {
     private readonly paging: TaskPagingController;
     /** Reconciler for the in-flight `render()` call. Consumed by `renderTaskCards`. */
     private currentReconciler: CardReconciler | null = null;
+    private listDefMap = new Map<string, PinnedListDefinition>();
 
     // attach state — set by attach(), cleared by detach()
     private host: HTMLElement | null = null;
@@ -167,6 +169,8 @@ export class PinnedListRenderer {
         // (collapsedState keys are caller-prefixed, so use list.id directly here).
         const currentListIds = new Set(lists.map(l => l.id));
         this.paging.pruneRemovedLists(currentListIds);
+        this.listDefMap.clear();
+        for (const def of lists) this.listDefMap.set(def.id, def);
         if (lists.length === 0) {
             container.createDiv('tv-sidebar__pinned-lists--empty')
                 .setText(t('pinnedList.noPinnedLists'));
@@ -324,6 +328,14 @@ export class PinnedListRenderer {
                 .onClick(() => callbacks.onDuplicate(listDef));
         });
 
+        if (callbacks.onTopRightEdit) {
+            menu.addItem(item => {
+                item.setTitle(t('pinnedList.topRightLabel'))
+                    .setIcon('tag')
+                    .onClick(() => callbacks.onTopRightEdit!(listDef, anchorEl));
+            });
+        }
+
         if (callbacks.onToggleApplyViewFilter) {
             menu.addItem(item => {
                 item
@@ -390,6 +402,10 @@ export class PinnedListRenderer {
         const settings = this.plugin.settings;
         const viewId = this.viewId ?? 'unknown';
         const reconciler = this.currentReconciler;
+        const listDef = this.listDefMap.get(listId);
+        const topRight = listDef?.topRight
+            ? { mode: 'template' as const, config: listDef.topRight }
+            : { mode: 'none' as const };
         tasks.forEach(task => {
             const cardInstanceId = `${viewId}::pl-${listId}::${task.id}`;
             const reused = reconciler?.acquire(cardInstanceId);
@@ -399,6 +415,7 @@ export class PinnedListRenderer {
             this.decoratePinnedCard(card, task);
             this.taskRenderer.render(card, task, settings, {
                 cardInstanceId,
+                topRight,
             });
             if (!reused) this.menuHandler.addTaskContextMenu(card, task);
         });

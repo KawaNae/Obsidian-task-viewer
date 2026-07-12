@@ -61,8 +61,7 @@ obsidian obsidian-task-viewer:list tag=work format=json output-fields=content,st
 | フラグ | 説明 | 例 |
 |-------|------|-----|
 | `sort` | ソートルール（`property[:direction]` カンマ区切り） | `sort=startDate:asc,due:desc` |
-| `limit` | 最大件数 | `limit=50`（デフォルト: 100） |
-| `offset` | スキップ件数 | `offset=10` |
+| `limit` | 最大件数（デフォルト: 100, 0=件数のみ, all=無制限） | `limit=50` / `limit=all` |
 
 **ソート可能プロパティ:** `content`, `due`, `startDate`, `endDate`, `file`, `status`, `tag`
 
@@ -78,7 +77,7 @@ obsidian obsidian-task-viewer:today output-fields=content,effectiveStartTime,eff
 |-------|------|
 | `leaf` | 子タスクを持たないタスクのみ |
 | `sort` | ソートルール |
-| `limit` / `offset` | ページネーション |
+| `limit` | 最大件数（デフォルト: 100, 0=件数のみ, all=無制限） |
 
 ### get — 単一タスク取得
 
@@ -178,7 +177,7 @@ obsidian obsidian-task-viewer:tasks-for-date-range from=2026-03-01 to=2026-03-31
 | `from` | ○ | クエリ窓の開始（YYYY-MM-DD またはプリセット、inclusive） |
 | `to` | ○ | クエリ窓の終了（YYYY-MM-DD またはプリセット、inclusive） |
 | `sort` | | ソートルール |
-| `limit` / `offset` | | ページネーション |
+| `limit` | | 最大件数（デフォルト: 100, 0=件数のみ, all=無制限） |
 
 ### categorized-tasks-for-date-range — 日付範囲のタスク（分類済み）
 

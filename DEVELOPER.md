@@ -1319,15 +1319,15 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 
 | Command | Description | Key flags |
 |---------|-------------|-----------|
-| `list` | List tasks with filters | file, status, tag, content, date, from, to, due, leaf, root, property, color, type, filter-file, list, sort, limit, offset |
-| `today` | Today's active tasks | leaf, sort, limit, offset |
+| `list` | List tasks with filters | file, status, tag, content, date, from, to, due, leaf, root, property, color, type, filter-file, list, sort, limit |
+| `today` | Today's active tasks | leaf, sort, limit |
 | `get` | Single task by ID | id (required) |
 | `create` | Create inline task | file (req), content (req), start, end, due, status, heading |
 | `update` | Update task fields | id (req), content, start, end, due, status (use `none` to clear) |
 | `delete` | Delete task | id (required) |
 | `duplicate` | Duplicate task | id (req), day-offset, count |
 | `convert` | Inline → frontmatter | id (required) |
-| `tasks-for-date-range` | Tasks in date range | from (req), to (req), sort, limit, offset |
+| `tasks-for-date-range` | Tasks in date range | from (req), to (req), sort, limit |
 | `categorized-tasks-for-date-range` | Categorized tasks for date range | from (req), to (req) |
 | `insert-child-task` | Insert child task | parent-id (req), content (req) |
 | `create-tv-file` | Create tv-file (frontmatter) task | content (req), start, end, due, status |
