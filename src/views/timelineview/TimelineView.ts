@@ -32,6 +32,8 @@ import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
 import { PinnedListRenderer, type PinnedListCallbacks } from '../sharedUI/PinnedListRenderer';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
+import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
+import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
@@ -85,6 +87,7 @@ export class TimelineView extends ItemView {
     private pinnedListRenderer: PinnedListRenderer;
     private sidebarFilterMenu = new FilterMenuComponent();
     private sidebarSortMenu = new SortMenuComponent();
+    private topRightEditor = new TopRightConfigEditor();
     private moonRenderer: MoonPhaseRenderer;
     private dateHeaderRenderer: DateHeaderRenderer;
     private periodicHeaderRenderer: PeriodicHeaderRenderer;
@@ -763,6 +766,19 @@ export class TimelineView extends ItemView {
             },
             onRename: () => {
                 this.app.workspace.requestSaveLayout();
+            },
+            onTopRightEdit: (listDef, anchorEl) => {
+                const tasks = this.readService.getTasks();
+                const propertyKeys = FilterValueCollector.collectPropertyKeys(tasks);
+                this.topRightEditor.open(anchorEl, {
+                    config: listDef.topRight,
+                    propertyKeys,
+                    onChange: (config) => {
+                        listDef.topRight = config;
+                        this.app.workspace.requestSaveLayout();
+                        this.pinnedListRenderer.refresh();
+                    },
+                });
             },
         };
     }

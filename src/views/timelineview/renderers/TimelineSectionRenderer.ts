@@ -54,6 +54,7 @@ export class TimelineSectionRenderer {
 
             this.taskRenderer.render(el, task, this.plugin.settings, {
                 cardInstanceId,
+                topRight: { mode: 'time' },
             });
             // addTaskContextMenu is idempotent (WeakSet-guarded) so re-calling
             // on a reused element is a no-op, but skip the call to keep the

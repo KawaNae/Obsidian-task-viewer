@@ -110,7 +110,7 @@ export class AllDaySectionRenderer {
         // task spanning multiple days can be expanded independently per row.
         this.taskRenderer.render(el, task as DisplayTask, this.plugin.settings, {
             cardInstanceId,
-            topRight: 'none',
+            topRight: { mode: 'none' },
             compact: true,
         });
         if (!reused) this.menuHandler.addTaskContextMenu(el, task);

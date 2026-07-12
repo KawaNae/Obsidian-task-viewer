@@ -399,6 +399,9 @@ function serializePinnedList(pl: PinnedListDefinition): Record<string, unknown> 
         };
     }
     if (pl.applyViewFilter !== undefined) result.applyViewFilter = pl.applyViewFilter;
+    if (pl.topRight && pl.topRight.fields.length > 0) {
+        result.topRight = { fields: pl.topRight.fields, separator: pl.topRight.separator };
+    }
     return result;
 }
 
@@ -433,6 +436,15 @@ function parsePinnedLists(raw: unknown[]): PinnedListDefinition[] {
             }
         }
         if (typeof obj.applyViewFilter === 'boolean') def.applyViewFilter = obj.applyViewFilter;
+        if (obj.topRight && typeof obj.topRight === 'object') {
+            const tr = obj.topRight as Record<string, unknown>;
+            if (Array.isArray(tr.fields)) {
+                const fields = (tr.fields as unknown[]).filter((f): f is string => typeof f === 'string');
+                if (fields.length > 0) {
+                    def.topRight = { fields, separator: typeof tr.separator === 'string' ? tr.separator : '' };
+                }
+            }
+        }
         result.push(def);
     }
     return result;

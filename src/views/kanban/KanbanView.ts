@@ -30,6 +30,8 @@ import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { KanbanSchema, type KanbanConfig, type KanbanTransient } from './KanbanSchema';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
+import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 
 export const VIEW_TYPE_KANBAN = VIEW_META_KANBAN.type;
 
@@ -55,6 +57,8 @@ export class KanbanView extends ItemView {
     private gridCollapsed: Record<string, boolean> = {};
     private maskMode: boolean = false;
     private readonly hoverParent = new TaskViewHoverParent();
+    private listDefMap = new Map<string, PinnedListDefinition>();
+    private topRightEditor = new TopRightConfigEditor();
     private readonly paging: TaskPagingController;
     /**
      * Reconciler for the in-flight `render()` call. Set at the top of
@@ -267,10 +271,12 @@ export class KanbanView extends ItemView {
         gridEl.style.gridTemplateColumns = `repeat(${cols}, minmax(250px, 1fr))`;
 
         const currentListIds = new Set<string>();
+        this.listDefMap.clear();
         for (let r = 0; r < this.grid.length; r++) {
             for (let c = 0; c < this.grid[r].length; c++) {
                 const listDef = this.grid[r][c];
                 currentListIds.add(listDef.id);
+                this.listDefMap.set(listDef.id, listDef);
                 this.renderCell(gridEl, listDef, r, c);
             }
         }
@@ -377,6 +383,10 @@ export class KanbanView extends ItemView {
     private renderTaskCards(body: HTMLElement, tasks: import('../../types').DisplayTask[], listId: string): void {
         const settings = this.plugin.settings;
         const reconciler = this.currentReconciler;
+        const listDef = this.listDefMap.get(listId);
+        const topRight = listDef?.topRight
+            ? { mode: 'template' as const, config: listDef.topRight }
+            : { mode: 'none' as const };
         for (const task of tasks) {
             const cardInstanceId = `kanban::cell-${listId}::${task.id}`;
             const reused = reconciler?.acquire(cardInstanceId);
@@ -386,6 +396,7 @@ export class KanbanView extends ItemView {
             this.decorateKanbanCard(card, task);
             this.taskRenderer.render(card, task, settings, {
                 cardInstanceId,
+                topRight,
             });
             if (!reused) this.menuHandler.addTaskContextMenu(card, task);
         }
@@ -417,6 +428,24 @@ export class KanbanView extends ItemView {
             item.setTitle(t('menu.duplicate'))
                 .setIcon('copy')
                 .onClick(() => this.duplicateCell(listDef, row, col));
+        });
+
+        menu.addItem(item => {
+            item.setTitle(t('pinnedList.topRightLabel'))
+                .setIcon('tag')
+                .onClick(() => {
+                    const tasks = this.readService.getTasks();
+                    const propertyKeys = FilterValueCollector.collectPropertyKeys(tasks);
+                    this.topRightEditor.open(nameEl, {
+                        config: listDef.topRight,
+                        propertyKeys,
+                        onChange: (config) => {
+                            listDef.topRight = config;
+                            this.requestSaveLayout();
+                            this.render();
+                        },
+                    });
+                });
         });
 
         menu.addItem(item => {

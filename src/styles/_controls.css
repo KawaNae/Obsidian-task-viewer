@@ -186,3 +186,23 @@
 .tv-ctrl__suggest-item--active {
     background: var(--tv-bg-hover);
 }
+
+/* ── TopRight Config Editor ── */
+.top-right-config-editor .tv-overlay__body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    min-width: 240px;
+}
+
+.top-right-config-editor__label {
+    font-size: var(--font-ui-small);
+    font-weight: 600;
+    color: var(--tv-text-muted);
+}
+
+.top-right-config-editor__sep-input {
+    width: 100%;
+}
+

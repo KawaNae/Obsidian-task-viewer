@@ -110,8 +110,8 @@ export class ScheduleTaskRenderer {
 
         this.decorateScheduleCard(card, task);
         const options = flowCard
-            ? { cardInstanceId }
-            : { cardInstanceId, compact: true };
+            ? { cardInstanceId, topRight: { mode: 'time' as const } }
+            : { cardInstanceId, topRight: { mode: 'time' as const }, compact: true };
         await this.taskRenderer.render(card, task, this.getSettings(), options);
         if (!reused) this.menuHandler.addTaskContextMenu(card, task);
     }
