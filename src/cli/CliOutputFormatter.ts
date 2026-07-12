@@ -39,10 +39,17 @@ export function pickFields(record: NormalizedTask, fields: string[]): Record<str
 
 // ── Output formatters ──
 
+export interface ListMeta {
+    total: number;
+    truncated: boolean;
+    limit: number | null;
+}
+
 export function formatOutput(
     tasks: NormalizedTask[],
     format: OutputFormat,
     fields: string[],
+    meta?: ListMeta,
 ): string {
     switch (format) {
         case 'tsv':
@@ -52,6 +59,7 @@ export function formatOutput(
         case 'json':
         default:
             return JSON.stringify({
+                ...(meta ? { total: meta.total, truncated: meta.truncated, limit: meta.limit } : {}),
                 count: tasks.length,
                 tasks: tasks.map(t => pickFields(t, fields)),
             });

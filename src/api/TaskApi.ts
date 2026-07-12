@@ -311,11 +311,18 @@ function buildSortState(rules?: ApiSortRule[]): SortState | undefined {
     };
 }
 
-function paginate(tasks: DisplayTask[], params: PaginationParams): DisplayTask[] {
-    const limit = params.limit ?? 100;
-    const offset = params.offset ?? 0;
-    if (limit === 0) return [];
-    return tasks.slice(offset, offset + limit);
+interface PaginateResult {
+    paged: DisplayTask[];
+    total: number;
+    resolvedLimit: number | null;
+}
+
+function paginate(tasks: DisplayTask[], params: PaginationParams): PaginateResult {
+    const total = tasks.length;
+    const rawLimit = params.limit ?? 100;
+    if (rawLimit === 0) return { paged: [], total, resolvedLimit: 0 };
+    if (!isFinite(rawLimit)) return { paged: tasks, total, resolvedLimit: null };
+    return { paged: tasks.slice(0, rawLimit), total, resolvedLimit: rawLimit };
 }
 
 function parseDateTimeParam(value: string, fieldName: string): { date: string; time?: string } {
@@ -366,8 +373,14 @@ export class TaskApi {
             TaskSorter.sort(filtered, sortState);
         }
 
-        const paged = paginate(filtered, p);
-        return { count: paged.length, tasks: paged.map(normalizeTask) };
+        const { paged, total, resolvedLimit } = paginate(filtered, p);
+        return {
+            total,
+            count: paged.length,
+            truncated: paged.length < total,
+            limit: resolvedLimit,
+            tasks: paged.map(normalizeTask),
+        };
     }
 
     /**
@@ -400,8 +413,14 @@ export class TaskApi {
         const sortState = buildSortState(p.sort);
         TaskSorter.sort(filtered, sortState);
 
-        const paged = paginate(filtered, p);
-        return { count: paged.length, tasks: paged.map(normalizeTask) };
+        const { paged, total, resolvedLimit } = paginate(filtered, p);
+        return {
+            total,
+            count: paged.length,
+            truncated: paged.length < total,
+            limit: resolvedLimit,
+            tasks: paged.map(normalizeTask),
+        };
     }
 
     /**
@@ -572,12 +591,16 @@ export class TaskApi {
         const to = this.resolveWindowBound(params.to, 'to');
         let tasks = this.readService.getTasksForDateRange(from, to, params.filter);
         const sortState = buildSortState(params.sort);
-        if (sortState) {
-            tasks = [...tasks];
-            TaskSorter.sort(tasks, sortState);
-        }
-        const paged = paginate(tasks, params);
-        return { count: paged.length, tasks: paged.map(normalizeTask) };
+        tasks = [...tasks];
+        TaskSorter.sort(tasks, sortState);
+        const { paged, total, resolvedLimit } = paginate(tasks, params);
+        return {
+            total,
+            count: paged.length,
+            truncated: paged.length < total,
+            limit: resolvedLimit,
+            tasks: paged.map(normalizeTask),
+        };
     }
 
     /**

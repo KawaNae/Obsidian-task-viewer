@@ -6,6 +6,13 @@ import { parseSortFlag } from '../CliFilterBuilder';
 
 const VALID_FORMATS = new Set(['json', 'tsv', 'jsonl']);
 
+function parseLimit(raw: string): number {
+    if (raw === 'all') return Infinity;
+    const n = parseInt(raw, 10);
+    if (isNaN(n) || n < 0) throw new TaskApiError('--limit must be a non-negative integer or "all"');
+    return n;
+}
+
 export function createDuplicateHandler(plugin: TaskViewerPlugin) {
     return async (params: CliData): Promise<string> => {
         if (!params.id) return cliError('Missing required flag: --id');
@@ -110,24 +117,19 @@ export function createTasksForDateRangeHandler(plugin: TaskViewerPlugin) {
 
         try {
             const sort = params.sort ? parseSortFlag(params.sort) : undefined;
-            const limit = params.limit ? parseInt(params.limit, 10) : undefined;
-            const offset = params.offset ? parseInt(params.offset, 10) : undefined;
-
-            if (limit !== undefined && (isNaN(limit) || limit < 0)) {
-                return cliError('--limit must be a non-negative integer');
-            }
+            const limit = params.limit ? parseLimit(params.limit) : undefined;
 
             const result = await plugin.api.tasksForDateRange({
                 from: params.from,
                 to: params.to,
                 sort,
                 limit,
-                offset: offset !== undefined ? Math.max(0, offset || 0) : undefined,
             });
 
             const format = (params.format as OutputFormat) || 'json';
             const fields = resolveFields(params['output-fields']);
-            return formatOutput(result.tasks, format, fields);
+            const meta = { total: result.total, truncated: result.truncated, limit: result.limit };
+            return formatOutput(result.tasks, format, fields, meta);
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to query date range: ${e instanceof Error ? e.message : String(e)}`);
         }

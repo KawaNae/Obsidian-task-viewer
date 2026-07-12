@@ -36,12 +36,7 @@ function cliDataToListParams(params: CliData, preloadedFilter?: FilterState): Li
     }
 
     if (params.sort) result.sort = parseSortFlag(params.sort);
-    if (params.limit) {
-        const limit = parseInt(params.limit, 10);
-        if (isNaN(limit) || limit < 0) throw new TaskApiError('--limit must be a non-negative integer');
-        result.limit = limit;
-    }
-    if (params.offset) result.offset = Math.max(0, parseInt(params.offset, 10) || 0);
+    if (params.limit) result.limit = parseLimit(params.limit);
 
     return result;
 }
@@ -50,13 +45,15 @@ function cliDataToTodayParams(params: CliData): TodayParams {
     const result: TodayParams = {};
     if (params.leaf === 'true') result.leaf = true;
     if (params.sort) result.sort = parseSortFlag(params.sort);
-    if (params.limit) {
-        const limit = parseInt(params.limit, 10);
-        if (isNaN(limit) || limit < 0) throw new TaskApiError('--limit must be a non-negative integer');
-        result.limit = limit;
-    }
-    if (params.offset) result.offset = Math.max(0, parseInt(params.offset, 10) || 0);
+    if (params.limit) result.limit = parseLimit(params.limit);
     return result;
+}
+
+function parseLimit(raw: string): number {
+    if (raw === 'all') return Infinity;
+    const n = parseInt(raw, 10);
+    if (isNaN(n) || n < 0) throw new TaskApiError('--limit must be a non-negative integer or "all"');
+    return n;
 }
 
 // ── Format helpers ──
@@ -90,7 +87,8 @@ export function createListHandler(plugin: TaskViewerPlugin) {
 
             const format = (params.format as OutputFormat) || 'json';
             const fields = resolveFields(params['output-fields']);
-            return formatOutput(listResult.tasks, format, fields);
+            const meta = { total: listResult.total, truncated: listResult.truncated, limit: listResult.limit };
+            return formatOutput(listResult.tasks, format, fields, meta);
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));
         }
@@ -108,7 +106,8 @@ export function createTodayHandler(plugin: TaskViewerPlugin) {
 
             const format = (params.format as OutputFormat) || 'json';
             const fields = resolveFields(params['output-fields']);
-            return formatOutput(result.tasks, format, fields);
+            const meta = { total: result.total, truncated: result.truncated, limit: result.limit };
+            return formatOutput(result.tasks, format, fields, meta);
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));
         }

@@ -86,15 +86,20 @@ const result = api.today({
 | `filterFile` | `string` | vault 内フィルタファイルパス（`.json` / `.md` テンプレート） |
 | `list` | `string` | ピン留めリスト名（`filterFile` が `.md` テンプレートの場合） |
 | `sort` | `ApiSortRule[]` | ソートルール |
-| `limit` | `number` | 最大件数（デフォルト: 100） |
-| `offset` | `number` | スキップ件数 |
+| `limit` | `number` | 最大件数（デフォルト: 100, 0=件数のみ, Infinity=無制限） |
 
-**TodayParams:** `leaf`, `sort`, `limit`, `offset` のみ。
+**TodayParams:** `leaf`, `sort`, `limit` のみ。
 
 **戻り値: `TaskListResult`**
 
 ```typescript
-{ count: number; tasks: NormalizedTask[] }
+{
+  total: number;       // フィルタ後・limit適用前の総件数
+  count: number;       // 返却件数 (= tasks.length)
+  truncated: boolean;  // count < total
+  limit: number | null; // 適用された limit (null = unlimited)
+  tasks: NormalizedTask[];
+}
 ```
 
 ## get
@@ -199,8 +204,7 @@ const result = await api.tasksForDateRange({
 | `to` | ○ | `string` | クエリ窓の終了（YYYY-MM-DD またはプリセット、inclusive） |
 | `filter` | | `FilterState` | フィルタ定義 |
 | `sort` | | `ApiSortRule[]` | ソートルール |
-| `limit` | | `number` | 最大件数（デフォルト: 100） |
-| `offset` | | `number` | スキップ件数 |
+| `limit` | | `number` | 最大件数（デフォルト: 100, 0=件数のみ, Infinity=無制限） |
 
 ## categorizedTasksForDateRange
 

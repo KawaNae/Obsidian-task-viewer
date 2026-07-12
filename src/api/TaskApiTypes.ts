@@ -55,8 +55,7 @@ export interface ApiSortRule {
 // ── Pagination ──
 
 export interface PaginationParams {
-    limit?: number;    // default: 100
-    offset?: number;   // default: 0
+    limit?: number;    // default: 100, 0=count-only, Infinity=unlimited
 }
 
 // ── list ──
@@ -126,7 +125,10 @@ export interface DeleteParams {
 // ── Result types ──
 
 export interface TaskListResult {
+    total: number;
     count: number;
+    truncated: boolean;
+    limit: number | null;
     tasks: NormalizedTask[];
 }
 

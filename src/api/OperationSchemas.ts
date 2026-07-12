@@ -55,15 +55,13 @@ export const LIST_SCHEMA = {
     filterFile: { value: '<path>',        description: 'FilterState JSON (.json) or view template (.md). Overrides simple filter flags' },
     list:     { value: '<name>',          description: 'Pinned list name (for .md templates with pinnedLists)' },
     sort:     { value: '<prop[:dir],..>', description: 'Sort (e.g. startDate:asc,due:desc)' },
-    limit:    { value: '<number>',        description: 'Max results (default: 100)' },
-    offset:   { value: '<number>',        description: 'Skip first N results' },
+    limit:    { value: '<number|all>',     description: 'Max results (default: 100, 0=count only, all=unlimited)' },
 } as const satisfies ParamMap<ListParams>;
 
 export const TODAY_SCHEMA = {
     leaf:   { boolean: true,            description: 'Only leaf tasks (no children)' },
     sort:   { value: '<prop[:dir],..>', description: 'Sort' },
-    limit:  { value: '<number>',        description: 'Max results' },
-    offset: { value: '<number>',        description: 'Skip first N' },
+    limit:  { value: '<number|all>',    description: 'Max results (default: 100, 0=count only, all=unlimited)' },
 } as const satisfies ParamMap<TodayParams>;
 
 export const GET_SCHEMA = {
@@ -108,8 +106,7 @@ export const TASKS_FOR_DATE_RANGE_SCHEMA = {
     to:     { value: '<date|preset>',   description: 'Query window end (inclusive)', required: true },
     filter: { cli: 'hidden',            description: 'FilterState object (API only)' },
     sort:   { value: '<prop[:dir],..>', description: 'Sort (e.g. startDate:asc,due:desc)' },
-    limit:  { value: '<number>',        description: 'Max results' },
-    offset: { value: '<number>',        description: 'Skip first N' },
+    limit:  { value: '<number|all>',    description: 'Max results (default: 100, 0=count only, all=unlimited)' },
 } as const satisfies ParamMap<TasksForDateRangeParams>;
 
 export const CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA = {
