@@ -202,7 +202,23 @@
     color: var(--tv-text-muted);
 }
 
-.top-right-config-editor__sep-input {
+.top-right-config-editor .tv-ctrl__input-wrap,
+.top-right-config-editor .tv-ctrl__text-input {
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.top-right-config-editor__affix-row {
+    display: flex;
+    gap: 8px;
+}
+
+.top-right-config-editor__affix {
+    flex: 1;
+    min-width: 0;
+}
+
+.top-right-config-editor__affix .tv-ctrl__text-input {
     width: 100%;
 }
 

@@ -406,6 +406,8 @@ export interface ViewState {
 export interface TopRightConfig {
     fields: string[];
     separator: string;
+    prefix?: string;
+    suffix?: string;
 }
 
 export interface PinnedListDefinition {

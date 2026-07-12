@@ -400,7 +400,10 @@ function serializePinnedList(pl: PinnedListDefinition): Record<string, unknown> 
     }
     if (pl.applyViewFilter !== undefined) result.applyViewFilter = pl.applyViewFilter;
     if (pl.topRight && pl.topRight.fields.length > 0) {
-        result.topRight = { fields: pl.topRight.fields, separator: pl.topRight.separator };
+        const tr: Record<string, unknown> = { fields: pl.topRight.fields, separator: pl.topRight.separator };
+        if (pl.topRight.prefix) tr.prefix = pl.topRight.prefix;
+        if (pl.topRight.suffix) tr.suffix = pl.topRight.suffix;
+        result.topRight = tr;
     }
     return result;
 }
@@ -441,7 +444,12 @@ function parsePinnedLists(raw: unknown[]): PinnedListDefinition[] {
             if (Array.isArray(tr.fields)) {
                 const fields = (tr.fields as unknown[]).filter((f): f is string => typeof f === 'string');
                 if (fields.length > 0) {
-                    def.topRight = { fields, separator: typeof tr.separator === 'string' ? tr.separator : '' };
+                    def.topRight = {
+                        fields,
+                        separator: typeof tr.separator === 'string' ? tr.separator : '',
+                        ...(typeof tr.prefix === 'string' && tr.prefix ? { prefix: tr.prefix } : {}),
+                        ...(typeof tr.suffix === 'string' && tr.suffix ? { suffix: tr.suffix } : {}),
+                    };
                 }
             }
         }

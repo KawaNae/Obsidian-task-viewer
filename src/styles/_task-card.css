@@ -249,6 +249,7 @@
 .task-card__time-seg,
 .task-card__time-sep {
     flex-shrink: 0;
+    white-space: pre;
 }
 
 @container (max-width: 120px) {

@@ -309,19 +309,21 @@ export class TaskCardRenderer extends Component {
             return;
         }
 
-        const { fields, separator } = spec.config;
+        const { fields, separator, prefix, suffix } = spec.config;
         const segments = fields
             .map(f => resolveTopRightField(task, f, settings))
             .filter((v): v is string => v != null && v !== '');
         if (segments.length === 0) return;
 
         const el = container.createDiv('task-card__time');
+        if (prefix) el.createSpan('task-card__time-seg').textContent = prefix;
         for (let i = 0; i < segments.length; i++) {
             if (i > 0 && separator) {
                 el.createSpan('task-card__time-sep').textContent = separator;
             }
             el.createSpan('task-card__time-seg').textContent = segments[i];
         }
+        if (suffix) el.createSpan('task-card__time-seg').textContent = suffix;
     }
 
     private buildParentMarkdown(task: DisplayTask, settings: TaskViewerSettings): string {

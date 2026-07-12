@@ -651,7 +651,9 @@
     "topRightLabel": "Display Label",
     "topRightFields": "Fields",
     "topRightSeparator": "Separator",
-    "topRightFieldPlaceholder": "Add field..."
+    "topRightFieldPlaceholder": "Add field...",
+    "topRightPrefix": "Prefix",
+    "topRightSuffix": "Suffix"
   },
   "calendar": {
     "weekdaysShort": "Sun,Mon,Tue,Wed,Thu,Fri,Sat",

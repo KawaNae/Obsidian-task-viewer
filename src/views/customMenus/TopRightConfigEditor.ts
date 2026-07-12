@@ -19,11 +19,15 @@ export class TopRightConfigEditor {
     private opts: TopRightConfigEditorOpts | null = null;
     private fields: string[] = [];
     private separator: string = '';
+    private prefix: string = '';
+    private suffix: string = '';
 
     open(anchor: HTMLElement, opts: TopRightConfigEditorOpts): void {
         this.opts = opts;
         this.fields = opts.config ? [...opts.config.fields] : [];
         this.separator = opts.config?.separator ?? '';
+        this.prefix = opts.config?.prefix ?? '';
+        this.suffix = opts.config?.suffix ?? '';
 
         this.overlay.open({
             mode: 'anchored',
@@ -66,6 +70,31 @@ export class TopRightConfigEditor {
             this.emitChange();
         });
 
+        const affixRow = this.bodyEl.createDiv('top-right-config-editor__affix-row');
+
+        const prefixWrap = affixRow.createDiv('top-right-config-editor__affix');
+        prefixWrap.createDiv('top-right-config-editor__label').setText(t('pinnedList.topRightPrefix'));
+        const prefixInput = prefixWrap.createEl('input', {
+            cls: 'tv-ctrl__text-input',
+            attr: { type: 'text' },
+        });
+        prefixInput.value = this.prefix;
+        prefixInput.addEventListener('input', () => {
+            this.prefix = prefixInput.value;
+            this.emitChange();
+        });
+
+        const suffixWrap = affixRow.createDiv('top-right-config-editor__affix');
+        suffixWrap.createDiv('top-right-config-editor__label').setText(t('pinnedList.topRightSuffix'));
+        const suffixInput = suffixWrap.createEl('input', {
+            cls: 'tv-ctrl__text-input',
+            attr: { type: 'text' },
+        });
+        suffixInput.value = this.suffix;
+        suffixInput.addEventListener('input', () => {
+            this.suffix = suffixInput.value;
+            this.emitChange();
+        });
     }
 
     private renderFieldsPills(container: HTMLElement): void {
@@ -148,7 +177,13 @@ export class TopRightConfigEditor {
         if (this.fields.length === 0) {
             this.opts.onChange(undefined);
         } else {
-            this.opts.onChange({ fields: [...this.fields], separator: this.separator });
+            const config: import('../../types').TopRightConfig = {
+                fields: [...this.fields],
+                separator: this.separator,
+            };
+            if (this.prefix) config.prefix = this.prefix;
+            if (this.suffix) config.suffix = this.suffix;
+            this.opts.onChange(config);
         }
     }
 }
