@@ -7,7 +7,7 @@
 
 import { App } from 'obsidian';
 import TaskViewerPlugin from '../main';
-import { TimerInstance } from './TimerInstance';
+import { TimerInstance, TimerStartConfig } from './TimerInstance';
 import { TimerRecorder } from './TimerRecorder';
 
 // ─── Constants ────────────────────────────────────────────────
@@ -25,6 +25,9 @@ export interface TimerContext {
     readonly recorder: TimerRecorder;
     readonly plugin: TaskViewerPlugin;
     readonly app: App;
+
+    /** Unified timer start API (implemented by TimerWidget). */
+    startTimer(config: TimerStartConfig): void;
 
     /** Trigger a full UI re-render. */
     render(): void;
