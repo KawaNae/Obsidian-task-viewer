@@ -622,6 +622,8 @@
     "custom": "カスタム...",
     "minSuffix": "分",
     "alreadyActive": "このタスクにはすでにアクティブなタイマーがあります",
+    "nextCurrent": "予定時間中",
+    "nextUpcoming": "次の予定",
     "pinPinned": "このウィンドウにピン留め中（クリックで解除）",
     "pinPending": "解除中 — 移動先のウィンドウをクリック"
   },

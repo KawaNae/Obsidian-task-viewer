@@ -1,5 +1,5 @@
 import type { HoverParent } from 'obsidian';
-import { ViewState, isCompleteStatusChar } from '../../../types';
+import { ViewState } from '../../../types';
 import TaskViewerPlugin from '../../../main';
 import { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
@@ -19,6 +19,7 @@ import { bucketBySection } from '../../../services/display/SectionClassifier';
 import { DateHeaderRenderer } from '../../sharedUI/DateHeaderRenderer';
 import { PeriodicHeaderRenderer } from '../../sharedUI/PeriodicHeaderRenderer';
 import { CardReconciler } from '../../sharedUI/CardReconciler';
+import { getOverdueLevel } from '../../../services/display/TaskStatusQuery';
 
 export class GridRenderer {
     constructor(
@@ -50,10 +51,11 @@ export class GridRenderer {
 
         // 1. Pre-compute overdue dates
         const todayVisualDate = DateUtils.getVisualDateOfNow(startHour);
-        const completeChars = this.plugin.settings.statusDefinitions;
+        const readService = this.plugin.getTaskReadService();
+        const defs = this.plugin.settings.statusDefinitions;
         const overdueDates = new Set<string>();
         for (const dt of filteredTasks) {
-            if (isCompleteStatusChar(dt.statusChar, completeChars)) continue;
+            if (getOverdueLevel(dt, startHour, defs, readService) === 'none') continue;
             for (const date of dates) {
                 if (date >= todayVisualDate) continue;
                 if (isDisplayTaskOnVisualDate(dt, date, startHour)) {

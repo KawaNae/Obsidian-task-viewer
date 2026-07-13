@@ -15,7 +15,6 @@ import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
 import {
     getTaskDateRange,
-    isTaskCompleted as isTaskCompletedUtil,
     parseLocalDateString,
     getCalendarDateRange,
     getWeekStart,
@@ -919,10 +918,6 @@ export class CalendarView extends ItemView {
         el.dataset.colStart = `${entry.colStart}`;
         el.dataset.span = `${entry.span}`;
         el.dataset.trackIndex = `${entry.trackIndex}`;
-    }
-
-    private isTaskCompleted(task: DisplayTask): boolean {
-        return isTaskCompletedUtil(task, this.plugin.settings.statusDefinitions, this.readService);
     }
 
     private getViewStartDateString(): string {

@@ -68,10 +68,11 @@ export class ChildSectionRenderer {
         filePath: string,
         component: Component,
         settings: TaskViewerSettings,
-        parentStartDate?: string
+        parentStartDate?: string,
+        warnIcon = ''
     ): Promise<void> {
         const { completed, total } = countChildCompletion(items, this.readService, settings);
-        const label = `${completed}/${total}`;
+        const label = `${warnIcon}${completed}/${total}`;
         const wasExpanded = expandedTaskIds.has(expandKey);
 
         const toggle = contentContainer.createDiv('task-card__children-toggle');

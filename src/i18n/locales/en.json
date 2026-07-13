@@ -622,6 +622,8 @@
     "custom": "Custom...",
     "minSuffix": "min",
     "alreadyActive": "This task already has an active timer",
+    "nextCurrent": "Scheduled now",
+    "nextUpcoming": "Up next",
     "pinPinned": "Pinned to this window — click to release",
     "pinPending": "Release pending — click another window to move there"
   },

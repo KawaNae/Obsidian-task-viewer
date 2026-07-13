@@ -9,9 +9,11 @@
  */
 
 import { setIcon } from 'obsidian';
+import type { DisplayTask } from '../types';
 import {
     CountdownTimer,
     CountupTimer,
+    IdleTimer,
     IntervalTimer,
     TimerInstance,
 } from './TimerInstance';
@@ -27,15 +29,20 @@ import { AudioUtils } from './AudioUtils';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { t } from '../i18n';
 import { getEffectiveColor } from '../services/data/EffectiveProperties';
+import { canTriggerFlow } from '../services/flow/FlowTrigger';
+import { NextTaskSuggester, suggestionKey } from './NextTaskSuggester';
 
 export class TimerRenderer {
     private closeConfirmTimers = new Map<string, number>();
+    private suggester: NextTaskSuggester;
 
     constructor(
         private ctx: TimerContext,
         private lifecycle: TimerLifecycle,
         private creator: TimerCreator,
-    ) {}
+    ) {
+        this.suggester = new NextTaskSuggester(ctx.plugin);
+    }
 
     // ─── Render ──────────────────────────────────────────────
 
@@ -68,14 +75,23 @@ export class TimerRenderer {
                 TaskStyling.applyTaskColor(itemEl, timer.taskColor);
             }
         }
-        itemEl.toggleClass('timer-widget__item--idle', this.lifecycle.isIdleTimer(taskId));
+        const isIdle = this.lifecycle.isIdleTimer(taskId);
+        itemEl.toggleClass('timer-widget__item--idle', isIdle);
+
+        // Idle item shows a next-task suggestion; rebuild when it changes.
+        const nextKey = isIdle ? suggestionKey(this.suggester.getSuggestion()) : '';
 
         const currentExpanded = itemEl.dataset.expanded === 'true';
-        const needsRebuild = isNewItem || currentExpanded !== timer.isExpanded;
+        const needsRebuild = isNewItem
+            || currentExpanded !== timer.isExpanded
+            || (isIdle && itemEl.dataset.nextTaskKey !== nextKey);
 
         if (needsRebuild) {
             itemEl.empty();
             itemEl.dataset.expanded = timer.isExpanded.toString();
+            if (isIdle) {
+                itemEl.dataset.nextTaskKey = nextKey;
+            }
 
             // Header
             const header = itemEl.createDiv('timer-widget__header');
@@ -300,10 +316,72 @@ export class TimerRenderer {
                 this.renderIntervalControls(container, timer);
                 return;
             case 'idle':
+                this.renderIdleControls(container, timer);
                 return;
             default:
                 return;
         }
+    }
+
+    /** Idle item: suggest the next task to start (current window > upcoming today). */
+    private renderIdleControls(container: HTMLElement, timer: IdleTimer): void {
+        const suggestion = this.suggester.getSuggestion();
+        if (!suggestion) return;
+        const { task, kind } = suggestion;
+
+        const next = container.createDiv('timer-widget__next');
+        const color = getEffectiveColor(task);
+        if (color) {
+            TaskStyling.applyTaskColor(next, color);
+        }
+
+        const info = next.createDiv('timer-widget__next-info');
+        info.createSpan({
+            cls: 'timer-widget__next-label',
+            text: kind === 'current' ? t('timer.nextCurrent') : t('timer.nextUpcoming'),
+        });
+        info.createSpan({
+            cls: 'timer-widget__next-name',
+            text: getTaskDisplayName(task),
+        });
+        if (task.effectiveStartTime && task.effectiveEndTime) {
+            info.createSpan({
+                cls: 'timer-widget__next-time',
+                text: `${task.effectiveStartTime}–${task.effectiveEndTime}`,
+            });
+        }
+
+        const startBtn = next.createEl('button', {
+            cls: 'timer-widget__btn timer-widget__btn--primary timer-widget__next-start',
+        });
+        setIcon(startBtn, 'play');
+        startBtn.createSpan({ text: ` ${t('timer.start')}` });
+        startBtn.onclick = () => {
+            // Same accidental-click guard as the idle close button
+            if (Date.now() - timer.startTimeMs < 500) return;
+            this.startSuggestedTask(task);
+        };
+    }
+
+    /**
+     * Mirrors the task card's "Track self → Countup" start. Tasks whose
+     * completion would trigger a flow command must not have their start
+     * date rewritten (self mode does), so they record as child instead.
+     */
+    private startSuggestedTask(task: DisplayTask): void {
+        const selfUnsafe = canTriggerFlow(task, this.ctx.plugin.settings.statusDefinitions);
+        this.ctx.startTimer({
+            taskId: task.id,
+            taskName: getTaskDisplayName(task),
+            taskOriginalText: task.originalText,
+            taskFile: task.file,
+            taskColor: getEffectiveColor(task) ?? '',
+            recordMode: selfUnsafe ? 'child' : 'self',
+            parserId: task.parserId,
+            timerTargetId: task.timerTargetId ?? task.blockId,
+            autoStart: true,
+            timerType: 'countup',
+        });
     }
 
     private renderCountupControls(container: HTMLElement, timer: CountupTimer): void {

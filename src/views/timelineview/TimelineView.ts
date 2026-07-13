@@ -1046,10 +1046,9 @@ export class TimelineView extends ItemView {
      */
     private findOldestOverdueDate(): string | null {
         const startHour = this.plugin.settings.startHour;
-        const visualToday = DateUtils.getVisualDateOfNow(startHour);
         const filterState = this.viewState.filterState ?? createEmptyFilterState();
         const displayTasks = this.readService.getFilteredTasks(filterState);
 
-        return findOldestOverdueDate(displayTasks, visualToday, this.plugin.settings.statusDefinitions);
+        return findOldestOverdueDate(displayTasks, startHour, this.plugin.settings.statusDefinitions, this.readService);
     }
 }

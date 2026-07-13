@@ -1,22 +1,24 @@
 import type { DisplayTask, StatusDefinition } from '../../types';
-import { isCompleteStatusChar } from '../../types';
+import type { TaskReadService } from '../data/TaskReadService';
+import { getOverdueLevel } from './TaskStatusQuery';
+import { getTaskDateRange } from './VisualDateRange';
 
-/**
- * Find the oldest past visual start date among incomplete tasks.
- * Returns null when no overdue task exists.
- */
 export function findOldestOverdueDate(
     displayTasks: DisplayTask[],
-    visualToday: string,
-    statusDefinitions: StatusDefinition[]
+    startHour: number,
+    statusDefinitions: StatusDefinition[],
+    readService: TaskReadService,
 ): string | null {
     let oldest: string | null = null;
     for (const dt of displayTasks) {
-        if (!dt.effectiveStartDate) continue;
-        if (isCompleteStatusChar(dt.statusChar, statusDefinitions)) continue;
-        if (dt.effectiveStartDate >= visualToday) continue;
-        if (!oldest || dt.effectiveStartDate < oldest) {
-            oldest = dt.effectiveStartDate;
+        // Visual start date, so the returned date matches the column the
+        // task is actually rendered on (an early-morning task belongs to
+        // the previous visual day).
+        const { effectiveStart } = getTaskDateRange(dt, startHour);
+        if (!effectiveStart) continue;
+        if (getOverdueLevel(dt, startHour, statusDefinitions, readService) === 'none') continue;
+        if (!oldest || effectiveStart < oldest) {
+            oldest = effectiveStart;
         }
     }
     return oldest;

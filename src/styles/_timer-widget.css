@@ -422,3 +422,47 @@
     background: var(--tv-bg-hover);
     border-color: var(--tv-border);
 }
+
+/* Next-task suggestion (idle item) */
+.timer-widget__next {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    /* Task color as a small accent bar on the left (transparent keeps
+       alignment stable for colorless tasks) */
+    border-left: 3px solid var(--file-accent, transparent);
+    padding-left: 8px;
+}
+
+.timer-widget__next-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.timer-widget__next-label {
+    display: block;
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+    color: var(--tv-text-muted);
+}
+
+.timer-widget__next-name {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 500;
+    font-style: normal;
+    color: var(--tv-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+.timer-widget__next-time {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--tv-text-muted);
+    font-variant-numeric: tabular-nums;
+}

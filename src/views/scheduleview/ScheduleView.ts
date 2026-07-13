@@ -3,7 +3,6 @@ import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { CardReconciler } from '../sharedUI/CardReconciler';
-import { isCompleteStatusChar } from '../../types';
 import type { DisplayTask, AstronomyDisplay, Task } from '../../types';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
@@ -40,6 +39,7 @@ import { TaskReadService } from '../../services/data/TaskReadService';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { categorizeTasksForDate, type CategorizedTasks as BaseCategorizedTasks } from '../../services/display/TaskDateCategorizer';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
+import { getOverdueLevel } from '../../services/display/TaskStatusQuery';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { ScheduleSchema, type ScheduleConfig, type ScheduleTransient } from './ScheduleSchema';
@@ -490,7 +490,7 @@ export class ScheduleView extends ItemView {
             if (d >= todayVisualDate) return false;
             const tasksOnDate = this.readService.getTasksForDateRange(d, d, this.filterMenu.getFilterState());
             return tasksOnDate.some(dt =>
-                !isCompleteStatusChar(dt.statusChar, this.plugin.settings.statusDefinitions)
+                getOverdueLevel(dt, this.plugin.settings.startHour, this.plugin.settings.statusDefinitions, this.readService) !== 'none'
             );
         };
 
