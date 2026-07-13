@@ -313,12 +313,11 @@ export class TimelineToolbar extends ViewToolbarBase {
      */
     private findOldestOverdueDate(): string | null {
         const startHour = this.plugin.settings.startHour;
-        const visualToday = DateUtils.getVisualDateOfNow(startHour);
         const readService = this.plugin.getTaskReadService();
         const filterState = this.getFilterState();
         const displayTasks = readService.getFilteredTasks(filterState);
 
-        return findOldestOverdueDate(displayTasks, visualToday, this.plugin.settings.statusDefinitions);
+        return findOldestOverdueDate(displayTasks, startHour, this.plugin.settings.statusDefinitions, readService);
     }
 
     private renderViewModeSwitch(toolbar: HTMLElement): void {

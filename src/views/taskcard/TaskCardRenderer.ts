@@ -1,5 +1,6 @@
 import { App, MarkdownRenderer, Component } from 'obsidian';
 import { Task, DisplayTask, TaskViewerSettings, DoubleTapAction, isCompleteStatusChar, isTvFile, TopRightConfig } from '../../types';
+import { getOverdueLevel } from '../../services/display/TaskStatusQuery';
 import { resolveTopRightField } from './TopRightFieldResolver';
 
 export type TopRightSpec =
@@ -34,7 +35,6 @@ const RENDERER_OWNED_CHILD_CLASSES = [
 const SHAPE_CLASS = 'task-card__shape';
 import { TaskReadService } from '../../services/data/TaskReadService';
 import { TaskWriteService } from '../../services/data/TaskWriteService';
-import { DateUtils } from '../../utils/DateUtils';
 import { getFileBaseName, hasTaskContent, isContentMatchingBaseName } from '../../services/parsing/utils/TaskContent';
 import { ChildItemBuilder } from './ChildItemBuilder';
 import { ChildSectionRenderer, ChildMenuCallback, ChildLineEditCallback } from './ChildSectionRenderer';
@@ -220,7 +220,7 @@ export class TaskCardRenderer extends Component {
 
             const { completed, total } = this.getChildCompletion(task, settings);
             if (total > 0) {
-                countLabelSpan.setText(`${completed}/${total}`);
+                countLabelSpan.setText(`${this.getChildOverdueIcon(task, settings)}${completed}/${total}`);
             }
         } else if (isTvFile(task)) {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
@@ -253,6 +253,23 @@ export class TaskCardRenderer extends Component {
     disposeInside(root: HTMLElement): void {
         const cards = root.querySelectorAll<HTMLElement>('.task-card');
         cards.forEach(card => this.dispose(card));
+    }
+
+    private getOverdueIcon(task: DisplayTask, settings: TaskViewerSettings): string {
+        const level = getOverdueLevel(task, settings.startHour, settings.statusDefinitions, this.childItemBuilder.getReadService());
+        return level === 'past-due' ? '🚨 '
+            : level === 'past-end' ? '⚠️ '
+            : '';
+    }
+
+    /**
+     * Overdue icon shown next to the n/m child counter — only when the
+     * overdue is child-caused (parent's own status is complete but an
+     * unchecked child keeps the task incomplete).
+     */
+    private getChildOverdueIcon(task: DisplayTask, settings: TaskViewerSettings): string {
+        if (!isCompleteStatusChar(task.statusChar, settings.statusDefinitions)) return '';
+        return this.getOverdueIcon(task, settings);
     }
 
     private getChildCompletion(task: DisplayTask, settings: TaskViewerSettings): { completed: number; total: number } {
@@ -329,25 +346,13 @@ export class TaskCardRenderer extends Component {
     private buildParentMarkdown(task: DisplayTask, settings: TaskViewerSettings): string {
         const statusChar = task.statusChar || ' ';
 
-        let overdueIcon = '';
-        if (!isCompleteStatusChar(task.statusChar, settings.statusDefinitions)) {
-            if (task.due && DateUtils.isPastDue(task.due, settings.startHour)) {
-                overdueIcon = '🚨 ';
-            } else {
-                // effective only: toDisplayTask seeds effectiveEndDate from
-                // task.endDate, so a raw fallback here could never fire —
-                // and falling back would reintroduce the raw endDate's
-                // inclusive/exclusive dual semantics this layer must not see.
-                const endDate = task.effectiveEndDate;
-                const endTime = task.effectiveEndTime;
-                if (endDate) {
-                    const cleanEndTime = endTime?.includes('T') ? endTime.split('T')[1] : endTime;
-                    if (DateUtils.isPastDate(endDate, cleanEndTime, settings.startHour)) {
-                        overdueIcon = '⚠️ ';
-                    }
-                }
-            }
-        }
+        // Icon placement disambiguates the overdue cause: the parent line
+        // only carries the icon when the parent's own status is incomplete;
+        // child-caused overdue (parent complete, child unchecked) shows the
+        // icon next to the n/m child counter instead.
+        const overdueIcon = isCompleteStatusChar(task.statusChar, settings.statusDefinitions)
+            ? ''
+            : this.getOverdueIcon(task, settings);
 
         const filePath = task.file.replace(/\.md$/, '');
         const fileBaseName = getFileBaseName(task.file) || filePath;
@@ -369,7 +374,7 @@ export class TaskCardRenderer extends Component {
      */
     private async renderInlineChildren(
         contentContainer: HTMLElement,
-        task: Task,
+        task: DisplayTask,
         component: Component,
         settings: TaskViewerSettings,
         parentMarkdown: string,
@@ -387,7 +392,8 @@ export class TaskCardRenderer extends Component {
                 task.file,
                 component,
                 settings,
-                task.startDate
+                task.startDate,
+                this.getChildOverdueIcon(task, settings)
             );
             return;
         }
@@ -431,7 +437,8 @@ export class TaskCardRenderer extends Component {
                 task.file,
                 component,
                 settings,
-                task.startDate
+                task.startDate,
+                this.getChildOverdueIcon(task, settings)
             );
             return;
         }
