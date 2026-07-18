@@ -367,6 +367,10 @@ export class TaskHubForm {
                 if (last) this.commitTags(this.task.tags.filter(x => x !== last));
             }
         });
+        input.addEventListener('blur', () => {
+            const raw = input.value.trim();
+            if (raw) addTags(raw);
+        });
     }
 
     private commitTags(tags: string[]): void {
@@ -662,6 +666,9 @@ export class TaskHubForm {
                 if (e.key === 'Enter' && !e.isComposing) commitAdd();
             });
         }
+        valueInput.addEventListener('blur', () => {
+            if (keyInput.value.trim() && valueInput.value.trim()) commitAdd();
+        });
     }
 
     private commitProps(props: Record<string, PropertyValue>): void {
