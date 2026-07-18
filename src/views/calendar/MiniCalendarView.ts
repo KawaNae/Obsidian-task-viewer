@@ -6,6 +6,7 @@ import { attachMoonPhase } from '../sharedUI/AstronomyCellAdorner';
 import { shouldRenderForChanges } from '../sharedUI/RenderScheduler';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { DateUtils } from '../../utils/DateUtils';
+import { getTaskDateRange } from '../../services/display/VisualDateRange';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
@@ -361,23 +362,34 @@ export class MiniCalendarView extends ItemView {
         const filterState = this.filterMenu.getFilterState();
         const filter = hasConditions(filterState) ? filterState : undefined;
 
-        let dateCursor = rangeStart;
-        while (dateCursor <= rangeEnd) {
-            const tasks = this.readService.getTasksForDateRange(dateCursor, dateCursor, filter);
-            if (tasks.length > 0) {
-                let hasIncomplete = false;
-                let hasComplete = false;
-                for (const dt of tasks) {
-                    if (this.isTaskCompleted(dt)) {
-                        hasComplete = true;
-                    } else {
-                        hasIncomplete = true;
-                    }
-                    if (hasIncomplete && hasComplete) break;
-                }
-                indicatorMap.set(dateCursor, { hasIncomplete, hasComplete });
+        const allTasks = this.readService.getTasksForDateRange(rangeStart, rangeEnd, filter);
+        const startHour = this.plugin.settings.startHour;
+
+        for (const dt of allTasks) {
+            const dates = getTaskDateRange(dt, startHour);
+            const visualStart = dates.effectiveStart || dt.effectiveStartDate;
+            const visualEnd = dates.effectiveEnd || visualStart;
+            const duePart = DateUtils.dueDatePart(dt.effectiveDue);
+
+            const completed = this.isTaskCompleted(dt);
+
+            if (!visualStart && duePart) {
+                const entry = indicatorMap.get(duePart) ?? { hasIncomplete: false, hasComplete: false };
+                if (completed) entry.hasComplete = true; else entry.hasIncomplete = true;
+                indicatorMap.set(duePart, entry);
+                continue;
             }
-            dateCursor = DateUtils.addDays(dateCursor, 1);
+
+            if (!visualStart) continue;
+
+            let cursor = visualStart < rangeStart ? rangeStart : visualStart;
+            const end = visualEnd > rangeEnd ? rangeEnd : visualEnd;
+            while (cursor <= end) {
+                const entry = indicatorMap.get(cursor) ?? { hasIncomplete: false, hasComplete: false };
+                if (completed) entry.hasComplete = true; else entry.hasIncomplete = true;
+                indicatorMap.set(cursor, entry);
+                cursor = DateUtils.addDays(cursor, 1);
+            }
         }
 
         return indicatorMap;
