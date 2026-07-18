@@ -8,7 +8,6 @@ import { getEffectiveAstronomyDisplay } from '../../services/astronomy/Astronomy
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
 import { DateUtils } from '../../utils/DateUtils';
-import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import type TaskViewerPlugin from '../../main';
 
@@ -560,13 +559,4 @@ export class ScheduleView extends ItemView {
         return new Date(year, month - 1, day, 0, 0, 0, 0);
     }
 
-    private async openOrCreateDailyNote(date: Date): Promise<void> {
-        let file = DailyNoteUtils.getDailyNote(this.app, date);
-        if (!file) {
-            file = await DailyNoteUtils.createDailyNote(this.app, date);
-        }
-        if (file) {
-            await this.app.workspace.getLeaf(false).openFile(file);
-        }
-    }
 }

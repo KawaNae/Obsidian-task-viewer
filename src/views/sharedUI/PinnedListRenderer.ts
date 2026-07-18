@@ -228,7 +228,7 @@ export class PinnedListRenderer {
         const header = listEl.createDiv('pinned-list__header');
 
         const toggle = header.createSpan({ text: isCollapsed ? '▶' : '▼', cls: 'pinned-list__toggle' });
-        const nameEl = header.createSpan({ text: listDef.name, cls: 'pinned-list__name' });
+        header.createSpan({ text: listDef.name, cls: 'pinned-list__name' });
         header.createSpan({ text: ` (${tasks.length})`, cls: 'pinned-list__count' });
 
         // Sort button

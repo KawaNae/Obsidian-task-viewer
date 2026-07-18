@@ -650,15 +650,6 @@ export class TimelineView extends ItemView {
         this.performRender();
     }
 
-    /**
-     * 同一 frame 内に複数回呼ばれても 1 回の render に集約する。
-     * データ変更通知 (onChange) からの render はこの経路を使う。
-     * トールバー / sidebar / pinch zoom 等の即時反映が必要な経路は render() を直呼び。
-     */
-    private scheduleRender(): void {
-        this.renderScheduler.scheduleRender();
-    }
-
     private saveScrollPosition(): void {
         const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (!grid) return;

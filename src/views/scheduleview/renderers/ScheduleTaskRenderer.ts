@@ -22,7 +22,6 @@ export interface ScheduleTaskRendererOptions {
 }
 
 export class ScheduleTaskRenderer {
-    private readonly app: App;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly menuHandler: MenuHandler;
     private readonly getSettings: () => TaskViewerSettings;
@@ -31,7 +30,6 @@ export class ScheduleTaskRenderer {
     private readonly timelineTopPaddingPx: number;
 
     constructor(options: ScheduleTaskRendererOptions) {
-        this.app = options.app;
         this.taskRenderer = options.taskRenderer;
         this.menuHandler = options.menuHandler;
         this.getSettings = options.getSettings;

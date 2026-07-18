@@ -567,14 +567,6 @@ export class KanbanView extends ItemView {
         this.render();
     }
 
-    private addColumn(): void {
-        for (const row of this.grid) {
-            row.push(this.createDefaultList());
-        }
-        this.requestSaveLayout();
-        this.render();
-    }
-
     private insertRow(atIndex: number): void {
         const cols = this.grid[0]?.length ?? 1;
         const newRow: PinnedListDefinition[] = [];
