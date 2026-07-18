@@ -8,8 +8,12 @@ export class ChildLineClassifier {
     /** `- [[link]]` with any list bullet (kept in sync with CHECKBOX_CHAR's bullet set). */
     static readonly WIKILINK_CHILD = /^\s*(?:[-*+]|\d+[.)])\s+\[\[([^\]]+)\]\]\s*$/;
     static readonly CHECKBOX_CHAR = /^\s*(?:[-*+]|\d+[.)])\s*\[(.)\]/;
-    /** Matches `- key:: value` (Dataview-compatible) but not checkbox or wikilink lines */
-    static readonly PROPERTY_LINE = /^\s*-\s+([^:\[\]]+?)::\s*(.+)$/;
+    /**
+     * Matches `- key:: value` (Dataview-compatible) but not checkbox or wikilink lines.
+     * 値部は空を許す（`- key ::` は空値プロパティ）。`(.+)` にすると末尾空白の
+     * 有無で認識が反転する（`- key :: ` だけマッチ）ため `(.*)` が正しい。
+     */
+    static readonly PROPERTY_LINE = /^\s*-\s+([^:\[\]]+?)::\s*(.*)$/;
 
     /**
      * 生テキスト → ChildLine に変換。
