@@ -1,4 +1,5 @@
-import { apiVersion, Notice, Platform, Plugin, Workspace, WorkspaceLeaf, TFile } from 'obsidian';
+import { apiVersion, Notice, Platform, Plugin, type Workspace, type WorkspaceLeaf, TFile } from 'obsidian';
+import './views/registerAllSchemas';
 import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
@@ -8,7 +9,7 @@ import { TimerView, VIEW_TYPE_TIMER } from './views/TimerView';
 import { TimerWidget } from './timer/TimerWidget';
 import { createTempTask } from './services/data/createTempTask';
 import {
-    TaskViewerSettings,
+    type TaskViewerSettings,
     DEFAULT_SETTINGS,
     DEFAULT_TV_FILE_KEYS,
     normalizeTvFileKeys,
@@ -136,6 +137,7 @@ export default class TaskViewerPlugin extends Plugin {
             win: typeof window !== 'undefined' ? window : undefined,
         });
         this.readService = new TaskReadService(this.taskIndex, this.settings.startHour);
+        this.readService.updateWeekStartDay(this.settings.weekStartDay);
         this.writeService = new TaskWriteService(this.taskIndex);
 
         // Single source of truth for menu lifecycle (dedup across all views/touch paths).
@@ -565,6 +567,7 @@ export default class TaskViewerPlugin extends Plugin {
         // parser chain immediately (dp/tp toggles change line ownership).
         this.app.workspace.updateOptions();
         this.readService.updateStartHour(this.settings.startHour);
+        this.readService.updateWeekStartDay(this.settings.weekStartDay);
         this.updateViewHeaderStyles();
 
         this.refreshAllViews();

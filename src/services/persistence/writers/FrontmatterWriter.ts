@@ -1,6 +1,6 @@
-import { App, TFile } from 'obsidian';
+import { type App, TFile } from 'obsidian';
 import type { TvFileKeys, Task } from '../../../types';
-import { FileOperations } from '../utils/FileOperations';
+import type { FileOperations } from '../utils/FileOperations';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 import { HeadingInserter } from '../../../utils/HeadingInserter';
 import { DateUtils } from '../../../utils/DateUtils';
@@ -114,7 +114,7 @@ export class FrontmatterWriter {
         if (!(file instanceof TFile)) return;
 
         await this.app.vault.process(file, (content) => {
-            return HeadingInserter.insertUnderHeading(content, lineContent, header, headerLevel);
+            return HeadingInserter.insertUnderHeading(content, lineContent, header, headerLevel).content;
         });
     }
 

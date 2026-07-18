@@ -1,9 +1,8 @@
-import { App, TFile } from 'obsidian';
+import { type App, TFile } from 'obsidian';
 import type { DuplicateOptions, TvFileKeys, Task } from '../../types';
-import { TaskParser } from '../parsing/TaskParser';
 import { collectFlowLineIndices, formatFlowLine } from '../flow/FlowLineScanner';
 import { DateUtils } from '../../utils/DateUtils';
-import { FileOperations } from './utils/FileOperations';
+import type { FileOperations } from './utils/FileOperations';
 import { FrontmatterLineEditor } from './utils/FrontmatterLineEditor';
 
 

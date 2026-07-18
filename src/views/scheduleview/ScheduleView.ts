@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, type ViewStateResult } from 'obsidian';
+import { ItemView, type WorkspaceLeaf, type ViewStateResult } from 'obsidian';
 import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -7,17 +7,14 @@ import type { DisplayTask, AstronomyDisplay, Task } from '../../types';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
-import type { TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
 import { DateUtils } from '../../utils/DateUtils';
-import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
-import TaskViewerPlugin from '../../main';
+import type TaskViewerPlugin from '../../main';
 
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
-import { FilterSerializer } from '../../services/filter/FilterSerializer';
-import { createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
+import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { ScheduleToolbar } from './ScheduleToolbar';
-import { openTaskInEditor } from '../sharedLogic/NavigationUtils';
+import { openTaskInEditor } from '../../utils/NavigationUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
@@ -35,10 +32,10 @@ import { ScheduleOverlapLayout } from './utils/ScheduleOverlapLayout';
 import { ScheduleGridRenderer } from './renderers/ScheduleGridRenderer';
 import { ScheduleTaskRenderer } from './renderers/ScheduleTaskRenderer';
 import { ScheduleSectionRenderer } from './renderers/ScheduleSectionRenderer';
-import { TaskReadService } from '../../services/data/TaskReadService';
+import type { TaskReadService } from '../../services/data/TaskReadService';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { categorizeTasksForDate, type CategorizedTasks as BaseCategorizedTasks } from '../../services/display/TaskDateCategorizer';
-import { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import { getOverdueLevel } from '../../services/display/TaskStatusQuery';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
@@ -562,13 +559,4 @@ export class ScheduleView extends ItemView {
         return new Date(year, month - 1, day, 0, 0, 0, 0);
     }
 
-    private async openOrCreateDailyNote(date: Date): Promise<void> {
-        let file = DailyNoteUtils.getDailyNote(this.app, date);
-        if (!file) {
-            file = await DailyNoteUtils.createDailyNote(this.app, date);
-        }
-        if (file) {
-            await this.app.workspace.getLeaf(false).openFile(file);
-        }
-    }
 }

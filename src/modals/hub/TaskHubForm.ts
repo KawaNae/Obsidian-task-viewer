@@ -1,4 +1,4 @@
-import { App, setIcon } from 'obsidian';
+import { type App, setIcon } from 'obsidian';
 import { t } from '../../i18n';
 import { isTvFile, type PropertyValue, type Task } from '../../types';
 import type TaskViewerPlugin from '../../main';
@@ -12,14 +12,14 @@ import { filterColors, renderColorSuggestion } from '../../suggest/color/colorUt
 import { filterLineStyles, renderLineStyleSuggestion } from '../../suggest/line/lineStyleUtils';
 import { createFormRow } from '../form/formRow';
 import { PROPERTY_ICONS } from '../../constants/propertyIcons';
-import { attachBracketPairing, BracketPairingHandle } from '../form/bracketPairing';
+import { attachBracketPairing, type BracketPairingHandle } from '../form/bracketPairing';
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
 import { CascadeSource, type CascadeSourceKind } from './CascadeSource';
 import { getEffectiveTags, getEffectiveProperties } from '../../services/data/EffectiveProperties';
 import { TagExtractor } from '../../services/parsing/utils/TagExtractor';
 import { ChildLineClassifier } from '../../services/parsing/utils/ChildLineClassifier';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
-import { openFileInExistingOrNewTab } from '../../views/sharedLogic/NavigationUtils';
+import { openFileInExistingOrNewTab } from '../../utils/NavigationUtils';
 import { SuggestController } from '../../views/customMenus/SuggestController';
 import type { PopoverStack } from '../../views/sharedUI/PopoverStack';
 import type { DateGroupKey } from '../form/DateFieldGroup';
@@ -367,6 +367,10 @@ export class TaskHubForm {
                 if (last) this.commitTags(this.task.tags.filter(x => x !== last));
             }
         });
+        input.addEventListener('blur', () => {
+            const raw = input.value.trim();
+            if (raw) addTags(raw);
+        });
     }
 
     private commitTags(tags: string[]): void {
@@ -662,6 +666,16 @@ export class TaskHubForm {
                 if (e.key === 'Enter' && !e.isComposing) commitAdd();
             });
         }
+        // blur 確定ルール: key があれば value 空でも確定（空値プロパティは有効）。
+        // value だけでは書き込み先がないので確定しない。
+        // ただし key⇔value 間のフォーカス移動は入力継続中なので確定を保留する。
+        const blurCommit = (e: FocusEvent) => {
+            const to = e.relatedTarget;
+            if (to === keyInput || to === valueInput) return;
+            if (keyInput.value.trim()) commitAdd();
+        };
+        keyInput.addEventListener('blur', blurCommit);
+        valueInput.addEventListener('blur', blurCommit);
     }
 
     private commitProps(props: Record<string, PropertyValue>): void {

@@ -1,7 +1,7 @@
-import { App, TFile } from 'obsidian';
-import { Task, WikilinkRef, isTvFile, hasBodyLine } from '../../types';
+import type { App } from 'obsidian';
+import { type Task, type WikilinkRef, isTvFile, hasBodyLine } from '../../types';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
-import { logWarn, logDebug } from '../../log/log';
+import { logDebug } from '../../log/log';
 
 /**
  * `- [[name]]` パターンのwikilink子タスクを解決し、親子関係をワイアーする。
@@ -189,11 +189,8 @@ export class WikiLinkResolver {
 
     /**
      * wikilink名からvaultファイルのパスを解決する。
-     * 解決順序:
-     *   1. 完全パス一致 (linkName がすでに .md を含む場合)
-     *   2. linkName + '.md'
-     *   3. 全markdownファイルのbasenameで検索
-     * 各候補を順番に試して最初に解決できたパスを返す。
+     * metadataCache.getFirstLinkpathDest を使用し、Obsidian 内部の
+     * リンク解決ロジック（完全パス → basename 検索）に委譲する。
      */
     private static resolveWikiLink(linkName: string, app: App): string | null {
         const target = this.extractWikiLinkTarget(linkName);
@@ -201,33 +198,8 @@ export class WikiLinkResolver {
             return null;
         }
 
-        // 1. 完全パス一致
-        const exact = app.vault.getAbstractFileByPath(target);
-        if (exact instanceof TFile) {
-            return exact.path;
-        }
-
-        // 2. .md 拡張子追加
-        const withExt = app.vault.getAbstractFileByPath(`${target}.md`);
-        if (withExt instanceof TFile) {
-            return withExt.path;
-        }
-
-        // 3. basename で検索（同名複数時は path 辞書順で決定的に1件を選ぶ）
-        const files = app.vault.getMarkdownFiles();
-        const matches = files.filter(f => f.basename === target);
-        if (matches.length > 0) {
-            if (matches.length > 1) {
-                matches.sort((a, b) => a.path.localeCompare(b.path));
-                logWarn(
-                    `[WikiLinkResolver] Ambiguous wikilink "${target}" matches ${matches.length} files; ` +
-                    `resolving to "${matches[0].path}"`
-                );
-            }
-            return matches[0].path;
-        }
-
-        return null;
+        const resolved = app.metadataCache.getFirstLinkpathDest(target, '');
+        return resolved?.path ?? null;
     }
 
     private static extractWikiLinkTarget(linkName: string): string {

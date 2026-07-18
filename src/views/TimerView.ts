@@ -6,12 +6,12 @@
  * TimerInstance 型と TimerProgressUI を再利用。
  */
 
-import { ItemView, WorkspaceLeaf, Notice, Menu, setIcon, ViewStateResult } from 'obsidian';
+import { ItemView, type WorkspaceLeaf, Notice, type Menu, setIcon, type ViewStateResult } from 'obsidian';
 import { logDebug } from '../log/log';
-import TaskViewerPlugin from '../main';
+import type TaskViewerPlugin from '../main';
 import { InputModal } from '../modals/InputModal';
 import { VIEW_META_TIMER } from '../constants/viewRegistry';
-import {
+import type {
     CountupTimer,
     CountdownTimer,
     IntervalGroup,
@@ -21,7 +21,7 @@ import {
     TimerPhase,
 } from '../timer/TimerInstance';
 import { TimerProgressUI } from '../timer/TimerProgressUI';
-import { IntervalTemplateLoader, IntervalTemplate } from '../timer/IntervalTemplateLoader';
+import { IntervalTemplateLoader, type IntervalTemplate } from '../timer/IntervalTemplateLoader';
 import { AudioUtils } from '../timer/AudioUtils';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { ViewUriBuilder } from './sharedLogic/ViewUriBuilder';

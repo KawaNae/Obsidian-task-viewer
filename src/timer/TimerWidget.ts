@@ -5,11 +5,11 @@
  * アコーディオン形式で個別にトグル可能。
  */
 
-import { App, Notice } from 'obsidian';
+import { type App, Notice } from 'obsidian';
 import { t } from '../i18n';
-import TaskViewerPlugin from '../main';
+import type TaskViewerPlugin from '../main';
 import { AudioUtils } from './AudioUtils';
-import {
+import type {
     TimerInstance,
     TimerStartConfig
 } from './TimerInstance';
@@ -21,9 +21,9 @@ import { TimerLifecycle } from './TimerLifecycle';
 import { TimerRenderer } from './TimerRenderer';
 import { TimerPersistence } from './TimerPersistence';
 import { TimerTargetManager } from './TimerTargetManager';
-import { TimerWidgetWindowObserver, PinState } from './TimerWidgetWindowObserver';
+import { TimerWidgetWindowObserver, type PinState } from './TimerWidgetWindowObserver';
 import {
-    TimerContext,
+    type TimerContext,
     IDLE_TIMER_ID,
 } from './TimerContext';
 import { logInfo } from '../log/log';

@@ -1,6 +1,6 @@
 import { Setting } from 'obsidian';
-import TaskViewerPlugin from '../main';
-import { DefaultLeafPosition, TaskViewerSettings } from '../types';
+import type TaskViewerPlugin from '../main';
+import type { DefaultLeafPosition, TaskViewerSettings } from '../types';
 import { t } from '../i18n';
 
 export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {

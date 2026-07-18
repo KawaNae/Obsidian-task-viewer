@@ -1,6 +1,6 @@
-import { App, TFile, normalizePath } from 'obsidian';
-import { DEFAULT_TV_FILE_KEYS, TvFileKeys, Task, PropertyValue } from '../../types';
-import { FileOperations } from './utils/FileOperations';
+import { type App, normalizePath } from 'obsidian';
+import { DEFAULT_TV_FILE_KEYS, type TvFileKeys, type Task, type PropertyValue } from '../../types';
+import type { FileOperations } from './utils/FileOperations';
 import { FrontmatterLineEditor } from './utils/FrontmatterLineEditor';
 import { DateUtils } from '../../utils/DateUtils';
 import { TagExtractor } from '../parsing/utils/TagExtractor';

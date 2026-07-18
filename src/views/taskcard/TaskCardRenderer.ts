@@ -1,5 +1,5 @@
-import { App, MarkdownRenderer, Component } from 'obsidian';
-import { Task, DisplayTask, TaskViewerSettings, DoubleTapAction, isCompleteStatusChar, isTvFile, TopRightConfig } from '../../types';
+import { type App, MarkdownRenderer, Component } from 'obsidian';
+import { type Task, type DisplayTask, type TaskViewerSettings, type DoubleTapAction, isCompleteStatusChar, isTvFile, type TopRightConfig } from '../../types';
 import { getOverdueLevel } from '../../services/display/TaskStatusQuery';
 import { resolveTopRightField } from './TopRightFieldResolver';
 
@@ -33,17 +33,62 @@ const RENDERER_OWNED_CHILD_CLASSES = [
 ] as const;
 
 const SHAPE_CLASS = 'task-card__shape';
-import { TaskReadService } from '../../services/data/TaskReadService';
-import { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import { getFileBaseName, hasTaskContent, isContentMatchingBaseName } from '../../services/parsing/utils/TaskContent';
 import { ChildItemBuilder } from './ChildItemBuilder';
-import { ChildSectionRenderer, ChildMenuCallback, ChildLineEditCallback } from './ChildSectionRenderer';
+import { ChildSectionRenderer, type ChildMenuCallback, type ChildLineEditCallback } from './ChildSectionRenderer';
 import { CheckboxWiring } from './CheckboxWiring';
-import { MenuPresenter } from '../../interaction/menu/MenuPresenter';
+import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
 import { bindTapIntents } from '../../interaction/tap/TapIntent';
 import type { TaskCardLinkRuntime } from './types';
 import { getEffectiveMask } from '../../services/data/EffectiveProperties';
+
+export function computeContentSignature(
+    task: DisplayTask,
+    settings: TaskViewerSettings,
+    options: RenderOptions,
+    topRightResolved: string,
+    maskMode: boolean,
+    isExpanded: boolean,
+    readService: TaskReadService,
+): string {
+    const childSig = task.childEntries.map(e => {
+        if (e.kind === 'task') {
+            const child = readService.getTask(e.taskId);
+            return `t:${e.taskId}:${child?.statusChar ?? '?'}:${child?.content ?? ''}`;
+        }
+        if (e.kind === 'wikilink') {
+            return `w:${e.target}:${e.line.text}`;
+        }
+        return `l:${e.line.text}`;
+    }).join('|');
+
+    return [
+        task.statusChar,
+        task.content,
+        task.file,
+        task.parserId,
+        task.effectiveStartDate,
+        task.effectiveStartTime ?? '',
+        task.effectiveEndDate ?? '',
+        task.effectiveEndTime ?? '',
+        task.startTimeImplicit ? '1' : '0',
+        task.endTimeImplicit ? '1' : '0',
+        task.effectiveDue ?? '',
+        task.isReadOnly ? '1' : '0',
+        topRightResolved,
+        options.compact ? '1' : '0',
+        maskMode ? '1' : '0',
+        isExpanded ? '1' : '0',
+        settings.startHour,
+        settings.childCollapseThreshold,
+        settings.enableCardFileLink ? '1' : '0',
+        settings.statusDefinitions.map(d => `${d.char}:${d.label}`).join(','),
+        childSig,
+    ].join('\x00');
+}
 
 export class TaskCardRenderer extends Component {
     private expandedTaskIds: Set<string> = new Set();
@@ -142,18 +187,26 @@ export class TaskCardRenderer extends Component {
         const enableLinks = isHubPreview || settings.enableCardFileLink;
         const onNavigate = options.hooks?.onNavigate;
 
-        // Tag the card with its instance id. `CardReconciler` indexes by this
-        // attribute when the view tears down its scaffolding so the same card
-        // element is re-acquired and re-decorated in the next render.
         container.dataset.cardInstanceId = cardInstanceId;
 
         if (isHubPreview) {
             container.addClass('task-card--in-hub-preview');
         }
 
-        // Idempotent re-render: remove only the renderer-owned direct children
-        // before rebuilding. View-injected `__handle*` (post, by HandleManager)
-        // sits outside this set and is preserved.
+        // Compute content signature for render skip
+        const topRightResolved = this.resolveTopRightString(task, settings, topRight);
+        const isExpanded = this.expandedTaskIds.has(cardInstanceId);
+        const sig = computeContentSignature(
+            task, settings, options, topRightResolved,
+            this.getMaskMode(), isExpanded,
+            this.childItemBuilder.getReadService(),
+        );
+
+        if (container.dataset.contentSig === sig) {
+            return;
+        }
+        container.dataset.contentSig = sig;
+
         const ownedSelector = RENDERER_OWNED_CHILD_CLASSES
             .map(c => `:scope > .${c}`).join(', ');
         container.querySelectorAll(ownedSelector).forEach(el => el.remove());
@@ -306,6 +359,21 @@ export class TaskCardRenderer extends Component {
             if (t === baseName || t === fullPath || t === c.file) return c;
         }
         return undefined;
+    }
+
+    private resolveTopRightString(task: DisplayTask, settings: TaskViewerSettings, spec: TopRightSpec): string {
+        if (spec.mode === 'none') return '';
+        if (spec.mode === 'time') {
+            if (!task.effectiveStartTime || task.startTimeImplicit) return '';
+            const end = (task.effectiveEndTime && !task.endTimeImplicit) ? `>${task.effectiveEndTime}` : '';
+            return `${task.effectiveStartTime}${end}`;
+        }
+        const { fields, separator, prefix, suffix } = spec.config;
+        const segments = fields
+            .map(f => resolveTopRightField(task, f, settings))
+            .filter((v): v is string => v != null && v !== '');
+        if (segments.length === 0) return '';
+        return `${prefix ?? ''}${segments.join(separator ?? '')}${suffix ?? ''}`;
     }
 
     private renderTopRightMeta(

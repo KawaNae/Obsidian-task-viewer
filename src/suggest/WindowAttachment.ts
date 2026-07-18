@@ -1,6 +1,6 @@
-import { App, setIcon } from 'obsidian';
+import { type App, setIcon } from 'obsidian';
 import type { TaskViewerSettings } from '../types';
-import TaskViewerPlugin from '../main';
+import type TaskViewerPlugin from '../main';
 import { PropertyColorSuggest } from './color/PropertyColorSuggest';
 import { PropertyLineStyleSuggest } from './line/PropertyLineStyleSuggest';
 import { normalizeColor, cssColorToHex } from '../utils/ColorUtils';

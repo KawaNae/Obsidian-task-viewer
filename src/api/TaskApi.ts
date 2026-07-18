@@ -8,7 +8,6 @@ import { splitTasks } from '../services/display/TaskSplitter';
 import { categorizeTasksByDate } from '../services/display/TaskDateCategorizer';
 import { normalizeTask } from './TaskNormalizer';
 import { TaskSorter } from '../services/sort/TaskSorter';
-import type { FilterState } from '../services/filter/FilterTypes';
 import type { SortState, SortProperty } from '../services/sort/SortTypes';
 import { DateUtils } from '../utils/DateUtils';
 import { parseDateTimeFlag } from '../cli/CliFilterBuilder';
@@ -78,7 +77,7 @@ Methods
     ListParams:
 ${renderParamTable(LIST_SCHEMA).replace(/^/gm, '    ')}
 
-    Returns: { count: number, tasks: NormalizedTask[] }
+    Returns: { total: number, count: number, truncated: boolean, limit: number | null, tasks: NormalizedTask[] }
 
   today(params?: TodayParams): TaskListResult
     List tasks active today (visual-date aware).
@@ -286,16 +285,17 @@ Examples
 
 // ── Internal helpers ──
 
-const VALID_SORT_PROPERTIES: Set<string> = new Set<string>([
-    'content', 'due', 'startDate', 'endDate', 'file', 'status', 'tag',
-]);
+const VALID_SORT_PROPERTIES = {
+    content: true, due: true, startDate: true, endDate: true,
+    file: true, status: true, tag: true,
+} as const satisfies Record<SortProperty, true>;
 
 function buildSortState(rules?: ApiSortRule[]): SortState | undefined {
     if (!rules || rules.length === 0) return undefined;
     for (const r of rules) {
-        if (!VALID_SORT_PROPERTIES.has(r.property)) {
+        if (!(r.property in VALID_SORT_PROPERTIES)) {
             throw new TaskApiError(
-                `Unknown sort property: ${r.property}. Available: ${[...VALID_SORT_PROPERTIES].join(', ')}`,
+                `Unknown sort property: ${r.property}. Available: ${Object.keys(VALID_SORT_PROPERTIES).join(', ')}`,
             );
         }
         if (r.direction !== undefined && r.direction !== 'asc' && r.direction !== 'desc') {
@@ -320,6 +320,8 @@ interface PaginateResult {
 function paginate(tasks: DisplayTask[], params: PaginationParams): PaginateResult {
     const total = tasks.length;
     const rawLimit = params.limit ?? 100;
+    if (typeof rawLimit !== 'number' || isNaN(rawLimit)) throw new TaskApiError('limit must be a number');
+    if (rawLimit < 0) throw new TaskApiError('limit must be non-negative');
     if (rawLimit === 0) return { paged: [], total, resolvedLimit: 0 };
     if (!isFinite(rawLimit)) return { paged: tasks, total, resolvedLimit: null };
     return { paged: tasks.slice(0, rawLimit), total, resolvedLimit: rawLimit };
@@ -353,6 +355,10 @@ export class TaskApi {
         assertParams(params ?? {}, LIST_SCHEMA, 'list');
         const p = { ...(params ?? {}) };
 
+        if (p.list && !p.filterFile) {
+            throw new TaskApiError('list requires filterFile (a .md view template)');
+        }
+
         // Resolve filterFile → filter (async file read)
         if (p.filterFile) {
             const result = await loadFilterFile(this.plugin.app, p.filterFile, p.list);
@@ -367,7 +373,7 @@ export class TaskApi {
 
         let filtered: DisplayTask[];
         if (filterState) {
-            filtered = readService.getFilteredTasks(filterState, sortState);
+            filtered = readService.getFilteredTasks(filterState, sortState, { includeInvalid: true });
         } else {
             filtered = [...readService.getAllDisplayTasks()];
             TaskSorter.sort(filtered, sortState);
@@ -398,8 +404,9 @@ export class TaskApi {
         let filtered = displayTasks.filter(t => {
             const start = t.effectiveStartDate;
             const end = t.effectiveEndDate;
-            if (!start && !t.due) return false;
-            if (!start && t.due) return t.due === today;
+            const duePart = DateUtils.dueDatePart(t.effectiveDue);
+            if (!start && !duePart) return false;
+            if (!start && duePart) return duePart === today;
             if (start && start > today) return false;
             if (end && end < today) return false;
             if (!end && start && start < today) return false;
@@ -440,10 +447,13 @@ export class TaskApi {
     async create(params: CreateParams): Promise<MutationResult> {
         assertParams(params, CREATE_SCHEMA, 'create');
 
+        const statusChar = params.status || ' ';
+        if (statusChar.length !== 1) throw new TaskApiError(`status must be a single character, got: "${statusChar}"`);
+
+        if (params.content.includes('\n')) throw new TaskApiError('content must not contain newlines');
+
         const file = this.plugin.app.vault.getAbstractFileByPath(params.file);
         if (!(file instanceof TFile)) throw new TaskApiError(`File not found: ${params.file}`);
-
-        const statusChar = params.status || ' ';
         const content = params.content;
 
         let line = `- [${statusChar}] ${content}`;
@@ -474,15 +484,9 @@ export class TaskApi {
             line += ` ${dateBlock}`;
         }
 
-        await this.writeService.createTask(params.file, line, params.heading);
+        const insertedLine = await this.writeService.createTask(params.file, line, params.heading);
 
-        const tasks = this.readService.getTasks().filter(
-            t => t.file === params.file && t.content === content,
-        );
-        const created = tasks.length > 0
-            ? tasks.reduce((a, b) => a.line > b.line ? a : b)
-            : undefined;
-
+        const created = this.readService.getTaskByFileLine(params.file, insertedLine);
         if (!created) throw new TaskApiError('Task was created but could not be found after scan');
 
         return { task: normalizeTask(toDisplayTask(created, this.plugin.settings.startHour, (id) => this.readService.getTask(id))) };
@@ -496,12 +500,18 @@ export class TaskApi {
 
         const task = this.readService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
+        if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
 
         const updates: Partial<Task> = {};
 
-        if (params.content !== undefined) updates.content = params.content;
+        if (params.content !== undefined) {
+            if (params.content.includes('\n')) throw new TaskApiError('content must not contain newlines');
+            updates.content = params.content;
+        }
         if (params.status !== undefined) {
-            updates.statusChar = params.status === 'none' ? ' ' : params.status;
+            const sc = params.status === 'none' ? ' ' : params.status;
+            if (sc.length !== 1) throw new TaskApiError(`status must be a single character or "none", got: "${params.status}"`);
+            updates.statusChar = sc;
         }
 
         if (params.start !== undefined) {
@@ -531,6 +541,7 @@ export class TaskApi {
                 updates.due = undefined;
             } else {
                 const parsed = parseDateTimeParam(params.due, 'due');
+                if (!parsed.date) throw new TaskApiError(`due must include a date, got: "${params.due}"`);
                 updates.due = parsed.date;
             }
         }
@@ -551,6 +562,7 @@ export class TaskApi {
 
         const task = this.readService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
+        if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
 
         await this.writeService.deleteTask(params.id);
         return { deleted: params.id };
@@ -563,6 +575,14 @@ export class TaskApi {
         assertParams(params, DUPLICATE_SCHEMA, 'duplicate');
         const task = this.readService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
+        if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
+        if (params.dayOffset !== undefined) {
+            if (typeof params.dayOffset !== 'number' || isNaN(params.dayOffset)) throw new TaskApiError('dayOffset must be a number');
+        }
+        if (params.count !== undefined) {
+            if (typeof params.count !== 'number' || isNaN(params.count)) throw new TaskApiError('count must be a number');
+            if (params.count < 1) throw new TaskApiError('count must be at least 1');
+        }
         await this.writeService.duplicateTask(params.id, {
             dayOffset: params.dayOffset,
             count: params.count,
@@ -589,7 +609,7 @@ export class TaskApi {
         if (params.filter) assertValidFilterState(params.filter);
         const from = this.resolveWindowBound(params.from, 'from');
         const to = this.resolveWindowBound(params.to, 'to');
-        let tasks = this.readService.getTasksForDateRange(from, to, params.filter);
+        let tasks = this.readService.getTasksForDateRange(from, to, params.filter, { includeInvalid: true });
         const sortState = buildSortState(params.sort);
         tasks = [...tasks];
         TaskSorter.sort(tasks, sortState);
@@ -612,7 +632,7 @@ export class TaskApi {
         const startHour = this.plugin.settings.startHour;
         const from = this.resolveWindowBound(params.from, 'from');
         const to = this.resolveWindowBound(params.to, 'to');
-        const tasks = this.readService.getTasksForDateRange(from, to, params.filter);
+        const tasks = this.readService.getTasksForDateRange(from, to, params.filter, { includeInvalid: true });
         const split = splitTasks(tasks, { type: 'visual-date', startHour });
         const dates = DateUtils.getDateRange(from, to);
         const map = categorizeTasksByDate(split, dates, startHour);
@@ -632,8 +652,10 @@ export class TaskApi {
      */
     async insertChildTask(params: InsertChildTaskParams): Promise<InsertChildTaskResult> {
         assertParams(params, INSERT_CHILD_TASK_SCHEMA, 'insertChildTask');
+        if (params.content.includes('\n')) throw new TaskApiError('content must not contain newlines');
         const task = this.readService.getTask(params.parentId);
         if (!task) throw new TaskApiError(`Task not found: ${params.parentId}`);
+        if (task.isReadOnly) throw new TaskApiError(`Task ${params.parentId} is read-only (parserId=${task.parserId})`);
         await this.writeService.insertChildTask(params.parentId, `- [ ] ${params.content}`);
         return { parentId: params.parentId };
     }
@@ -643,11 +665,17 @@ export class TaskApi {
      */
     async createTvFile(params: CreateTvFileParams): Promise<CreateTvFileResult> {
         assertParams(params, CREATE_TV_FILE_SCHEMA, 'createTvFile');
-        const parsed = params.start ? parseDateTimeFlag(params.start) : null;
-        const parsedEnd = params.end ? parseDateTimeFlag(params.end) : null;
+        const statusChar = params.status ?? ' ';
+        if (statusChar.length !== 1) throw new TaskApiError(`status must be a single character, got: "${statusChar}"`);
+        const parsed = params.start ? parseDateTimeParam(params.start, 'start') : null;
+        const parsedEnd = params.end ? parseDateTimeParam(params.end, 'end') : null;
+        if (params.due) {
+            const parsedDue = parseDateTimeParam(params.due, 'due');
+            if (!parsedDue.date) throw new TaskApiError(`due must include a date, got: "${params.due}"`);
+        }
         const newFile = await this.writeService.createTvFileFromData({
             content: params.content,
-            statusChar: params.status ?? ' ',
+            statusChar,
             startDate: parsed?.date,
             startTime: parsed?.time,
             endDate: parsedEnd?.date || (parsedEnd?.time && parsed?.date ? parsed.date : undefined),

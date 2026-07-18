@@ -1,13 +1,12 @@
-import { ItemView, WorkspaceLeaf, TFile, Notice, setIcon, type ViewStateResult } from 'obsidian';
-import type { MenuItem } from 'obsidian';
+import { ItemView, type WorkspaceLeaf, type TFile, type ViewStateResult } from 'obsidian';
 import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
-import { DisplayTask, Task, AstronomyDisplay } from '../../types';
+import type { DisplayTask, Task, AstronomyDisplay } from '../../types';
 import { attachMoonPhase } from '../sharedUI/AstronomyCellAdorner';
-import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import { shouldRenderForChanges } from '../sharedUI/RenderScheduler';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { DateUtils } from '../../utils/DateUtils';
+import { getTaskDateRange } from '../../services/display/VisualDateRange';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
@@ -22,7 +21,7 @@ import {
     getGridColumnForDay,
     openOrCreateDailyNote,
 } from './CalendarDateUtils';
-import TaskViewerPlugin from '../../main';
+import type TaskViewerPlugin from '../../main';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
@@ -30,12 +29,7 @@ import { VIEW_META_MINI_CALENDAR } from '../../constants/viewRegistry';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { MiniCalendarSchema, type MiniCalendarConfig, type MiniCalendarTransient } from './MiniCalendarSchema';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
-import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
-import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../sharedLogic/ViewUriBuilder';
-import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
-import { ViewTemplateWriter } from '../../services/template/ViewTemplateWriter';
-import { InputModal } from '../../modals/InputModal';
 import { MiniCalendarToolbar } from './MiniCalendarToolbar';
 
 export const VIEW_TYPE_MINI_CALENDAR = VIEW_META_MINI_CALENDAR.type;
@@ -368,23 +362,34 @@ export class MiniCalendarView extends ItemView {
         const filterState = this.filterMenu.getFilterState();
         const filter = hasConditions(filterState) ? filterState : undefined;
 
-        let dateCursor = rangeStart;
-        while (dateCursor <= rangeEnd) {
-            const tasks = this.readService.getTasksForDateRange(dateCursor, dateCursor, filter);
-            if (tasks.length > 0) {
-                let hasIncomplete = false;
-                let hasComplete = false;
-                for (const dt of tasks) {
-                    if (this.isTaskCompleted(dt)) {
-                        hasComplete = true;
-                    } else {
-                        hasIncomplete = true;
-                    }
-                    if (hasIncomplete && hasComplete) break;
-                }
-                indicatorMap.set(dateCursor, { hasIncomplete, hasComplete });
+        const allTasks = this.readService.getTasksForDateRange(rangeStart, rangeEnd, filter);
+        const startHour = this.plugin.settings.startHour;
+
+        for (const dt of allTasks) {
+            const dates = getTaskDateRange(dt, startHour);
+            const visualStart = dates.effectiveStart || dt.effectiveStartDate;
+            const visualEnd = dates.effectiveEnd || visualStart;
+            const duePart = DateUtils.dueDatePart(dt.effectiveDue);
+
+            const completed = this.isTaskCompleted(dt);
+
+            if (!visualStart && duePart) {
+                const entry = indicatorMap.get(duePart) ?? { hasIncomplete: false, hasComplete: false };
+                if (completed) entry.hasComplete = true; else entry.hasIncomplete = true;
+                indicatorMap.set(duePart, entry);
+                continue;
             }
-            dateCursor = DateUtils.addDays(dateCursor, 1);
+
+            if (!visualStart) continue;
+
+            let cursor = visualStart < rangeStart ? rangeStart : visualStart;
+            const end = visualEnd > rangeEnd ? rangeEnd : visualEnd;
+            while (cursor <= end) {
+                const entry = indicatorMap.get(cursor) ?? { hasIncomplete: false, hasComplete: false };
+                if (completed) entry.hasComplete = true; else entry.hasIncomplete = true;
+                indicatorMap.set(cursor, entry);
+                cursor = DateUtils.addDays(cursor, 1);
+            }
         }
 
         return indicatorMap;

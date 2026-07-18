@@ -1,4 +1,4 @@
-import { Span } from './Diagnostic';
+import type { Span } from './Diagnostic';
 
 export type TokenKind =
     | 'ident'      // every, mon, x14, format, ...

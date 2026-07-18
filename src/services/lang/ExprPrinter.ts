@@ -1,4 +1,4 @@
-import { Expr } from './ExprAst';
+import type { Expr } from './ExprAst';
 import { valueToLiteral } from './Value';
 
 /**

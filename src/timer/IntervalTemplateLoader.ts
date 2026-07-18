@@ -26,8 +26,8 @@
  * ```
  */
 
-import { App, TFile, TFolder } from 'obsidian';
-import { IntervalGroup, IntervalSegment } from './TimerInstance';
+import { type App, TFile, TFolder } from 'obsidian';
+import type { IntervalGroup, IntervalSegment } from './TimerInstance';
 
 export interface IntervalTemplate {
     filePath: string;

@@ -1,4 +1,4 @@
-import { toLogicalHeightPx } from '../../sharedLogic/TimelineCardPosition';
+import { toLogicalHeightPx } from '../../../services/display/TimelineCardPosition';
 import type { AdaptiveGridLayout, GridRow, TimedDisplayTask } from '../ScheduleTypes';
 
 export interface ScheduleGridCalculatorOptions {

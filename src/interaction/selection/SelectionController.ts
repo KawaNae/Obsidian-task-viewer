@@ -1,5 +1,5 @@
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
-import type { HandleManager } from '../../views/timelineview/HandleManager';
+import type { SelectionHost } from './SelectionHost';
 
 /**
  * View 横断の selection lifecycle を集約する controller。
@@ -13,7 +13,7 @@ import type { HandleManager } from '../../views/timelineview/HandleManager';
  * 後続 PR で別途対応する。
  */
 export class SelectionController {
-    constructor(private readonly handleManager: HandleManager) {}
+    constructor(private readonly handleManager: SelectionHost) {}
 
     /**
      * container 上の `pointerdown` を監視し、タスクカード外への入力で selection

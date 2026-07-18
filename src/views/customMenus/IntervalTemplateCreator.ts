@@ -6,7 +6,7 @@
  * windows (host doc/win resolved from the anchor) and follow window resize.
  */
 
-import { App, Notice, setIcon, getIconIds } from 'obsidian';
+import { type App, Notice, setIcon, getIconIds } from 'obsidian';
 import { t } from '../../i18n';
 import { IntervalTemplateWriter } from '../../timer/IntervalTemplateWriter';
 import type { IntervalGroup } from '../../timer/TimerInstance';

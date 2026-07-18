@@ -1,4 +1,4 @@
-import { App, Modal, Setting } from 'obsidian';
+import { type App, Modal, Setting } from 'obsidian';
 import { t } from '../i18n';
 
 export class ConfirmModal extends Modal {

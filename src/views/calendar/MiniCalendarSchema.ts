@@ -6,7 +6,9 @@
  * the same Partial<AstronomyDisplay>.
  */
 
-import { F, T, registerSchema, type ViewSchema } from '../../services/viewConfig';
+import { F, T } from '../../services/viewConfig/FieldCodecs';
+import { registerSchema } from '../../services/viewConfig/SchemaRegistry';
+import type { ViewSchema } from '../../services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import type { AstronomyDisplay } from '../../types';
 import { VIEW_META_MINI_CALENDAR } from '../../constants/viewRegistry';

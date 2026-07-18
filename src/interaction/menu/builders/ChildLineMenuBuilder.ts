@@ -1,7 +1,7 @@
-import { App } from 'obsidian';
-import { TaskWriteService } from '../../../services/data/TaskWriteService';
+import type { App } from 'obsidian';
+import type { TaskWriteService } from '../../../services/data/TaskWriteService';
 import { CheckboxMenuBuilder, type CheckboxLineOps, type CreateTvFileCallback } from './CheckboxMenuBuilder';
-import TaskViewerPlugin from '../../../main';
+import type TaskViewerPlugin from '../../../main';
 import type { Task, ChildLine } from '../../../types';
 import type { CreateTaskResult } from '../../../modals/CreateTaskModal';
 

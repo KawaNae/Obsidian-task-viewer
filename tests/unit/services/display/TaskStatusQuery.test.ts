@@ -22,7 +22,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 }
 
 function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
-    return {
+    const base = {
         ...makeTask(),
         effectiveStartDate: '',
         startDateImplicit: true,
@@ -34,6 +34,10 @@ function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
         childEntries: [],
         ...overrides,
     };
+    if (base.due && !('effectiveDue' in overrides)) {
+        (base as any).effectiveDue = base.due;
+    }
+    return base;
 }
 
 const defs = DEFAULT_STATUS_DEFINITIONS;
@@ -270,5 +274,54 @@ describe('getOverdueLevel', () => {
             childEntries: [{ kind: 'task', taskId: 'child-1' }],
         });
         expect(getOverdueLevel(dt, startHour, defs, mockReadService)).toBe('past-due');
+    });
+
+    it('split segment: ビュー境界で切られた end でなく元タスクの end で絶対判定する', () => {
+        // 元タスク @2026-07-17>2026-07-20、now=07-18 → overdue ではない
+        const original = makeDisplayTask({
+            id: 'tv-inline:test.md:ln:1',
+            statusChar: ' ',
+            effectiveStartDate: '2026-07-17',
+            effectiveEndDate: '2026-07-20',
+        });
+        const svc = {
+            getTask: vi.fn(),
+            getDisplayTask: vi.fn().mockReturnValue(original),
+        } as unknown as TaskReadService;
+        // ビュー範囲 07-11..07-17 で切られたセグメント: end が 07-18 (過去) に見える
+        const segment = makeDisplayTask({
+            id: 'tv-inline:test.md:ln:1##seg:2026-07-17',
+            originalTaskId: 'tv-inline:test.md:ln:1',
+            isSplit: true,
+            statusChar: ' ',
+            effectiveStartDate: '2026-07-17',
+            effectiveEndDate: '2026-07-18',
+            effectiveEndTime: '04:59',
+        });
+        vi.setSystemTime(new Date(2026, 6, 18, 17, 0));
+        expect(getOverdueLevel(segment, startHour, defs, svc)).toBe('none');
+    });
+
+    it('split segment: 元タスク自体が過去なら overdue のまま', () => {
+        const original = makeDisplayTask({
+            id: 'tv-inline:test.md:ln:2',
+            statusChar: ' ',
+            effectiveStartDate: '2026-07-10',
+            effectiveEndDate: '2026-07-12',
+        });
+        const svc = {
+            getTask: vi.fn(),
+            getDisplayTask: vi.fn().mockReturnValue(original),
+        } as unknown as TaskReadService;
+        const segment = makeDisplayTask({
+            id: 'tv-inline:test.md:ln:2##seg:2026-07-11',
+            originalTaskId: 'tv-inline:test.md:ln:2',
+            isSplit: true,
+            statusChar: ' ',
+            effectiveStartDate: '2026-07-11',
+            effectiveEndDate: '2026-07-12',
+        });
+        vi.setSystemTime(new Date(2026, 6, 18, 17, 0));
+        expect(getOverdueLevel(segment, startHour, defs, svc)).toBe('past-end');
     });
 });

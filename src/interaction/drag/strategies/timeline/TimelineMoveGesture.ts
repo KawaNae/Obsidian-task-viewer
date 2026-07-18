@@ -4,8 +4,8 @@ import type { Task } from '../../../../types';
 import { DateUtils } from '../../../../utils/DateUtils';
 import { GhostRenderer } from '../../ghost/GhostRenderer';
 import type { GhostPlan } from '../../ghost/GhostPlan';
-import { toDisplayHeightPx, toDisplayTopPx } from '../../../../views/sharedLogic/TimelineCardPosition';
-import { DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
+import { toDisplayHeightPx, toDisplayTopPx } from '../../../../services/display/TimelineCardPosition';
+import { type DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
 import type { DragPlan } from '../../DragPlan';
 import { TRANSIENT_DRAG_CLASSES } from '../../constants';
 

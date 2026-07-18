@@ -63,18 +63,15 @@ export class TaskFilterEngine {
             case 'content':
                 return this.evalContent(task, condition);
             case 'startDate':
-                return this.evalDate(task.effectiveStartDate || task.startDate, condition, context?.startHour ?? 0);
+                return this.evalDate(task.effectiveStartDate || task.startDate, condition, context?.startHour ?? 0, context?.weekStartDay ?? 1);
             case 'endDate':
-                return this.evalDate(task.effectiveEndDate ?? task.endDate, condition, context?.startHour ?? 0);
+                return this.evalDate(task.effectiveEndDate ?? task.endDate, condition, context?.startHour ?? 0, context?.weekStartDay ?? 1);
             case 'due':
-                return this.evalDate(task.due?.split('T')[0], condition, context?.startHour ?? 0);
+                return this.evalDate(DateUtils.dueDatePart(task.effectiveDue), condition, context?.startHour ?? 0, context?.weekStartDay ?? 1);
             case 'anyDate': {
-                // Aggregate over startDate / endDate / due using effective fields.
-                // isSet = any of the three set (scheduled)
-                // isNotSet = all three unset (inbox)
                 const hasAny = !!task.effectiveStartDate
                             || !!task.effectiveEndDate
-                            || !!task.due;
+                            || !!task.effectiveDue;
                 if (condition.operator === 'isSet') return hasAny;
                 if (condition.operator === 'isNotSet') return !hasAny;
                 return true;
@@ -185,14 +182,13 @@ export class TaskFilterEngine {
         return true;
     }
 
-    private static evalDate(taskDate: string | undefined, c: FilterCondition, startHour: number = 0): boolean {
-        // isSet / isNotSet — existence check, no date value needed
+    private static evalDate(taskDate: string | undefined, c: FilterCondition, startHour: number = 0, weekStartDay: 0 | 1 = 1): boolean {
         if (c.operator === 'isSet') return !!taskDate;
         if (c.operator === 'isNotSet') return !taskDate;
 
         if (c.value == null) return true;
         if (!taskDate) return false;
-        const { start, end } = DateResolver.resolve(c.value as DateFilterValue, 1, startHour);
+        const { start, end } = DateResolver.resolve(c.value as DateFilterValue, weekStartDay, startHour);
         switch (c.operator) {
             case 'equals':     return taskDate >= start && taskDate <= end;
             case 'before':     return taskDate < start;

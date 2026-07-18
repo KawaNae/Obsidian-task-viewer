@@ -1,15 +1,15 @@
-import { ItemView, TFile, WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
+import { ItemView, type TFile, type WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import { Task, DisplayTask, PinnedListDefinition, AstronomyDisplay } from '../../types';
+import type { Task, DisplayTask, PinnedListDefinition, AstronomyDisplay } from '../../types';
 import { attachMoonPhase } from '../sharedUI/AstronomyCellAdorner';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { DateUtils } from '../../utils/DateUtils';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
-import { TaskReadService } from '../../services/data/TaskReadService';
-import { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
@@ -25,12 +25,11 @@ import {
     openOrCreateDailyNote,
 } from './CalendarDateUtils';
 import { DragHandler } from '../../interaction/drag/DragHandler';
-import TaskViewerPlugin from '../../main';
+import type TaskViewerPlugin from '../../main';
 import { TaskStyling } from '../sharedUI/TaskStyling';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
-import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
 import { CalendarToolbar } from './CalendarToolbar';
 import { createEmptySortState } from '../../services/sort/SortTypes';
@@ -49,12 +48,12 @@ import { RenderScheduler } from '../sharedUI/RenderScheduler';
 import { AsyncRenderSerializer } from '../sharedUI/AsyncRenderSerializer';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
-import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
+import { computeGridLayout, type GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
 import type { TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
-import { openTaskInEditor } from '../sharedLogic/NavigationUtils';
+import { openTaskInEditor } from '../../utils/NavigationUtils';
 import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 

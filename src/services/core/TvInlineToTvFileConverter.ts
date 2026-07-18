@@ -1,6 +1,6 @@
-import { App, TFile } from 'obsidian';
+import { type App, TFile } from 'obsidian';
 import type { TvFileKeys, Task } from '../../types';
-import { TaskRepository } from '../persistence/TaskRepository';
+import type { TaskRepository } from '../persistence/TaskRepository';
 import { TagExtractor } from '../parsing/utils/TagExtractor';
 
 /**

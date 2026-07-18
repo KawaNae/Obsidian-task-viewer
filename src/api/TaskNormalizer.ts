@@ -27,6 +27,7 @@ const FIELD_EXTRACTORS: Record<string, (task: DisplayTask) => unknown> = {
     effectiveStartTime: t => t.effectiveStartTime ?? null,
     effectiveEndDate:   t => t.effectiveEndDate ?? null,
     effectiveEndTime:   t => t.effectiveEndTime ?? null,
+    effectiveDue:       t => t.effectiveDue ?? null,
     durationMinutes:    t => computeDurationMinutes(t),
     properties:         t => {
         const result: Record<string, unknown> = {};

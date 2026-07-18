@@ -1,4 +1,4 @@
-import { App, TFile, TFolder } from 'obsidian';
+import { type App, TFolder } from 'obsidian';
 import type { Task } from '../../../types';
 import { hasBodyLine } from '../../../types';
 

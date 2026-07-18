@@ -1,5 +1,5 @@
 import { Setting } from 'obsidian';
-import TaskViewerPlugin from '../main';
+import type TaskViewerPlugin from '../main';
 import { t } from '../i18n';
 
 const REPO_URL = 'https://github.com/KawaNae/Obsidian-task-viewer';

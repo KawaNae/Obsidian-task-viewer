@@ -1,15 +1,15 @@
 import { differenceInCalendarDays } from 'date-fns';
-import { Task, TaskFlow } from '../../types';
+import type { Task, TaskFlow } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { PropName } from '../lang/ExprAst';
-import { EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
-import { EvalHost } from '../lang/functions';
-import { Value, isDatishValue, parseDateStr, valueToDisplay } from '../lang/Value';
-import { FlowProgram, SET_FIELD_ORDER } from './FlowAst';
-import { FlowEffect } from './FlowEffects';
+import type { PropName } from '../lang/ExprAst';
+import { type EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
+import type { EvalHost } from '../lang/functions';
+import { type Value, isDatishValue, parseDateStr, valueToDisplay } from '../lang/Value';
+import { type FlowProgram, SET_FIELD_ORDER } from './FlowAst';
+import type { FlowEffect } from './FlowEffects';
 import { flowRaws, joinSegments } from './FlowSegments';
 import { serializeFlowLines } from './FlowSerializer';
-import { DateAnchor, NextOccurrence, nextOccurrence } from './ScheduleEngine';
+import { type DateAnchor, type NextOccurrence, nextOccurrence } from './ScheduleEngine';
 
 export interface FlowPlanDeps {
     /** Local calendar date of "now" (YYYY-MM-DD). */

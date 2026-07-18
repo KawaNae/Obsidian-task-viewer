@@ -1,4 +1,4 @@
-import { isTvFile, ParserId } from '../../types';
+import { isTvFile, type ParserId } from '../../types';
 
 const PARSER_IDS: ReadonlySet<ParserId> = new Set(['tv-inline', 'tv-file', 'tasks-plugin', 'day-planner']);
 

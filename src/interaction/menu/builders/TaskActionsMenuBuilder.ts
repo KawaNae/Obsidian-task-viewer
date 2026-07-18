@@ -1,11 +1,11 @@
-import { App, MarkdownView, Menu, Notice } from 'obsidian';
-import { Task, isTvInline, hasBodyLine } from '../../../types';
-import { TaskWriteService } from '../../../services/data/TaskWriteService';
-import TaskViewerPlugin from '../../../main';
+import { type App, MarkdownView, type Menu, Notice } from 'obsidian';
+import { type Task, isTvInline, hasBodyLine } from '../../../types';
+import type { TaskWriteService } from '../../../services/data/TaskWriteService';
+import type TaskViewerPlugin from '../../../main';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { ConfirmModal } from '../../../modals/ConfirmModal';
 import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
-import { openFileInExistingOrNewTab } from '../../../views/sharedLogic/NavigationUtils';
+import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
 import { DateUtils } from '../../../utils/DateUtils';
 import { t } from '../../../i18n';
 import { getEffectiveColor } from '../../../services/data/EffectiveProperties';

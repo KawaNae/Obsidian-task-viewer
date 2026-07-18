@@ -1,5 +1,5 @@
-import { App, WorkspaceLeaf, MarkdownView } from 'obsidian';
-import { SyncDetector } from './SyncDetector';
+import { type App, type WorkspaceLeaf, MarkdownView } from 'obsidian';
+import type { SyncDetector } from './SyncDetector';
 
 /**
  * エディタオブザーバー - エディタイベントの監視

@@ -1,4 +1,4 @@
-import { Task } from '../../types';
+import type { Task } from '../../types';
 import type TaskViewerPlugin from '../../main';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';

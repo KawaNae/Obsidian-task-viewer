@@ -1,30 +1,40 @@
-import type { ValidationError } from './TaskIndex';
+export interface ValidationError {
+    file: string;
+    line: number;
+    taskId: string;
+    error: string;
+}
 
 /**
  * バリデーションエラーの管理クラス
- * タスクのスキャン時に発生したバリデーションエラーを収集・管理
+ * タスクのスキャン時に発生したバリデーションエラーを収集・管理。
+ * ファイル単位で差し替え可能にし、増分スキャン時の重複蓄積を防ぐ。
  */
 export class TaskValidator {
-    private validationErrors: ValidationError[] = [];
+    private errorsByFile: Map<string, ValidationError[]> = new Map();
 
-    /**
-     * バリデーションエラーを追加
-     */
     addError(error: ValidationError): void {
-        this.validationErrors.push(error);
+        const list = this.errorsByFile.get(error.file);
+        if (list) {
+            list.push(error);
+        } else {
+            this.errorsByFile.set(error.file, [error]);
+        }
     }
 
-    /**
-     * 全てのバリデーションエラーをクリア
-     */
+    clearErrorsForFile(file: string): void {
+        this.errorsByFile.delete(file);
+    }
+
     clearErrors(): void {
-        this.validationErrors = [];
+        this.errorsByFile.clear();
     }
 
-    /**
-     * 現在のバリデーションエラーを取得
-     */
     getValidationErrors(): ValidationError[] {
-        return this.validationErrors;
+        const result: ValidationError[] = [];
+        for (const errors of this.errorsByFile.values()) {
+            result.push(...errors);
+        }
+        return result;
     }
 }

@@ -1,5 +1,5 @@
-import { EvalHost } from '../lang/functions';
-import { Value, parseDateStr } from '../lang/Value';
+import type { EvalHost } from '../lang/functions';
+import { type Value, parseDateStr } from '../lang/Value';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
 
 /**

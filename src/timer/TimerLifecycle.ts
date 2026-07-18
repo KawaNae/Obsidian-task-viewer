@@ -3,15 +3,15 @@
  */
 
 import { AudioUtils } from './AudioUtils';
-import {
+import type {
     CountdownTimer,
     CountupTimer,
     IdleTimer,
     IntervalTimer,
     TimerInstance,
 } from './TimerInstance';
-import { TimerContext, IDLE_TIMER_ID } from './TimerContext';
-import { TimerCreator } from './TimerCreator';
+import { type TimerContext, IDLE_TIMER_ID } from './TimerContext';
+import type { TimerCreator } from './TimerCreator';
 
 export class TimerLifecycle {
     constructor(

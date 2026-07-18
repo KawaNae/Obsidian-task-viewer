@@ -1,4 +1,4 @@
-import { DisplayTask, Task } from '../../types';
+import type { DisplayTask, Task } from '../../types';
 
 /**
  * Polymorphic notation label input. Effective fields (DisplayTask) are

@@ -101,6 +101,24 @@ function tsvValue(value: unknown): string {
     return String(value).replace(/[\t\n\r]/g, ' ');
 }
 
+// ── Shared CLI validation ──
+
+const VALID_FORMATS: ReadonlySet<string> = new Set(['json', 'tsv', 'jsonl']);
+
+export function validateFormat(format: string | undefined): string | null {
+    if (format && !VALID_FORMATS.has(format)) {
+        return `Invalid format: ${format}. Must be json, tsv, or jsonl`;
+    }
+    return null;
+}
+
+export function parseLimit(raw: string): number {
+    if (raw === 'all') return Infinity;
+    const n = parseInt(raw, 10);
+    if (isNaN(n) || n < 0) throw new TaskApiError('--limit must be a non-negative integer or "all"');
+    return n;
+}
+
 // ── JSON helpers (for CRUD responses) ──
 
 export function cliOk(data: Record<string, unknown>): string {

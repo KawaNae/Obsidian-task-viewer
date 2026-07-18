@@ -7,7 +7,7 @@ import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import type { GridRow, TaskPlacement, TimedDisplayTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from '../utils/ScheduleGridCalculator';
 import type { ScheduleOverlapLayout } from '../utils/ScheduleOverlapLayout';
-import { toDisplayHeightPx, toDisplayTopPx } from '../../sharedLogic/TimelineCardPosition';
+import { toDisplayHeightPx, toDisplayTopPx } from '../../../services/display/TimelineCardPosition';
 import type { DisplayTask } from '../../../types';
 import type { CardReconciler } from '../../sharedUI/CardReconciler';
 
@@ -22,7 +22,6 @@ export interface ScheduleTaskRendererOptions {
 }
 
 export class ScheduleTaskRenderer {
-    private readonly app: App;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly menuHandler: MenuHandler;
     private readonly getSettings: () => TaskViewerSettings;
@@ -31,7 +30,6 @@ export class ScheduleTaskRenderer {
     private readonly timelineTopPaddingPx: number;
 
     constructor(options: ScheduleTaskRendererOptions) {
-        this.app = options.app;
         this.taskRenderer = options.taskRenderer;
         this.menuHandler = options.menuHandler;
         this.getSettings = options.getSettings;

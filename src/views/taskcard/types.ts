@@ -1,5 +1,5 @@
 import type { HoverParent } from 'obsidian';
-import { Task, ChildLine } from '../../types';
+import type { Task, ChildLine } from '../../types';
 
 export interface ChildRenderItem {
     markdown: string;

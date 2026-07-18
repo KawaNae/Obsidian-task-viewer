@@ -281,4 +281,9 @@ export class DateUtils {
 
         return this.isPastDate(datePart, timePart, startHour);
     }
+
+    static dueDatePart(due: string | undefined): string | undefined {
+        if (!due) return undefined;
+        return due.split('T')[0];
+    }
 }

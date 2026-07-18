@@ -1,6 +1,6 @@
-import { Span } from '../lang/Diagnostic';
-import { Expr } from '../lang/ExprAst';
-import { DurUnit, Weekday } from '../lang/Value';
+import type { Span } from '../lang/Diagnostic';
+import type { Expr } from '../lang/ExprAst';
+import type { DurUnit, Weekday } from '../lang/Value';
 
 /** Calendar-grid recurrence rules (`every ...`). */
 export type EveryRule =

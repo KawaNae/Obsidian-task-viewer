@@ -1,12 +1,12 @@
-import { App, TFile } from 'obsidian';
+import type { App, TFile } from 'obsidian';
 import type { TaskViewerSettings } from '../../types';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import { WikiLinkResolver } from './WikiLinkResolver';
-import { TaskStore } from './TaskStore';
-import { TaskValidator } from './TaskValidator';
-import { SyncDetector } from './SyncDetector';
+import type { TaskStore } from './TaskStore';
+import type { TaskValidator } from './TaskValidator';
+import type { SyncDetector } from './SyncDetector';
 import { CompletionDetector } from './CompletionDetector';
-import { FlowExecutor } from '../flow/FlowExecutor';
+import type { FlowExecutor } from '../flow/FlowExecutor';
 import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
@@ -35,16 +35,45 @@ export class TaskScanner {
      */
     async scanVault(): Promise<void> {
         this.validator.clearErrors();
-        const files = this.app.vault.getMarkdownFiles();
-        logInfo(`[scanVault] files=${files.length}`);
+        const allFiles = this.app.vault.getMarkdownFiles();
+        const files = allFiles.filter(f => this.mayContainTasks(f));
+        logInfo(`[scanVault] total=${allFiles.length} candidates=${files.length} skipped=${allFiles.length - files.length}`);
 
         for (const file of files) {
             await this.queueScan(file);
         }
+
         WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
         this.store.notifyListenersStaggered();
         logInfo(`[scanVault:done] tasks=${this.store.getTasks().length}`);
         this.isInitializing = false;
+    }
+
+    /**
+     * metadataCache による前段フィルタ。
+     * frontmatter に tv-* キーも tags もなく、listItems もないファイルをスキップ。
+     * 偽陽性 (不要なスキャン) は許容、偽陰性 (タスク見逃し) は禁止。
+     * metadataCache が未構築のファイルはスキップしない (安全側)。
+     */
+    private mayContainTasks(file: TFile): boolean {
+        const cache = this.app.metadataCache.getCache(file.path);
+        if (!cache) return true;
+
+        const fm = cache.frontmatter;
+        if (fm) {
+            if ('tags' in fm) return true;
+            const keys = this.settings.tvFileKeys;
+            if (keys.start in fm || keys.end in fm || keys.due in fm ||
+                keys.status in fm || keys.content in fm || keys.color in fm ||
+                keys.linestyle in fm || keys.mask in fm || keys.timerTargetId in fm ||
+                keys.ignore in fm) return true;
+        }
+
+        if (cache.listItems && cache.listItems.length > 0) return true;
+
+        if (cache.tags && cache.tags.length > 0) return true;
+
+        return false;
     }
 
     /**
@@ -88,6 +117,7 @@ export class TaskScanner {
      * ファイルをスキャンしてタスクを抽出（parse → detect → commit）
      */
     private async scanFile(file: TFile, isLocalChange: boolean = false): Promise<void> {
+        this.validator.clearErrorsForFile(file.path);
         const content = await this.app.vault.read(file);
         const lines = content.split('\n').map(l => l.replace(/\r$/, ''));
 
@@ -124,18 +154,20 @@ export class TaskScanner {
             statusDefinitions: this.settings.statusDefinitions,
         });
 
-        // --- commit ---
-        // 注: removeTasksByFile は対象ファイルの wikilinkRefs も削除するため、
-        // wikilink refs の登録は必ずこの後で行う（前に置くと再スキャンで消える）。
-        this.store.removeTasksByFile(file.path);
+        // --- commit (batched: 1 file = 1 revision bump) ---
+        this.store.beginBatch();
+        try {
+            this.store.removeTasksByFile(file.path);
 
-        for (const task of parsed.tasks) {
-            this.store.setTask(task.id, task);
-        }
+            for (const task of parsed.tasks) {
+                this.store.setTask(task.id, task);
+            }
 
-        // wikilink refs を登録（removeTasksByFile の後でなければ消える）
-        if (parsed.fmTask) {
-            this.store.setWikilinkRefs(parsed.fmTask.id, parsed.wikilinkRefs);
+            if (parsed.fmTask) {
+                this.store.setWikilinkRefs(parsed.fmTask.id, parsed.wikilinkRefs);
+            }
+        } finally {
+            this.store.endBatch();
         }
 
         // フロー発火

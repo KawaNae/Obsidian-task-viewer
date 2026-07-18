@@ -1,4 +1,4 @@
-import { Task } from '../../types';
+import type { Task } from '../../types';
 import { GridHandleStrategy } from './handles/GridHandleStrategy';
 import { TimelineHandleStrategy } from './handles/TimelineHandleStrategy';
 import type { HandleStrategy } from './handles/HandleStrategy';
@@ -12,7 +12,9 @@ interface HandleManagerDeps {
  * Manages drag handles for selected tasks in TimelineView.
  * Handles are rendered directly inside task card elements for native scroll sync.
  */
-export class HandleManager {
+import type { SelectionHost } from '../../interaction/selection/SelectionHost';
+
+export class HandleManager implements SelectionHost {
     private selectedTaskId: string | null = null;
     private readonly gridStrategy: HandleStrategy = new GridHandleStrategy();
     private readonly timelineStrategy: HandleStrategy = new TimelineHandleStrategy();

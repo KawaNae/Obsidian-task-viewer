@@ -1,6 +1,6 @@
-import { Task, ChildLine, isTvFile } from '../../types';
+import { type Task, type ChildLine, isTvFile } from '../../types';
 import { NotationUtils } from './NotationUtils';
-import { ChildRenderItem } from './types';
+import type { ChildRenderItem } from './types';
 import { getFileBaseName } from '../../services/parsing/utils/TaskContent';
 
 /**

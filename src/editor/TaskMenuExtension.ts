@@ -1,4 +1,4 @@
-import { ViewPlugin, ViewUpdate, Decoration, WidgetType, EditorView, DecorationSet } from '@codemirror/view';
+import { ViewPlugin, type ViewUpdate, Decoration, WidgetType, type EditorView, type DecorationSet } from '@codemirror/view';
 import { StateEffect, RangeSet, type Extension } from '@codemirror/state';
 import { editorInfoField, setIcon, MarkdownView } from 'obsidian';
 import type { App } from 'obsidian';

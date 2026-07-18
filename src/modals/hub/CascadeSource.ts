@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import { type App, TFile } from 'obsidian';
 import type { Task, TvFileKeys } from '../../types';
 import { FilePropertyResolver } from '../../services/parsing/FilePropertyResolver';
 import type { ExtractedProperties } from '../../services/parsing/tree/BuiltinPropertyExtractor';

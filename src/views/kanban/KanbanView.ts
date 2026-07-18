@@ -1,11 +1,10 @@
-import { ItemView, WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
+import { ItemView, type WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
-import type { TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
-import TaskViewerPlugin from '../../main';
+import type TaskViewerPlugin from '../../main';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { KanbanToolbar } from './KanbanToolbar';
@@ -19,7 +18,7 @@ import { TaskPagingController } from '../sharedUI/TaskPagingController';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { shouldRenderForChanges } from '../sharedUI/RenderScheduler';
 
-import { openTaskInEditor } from '../sharedLogic/NavigationUtils';
+import { openTaskInEditor } from '../../utils/NavigationUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
@@ -564,14 +563,6 @@ export class KanbanView extends ItemView {
             newRow.push(this.createDefaultList());
         }
         this.grid.push(newRow);
-        this.requestSaveLayout();
-        this.render();
-    }
-
-    private addColumn(): void {
-        for (const row of this.grid) {
-            row.push(this.createDefaultList());
-        }
         this.requestSaveLayout();
         this.render();
     }

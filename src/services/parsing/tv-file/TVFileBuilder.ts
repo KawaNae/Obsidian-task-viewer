@@ -1,4 +1,4 @@
-import { TvFileKeys, Task, WikilinkRef, ChildLine } from '../../../types';
+import type { TvFileKeys, Task, WikilinkRef, ChildLine } from '../../../types';
 import { createBaseTask } from '../TaskFactory';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';

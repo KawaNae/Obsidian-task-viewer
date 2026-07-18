@@ -1,8 +1,7 @@
-import { Notice } from 'obsidian';
-import { Task, ChildLine, TaskViewerSettings } from '../../types';
-import { TaskWriteService } from '../../services/data/TaskWriteService';
-import { MenuPresenter } from '../../interaction/menu/MenuPresenter';
-import { ChildRenderItem } from './types';
+import type { Task, ChildLine, TaskViewerSettings } from '../../types';
+import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
+import type { ChildRenderItem } from './types';
 import { buildStatusOptions, createStatusTitle } from '../../constants/statusOptions';
 import { logWarn } from '../../log/log';
 

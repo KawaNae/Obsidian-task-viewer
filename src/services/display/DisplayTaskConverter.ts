@@ -35,6 +35,7 @@ export function toDisplayTask(task: Task, startHour: number, getTask: TaskLookup
     let effectiveStartTime = task.startTime || task.cascadeContext?.startTime;
     let effectiveEndDate = task.endDate || task.cascadeContext?.endDate;
     let effectiveEndTime = task.endTime || task.cascadeContext?.endTime;
+    const effectiveDue = task.due || task.cascadeContext?.due;
 
     const startDateExplicit = !!task.startDate;
 
@@ -135,6 +136,7 @@ export function toDisplayTask(task: Task, startHour: number, getTask: TaskLookup
         effectiveStartTime,
         effectiveEndDate,
         effectiveEndTime,
+        effectiveDue,
         startDateImplicit,
         startTimeImplicit,
         endDateImplicit,

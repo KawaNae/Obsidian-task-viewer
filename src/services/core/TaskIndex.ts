@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import { type App, TFile } from 'obsidian';
 import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
 import { isTvFile, isTvInline, hasBodyLine } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
@@ -8,7 +8,7 @@ import { FlowExecutor } from '../flow/FlowExecutor';
 import { WikiLinkResolver } from './WikiLinkResolver';
 import { TaskStore } from './TaskStore';
 import { TaskScanner } from './TaskScanner';
-import { TaskValidator } from './TaskValidator';
+import { TaskValidator, type ValidationError } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { EditorObserver } from './EditorObserver';
 import { TvInlineToTvFileConverter } from './TvInlineToTvFileConverter';
@@ -20,13 +20,6 @@ import { TaskParser } from '../parsing/TaskParser';
 import { HeadingInserter } from '../../utils/HeadingInserter';
 import { FileOperations } from '../persistence/utils/FileOperations';
 import { logError, logInfo, logWarn } from '../../log/log';
-
-export interface ValidationError {
-    file: string;
-    line: number;
-    taskId: string;
-    error: string;
-}
 
 /**
  * TaskIndex - タスク管理の統括ファサードクラス
@@ -42,6 +35,7 @@ export class TaskIndex {
     private tvInlineToTvFileConverter: TvInlineToTvFileConverter;
     private commandExecutor: FlowExecutor;
     private settings: TaskViewerSettings;
+    private parseFingerprint: string;
     private draggingFilePath: string | null = null;  // ドラッグ中のファイルパス
     private notifyDebounceTimer: NodeJS.Timeout | null = null;
     private readonly NOTIFY_DEBOUNCE_MS = 16; // 約1フレーム
@@ -58,8 +52,12 @@ export class TaskIndex {
     private recentSelfWriteTimers: Map<string, NodeJS.Timeout> = new Map();
     private readonly SELF_WRITE_SUPPRESSION_MS = 1000;
 
+    private apiWriteInFlight: Map<string, NodeJS.Timeout> = new Map();
+    private readonly API_WRITE_SUPPRESSION_MS = 2000;
+
     constructor(private app: App, settings: TaskViewerSettings) {
         this.settings = settings;
+        this.parseFingerprint = computeParseFingerprint(settings);
 
         // サービスの初期化
         this.store = new TaskStore(settings);
@@ -110,22 +108,21 @@ export class TaskIndex {
 
                 await this.scanner.queueScan(file, isLocal);
                 WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
-                // Always emit notify here. UI write methods (via withNotify) emit their own
-                // notifyImmediate after waitForScan, but editor user edits (typing, checkbox
-                // click via mousedown) are also flagged isLocal=true by EditorObserver and
-                // would otherwise have no notify path at all. Duplicate notifies between
-                // withNotify and this handler are coalesced by pendingNotify + the 16ms
-                // debounce. metadataCache.changed remains skipped via recentSelfWrite to
-                // avoid a third redundant scan+notify.
-                this.debouncedNotify();
+                // Skip notify when an API write (withNotify) is in flight for this
+                // file — withNotify's own notifyImmediate is the authoritative notify.
+                // Editor direct edits (no withNotify) are unaffected: apiWriteInFlight
+                // is only set during API CRUD operations.
+                if (!this.apiWriteInFlight.has(file.path)) {
+                    this.debouncedNotify();
+                }
             }
         });
 
         this.app.vault.on('delete', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 this.store.removeTasksByFile(file.path);
-                // 削除されたファイルを wikilink 親に持つ生存タスクの parentId / childIds を
-                // 冪等 resolve で掃除する（dangling 解消）。
+                this.scanner.handleFileRenamed(file.path);
+                this.validator.clearErrorsForFile(file.path);
                 WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
                 this.debouncedNotify();
             }
@@ -164,7 +161,7 @@ export class TaskIndex {
             if (!(file instanceof TFile) || file.extension !== 'md') {
                 this.store.removeTasksByFile(oldPath);
                 this.scanner.handleFileRenamed(oldPath);
-                // delete と同様、wikilink 親の dangling を冪等 resolve で掃除する。
+                this.validator.clearErrorsForFile(oldPath);
                 WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
                 this.debouncedNotify();
                 return;
@@ -292,14 +289,21 @@ export class TaskIndex {
     }
 
     updateSettings(settings: TaskViewerSettings): void {
+        const newFingerprint = computeParseFingerprint(settings);
+        const needsRescan = newFingerprint !== this.parseFingerprint;
+        this.parseFingerprint = newFingerprint;
         this.settings = settings;
         TaskParser.rebuildChain(settings);
         this.store.updateSettings(settings);
         this.scanner.updateSettings(settings);
-        this.scanner.scanVault()
-            .catch((error) => {
-                logError(`[TaskIndex] Failed to rescan vault: ${(error as Error)?.message ?? error}`);
-            });
+        if (needsRescan) {
+            this.scanner.scanVault()
+                .catch((error) => {
+                    logError(`[TaskIndex] Failed to rescan vault: ${(error as Error)?.message ?? error}`);
+                });
+        } else {
+            this.store.notifyListenersStaggered();
+        }
     }
 
     dispose(): void {
@@ -376,10 +380,31 @@ export class TaskIndex {
      *
      * Note: notifyImmediate() is called with no args → full invalidation.
      */
-    private async withNotify<T>(op: () => Promise<T>): Promise<T> {
-        const result = await op();
-        this.notifyImmediate();
-        return result;
+    private markApiWrite(filePath: string): void {
+        const existing = this.apiWriteInFlight.get(filePath);
+        if (existing) clearTimeout(existing);
+        this.apiWriteInFlight.set(filePath, setTimeout(() => {
+            this.apiWriteInFlight.delete(filePath);
+        }, this.API_WRITE_SUPPRESSION_MS));
+    }
+
+    private clearApiWrite(filePath: string): void {
+        const timer = this.apiWriteInFlight.get(filePath);
+        if (timer) {
+            clearTimeout(timer);
+            this.apiWriteInFlight.delete(filePath);
+        }
+    }
+
+    private async withNotify<T>(filePath: string, op: () => Promise<T>): Promise<T> {
+        this.markApiWrite(filePath);
+        try {
+            const result = await op();
+            this.notifyImmediate();
+            return result;
+        } finally {
+            this.clearApiWrite(filePath);
+        }
     }
 
     async updateTask(taskId: string, updates: Partial<Task>): Promise<void> {
@@ -495,10 +520,10 @@ export class TaskIndex {
     }
 
     async deleteTask(taskId: string): Promise<void> {
-        return this.withNotify(async () => {
+        const task = this.store.getTask(taskId);
+        if (!task) return;
+        return this.withNotify(task.file, async () => {
             logInfo(`[deleteTask] id=${taskId}`);
-            const task = this.store.getTask(taskId);
-            if (!task) return;
             if (task.isReadOnly) return;
 
             this.syncDetector.markLocalEdit(task.file);
@@ -514,9 +539,9 @@ export class TaskIndex {
     }
 
     async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<void> {
-        return this.withNotify(async () => {
-            const task = this.store.getTask(taskId);
-            if (!task) return;
+        const task = this.store.getTask(taskId);
+        if (!task) return;
+        return this.withNotify(task.file, async () => {
             if (task.isReadOnly) return;
 
             this.syncDetector.markLocalEdit(task.file);
@@ -537,9 +562,9 @@ export class TaskIndex {
      * @returns 新ファイルのパス
      */
     async convertToTvFile(taskId: string): Promise<string> {
-        return this.withNotify(async () => {
-            const task = this.store.getTask(taskId);
-            if (!task) throw new Error('Task not found');
+        const task = this.store.getTask(taskId);
+        if (!task) throw new Error('Task not found');
+        return this.withNotify(task.file, async () => {
 
             if (!isTvInline(task)) {
                 throw new Error('Only tv-inline tasks can be converted to tv-file tasks');
@@ -561,30 +586,34 @@ export class TaskIndex {
         });
     }
 
-    async createTask(filePath: string, taskLine: string, heading?: string): Promise<void> {
-        return this.withNotify(async () => {
+    async createTask(filePath: string, taskLine: string, heading?: string): Promise<number> {
+        let insertedLine = -1;
+        await this.withNotify(filePath, async () => {
             logInfo(`[createTask] path=${filePath} heading=${heading ?? '(none)'}`);
             this.syncDetector.markLocalEdit(filePath);
 
             if (heading) {
                 const file = this.app.vault.getAbstractFileByPath(filePath);
                 if (!(file instanceof TFile)) return;
-                await this.app.vault.process(file, (content) =>
-                    HeadingInserter.insertUnderHeading(content, taskLine, heading, 2)
-                );
+                await this.app.vault.process(file, (content) => {
+                    const result = HeadingInserter.insertUnderHeading(content, taskLine, heading, 2);
+                    insertedLine = result.insertedLine;
+                    return result.content;
+                });
             } else {
-                await this.repository.appendTaskToFile(filePath, taskLine);
+                insertedLine = await this.repository.appendTaskToFile(filePath, taskLine);
             }
 
             await this.scanner.waitForScan(filePath);
         });
+        return insertedLine;
     }
 
     async insertChildTask(parentTaskId: string, childLine: string): Promise<void> {
-        return this.withNotify(async () => {
+        const task = this.store.getTask(parentTaskId);
+        if (!task) return;
+        return this.withNotify(task.file, async () => {
             logInfo(`[insertChildTask] parentId=${parentTaskId}`);
-            const task = this.store.getTask(parentTaskId);
-            if (!task) return;
 
             this.syncDetector.markLocalEdit(task.file);
 
@@ -604,7 +633,7 @@ export class TaskIndex {
     }
 
     async createTvFileFromData(taskData: Partial<Task>): Promise<string> {
-        return this.withNotify(async () => {
+        return this.withNotify('', async () => {
             const tempTask = createTempTask({
                 id: 'convert-temp',
                 content: taskData.content ?? '',
@@ -627,7 +656,7 @@ export class TaskIndex {
     }
 
     async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
-        return this.withNotify(async () => {
+        return this.withNotify(filePath, async () => {
             this.syncDetector.markLocalEdit(filePath);
             await this.repository.updateLine(filePath, lineNumber, newContent);
 
@@ -639,7 +668,7 @@ export class TaskIndex {
     }
 
     async insertLineAfterLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
-        return this.withNotify(async () => {
+        return this.withNotify(filePath, async () => {
             this.syncDetector.markLocalEdit(filePath);
             await this.repository.insertLineAfterLine(filePath, lineNumber, newContent);
 
@@ -651,7 +680,7 @@ export class TaskIndex {
     }
 
     async deleteLine(filePath: string, lineNumber: number): Promise<void> {
-        return this.withNotify(async () => {
+        return this.withNotify(filePath, async () => {
             this.syncDetector.markLocalEdit(filePath);
             await this.repository.deleteLine(filePath, lineNumber);
 
@@ -686,6 +715,35 @@ export class TaskIndex {
 
         return undefined;
     }
+}
+
+// ── Parse-affecting settings fingerprint ──
+// These keys control how files are parsed into tasks. Changing any of them
+// requires a full vault re-scan. All other settings (startHour, UI toggles,
+// timer durations, etc.) are display-only and need only a notify.
+//
+// Uses a JSON fingerprint because the caller may pass the same object reference
+// (plugin.settings is mutated in place, then updateSettings(this.settings) is
+// called with the same ref). Field-by-field prev/next comparison would always
+// see them as equal.
+//
+//   tvFileKeys          — frontmatter field names for tv-start/end/due/status/etc.
+//   tvFileChildHeader   — heading name that marks the child-items section
+//   tvFileChildHeaderLevel — heading level for the child-items section
+//   enableDayPlanner    — toggles DayPlanner parser in the chain
+//   enableTasksPlugin   — toggles TasksPlugin parser in the chain
+//   tasksPluginMapping  — emoji-to-field mapping for TasksPlugin parser
+//   statusDefinitions   — which status chars count as complete (CompletionDetector)
+export function computeParseFingerprint(settings: TaskViewerSettings): string {
+    return JSON.stringify([
+        settings.tvFileKeys,
+        settings.tvFileChildHeader,
+        settings.tvFileChildHeaderLevel,
+        settings.enableDayPlanner,
+        settings.enableTasksPlugin,
+        settings.tasksPluginMapping,
+        settings.statusDefinitions,
+    ]);
 }
 
 // 時刻比較専用ヘルパー

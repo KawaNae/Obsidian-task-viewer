@@ -1,15 +1,15 @@
 import { t } from '../../../i18n';
 import type { DisplayTask } from '../../../types';
-import TaskViewerPlugin from '../../../main';
-import { MenuHandler } from '../../../interaction/menu/MenuHandler';
+import type TaskViewerPlugin from '../../../main';
+import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { TouchLongPressBinder } from '../../../interaction/menu/TouchLongPressBinder';
 import { DateUtils } from '../../../utils/DateUtils';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../../services/data/EffectiveProperties';
 import { TaskLayout } from '../TaskLayout';
-import { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
-import { HandleManager } from '../HandleManager';
-import { CardReconciler } from '../../sharedUI/CardReconciler';
+import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
+import type { HandleManager } from '../HandleManager';
+import type { CardReconciler } from '../../sharedUI/CardReconciler';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 

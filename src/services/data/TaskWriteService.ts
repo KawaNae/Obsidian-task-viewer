@@ -49,7 +49,7 @@ export class TaskWriteService {
 
     // ===== Task creation =====
 
-    async createTask(filePath: string, taskLine: string, heading?: string): Promise<void> {
+    async createTask(filePath: string, taskLine: string, heading?: string): Promise<number> {
         return this.taskIndex.createTask(filePath, taskLine, heading);
     }
 

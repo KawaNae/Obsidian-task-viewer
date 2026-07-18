@@ -1,6 +1,6 @@
-import { DragStrategy, DragContext } from '../DragStrategy';
+import type { DragStrategy, DragContext } from '../DragStrategy';
 import { TRANSIENT_DRAG_CLASSES } from '../constants';
-import { Task } from '../../../types';
+import type { Task } from '../../../types';
 import { materializeRawDates, NO_TASK_LOOKUP, toDisplayTask } from '../../../services/display/DisplayTaskConverter';
 import { getTaskDateRange } from '../../../services/display/VisualDateRange';
 import type { DragPlan } from '../DragPlan';

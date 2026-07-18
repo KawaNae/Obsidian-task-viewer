@@ -1,9 +1,9 @@
-import { Diagnostic, Span, error } from '../lang/Diagnostic';
+import { type Diagnostic, type Span, error } from '../lang/Diagnostic';
 import { parseExpr } from '../lang/ExprParser';
 import { splitDurationText, tokenize } from '../lang/Lexer';
-import { Token, TokenCursor, tokenSpan } from '../lang/Token';
-import { Weekday, weekdayFromName } from '../lang/Value';
-import { EveryRule, FlowProgram, SET_FIELD_ORDER, SetField, ScheduleNode, setHeadName } from './FlowAst';
+import { TokenCursor, tokenSpan } from '../lang/Token';
+import { type Weekday, weekdayFromName } from '../lang/Value';
+import { type EveryRule, type FlowProgram, SET_FIELD_ORDER, type SetField, type ScheduleNode, setHeadName } from './FlowAst';
 import { checkFlow } from './FlowChecker';
 
 export interface ParseFlowResult {

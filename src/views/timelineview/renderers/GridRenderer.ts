@@ -1,24 +1,24 @@
 import type { HoverParent } from 'obsidian';
-import { ViewState } from '../../../types';
-import TaskViewerPlugin from '../../../main';
-import { MenuHandler } from '../../../interaction/menu/MenuHandler';
+import type { ViewState } from '../../../types';
+import type TaskViewerPlugin from '../../../main';
+import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
-import { HandleManager } from '../HandleManager';
+import type { HandleManager } from '../HandleManager';
 import { t } from '../../../i18n';
 
-import { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
-import { TimelineSectionRenderer } from './TimelineSectionRenderer';
+import type { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
+import type { TimelineSectionRenderer } from './TimelineSectionRenderer';
 import { isDisplayTaskOnVisualDate } from '../../../services/display/DisplayTaskConverter';
 import type { DisplayTask } from '../../../types';
-import { MoonPhaseRenderer } from '../../sharedUI/MoonPhaseRenderer';
+import type { MoonPhaseRenderer } from '../../sharedUI/MoonPhaseRenderer';
 import { getEffectiveAstronomyDisplay } from '../../../services/astronomy/AstronomyService';
 import { attachSunAxisArrows } from '../../sharedUI/AstronomyCellAdorner';
 import { splitTasks } from '../../../services/display/TaskSplitter';
 import { categorizeTasksByDate } from '../../../services/display/TaskDateCategorizer';
 import { bucketBySection } from '../../../services/display/SectionClassifier';
-import { DateHeaderRenderer } from '../../sharedUI/DateHeaderRenderer';
-import { PeriodicHeaderRenderer } from '../../sharedUI/PeriodicHeaderRenderer';
-import { CardReconciler } from '../../sharedUI/CardReconciler';
+import type { DateHeaderRenderer } from '../../sharedUI/DateHeaderRenderer';
+import type { PeriodicHeaderRenderer } from '../../sharedUI/PeriodicHeaderRenderer';
+import type { CardReconciler } from '../../sharedUI/CardReconciler';
 import { getOverdueLevel } from '../../../services/display/TaskStatusQuery';
 
 export class GridRenderer {
@@ -110,20 +110,25 @@ export class GridRenderer {
             const axisLabel = axisCell.createEl('span', { cls: 'allday-section__label' });
             axisLabel.setText(t('allDaySection.allDay'));
             axisCell.style.gridColumn = '1';
-            axisCell.style.gridRow = '1 / span 50';
 
+            const dateCells: HTMLElement[] = [];
             dates.forEach((date, i) => {
                 const cell = allDayRow.createDiv('allday-section__cell');
                 if (i === 0) cell.addClass('is-first-cell');
                 if (i === dates.length - 1) cell.addClass('is-last-cell');
                 cell.dataset.date = date;
                 cell.style.gridColumn = `${i + 2}`;
-                cell.style.gridRow = '1 / span 50';
                 cell.style.zIndex = '0';
                 allDayRenderer.addEmptySpaceContextMenu(cell, date);
+                dateCells.push(cell);
             });
 
-            allDayRenderer.render(allDayRow, dates, buckets.allDay, reconciler);
+            const laneCount = allDayRenderer.render(allDayRow, dates, buckets.allDay, reconciler);
+            const rowSpan = Math.max(laneCount + 2, 2);
+            axisCell.style.gridRow = `1 / span ${rowSpan}`;
+            for (const cell of dateCells) {
+                cell.style.gridRow = `1 / span ${rowSpan}`;
+            }
         }
 
         // 5.2. Timeline Grid (time axis + day columns)

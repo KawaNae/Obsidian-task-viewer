@@ -7,8 +7,8 @@ import type { TaskIndex } from '../core/TaskIndex';
 import { toDisplayTask, toDisplayTasks } from '../display/DisplayTaskConverter';
 import { TaskFilterEngine } from '../filter/TaskFilterEngine';
 import { TaskSorter } from '../sort/TaskSorter';
-import { DateUtils } from '../../utils/DateUtils';
 import { getTaskDateRange } from '../display/VisualDateRange';
+import { DateUtils } from '../../utils/DateUtils';
 import { buildChildEntries } from './ChildEntryBuilder';
 
 /**
@@ -22,6 +22,8 @@ export class TaskReadService {
     private cachedDisplayTasks: DisplayTask[] | null = null;
     private cacheRevision: number = -1;
 
+    private weekStartDay: 0 | 1 = 1;
+
     constructor(
         private taskIndex: TaskIndex,
         private startHour: number
@@ -33,6 +35,10 @@ export class TaskReadService {
             this.startHour = startHour;
             this.cachedDisplayTasks = null;
         }
+    }
+
+    updateWeekStartDay(day: 0 | 1): void {
+        this.weekStartDay = day;
     }
 
     /** Current startHour value. */
@@ -77,6 +83,10 @@ export class TaskReadService {
 
     // ===== Core data access =====
 
+    private static isVisible(dt: DisplayTask): boolean {
+        return !dt.validation || dt.validation.severity !== 'error';
+    }
+
     /**
      * All DisplayTasks, revision-cached.
      * Recomputed only when TaskStore revision changes.
@@ -90,6 +100,10 @@ export class TaskReadService {
         this.cachedDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), this.startHour, lookup);
         this.cacheRevision = currentRevision;
         return this.cachedDisplayTasks;
+    }
+
+    getVisibleDisplayTasks(): DisplayTask[] {
+        return this.getAllDisplayTasks().filter(TaskReadService.isVisible);
     }
 
     /**
@@ -113,9 +127,11 @@ export class TaskReadService {
     getTasksForDateRange(
         startDate: string,
         endDate: string,
-        filter?: FilterState
+        filter?: FilterState,
+        options?: { includeInvalid?: boolean }
     ): DisplayTask[] {
-        const all = this.getAllDisplayTasks();
+        const raw = this.getAllDisplayTasks();
+        const all = options?.includeInvalid ? raw : raw.filter(TaskReadService.isVisible);
         const context = filter ? this.createFilterContext() : undefined;
         const startHour = this.startHour;
 
@@ -124,7 +140,8 @@ export class TaskReadService {
             if (filter && !TaskFilterEngine.evaluate(dt, filter, context)) continue;
             if (!dt.effectiveStartDate) {
                 // D type (due-only): include if due is in range
-                if (dt.due && dt.due >= startDate && dt.due <= endDate) {
+                const duePart = DateUtils.dueDatePart(dt.effectiveDue);
+                if (duePart && duePart >= startDate && duePart <= endDate) {
                     result.push(dt);
                 }
                 continue;
@@ -155,8 +172,9 @@ export class TaskReadService {
      * Filtered (and optionally sorted) tasks.
      * Primary API for views needing filtered results.
      */
-    getFilteredTasks(filter: FilterState, sort?: SortState): DisplayTask[] {
-        const all = this.getAllDisplayTasks();
+    getFilteredTasks(filter: FilterState, sort?: SortState, options?: { includeInvalid?: boolean }): DisplayTask[] {
+        const raw = this.getAllDisplayTasks();
+        const all = options?.includeInvalid ? raw : raw.filter(TaskReadService.isVisible);
         if (!hasConditions(filter)) {
             const result = [...all];
             TaskSorter.sort(result, sort);
@@ -174,6 +192,7 @@ export class TaskReadService {
     private createFilterContext(): FilterContext {
         return {
             startHour: this.startHour,
+            weekStartDay: this.weekStartDay,
             taskLookup: (id: string) => this.taskIndex.getTask(id),
         };
     }

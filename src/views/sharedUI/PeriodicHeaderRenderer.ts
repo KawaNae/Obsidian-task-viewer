@@ -1,10 +1,10 @@
-import { TFile, moment } from 'obsidian';
+import type { TFile } from 'obsidian';
 import type { App, HoverParent } from 'obsidian';
-import TaskViewerPlugin from '../../main';
+import type TaskViewerPlugin from '../../main';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { DateUtils } from '../../utils/DateUtils';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
-import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
+import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 
 interface PeriodicHeaderRendererDeps {

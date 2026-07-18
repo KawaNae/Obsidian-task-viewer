@@ -1,6 +1,6 @@
-import { Diagnostic, error } from './Diagnostic';
-import { Token, TokenKind } from './Token';
-import { DURATION_UNITS, DurUnit } from './Value';
+import { type Diagnostic, error } from './Diagnostic';
+import type { Token, TokenKind } from './Token';
+import { DURATION_UNITS, type DurUnit } from './Value';
 
 const DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}/;

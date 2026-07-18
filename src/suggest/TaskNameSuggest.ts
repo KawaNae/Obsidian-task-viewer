@@ -3,7 +3,7 @@
  * Provides [[wikilink]], [[file#heading]], and #tag suggestions on a plain <input>.
  */
 
-import { App, AbstractInputSuggest } from 'obsidian';
+import { type App, AbstractInputSuggest } from 'obsidian';
 
 interface SuggestionItem {
     label: string;

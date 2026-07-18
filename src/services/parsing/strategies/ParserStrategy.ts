@@ -1,4 +1,4 @@
-import { ParserId, Task } from '../../../types';
+import type { ParserId, Task } from '../../../types';
 
 /**
  * Interface for task parser strategies.

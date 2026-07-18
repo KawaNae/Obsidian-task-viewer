@@ -1,6 +1,6 @@
-import { Task, ChildEntry, isTvFile } from '../../types';
-import { TaskReadService } from '../../services/data/TaskReadService';
-import { ChildRenderItem } from './types';
+import { type Task, type ChildEntry, isTvFile } from '../../types';
+import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { ChildRenderItem } from './types';
 import { ChildRenderItemMapper } from './ChildRenderItemMapper';
 import { extractWikilinkTarget } from '../../services/data/ChildEntryBuilder';
 

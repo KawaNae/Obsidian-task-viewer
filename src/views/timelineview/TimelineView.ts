@@ -1,8 +1,8 @@
-import { ItemView, WorkspaceLeaf, setIcon, type Workspace, type ViewStateResult } from 'obsidian';
+import { ItemView, type WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
 import { ViewUriBuilder } from '../sharedLogic/ViewUriBuilder';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import { Task, ViewState, PinnedListDefinition } from '../../types';
+import type { Task, ViewState, PinnedListDefinition } from '../../types';
 import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
@@ -11,11 +11,11 @@ import type { TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
 import { logDebug, logError } from '../../log/log';
 
 import { DateUtils } from '../../utils/DateUtils';
-import { TaskReadService } from '../../services/data/TaskReadService';
-import { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 
-import TaskViewerPlugin from '../../main';
+import type TaskViewerPlugin from '../../main';
 import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
 
 import { HandleManager } from './HandleManager';
@@ -38,7 +38,7 @@ import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
-import { openTaskInEditor } from '../sharedLogic/NavigationUtils';
+import { openTaskInEditor } from '../../utils/NavigationUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
@@ -650,15 +650,6 @@ export class TimelineView extends ItemView {
         this.performRender();
     }
 
-    /**
-     * 同一 frame 内に複数回呼ばれても 1 回の render に集約する。
-     * データ変更通知 (onChange) からの render はこの経路を使う。
-     * トールバー / sidebar / pinch zoom 等の即時反映が必要な経路は render() を直呼び。
-     */
-    private scheduleRender(): void {
-        this.renderScheduler.scheduleRender();
-    }
-
     private saveScrollPosition(): void {
         const grid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (!grid) return;
@@ -966,7 +957,11 @@ export class TimelineView extends ItemView {
      * Measures the actual scrollbar width for the current environment.
      * Returns 0 for overlay scrollbars (iOS/macOS), ~15px for classic scrollbars (Windows).
      */
+    private static cachedScrollbarWidth: number | null = null;
+
     private measureScrollbarWidth(): number {
+        if (TimelineView.cachedScrollbarWidth !== null) return TimelineView.cachedScrollbarWidth;
+
         const outer = document.createElement('div');
         outer.style.visibility = 'hidden';
         outer.style.overflow = 'scroll';
@@ -983,6 +978,7 @@ export class TimelineView extends ItemView {
         const scrollbarWidth = outer.offsetWidth - inner.offsetWidth;
         document.body.removeChild(outer);
 
+        TimelineView.cachedScrollbarWidth = scrollbarWidth;
         return scrollbarWidth;
     }
 

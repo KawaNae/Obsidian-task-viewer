@@ -8,6 +8,11 @@ export function createCreateHandler(plugin: TaskViewerPlugin) {
         if (!params.file) return cliError('Missing required flag: --file');
         if (!params.content) return cliError('Missing required flag: --content');
 
+        let fields: string[];
+        try { fields = resolveFields(params['output-fields']); } catch (e) {
+            return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));
+        }
+
         try {
             const result = await plugin.api.create({
                 file: params.file,
@@ -18,7 +23,7 @@ export function createCreateHandler(plugin: TaskViewerPlugin) {
                 status: params.status,
                 heading: params.heading,
             });
-            return cliOk({ task: pickFields(result.task, resolveFields(params['output-fields'])) });
+            return cliOk({ task: pickFields(result.task, fields) });
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to create task: ${e instanceof Error ? e.message : String(e)}`);
         }
@@ -29,6 +34,11 @@ export function createUpdateHandler(plugin: TaskViewerPlugin) {
     return async (params: CliData): Promise<string> => {
         if (!params.id) return cliError('Missing required flag: --id');
 
+        let fields: string[];
+        try { fields = resolveFields(params['output-fields']); } catch (e) {
+            return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));
+        }
+
         try {
             const result = await plugin.api.update({
                 id: params.id,
@@ -38,7 +48,7 @@ export function createUpdateHandler(plugin: TaskViewerPlugin) {
                 due: params.due,
                 status: params.status,
             });
-            return cliOk({ task: pickFields(result.task, resolveFields(params['output-fields'])) });
+            return cliOk({ task: pickFields(result.task, fields) });
         } catch (e) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to update task: ${e instanceof Error ? e.message : String(e)}`);
         }

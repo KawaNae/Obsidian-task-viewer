@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import { type App, TFile } from 'obsidian';
 import type { DuplicateOptions, TvFileKeys, Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
@@ -65,7 +65,7 @@ export class TaskRepository {
         return this.inlineWriter.insertLineAsFirstChild(task, lineContent);
     }
 
-    async appendTaskToFile(filePath: string, content: string): Promise<void> {
+    async appendTaskToFile(filePath: string, content: string): Promise<number> {
         return this.inlineWriter.appendTaskToFile(filePath, content);
     }
 

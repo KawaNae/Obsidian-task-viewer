@@ -3,8 +3,8 @@
  * Provides line style suggestions for configured linestyle property in Properties View.
  */
 
-import { App, AbstractInputSuggest } from 'obsidian';
-import TaskViewerPlugin from '../../main';
+import { type App, AbstractInputSuggest } from 'obsidian';
+import type TaskViewerPlugin from '../../main';
 import { filterLineStyles, renderLineStyleSuggestion } from './lineStyleUtils';
 
 export class PropertyLineStyleSuggest extends AbstractInputSuggest<string> {

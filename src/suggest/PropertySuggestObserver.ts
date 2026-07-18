@@ -1,7 +1,7 @@
-import { App, WorkspaceWindow } from 'obsidian';
+import type { App, WorkspaceWindow } from 'obsidian';
 import type { TaskViewerSettings } from '../types';
-import TaskViewerPlugin from '../main';
-import { WindowAttachment, AttachmentContext } from './WindowAttachment';
+import type TaskViewerPlugin from '../main';
+import { WindowAttachment, type AttachmentContext } from './WindowAttachment';
 
 /**
  * Properties View の tv-color / tv-linestyle 行に AbstractInputSuggest と

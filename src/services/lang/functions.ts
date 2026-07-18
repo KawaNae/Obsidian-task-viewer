@@ -1,8 +1,8 @@
 import { addDays, addMonths, addYears, differenceInCalendarDays } from 'date-fns';
-import { Span } from './Diagnostic';
-import { Expr, FnName } from './ExprAst';
+import type { Span } from './Diagnostic';
+import type { Expr, FnName } from './ExprAst';
 import {
-    DurUnit, Value, Weekday, formatDateStr, isDatishValue, parseDateStr,
+    type DurUnit, type Value, type Weekday, formatDateStr, isDatishValue, parseDateStr,
 } from './Value';
 
 /**

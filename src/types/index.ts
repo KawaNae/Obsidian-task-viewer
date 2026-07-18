@@ -305,6 +305,7 @@ export interface DisplayTask extends Task {
     effectiveStartTime?: string;
     effectiveEndDate?: string;
     effectiveEndTime?: string;
+    effectiveDue?: string;
     /** 各フィールドが暗黙値かどうか */
     startDateImplicit: boolean;
     startTimeImplicit: boolean;

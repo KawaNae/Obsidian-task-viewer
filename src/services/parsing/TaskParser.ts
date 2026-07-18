@@ -1,5 +1,5 @@
 import type { Task, TaskViewerSettings } from '../../types';
-import { LeafParserStrategy, ParserStrategy } from './strategies/ParserStrategy';
+import type { LeafParserStrategy, ParserStrategy } from './strategies/ParserStrategy';
 import { ParserChain } from './strategies/ParserChain';
 import { TVInlineParser } from './tv-inline/TVInlineParser';
 import { DayPlannerParser } from './tv-inline/DayPlannerParser';

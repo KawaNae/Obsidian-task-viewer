@@ -1,7 +1,7 @@
-import { Diagnostic, error } from '../lang/Diagnostic';
+import { type Diagnostic, error } from '../lang/Diagnostic';
 import { FLOW_TYPE_ENV, checkExpr } from '../lang/ExprChecker';
 import { isDatishType } from '../lang/functions';
-import { FlowProgram, SET_FIELD_ORDER, setHeadName } from './FlowAst';
+import { type FlowProgram, SET_FIELD_ORDER, setHeadName } from './FlowAst';
 
 /**
  * Structural + type validation of a parsed FlowProgram. Runs inside

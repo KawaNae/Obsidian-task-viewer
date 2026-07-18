@@ -2,13 +2,13 @@ import type { Task, TaskFlow } from '../../../types';
 import { t } from '../../../i18n';
 import { flowValidation, singleLineFlow } from '../../flow/FlowSegments';
 import { createBaseTask } from '../TaskFactory';
-import { LeafParserStrategy } from '../strategies/ParserStrategy';
+import type { LeafParserStrategy } from '../strategies/ParserStrategy';
 import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';
 import { parseDateTimeField } from '../utils/DateTimeFieldParser';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
-import { validateDateTimeRules, DateTimeValidationResult } from '../utils/DateTimeRuleValidator';
+import { validateDateTimeRules, type DateTimeValidationResult } from '../utils/DateTimeRuleValidator';
 import { DATE_BLOCK_REGEX } from './DateBlockLocator';
 
 interface DateBlockResult {

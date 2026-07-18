@@ -1,4 +1,4 @@
-import { ItemView, Notice, WorkspaceLeaf, setIcon } from "obsidian";
+import { ItemView, Notice, type WorkspaceLeaf, setIcon } from "obsidian";
 import {
     type LogLevel,
     type LogEntry,

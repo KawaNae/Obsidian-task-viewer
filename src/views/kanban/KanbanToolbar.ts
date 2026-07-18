@@ -4,7 +4,7 @@ import type TaskViewerPlugin from '../../main';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
 import { ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
-import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
+import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { KanbanSchema, type KanbanConfig, type KanbanTransient } from './KanbanSchema';
 
