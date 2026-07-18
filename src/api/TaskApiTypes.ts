@@ -30,6 +30,7 @@ export interface NormalizedTask {
     effectiveStartTime: string | null;
     effectiveEndDate: string | null;
     effectiveEndTime: string | null;
+    effectiveDue: string | null;
     durationMinutes: number | null;
     properties: Record<string, unknown>;
 }
