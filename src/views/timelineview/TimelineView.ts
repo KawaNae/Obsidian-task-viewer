@@ -966,7 +966,11 @@ export class TimelineView extends ItemView {
      * Measures the actual scrollbar width for the current environment.
      * Returns 0 for overlay scrollbars (iOS/macOS), ~15px for classic scrollbars (Windows).
      */
+    private static cachedScrollbarWidth: number | null = null;
+
     private measureScrollbarWidth(): number {
+        if (TimelineView.cachedScrollbarWidth !== null) return TimelineView.cachedScrollbarWidth;
+
         const outer = document.createElement('div');
         outer.style.visibility = 'hidden';
         outer.style.overflow = 'scroll';
@@ -983,6 +987,7 @@ export class TimelineView extends ItemView {
         const scrollbarWidth = outer.offsetWidth - inner.offsetWidth;
         document.body.removeChild(outer);
 
+        TimelineView.cachedScrollbarWidth = scrollbarWidth;
         return scrollbarWidth;
     }
 
