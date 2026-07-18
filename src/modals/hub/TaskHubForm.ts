@@ -666,9 +666,13 @@ export class TaskHubForm {
                 if (e.key === 'Enter' && !e.isComposing) commitAdd();
             });
         }
-        valueInput.addEventListener('blur', () => {
-            if (keyInput.value.trim() && valueInput.value.trim()) commitAdd();
-        });
+        // key/value が揃っていればどちらの blur でも確定する（値を先に入れて
+        // キーを後から編集し、そのままフォーカスを外すフローを取りこぼさない）
+        for (const input of [keyInput, valueInput]) {
+            input.addEventListener('blur', () => {
+                if (keyInput.value.trim() && valueInput.value.trim()) commitAdd();
+            });
+        }
     }
 
     private commitProps(props: Record<string, PropertyValue>): void {
