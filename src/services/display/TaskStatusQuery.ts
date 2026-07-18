@@ -36,6 +36,13 @@ export function getOverdueLevel(
     defs: StatusDefinition[],
     readService: TaskReadService,
 ): OverdueLevel {
+    // overdue は「現在時刻 × タスク本来の日付」の絶対判定。split セグメントは
+    // ビュー境界で切られた effective 日付を持つため、元タスクに解決して判定する。
+    if (task.isSplit && task.originalTaskId !== task.id) {
+        const original = readService.getDisplayTask(task.originalTaskId);
+        if (original) task = original;
+    }
+
     if (isTaskCompleted(task, defs, readService)) return 'none';
 
     if (task.effectiveDue && DateUtils.isPastDue(task.effectiveDue, startHour)) {
