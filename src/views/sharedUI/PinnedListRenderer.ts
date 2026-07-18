@@ -72,6 +72,7 @@ export class PinnedListRenderer {
     private callbacks: PinnedListCallbacks | null = null;
     private viewId: string | null = null;
     private unsubscribe: (() => void) | null = null;
+    private pendingRaf: number | null = null;
 
     constructor(
         private taskRenderer: TaskCardRenderer,
@@ -107,10 +108,9 @@ export class PinnedListRenderer {
         this.callbacks = params.callbacks;
         this.viewId = params.viewId;
 
-        // Subscribe to data changes — refresh self-contained without view involvement.
         this.unsubscribe = this.readService.onChange((_taskId, changes) => {
             if (!shouldRenderForChanges(changes)) return;
-            this.refresh();
+            this.scheduleRefresh();
         });
 
         // Initial paint
@@ -129,6 +129,10 @@ export class PinnedListRenderer {
         this.getViewFilterState = null;
         this.callbacks = null;
         this.viewId = null;
+        if (this.pendingRaf !== null) {
+            cancelAnimationFrame(this.pendingRaf);
+            this.pendingRaf = null;
+        }
     }
 
     /**
@@ -136,6 +140,14 @@ export class PinnedListRenderer {
      * automatically; views may call it manually after mutating list arrays
      * (rename / duplicate / reorder / remove / filter / sort changes).
      */
+    private scheduleRefresh(): void {
+        if (this.pendingRaf !== null) return;
+        this.pendingRaf = requestAnimationFrame(() => {
+            this.pendingRaf = null;
+            this.refresh();
+        });
+    }
+
     refresh(): void {
         if (!this.host || !this.getLists || !this.getCollapsed || !this.callbacks) return;
 
