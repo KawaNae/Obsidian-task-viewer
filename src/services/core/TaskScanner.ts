@@ -35,16 +35,45 @@ export class TaskScanner {
      */
     async scanVault(): Promise<void> {
         this.validator.clearErrors();
-        const files = this.app.vault.getMarkdownFiles();
-        logInfo(`[scanVault] files=${files.length}`);
+        const allFiles = this.app.vault.getMarkdownFiles();
+        const files = allFiles.filter(f => this.mayContainTasks(f));
+        logInfo(`[scanVault] total=${allFiles.length} candidates=${files.length} skipped=${allFiles.length - files.length}`);
 
         for (const file of files) {
             await this.queueScan(file);
         }
+
         WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
         this.store.notifyListenersStaggered();
         logInfo(`[scanVault:done] tasks=${this.store.getTasks().length}`);
         this.isInitializing = false;
+    }
+
+    /**
+     * metadataCache による前段フィルタ。
+     * frontmatter に tv-* キーも tags もなく、listItems もないファイルをスキップ。
+     * 偽陽性 (不要なスキャン) は許容、偽陰性 (タスク見逃し) は禁止。
+     * metadataCache が未構築のファイルはスキップしない (安全側)。
+     */
+    private mayContainTasks(file: TFile): boolean {
+        const cache = this.app.metadataCache.getCache(file.path);
+        if (!cache) return true;
+
+        const fm = cache.frontmatter;
+        if (fm) {
+            if ('tags' in fm) return true;
+            const keys = this.settings.tvFileKeys;
+            if (keys.start in fm || keys.end in fm || keys.due in fm ||
+                keys.status in fm || keys.content in fm || keys.color in fm ||
+                keys.linestyle in fm || keys.mask in fm || keys.timerTargetId in fm ||
+                keys.ignore in fm) return true;
+        }
+
+        if (cache.listItems && cache.listItems.length > 0) return true;
+
+        if (cache.tags && cache.tags.length > 0) return true;
+
+        return false;
     }
 
     /**
@@ -88,6 +117,7 @@ export class TaskScanner {
      * ファイルをスキャンしてタスクを抽出（parse → detect → commit）
      */
     private async scanFile(file: TFile, isLocalChange: boolean = false): Promise<void> {
+        this.validator.clearErrorsForFile(file.path);
         const content = await this.app.vault.read(file);
         const lines = content.split('\n').map(l => l.replace(/\r$/, ''));
 
