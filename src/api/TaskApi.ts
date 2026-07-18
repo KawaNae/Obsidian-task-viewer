@@ -534,6 +534,7 @@ export class TaskApi {
                 updates.due = undefined;
             } else {
                 const parsed = parseDateTimeParam(params.due, 'due');
+                if (!parsed.date) throw new TaskApiError(`due must include a date, got: "${params.due}"`);
                 updates.due = parsed.date;
             }
         }
@@ -651,8 +652,12 @@ export class TaskApi {
         assertParams(params, CREATE_TV_FILE_SCHEMA, 'createTvFile');
         const statusChar = params.status ?? ' ';
         if (statusChar.length !== 1) throw new TaskApiError(`status must be a single character, got: "${statusChar}"`);
-        const parsed = params.start ? parseDateTimeFlag(params.start) : null;
-        const parsedEnd = params.end ? parseDateTimeFlag(params.end) : null;
+        const parsed = params.start ? parseDateTimeParam(params.start, 'start') : null;
+        const parsedEnd = params.end ? parseDateTimeParam(params.end, 'end') : null;
+        if (params.due) {
+            const parsedDue = parseDateTimeParam(params.due, 'due');
+            if (!parsedDue.date) throw new TaskApiError(`due must include a date, got: "${params.due}"`);
+        }
         const newFile = await this.writeService.createTvFileFromData({
             content: params.content,
             statusChar,
