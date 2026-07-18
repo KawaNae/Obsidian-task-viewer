@@ -10,5 +10,6 @@ import type { Task } from '../../types';
  */
 export interface FilterContext {
     startHour?: number;
+    weekStartDay?: 0 | 1;
     taskLookup?: (id: string) => Task | undefined;
 }

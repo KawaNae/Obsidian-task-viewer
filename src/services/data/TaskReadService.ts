@@ -22,6 +22,8 @@ export class TaskReadService {
     private cachedDisplayTasks: DisplayTask[] | null = null;
     private cacheRevision: number = -1;
 
+    private weekStartDay: 0 | 1 = 1;
+
     constructor(
         private taskIndex: TaskIndex,
         private startHour: number
@@ -33,6 +35,10 @@ export class TaskReadService {
             this.startHour = startHour;
             this.cachedDisplayTasks = null;
         }
+    }
+
+    updateWeekStartDay(day: 0 | 1): void {
+        this.weekStartDay = day;
     }
 
     /** Current startHour value. */
@@ -175,6 +181,7 @@ export class TaskReadService {
     private createFilterContext(): FilterContext {
         return {
             startHour: this.startHour,
+            weekStartDay: this.weekStartDay,
             taskLookup: (id: string) => this.taskIndex.getTask(id),
         };
     }

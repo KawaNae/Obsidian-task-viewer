@@ -137,6 +137,7 @@ export default class TaskViewerPlugin extends Plugin {
             win: typeof window !== 'undefined' ? window : undefined,
         });
         this.readService = new TaskReadService(this.taskIndex, this.settings.startHour);
+        this.readService.updateWeekStartDay(this.settings.weekStartDay);
         this.writeService = new TaskWriteService(this.taskIndex);
 
         // Single source of truth for menu lifecycle (dedup across all views/touch paths).
@@ -566,6 +567,7 @@ export default class TaskViewerPlugin extends Plugin {
         // parser chain immediately (dp/tp toggles change line ownership).
         this.app.workspace.updateOptions();
         this.readService.updateStartHour(this.settings.startHour);
+        this.readService.updateWeekStartDay(this.settings.weekStartDay);
         this.updateViewHeaderStyles();
 
         this.refreshAllViews();
