@@ -373,7 +373,7 @@ export class TaskApi {
 
         let filtered: DisplayTask[];
         if (filterState) {
-            filtered = readService.getFilteredTasks(filterState, sortState);
+            filtered = readService.getFilteredTasks(filterState, sortState, { includeInvalid: true });
         } else {
             filtered = [...readService.getAllDisplayTasks()];
             TaskSorter.sort(filtered, sortState);
@@ -609,7 +609,7 @@ export class TaskApi {
         if (params.filter) assertValidFilterState(params.filter);
         const from = this.resolveWindowBound(params.from, 'from');
         const to = this.resolveWindowBound(params.to, 'to');
-        let tasks = this.readService.getTasksForDateRange(from, to, params.filter);
+        let tasks = this.readService.getTasksForDateRange(from, to, params.filter, { includeInvalid: true });
         const sortState = buildSortState(params.sort);
         tasks = [...tasks];
         TaskSorter.sort(tasks, sortState);
@@ -632,7 +632,7 @@ export class TaskApi {
         const startHour = this.plugin.settings.startHour;
         const from = this.resolveWindowBound(params.from, 'from');
         const to = this.resolveWindowBound(params.to, 'to');
-        const tasks = this.readService.getTasksForDateRange(from, to, params.filter);
+        const tasks = this.readService.getTasksForDateRange(from, to, params.filter, { includeInvalid: true });
         const split = splitTasks(tasks, { type: 'visual-date', startHour });
         const dates = DateUtils.getDateRange(from, to);
         const map = categorizeTasksByDate(split, dates, startHour);

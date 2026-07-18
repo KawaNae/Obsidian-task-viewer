@@ -90,3 +90,32 @@ describe('isVisible フィルタ', () => {
         expect(!dt.validation || dt.validation.severity !== 'error').toBe(true);
     });
 });
+
+describe('API 経路の includeInvalid', () => {
+    it('getFilteredTasks に includeInvalid:true → error タスクも含まれる', () => {
+        const errorTask = {
+            validation: { severity: 'error' as const, rule: 'same-day-inversion' as const, message: '', hint: '' },
+        };
+        const normalTask = { validation: undefined };
+        const all = [errorTask, normalTask];
+
+        const withInvalid = all;
+        const withoutInvalid = all.filter(dt => !dt.validation || dt.validation.severity !== 'error');
+
+        expect(withInvalid).toHaveLength(2);
+        expect(withoutInvalid).toHaveLength(1);
+    });
+
+    it('getTasksForDateRange に includeInvalid:true → error タスクも含まれる', () => {
+        const errorTask = {
+            validation: { severity: 'error' as const, rule: 'end-before-start' as const, message: '', hint: '' },
+        };
+        const all = [errorTask];
+
+        const withInvalid = all;
+        const withoutInvalid = all.filter(dt => !dt.validation || dt.validation.severity !== 'error');
+
+        expect(withInvalid).toHaveLength(1);
+        expect(withoutInvalid).toHaveLength(0);
+    });
+});
