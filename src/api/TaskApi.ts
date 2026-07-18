@@ -508,7 +508,10 @@ export class TaskApi {
 
         const updates: Partial<Task> = {};
 
-        if (params.content !== undefined) updates.content = params.content;
+        if (params.content !== undefined) {
+            if (params.content.includes('\n')) throw new TaskApiError('content must not contain newlines');
+            updates.content = params.content;
+        }
         if (params.status !== undefined) {
             const sc = params.status === 'none' ? ' ' : params.status;
             if (sc.length !== 1) throw new TaskApiError(`status must be a single character or "none", got: "${params.status}"`);

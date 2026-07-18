@@ -290,9 +290,15 @@ describe('C17: content の改行注入拒否', () => {
             .rejects.toThrow(/content must not contain newlines/);
     });
 
+    it('update: 改行入り content を拒否', async () => {
+        const task = makeTask({ isReadOnly: false });
+        const api = createMockApi(task);
+        await expect(api.update({ id: 'test-1', content: 'line1\nline2' }))
+            .rejects.toThrow(/content must not contain newlines/);
+    });
+
     it('create: 改行なし content は通過', async () => {
         const api = createMockApi(undefined);
-        // Will fail at file lookup, not at newline validation
         try {
             await api.create({ file: 'test.md', content: 'simple task' });
         } catch (e) {
