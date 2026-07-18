@@ -319,6 +319,8 @@ interface PaginateResult {
 function paginate(tasks: DisplayTask[], params: PaginationParams): PaginateResult {
     const total = tasks.length;
     const rawLimit = params.limit ?? 100;
+    if (typeof rawLimit !== 'number' || isNaN(rawLimit)) throw new TaskApiError('limit must be a number');
+    if (rawLimit < 0) throw new TaskApiError('limit must be non-negative');
     if (rawLimit === 0) return { paged: [], total, resolvedLimit: 0 };
     if (!isFinite(rawLimit)) return { paged: tasks, total, resolvedLimit: null };
     return { paged: tasks.slice(0, rawLimit), total, resolvedLimit: rawLimit };
@@ -569,6 +571,13 @@ export class TaskApi {
         const task = this.readService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
+        if (params.dayOffset !== undefined) {
+            if (typeof params.dayOffset !== 'number' || isNaN(params.dayOffset)) throw new TaskApiError('dayOffset must be a number');
+        }
+        if (params.count !== undefined) {
+            if (typeof params.count !== 'number' || isNaN(params.count)) throw new TaskApiError('count must be a number');
+            if (params.count < 1) throw new TaskApiError('count must be at least 1');
+        }
         await this.writeService.duplicateTask(params.id, {
             dayOffset: params.dayOffset,
             count: params.count,

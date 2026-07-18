@@ -195,3 +195,65 @@ describe('C5: update due の time-only 拒否', () => {
         }
     });
 });
+
+describe('C8: 数値パラメータ検証', () => {
+    it('duplicate: NaN dayOffset を拒否', async () => {
+        const task = makeTask({ isReadOnly: false });
+        const api = createMockApi(task);
+        await expect(api.duplicate({ id: 'test-1', dayOffset: NaN }))
+            .rejects.toThrow(/dayOffset must be a number/);
+    });
+
+    it('duplicate: 文字列 dayOffset を拒否', async () => {
+        const task = makeTask({ isReadOnly: false });
+        const api = createMockApi(task);
+        await expect(api.duplicate({ id: 'test-1', dayOffset: 'abc' as any }))
+            .rejects.toThrow(/dayOffset must be a number/);
+    });
+
+    it('duplicate: NaN count を拒否', async () => {
+        const task = makeTask({ isReadOnly: false });
+        const api = createMockApi(task);
+        await expect(api.duplicate({ id: 'test-1', count: NaN }))
+            .rejects.toThrow(/count must be a number/);
+    });
+
+    it('duplicate: count=0 を拒否', async () => {
+        const task = makeTask({ isReadOnly: false });
+        const api = createMockApi(task);
+        await expect(api.duplicate({ id: 'test-1', count: 0 }))
+            .rejects.toThrow(/count must be at least 1/);
+    });
+
+    it('duplicate: 負の count を拒否', async () => {
+        const task = makeTask({ isReadOnly: false });
+        const api = createMockApi(task);
+        await expect(api.duplicate({ id: 'test-1', count: -1 }))
+            .rejects.toThrow(/count must be at least 1/);
+    });
+
+    it('duplicate: 正常な値は通過', async () => {
+        const task = makeTask({ isReadOnly: false });
+        const api = createMockApi(task);
+        const result = await api.duplicate({ id: 'test-1', dayOffset: 1, count: 2 });
+        expect(result.duplicated).toBe('test-1');
+    });
+
+    it('list: NaN limit を拒否', async () => {
+        const api = createMockApi(undefined);
+        await expect(api.list({ limit: NaN }))
+            .rejects.toThrow(/limit must be a number/);
+    });
+
+    it('list: 負の limit を拒否', async () => {
+        const api = createMockApi(undefined);
+        await expect(api.list({ limit: -1 }))
+            .rejects.toThrow(/limit must be non-negative/);
+    });
+
+    it('list: 文字列 limit を拒否', async () => {
+        const api = createMockApi(undefined);
+        await expect(api.list({ limit: 'abc' as any }))
+            .rejects.toThrow(/limit must be a number/);
+    });
+});
