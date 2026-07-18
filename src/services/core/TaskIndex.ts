@@ -285,14 +285,19 @@ export class TaskIndex {
     }
 
     updateSettings(settings: TaskViewerSettings): void {
+        const needsRescan = hasParseAffectingChange(this.settings, settings);
         this.settings = settings;
         TaskParser.rebuildChain(settings);
         this.store.updateSettings(settings);
         this.scanner.updateSettings(settings);
-        this.scanner.scanVault()
-            .catch((error) => {
-                logError(`[TaskIndex] Failed to rescan vault: ${(error as Error)?.message ?? error}`);
-            });
+        if (needsRescan) {
+            this.scanner.scanVault()
+                .catch((error) => {
+                    logError(`[TaskIndex] Failed to rescan vault: ${(error as Error)?.message ?? error}`);
+                });
+        } else {
+            this.store.notifyListenersStaggered();
+        }
     }
 
     dispose(): void {
@@ -683,6 +688,29 @@ export class TaskIndex {
 
         return undefined;
     }
+}
+
+// ── Parse-affecting settings diff ──
+// These keys control how files are parsed into tasks. Changing any of them
+// requires a full vault re-scan. All other settings (startHour, UI toggles,
+// timer durations, etc.) are display-only and need only a notify.
+//
+//   tvFileKeys          — frontmatter field names for tv-start/end/due/status/etc.
+//   tvFileChildHeader   — heading name that marks the child-items section
+//   tvFileChildHeaderLevel — heading level for the child-items section
+//   enableDayPlanner    — toggles DayPlanner parser in the chain
+//   enableTasksPlugin   — toggles TasksPlugin parser in the chain
+//   tasksPluginMapping  — emoji-to-field mapping for TasksPlugin parser
+//   statusDefinitions   — which status chars count as complete (CompletionDetector)
+function hasParseAffectingChange(prev: TaskViewerSettings, next: TaskViewerSettings): boolean {
+    if (prev.tvFileChildHeader !== next.tvFileChildHeader) return true;
+    if (prev.tvFileChildHeaderLevel !== next.tvFileChildHeaderLevel) return true;
+    if (prev.enableDayPlanner !== next.enableDayPlanner) return true;
+    if (prev.enableTasksPlugin !== next.enableTasksPlugin) return true;
+    if (JSON.stringify(prev.tvFileKeys) !== JSON.stringify(next.tvFileKeys)) return true;
+    if (JSON.stringify(prev.tasksPluginMapping) !== JSON.stringify(next.tasksPluginMapping)) return true;
+    if (JSON.stringify(prev.statusDefinitions) !== JSON.stringify(next.statusDefinitions)) return true;
+    return false;
 }
 
 // 時刻比較専用ヘルパー
