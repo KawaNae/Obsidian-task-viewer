@@ -1,4 +1,5 @@
 import { apiVersion, Notice, Platform, Plugin, type Workspace, type WorkspaceLeaf, TFile } from 'obsidian';
+import './views/registerAllSchemas';
 import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';

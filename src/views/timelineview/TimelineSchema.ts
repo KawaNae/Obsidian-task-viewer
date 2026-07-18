@@ -6,7 +6,9 @@
  * makes it round-trip through all 5 boundaries automatically.
  */
 
-import { F, T, registerSchema, type ViewSchema } from '../../services/viewConfig';
+import { F, T } from '../../services/viewConfig/FieldCodecs';
+import { registerSchema } from '../../services/viewConfig/SchemaRegistry';
+import type { ViewSchema } from '../../services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
