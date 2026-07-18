@@ -90,3 +90,54 @@ describe('C1: read-only タスクの mutation 拒否', () => {
         }
     });
 });
+
+describe('C2: status 単一文字検証', () => {
+    it('create: 多文字 status を拒否', async () => {
+        const api = createMockApi(undefined);
+        await expect(api.create({ file: 'test.md', content: 'task', status: 'done' }))
+            .rejects.toThrow(/status must be a single character/);
+    });
+
+    it('create: 空文字 status はデフォルト空白に fallback', async () => {
+        const api = createMockApi(undefined);
+        // status='' → fallback to ' ' (1 char), so no status error
+        try {
+            await api.create({ file: 'test.md', content: 'task', status: '' });
+        } catch (e) {
+            expect((e as Error).message).not.toMatch(/status must be/);
+        }
+    });
+
+    it('update: 多文字 status を拒否', async () => {
+        const task = makeTask({ isReadOnly: false });
+        const api = createMockApi(task);
+        await expect(api.update({ id: 'test-1', status: 'done' }))
+            .rejects.toThrow(/status must be a single character/);
+    });
+
+    it('update: "none" は許可（空白に変換）', async () => {
+        const task = makeTask({ isReadOnly: false });
+        const api = createMockApi(task);
+        try {
+            await api.update({ id: 'test-1', status: 'none' });
+        } catch (e) {
+            expect((e as Error).message).not.toMatch(/status must be/);
+        }
+    });
+
+    it('createTvFile: 多文字 status を拒否', async () => {
+        const api = createMockApi(undefined);
+        await expect(api.createTvFile({ content: 'task', status: 'ab' }))
+            .rejects.toThrow(/status must be a single character/);
+    });
+
+    it('create: 単一文字 "x" は通過', async () => {
+        const api = createMockApi(undefined);
+        // Will fail at file lookup, not at status validation
+        try {
+            await api.create({ file: 'test.md', content: 'task', status: 'x' });
+        } catch (e) {
+            expect((e as Error).message).not.toMatch(/status must be/);
+        }
+    });
+});

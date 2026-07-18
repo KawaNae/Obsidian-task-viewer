@@ -439,10 +439,11 @@ export class TaskApi {
     async create(params: CreateParams): Promise<MutationResult> {
         assertParams(params, CREATE_SCHEMA, 'create');
 
+        const statusChar = params.status || ' ';
+        if (statusChar.length !== 1) throw new TaskApiError(`status must be a single character, got: "${statusChar}"`);
+
         const file = this.plugin.app.vault.getAbstractFileByPath(params.file);
         if (!(file instanceof TFile)) throw new TaskApiError(`File not found: ${params.file}`);
-
-        const statusChar = params.status || ' ';
         const content = params.content;
 
         let line = `- [${statusChar}] ${content}`;
@@ -501,7 +502,9 @@ export class TaskApi {
 
         if (params.content !== undefined) updates.content = params.content;
         if (params.status !== undefined) {
-            updates.statusChar = params.status === 'none' ? ' ' : params.status;
+            const sc = params.status === 'none' ? ' ' : params.status;
+            if (sc.length !== 1) throw new TaskApiError(`status must be a single character or "none", got: "${params.status}"`);
+            updates.statusChar = sc;
         }
 
         if (params.start !== undefined) {
@@ -646,11 +649,13 @@ export class TaskApi {
      */
     async createTvFile(params: CreateTvFileParams): Promise<CreateTvFileResult> {
         assertParams(params, CREATE_TV_FILE_SCHEMA, 'createTvFile');
+        const statusChar = params.status ?? ' ';
+        if (statusChar.length !== 1) throw new TaskApiError(`status must be a single character, got: "${statusChar}"`);
         const parsed = params.start ? parseDateTimeFlag(params.start) : null;
         const parsedEnd = params.end ? parseDateTimeFlag(params.end) : null;
         const newFile = await this.writeService.createTvFileFromData({
             content: params.content,
-            statusChar: params.status ?? ' ',
+            statusChar,
             startDate: parsed?.date,
             startTime: parsed?.time,
             endDate: parsedEnd?.date || (parsedEnd?.time && parsed?.date ? parsed.date : undefined),
