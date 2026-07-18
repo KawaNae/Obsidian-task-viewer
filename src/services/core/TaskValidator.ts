@@ -1,4 +1,9 @@
-import type { ValidationError } from './TaskIndex';
+export interface ValidationError {
+    file: string;
+    line: number;
+    taskId: string;
+    error: string;
+}
 
 /**
  * バリデーションエラーの管理クラス

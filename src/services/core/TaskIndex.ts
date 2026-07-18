@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import { type App, TFile } from 'obsidian';
 import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
 import { isTvFile, isTvInline, hasBodyLine } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
@@ -8,7 +8,7 @@ import { FlowExecutor } from '../flow/FlowExecutor';
 import { WikiLinkResolver } from './WikiLinkResolver';
 import { TaskStore } from './TaskStore';
 import { TaskScanner } from './TaskScanner';
-import { TaskValidator } from './TaskValidator';
+import { TaskValidator, type ValidationError } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { EditorObserver } from './EditorObserver';
 import { TvInlineToTvFileConverter } from './TvInlineToTvFileConverter';
@@ -20,13 +20,6 @@ import { TaskParser } from '../parsing/TaskParser';
 import { HeadingInserter } from '../../utils/HeadingInserter';
 import { FileOperations } from '../persistence/utils/FileOperations';
 import { logError, logInfo, logWarn } from '../../log/log';
-
-export interface ValidationError {
-    file: string;
-    line: number;
-    taskId: string;
-    error: string;
-}
 
 /**
  * TaskIndex - タスク管理の統括ファサードクラス
