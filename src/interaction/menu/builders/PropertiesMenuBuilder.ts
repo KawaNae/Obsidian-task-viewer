@@ -264,7 +264,7 @@ export class PropertiesMenuBuilder {
             menu.addItem((item) => {
                 item.setTitle(`${key}: ${prop.value}`)
                     .setIcon(this.getPropertyTypeIcon(prop.type))
-                    .onClick(() => openModal('properties'));
+                    .onClick(() => openModal(`property:${key}`));
             });
         }
     }

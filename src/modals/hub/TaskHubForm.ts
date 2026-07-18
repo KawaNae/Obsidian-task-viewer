@@ -27,7 +27,8 @@ import { logError } from '../../log/log';
 
 export type TaskHubFocusField =
     | 'name' | 'status' | 'start' | 'end' | 'due'
-    | 'tags' | 'color' | 'linestyle' | 'mask' | 'properties';
+    | 'tags' | 'color' | 'linestyle' | 'mask' | 'properties'
+    | `property:${string}`;
 
 export interface TaskHubFormDeps {
     app: App;
@@ -72,6 +73,8 @@ export class TaskHubForm {
     private tagAddInput: HTMLInputElement | null = null;
     private propsSectionEl: HTMLElement;
     private propAddKeyInput: HTMLInputElement | null = null;
+    /** custom プロパティ行の value input（focusField('property:<key>') 用） */
+    private propValueInputs = new Map<string, HTMLInputElement>();
     private errorEl: HTMLElement;
     private noticeEl: HTMLElement;
 
@@ -545,6 +548,7 @@ export class TaskHubForm {
     private rebuildPropsSection(force = false): void {
         if (!force && this.propsSectionEl.contains(document.activeElement)) return;
         this.propsSectionEl.empty();
+        this.propValueInputs.clear();
 
         // render 時スナップショット。表示判定（isOwn / pv）専用 — commit の
         // merge base には使わない。focus ガードで rebuild がスキップされる間に
@@ -564,6 +568,7 @@ export class TaskHubForm {
             const valueInput = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
             valueInput.value = pv.value;
             valueInput.disabled = this.missing || arrayReadOnly;
+            this.propValueInputs.set(key, valueInput);
             if (arrayReadOnly) valueInput.setAttribute('aria-label', t('modal.hub.arrayReadOnly'));
 
             const commitValue = () => {
@@ -832,6 +837,10 @@ export class TaskHubForm {
     }
 
     protected resolveFocusTarget(field: TaskHubFocusField): HTMLElement | null {
+        if (field.startsWith('property:')) {
+            const key = field.slice('property:'.length);
+            return this.propValueInputs.get(key) ?? this.propAddKeyInput;
+        }
         switch (field) {
             case 'name': return this.nameInput;
             case 'status': return this.statusPill ?? null;

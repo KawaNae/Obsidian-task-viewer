@@ -84,6 +84,26 @@ describe('ChildLineClassifier', () => {
             expect(result.propertyValue).toBe('value');
         });
 
+        it('parses empty-value property (`- key ::`)', () => {
+            const result = ChildLineClassifier.classify('    - key ::', 0);
+            expect(result.propertyKey).toBe('key');
+            expect(result.propertyValue).toBe('');
+        });
+
+        it('empty-value recognition does not depend on trailing whitespace', () => {
+            const noTrail = ChildLineClassifier.classify('    - key ::', 0);
+            const trail = ChildLineClassifier.classify('    - key :: ', 0);
+            expect(noTrail.propertyKey).toBe('key');
+            expect(trail.propertyKey).toBe('key');
+            expect(noTrail.propertyValue).toBe('');
+            expect(trail.propertyValue).toBe('');
+        });
+
+        it('does not treat bare `- ::` as property (empty key)', () => {
+            const result = ChildLineClassifier.classify('- ::', 0);
+            expect(result.propertyKey).toBeNull();
+        });
+
         it('does NOT parse single-colon as property', () => {
             const result = ChildLineClassifier.classify('\t- 金額: 2000', 0);
             expect(result.propertyKey).toBeNull();

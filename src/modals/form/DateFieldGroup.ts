@@ -185,6 +185,17 @@ export class DateFieldGroup {
             this.endTimeInput.placeholder =
                 (dt.endTimeImplicit && dt.effectiveEndDate && dt.effectiveEndTime) || 'HH:mm';
         }
+
+        // due の implicit は cascade 継承のみ (raw due なし && effectiveDue あり)。
+        // 開始/終了と同じく placeholder として注入する。fallback (dailyNoteDate)
+        // は開始日の既定値であって due の既定値ではないため、due には使わない。
+        const dueInherited = !dt.due ? DateFieldGroup.splitDue(dt.effectiveDue) : { date: undefined, time: undefined };
+        if (this.dueDateInput) {
+            this.dueDateInput.placeholder = dueInherited.date || 'YYYY-MM-DD';
+        }
+        if (this.dueTimeInput) {
+            this.dueTimeInput.placeholder = dueInherited.time || 'HH:mm';
+        }
     }
 
     getInput(key: DateFieldKey): HTMLInputElement {
