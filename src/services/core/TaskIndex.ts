@@ -52,6 +52,9 @@ export class TaskIndex {
     private recentSelfWriteTimers: Map<string, NodeJS.Timeout> = new Map();
     private readonly SELF_WRITE_SUPPRESSION_MS = 1000;
 
+    private apiWriteInFlight: Map<string, NodeJS.Timeout> = new Map();
+    private readonly API_WRITE_SUPPRESSION_MS = 2000;
+
     constructor(private app: App, settings: TaskViewerSettings) {
         this.settings = settings;
         this.parseFingerprint = computeParseFingerprint(settings);
@@ -105,14 +108,13 @@ export class TaskIndex {
 
                 await this.scanner.queueScan(file, isLocal);
                 WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
-                // Always emit notify here. UI write methods (via withNotify) emit their own
-                // notifyImmediate after waitForScan, but editor user edits (typing, checkbox
-                // click via mousedown) are also flagged isLocal=true by EditorObserver and
-                // would otherwise have no notify path at all. Duplicate notifies between
-                // withNotify and this handler are coalesced by pendingNotify + the 16ms
-                // debounce. metadataCache.changed remains skipped via recentSelfWrite to
-                // avoid a third redundant scan+notify.
-                this.debouncedNotify();
+                // Skip notify when an API write (withNotify) is in flight for this
+                // file — withNotify's own notifyImmediate is the authoritative notify.
+                // Editor direct edits (no withNotify) are unaffected: apiWriteInFlight
+                // is only set during API CRUD operations.
+                if (!this.apiWriteInFlight.has(file.path)) {
+                    this.debouncedNotify();
+                }
             }
         });
 
@@ -378,10 +380,31 @@ export class TaskIndex {
      *
      * Note: notifyImmediate() is called with no args → full invalidation.
      */
-    private async withNotify<T>(op: () => Promise<T>): Promise<T> {
-        const result = await op();
-        this.notifyImmediate();
-        return result;
+    private markApiWrite(filePath: string): void {
+        const existing = this.apiWriteInFlight.get(filePath);
+        if (existing) clearTimeout(existing);
+        this.apiWriteInFlight.set(filePath, setTimeout(() => {
+            this.apiWriteInFlight.delete(filePath);
+        }, this.API_WRITE_SUPPRESSION_MS));
+    }
+
+    private clearApiWrite(filePath: string): void {
+        const timer = this.apiWriteInFlight.get(filePath);
+        if (timer) {
+            clearTimeout(timer);
+            this.apiWriteInFlight.delete(filePath);
+        }
+    }
+
+    private async withNotify<T>(filePath: string, op: () => Promise<T>): Promise<T> {
+        this.markApiWrite(filePath);
+        try {
+            const result = await op();
+            this.notifyImmediate();
+            return result;
+        } finally {
+            this.clearApiWrite(filePath);
+        }
     }
 
     async updateTask(taskId: string, updates: Partial<Task>): Promise<void> {
@@ -497,10 +520,10 @@ export class TaskIndex {
     }
 
     async deleteTask(taskId: string): Promise<void> {
-        return this.withNotify(async () => {
+        const task = this.store.getTask(taskId);
+        if (!task) return;
+        return this.withNotify(task.file, async () => {
             logInfo(`[deleteTask] id=${taskId}`);
-            const task = this.store.getTask(taskId);
-            if (!task) return;
             if (task.isReadOnly) return;
 
             this.syncDetector.markLocalEdit(task.file);
@@ -516,9 +539,9 @@ export class TaskIndex {
     }
 
     async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<void> {
-        return this.withNotify(async () => {
-            const task = this.store.getTask(taskId);
-            if (!task) return;
+        const task = this.store.getTask(taskId);
+        if (!task) return;
+        return this.withNotify(task.file, async () => {
             if (task.isReadOnly) return;
 
             this.syncDetector.markLocalEdit(task.file);
@@ -539,9 +562,9 @@ export class TaskIndex {
      * @returns 新ファイルのパス
      */
     async convertToTvFile(taskId: string): Promise<string> {
-        return this.withNotify(async () => {
-            const task = this.store.getTask(taskId);
-            if (!task) throw new Error('Task not found');
+        const task = this.store.getTask(taskId);
+        if (!task) throw new Error('Task not found');
+        return this.withNotify(task.file, async () => {
 
             if (!isTvInline(task)) {
                 throw new Error('Only tv-inline tasks can be converted to tv-file tasks');
@@ -565,7 +588,7 @@ export class TaskIndex {
 
     async createTask(filePath: string, taskLine: string, heading?: string): Promise<number> {
         let insertedLine = -1;
-        await this.withNotify(async () => {
+        await this.withNotify(filePath, async () => {
             logInfo(`[createTask] path=${filePath} heading=${heading ?? '(none)'}`);
             this.syncDetector.markLocalEdit(filePath);
 
@@ -587,10 +610,10 @@ export class TaskIndex {
     }
 
     async insertChildTask(parentTaskId: string, childLine: string): Promise<void> {
-        return this.withNotify(async () => {
+        const task = this.store.getTask(parentTaskId);
+        if (!task) return;
+        return this.withNotify(task.file, async () => {
             logInfo(`[insertChildTask] parentId=${parentTaskId}`);
-            const task = this.store.getTask(parentTaskId);
-            if (!task) return;
 
             this.syncDetector.markLocalEdit(task.file);
 
@@ -610,7 +633,7 @@ export class TaskIndex {
     }
 
     async createTvFileFromData(taskData: Partial<Task>): Promise<string> {
-        return this.withNotify(async () => {
+        return this.withNotify('', async () => {
             const tempTask = createTempTask({
                 id: 'convert-temp',
                 content: taskData.content ?? '',
@@ -633,7 +656,7 @@ export class TaskIndex {
     }
 
     async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
-        return this.withNotify(async () => {
+        return this.withNotify(filePath, async () => {
             this.syncDetector.markLocalEdit(filePath);
             await this.repository.updateLine(filePath, lineNumber, newContent);
 
@@ -645,7 +668,7 @@ export class TaskIndex {
     }
 
     async insertLineAfterLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
-        return this.withNotify(async () => {
+        return this.withNotify(filePath, async () => {
             this.syncDetector.markLocalEdit(filePath);
             await this.repository.insertLineAfterLine(filePath, lineNumber, newContent);
 
@@ -657,7 +680,7 @@ export class TaskIndex {
     }
 
     async deleteLine(filePath: string, lineNumber: number): Promise<void> {
-        return this.withNotify(async () => {
+        return this.withNotify(filePath, async () => {
             this.syncDetector.markLocalEdit(filePath);
             await this.repository.deleteLine(filePath, lineNumber);
 
