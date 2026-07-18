@@ -7,7 +7,7 @@ import type { PropertyFormatter } from '../PropertyFormatter';
 import { DateUtils } from '../../../utils/DateUtils';
 import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
-import { openFileInExistingOrNewTab } from '../../../views/sharedLogic/NavigationUtils';
+import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
 import { t } from '../../../i18n';
 import { TaskStyling } from '../../../views/sharedUI/TaskStyling';
 import type { TaskHubFocusField } from '../../../modals/hub/TaskHubForm';

@@ -19,7 +19,7 @@ import { getEffectiveTags, getEffectiveProperties } from '../../services/data/Ef
 import { TagExtractor } from '../../services/parsing/utils/TagExtractor';
 import { ChildLineClassifier } from '../../services/parsing/utils/ChildLineClassifier';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
-import { openFileInExistingOrNewTab } from '../../views/sharedLogic/NavigationUtils';
+import { openFileInExistingOrNewTab } from '../../utils/NavigationUtils';
 import { SuggestController } from '../../views/customMenus/SuggestController';
 import type { PopoverStack } from '../../views/sharedUI/PopoverStack';
 import type { DateGroupKey } from '../form/DateFieldGroup';

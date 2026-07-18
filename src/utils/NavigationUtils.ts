@@ -1,5 +1,5 @@
 import { type App, MarkdownView } from 'obsidian';
-import { type Task, hasBodyLine } from '../../types';
+import { type Task, hasBodyLine } from '../types';
 
 /**
  * 既に開いているタブを検索し、あればフォーカスを移動する。

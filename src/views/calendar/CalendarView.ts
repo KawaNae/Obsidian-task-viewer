@@ -53,7 +53,7 @@ import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
 import type { TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
-import { openTaskInEditor } from '../sharedLogic/NavigationUtils';
+import { openTaskInEditor } from '../../utils/NavigationUtils';
 import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 

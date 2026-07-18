@@ -5,7 +5,7 @@ import type TaskViewerPlugin from '../../../main';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { ConfirmModal } from '../../../modals/ConfirmModal';
 import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
-import { openFileInExistingOrNewTab } from '../../../views/sharedLogic/NavigationUtils';
+import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
 import { DateUtils } from '../../../utils/DateUtils';
 import { t } from '../../../i18n';
 import { getEffectiveColor } from '../../../services/data/EffectiveProperties';

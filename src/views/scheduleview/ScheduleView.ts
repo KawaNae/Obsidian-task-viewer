@@ -15,7 +15,7 @@ import type TaskViewerPlugin from '../../main';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { ScheduleToolbar } from './ScheduleToolbar';
-import { openTaskInEditor } from '../sharedLogic/NavigationUtils';
+import { openTaskInEditor } from '../../utils/NavigationUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';

@@ -38,7 +38,7 @@ import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
-import { openTaskInEditor } from '../sharedLogic/NavigationUtils';
+import { openTaskInEditor } from '../../utils/NavigationUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';

@@ -1,6 +1,6 @@
 import type { App } from 'obsidian';
 import type { TaskViewerSettings } from '../../types';
-import { openLinkInExistingOrNewTab } from '../sharedLogic/NavigationUtils';
+import { openLinkInExistingOrNewTab } from '../../utils/NavigationUtils';
 import type { HoverLinkPayload, TaskLinkBindContext } from './types';
 import { logError } from '../../log/log';
 
