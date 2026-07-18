@@ -495,6 +495,7 @@ export class TaskApi {
 
         const task = this.readService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
+        if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
 
         const updates: Partial<Task> = {};
 
@@ -550,6 +551,7 @@ export class TaskApi {
 
         const task = this.readService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
+        if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
 
         await this.writeService.deleteTask(params.id);
         return { deleted: params.id };
@@ -562,6 +564,7 @@ export class TaskApi {
         assertParams(params, DUPLICATE_SCHEMA, 'duplicate');
         const task = this.readService.getTask(params.id);
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
+        if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
         await this.writeService.duplicateTask(params.id, {
             dayOffset: params.dayOffset,
             count: params.count,
@@ -633,6 +636,7 @@ export class TaskApi {
         assertParams(params, INSERT_CHILD_TASK_SCHEMA, 'insertChildTask');
         const task = this.readService.getTask(params.parentId);
         if (!task) throw new TaskApiError(`Task not found: ${params.parentId}`);
+        if (task.isReadOnly) throw new TaskApiError(`Task ${params.parentId} is read-only (parserId=${task.parserId})`);
         await this.writeService.insertChildTask(params.parentId, `- [ ] ${params.content}`);
         return { parentId: params.parentId };
     }
