@@ -36,7 +36,7 @@ export class AllDaySectionRenderer {
         dates: string[],
         displayTasks: DisplayTask[],
         reconciler: CardReconciler,
-    ): void {
+    ): number {
         const viewStart = dates[0];
         const viewEnd = dates[dates.length - 1];
         const startHour = this.plugin.settings.startHour;
@@ -79,8 +79,10 @@ export class AllDaySectionRenderer {
         const gridColOffset = 1;
         const gridRowOffset = 2;
 
+        let maxTrack = 0;
         for (const entry of entries) {
             this.renderTaskCard(container, entry, gridColOffset, gridRowOffset, reconciler);
+            if (entry.trackIndex >= maxTrack) maxTrack = entry.trackIndex + 1;
 
             if (entry.dueArrow) {
                 renderDueArrow(container, entry, {
@@ -89,6 +91,7 @@ export class AllDaySectionRenderer {
                 });
             }
         }
+        return maxTrack;
     }
 
     private renderTaskCard(

@@ -110,20 +110,25 @@ export class GridRenderer {
             const axisLabel = axisCell.createEl('span', { cls: 'allday-section__label' });
             axisLabel.setText(t('allDaySection.allDay'));
             axisCell.style.gridColumn = '1';
-            axisCell.style.gridRow = '1 / span 50';
 
+            const dateCells: HTMLElement[] = [];
             dates.forEach((date, i) => {
                 const cell = allDayRow.createDiv('allday-section__cell');
                 if (i === 0) cell.addClass('is-first-cell');
                 if (i === dates.length - 1) cell.addClass('is-last-cell');
                 cell.dataset.date = date;
                 cell.style.gridColumn = `${i + 2}`;
-                cell.style.gridRow = '1 / span 50';
                 cell.style.zIndex = '0';
                 allDayRenderer.addEmptySpaceContextMenu(cell, date);
+                dateCells.push(cell);
             });
 
-            allDayRenderer.render(allDayRow, dates, buckets.allDay, reconciler);
+            const laneCount = allDayRenderer.render(allDayRow, dates, buckets.allDay, reconciler);
+            const rowSpan = Math.max(laneCount + 2, 2);
+            axisCell.style.gridRow = `1 / span ${rowSpan}`;
+            for (const cell of dateCells) {
+                cell.style.gridRow = `1 / span ${rowSpan}`;
+            }
         }
 
         // 5.2. Timeline Grid (time axis + day columns)
