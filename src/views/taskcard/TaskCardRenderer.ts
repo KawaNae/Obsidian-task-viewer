@@ -45,7 +45,7 @@ import { bindTapIntents } from '../../interaction/tap/TapIntent';
 import type { TaskCardLinkRuntime } from './types';
 import { getEffectiveMask } from '../../services/data/EffectiveProperties';
 
-function computeContentSignature(
+export function computeContentSignature(
     task: DisplayTask,
     settings: TaskViewerSettings,
     options: RenderOptions,
