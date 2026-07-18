@@ -9,6 +9,8 @@ export class TaskStore {
     private wikilinkRefs: Map<string, WikilinkRef[]> = new Map(); // taskId → refs
     private listeners: ((taskId?: string, changes?: string[]) => void)[] = [];
     private revision: number = 0;
+    private batchDepth: number = 0;
+    private batchDirty: boolean = false;
 
     constructor(private settings: TaskViewerSettings) { }
 
@@ -19,7 +21,20 @@ export class TaskStore {
 
     /** Bump revision without changing task data (for in-place mutations). */
     bumpRevision(): void {
+        if (this.batchDepth > 0) { this.batchDirty = true; return; }
         this.revision++;
+    }
+
+    beginBatch(): void {
+        this.batchDepth++;
+    }
+
+    endBatch(): void {
+        if (this.batchDepth > 0) this.batchDepth--;
+        if (this.batchDepth === 0 && this.batchDirty) {
+            this.batchDirty = false;
+            this.revision++;
+        }
     }
 
     // ===== データアクセス =====
@@ -45,7 +60,7 @@ export class TaskStore {
      */
     setTask(taskId: string, task: Task): void {
         this.tasks.set(taskId, task);
-        this.revision++;
+        this.bumpRevision();
     }
 
     /**
@@ -53,7 +68,7 @@ export class TaskStore {
      */
     deleteTask(taskId: string): void {
         this.tasks.delete(taskId);
-        this.revision++;
+        this.bumpRevision();
     }
 
     /**
@@ -62,7 +77,7 @@ export class TaskStore {
     clear(): void {
         this.tasks.clear();
         this.wikilinkRefs.clear();
-        this.revision++;
+        this.bumpRevision();
     }
 
     /**
@@ -80,7 +95,7 @@ export class TaskStore {
                 this.tasks.delete(id);
                 this.wikilinkRefs.delete(id);
             }
-            this.revision++;
+            this.bumpRevision();
         }
     }
 

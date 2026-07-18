@@ -154,18 +154,20 @@ export class TaskScanner {
             statusDefinitions: this.settings.statusDefinitions,
         });
 
-        // --- commit ---
-        // 注: removeTasksByFile は対象ファイルの wikilinkRefs も削除するため、
-        // wikilink refs の登録は必ずこの後で行う（前に置くと再スキャンで消える）。
-        this.store.removeTasksByFile(file.path);
+        // --- commit (batched: 1 file = 1 revision bump) ---
+        this.store.beginBatch();
+        try {
+            this.store.removeTasksByFile(file.path);
 
-        for (const task of parsed.tasks) {
-            this.store.setTask(task.id, task);
-        }
+            for (const task of parsed.tasks) {
+                this.store.setTask(task.id, task);
+            }
 
-        // wikilink refs を登録（removeTasksByFile の後でなければ消える）
-        if (parsed.fmTask) {
-            this.store.setWikilinkRefs(parsed.fmTask.id, parsed.wikilinkRefs);
+            if (parsed.fmTask) {
+                this.store.setWikilinkRefs(parsed.fmTask.id, parsed.wikilinkRefs);
+            }
+        } finally {
+            this.store.endBatch();
         }
 
         // フロー発火
