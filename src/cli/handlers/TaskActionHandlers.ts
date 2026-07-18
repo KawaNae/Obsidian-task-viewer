@@ -1,17 +1,8 @@
 import type { CliData } from 'obsidian';
 import type TaskViewerPlugin from '../../main';
 import { TaskApiError } from '../../api/TaskApiTypes';
-import { formatOutput, resolveFields, cliOk, cliError, type OutputFormat } from '../CliOutputFormatter';
+import { formatOutput, resolveFields, cliOk, cliError, validateFormat, parseLimit, type OutputFormat } from '../CliOutputFormatter';
 import { parseSortFlag } from '../CliFilterBuilder';
-
-const VALID_FORMATS = new Set(['json', 'tsv', 'jsonl']);
-
-function parseLimit(raw: string): number {
-    if (raw === 'all') return Infinity;
-    const n = parseInt(raw, 10);
-    if (isNaN(n) || n < 0) throw new TaskApiError('--limit must be a non-negative integer or "all"');
-    return n;
-}
 
 export function createDuplicateHandler(plugin: TaskViewerPlugin) {
     return async (params: CliData): Promise<string> => {
@@ -111,9 +102,8 @@ export function createTasksForDateRangeHandler(plugin: TaskViewerPlugin) {
         if (!params.from) return cliError('Missing required flag: --from');
         if (!params.to) return cliError('Missing required flag: --to');
 
-        if (params.format && !VALID_FORMATS.has(params.format)) {
-            return cliError(`Invalid format: ${params.format}. Must be json, tsv, or jsonl`);
-        }
+        const formatErr = validateFormat(params.format);
+        if (formatErr) return cliError(formatErr);
 
         try {
             const sort = params.sort ? parseSortFlag(params.sort) : undefined;

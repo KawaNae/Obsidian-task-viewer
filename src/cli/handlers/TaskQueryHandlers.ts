@@ -7,10 +7,9 @@ import type { ListParams, TodayParams } from '../../api/TaskApiTypes';
 import { parseSortFlag } from '../CliFilterBuilder';
 import {
     formatOutput, formatSingleTask, resolveFields, cliError,
+    validateFormat, parseLimit,
     type OutputFormat,
 } from '../CliOutputFormatter';
-
-const VALID_FORMATS = new Set(['json', 'tsv', 'jsonl']);
 
 // ── CliData → typed params converters ──
 
@@ -49,27 +48,12 @@ function cliDataToTodayParams(params: CliData): TodayParams {
     return result;
 }
 
-function parseLimit(raw: string): number {
-    if (raw === 'all') return Infinity;
-    const n = parseInt(raw, 10);
-    if (isNaN(n) || n < 0) throw new TaskApiError('--limit must be a non-negative integer or "all"');
-    return n;
-}
-
-// ── Format helpers ──
-
-function validateFormat(params: CliData): string | null {
-    if (params.format && !VALID_FORMATS.has(params.format)) {
-        return `Invalid format: ${params.format}. Must be json, tsv, or jsonl`;
-    }
-    return null;
-}
 
 // ── Handlers ──
 
 export function createListHandler(plugin: TaskViewerPlugin) {
     return async (params: CliData): Promise<string> => {
-        const formatErr = validateFormat(params);
+        const formatErr = validateFormat(params.format);
         if (formatErr) return cliError(formatErr);
 
         try {
@@ -90,14 +74,14 @@ export function createListHandler(plugin: TaskViewerPlugin) {
             const meta = { total: listResult.total, truncated: listResult.truncated, limit: listResult.limit };
             return formatOutput(listResult.tasks, format, fields, meta);
         } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));
+            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to list tasks: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 }
 
 export function createTodayHandler(plugin: TaskViewerPlugin) {
     return (params: CliData): string => {
-        const formatErr = validateFormat(params);
+        const formatErr = validateFormat(params.format);
         if (formatErr) return cliError(formatErr);
 
         try {
@@ -109,7 +93,7 @@ export function createTodayHandler(plugin: TaskViewerPlugin) {
             const meta = { total: result.total, truncated: result.truncated, limit: result.limit };
             return formatOutput(result.tasks, format, fields, meta);
         } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));
+            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to list today's tasks: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 }
@@ -117,7 +101,7 @@ export function createTodayHandler(plugin: TaskViewerPlugin) {
 export function createGetHandler(plugin: TaskViewerPlugin) {
     return (params: CliData): string => {
         if (!params.id) return cliError('Missing required flag: --id');
-        const formatErr = validateFormat(params);
+        const formatErr = validateFormat(params.format);
         if (formatErr) return cliError(formatErr);
 
         try {
@@ -126,7 +110,7 @@ export function createGetHandler(plugin: TaskViewerPlugin) {
             const fields = resolveFields(params['output-fields']);
             return formatSingleTask(displayTask, format, fields);
         } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));
+            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to get task: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 }

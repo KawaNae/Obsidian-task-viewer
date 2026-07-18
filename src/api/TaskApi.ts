@@ -285,16 +285,17 @@ Examples
 
 // ── Internal helpers ──
 
-const VALID_SORT_PROPERTIES: Set<string> = new Set<string>([
-    'content', 'due', 'startDate', 'endDate', 'file', 'status', 'tag',
-]);
+const VALID_SORT_PROPERTIES = {
+    content: true, due: true, startDate: true, endDate: true,
+    file: true, status: true, tag: true,
+} as const satisfies Record<SortProperty, true>;
 
 function buildSortState(rules?: ApiSortRule[]): SortState | undefined {
     if (!rules || rules.length === 0) return undefined;
     for (const r of rules) {
-        if (!VALID_SORT_PROPERTIES.has(r.property)) {
+        if (!(r.property in VALID_SORT_PROPERTIES)) {
             throw new TaskApiError(
-                `Unknown sort property: ${r.property}. Available: ${[...VALID_SORT_PROPERTIES].join(', ')}`,
+                `Unknown sort property: ${r.property}. Available: ${Object.keys(VALID_SORT_PROPERTIES).join(', ')}`,
             );
         }
         if (r.direction !== undefined && r.direction !== 'asc' && r.direction !== 'desc') {
