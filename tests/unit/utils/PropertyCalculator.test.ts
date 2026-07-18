@@ -77,22 +77,33 @@ describe('PropertyCalculator', () => {
     });
 
     describe('calculateDue', () => {
-        it('returns date-only due', () => {
-            const dt = makeDT({ due: '2026-03-20' });
+        it('returns date-only due as explicit', () => {
+            const dt = makeDT({ due: '2026-03-20', effectiveDue: '2026-03-20' });
             const result = calc.calculateDue(dt);
             expect(result.date).toBe('2026-03-20');
             expect(result.time).toBeUndefined();
+            expect(result.dateImplicit).toBe(false);
         });
 
         it('splits datetime due', () => {
-            const dt = makeDT({ due: '2026-03-20T15:00' });
+            const dt = makeDT({ due: '2026-03-20T15:00', effectiveDue: '2026-03-20T15:00' });
             const result = calc.calculateDue(dt);
             expect(result.date).toBe('2026-03-20');
             expect(result.time).toBe('15:00');
+            expect(result.dateImplicit).toBe(false);
+            expect(result.timeImplicit).toBe(false);
         });
 
-        it('returns isUnset when no due', () => {
-            const dt = makeDT({ due: undefined });
+        it('cascade 継承 due (raw due なし) は implicit として表示する', () => {
+            const dt = makeDT({ due: undefined, effectiveDue: '2026-03-31' });
+            const result = calc.calculateDue(dt);
+            expect(result.date).toBe('2026-03-31');
+            expect(result.isUnset).toBeUndefined();
+            expect(result.dateImplicit).toBe(true);
+        });
+
+        it('returns isUnset when no due at all', () => {
+            const dt = makeDT({ due: undefined, effectiveDue: undefined });
             const result = calc.calculateDue(dt);
             expect(result.isUnset).toBe(true);
         });

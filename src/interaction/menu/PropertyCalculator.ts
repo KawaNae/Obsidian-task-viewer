@@ -68,24 +68,30 @@ export class PropertyCalculator {
      * Due プロパティの計算
      */
     calculateDue(task: DisplayTask): CalculatedProperty {
-        if (!task.due) {
+        // cascade 継承 due (raw due なし) は implicit 扱いで表示する。
+        // overdue 判定 (TaskStatusQuery) と同じ effectiveDue を見せることで
+        // 表示と判定の食い違いを防ぐ。
+        const due = task.effectiveDue;
+        if (!due) {
             return { dateImplicit: false, timeImplicit: false, isUnset: true };
         }
 
-        if (task.due.includes('T')) {
-            const [date, time] = task.due.split('T');
+        const inherited = !task.due;
+
+        if (due.includes('T')) {
+            const [date, time] = due.split('T');
             return {
                 date,
                 time,
-                dateImplicit: false,
-                timeImplicit: false
+                dateImplicit: inherited,
+                timeImplicit: inherited
             };
         }
 
         return {
-            date: task.due,
-            dateImplicit: false,
-            timeImplicit: false
+            date: due,
+            dateImplicit: inherited,
+            timeImplicit: inherited
         };
     }
 }
