@@ -97,7 +97,7 @@ obsidian obsidian-task-viewer:create file=DailyNotes/2026-03-15.md content="Meet
 
 | フラグ | 必須 | 説明 | 例 |
 |-------|------|------|-----|
-| `file` | ○ | 対象ファイル（`.md` 自動補完） | `file=daily.md` |
+| `file` | ○ | 対象ファイルパス | `file=DailyNotes/daily.md` |
 | `content` | ○ | タスクの内容 | `content="Weekly review"` |
 | `start` | | 開始日時 | `start=2026-03-15T14:00` |
 | `end` | | 終了日時 | `end=15:00` |

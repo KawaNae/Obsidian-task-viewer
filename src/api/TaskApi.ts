@@ -77,7 +77,7 @@ Methods
     ListParams:
 ${renderParamTable(LIST_SCHEMA).replace(/^/gm, '    ')}
 
-    Returns: { count: number, tasks: NormalizedTask[] }
+    Returns: { total: number, count: number, truncated: boolean, limit: number | null, tasks: NormalizedTask[] }
 
   today(params?: TodayParams): TaskListResult
     List tasks active today (visual-date aware).

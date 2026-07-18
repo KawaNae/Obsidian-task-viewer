@@ -70,7 +70,7 @@ Sort
 
 Boolean Flags
 -------------
-  leaf, root — specify flag name only to enable (e.g. "leaf", not "leaf=true")
+  leaf, root — boolean flags: pass the name alone ("leaf") or with "=true" ("leaf=true")
 
 list: Filter Flags
 ------------------
