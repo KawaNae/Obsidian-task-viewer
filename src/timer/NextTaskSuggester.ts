@@ -66,7 +66,7 @@ export class NextTaskSuggester {
         let upcoming: DisplayTask | null = null;
         let upcomingStart = '';
 
-        for (const dt of readService.getAllDisplayTasks()) {
+        for (const dt of readService.getVisibleDisplayTasks()) {
             if (!dt.effectiveStartDate || !dt.effectiveStartTime) continue;
             if (DateUtils.isAllDayTask(
                 dt.effectiveStartDate, dt.effectiveStartTime,
