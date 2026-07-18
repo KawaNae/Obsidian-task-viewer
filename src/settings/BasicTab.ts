@@ -1,5 +1,5 @@
 import { Setting } from 'obsidian';
-import TaskViewerPlugin from '../main';
+import type TaskViewerPlugin from '../main';
 import { FIXED_STATUS_CHARS } from '../types';
 import { t } from '../i18n';
 import { FolderSuggest } from '../suggest/FolderSuggest';

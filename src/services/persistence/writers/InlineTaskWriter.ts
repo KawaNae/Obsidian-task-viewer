@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import { type App, TFile } from 'obsidian';
 import type { Task } from '../../../types';
 import { TaskParser } from '../../parsing/TaskParser';
 import { collectFlowLineIndices } from '../../flow/FlowLineScanner';

@@ -5,7 +5,7 @@ import type { Task } from '../../../../types';
 import { DateUtils } from '../../../../utils/DateUtils';
 import { GhostRenderer } from '../../ghost/GhostRenderer';
 import type { GhostPlan } from '../../ghost/GhostPlan';
-import { DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
+import { type DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
 import type { GridSurface } from '../../grid/GridSurface';
 import { CalendarGridSurface } from '../../grid/CalendarGridSurface';
 import { AllDayGridSurface } from '../../grid/AllDayGridSurface';

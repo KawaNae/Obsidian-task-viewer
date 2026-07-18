@@ -1,5 +1,5 @@
-import { Span } from './Diagnostic';
-import { Value } from './Value';
+import type { Span } from './Diagnostic';
+import type { Value } from './Value';
 
 export const PROP_NAMES = ['start', 'end', 'due', 'content', 'done', 'today', 'file.name'] as const;
 export type PropName = typeof PROP_NAMES[number];

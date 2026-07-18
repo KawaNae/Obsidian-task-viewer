@@ -8,7 +8,6 @@ import { splitTasks } from '../services/display/TaskSplitter';
 import { categorizeTasksByDate } from '../services/display/TaskDateCategorizer';
 import { normalizeTask } from './TaskNormalizer';
 import { TaskSorter } from '../services/sort/TaskSorter';
-import type { FilterState } from '../services/filter/FilterTypes';
 import type { SortState, SortProperty } from '../services/sort/SortTypes';
 import { DateUtils } from '../utils/DateUtils';
 import { parseDateTimeFlag } from '../cli/CliFilterBuilder';

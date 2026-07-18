@@ -1,6 +1,6 @@
-import { Diagnostic, error } from './Diagnostic';
-import { Expr, PropName } from './ExprAst';
-import { FN_SIGS, StaticType, isAssignable, isDatishType } from './functions';
+import { type Diagnostic, error } from './Diagnostic';
+import type { Expr, PropName } from './ExprAst';
+import { FN_SIGS, type StaticType, isAssignable, isDatishType } from './functions';
 
 /** Static types of the property references available in an evaluation context. */
 export type TypeEnv = Partial<Record<PropName, StaticType>>;

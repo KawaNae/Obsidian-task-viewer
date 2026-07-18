@@ -1,4 +1,4 @@
-import { StatusDefinition, Task, isCompleteStatusChar, isTvInline } from '../../types';
+import { type StatusDefinition, type Task, isCompleteStatusChar, isTvInline } from '../../types';
 
 /**
  * Single source of truth for "does completing this task fire its flow

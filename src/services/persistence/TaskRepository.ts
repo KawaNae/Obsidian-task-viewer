@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import { type App, TFile } from 'obsidian';
 import type { DuplicateOptions, TvFileKeys, Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';

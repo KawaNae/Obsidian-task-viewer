@@ -7,12 +7,12 @@ import { ViewToolbarBase, ViewSettingsMenu, type ViewSettingsOptions } from '../
 import { DateLabel } from '../sharedUI/DateLabel';
 import { DateNavigator } from '../sharedUI/ViewToolbar';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
-import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
+import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { VIEW_META_MINI_CALENDAR } from '../../constants/viewRegistry';
-import { MiniCalendarSchema, type MiniCalendarConfig, type MiniCalendarTransient } from './MiniCalendarSchema';
+import type { MiniCalendarConfig, MiniCalendarTransient } from './MiniCalendarSchema';
 
 export interface MiniCalendarToolbarDeps {
     app: App;

@@ -1,5 +1,5 @@
-import { Task } from '../../../types';
-import { LeafParserStrategy, ParserStrategy } from './ParserStrategy';
+import type { Task } from '../../../types';
+import type { LeafParserStrategy, ParserStrategy } from './ParserStrategy';
 
 /**
  * Chain of Responsibility pattern for multiple parser support.

@@ -1,6 +1,5 @@
-import { App, Setting } from 'obsidian';
+import { type App, Setting } from 'obsidian';
 import { t } from '../i18n';
-import { Task } from '../types';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { NO_TASK_LOOKUP } from '../services/display/DisplayTaskConverter';
 import { createTempTask } from '../services/data/createTempTask';

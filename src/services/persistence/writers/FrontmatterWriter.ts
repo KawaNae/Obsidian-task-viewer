@@ -1,6 +1,6 @@
-import { App, TFile } from 'obsidian';
+import { type App, TFile } from 'obsidian';
 import type { TvFileKeys, Task } from '../../../types';
-import { FileOperations } from '../utils/FileOperations';
+import type { FileOperations } from '../utils/FileOperations';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 import { HeadingInserter } from '../../../utils/HeadingInserter';
 import { DateUtils } from '../../../utils/DateUtils';

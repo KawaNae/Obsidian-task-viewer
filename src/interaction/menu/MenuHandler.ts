@@ -1,8 +1,8 @@
-import { App, Notice } from 'obsidian';
-import { Task } from '../../types';
-import { TaskReadService } from '../../services/data/TaskReadService';
-import { TaskWriteService } from '../../services/data/TaskWriteService';
-import TaskViewerPlugin from '../../main';
+import { type App, Notice } from 'obsidian';
+import type { Task } from '../../types';
+import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type TaskViewerPlugin from '../../main';
 import { TouchLongPressBinder } from './TouchLongPressBinder';
 import { PropertyCalculator } from './PropertyCalculator';
 import { PropertyFormatter } from './PropertyFormatter';

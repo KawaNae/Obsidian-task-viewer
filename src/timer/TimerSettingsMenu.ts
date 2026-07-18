@@ -1,7 +1,7 @@
-import { App } from 'obsidian';
-import TaskViewerPlugin from '../main';
+import type { App } from 'obsidian';
+import type TaskViewerPlugin from '../main';
 import { InputModal } from '../modals/InputModal';
-import { IntervalTimer } from './TimerInstance';
+import type { IntervalTimer } from './TimerInstance';
 
 interface PomodoroSettingsMenuOptions {
     app: App;

@@ -1,9 +1,9 @@
-import { App, Menu } from 'obsidian';
-import { Task, DisplayTask, PropertyType } from '../../../types';
-import { TaskWriteService } from '../../../services/data/TaskWriteService';
-import TaskViewerPlugin from '../../../main';
-import { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } from '../PropertyCalculator';
-import { PropertyFormatter } from '../PropertyFormatter';
+import type { App, Menu } from 'obsidian';
+import type { Task, DisplayTask, PropertyType } from '../../../types';
+import type { TaskWriteService } from '../../../services/data/TaskWriteService';
+import type TaskViewerPlugin from '../../../main';
+import type { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } from '../PropertyCalculator';
+import type { PropertyFormatter } from '../PropertyFormatter';
 import { DateUtils } from '../../../utils/DateUtils';
 import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';

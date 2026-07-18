@@ -1,8 +1,8 @@
-import { Span } from '../lang/Diagnostic';
+import type { Span } from '../lang/Diagnostic';
 import { printExpr } from '../lang/ExprPrinter';
 import { WEEKDAY_NAMES } from '../lang/Value';
-import { EveryRule, FlowProgram, SET_FIELD_ORDER, ScheduleNode, setHeadName } from './FlowAst';
-import { SegmentTable, segmentIndexAt } from './FlowSegments';
+import { type EveryRule, type FlowProgram, SET_FIELD_ORDER, type ScheduleNode, setHeadName } from './FlowAst';
+import { type SegmentTable, segmentIndexAt } from './FlowSegments';
 
 /**
  * Serialize a FlowProgram to canonical source form.

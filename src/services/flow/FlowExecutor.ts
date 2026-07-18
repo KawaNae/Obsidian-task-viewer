@@ -1,14 +1,14 @@
-import { App, TFile } from 'obsidian';
-import { Task, TaskViewerSettings } from '../../types';
+import { type App, TFile } from 'obsidian';
+import type { Task, TaskViewerSettings } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { logError, logInfo, logWarn } from '../../log/log';
-import { TaskIndex } from '../core/TaskIndex';
+import type { TaskIndex } from '../core/TaskIndex';
 import { TaskParser } from '../parsing/TaskParser';
-import { TaskRepository } from '../persistence/TaskRepository';
+import type { TaskRepository } from '../persistence/TaskRepository';
 import { EvalError } from '../lang/ExprEvaluator';
-import { FlowEffect } from './FlowEffects';
+import type { FlowEffect } from './FlowEffects';
 import { flowSource } from './FlowSegments';
-import { FlowPlanDeps, planFlow } from './FlowPlanner';
+import { type FlowPlanDeps, planFlow } from './FlowPlanner';
 import { canTriggerFlow } from './FlowTrigger';
 import { createMomentEvalHost } from './MomentEvalHost';
 

@@ -2,7 +2,7 @@ import { BaseDragStrategy } from '../BaseDragStrategy';
 import type { DragContext } from '../../DragStrategy';
 import type { Task } from '../../../../types';
 import { DateUtils } from '../../../../utils/DateUtils';
-import { DisplayDateEdits, getOriginalTaskId, toDisplayTask } from '../../../../services/display/DisplayTaskConverter';
+import { type DisplayDateEdits, getOriginalTaskId, toDisplayTask } from '../../../../services/display/DisplayTaskConverter';
 import type { DragPlan } from '../../DragPlan';
 
 /**

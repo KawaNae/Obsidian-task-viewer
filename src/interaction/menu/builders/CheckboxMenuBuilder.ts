@@ -1,4 +1,4 @@
-import { App, Menu } from 'obsidian';
+import type { App, Menu } from 'obsidian';
 import type { StatusDefinition, TaskViewerSettings } from '../../../types';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
 import { CreateTaskModal, type CreateTaskResult, formatTaskLine } from '../../../modals/CreateTaskModal';

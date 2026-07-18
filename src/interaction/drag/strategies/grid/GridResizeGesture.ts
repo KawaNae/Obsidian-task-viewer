@@ -2,7 +2,7 @@ import { BaseDragStrategy } from '../BaseDragStrategy';
 import { TRANSIENT_DRAG_CLASSES } from '../../constants';
 import type { DragContext } from '../../DragStrategy';
 import type { Task } from '../../../../types';
-import { DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
+import { type DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
 import type { DragPlan } from '../../DragPlan';
 import type { GridSurface } from '../../grid/GridSurface';
 import { CalendarGridSurface } from '../../grid/CalendarGridSurface';

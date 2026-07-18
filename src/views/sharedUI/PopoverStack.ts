@@ -11,7 +11,7 @@
  * by which parents had to know their children's class names.
  */
 
-import { PopoverShell, PopoverOpenOpts } from './PopoverShell';
+import { PopoverShell, type PopoverOpenOpts } from './PopoverShell';
 
 export class PopoverStack {
     private shells: PopoverShell[] = [];

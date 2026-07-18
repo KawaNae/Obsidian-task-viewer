@@ -1,6 +1,6 @@
-import { App, TFile, moment } from 'obsidian';
+import { type App, TFile, moment } from 'obsidian';
 import { HeadingInserter } from './HeadingInserter';
-import { TaskViewerSettings, NoteType } from '../types';
+import type { TaskViewerSettings, NoteType } from '../types';
 import { processTemplate, normalizeTrailingNewline } from './NoteTemplateProcessor';
 import { withWeekStartDay } from './momentWeekLocale';
 import { logError, logWarn } from '../log/log';

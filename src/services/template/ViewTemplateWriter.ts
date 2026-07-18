@@ -9,7 +9,7 @@
  * logic lives here.
  */
 
-import { App, TFile, TFolder, normalizePath } from 'obsidian';
+import { type App, TFile, TFolder, normalizePath } from 'obsidian';
 import type { ViewTemplate } from '../../types';
 
 export class ViewTemplateWriter {

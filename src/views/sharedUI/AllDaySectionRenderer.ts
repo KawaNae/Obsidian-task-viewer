@@ -1,19 +1,19 @@
-import TaskViewerPlugin from '../../main';
+import type TaskViewerPlugin from '../../main';
 import { t } from '../../i18n';
-import { MenuHandler } from '../../interaction/menu/MenuHandler';
+import type { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TouchLongPressBinder } from '../../interaction/menu/TouchLongPressBinder';
 import { TaskStyling } from './TaskStyling';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
-import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import { HandleManager } from '../timelineview/HandleManager';
-import { DisplayTask } from '../../types';
+import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
+import type { HandleManager } from '../timelineview/HandleManager';
+import type { DisplayTask } from '../../types';
 import { CreateTaskModal, formatTaskLine } from '../../modals/CreateTaskModal';
-import { computeGridLayout, GridTaskEntry } from '../sharedLogic/GridTaskLayout';
+import { computeGridLayout, type GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from './DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { getTaskDateRange } from '../../services/display/VisualDateRange';
 import { getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
-import { CardReconciler } from './CardReconciler';
+import type { CardReconciler } from './CardReconciler';
 
 const ALLDAY_VARIANT_CLASSES = [
     'task-card--multi-day',

@@ -3,11 +3,11 @@
  */
 
 import { TFile } from 'obsidian';
-import { TimerInstance } from './TimerInstance';
-import { TimerContext } from './TimerContext';
-import { TimerStorageUtils } from './TimerStorageUtils';
+import type { TimerInstance } from './TimerInstance';
+import type { TimerContext } from './TimerContext';
+import type { TimerStorageUtils } from './TimerStorageUtils';
 import { TimerTaskResolver } from './TimerTaskResolver';
-import { Task, isTvFile, isTvInline } from '../types';
+import { type Task, isTvFile, isTvInline } from '../types';
 import { logError } from '../log/log';
 
 export class TimerTargetManager {

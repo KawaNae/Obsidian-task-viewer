@@ -1,4 +1,4 @@
-import { Task } from '../../types';
+import type { Task } from '../../types';
 
 /**
  * Effect descriptors produced by the pure planner and applied by the

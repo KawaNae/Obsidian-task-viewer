@@ -1,11 +1,11 @@
-import { App, setIcon, type Menu, type WorkspaceLeaf } from 'obsidian';
+import { type App, setIcon, type Menu, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
-import { ViewState } from '../../types';
+import type { ViewState } from '../../types';
 import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
-import { TaskReadService } from '../../services/data/TaskReadService';
+import type { TaskReadService } from '../../services/data/TaskReadService';
 import { DateUtils } from '../../utils/DateUtils';
 import type { LeafPosition } from '../sharedLogic/ViewUriBuilder';
-import TaskViewerPlugin from '../../main';
+import type TaskViewerPlugin from '../../main';
 import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, type ViewSettingsOptions } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';

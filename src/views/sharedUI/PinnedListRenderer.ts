@@ -6,11 +6,11 @@
 import { setIcon } from 'obsidian';
 import { t } from '../../i18n';
 import type { DisplayTask, PinnedListDefinition } from '../../types';
-import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import { MenuHandler } from '../../interaction/menu/MenuHandler';
+import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
+import type { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { combineFilterStates, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
 import { hasSortRules } from '../../services/sort/SortTypes';
-import TaskViewerPlugin from '../../main';
+import type TaskViewerPlugin from '../../main';
 import { TaskStyling } from './TaskStyling';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { TaskPagingController } from './TaskPagingController';

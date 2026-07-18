@@ -1,6 +1,6 @@
 import { Setting } from 'obsidian';
-import TaskViewerPlugin from '../main';
-import { TaskFieldMapping } from '../types';
+import type TaskViewerPlugin from '../main';
+import type { TaskFieldMapping } from '../types';
 import { t } from '../i18n';
 
 export function render(el: HTMLElement, plugin: TaskViewerPlugin, redisplay: () => void): void {

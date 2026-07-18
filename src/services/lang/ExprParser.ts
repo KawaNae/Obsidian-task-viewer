@@ -1,7 +1,7 @@
-import { Diagnostic, Span, error } from './Diagnostic';
-import { BinaryOp, Expr, FN_NAMES, FnName, PropName } from './ExprAst';
+import { type Diagnostic, type Span, error } from './Diagnostic';
+import { type BinaryOp, type Expr, FN_NAMES, type FnName, type PropName } from './ExprAst';
 import { splitDurationText } from './Lexer';
-import { Token, TokenCursor, tokenSpan } from './Token';
+import { type Token, type TokenCursor, tokenSpan } from './Token';
 import { weekdayFromName } from './Value';
 
 /** Bare idents inside expressions that read as unit keywords (startOf(week)). */

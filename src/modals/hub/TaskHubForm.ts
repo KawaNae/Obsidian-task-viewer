@@ -1,4 +1,4 @@
-import { App, setIcon } from 'obsidian';
+import { type App, setIcon } from 'obsidian';
 import { t } from '../../i18n';
 import { isTvFile, type PropertyValue, type Task } from '../../types';
 import type TaskViewerPlugin from '../../main';
@@ -12,7 +12,7 @@ import { filterColors, renderColorSuggestion } from '../../suggest/color/colorUt
 import { filterLineStyles, renderLineStyleSuggestion } from '../../suggest/line/lineStyleUtils';
 import { createFormRow } from '../form/formRow';
 import { PROPERTY_ICONS } from '../../constants/propertyIcons';
-import { attachBracketPairing, BracketPairingHandle } from '../form/bracketPairing';
+import { attachBracketPairing, type BracketPairingHandle } from '../form/bracketPairing';
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
 import { CascadeSource, type CascadeSourceKind } from './CascadeSource';
 import { getEffectiveTags, getEffectiveProperties } from '../../services/data/EffectiveProperties';

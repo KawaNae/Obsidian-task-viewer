@@ -14,7 +14,7 @@
  * 1-second idle tick never rescans the index.
  */
 
-import TaskViewerPlugin from '../main';
+import type TaskViewerPlugin from '../main';
 import type { DisplayTask } from '../types';
 import { DateUtils } from '../utils/DateUtils';
 import { isTaskCompleted } from '../services/display/TaskStatusQuery';

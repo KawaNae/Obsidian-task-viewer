@@ -1,5 +1,5 @@
 import { Setting } from 'obsidian';
-import TaskViewerPlugin from '../main';
+import type TaskViewerPlugin from '../main';
 import { t } from '../i18n';
 import { FileSuggest } from '../suggest/FileSuggest';
 

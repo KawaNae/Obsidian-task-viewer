@@ -1,6 +1,6 @@
 import { Notice, Setting } from 'obsidian';
-import TaskViewerPlugin from '../main';
-import { TvFileKeys, validateTvFileKeys } from '../types';
+import type TaskViewerPlugin from '../main';
+import { type TvFileKeys, validateTvFileKeys } from '../types';
 import { t } from '../i18n';
 
 export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {

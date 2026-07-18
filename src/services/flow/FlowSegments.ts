@@ -1,7 +1,7 @@
 import type { DiagnosticCode, Task, TaskFlow } from '../../types';
-import { Diagnostic, Span, error } from '../lang/Diagnostic';
-import { FlowProgram } from './FlowAst';
-import { ParseFlowResult, parseFlow } from './FlowParser';
+import { type Diagnostic, type Span, error } from '../lang/Diagnostic';
+import type { FlowProgram } from './FlowAst';
+import { type ParseFlowResult, parseFlow } from './FlowParser';
 import { diagnosticText } from './diagnosticText';
 
 /**

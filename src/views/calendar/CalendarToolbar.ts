@@ -7,7 +7,7 @@ import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
 import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, type ViewSettingsOptions } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
-import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
+import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';

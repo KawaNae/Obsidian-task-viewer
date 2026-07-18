@@ -1,7 +1,7 @@
-import { Span } from './Diagnostic';
-import { Expr, PropName } from './ExprAst';
-import { EvalRuntime, FnCallError, callFn } from './functions';
-import { Value, addDuration, compareValues, isDatishValue } from './Value';
+import type { Span } from './Diagnostic';
+import type { Expr, PropName } from './ExprAst';
+import { type EvalRuntime, FnCallError, callFn } from './functions';
+import { type Value, addDuration, compareValues, isDatishValue } from './Value';
 
 /**
  * Runtime evaluation failure (e.g. a referenced property is unset on the

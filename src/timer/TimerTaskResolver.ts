@@ -1,6 +1,6 @@
-import TaskViewerPlugin from '../main';
-import { Task, isTvFile, isTvInline } from '../types';
-import { TimerInstance } from './TimerInstance';
+import type TaskViewerPlugin from '../main';
+import { type Task, isTvFile, isTvInline } from '../types';
+import type { TimerInstance } from './TimerInstance';
 
 /**
  * Shared timer target resolution helpers.

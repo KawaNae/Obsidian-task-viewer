@@ -1,5 +1,5 @@
 import type { ParserId, Task } from '../../../types';
-import { LeafParserStrategy } from '../strategies/ParserStrategy';
+import type { LeafParserStrategy } from '../strategies/ParserStrategy';
 import { createBaseTask } from '../TaskFactory';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';

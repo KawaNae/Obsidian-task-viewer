@@ -3,8 +3,8 @@
  * Provides color suggestions for timeline-color property in Properties View (contenteditable div)
  */
 
-import { App, AbstractInputSuggest } from 'obsidian';
-import TaskViewerPlugin from '../../main';
+import { type App, AbstractInputSuggest } from 'obsidian';
+import type TaskViewerPlugin from '../../main';
 import { filterColors, renderColorSuggestion } from './colorUtils';
 
 export class PropertyColorSuggest extends AbstractInputSuggest<string> {

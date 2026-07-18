@@ -5,7 +5,7 @@
  * Format: YAML frontmatter (_tv-name) + JSON code block (icon, groups).
  */
 
-import { App, TFile, TFolder, normalizePath } from 'obsidian';
+import { type App, TFile, TFolder, normalizePath } from 'obsidian';
 import type { IntervalGroup } from './TimerInstance';
 
 export interface TemplateCreateData {

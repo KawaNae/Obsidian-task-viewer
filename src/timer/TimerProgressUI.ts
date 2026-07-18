@@ -4,7 +4,7 @@
  * Handles rendering and lightweight updates for circular progress indicators.
  */
 
-import { TimerInstance } from './TimerInstance';
+import type { TimerInstance } from './TimerInstance';
 
 interface ProgressState {
     progress: number;

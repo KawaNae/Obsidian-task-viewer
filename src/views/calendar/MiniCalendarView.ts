@@ -1,10 +1,8 @@
-import { ItemView, WorkspaceLeaf, TFile, Notice, setIcon, type ViewStateResult } from 'obsidian';
-import type { MenuItem } from 'obsidian';
+import { ItemView, type WorkspaceLeaf, type TFile, type ViewStateResult } from 'obsidian';
 import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
-import { DisplayTask, Task, AstronomyDisplay } from '../../types';
+import type { DisplayTask, Task, AstronomyDisplay } from '../../types';
 import { attachMoonPhase } from '../sharedUI/AstronomyCellAdorner';
-import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import { shouldRenderForChanges } from '../sharedUI/RenderScheduler';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { DateUtils } from '../../utils/DateUtils';
@@ -22,7 +20,7 @@ import {
     getGridColumnForDay,
     openOrCreateDailyNote,
 } from './CalendarDateUtils';
-import TaskViewerPlugin from '../../main';
+import type TaskViewerPlugin from '../../main';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
@@ -30,12 +28,7 @@ import { VIEW_META_MINI_CALENDAR } from '../../constants/viewRegistry';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { MiniCalendarSchema, type MiniCalendarConfig, type MiniCalendarTransient } from './MiniCalendarSchema';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
-import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
-import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../sharedLogic/ViewUriBuilder';
-import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
-import { ViewTemplateWriter } from '../../services/template/ViewTemplateWriter';
-import { InputModal } from '../../modals/InputModal';
 import { MiniCalendarToolbar } from './MiniCalendarToolbar';
 
 export const VIEW_TYPE_MINI_CALENDAR = VIEW_META_MINI_CALENDAR.type;

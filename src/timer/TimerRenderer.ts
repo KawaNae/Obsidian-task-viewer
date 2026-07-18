@@ -10,17 +10,16 @@
 
 import { setIcon } from 'obsidian';
 import type { DisplayTask } from '../types';
-import {
+import type {
     CountdownTimer,
     CountupTimer,
     IdleTimer,
     IntervalTimer,
     TimerInstance,
 } from './TimerInstance';
-import { TimerContext } from './TimerContext';
-import { TimerCreator } from './TimerCreator';
-import { TimerLifecycle } from './TimerLifecycle';
-import { TimerRecorder } from './TimerRecorder';
+import type { TimerContext } from './TimerContext';
+import type { TimerCreator } from './TimerCreator';
+import type { TimerLifecycle } from './TimerLifecycle';
 import { getDisplayFileName, getTaskDisplayName } from '../services/parsing/utils/TaskContent';
 import { TaskStyling } from '../views/sharedUI/TaskStyling';
 import { TimerProgressUI } from './TimerProgressUI';

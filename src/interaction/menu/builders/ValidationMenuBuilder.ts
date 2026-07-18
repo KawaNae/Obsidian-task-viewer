@@ -1,5 +1,5 @@
-import { Menu } from 'obsidian';
-import { Task } from '../../../types';
+import type { Menu } from 'obsidian';
+import type { Task } from '../../../types';
 
 export class ValidationMenuBuilder {
     addValidationWarning(menu: Menu, task: Task): void {

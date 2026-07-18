@@ -1,4 +1,4 @@
-import { App, AbstractInputSuggest, TFile } from 'obsidian';
+import { type App, AbstractInputSuggest, type TFile } from 'obsidian';
 
 export class FileSuggest extends AbstractInputSuggest<TFile> {
     private textInputEl: HTMLInputElement;

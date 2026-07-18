@@ -1,8 +1,8 @@
-import { ItemView, WorkspaceLeaf, setIcon, type Workspace, type ViewStateResult } from 'obsidian';
+import { ItemView, type WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
 import { ViewUriBuilder } from '../sharedLogic/ViewUriBuilder';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import { Task, ViewState, PinnedListDefinition } from '../../types';
+import type { Task, ViewState, PinnedListDefinition } from '../../types';
 import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
@@ -11,11 +11,11 @@ import type { TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
 import { logDebug, logError } from '../../log/log';
 
 import { DateUtils } from '../../utils/DateUtils';
-import { TaskReadService } from '../../services/data/TaskReadService';
-import { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 
-import TaskViewerPlugin from '../../main';
+import type TaskViewerPlugin from '../../main';
 import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
 
 import { HandleManager } from './HandleManager';

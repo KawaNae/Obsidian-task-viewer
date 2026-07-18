@@ -1,12 +1,12 @@
-import { App, TFile } from 'obsidian';
+import type { App, TFile } from 'obsidian';
 import type { TaskViewerSettings } from '../../types';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import { WikiLinkResolver } from './WikiLinkResolver';
-import { TaskStore } from './TaskStore';
-import { TaskValidator } from './TaskValidator';
-import { SyncDetector } from './SyncDetector';
+import type { TaskStore } from './TaskStore';
+import type { TaskValidator } from './TaskValidator';
+import type { SyncDetector } from './SyncDetector';
 import { CompletionDetector } from './CompletionDetector';
-import { FlowExecutor } from '../flow/FlowExecutor';
+import type { FlowExecutor } from '../flow/FlowExecutor';
 import { logDebug, logError, logInfo } from '../../log/log';
 
 /**

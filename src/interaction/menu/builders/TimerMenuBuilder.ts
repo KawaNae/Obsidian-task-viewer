@@ -1,6 +1,6 @@
-import { Menu } from 'obsidian';
-import { Task } from '../../../types';
-import TaskViewerPlugin from '../../../main';
+import type { Menu } from 'obsidian';
+import type { Task } from '../../../types';
+import type TaskViewerPlugin from '../../../main';
 import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
 import { DateUtils } from '../../../utils/DateUtils';
 import { canTriggerFlow } from '../../../services/flow/FlowTrigger';

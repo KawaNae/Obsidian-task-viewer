@@ -1,4 +1,4 @@
-import { DisplayTask } from '../../types';
+import type { DisplayTask } from '../../types';
 
 export interface CalculatedProperty {
     date?: string;

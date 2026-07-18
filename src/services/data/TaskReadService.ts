@@ -7,7 +7,6 @@ import type { TaskIndex } from '../core/TaskIndex';
 import { toDisplayTask, toDisplayTasks } from '../display/DisplayTaskConverter';
 import { TaskFilterEngine } from '../filter/TaskFilterEngine';
 import { TaskSorter } from '../sort/TaskSorter';
-import { DateUtils } from '../../utils/DateUtils';
 import { getTaskDateRange } from '../display/VisualDateRange';
 import { buildChildEntries } from './ChildEntryBuilder';
 

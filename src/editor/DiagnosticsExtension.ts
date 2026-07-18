@@ -1,6 +1,6 @@
-import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
+import { Decoration, type DecorationSet, type EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import { RangeSet, type Extension } from '@codemirror/state';
-import { Diagnostic } from '../services/lang/Diagnostic';
+import type { Diagnostic } from '../services/lang/Diagnostic';
 import { joinSegments, parseFlowSegments, segmentIndexAt } from '../services/flow/FlowSegments';
 import { collectFlowLineIndices, isFlowLine, matchFlowLine } from '../services/flow/FlowLineScanner';
 import { diagnosticText } from '../services/flow/diagnosticText';

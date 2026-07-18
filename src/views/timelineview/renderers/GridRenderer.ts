@@ -1,24 +1,24 @@
 import type { HoverParent } from 'obsidian';
-import { ViewState } from '../../../types';
-import TaskViewerPlugin from '../../../main';
-import { MenuHandler } from '../../../interaction/menu/MenuHandler';
+import type { ViewState } from '../../../types';
+import type TaskViewerPlugin from '../../../main';
+import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
-import { HandleManager } from '../HandleManager';
+import type { HandleManager } from '../HandleManager';
 import { t } from '../../../i18n';
 
-import { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
-import { TimelineSectionRenderer } from './TimelineSectionRenderer';
+import type { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
+import type { TimelineSectionRenderer } from './TimelineSectionRenderer';
 import { isDisplayTaskOnVisualDate } from '../../../services/display/DisplayTaskConverter';
 import type { DisplayTask } from '../../../types';
-import { MoonPhaseRenderer } from '../../sharedUI/MoonPhaseRenderer';
+import type { MoonPhaseRenderer } from '../../sharedUI/MoonPhaseRenderer';
 import { getEffectiveAstronomyDisplay } from '../../../services/astronomy/AstronomyService';
 import { attachSunAxisArrows } from '../../sharedUI/AstronomyCellAdorner';
 import { splitTasks } from '../../../services/display/TaskSplitter';
 import { categorizeTasksByDate } from '../../../services/display/TaskDateCategorizer';
 import { bucketBySection } from '../../../services/display/SectionClassifier';
-import { DateHeaderRenderer } from '../../sharedUI/DateHeaderRenderer';
-import { PeriodicHeaderRenderer } from '../../sharedUI/PeriodicHeaderRenderer';
-import { CardReconciler } from '../../sharedUI/CardReconciler';
+import type { DateHeaderRenderer } from '../../sharedUI/DateHeaderRenderer';
+import type { PeriodicHeaderRenderer } from '../../sharedUI/PeriodicHeaderRenderer';
+import type { CardReconciler } from '../../sharedUI/CardReconciler';
 import { getOverdueLevel } from '../../../services/display/TaskStatusQuery';
 
 export class GridRenderer {

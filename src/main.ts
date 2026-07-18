@@ -1,4 +1,4 @@
-import { apiVersion, Notice, Platform, Plugin, Workspace, WorkspaceLeaf, TFile } from 'obsidian';
+import { apiVersion, Notice, Platform, Plugin, type Workspace, type WorkspaceLeaf, TFile } from 'obsidian';
 import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
@@ -8,7 +8,7 @@ import { TimerView, VIEW_TYPE_TIMER } from './views/TimerView';
 import { TimerWidget } from './timer/TimerWidget';
 import { createTempTask } from './services/data/createTempTask';
 import {
-    TaskViewerSettings,
+    type TaskViewerSettings,
     DEFAULT_SETTINGS,
     DEFAULT_TV_FILE_KEYS,
     normalizeTvFileKeys,

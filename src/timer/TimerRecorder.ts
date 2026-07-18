@@ -4,17 +4,17 @@
  * Handles saving timer records to tasks or daily notes.
  */
 
-import { App, Notice } from 'obsidian';
+import { type App, Notice } from 'obsidian';
 import { t } from '../i18n';
-import TaskViewerPlugin from '../main';
-import { TimerInstance, getTimerElapsedSeconds } from './TimerInstance';
+import type TaskViewerPlugin from '../main';
+import { type TimerInstance, getTimerElapsedSeconds } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { TaskParser } from '../services/parsing/TaskParser';
-import { Task, isTvFile } from '../types';
+import { type Task, isTvFile } from '../types';
 import { createTempTask } from '../services/data/createTempTask';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
-import { TimerStorageUtils } from './TimerStorageUtils';
+import type { TimerStorageUtils } from './TimerStorageUtils';
 
 export class TimerRecorder {
     private resolver: TimerTaskResolver;

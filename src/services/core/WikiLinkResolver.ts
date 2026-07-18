@@ -1,5 +1,5 @@
-import { App, TFile } from 'obsidian';
-import { Task, WikilinkRef, isTvFile, hasBodyLine } from '../../types';
+import { type App, TFile } from 'obsidian';
+import { type Task, type WikilinkRef, isTvFile, hasBodyLine } from '../../types';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { logWarn, logDebug } from '../../log/log';
 

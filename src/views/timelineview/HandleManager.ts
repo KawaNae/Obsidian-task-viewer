@@ -1,4 +1,4 @@
-import { Task } from '../../types';
+import type { Task } from '../../types';
 import { GridHandleStrategy } from './handles/GridHandleStrategy';
 import { TimelineHandleStrategy } from './handles/TimelineHandleStrategy';
 import type { HandleStrategy } from './handles/HandleStrategy';

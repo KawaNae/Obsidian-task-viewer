@@ -1,10 +1,10 @@
-import { App, TFile, type EventRef } from 'obsidian';
+import { type App, TFile, type EventRef } from 'obsidian';
 import { t } from '../../i18n';
 import type { Task } from '../../types';
 import type TaskViewerPlugin from '../../main';
-import { TaskCardRenderer } from '../../views/taskcard/TaskCardRenderer';
+import type { TaskCardRenderer } from '../../views/taskcard/TaskCardRenderer';
 import { TaskStyling } from '../../views/sharedUI/TaskStyling';
-import { MenuHandler } from '../../interaction/menu/MenuHandler';
+import type { MenuHandler } from '../../interaction/menu/MenuHandler';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import { toDisplayTask, getOriginalTaskId } from '../../services/display/DisplayTaskConverter';

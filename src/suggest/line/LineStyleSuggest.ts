@@ -1,5 +1,5 @@
-import { App, Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo, TFile } from 'obsidian';
-import TaskViewerPlugin from '../../main';
+import { type App, type Editor, type EditorPosition, EditorSuggest, type EditorSuggestContext, type EditorSuggestTriggerInfo, type TFile } from 'obsidian';
+import type TaskViewerPlugin from '../../main';
 import { filterLineStyles, renderLineStyleSuggestion } from './lineStyleUtils';
 
 /**

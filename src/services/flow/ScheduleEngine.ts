@@ -1,8 +1,8 @@
 import { addMonths } from 'date-fns';
-import { EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
+import { type EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
 import { nextCycle, nextWeekdayAfter } from '../lang/functions';
 import { addDuration, formatDateStr, isDatishValue, parseDateStr } from '../lang/Value';
-import { EveryRule, ScheduleNode } from './FlowAst';
+import type { EveryRule, ScheduleNode } from './FlowAst';
 
 /** The task's primary date (start > end > due priority), if any. */
 export interface DateAnchor {

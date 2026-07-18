@@ -1,11 +1,10 @@
-import { ItemView, WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
+import { ItemView, type WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
-import type { TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
-import TaskViewerPlugin from '../../main';
+import type TaskViewerPlugin from '../../main';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { KanbanToolbar } from './KanbanToolbar';

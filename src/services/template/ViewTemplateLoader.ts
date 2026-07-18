@@ -14,7 +14,7 @@
  * - loadFullTemplate(): async, reads JSON code block via cachedRead
  */
 
-import { App, TFile, TFolder } from 'obsidian';
+import { type App, TFile, TFolder } from 'obsidian';
 import type { ViewTemplateSummary, ViewTemplate } from '../../types';
 
 const VALID_VIEWS = new Set(['timeline', 'calendar', 'schedule', 'mini-calendar', 'kanban']);

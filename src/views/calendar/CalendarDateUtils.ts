@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import type { App, TFile } from 'obsidian';
 import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 

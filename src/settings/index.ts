@@ -1,5 +1,5 @@
-import { App, PluginSettingTab } from 'obsidian';
-import TaskViewerPlugin from '../main';
+import { type App, PluginSettingTab } from 'obsidian';
+import type TaskViewerPlugin from '../main';
 import { t } from '../i18n';
 import * as BasicTab from './BasicTab';
 import * as GeneralTab from './GeneralTab';

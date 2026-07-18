@@ -1,5 +1,5 @@
-import { App, MarkdownRenderer, Component } from 'obsidian';
-import { Task, DisplayTask, TaskViewerSettings, DoubleTapAction, isCompleteStatusChar, isTvFile, TopRightConfig } from '../../types';
+import { type App, MarkdownRenderer, Component } from 'obsidian';
+import { type Task, type DisplayTask, type TaskViewerSettings, type DoubleTapAction, isCompleteStatusChar, isTvFile, type TopRightConfig } from '../../types';
 import { getOverdueLevel } from '../../services/display/TaskStatusQuery';
 import { resolveTopRightField } from './TopRightFieldResolver';
 
@@ -33,13 +33,13 @@ const RENDERER_OWNED_CHILD_CLASSES = [
 ] as const;
 
 const SHAPE_CLASS = 'task-card__shape';
-import { TaskReadService } from '../../services/data/TaskReadService';
-import { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import { getFileBaseName, hasTaskContent, isContentMatchingBaseName } from '../../services/parsing/utils/TaskContent';
 import { ChildItemBuilder } from './ChildItemBuilder';
-import { ChildSectionRenderer, ChildMenuCallback, ChildLineEditCallback } from './ChildSectionRenderer';
+import { ChildSectionRenderer, type ChildMenuCallback, type ChildLineEditCallback } from './ChildSectionRenderer';
 import { CheckboxWiring } from './CheckboxWiring';
-import { MenuPresenter } from '../../interaction/menu/MenuPresenter';
+import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
 import { bindTapIntents } from '../../interaction/tap/TapIntent';
 import type { TaskCardLinkRuntime } from './types';

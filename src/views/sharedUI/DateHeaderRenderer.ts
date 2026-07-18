@@ -1,8 +1,8 @@
 import type { App, HoverParent } from 'obsidian';
-import TaskViewerPlugin from '../../main';
+import type TaskViewerPlugin from '../../main';
 import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
-import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
+import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { t } from '../../i18n';
 

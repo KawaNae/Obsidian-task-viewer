@@ -2,7 +2,7 @@
  * Timer factory and pure computation helpers.
  */
 
-import {
+import type {
     CountdownTimer,
     CountupTimer,
     IdleTimer,
@@ -13,8 +13,8 @@ import {
     TimerPhase,
     TimerStartConfig,
 } from './TimerInstance';
-import { TimerContext, IDLE_TIMER_ID } from './TimerContext';
-import { TimerStorageUtils } from './TimerStorageUtils';
+import { type TimerContext, IDLE_TIMER_ID } from './TimerContext';
+import type { TimerStorageUtils } from './TimerStorageUtils';
 
 export class TimerCreator {
     constructor(

@@ -1,4 +1,4 @@
-import { DisplayTask } from '../../types';
+import type { DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 

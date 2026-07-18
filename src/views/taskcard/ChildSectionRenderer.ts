@@ -1,8 +1,8 @@
-import { App, MarkdownRenderer, Component, setIcon } from 'obsidian';
-import { Task, ChildLine, TaskViewerSettings, isCompleteStatusChar } from '../../types';
-import { TaskReadService } from '../../services/data/TaskReadService';
-import { ChildRenderItem } from './types';
-import { CheckboxWiring } from './CheckboxWiring';
+import { type App, MarkdownRenderer, type Component, setIcon } from 'obsidian';
+import { type Task, type ChildLine, type TaskViewerSettings, isCompleteStatusChar } from '../../types';
+import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { ChildRenderItem } from './types';
+import type { CheckboxWiring } from './CheckboxWiring';
 import { NotationUtils } from './NotationUtils';
 
 export type ChildMenuCallback = (taskId: string, x: number, y: number) => void;

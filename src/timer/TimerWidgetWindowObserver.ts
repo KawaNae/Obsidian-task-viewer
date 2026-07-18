@@ -16,10 +16,10 @@
  * subscribes to workspace events and manages per-window resources.
  */
 
-import { App, WorkspaceLeaf, WorkspaceWindow } from 'obsidian';
-import TaskViewerPlugin from '../main';
+import type { App, WorkspaceLeaf, WorkspaceWindow } from 'obsidian';
+import type TaskViewerPlugin from '../main';
 import { FloatingOverlayHost } from './FloatingOverlayHost';
-import { TimerWidget } from './TimerWidget';
+import type { TimerWidget } from './TimerWidget';
 
 const NON_DRAGGABLE_SELECTORS = [
     '.timer-widget__pin-badge',
