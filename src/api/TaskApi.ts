@@ -354,6 +354,10 @@ export class TaskApi {
         assertParams(params ?? {}, LIST_SCHEMA, 'list');
         const p = { ...(params ?? {}) };
 
+        if (p.list && !p.filterFile) {
+            throw new TaskApiError('list requires filterFile (a .md view template)');
+        }
+
         // Resolve filterFile → filter (async file read)
         if (p.filterFile) {
             const result = await loadFilterFile(this.plugin.app, p.filterFile, p.list);
@@ -443,6 +447,8 @@ export class TaskApi {
 
         const statusChar = params.status || ' ';
         if (statusChar.length !== 1) throw new TaskApiError(`status must be a single character, got: "${statusChar}"`);
+
+        if (params.content.includes('\n')) throw new TaskApiError('content must not contain newlines');
 
         const file = this.plugin.app.vault.getAbstractFileByPath(params.file);
         if (!(file instanceof TFile)) throw new TaskApiError(`File not found: ${params.file}`);
@@ -647,6 +653,7 @@ export class TaskApi {
      */
     async insertChildTask(params: InsertChildTaskParams): Promise<InsertChildTaskResult> {
         assertParams(params, INSERT_CHILD_TASK_SCHEMA, 'insertChildTask');
+        if (params.content.includes('\n')) throw new TaskApiError('content must not contain newlines');
         const task = this.readService.getTask(params.parentId);
         if (!task) throw new TaskApiError(`Task not found: ${params.parentId}`);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.parentId} is read-only (parserId=${task.parserId})`);

@@ -257,3 +257,46 @@ describe('C8: 数値パラメータ検証', () => {
             .rejects.toThrow(/limit must be a number/);
     });
 });
+
+describe('C11: list= を filterFile なしで渡すとエラー', () => {
+    it('list に filterFile なしで list= を渡すとエラー', async () => {
+        const api = createMockApi(undefined);
+        await expect(api.list({ list: 'urgent' }))
+            .rejects.toThrow(/list requires filterFile/);
+    });
+
+    it('filterFile ありの list= は通過', async () => {
+        const api = createMockApi(undefined);
+        // filterFile のファイル読み込みで失敗するが、list 検証は通過
+        try {
+            await api.list({ filterFile: 'template.md', list: 'urgent' });
+        } catch (e) {
+            expect((e as Error).message).not.toMatch(/list requires filterFile/);
+        }
+    });
+});
+
+describe('C17: content の改行注入拒否', () => {
+    it('create: 改行入り content を拒否', async () => {
+        const api = createMockApi(undefined);
+        await expect(api.create({ file: 'test.md', content: 'line1\nline2' }))
+            .rejects.toThrow(/content must not contain newlines/);
+    });
+
+    it('insertChildTask: 改行入り content を拒否', async () => {
+        const task = makeTask({ isReadOnly: false });
+        const api = createMockApi(task);
+        await expect(api.insertChildTask({ parentId: 'test-1', content: 'line1\nline2' }))
+            .rejects.toThrow(/content must not contain newlines/);
+    });
+
+    it('create: 改行なし content は通過', async () => {
+        const api = createMockApi(undefined);
+        // Will fail at file lookup, not at newline validation
+        try {
+            await api.create({ file: 'test.md', content: 'simple task' });
+        } catch (e) {
+            expect((e as Error).message).not.toMatch(/newline/);
+        }
+    });
+});
