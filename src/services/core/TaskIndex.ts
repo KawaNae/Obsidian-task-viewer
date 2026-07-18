@@ -35,6 +35,7 @@ export class TaskIndex {
     private tvInlineToTvFileConverter: TvInlineToTvFileConverter;
     private commandExecutor: FlowExecutor;
     private settings: TaskViewerSettings;
+    private parseFingerprint: string;
     private draggingFilePath: string | null = null;  // ドラッグ中のファイルパス
     private notifyDebounceTimer: NodeJS.Timeout | null = null;
     private readonly NOTIFY_DEBOUNCE_MS = 16; // 約1フレーム
@@ -53,6 +54,7 @@ export class TaskIndex {
 
     constructor(private app: App, settings: TaskViewerSettings) {
         this.settings = settings;
+        this.parseFingerprint = computeParseFingerprint(settings);
 
         // サービスの初期化
         this.store = new TaskStore(settings);
@@ -285,7 +287,9 @@ export class TaskIndex {
     }
 
     updateSettings(settings: TaskViewerSettings): void {
-        const needsRescan = hasParseAffectingChange(this.settings, settings);
+        const newFingerprint = computeParseFingerprint(settings);
+        const needsRescan = newFingerprint !== this.parseFingerprint;
+        this.parseFingerprint = newFingerprint;
         this.settings = settings;
         TaskParser.rebuildChain(settings);
         this.store.updateSettings(settings);
@@ -690,10 +694,15 @@ export class TaskIndex {
     }
 }
 
-// ── Parse-affecting settings diff ──
+// ── Parse-affecting settings fingerprint ──
 // These keys control how files are parsed into tasks. Changing any of them
 // requires a full vault re-scan. All other settings (startHour, UI toggles,
 // timer durations, etc.) are display-only and need only a notify.
+//
+// Uses a JSON fingerprint because the caller may pass the same object reference
+// (plugin.settings is mutated in place, then updateSettings(this.settings) is
+// called with the same ref). Field-by-field prev/next comparison would always
+// see them as equal.
 //
 //   tvFileKeys          — frontmatter field names for tv-start/end/due/status/etc.
 //   tvFileChildHeader   — heading name that marks the child-items section
@@ -702,15 +711,16 @@ export class TaskIndex {
 //   enableTasksPlugin   — toggles TasksPlugin parser in the chain
 //   tasksPluginMapping  — emoji-to-field mapping for TasksPlugin parser
 //   statusDefinitions   — which status chars count as complete (CompletionDetector)
-function hasParseAffectingChange(prev: TaskViewerSettings, next: TaskViewerSettings): boolean {
-    if (prev.tvFileChildHeader !== next.tvFileChildHeader) return true;
-    if (prev.tvFileChildHeaderLevel !== next.tvFileChildHeaderLevel) return true;
-    if (prev.enableDayPlanner !== next.enableDayPlanner) return true;
-    if (prev.enableTasksPlugin !== next.enableTasksPlugin) return true;
-    if (JSON.stringify(prev.tvFileKeys) !== JSON.stringify(next.tvFileKeys)) return true;
-    if (JSON.stringify(prev.tasksPluginMapping) !== JSON.stringify(next.tasksPluginMapping)) return true;
-    if (JSON.stringify(prev.statusDefinitions) !== JSON.stringify(next.statusDefinitions)) return true;
-    return false;
+export function computeParseFingerprint(settings: TaskViewerSettings): string {
+    return JSON.stringify([
+        settings.tvFileKeys,
+        settings.tvFileChildHeader,
+        settings.tvFileChildHeaderLevel,
+        settings.enableDayPlanner,
+        settings.enableTasksPlugin,
+        settings.tasksPluginMapping,
+        settings.statusDefinitions,
+    ]);
 }
 
 // 時刻比較専用ヘルパー
