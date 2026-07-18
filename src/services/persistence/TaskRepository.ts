@@ -65,7 +65,7 @@ export class TaskRepository {
         return this.inlineWriter.insertLineAsFirstChild(task, lineContent);
     }
 
-    async appendTaskToFile(filePath: string, content: string): Promise<void> {
+    async appendTaskToFile(filePath: string, content: string): Promise<number> {
         return this.inlineWriter.appendTaskToFile(filePath, content);
     }
 

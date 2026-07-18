@@ -554,23 +554,27 @@ export class TaskIndex {
         });
     }
 
-    async createTask(filePath: string, taskLine: string, heading?: string): Promise<void> {
-        return this.withNotify(async () => {
+    async createTask(filePath: string, taskLine: string, heading?: string): Promise<number> {
+        let insertedLine = -1;
+        await this.withNotify(async () => {
             logInfo(`[createTask] path=${filePath} heading=${heading ?? '(none)'}`);
             this.syncDetector.markLocalEdit(filePath);
 
             if (heading) {
                 const file = this.app.vault.getAbstractFileByPath(filePath);
                 if (!(file instanceof TFile)) return;
-                await this.app.vault.process(file, (content) =>
-                    HeadingInserter.insertUnderHeading(content, taskLine, heading, 2)
-                );
+                await this.app.vault.process(file, (content) => {
+                    const result = HeadingInserter.insertUnderHeading(content, taskLine, heading, 2);
+                    insertedLine = result.insertedLine;
+                    return result.content;
+                });
             } else {
-                await this.repository.appendTaskToFile(filePath, taskLine);
+                insertedLine = await this.repository.appendTaskToFile(filePath, taskLine);
             }
 
             await this.scanner.waitForScan(filePath);
         });
+        return insertedLine;
     }
 
     async insertChildTask(parentTaskId: string, childLine: string): Promise<void> {

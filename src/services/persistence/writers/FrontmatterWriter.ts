@@ -114,7 +114,7 @@ export class FrontmatterWriter {
         if (!(file instanceof TFile)) return;
 
         await this.app.vault.process(file, (content) => {
-            return HeadingInserter.insertUnderHeading(content, lineContent, header, headerLevel);
+            return HeadingInserter.insertUnderHeading(content, lineContent, header, headerLevel).content;
         });
     }
 

@@ -217,25 +217,26 @@ export class InlineTaskWriter {
         return insertedLineIndex;
     }
 
-    async appendTaskToFile(filePath: string, content: string): Promise<void> {
+    async appendTaskToFile(filePath: string, content: string): Promise<number> {
         let file = this.app.vault.getAbstractFileByPath(filePath);
 
         if (!file) {
-            // Ensure directory exists
             await this.fileOps.ensureDirectoryExists(filePath);
-
-            // Create file if it doesn't exist
             await this.app.vault.create(filePath, content);
-            return;
+            return 0;
         }
 
+        let insertedLine = 0;
         if (file instanceof TFile) {
             await this.app.vault.process(file, (fileContent) => {
-                // Ensure starts with newline if file not empty
                 const prefix = fileContent.length > 0 && !fileContent.endsWith('\n') ? '\n' : '';
+                insertedLine = fileContent.length === 0
+                    ? 0
+                    : fileContent.split('\n').length + (prefix ? 0 : -1);
                 return fileContent + prefix + content;
             });
         }
+        return insertedLine;
     }
 
     /**

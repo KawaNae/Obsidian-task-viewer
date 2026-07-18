@@ -1,5 +1,10 @@
 import { CodeFenceTracker } from './CodeFenceTracker';
 
+export interface InsertResult {
+    content: string;
+    insertedLine: number;
+}
+
 /**
  * Heading-based line insertion utility.
  * Pure function: takes content string, returns modified content string.
@@ -15,14 +20,14 @@ export class HeadingInserter {
      * @param line    Line to insert
      * @param header  Heading text (without # prefix)
      * @param headerLevel Number of # (e.g. 2 for ##)
-     * @returns Modified file content
+     * @returns Modified file content and the 0-based line number of the inserted line
      */
     static insertUnderHeading(
         content: string,
         line: string,
         header: string,
         headerLevel: number
-    ): string {
+    ): InsertResult {
         const lines = content.split('\n');
         const headerPrefix = '#'.repeat(headerLevel) + ' ';
         const fullHeader = headerPrefix + header;
@@ -38,18 +43,19 @@ export class HeadingInserter {
             }
         }
 
+        let insertedLine: number;
         if (headerIndex !== -1) {
-            // Insert directly under the heading
-            lines.splice(headerIndex + 1, 0, line);
+            insertedLine = headerIndex + 1;
+            lines.splice(insertedLine, 0, line);
         } else {
-            // Header doesn't exist - create it at end of file
             if (lines.length > 0 && lines[lines.length - 1].trim() !== '') {
                 lines.push('');
             }
             lines.push(fullHeader);
+            insertedLine = lines.length;
             lines.push(line);
         }
 
-        return lines.join('\n');
+        return { content: lines.join('\n'), insertedLine };
     }
 }

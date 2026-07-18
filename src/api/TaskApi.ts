@@ -483,15 +483,9 @@ export class TaskApi {
             line += ` ${dateBlock}`;
         }
 
-        await this.writeService.createTask(params.file, line, params.heading);
+        const insertedLine = await this.writeService.createTask(params.file, line, params.heading);
 
-        const tasks = this.readService.getTasks().filter(
-            t => t.file === params.file && t.content === content,
-        );
-        const created = tasks.length > 0
-            ? tasks.reduce((a, b) => a.line > b.line ? a : b)
-            : undefined;
-
+        const created = this.readService.getTaskByFileLine(params.file, insertedLine);
         if (!created) throw new TaskApiError('Task was created but could not be found after scan');
 
         return { task: normalizeTask(toDisplayTask(created, this.plugin.settings.startHour, (id) => this.readService.getTask(id))) };

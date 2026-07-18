@@ -238,7 +238,7 @@ export class DailyNoteUtils {
         if (!file) return;
 
         await app.vault.process(file, (fileContent) => {
-            return HeadingInserter.insertUnderHeading(fileContent, line, header, headerLevel);
+            return HeadingInserter.insertUnderHeading(fileContent, line, header, headerLevel).content;
         });
     }
 }
