@@ -38,7 +38,7 @@ export function getOverdueLevel(
 ): OverdueLevel {
     if (isTaskCompleted(task, defs, readService)) return 'none';
 
-    if (task.due && DateUtils.isPastDue(task.due, startHour)) {
+    if (task.effectiveDue && DateUtils.isPastDue(task.effectiveDue, startHour)) {
         return 'past-due';
     }
 

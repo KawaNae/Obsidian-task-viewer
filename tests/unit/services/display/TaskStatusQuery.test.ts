@@ -22,7 +22,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 }
 
 function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
-    return {
+    const base = {
         ...makeTask(),
         effectiveStartDate: '',
         startDateImplicit: true,
@@ -34,6 +34,10 @@ function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
         childEntries: [],
         ...overrides,
     };
+    if (base.due && !('effectiveDue' in overrides)) {
+        (base as any).effectiveDue = base.due;
+    }
+    return base;
 }
 
 const defs = DEFAULT_STATUS_DEFINITIONS;

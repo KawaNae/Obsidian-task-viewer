@@ -24,7 +24,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 
 function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
     const base = makeTask(overrides) as DisplayTask;
-    return {
+    const result = {
         ...base,
         effectiveStartDate: overrides.effectiveStartDate ?? overrides.startDate ?? '',
         effectiveStartTime: overrides.effectiveStartTime,
@@ -39,6 +39,10 @@ function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
         childEntries: overrides.childEntries ?? [],
         ...overrides,
     };
+    if (result.due && !('effectiveDue' in overrides)) {
+        (result as any).effectiveDue = result.due;
+    }
+    return result;
 }
 
 // ── Helper: build FilterState from conditions ──
@@ -407,13 +411,13 @@ describe('TaskFilterEngine', () => {
 
     describe('due filter', () => {
         it('strips time portion from due', () => {
-            const task = makeTask({ due: '2026-05-15T10:00' });
+            const task = makeDisplayTask({ due: '2026-05-15T10:00' });
             const state = stateFromCondition(cond('due', 'equals', '2026-05-15'));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
 
         it('due isSet', () => {
-            const task = makeTask({ due: '2026-05-15' });
+            const task = makeDisplayTask({ due: '2026-05-15' });
             const state = stateFromCondition(cond('due', 'isSet'));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });

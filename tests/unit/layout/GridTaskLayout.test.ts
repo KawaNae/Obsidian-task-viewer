@@ -4,7 +4,7 @@ import type { DisplayTask } from '../../../src/types';
 import type { GridLayoutConfig, TaskDateRange } from '../../../src/views/sharedLogic/GridTaskLayout';
 
 function makeDT(overrides: Partial<DisplayTask> = {}): DisplayTask {
-    return {
+    const result = {
         id: overrides.id ?? 'test-1',
         file: overrides.file ?? 'file.md',
         line: overrides.line ?? 0,
@@ -25,6 +25,10 @@ function makeDT(overrides: Partial<DisplayTask> = {}): DisplayTask {
         isSplit: false,
         ...overrides,
     } as DisplayTask;
+    if (result.due && !('effectiveDue' in overrides)) {
+        (result as any).effectiveDue = result.due;
+    }
+    return result;
 }
 
 function makeConfig(dates: string[], ranges: Map<string, TaskDateRange>): GridLayoutConfig {

@@ -8,6 +8,7 @@ import { toDisplayTask, toDisplayTasks } from '../display/DisplayTaskConverter';
 import { TaskFilterEngine } from '../filter/TaskFilterEngine';
 import { TaskSorter } from '../sort/TaskSorter';
 import { getTaskDateRange } from '../display/VisualDateRange';
+import { DateUtils } from '../../utils/DateUtils';
 import { buildChildEntries } from './ChildEntryBuilder';
 
 /**
@@ -123,7 +124,8 @@ export class TaskReadService {
             if (filter && !TaskFilterEngine.evaluate(dt, filter, context)) continue;
             if (!dt.effectiveStartDate) {
                 // D type (due-only): include if due is in range
-                if (dt.due && dt.due >= startDate && dt.due <= endDate) {
+                const duePart = DateUtils.dueDatePart(dt.effectiveDue);
+                if (duePart && duePart >= startDate && duePart <= endDate) {
                     result.push(dt);
                 }
                 continue;

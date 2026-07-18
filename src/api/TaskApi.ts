@@ -404,8 +404,9 @@ export class TaskApi {
         let filtered = displayTasks.filter(t => {
             const start = t.effectiveStartDate;
             const end = t.effectiveEndDate;
-            if (!start && !t.due) return false;
-            if (!start && t.due) return t.due === today;
+            const duePart = DateUtils.dueDatePart(t.effectiveDue);
+            if (!start && !duePart) return false;
+            if (!start && duePart) return duePart === today;
             if (start && start > today) return false;
             if (end && end < today) return false;
             if (!end && start && start < today) return false;

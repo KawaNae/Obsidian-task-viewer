@@ -1,4 +1,5 @@
 import type { DisplayTask } from '../../types';
+import { DateUtils } from '../../utils/DateUtils';
 import { getTaskDateRange } from './VisualDateRange';
 import { classifyForSection, type Section } from './SectionClassifier';
 import {
@@ -51,7 +52,7 @@ function placeTask(dt: DisplayTask, startHour: number): TaskPlacement {
     const kind = classifyForSection(dt, startHour);
     switch (kind) {
         case 'dueOnly':
-            return { kind, dueDate: (dt.due ?? '').split('T')[0] };
+            return { kind, dueDate: DateUtils.dueDatePart(dt.effectiveDue) ?? '' };
         case 'allDay': {
             const range = getTaskDateRange(dt, startHour);
             const visualStart = range.effectiveStart || dt.effectiveStartDate;

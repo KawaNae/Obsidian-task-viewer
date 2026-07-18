@@ -67,7 +67,7 @@ export class TaskFilterEngine {
             case 'endDate':
                 return this.evalDate(task.effectiveEndDate ?? task.endDate, condition, context?.startHour ?? 0);
             case 'due':
-                return this.evalDate(task.due?.split('T')[0], condition, context?.startHour ?? 0);
+                return this.evalDate(DateUtils.dueDatePart(task.effectiveDue), condition, context?.startHour ?? 0);
             case 'anyDate': {
                 // Aggregate over startDate / endDate / due using effective fields.
                 // isSet = any of the three set (scheduled)

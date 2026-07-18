@@ -146,8 +146,9 @@ export function computeGridLayout(
 
         // 2. Compute due arrow
         let dueArrow: DueArrowInfo | null = null;
-        if (computeDueArrows && task.due && /^\d{4}-\d{2}-\d{2}/.test(task.due)) {
-            const dueDateStr = task.due.split('T')[0];
+        const effectiveDueStr = task.effectiveDue;
+        if (computeDueArrows && effectiveDueStr && /^\d{4}-\d{2}-\d{2}/.test(effectiveDueStr)) {
+            const dueDateStr = DateUtils.dueDatePart(effectiveDueStr)!;
             const dueDiff = DateUtils.getDiffDays(rangeStart, dueDateStr);
             const maxCol = dates.length;
             let dlCol = dueDiff + 1; // 1-based
@@ -164,7 +165,7 @@ export function computeGridLayout(
                     arrowStartCol: taskEndCol,
                     arrowEndCol: dlCol,
                     isClipped,
-                    dueStr: task.due,
+                    dueStr: effectiveDueStr,
                 };
             }
         }
