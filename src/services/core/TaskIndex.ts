@@ -117,8 +117,8 @@ export class TaskIndex {
         this.app.vault.on('delete', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 this.store.removeTasksByFile(file.path);
-                // 削除されたファイルを wikilink 親に持つ生存タスクの parentId / childIds を
-                // 冪等 resolve で掃除する（dangling 解消）。
+                this.scanner.handleFileRenamed(file.path);
+                this.validator.clearErrorsForFile(file.path);
                 WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
                 this.debouncedNotify();
             }
@@ -157,7 +157,7 @@ export class TaskIndex {
             if (!(file instanceof TFile) || file.extension !== 'md') {
                 this.store.removeTasksByFile(oldPath);
                 this.scanner.handleFileRenamed(oldPath);
-                // delete と同様、wikilink 親の dangling を冪等 resolve で掃除する。
+                this.validator.clearErrorsForFile(oldPath);
                 WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
                 this.debouncedNotify();
                 return;
