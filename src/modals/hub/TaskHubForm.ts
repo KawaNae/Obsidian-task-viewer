@@ -666,13 +666,16 @@ export class TaskHubForm {
                 if (e.key === 'Enter' && !e.isComposing) commitAdd();
             });
         }
-        // key/value が揃っていればどちらの blur でも確定する（値を先に入れて
-        // キーを後から編集し、そのままフォーカスを外すフローを取りこぼさない）
-        for (const input of [keyInput, valueInput]) {
-            input.addEventListener('blur', () => {
-                if (keyInput.value.trim() && valueInput.value.trim()) commitAdd();
-            });
-        }
+        // blur 確定ルール: key があれば value 空でも確定（空値プロパティは有効）。
+        // value だけでは書き込み先がないので確定しない。
+        // ただし key⇔value 間のフォーカス移動は入力継続中なので確定を保留する。
+        const blurCommit = (e: FocusEvent) => {
+            const to = e.relatedTarget;
+            if (to === keyInput || to === valueInput) return;
+            if (keyInput.value.trim()) commitAdd();
+        };
+        keyInput.addEventListener('blur', blurCommit);
+        valueInput.addEventListener('blur', blurCommit);
     }
 
     private commitProps(props: Record<string, PropertyValue>): void {
