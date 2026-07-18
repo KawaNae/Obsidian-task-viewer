@@ -5,17 +5,14 @@
  * via constructor injection to access shared state and cross-cutting operations.
  */
 
-import { App } from 'obsidian';
-import TaskViewerPlugin from '../main';
-import { TimerInstance, TimerStartConfig } from './TimerInstance';
-import { TimerRecorder } from './TimerRecorder';
+import type { App } from 'obsidian';
+import type TaskViewerPlugin from '../main';
+import type { TimerInstance, TimerStartConfig } from './TimerInstance';
+import type { TimerRecorder } from './TimerRecorder';
 
 // ─── Constants ────────────────────────────────────────────────
 
 export const IDLE_TIMER_ID = '__idle__';
-export const STORAGE_VERSION = 5;
-export const STORAGE_KEY_PREFIX = 'task-viewer.active-timers';
-export const DEVICE_ID_KEY = 'task-viewer.device-id.v1';
 
 // ─── Interface ────────────────────────────────────────────────
 

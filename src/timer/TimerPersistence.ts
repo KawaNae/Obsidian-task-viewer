@@ -3,19 +3,19 @@
  */
 
 import type { ParserId } from '../types';
-import {
+import type {
     IntervalGroup,
     IntervalTimer,
     TimerInstance,
     TimerPhase,
     TimerStartConfig,
 } from './TimerInstance';
-import { TimerContext, STORAGE_VERSION } from './TimerContext';
-import { TimerCreator } from './TimerCreator';
-import { TimerLifecycle } from './TimerLifecycle';
-import { TimerStorageUtils } from './TimerStorageUtils';
+import type { TimerContext } from './TimerContext';
+import { STORAGE_VERSION } from './TimerStorageUtils';
+import type { TimerCreator } from './TimerCreator';
+import type { TimerLifecycle } from './TimerLifecycle';
+import type { TimerStorageUtils } from './TimerStorageUtils';
 import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
-import TaskViewerPlugin from '../main';
 import { logError, logInfo } from '../log/log';
 
 /**

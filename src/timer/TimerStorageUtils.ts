@@ -2,16 +2,14 @@
  * Storage key management, device/vault identification, and ID generation.
  */
 
-import { App, FileSystemAdapter } from 'obsidian';
+import { type App, FileSystemAdapter } from 'obsidian';
 import {
     TIMER_TARGET_ID_PREFIX,
     isTimerTargetId
 } from '../utils/TimerTargetIdUtils';
-import {
-    STORAGE_VERSION,
-    STORAGE_KEY_PREFIX,
-    DEVICE_ID_KEY,
-} from './TimerContext';
+export const STORAGE_VERSION = 5;
+export const STORAGE_KEY_PREFIX = 'task-viewer.active-timers';
+export const DEVICE_ID_KEY = 'task-viewer.device-id.v1';
 
 export class TimerStorageUtils {
     readonly deviceId: string;
