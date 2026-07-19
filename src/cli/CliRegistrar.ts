@@ -1,16 +1,18 @@
 import type { CliFlags, CliHandler } from 'obsidian';
 import type TaskViewerPlugin from '../main';
+import { cliError } from './CliOutputFormatter';
 import {
     toCliFlags,
     LIST_SCHEMA, TODAY_SCHEMA, GET_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA,
     DELETE_SCHEMA, DUPLICATE_SCHEMA, CONVERT_SCHEMA,
     TASKS_FOR_DATE_RANGE_SCHEMA, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA,
-    INSERT_CHILD_TASK_SCHEMA, CREATE_TV_FILE_SCHEMA,
+    INSERT_CHILD_TASK_SCHEMA, CREATE_TV_FILE_SCHEMA, EXPORT_IMAGE_SCHEMA,
 } from '../api/OperationSchemas';
 import { validateCliParams } from './CliParamValidator';
 import { createListHandler, createTodayHandler, createGetHandler } from './handlers/TaskQueryHandlers';
 import { createCreateHandler, createUpdateHandler, createDeleteHandler } from './handlers/TaskCrudHandlers';
 import { createDuplicateHandler, createConvertHandler, createTasksForDateRangeHandler, createCategorizedTasksForDateRangeHandler, createInsertChildTaskHandler, createCreateTvFileHandler, createGetStartHourHandler } from './handlers/TaskActionHandlers';
+import { createExportImageHandler } from './handlers/ExportImageHandler';
 import { createHelpHandler } from './handlers/HelpHandler';
 
 /**
@@ -27,10 +29,14 @@ import { createHelpHandler } from './handlers/HelpHandler';
  */
 export function registerCliHandlers(plugin: TaskViewerPlugin): void {
     function register(action: string, description: string, flags: CliFlags | null, handler: CliHandler): void {
-        const wrapped: CliHandler = (params) => {
+        const wrapped: CliHandler = async (params) => {
             const err = validateCliParams(params, flags, action);
             if (err) return err;
-            return handler(params);
+            try {
+                return await handler(params);
+            } catch (e) {
+                return cliError(e instanceof Error ? e.message : String(e));
+            }
         };
         plugin.registerCliHandler(`obsidian-task-viewer:${action}`, description, flags, wrapped);
     }
@@ -80,7 +86,19 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
     register('get-start-hour', 'Get the current startHour setting (visual day boundary)',
         null, createGetStartHourHandler(plugin));
 
+    // ── Export ──
+    // export-image accepts dynamic view-config flags (start-date, days-to-show,
+    // etc.) that vary per view type, so strict validation is skipped here.
+    // The handler performs its own context-aware validation.
+    plugin.registerCliHandler(
+        'obsidian-task-viewer:export-image',
+        'Export a view as a PNG image',
+        toCliFlags(EXPORT_IMAGE_SCHEMA),
+        createExportImageHandler(plugin),
+    );
+
     // ── Help ──
 
     register('help', 'Show detailed CLI reference', null, createHelpHandler());
+
 }

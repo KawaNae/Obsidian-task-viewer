@@ -38,6 +38,7 @@ export const CalendarSchema: ViewSchema<CalendarConfig, CalendarTransient> = {
         showSidebar:      F.boolean('showSidebar'),
         pinnedLists:      F.pinnedLists('pinnedLists'),
     },
+    anchorKey: 'windowStart',
     transient: {
         windowStart:         T.dateString('windowStart'),
         pinnedListCollapsed: T.collapsedKeys('pinnedListCollapsed', 'calendar'),

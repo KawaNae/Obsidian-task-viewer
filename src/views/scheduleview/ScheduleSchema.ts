@@ -32,6 +32,7 @@ export const ScheduleSchema: ViewSchema<ScheduleConfig, ScheduleTransient> = {
         maskMode:         F.boolean('maskMode'),
         astronomyDisplay: F.astronomyDisplay('astronomyDisplay'),
     },
+    anchorKey: 'currentDate',
     transient: {
         currentDate:             T.dateString('currentDate'),
     },

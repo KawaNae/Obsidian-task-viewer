@@ -3,6 +3,8 @@ import type { NormalizedTask } from './TaskApiTypes';
 import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveTags, getEffectiveProperties,
 } from '../services/data/EffectiveProperties';
+import { serializeFlow } from '../services/flow/FlowSerializer';
+import { flowRaws } from '../services/flow/FlowSegments';
 
 // ── Field extractors ──
 
@@ -36,9 +38,19 @@ const FIELD_EXTRACTORS: Record<string, (task: DisplayTask) => unknown> = {
         }
         return result;
     },
+    flow:               t => extractFlowString(t),
 };
 
 export const ALL_FIELD_NAMES: string[] = Object.keys(FIELD_EXTRACTORS);
+
+// ── Flow extraction ──
+
+function extractFlowString(task: DisplayTask): string | null {
+    if (!task.flow) return null;
+    if (task.flow.program) return serializeFlow(task.flow.program);
+    const joined = flowRaws(task.flow).filter(r => r !== '').join(' ');
+    return joined || null;
+}
 
 // ── Property value conversion ──
 

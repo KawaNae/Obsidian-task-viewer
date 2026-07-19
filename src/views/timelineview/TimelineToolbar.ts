@@ -415,11 +415,7 @@ export class TimelineToolbar extends ViewToolbarBase {
                 this.callbacks.onRender();
                 this.app.workspace.requestSaveLayout();
             },
-            getExportContainer: () => this.rootEl?.closest<HTMLElement>('.timeline-view') ?? null,
-            getExportSpec: () => ({
-                scrollAreas: ['.timeline-grid'],
-                overflowParents: '.timeline-view',
-            }),
+            getExportFolder: () => this.plugin.settings.exportFolder,
             onReset: () => {
                 this.applyConfigToViewState({});
                 this.viewState.pinnedListCollapsed = undefined;

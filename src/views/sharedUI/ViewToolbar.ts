@@ -7,7 +7,7 @@ import type { ViewTemplate } from '../../types';
 import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
 import { ViewTemplateWriter } from '../../services/template/ViewTemplateWriter';
 import { ViewExporter } from '../../services/export/ViewExporter';
-import type { ExportTargetSpec } from '../../services/export/ExportTypes';
+import { exportDescriptorFor, resolveExportContainer } from '../../services/export/ExportRegistry';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 
 /**
@@ -304,8 +304,7 @@ export interface ViewSettingsOptions {
     onApplyTemplate: (template: ViewTemplate) => void;
     onReset: () => void;
     menuPresenter: MenuPresenter;
-    getExportContainer?: () => HTMLElement | null;
-    getExportSpec?: () => ExportTargetSpec;
+    getExportFolder?: () => string;
     /** View-specific menu items appended above the Save/Load/Reset block.
      *  Used by views to surface their own overlay/display toggles
      *  (e.g. astronomy) without bloating the shared option list. */
@@ -452,16 +451,20 @@ export class ViewSettingsMenu {
                 });
         });
 
-        if (options.getExportContainer && options.getExportSpec) {
+        const descriptor = exportDescriptorFor(viewType);
+        if (descriptor) {
             menu.addSeparator();
-            const getContainer = options.getExportContainer;
-            const getSpec = options.getExportSpec;
 
             menu.addItem((item) => {
                 item.setTitle(t('toolbar.exportAsImage'))
                     .setIcon('image')
                     .onClick(async () => {
-                        const container = getContainer();
+                        const contentEl = (leaf.view as any).contentEl as HTMLElement | undefined;
+                        if (!contentEl) {
+                            new Notice(t('notice.noContentToExport'));
+                            return;
+                        }
+                        const container = resolveExportContainer(contentEl, descriptor);
                         if (!container) {
                             new Notice(t('notice.noContentToExport'));
                             return;
@@ -472,11 +475,13 @@ export class ViewSettingsMenu {
                         const filename = name
                             ? `${name}_${date}.png`
                             : `${shortType}_${date}.png`;
+                        const folder = options.getExportFolder?.()?.trim() || 'task-viewer-export';
                         await ViewExporter.exportAsPng({
                             app: options.app,
                             container,
                             filename,
-                        }, getSpec());
+                            folder,
+                        }, descriptor.spec);
                     });
             });
         }

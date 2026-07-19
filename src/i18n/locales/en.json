@@ -66,6 +66,8 @@
       "templates": "Templates",
       "viewTemplateFolder": "View Template Folder",
       "viewTemplateFolderDesc": "Vault folder for view template files (.md with _tv-view in frontmatter). Used for cross-device sync of view configurations.",
+      "exportFolder": "Image Export Folder",
+      "exportFolderDesc": "Vault folder where exported images are saved. Defaults to 'task-viewer-export' when empty.",
       "intervalTemplateFolder": "Interval Template Folder",
       "intervalTemplateFolderDesc": "Vault folder containing interval timer template files (.md with _tv-segments in frontmatter). Leave empty to disable.",
       "longPressThreshold": "Long Press Threshold",

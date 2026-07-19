@@ -89,27 +89,7 @@ export class KanbanToolbar extends ViewToolbarBase {
                 viewType: KanbanSchema.shortName,
                 config: this.codec.serializeConfig(deps.getCurrentConfig()),
             }),
-            getExportContainer: () => deps.container,
-            // Kanban needs an extra pass: each cell has its own overflow/minHeight
-            // constraint plus a per-column scroll body. expand them all so the
-            // full grid is captured.
-            getExportSpec: () => ({
-                scrollAreas: ['.kanban-view__grid-host', '.kanban-view__cell-body'],
-                overflowParents: '.kanban-view, .kanban-view__grid-host',
-                extraExpand: (container, restoreFns) => {
-                    const cells = Array.from(container.querySelectorAll<HTMLElement>('.kanban-view__cell'));
-                    for (const cell of cells) {
-                        const origOverflow = cell.style.overflow;
-                        const origMinHeight = cell.style.minHeight;
-                        cell.style.overflow = 'visible';
-                        cell.style.minHeight = 'auto';
-                        restoreFns.push(() => {
-                            cell.style.overflow = origOverflow;
-                            cell.style.minHeight = origMinHeight;
-                        });
-                    }
-                },
-            }),
+            getExportFolder: () => deps.plugin.settings.exportFolder,
             onApplyTemplate: (template) => {
                 const cfg = this.codec.parseConfig(template.config ?? null);
                 deps.applyConfig(cfg);

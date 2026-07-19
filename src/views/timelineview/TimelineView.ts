@@ -134,6 +134,7 @@ export class TimelineView extends ItemView {
      * onOpen directly — to stay race-free regardless of Obsidian's lifecycle
      * order.
      */
+    private startDateExplicit = false;
     private initBarrier = {
         domReady: false,
         stateApplied: false,
@@ -213,6 +214,7 @@ export class TimelineView extends ItemView {
 
         // Transient is overlaid additively (no defaults — these are per-leaf).
         Object.assign(this.viewState, transient);
+        if (transient.startDate !== undefined) this.startDateExplicit = true;
 
         // Side effect: sidebar DOM has to follow the boolean.
         this.sidebarManager.applyOpen(this.viewState.showSidebar ?? true, { animate: false });
@@ -561,6 +563,7 @@ export class TimelineView extends ItemView {
      * settings. Called once via the init barrier.
      */
     private initializeStartDate(): void {
+        if (this.startDateExplicit) return;
         if (!this.plugin.settings.startFromOldestOverdue) return;
         const oldestOverdue = this.findOldestOverdueDate();
         const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);

@@ -127,6 +127,19 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
         });
 
     new Setting(el)
+        .setName(t('settings.views.exportFolder'))
+        .setDesc(t('settings.views.exportFolderDesc'))
+        .addText(text => {
+            text.setPlaceholder('task-viewer-export')
+                .setValue(plugin.settings.exportFolder)
+                .onChange(async (value) => {
+                    plugin.settings.exportFolder = value.trim();
+                    await plugin.saveSettings();
+                });
+            new FolderSuggest(plugin.app, text.inputEl);
+        });
+
+    new Setting(el)
         .setName(t('settings.views.intervalTemplateFolder'))
         .setDesc(t('settings.views.intervalTemplateFolderDesc'))
         .addText(text => {

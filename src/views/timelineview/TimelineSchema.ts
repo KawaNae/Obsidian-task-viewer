@@ -56,6 +56,7 @@ export const TimelineSchema: ViewSchema<TimelineConfig, TimelineTransient> = {
         showAllDay:       F.boolean('showAllDay'),
         showTimeline:     F.boolean('showTimeline'),
     },
+    anchorKey: 'startDate',
     transient: {
         startDate:               T.dateString('startDate', { legacyKeys: ['date'] }),
         pinnedListCollapsed:     T.collapsedKeys('pinnedListCollapsed', 'timeline'),

@@ -32,6 +32,7 @@ export const MiniCalendarSchema: ViewSchema<MiniCalendarConfig, MiniCalendarTran
         filterState:      F.filter('filterState', { legacyKeys: ['filter'] }),
         astronomyDisplay: F.astronomyDisplay('astronomyDisplay'),
     },
+    anchorKey: 'windowStart',
     transient: {
         windowStart: T.dateString('windowStart'),
     },

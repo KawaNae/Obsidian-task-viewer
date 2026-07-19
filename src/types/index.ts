@@ -565,6 +565,7 @@ export interface TaskViewerSettings {
     yearlyNoteTemplate: string;
     intervalTemplateFolder: string;
     viewTemplateFolder: string;
+    exportFolder: string;
     pinnedListPageSize: number;
     defaultViewPositions: {
         timeline: DefaultLeafPosition;
@@ -678,6 +679,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     yearlyNoteTemplate: '',
     intervalTemplateFolder: '',
     viewTemplateFolder: '',
+    exportFolder: 'task-viewer-export',
     pinnedListPageSize: 10,
     defaultViewPositions: {
         timeline: 'tab',
