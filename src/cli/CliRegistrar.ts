@@ -1,5 +1,6 @@
 import type { CliFlags, CliHandler } from 'obsidian';
 import type TaskViewerPlugin from '../main';
+import { cliError } from './CliOutputFormatter';
 import {
     toCliFlags,
     LIST_SCHEMA, TODAY_SCHEMA, GET_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA,
@@ -28,10 +29,14 @@ import { createHelpHandler } from './handlers/HelpHandler';
  */
 export function registerCliHandlers(plugin: TaskViewerPlugin): void {
     function register(action: string, description: string, flags: CliFlags | null, handler: CliHandler): void {
-        const wrapped: CliHandler = (params) => {
+        const wrapped: CliHandler = async (params) => {
             const err = validateCliParams(params, flags, action);
             if (err) return err;
-            return handler(params);
+            try {
+                return await handler(params);
+            } catch (e) {
+                return cliError(e instanceof Error ? e.message : String(e));
+            }
         };
         plugin.registerCliHandler(`obsidian-task-viewer:${action}`, description, flags, wrapped);
     }
@@ -95,4 +100,5 @@ export function registerCliHandlers(plugin: TaskViewerPlugin): void {
     // ── Help ──
 
     register('help', 'Show detailed CLI reference', null, createHelpHandler());
+
 }
