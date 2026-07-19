@@ -7,6 +7,9 @@ export interface CaptureResult {
     blob: Blob;
     width: number;
     height: number;
+    clamped: boolean;
+    actualWidth: number;
+    actualHeight: number;
 }
 
 /**
@@ -62,9 +65,33 @@ export class ViewExporter {
 
             const width = clone.offsetWidth;
             const height = clone.offsetHeight;
+            const PIXEL_RATIO = 2;
+            const CANVAS_LIMIT = 16384;
+            const canvasW = width * PIXEL_RATIO;
+            const canvasH = height * PIXEL_RATIO;
+            const clamped = canvasW > CANVAS_LIMIT || canvasH > CANVAS_LIMIT;
+            let actualWidth = canvasW;
+            let actualHeight = canvasH;
+            if (clamped) {
+                if (canvasW > CANVAS_LIMIT && canvasH > CANVAS_LIMIT) {
+                    if (canvasW > canvasH) {
+                        actualHeight = Math.round(canvasH * CANVAS_LIMIT / canvasW);
+                        actualWidth = CANVAS_LIMIT;
+                    } else {
+                        actualWidth = Math.round(canvasW * CANVAS_LIMIT / canvasH);
+                        actualHeight = CANVAS_LIMIT;
+                    }
+                } else if (canvasW > CANVAS_LIMIT) {
+                    actualHeight = Math.round(canvasH * CANVAS_LIMIT / canvasW);
+                    actualWidth = CANVAS_LIMIT;
+                } else {
+                    actualWidth = Math.round(canvasW * CANVAS_LIMIT / canvasH);
+                    actualHeight = CANVAS_LIMIT;
+                }
+            }
             try {
                 const blob = await ExportUtils.captureToBlob(clone);
-                return { blob, width, height };
+                return { blob, width, height, clamped, actualWidth, actualHeight };
             } catch (err) {
                 if (err instanceof Error && err.message.includes('Invalid string length')) {
                     throw new Error(

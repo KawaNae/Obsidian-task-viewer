@@ -18,6 +18,9 @@ export interface ExportResult {
     height: number;
     captureDurationMs: number;
     totalDurationMs: number;
+    clamped?: boolean;
+    actualWidth?: number;
+    actualHeight?: number;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -111,18 +114,24 @@ export class ExportService {
     ): Promise<ExportResult> {
         const captureStart = performance.now();
 
-        const { blob, width, height } = await ViewExporter.captureExpanded(container, spec);
+        const result = await ViewExporter.captureExpanded(container, spec);
 
         const folder = resolveFolder(opts, this.plugin);
         const filename = resolveFilename(opts, viewType, this.plugin);
-        const path = await ExportUtils.saveBlobToVault(blob, filename, folder, this.plugin.app);
+        const path = await ExportUtils.saveBlobToVault(result.blob, filename, folder, this.plugin.app);
 
-        return {
+        const out: ExportResult = {
             path,
-            width,
-            height,
+            width: result.width,
+            height: result.height,
             captureDurationMs: Math.round(performance.now() - captureStart),
             totalDurationMs: Math.round(performance.now() - totalStart),
         };
+        if (result.clamped) {
+            out.clamped = true;
+            out.actualWidth = result.actualWidth;
+            out.actualHeight = result.actualHeight;
+        }
+        return out;
     }
 }
