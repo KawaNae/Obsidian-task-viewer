@@ -25,7 +25,18 @@ export class ViewExporter {
      * Clone, expand scroll areas, and capture to Blob.
      * Throws on failure — caller handles UX (Notice, logging).
      */
+    static readonly MAX_EXPORT_ELEMENTS = 20000;
+
     static async captureExpanded(container: HTMLElement, spec: ExportTargetSpec): Promise<CaptureResult> {
+        const elementCount = container.querySelectorAll('*').length + 1;
+        if (elementCount > ViewExporter.MAX_EXPORT_ELEMENTS) {
+            throw new Error(
+                `Too many DOM elements to export (${elementCount.toLocaleString()}). ` +
+                `The limit is ${ViewExporter.MAX_EXPORT_ELEMENTS.toLocaleString()} elements. ` +
+                `Reduce the number of visible tasks by applying a filter or narrowing the date range.`,
+            );
+        }
+
         const clone = container.cloneNode(true) as HTMLElement;
         clone.style.position = 'absolute';
         clone.style.left = '-99999px';
@@ -51,8 +62,19 @@ export class ViewExporter {
 
             const width = clone.offsetWidth;
             const height = clone.offsetHeight;
-            const blob = await ExportUtils.captureToBlob(clone);
-            return { blob, width, height };
+            try {
+                const blob = await ExportUtils.captureToBlob(clone);
+                return { blob, width, height };
+            } catch (err) {
+                if (err instanceof Error && err.message.includes('Invalid string length')) {
+                    throw new Error(
+                        `Image export failed: the view content is too large to serialize ` +
+                        `(${elementCount.toLocaleString()} elements). ` +
+                        `Reduce the number of visible tasks by applying a filter or narrowing the date range.`,
+                    );
+                }
+                throw err;
+            }
         } finally {
             clone.remove();
         }
