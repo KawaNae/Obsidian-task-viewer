@@ -51,7 +51,7 @@ Common Flags
       id, file, line, content, status, startDate, startTime, endDate, endTime,
       due, tags, parserId, parentId, childIds, color, linestyle,
       effectiveStartDate, effectiveStartTime, effectiveEndDate, effectiveEndTime,
-      durationMinutes, properties
+      effectiveDue, durationMinutes, properties, flow
 
 Date Formats
 ------------

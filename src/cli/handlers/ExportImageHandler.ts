@@ -8,7 +8,10 @@ import { buildViewStateFromParams } from '../../services/viewConfig/ViewStateFac
 import type { ExportResult } from '../../services/export/ExportService';
 import { toCliName } from '../../api/OperationSchemas';
 
-const EXPORT_SPECIFIC_KEYS = new Set(['view', 'template', 'name', 'output-folder', 'filename', 'wait', 'keep-open']);
+const EXPORT_SPECIFIC_KEYS = new Set([
+    'view', 'template', 'name', 'output-folder', 'filename', 'wait', 'keep-open',
+    'anchor-date',
+]);
 
 export function createExportImageHandler(plugin: TaskViewerPlugin) {
     return async (params: CliData): Promise<string> => {
@@ -21,22 +24,25 @@ export function createExportImageHandler(plugin: TaskViewerPlugin) {
                 return cliError(`View '${params.view ?? viewType}' does not support image export. Supported: timeline, calendar, schedule, kanban`);
             }
 
-            // 2. Validate flags: only EXPORT_SPECIFIC_KEYS + valid view-config keys allowed
-            const validationErr = validateFlags(params, viewType);
+            // 2. Resolve anchor-date → view-specific transient key
+            const anchorResult = resolveAnchorDate(params, viewType);
+            if (anchorResult.error) return anchorResult.error;
+            const resolvedParams = anchorResult.params;
+
+            // 3. Validate flags: only EXPORT_SPECIFIC_KEYS + valid view-config keys allowed
+            const validationErr = validateFlags(resolvedParams, viewType);
             if (validationErr) return validationErr;
 
-            // 3. Determine mode: open-view vs temp-leaf
-            const hasViewConfig = hasConfigParams(params);
-            const hasTemplate = !!params.template;
+            // 4. Determine mode: open-view vs temp-leaf
+            const hasViewConfig = hasConfigParams(resolvedParams);
+            const hasTemplate = !!resolvedParams.template;
 
             let result: ExportResult;
 
             if (!hasViewConfig && !hasTemplate) {
-                // Capture the currently open view
-                result = await plugin.exportService.exportOpenView(viewType, buildOpts(params));
+                result = await plugin.exportService.exportOpenView(viewType, buildOpts(resolvedParams));
             } else {
-                // Open a temp leaf with specified state
-                const configParams = extractConfigParams(params);
+                const configParams = extractConfigParams(resolvedParams);
                 const buildResult = await buildViewStateFromParams(
                     plugin.app,
                     plugin.settings.viewTemplateFolder,
@@ -49,15 +55,116 @@ export function createExportImageHandler(plugin: TaskViewerPlugin) {
                         .map(s => s.name);
                     return cliError(`Template '${buildResult.templateNotFound}' not found. Available: ${available.join(', ') || '(none)'}`);
                 }
-                result = await plugin.exportService.exportTempView(viewType, buildResult.state, buildOpts(params));
+                result = await plugin.exportService.exportTempView(viewType, buildResult.state, buildOpts(resolvedParams));
             }
 
-            return cliOk({ ...result });
+            const rangeInfo = computeRenderedRange(viewType, anchorResult.resolvedAnchor, resolvedParams);
+            return cliOk({
+                ...result,
+                ...(rangeInfo ? {
+                    resolvedAnchor: rangeInfo.anchor,
+                    renderedRange: { from: rangeInfo.from, to: rangeInfo.to },
+                } : {}),
+            });
         } catch (e) {
             return cliError(e instanceof Error ? e.message : String(e));
         }
     };
 }
+
+// ── Anchor date resolution ──
+
+interface AnchorResult {
+    params: CliData;
+    resolvedAnchor: string | undefined;
+    error: string | null;
+}
+
+function resolveAnchorDate(params: CliData, viewType: string): AnchorResult {
+    const anchorValue = params['anchor-date'];
+    if (!anchorValue) return { params, resolvedAnchor: undefined, error: null };
+
+    const schema = schemaFor(viewType);
+    const anchorKey = schema?.anchorKey;
+    if (!anchorKey) {
+        return {
+            params,
+            resolvedAnchor: undefined,
+            error: cliError(`View '${viewType}' has no date anchor. anchor-date= is not supported for this view type`),
+        };
+    }
+
+    const cliKey = toCliName(anchorKey);
+    if (params[cliKey] && params[cliKey] !== anchorValue) {
+        return {
+            params,
+            resolvedAnchor: undefined,
+            error: cliError(`Conflicting date flags: anchor-date=${anchorValue} and ${cliKey}=${params[cliKey]}. Use one or the other`),
+        };
+    }
+
+    const copy = { ...params, [cliKey]: anchorValue };
+    delete copy['anchor-date'];
+    return { params: copy, resolvedAnchor: anchorValue, error: null };
+}
+
+// ── Rendered range computation ──
+
+interface RenderedRange {
+    anchor: string;
+    from: string;
+    to: string;
+}
+
+function computeRenderedRange(
+    viewType: string,
+    resolvedAnchor: string | undefined,
+    params: CliData,
+): RenderedRange | null {
+    if (!resolvedAnchor) {
+        const schema = schemaFor(viewType);
+        const anchorKey = schema?.anchorKey;
+        if (!anchorKey) return null;
+        const cliKey = toCliName(anchorKey);
+        const dateFromParams = params[cliKey];
+        if (!dateFromParams) return null;
+        resolvedAnchor = dateFromParams;
+    }
+
+    const schema = schemaFor(viewType);
+    const shortName = schema?.shortName;
+
+    switch (shortName) {
+        case 'timeline': {
+            const daysToShow = params['days-to-show']
+                ? parseInt(params['days-to-show'], 10)
+                : (schema?.defaults as Record<string, unknown>)?.daysToShow as number ?? 3;
+            const from = resolvedAnchor;
+            const to = addDays(resolvedAnchor, daysToShow - 1);
+            return { anchor: resolvedAnchor, from, to };
+        }
+        case 'calendar':
+        case 'mini-calendar': {
+            const [year, month] = resolvedAnchor.split('-').map(Number);
+            const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
+            const lastDay = new Date(year, month, 0).getDate();
+            const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+            return { anchor: resolvedAnchor, from: monthStart, to: monthEnd };
+        }
+        case 'schedule':
+            return { anchor: resolvedAnchor, from: resolvedAnchor, to: resolvedAnchor };
+        default:
+            return null;
+    }
+}
+
+function addDays(dateStr: string, days: number): string {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d + days);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
+// ── Existing helpers ──
 
 function resolveViewType(params: CliData, plugin: TaskViewerPlugin): string {
     if (params.view) {
@@ -109,10 +216,6 @@ function hasConfigParams(params: CliData): boolean {
     return Object.keys(params).some(k => !EXPORT_SPECIFIC_KEYS.has(k));
 }
 
-/**
- * Extract view-config params, converting kebab-case CLI keys to camelCase
- * (the format that ViewConfigCodec.fromUriParams expects).
- */
 function extractConfigParams(params: CliData): Record<string, string> {
     const out: Record<string, string> = {};
     for (const [k, v] of Object.entries(params)) {

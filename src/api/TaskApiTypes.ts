@@ -33,6 +33,7 @@ export interface NormalizedTask {
     effectiveDue: string | null;
     durationMinutes: number | null;
     properties: Record<string, unknown>;
+    flow: string | null;
 }
 
 // ── Error ──

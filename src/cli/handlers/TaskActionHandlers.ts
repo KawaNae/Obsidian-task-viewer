@@ -1,7 +1,7 @@
 import type { CliData } from 'obsidian';
 import type TaskViewerPlugin from '../../main';
 import { TaskApiError } from '../../api/TaskApiTypes';
-import { formatOutput, resolveFields, cliOk, cliError, validateFormat, parseLimit, type OutputFormat } from '../CliOutputFormatter';
+import { formatOutput, resolveFields, cliOk, cliError, validateFormat, parseLimit, defaultLimitForFormat, type OutputFormat } from '../CliOutputFormatter';
 import { parseSortFlag } from '../CliFilterBuilder';
 
 export function createDuplicateHandler(plugin: TaskViewerPlugin) {
@@ -106,8 +106,9 @@ export function createTasksForDateRangeHandler(plugin: TaskViewerPlugin) {
         if (formatErr) return cliError(formatErr);
 
         try {
+            const format = (params.format as OutputFormat) || 'json';
             const sort = params.sort ? parseSortFlag(params.sort) : undefined;
-            const limit = params.limit ? parseLimit(params.limit) : undefined;
+            const limit = params.limit ? parseLimit(params.limit) : defaultLimitForFormat(format);
 
             const result = await plugin.api.tasksForDateRange({
                 from: params.from,
@@ -115,8 +116,6 @@ export function createTasksForDateRangeHandler(plugin: TaskViewerPlugin) {
                 sort,
                 limit,
             });
-
-            const format = (params.format as OutputFormat) || 'json';
             const fields = resolveFields(params['output-fields']);
             const meta = { total: result.total, truncated: result.truncated, limit: result.limit };
             return formatOutput(result.tasks, format, fields, meta);

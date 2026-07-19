@@ -7,13 +7,13 @@ import type { ListParams, TodayParams } from '../../api/TaskApiTypes';
 import { parseSortFlag } from '../CliFilterBuilder';
 import {
     formatOutput, formatSingleTask, resolveFields, cliError,
-    validateFormat, parseLimit,
+    validateFormat, parseLimit, defaultLimitForFormat,
     type OutputFormat,
 } from '../CliOutputFormatter';
 
 // ── CliData → typed params converters ──
 
-function cliDataToListParams(params: CliData, preloadedFilter?: FilterState): ListParams {
+function cliDataToListParams(params: CliData, format: OutputFormat, preloadedFilter?: FilterState): ListParams {
     const result: ListParams = {};
 
     if (preloadedFilter) {
@@ -35,16 +35,16 @@ function cliDataToListParams(params: CliData, preloadedFilter?: FilterState): Li
     }
 
     if (params.sort) result.sort = parseSortFlag(params.sort);
-    if (params.limit) result.limit = parseLimit(params.limit);
+    result.limit = params.limit ? parseLimit(params.limit) : defaultLimitForFormat(format);
 
     return result;
 }
 
-function cliDataToTodayParams(params: CliData): TodayParams {
+function cliDataToTodayParams(params: CliData, format: OutputFormat): TodayParams {
     const result: TodayParams = {};
     if (params.leaf === 'true') result.leaf = true;
     if (params.sort) result.sort = parseSortFlag(params.sort);
-    if (params.limit) result.limit = parseLimit(params.limit);
+    result.limit = params.limit ? parseLimit(params.limit) : defaultLimitForFormat(format);
     return result;
 }
 
@@ -57,6 +57,8 @@ export function createListHandler(plugin: TaskViewerPlugin) {
         if (formatErr) return cliError(formatErr);
 
         try {
+            const format = (params.format as OutputFormat) || 'json';
+
             let preloadedFilter: FilterState | undefined;
 
             const filterFilePath = params['filter-file'];
@@ -66,10 +68,8 @@ export function createListHandler(plugin: TaskViewerPlugin) {
                 preloadedFilter = result;
             }
 
-            const apiParams = cliDataToListParams(params, preloadedFilter);
+            const apiParams = cliDataToListParams(params, format, preloadedFilter);
             const listResult = await plugin.api.list(apiParams);
-
-            const format = (params.format as OutputFormat) || 'json';
             const fields = resolveFields(params['output-fields']);
             const meta = { total: listResult.total, truncated: listResult.truncated, limit: listResult.limit };
             return formatOutput(listResult.tasks, format, fields, meta);
@@ -85,10 +85,9 @@ export function createTodayHandler(plugin: TaskViewerPlugin) {
         if (formatErr) return cliError(formatErr);
 
         try {
-            const apiParams = cliDataToTodayParams(params);
-            const result = plugin.api.today(apiParams);
-
             const format = (params.format as OutputFormat) || 'json';
+            const apiParams = cliDataToTodayParams(params, format);
+            const result = plugin.api.today(apiParams);
             const fields = resolveFields(params['output-fields']);
             const meta = { total: result.total, truncated: result.truncated, limit: result.limit };
             return formatOutput(result.tasks, format, fields, meta);

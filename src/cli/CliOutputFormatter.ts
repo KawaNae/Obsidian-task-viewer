@@ -4,6 +4,10 @@ import { ALL_FIELD_NAMES } from '../api/TaskNormalizer';
 
 export type OutputFormat = 'json' | 'tsv' | 'jsonl';
 
+export function defaultLimitForFormat(format: OutputFormat): number {
+    return format === 'json' ? 100 : Infinity;
+}
+
 // ── Field selection ──
 
 /**
@@ -52,10 +56,20 @@ export function formatOutput(
     meta?: ListMeta,
 ): string {
     switch (format) {
-        case 'tsv':
-            return formatTsv(tasks, fields);
-        case 'jsonl':
-            return tasks.map(t => JSON.stringify(pickFields(t, fields))).join('\n');
+        case 'tsv': {
+            let output = formatTsv(tasks, fields);
+            if (meta?.truncated) {
+                output += `\n# truncated: showing ${tasks.length} of ${meta.total}`;
+            }
+            return output;
+        }
+        case 'jsonl': {
+            const lines = tasks.map(t => JSON.stringify(pickFields(t, fields)));
+            if (meta?.truncated) {
+                lines.push(JSON.stringify({ _truncated: true, showing: tasks.length, total: meta.total }));
+            }
+            return lines.join('\n');
+        }
         case 'json':
         default:
             return JSON.stringify({
