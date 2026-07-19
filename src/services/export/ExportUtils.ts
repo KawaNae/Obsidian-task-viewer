@@ -98,10 +98,9 @@ export class ExportUtils {
         return blob;
     }
 
-    /** Save a Blob to the vault as a binary file. */
-    static async downloadBlob(blob: Blob, filename: string, app: App): Promise<void> {
+    /** Save a Blob to the vault as a binary file. Returns the vault-relative path. */
+    static async saveBlobToVault(blob: Blob, filename: string, folder: string, app: App): Promise<string> {
         const buffer = await blob.arrayBuffer();
-        const folder = 'task-viewer-export';
         if (!app.vault.getAbstractFileByPath(folder)) {
             await app.vault.createFolder(folder);
         }
@@ -112,6 +111,6 @@ export class ExportUtils {
         } else {
             await app.vault.createBinary(filePath, buffer);
         }
-        new Notice(`Image saved to ${filePath}`);
+        return filePath;
     }
 }

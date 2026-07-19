@@ -27,8 +27,8 @@ import { registerWeekStartLocales } from './utils/momentWeekLocale';
 import { AudioUtils } from './timer/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
 import { getViewMeta } from './constants/viewRegistry';
-import { ViewTemplateLoader } from './services/template/ViewTemplateLoader';
-import { codecFor, resolveViewTypeFromShortName } from './services/viewConfig';
+import { resolveViewTypeFromShortName } from './services/viewConfig';
+import { buildViewStateFromParams } from './services/viewConfig/ViewStateFactory';
 import { migrateAstronomySettings } from './services/settings/migration';
 import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
 import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
@@ -47,6 +47,7 @@ import { createDiagnosticsExtension } from './editor/DiagnosticsExtension';
 import { toDisplayTask } from './services/display/DisplayTaskConverter';
 import { registerCliHandlers } from './cli/CliRegistrar';
 import { TaskApi } from './api/TaskApi';
+import { ExportService } from './services/export/ExportService';
 import { TaskReadService } from './services/data/TaskReadService';
 import { TaskWriteService } from './services/data/TaskWriteService';
 import { initI18n, t } from './i18n';
@@ -66,6 +67,7 @@ export default class TaskViewerPlugin extends Plugin {
     private logManager: LogManager;
     public settings: TaskViewerSettings;
     public api: TaskApi;
+    public exportService: ExportService;
     public menuPresenter: MenuPresenter;
 
     // Day boundary check
@@ -145,6 +147,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Public API (plugin interop / DataviewJS)
         this.api = new TaskApi(this);
+        this.exportService = new ExportService(this);
 
         // Register CLI handlers
         registerCliHandlers(this);
@@ -437,57 +440,17 @@ export default class TaskViewerPlugin extends Plugin {
         });
     }
 
-    /**
-     * Build the canonical workspace-state dict for `setViewState` from URI
-     * parameters. Merges: schema defaults (via codec REPLACE semantics inside
-     * the view's setState) ← template config ← URI query params.
-     */
     private async buildViewStateFromUri(
         viewType: string,
         params: Record<string, string>,
     ): Promise<Record<string, unknown>> {
-        const codec = codecFor(viewType);
-        if (!codec) return {};
-
-        // Step 1: template provides base config dict
-        let baseConfig: Record<string, unknown> = {};
-        let baseName: string | undefined;
-        if (params.template) {
-            const loader = new ViewTemplateLoader(this.app);
-            const summary = loader.findByBasename(this.settings.viewTemplateFolder, params.template);
-            if (summary) {
-                const tmpl = await loader.loadFullTemplate(summary.filePath);
-                if (tmpl) {
-                    baseConfig = tmpl.config ?? {};
-                    baseName = tmpl.name;
-                }
-            } else {
-                new Notice(t('notice.templateNotFound', { name: params.template }));
-            }
+        const result = await buildViewStateFromParams(
+            this.app, this.settings.viewTemplateFolder, viewType, params,
+        );
+        if (result.templateNotFound) {
+            new Notice(t('notice.templateNotFound', { name: result.templateNotFound }));
         }
-
-        // Step 2: parse template config + URI overrides through codec.
-        // codec.fromUriParams handles both canonical names AND legacyKeys
-        // (e.g. `days` → `daysToShow`), so old URIs and new URIs both work.
-        const baseParsed = codec.parseConfig(baseConfig);
-        const uriParsed = codec.fromUriParams(params);
-        const mergedConfig = { ...baseParsed, ...uriParsed };
-
-        // Step 3: name precedence: URI param > template name > current config.
-        if (params.name) {
-            (mergedConfig as Record<string, unknown>).customName = params.name;
-        } else if (baseName && (mergedConfig as Record<string, unknown>).customName === undefined) {
-            (mergedConfig as Record<string, unknown>).customName = baseName;
-        }
-
-        // Step 4: re-serialize to canonical state dict (this is exactly what
-        // each view's setState parses back via the same codec — round-trip
-        // identity through the codec is the symmetry guarantee).
-        const transientSeed = codec.parseTransient(params);
-        return {
-            ...codec.serializeConfig(mergedConfig),
-            ...codec.serializeTransient(transientSeed),
-        };
+        return result.state;
     }
 
     /**

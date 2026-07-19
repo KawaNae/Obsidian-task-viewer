@@ -169,11 +169,7 @@ export class CalendarToolbar extends ViewToolbarBase {
                 viewType: CalendarSchema.shortName,
                 config: this.codec.serializeConfig(deps.getCurrentConfig()),
             }),
-            getExportContainer: () => deps.container.querySelector<HTMLElement>('.cal-grid'),
-            getExportSpec: () => ({
-                scrollAreas: ['.cal-grid__body'],
-                overflowParents: '.calendar-view, .cal-grid',
-            }),
+            getExportFolder: () => deps.plugin.settings.exportFolder,
             onApplyTemplate: (template) => {
                 const cfg = this.codec.parseConfig(template.config ?? null);
                 deps.applyConfig(cfg, { explicit: true });

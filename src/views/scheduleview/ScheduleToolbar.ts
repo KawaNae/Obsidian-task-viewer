@@ -148,11 +148,7 @@ export class ScheduleToolbar extends ViewToolbarBase {
                 viewType: ScheduleSchema.shortName,
                 config: this.codec.serializeConfig(deps.getCurrentConfig()),
             }),
-            getExportContainer: () => deps.container,
-            getExportSpec: () => ({
-                scrollAreas: ['.schedule-view__body-scroll'],
-                overflowParents: '.schedule-view, .schedule-view__body-scroll',
-            }),
+            getExportFolder: () => deps.plugin.settings.exportFolder,
             onApplyTemplate: (template) => {
                 const cfg = this.codec.parseConfig(template.config ?? null);
                 deps.applyConfig(cfg);

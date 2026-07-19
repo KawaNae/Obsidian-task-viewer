@@ -21,4 +21,5 @@ export interface ViewExportOptions {
     app: App;
     container: HTMLElement;
     filename: string;
+    folder: string;
 }

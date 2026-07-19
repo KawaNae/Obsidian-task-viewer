@@ -66,6 +66,8 @@
       "templates": "テンプレート",
       "viewTemplateFolder": "ビューテンプレート保存先",
       "viewTemplateFolderDesc": "ビューテンプレートファイル（フロントマターに _tv-view を含む .md）を保存するVaultフォルダ。デバイス間のビュー設定同期に使用します。",
+      "exportFolder": "画像エクスポート保存先",
+      "exportFolderDesc": "画像エクスポートの保存先フォルダ。空欄の場合は「task-viewer-export」が使用されます。",
       "intervalTemplateFolder": "インターバルテンプレート保存先",
       "intervalTemplateFolderDesc": "インターバルタイマーテンプレートファイル（フロントマターに _tv-segments を含む .md）を保存するVaultフォルダ。空欄で無効化。",
       "longPressThreshold": "長押し閾値",

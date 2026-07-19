@@ -139,6 +139,16 @@ export const CLI_OUTPUT_SCHEMA: Record<string, ParamSpec> = {
     outputFields: { value: '<key,key,...>',    description: 'Output fields (default: id only). e.g. content,status,startDate' },
 };
 
+export const EXPORT_IMAGE_SCHEMA: Record<string, ParamSpec> = {
+    view:         { value: '<timeline|schedule|kanban>', description: 'View type to export (calendar currently unsupported)' },
+    template:     { value: '<name>',           description: 'View template name (infers view type if omitted)' },
+    name:         { value: '<text>',           description: 'Custom name for the exported view' },
+    outputFolder: { value: '<path>',           description: 'Vault folder for the exported image' },
+    filename:     { value: '<name.png>',       description: 'Output filename (default: {type}_{date}.png)' },
+    wait:         { value: '<ms>',             description: 'Settle time after rendering (default: 500)' },
+    keepOpen:     { boolean: true,             description: 'Keep the temporary tab open after export' },
+};
+
 /** Rule, not data: CLI flag name = kebab-case of the API key. */
 export function toCliName(apiKey: string): string {
     return apiKey.replace(/[A-Z]/g, c => '-' + c.toLowerCase());

@@ -63,9 +63,14 @@ export function computeContentSignature(
             return `w:${e.target}:${e.line.text}`;
         }
         return `l:${e.line.text}`;
-    }).join('|');
+    });
 
-    return [
+    // JSON.stringify: field values are escaped, so no separator can collide
+    // with content, and the result never contains raw control characters.
+    // The signature is stored in a data-* attribute; XMLSerializer consumers
+    // (html-to-image's SVG foreignObject export) reject XML-invalid chars
+    // like \x00, so the serialized form must stay XML-safe.
+    return JSON.stringify([
         task.statusChar,
         task.content,
         task.file,
@@ -87,7 +92,7 @@ export function computeContentSignature(
         settings.enableCardFileLink ? '1' : '0',
         settings.statusDefinitions.map(d => `${d.char}:${d.label}`).join(','),
         childSig,
-    ].join('\x00');
+    ]);
 }
 
 export class TaskCardRenderer extends Component {

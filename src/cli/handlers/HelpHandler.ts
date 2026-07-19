@@ -3,7 +3,7 @@ import {
     renderFlagTable,
     LIST_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA, DUPLICATE_SCHEMA, CONVERT_SCHEMA,
     TASKS_FOR_DATE_RANGE_SCHEMA, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA,
-    INSERT_CHILD_TASK_SCHEMA, CREATE_TV_FILE_SCHEMA,
+    INSERT_CHILD_TASK_SCHEMA, CREATE_TV_FILE_SCHEMA, EXPORT_IMAGE_SCHEMA,
 } from '../../api/OperationSchemas';
 
 // Per-command flag tables are generated from OperationSchemas (the same
@@ -28,6 +28,7 @@ Commands
   insert-child-task     Insert a child task under a parent task
   create-tv-file        Create a new tv-file (frontmatter) task
   get-start-hour        Get the current startHour setting
+  export-image          Export a view as a PNG image
   help               Show this reference
 
 Run "obsidian help obsidian-task-viewer:<command>" for each command's flags.
@@ -125,6 +126,37 @@ ${renderFlagTable(CREATE_TV_FILE_SCHEMA)}
 get-start-hour: Flags
 ---------------------
   (no flags)           Returns the current startHour setting (visual day boundary).
+
+export-image: Flags
+-------------------
+${renderFlagTable(EXPORT_IMAGE_SCHEMA)}
+  Exports a view as a PNG image at 2× pixel ratio.
+  Returns { path, width, height, captureDurationMs, totalDurationMs }.
+
+  Supported views: timeline, schedule, kanban.
+  Calendar is currently unsupported (html-to-image SVG serialization limit).
+
+  Modes:
+    view=timeline                        Captures the currently open view (must be visible).
+    view=timeline start-date=2026-07-14  Opens a temporary tab, renders with the given
+                                         config, captures, and closes it.
+
+  View-config flags (vary per view — use an unknown flag to see the list):
+    timeline : start-date=, days-to-show=, zoom-level=, show-all-day=, mask-mode=, ...
+    schedule : current-date=, mask-mode=, ...
+    kanban   : mask-mode=, ...
+
+  Behavior:
+    - Default filename: {name or template or viewType}_{YYYY-MM-DD}.png
+    - Same-day re-export overwrites (deterministic, idempotent).
+    - width/height in the result are CSS pixels of the expanded content.
+      Actual PNG is width×2 × height×2 (pixelRatio=2), clamped to 16384px max
+      canvas dimension (tall views may be proportionally scaled down).
+    - Capture results depend on the current tab width.
+    - wait= and keep-open apply to temporary-tab mode only.
+    - keep-open leaves are placed in a non-active tab group
+      (use split-walk, not iterateAllLeaves, to find them).
+    - Flags use key=value syntax only (--flag is not supported).
 
 filter-file: File-based Filtering
 ==================================
