@@ -52,6 +52,12 @@ Common Flags
       due, tags, parserId, parentId, childIds, color, linestyle,
       effectiveStartDate, effectiveStartTime, effectiveEndDate, effectiveEndTime,
       effectiveDue, durationMinutes, properties, flow
+  limit=<number|all>           Max results (default: 100 for json, all for tsv/jsonl)
+    Truncation signals (when results exceed limit):
+      json:  {"truncated": true, "total": N} in the response envelope
+      tsv:   trailing comment line: # truncated: showing N of M
+      jsonl: trailing record: {"_truncated":true,"showing":N,"total":M}
+    TSV note: tab and newline characters in field values are replaced with spaces
 
 Date Formats
 ------------
