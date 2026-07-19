@@ -13,9 +13,13 @@ const EXPORT_DESCRIPTORS: Record<string, ViewExportDescriptor> = {
             overflowParents: '.timeline-view',
         },
     },
-    // calendar-view: excluded — html-to-image's SVG serialization exceeds
-    // V8 string length limits on calendar DOM regardless of task count.
-    // Tracked as a known limitation in project_open_issues.md.
+    'calendar-view': {
+        containerSelector: '.cal-grid',
+        spec: {
+            scrollAreas: ['.cal-grid__body'],
+            overflowParents: '.calendar-view, .cal-grid',
+        },
+    },
     'schedule-view': {
         containerSelector: '.schedule-view',
         spec: {

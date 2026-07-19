@@ -133,8 +133,8 @@ ${renderFlagTable(EXPORT_IMAGE_SCHEMA)}
   Exports a view as a PNG image at 2× pixel ratio.
   Returns { path, width, height, captureDurationMs, totalDurationMs }.
 
-  Supported views: timeline, schedule, kanban.
-  Calendar is currently unsupported (html-to-image SVG serialization limit).
+  Supported views: timeline, calendar, schedule, kanban.
+  Note: very large calendars (thousands of task cards) may exceed rendering limits.
 
   Modes:
     view=timeline                        Captures the currently open view (must be visible).
@@ -143,6 +143,7 @@ ${renderFlagTable(EXPORT_IMAGE_SCHEMA)}
 
   View-config flags (vary per view — use an unknown flag to see the list):
     timeline : start-date=, days-to-show=, zoom-level=, show-all-day=, mask-mode=, ...
+    calendar : start-date=, mask-mode=, ...
     schedule : current-date=, mask-mode=, ...
     kanban   : mask-mode=, ...
 

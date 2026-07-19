@@ -140,7 +140,7 @@ export const CLI_OUTPUT_SCHEMA: Record<string, ParamSpec> = {
 };
 
 export const EXPORT_IMAGE_SCHEMA: Record<string, ParamSpec> = {
-    view:         { value: '<timeline|schedule|kanban>', description: 'View type to export (calendar currently unsupported)' },
+    view:         { value: '<timeline|calendar|schedule|kanban>', description: 'View type to export' },
     template:     { value: '<name>',           description: 'View template name (infers view type if omitted)' },
     name:         { value: '<text>',           description: 'Custom name for the exported view' },
     outputFolder: { value: '<path>',           description: 'Vault folder for the exported image' },

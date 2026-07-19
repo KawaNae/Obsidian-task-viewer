@@ -18,7 +18,7 @@ export function createExportImageHandler(plugin: TaskViewerPlugin) {
             if (viewType.startsWith('{')) return viewType; // cliError JSON
 
             if (!exportDescriptorFor(viewType)) {
-                return cliError(`View '${params.view ?? viewType}' does not support image export. Supported: timeline, schedule, kanban (calendar is currently unsupported)`);
+                return cliError(`View '${params.view ?? viewType}' does not support image export. Supported: timeline, calendar, schedule, kanban`);
             }
 
             // 2. Validate flags: only EXPORT_SPECIFIC_KEYS + valid view-config keys allowed
