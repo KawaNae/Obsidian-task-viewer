@@ -144,7 +144,7 @@ ${renderFlagTable(EXPORT_IMAGE_SCHEMA)}
 
   Modes:
     view=timeline                        Captures the currently open view (must be visible).
-    view=timeline start-date=2026-07-14  Opens a temporary tab, renders with the given
+    view=timeline start-date=2026-07-14  Opens a temporary window, renders with the given
                                          config, captures, and closes it.
 
   View-config flags (vary per view — use an unknown flag to see the list):
@@ -159,10 +159,12 @@ ${renderFlagTable(EXPORT_IMAGE_SCHEMA)}
     - width/height in the result are CSS pixels of the expanded content.
       Actual PNG is width×2 × height×2 (pixelRatio=2), clamped to 16384px max
       canvas dimension (tall views may be proportionally scaled down).
-    - Capture results depend on the current tab width.
-    - wait= and keep-open apply to temporary-tab mode only.
-    - keep-open leaves are placed in a non-active tab group
-      (use split-walk, not iterateAllLeaves, to find them).
+    - Render width defaults to 1200px; override with width=<px>.
+    - wait= and keep-open apply to temporary-window mode only.
+    - keep-open windows appear at the default OS position for inspection.
+    - output-folder accepts vault-relative or absolute paths.
+      Returned path uses forward slashes in both cases;
+      vault-relative for vault paths, absolute for external paths.
     - Flags use key=value syntax only (--flag is not supported).
 
 filter-file: File-based Filtering

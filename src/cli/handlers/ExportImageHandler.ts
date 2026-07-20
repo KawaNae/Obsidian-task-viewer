@@ -9,7 +9,7 @@ import type { ExportResult } from '../../services/export/ExportService';
 import { toCliName } from '../../api/OperationSchemas';
 
 const EXPORT_SPECIFIC_KEYS = new Set([
-    'view', 'template', 'name', 'output-folder', 'filename', 'wait', 'keep-open',
+    'view', 'template', 'name', 'output-folder', 'filename', 'wait', 'keep-open', 'width',
     'anchor-date',
 ]);
 
@@ -33,7 +33,11 @@ export function createExportImageHandler(plugin: TaskViewerPlugin) {
             const validationErr = validateFlags(resolvedParams, viewType);
             if (validationErr) return validationErr;
 
-            // 4. Determine mode: open-view vs temp-leaf
+            // 4. Validate filename if user-specified
+            const filenameErr = validateFilename(resolvedParams);
+            if (filenameErr) return filenameErr;
+
+            // 5. Determine mode: open-view vs temp-leaf
             const hasViewConfig = hasConfigParams(resolvedParams);
             const hasTemplate = !!resolvedParams.template;
 
@@ -212,6 +216,18 @@ function validateFlags(params: CliData, viewType: string): string | null {
     return null;
 }
 
+const INVALID_FILENAME_CHARS = /[\\/:*?"<>|]/;
+
+function validateFilename(params: CliData): string | null {
+    const fn = params.filename;
+    if (!fn) return null;
+    const match = fn.match(INVALID_FILENAME_CHARS);
+    if (match) {
+        return cliError(`Invalid filename '${fn}': character '${match[0]}' is not allowed in filenames`);
+    }
+    return null;
+}
+
 function hasConfigParams(params: CliData): boolean {
     return Object.keys(params).some(k => !EXPORT_SPECIFIC_KEYS.has(k));
 }
@@ -243,5 +259,6 @@ function buildOpts(params: CliData) {
         name: params.name || params.template || undefined,
         waitMs: params.wait ? parseInt(params.wait, 10) : undefined,
         keepOpen: params['keep-open'] === 'true',
+        width: params.width ? parseInt(params.width, 10) : undefined,
     };
 }

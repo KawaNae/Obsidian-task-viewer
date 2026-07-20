@@ -1,7 +1,8 @@
 import type { ItemView } from 'obsidian';
+import * as fsNode from 'fs';
+import * as pathNode from 'path';
 import type TaskViewerPlugin from '../../main';
 import { ViewExporter } from './ViewExporter';
-import { ExportUtils } from './ExportUtils';
 import { exportDescriptorFor, resolveExportContainer } from './ExportRegistry';
 
 export interface ExportOptions {
@@ -10,6 +11,7 @@ export interface ExportOptions {
     name?: string;
     waitMs?: number;
     keepOpen?: boolean;
+    width?: number;
 }
 
 export interface ExportResult {
@@ -27,10 +29,28 @@ function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function doubleRaf(): Promise<void> {
+const DEFAULT_POPOUT_WIDTH = 1200;
+const DEFAULT_POPOUT_HEIGHT = 800;
+const OFFSCREEN_X = -9999;
+
+function doubleRaf(win: Window): Promise<void> {
     return new Promise(resolve => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        win.requestAnimationFrame(() => win.requestAnimationFrame(() => resolve()));
     });
+}
+
+function getElectronWindow(win: Window): any | null {
+    const remote = (win as any).require?.('electron')?.remote
+        ?? (win as any).require?.('@electron/remote');
+    return remote?.getCurrentWindow?.() ?? null;
+}
+
+function resizePopout(win: Window, bw: any | null, width: number, height: number): void {
+    if (bw) {
+        bw.setSize(width, height);
+    } else {
+        win.resizeTo(width, height);
+    }
 }
 
 function resolveFolder(opts: ExportOptions | undefined, plugin: TaskViewerPlugin): string {
@@ -80,13 +100,21 @@ export class ExportService {
         if (!descriptor) throw new Error(`View type '${viewType}' does not support image export`);
 
         const workspace = this.plugin.app.workspace;
-        const leaf = workspace.getLeaf('tab');
+        const popoutWidth = opts?.width ?? DEFAULT_POPOUT_WIDTH;
+        const leaf = workspace.openPopoutLeaf({
+            ...(opts?.keepOpen ? {} : { x: OFFSCREEN_X, y: 0 }),
+            size: { width: popoutWidth, height: DEFAULT_POPOUT_HEIGHT },
+        });
 
         try {
-            await leaf.setViewState({ type: viewType, active: true, state });
-            workspace.revealLeaf(leaf);
+            const popoutWin = (leaf.getContainer() as any).win as Window;
+            const bw = getElectronWindow(popoutWin);
+            if (bw && !opts?.keepOpen) bw.setOpacity(0);
+            resizePopout(popoutWin, bw, popoutWidth, DEFAULT_POPOUT_HEIGHT);
 
-            await doubleRaf();
+            await leaf.setViewState({ type: viewType, active: true, state });
+
+            await doubleRaf(popoutWin);
             await sleep(opts?.waitMs ?? 500);
 
             const contentEl = ((leaf.view as ItemView).contentEl ?? (leaf.view as any).contentEl) as HTMLElement | undefined;
@@ -118,10 +146,10 @@ export class ExportService {
 
         const folder = resolveFolder(opts, this.plugin);
         const filename = resolveFilename(opts, viewType, this.plugin);
-        const path = await ExportUtils.saveBlobToVault(result.blob, filename, folder, this.plugin.app);
+        const savedPath = await this.saveToFs(result.blob, filename, folder);
 
         const out: ExportResult = {
-            path,
+            path: savedPath,
             width: result.width,
             height: result.height,
             captureDurationMs: Math.round(performance.now() - captureStart),
@@ -133,5 +161,22 @@ export class ExportService {
             out.actualHeight = result.actualHeight;
         }
         return out;
+    }
+
+    private async saveToFs(blob: Blob, filename: string, folder: string): Promise<string> {
+        const isAbsolute = pathNode.isAbsolute(folder);
+        const dir = isAbsolute
+            ? folder
+            : pathNode.join((this.plugin.app.vault.adapter as any).getBasePath(), folder);
+
+        if (!fsNode.existsSync(dir)) {
+            fsNode.mkdirSync(dir, { recursive: true });
+        }
+
+        const filePath = pathNode.join(dir, filename);
+        const buffer = Buffer.from(await blob.arrayBuffer());
+        fsNode.writeFileSync(filePath, buffer);
+
+        return isAbsolute ? filePath.replace(/\\/g, '/') : `${folder}/${filename}`;
     }
 }
