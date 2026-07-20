@@ -33,7 +33,11 @@ export function createExportImageHandler(plugin: TaskViewerPlugin) {
             const validationErr = validateFlags(resolvedParams, viewType);
             if (validationErr) return validationErr;
 
-            // 4. Determine mode: open-view vs temp-leaf
+            // 4. Validate filename if user-specified
+            const filenameErr = validateFilename(resolvedParams);
+            if (filenameErr) return filenameErr;
+
+            // 5. Determine mode: open-view vs temp-leaf
             const hasViewConfig = hasConfigParams(resolvedParams);
             const hasTemplate = !!resolvedParams.template;
 
@@ -208,6 +212,18 @@ function validateFlags(params: CliData, viewType: string): string | null {
         if (validConfigKeys.has(key)) continue;
         const allValid = [...EXPORT_SPECIFIC_KEYS, ...validConfigKeys].sort();
         return cliError(`Unknown flag: '${key}'. Available flags: ${allValid.join(', ')}`);
+    }
+    return null;
+}
+
+const INVALID_FILENAME_CHARS = /[\\/:*?"<>|]/;
+
+function validateFilename(params: CliData): string | null {
+    const fn = params.filename;
+    if (!fn) return null;
+    const match = fn.match(INVALID_FILENAME_CHARS);
+    if (match) {
+        return cliError(`Invalid filename '${fn}': character '${match[0]}' is not allowed in filenames`);
     }
     return null;
 }
