@@ -1,7 +1,8 @@
 import type { ItemView } from 'obsidian';
+import * as fsNode from 'fs';
+import * as pathNode from 'path';
 import type TaskViewerPlugin from '../../main';
 import { ViewExporter } from './ViewExporter';
-import { ExportUtils } from './ExportUtils';
 import { exportDescriptorFor, resolveExportContainer } from './ExportRegistry';
 
 export interface ExportOptions {
@@ -145,10 +146,10 @@ export class ExportService {
 
         const folder = resolveFolder(opts, this.plugin);
         const filename = resolveFilename(opts, viewType, this.plugin);
-        const path = await ExportUtils.saveBlobToVault(result.blob, filename, folder, this.plugin.app);
+        const savedPath = await this.saveToFs(result.blob, filename, folder);
 
         const out: ExportResult = {
-            path,
+            path: savedPath,
             width: result.width,
             height: result.height,
             captureDurationMs: Math.round(performance.now() - captureStart),
@@ -160,5 +161,22 @@ export class ExportService {
             out.actualHeight = result.actualHeight;
         }
         return out;
+    }
+
+    private async saveToFs(blob: Blob, filename: string, folder: string): Promise<string> {
+        const isAbsolute = pathNode.isAbsolute(folder);
+        const dir = isAbsolute
+            ? folder
+            : pathNode.join((this.plugin.app.vault.adapter as any).getBasePath(), folder);
+
+        if (!fsNode.existsSync(dir)) {
+            fsNode.mkdirSync(dir, { recursive: true });
+        }
+
+        const filePath = pathNode.join(dir, filename);
+        const buffer = Buffer.from(await blob.arrayBuffer());
+        fsNode.writeFileSync(filePath, buffer);
+
+        return isAbsolute ? filePath : `${folder}/${filename}`;
     }
 }
