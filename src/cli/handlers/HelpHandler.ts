@@ -162,6 +162,9 @@ ${renderFlagTable(EXPORT_IMAGE_SCHEMA)}
     - Render width defaults to 1200px; override with width=<px>.
     - wait= and keep-open apply to temporary-window mode only.
     - keep-open windows appear at the default OS position for inspection.
+    - output-folder accepts vault-relative or absolute paths.
+      Returned path uses forward slashes in both cases;
+      vault-relative for vault paths, absolute for external paths.
     - Flags use key=value syntax only (--flag is not supported).
 
 filter-file: File-based Filtering

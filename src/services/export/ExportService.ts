@@ -177,6 +177,6 @@ export class ExportService {
         const buffer = Buffer.from(await blob.arrayBuffer());
         fsNode.writeFileSync(filePath, buffer);
 
-        return isAbsolute ? filePath : `${folder}/${filename}`;
+        return isAbsolute ? filePath.replace(/\\/g, '/') : `${folder}/${filename}`;
     }
 }
