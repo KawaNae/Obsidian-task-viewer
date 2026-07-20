@@ -144,10 +144,11 @@ export const EXPORT_IMAGE_SCHEMA: Record<string, ParamSpec> = {
     template:     { value: '<name>',           description: 'View template name (infers view type if omitted)' },
     name:         { value: '<text>',           description: 'Custom name for the exported view' },
     anchorDate:   { value: '<YYYY-MM-DD>',     description: 'Date anchor — same as the "Today" button but for any date. Resolved to the view-specific field via schema' },
+    width:        { value: '<px>',             description: 'Render width in pixels (default: 1200). Minimum effective ~1024 due to OS constraints' },
     outputFolder: { value: '<path>',           description: 'Vault folder for the exported image' },
     filename:     { value: '<name.png>',       description: 'Output filename (default: {type}_{date}.png)' },
     wait:         { value: '<ms>',             description: 'Settle time after rendering (default: 500)' },
-    keepOpen:     { boolean: true,             description: 'Keep the temporary tab open after export' },
+    keepOpen:     { boolean: true,             description: 'Keep the temporary window open after export' },
 };
 
 /** Rule, not data: CLI flag name = kebab-case of the API key. */

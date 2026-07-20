@@ -10,6 +10,7 @@ export interface ExportOptions {
     name?: string;
     waitMs?: number;
     keepOpen?: boolean;
+    width?: number;
 }
 
 export interface ExportResult {
@@ -27,10 +28,28 @@ function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function doubleRaf(): Promise<void> {
+const DEFAULT_POPOUT_WIDTH = 1200;
+const DEFAULT_POPOUT_HEIGHT = 800;
+const OFFSCREEN_X = -9999;
+
+function doubleRaf(win: Window): Promise<void> {
     return new Promise(resolve => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        win.requestAnimationFrame(() => win.requestAnimationFrame(() => resolve()));
     });
+}
+
+function getElectronWindow(win: Window): any | null {
+    const remote = (win as any).require?.('electron')?.remote
+        ?? (win as any).require?.('@electron/remote');
+    return remote?.getCurrentWindow?.() ?? null;
+}
+
+function resizePopout(win: Window, bw: any | null, width: number, height: number): void {
+    if (bw) {
+        bw.setSize(width, height);
+    } else {
+        win.resizeTo(width, height);
+    }
 }
 
 function resolveFolder(opts: ExportOptions | undefined, plugin: TaskViewerPlugin): string {
@@ -80,13 +99,21 @@ export class ExportService {
         if (!descriptor) throw new Error(`View type '${viewType}' does not support image export`);
 
         const workspace = this.plugin.app.workspace;
-        const leaf = workspace.getLeaf('tab');
+        const popoutWidth = opts?.width ?? DEFAULT_POPOUT_WIDTH;
+        const leaf = workspace.openPopoutLeaf({
+            ...(opts?.keepOpen ? {} : { x: OFFSCREEN_X, y: 0 }),
+            size: { width: popoutWidth, height: DEFAULT_POPOUT_HEIGHT },
+        });
 
         try {
-            await leaf.setViewState({ type: viewType, active: true, state });
-            workspace.revealLeaf(leaf);
+            const popoutWin = (leaf.getContainer() as any).win as Window;
+            const bw = getElectronWindow(popoutWin);
+            if (bw && !opts?.keepOpen) bw.setOpacity(0);
+            resizePopout(popoutWin, bw, popoutWidth, DEFAULT_POPOUT_HEIGHT);
 
-            await doubleRaf();
+            await leaf.setViewState({ type: viewType, active: true, state });
+
+            await doubleRaf(popoutWin);
             await sleep(opts?.waitMs ?? 500);
 
             const contentEl = ((leaf.view as ItemView).contentEl ?? (leaf.view as any).contentEl) as HTMLElement | undefined;

@@ -9,7 +9,7 @@ import type { ExportResult } from '../../services/export/ExportService';
 import { toCliName } from '../../api/OperationSchemas';
 
 const EXPORT_SPECIFIC_KEYS = new Set([
-    'view', 'template', 'name', 'output-folder', 'filename', 'wait', 'keep-open',
+    'view', 'template', 'name', 'output-folder', 'filename', 'wait', 'keep-open', 'width',
     'anchor-date',
 ]);
 
@@ -243,5 +243,6 @@ function buildOpts(params: CliData) {
         name: params.name || params.template || undefined,
         waitMs: params.wait ? parseInt(params.wait, 10) : undefined,
         keepOpen: params['keep-open'] === 'true',
+        width: params.width ? parseInt(params.width, 10) : undefined,
     };
 }
