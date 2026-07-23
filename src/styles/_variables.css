@@ -86,7 +86,10 @@
     --z-allday-cell-drag-over: 50;
     --z-timer-widget: 65;
     --z-task-card-selected: 200;
-    --z-overlay: 1000;
+    /* overlay は Obsidian の modal 層（--layer-modal, 50）に立つ。
+       Obsidian native の menu(65)/suggest(60)/tooltip(70) はその上に
+       来るのが正しい。自前 popover は calc(+1) で overlay の直上。 */
+    --z-overlay: var(--layer-modal, 50);
     /* 210 = above selected card / now-line (200), below the sticky band
        (245+). The absolute (in-grid) ghost thus stays under sticky
        headers while covering all cards. The fixed ghost is relocated to

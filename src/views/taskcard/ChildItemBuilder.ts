@@ -3,6 +3,7 @@ import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { ChildRenderItem } from './types';
 import { ChildRenderItemMapper } from './ChildRenderItemMapper';
 import { extractWikilinkTarget } from '../../services/data/ChildEntryBuilder';
+import { getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 
 /**
  * Builds child render items by walking `TaskReadService.getChildEntries(parent)`.
@@ -25,7 +26,11 @@ export class ChildItemBuilder {
     }
 
     buildChildItems(task: Task, indent: string = ''): ChildRenderItem[] {
-        return this.walk(task, indent, new Set(), 0);
+        // 表示層の合成 ID（split セグメント等）はここで index 在住の原タスクへ
+        // 解決する。handler.parentTask が write 境界を越えるのはこの先なので、
+        // この入口が「合成 ID を write 層に漏らさない」不変条件の単一の境界。
+        const parent = this.readService.getTask(getOriginalTaskId(task)) ?? task;
+        return this.walk(parent, indent, new Set(), 0);
     }
 
     private walk(parent: Task, indent: string, visited: Set<string>, depth: number): ChildRenderItem[] {
