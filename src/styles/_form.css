@@ -68,6 +68,14 @@
     min-width: 0;
 }
 
+/* 追加行: ラベル列に input を収めるので overflow:hidden を解除し、
+   focus glow（box-shadow 2px）が切れないよう内側に余白を確保する。
+   border-box なので padding は flex-basis 7em 内に収まる */
+.task-hub__prop-add > .tv-form__label {
+    overflow: visible;
+    padding: 3px;
+}
+
 /* 日付/時刻フィールドラッパ — date:time = 2:1 配分 */
 .tv-form__field {
     flex: 1 1 0;
