@@ -614,6 +614,7 @@ export class TaskHubForm {
         // 追加行 — キーはラベル列に収め、値 input の左端を上の行と揃える
         const { row: addRow, labelEl: addLabelEl } = createFormRow(this.propsSectionEl, '');
         addRow.addClass('task-hub__prop-add');
+        addLabelEl.addClass('tv-form__label--input');
         const keyInput = addLabelEl.createEl('input', {
             type: 'text', placeholder: t('modal.hub.propertyKey'),
             cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow',

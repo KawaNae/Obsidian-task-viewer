@@ -1,27 +1,42 @@
 import type { TFile } from 'obsidian';
 import type { DuplicateOptions, Task } from '../../types';
 import type { TaskIndex } from '../core/TaskIndex';
+import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { buildChildEntries } from './ChildEntryBuilder';
 
 /**
  * Write-side entry point for views and interaction handlers.
  * All task mutations go through this service.
  * Pure delegation layer — no business logic here.
+ *
+ * ID contract: every taskId-taking method accepts display-layer synthetic
+ * segment IDs (`…##seg:YYYY-MM-DD`) and resolves them to the original task
+ * via {@link resolveTaskId}. A split segment shares the original's file and
+ * lines, so a mutation addressed to a segment IS a mutation of the original —
+ * enforcing that here makes "synthetic IDs never reach TaskIndex" hold by
+ * construction, rather than relying on each UI caller to remember
+ * getOriginalTaskId before calling.
  */
 export class TaskWriteService {
     private deleteListeners: Array<(taskId: string) => void> = [];
 
     constructor(private taskIndex: TaskIndex) {}
 
+    /** Resolve a synthetic segment ID to the original task ID (see class doc). */
+    private resolveTaskId(taskId: string): string {
+        return TaskIdGenerator.parseSegmentId(taskId)?.baseId ?? taskId;
+    }
+
     // ===== Task CRUD =====
 
     async updateTask(taskId: string, updates: Partial<Task>): Promise<void> {
-        return this.taskIndex.updateTask(taskId, updates);
+        return this.taskIndex.updateTask(this.resolveTaskId(taskId), updates);
     }
 
     async deleteTask(taskId: string): Promise<void> {
-        await this.taskIndex.deleteTask(taskId);
-        for (const cb of this.deleteListeners) cb(taskId);
+        const id = this.resolveTaskId(taskId);
+        await this.taskIndex.deleteTask(id);
+        for (const cb of this.deleteListeners) cb(id);
     }
 
     /**
@@ -40,11 +55,11 @@ export class TaskWriteService {
     }
 
     async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<void> {
-        return this.taskIndex.duplicateTask(taskId, options);
+        return this.taskIndex.duplicateTask(this.resolveTaskId(taskId), options);
     }
 
     async convertToTvFile(taskId: string): Promise<string> {
-        return this.taskIndex.convertToTvFile(taskId);
+        return this.taskIndex.convertToTvFile(this.resolveTaskId(taskId));
     }
 
     // ===== Task creation =====
@@ -54,7 +69,7 @@ export class TaskWriteService {
     }
 
     async insertChildTask(parentTaskId: string, childLine: string): Promise<void> {
-        return this.taskIndex.insertChildTask(parentTaskId, childLine);
+        return this.taskIndex.insertChildTask(this.resolveTaskId(parentTaskId), childLine);
     }
 
     async createTvFileFromData(taskData: Partial<Task>): Promise<string> {
@@ -113,7 +128,7 @@ export class TaskWriteService {
      * file-path access.
      */
     private requireWritableChildLine(parentTaskId: string, bodyLine: number, op: string): Task {
-        const parent = this.taskIndex.getTask(parentTaskId);
+        const parent = this.taskIndex.getTask(this.resolveTaskId(parentTaskId));
         if (!parent) {
             throw new Error(`${op}: parent task not found (${parentTaskId})`);
         }
@@ -135,7 +150,7 @@ export class TaskWriteService {
     }
 
     notifyImmediate(taskId?: string, changes?: string[]): void {
-        this.taskIndex.notifyImmediate(taskId, changes);
+        this.taskIndex.notifyImmediate(taskId === undefined ? undefined : this.resolveTaskId(taskId), changes);
     }
 
     // ===== Scan control (for menu-triggered rescans) =====
