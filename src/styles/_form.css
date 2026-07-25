@@ -53,6 +53,14 @@
     height: 14px;
 }
 
+/* input をホストするラベル: ellipsis 用の overflow:hidden を解除し、
+   focus glow（box-shadow 2px）が切れないよう内側に余白を確保する。
+   border-box なので padding は flex-basis 7em 内に収まる */
+.tv-form__label--input {
+    overflow: visible;
+    padding: 3px;
+}
+
 /* 行内の直置きコントロール。`.tv-ctrl .tv-ctrl__text-input` の width:100%
    （0,2,0）に読み込み順で勝つため、同じ 0,2,0 詳細度で定義する */
 .tv-ctrl .tv-form__control {

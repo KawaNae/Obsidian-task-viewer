@@ -20,6 +20,8 @@ export class SuggestController {
     private shell: PopoverShell | null = null;
     private selectedIdx = -1;
     private items: { el: HTMLElement; value: string }[] = [];
+    /** pointerdown 時点のタップ候補（pointerup でのタップ判定に使う）。 */
+    private pickStart: { pointerId: number; x: number; y: number; el: HTMLElement } | null = null;
 
     /**
      * @param stack            親 popover チェーン
@@ -49,6 +51,7 @@ export class SuggestController {
         this.shell = null;
         this.items = [];
         this.selectedIdx = -1;
+        this.pickStart = null;
     }
 
     /** ハイライトを 1 つ進める/戻す（候補が無ければ無視、端で wrap）。 */
@@ -103,13 +106,36 @@ export class SuggestController {
                     const item = suggestEl.createDiv(ITEM_CLASS);
                     renderItem(item, val);
                     // preventDefault on pointerdown keeps focus on the anchor
-                    // input — otherwise the click would blur it first, and
+                    // input — otherwise the tap would blur it first, and
                     // blur-commit surfaces (task hub) would persist the
                     // half-typed value before onPick delivers the real one.
-                    item.addEventListener('pointerdown', (e) => e.preventDefault());
-                    item.addEventListener('click', (e) => {
+                    //
+                    // pick は click ではなく pointerup のタップ判定で配送する。
+                    // WebKit (iPad) は pointerdown を cancel すると互換 click まで
+                    // 抑止するため、click 依存だと onPick が永遠に呼ばれない
+                    // (Chromium は click を発火する。cf. SelectionController の
+                    // 同種の対処)。リストは overflow-y:auto でスクロールするので、
+                    // 5px (drag 系と同じ閾値) 以上動いたらスクロール意図とみなす。
+                    item.addEventListener('pointerdown', (e) => {
+                        e.preventDefault();
+                        this.pickStart = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, el: item };
+                    });
+                    item.addEventListener('pointerup', (e) => {
+                        const start = this.pickStart;
+                        this.pickStart = null;
+                        if (!start || start.el !== item || start.pointerId !== e.pointerId) return;
+                        if (Math.abs(e.clientX - start.x) >= 5 || Math.abs(e.clientY - start.y) >= 5) return;
                         e.stopPropagation();
                         onPick(val);
+                    });
+                    item.addEventListener('pointercancel', () => {
+                        this.pickStart = null;
+                    });
+                    // Chromium では pointerup 後に click が来る。pick 済みなので
+                    // 外側ハンドラへ漏らさず握り潰すだけのガード。
+                    item.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
                     });
                     newItems.push({ el: item, value: val });
                 }

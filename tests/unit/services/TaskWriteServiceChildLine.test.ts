@@ -17,6 +17,7 @@ function buildIndex(tasks: Task[]) {
     const map = new Map(tasks.map(t => [t.id, t]));
     return {
         getTask: (id: string) => map.get(id),
+        updateTask: vi.fn(async () => {}),
         updateLine: vi.fn(async () => {}),
         insertLineAfterLine: vi.fn(async () => {}),
         deleteLine: vi.fn(async () => {}),
@@ -99,5 +100,41 @@ describe('TaskWriteService child-line operations', () => {
         const svc = new TaskWriteService(idx);
         await svc.insertChildLineAfter('p', 6, '- new');
         expect(idx.insertLineAfterLine).toHaveBeenCalledWith('note.md', 6, '- new');
+    });
+});
+
+describe('TaskWriteService synthetic segment ID resolution', () => {
+    // 不変条件: 表示層の合成 ID（…##seg:YYYY-MM-DD）は write 層の入口で
+    // 原タスク ID に解決され、TaskIndex には決して届かない。
+
+    it('updateChildLine resolves a segment parent ID to the original task', async () => {
+        const parent = makeTask({
+            id: 'tv-inline:note.md:ln:5',
+            file: 'note.md',
+            parserId: 'tv-inline',
+            line: 5,
+            childLines: [plainCl('- [ ] x', 6, ' ')],
+        });
+        const idx = buildIndex([parent]);
+        const svc = new TaskWriteService(idx);
+
+        await svc.updateChildLine('tv-inline:note.md:ln:5##seg:2026-07-24', 6, '- [x] x');
+        expect(idx.updateLine).toHaveBeenCalledWith('note.md', 6, '- [x] x');
+    });
+
+    it('updateTask resolves a segment ID before delegating to TaskIndex', async () => {
+        const idx = buildIndex([]);
+        const svc = new TaskWriteService(idx);
+
+        await svc.updateTask('tv-inline:note.md:ln:5##seg:2026-07-24', { status: 'x' } as Partial<Task>);
+        expect(idx.updateTask).toHaveBeenCalledWith('tv-inline:note.md:ln:5', { status: 'x' });
+    });
+
+    it('non-segment IDs pass through unchanged', async () => {
+        const idx = buildIndex([]);
+        const svc = new TaskWriteService(idx);
+
+        await svc.updateTask('tv-inline:note.md:ln:5', {});
+        expect(idx.updateTask).toHaveBeenCalledWith('tv-inline:note.md:ln:5', {});
     });
 });
