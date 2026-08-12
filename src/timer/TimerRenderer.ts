@@ -391,7 +391,7 @@ export class TimerRenderer {
                 cls: 'timer-widget__btn timer-widget__btn--primary'
             });
             setIcon(startBtn, 'play');
-            startBtn.createSpan({ text: ' Start' });
+            startBtn.createSpan({ text: ` ${t('timer.start')}` });
             startBtn.onclick = () => {
                 timer.phase = 'work';
                 timer.startTimeMs = Date.now();
@@ -408,7 +408,7 @@ export class TimerRenderer {
                 cls: 'timer-widget__btn timer-widget__btn--secondary'
             });
             setIcon(stopBtn, 'square');
-            stopBtn.createSpan({ text: ' Stop' });
+            stopBtn.createSpan({ text: ` ${t('timer.stop')}` });
             stopBtn.onclick = async () => {
                 this.lifecycle.pauseTimer(timer);
                 AudioUtils.playFinishSound();
@@ -422,7 +422,7 @@ export class TimerRenderer {
                 cls: 'timer-widget__btn timer-widget__btn--primary'
             });
             setIcon(resumeBtn, 'play');
-            resumeBtn.createSpan({ text: ' Resume' });
+            resumeBtn.createSpan({ text: ` ${t('timer.resume')}` });
             resumeBtn.onclick = () => {
                 this.lifecycle.resumeTimer(timer);
             };
@@ -435,7 +435,7 @@ export class TimerRenderer {
                 cls: 'timer-widget__btn timer-widget__btn--primary'
             });
             setIcon(startBtn, 'play');
-            startBtn.createSpan({ text: ' Start' });
+            startBtn.createSpan({ text: ` ${t('timer.start')}` });
             startBtn.onclick = () => {
                 timer.phase = 'work';
                 timer.startTimeMs = Date.now();
@@ -456,7 +456,7 @@ export class TimerRenderer {
                 cls: 'timer-widget__btn timer-widget__btn--secondary'
             });
             setIcon(stopBtn, 'square');
-            stopBtn.createSpan({ text: ' Stop' });
+            stopBtn.createSpan({ text: ` ${t('timer.stop')}` });
             stopBtn.onclick = async () => {
                 this.lifecycle.pauseTimer(timer);
                 AudioUtils.playFinishSound();
@@ -470,7 +470,7 @@ export class TimerRenderer {
             cls: 'timer-widget__btn timer-widget__btn--primary'
         });
         setIcon(resumeBtn, 'play');
-        resumeBtn.createSpan({ text: ' Resume' });
+        resumeBtn.createSpan({ text: ` ${t('timer.resume')}` });
         resumeBtn.onclick = () => {
             this.lifecycle.resumeTimer(timer);
         };
@@ -482,7 +482,7 @@ export class TimerRenderer {
                 cls: 'timer-widget__btn timer-widget__btn--primary'
             });
             setIcon(startBtn, 'play');
-            startBtn.createSpan({ text: ' Start' });
+            startBtn.createSpan({ text: ` ${t('timer.start')}` });
             startBtn.onclick = () => {
                 const segment = this.creator.getCurrentIntervalSegment(timer);
                 if (!segment) return;
@@ -505,7 +505,7 @@ export class TimerRenderer {
                 cls: 'timer-widget__btn timer-widget__btn--primary'
             });
             setIcon(resumeBtn, 'play');
-            resumeBtn.createSpan({ text: ' Resume' });
+            resumeBtn.createSpan({ text: ` ${t('timer.resume')}` });
             resumeBtn.onclick = () => {
                 this.lifecycle.resumeTimer(timer);
             };
@@ -514,7 +514,7 @@ export class TimerRenderer {
                 cls: 'timer-widget__btn timer-widget__btn--secondary'
             });
             setIcon(stopBtn, 'square');
-            stopBtn.createSpan({ text: ' Stop' });
+            stopBtn.createSpan({ text: ` ${t('timer.stop')}` });
             stopBtn.onclick = async () => {
                 this.lifecycle.pauseOrSnapshotIntervalForStop(timer);
                 AudioUtils.playFinishSound();
@@ -529,7 +529,7 @@ export class TimerRenderer {
                 cls: 'timer-widget__btn timer-widget__btn--secondary'
             });
             setIcon(pauseBtn, 'pause');
-            pauseBtn.createSpan({ text: ' Pause' });
+            pauseBtn.createSpan({ text: ` ${t('timer.pause')}` });
             pauseBtn.onclick = () => {
                 this.lifecycle.pauseIntervalToPrepare(timer);
                 AudioUtils.playPauseSound();
@@ -543,7 +543,7 @@ export class TimerRenderer {
             cls: 'timer-widget__btn timer-widget__btn--primary'
         });
         setIcon(resumeBtn, 'play');
-        resumeBtn.createSpan({ text: ' Resume' });
+        resumeBtn.createSpan({ text: ` ${t('timer.resume')}` });
         resumeBtn.onclick = () => {
             this.lifecycle.resumeTimer(timer);
         };
@@ -552,7 +552,7 @@ export class TimerRenderer {
             cls: 'timer-widget__btn timer-widget__btn--secondary'
         });
         setIcon(stopBtn, 'square');
-        stopBtn.createSpan({ text: ' Stop' });
+        stopBtn.createSpan({ text: ` ${t('timer.stop')}` });
         stopBtn.onclick = async () => {
             this.lifecycle.pauseOrSnapshotIntervalForStop(timer);
             AudioUtils.playFinishSound();
