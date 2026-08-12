@@ -291,7 +291,10 @@ export class ScheduleView extends ItemView {
         this.scrollToNowOnNextRender = true;
         await this.renderSerializer.request();
 
-        this.renderScheduler = new RenderScheduler({ performFull: () => this.render() });
+        this.renderScheduler = new RenderScheduler({
+            performFull: () => this.render(),
+            getHost: () => this.container,
+        });
         this.unsubscribe = this.readService.onChange((taskId, changes) => {
             this.renderScheduler?.handleChange(taskId, changes);
         });
@@ -308,6 +311,7 @@ export class ScheduleView extends ItemView {
         }
         this.renderScheduler?.dispose();
         this.renderScheduler = null;
+        this.scrollRestorer.dispose();
     }
 
     public refresh(): void {

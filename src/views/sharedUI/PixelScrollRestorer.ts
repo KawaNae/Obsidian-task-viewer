@@ -1,3 +1,5 @@
+import { HostFrameScheduler } from '../../utils/HostWindow';
+
 /**
  * ピクセル値ベースのスクロール位置の保存・復元。
  *
@@ -11,12 +13,18 @@
  * 値を保持せず毎回 getScrollEl() で取り直す。
  *
  * 時間アンカーで保存する Timeline は座標系も rAF パス数も異なるため対象外（意図的）。
+ *
+ * 次フレームは scroll 要素自身の window から取る（popout 対応。素の rAF は
+ * main window のクロックなので popout では復元が遅延・停止する）。
  */
 export class PixelScrollRestorer {
     private saved: number | null = null;
     private pending = false;
+    private readonly frames: HostFrameScheduler;
 
-    constructor(private readonly getScrollEl: () => HTMLElement | null) { }
+    constructor(private readonly getScrollEl: () => HTMLElement | null) {
+        this.frames = new HostFrameScheduler(getScrollEl);
+    }
 
     /** 現在のスクロール位置を保存する（復元適用中はスキップ）。 */
     save(): void {
@@ -30,7 +38,7 @@ export class PixelScrollRestorer {
         if (this.saved === null) return;
         const target = this.saved;
         this.pending = true;
-        requestAnimationFrame(() => {
+        this.frames.request(() => {
             this.pending = false;
             const el = this.getScrollEl();
             if (el) el.scrollTop = target;
@@ -43,9 +51,15 @@ export class PixelScrollRestorer {
      */
     runGuarded(action: () => void): void {
         this.pending = true;
-        requestAnimationFrame(() => {
+        this.frames.request(() => {
             this.pending = false;
             action();
         });
+    }
+
+    /** 未発火の復元フレームを破棄する。view の unload で呼ぶ。 */
+    dispose(): void {
+        this.frames.dispose();
+        this.pending = false;
     }
 }

@@ -31,6 +31,7 @@ import { MiniCalendarSchema, type MiniCalendarConfig, type MiniCalendarTransient
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { MiniCalendarToolbar } from './MiniCalendarToolbar';
+import { hostWindow } from '../../utils/HostWindow';
 
 export const VIEW_TYPE_MINI_CALENDAR = VIEW_META_MINI_CALENDAR.type;
 
@@ -492,7 +493,8 @@ export class MiniCalendarView extends ItemView {
             const nextOffset = this.pendingWeekOffset;
             this.pendingWeekOffset = 0;
             if (!this.isAnimating) {
-                requestAnimationFrame(() => this.navigateWeek(nextOffset));
+                // container の window のフレームで走らせる（popout の週送り）。
+                hostWindow(this.container).requestAnimationFrame(() => this.navigateWeek(nextOffset));
             }
         }, 50);
     }

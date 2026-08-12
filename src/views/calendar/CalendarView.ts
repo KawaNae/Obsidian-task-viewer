@@ -387,6 +387,7 @@ export class CalendarView extends ItemView {
         // a follow-up phase.
         this.renderScheduler = new RenderScheduler({
             performFull: () => this.render(),
+            getHost: () => this.container,
         });
 
         this.unsubscribe = this.readService.onChange((taskId, changes) => {
@@ -415,6 +416,7 @@ export class CalendarView extends ItemView {
             this.unsubscribeDelete = null;
         }
         this.renderScheduler?.dispose();
+        this.scrollRestorer.dispose();
     }
 
     public refresh(): void {
