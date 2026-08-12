@@ -76,6 +76,9 @@ describe('FileOperations', () => {
             expect(result.taskIndent).toBe(0);
         });
 
+        // Characterization: a blank line terminates the subtree even when
+        // deeper-indented lines follow. Pinned deliberately — the session-record
+        // work may revisit it, so any change must be a conscious one.
         it('stops at blank line', () => {
             const lines = [
                 '- [ ] parent',
@@ -85,6 +88,28 @@ describe('FileOperations', () => {
             ];
             const result = ops.collectChildrenFromLines(lines, 0);
             expect(result.childrenLines).toEqual(['    - [ ] child']);
+        });
+
+        // Characterization: this is a *range* function — every consumer uses the
+        // result as a splice extent or an indent baseline, never as task lines.
+        // Fenced content must therefore travel with the subtree verbatim;
+        // excluding it would make the splice range cut through the fence.
+        it('collects fenced lines verbatim, including checkbox-looking ones', () => {
+            const lines = [
+                '- [ ] parent',
+                '    ```md',
+                '    - [ ] not a real task',
+                '    ```',
+                '    - [ ] real child',
+                '- [ ] sibling',
+            ];
+            const result = ops.collectChildrenFromLines(lines, 0);
+            expect(result.childrenLines).toEqual([
+                '    ```md',
+                '    - [ ] not a real task',
+                '    ```',
+                '    - [ ] real child',
+            ]);
         });
 
         it('stops at same-level line', () => {
@@ -207,13 +232,136 @@ describe('FileOperations', () => {
             expect(ops.findTaskLineNumber(lines, task)).toBe(1);
         });
 
-        it('Strategy 3: fallback to stored line', () => {
+        // Behavior change (was: unverified fallback to task.line).
+        // The stored line is only trusted when it still holds a task line with
+        // the same content; otherwise the write must not happen at all.
+        it('Strategy 3: stored line is used when it still holds the same task', () => {
             const task = makeTask({
-                line: 2,
+                line: 3,
+                originalText: 'stale text',
+                content: 'second task',
+                startDate: '2099-01-01', // date no longer matches -> Strategy 2 misses
+            });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(3);
+        });
+
+        it('Strategy 3: returns -1 when the stored line holds something else', () => {
+            const task = makeTask({
+                line: 2, // '    child' — not even a task line
                 originalText: 'completely different',
                 content: 'not found anywhere',
             });
-            expect(ops.findTaskLineNumber(lines, task)).toBe(2);
+            expect(ops.findTaskLineNumber(lines, task)).toBe(-1);
+        });
+
+        // ── W1: prefix collision (evidence-line-misroute.md) ──
+        describe('W1: content prefix collision', () => {
+            // Exact input from the recorded incident: a write aimed at
+            // `DragFlashA` landed on the `DragFlashAllDay` line, +2 rows away.
+            const dragFlashLines = [
+                '# drag flash test',
+                '',
+                '- [ ] DragFlashA @2026-07-25T23:30>00:30',
+                '- [ ] DragFlashB @2026-07-24T13:00>14:00',
+                '- [ ] DragFlashAllDay @2026-07-26>2026-07-27',
+                '- [ ] DragFlashCancel @2026-07-24T16:00>17:00',
+            ];
+
+            it('does not resolve to a line whose content merely starts with it', () => {
+                const task = makeTask({
+                    line: 2,
+                    originalText: 'STALE LINE',
+                    content: 'DragFlashA',
+                    startDate: '2026-07-26',
+                });
+                // Must never be 4 (the DragFlashAllDay line). The stored line 2
+                // holds DragFlashA, so Strategy 3 accepts it.
+                expect(ops.findTaskLineNumber(dragFlashLines, task)).toBe(2);
+            });
+
+            it('refuses to write anywhere when the stored line is stale too', () => {
+                const task = makeTask({
+                    line: 3, // DragFlashB — wrong task
+                    originalText: 'STALE LINE',
+                    content: 'DragFlashA',
+                    startDate: '2026-07-26',
+                });
+                expect(ops.findTaskLineNumber(dragFlashLines, task)).toBe(-1);
+            });
+
+            it('matches an allday line by its start date (> must stay legal)', () => {
+                const task = makeTask({
+                    line: 99,
+                    originalText: 'STALE LINE',
+                    content: 'DragFlashAllDay',
+                    startDate: '2026-07-26',
+                });
+                expect(ops.findTaskLineNumber(dragFlashLines, task)).toBe(4);
+            });
+
+            it('matches a timed line by its date-only startDate (T must stay legal)', () => {
+                const task = makeTask({
+                    line: 99,
+                    originalText: 'STALE LINE',
+                    content: 'DragFlashB',
+                    startDate: '2026-07-24',
+                });
+                expect(ops.findTaskLineNumber(dragFlashLines, task)).toBe(3);
+            });
+
+            it('handles Japanese prefix collisions (買い物 vs 買い物リスト)', () => {
+                const jpLines = [
+                    '- [ ] 買い物リスト @2026-08-12',
+                    '- [ ] 買い物 @2026-08-13',
+                ];
+                const task = makeTask({
+                    line: 99,
+                    originalText: 'STALE LINE',
+                    content: '買い物',
+                    startDate: '2026-08-12', // matches the LIST line's date
+                });
+                // The only line whose content is exactly 買い物 has a different
+                // date, so no write target may be chosen.
+                expect(ops.findTaskLineNumber(jpLines, task)).toBe(-1);
+            });
+
+            it('picks the line whose date matches when content is duplicated', () => {
+                const dupLines = [
+                    '- [ ] 買い物 @2026-08-12',
+                    '- [ ] 買い物 @2026-08-13',
+                    '- [ ] 買い物 @2026-08-14',
+                ];
+                const task = makeTask({
+                    line: 99,
+                    originalText: 'STALE LINE',
+                    content: '買い物',
+                    startDate: '2026-08-13',
+                });
+                expect(ops.findTaskLineNumber(dupLines, task)).toBe(1);
+            });
+
+            it('tolerates extra spaces after the checkbox', () => {
+                const spacedLines = ['- [ ]   padded task @2026-08-12'];
+                const task = makeTask({
+                    line: 99,
+                    originalText: 'STALE LINE',
+                    content: 'padded task',
+                    startDate: '2026-08-12',
+                });
+                expect(ops.findTaskLineNumber(spacedLines, task)).toBe(0);
+            });
+
+            it('accepts a trailing block ID after the content', () => {
+                const blockLines = ['- [ ] plain task @2026-08-12 ^abc123'];
+                const task = makeTask({
+                    line: 99,
+                    originalText: 'STALE LINE',
+                    content: 'plain task',
+                    startDate: '2026-08-12',
+                });
+                expect(ops.findTaskLineNumber(blockLines, task)).toBe(0);
+            });
+
         });
 
         it('prefers blockId over exact text match', () => {
