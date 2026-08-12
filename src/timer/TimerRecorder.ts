@@ -288,6 +288,33 @@ export class TimerRecorder {
     }
 
     /**
+     * ✓ 完了: **対象タスク自身**を完了にする。
+     *
+     * child モードでセッションを子に積んでいる場合でも、完了するのはレコード
+     * ではなく親タスク（レコードは事実、状態はタスクが持つ）。self モードは
+     * 記録の時点で既に `[x]` になっているので、その場合は何もしない。
+     *
+     * flow 付きタスクは self が安全でないため child モードに退避されているが、
+     * ここで `[x]` にすると flow が発火する。完了は本物の完了意図なので、これは
+     * 意図した挙動（tv-lead 承認済み）。
+     */
+    async completeTargetTask(timer: TimerInstance): Promise<void> {
+        if (!timer.taskId || timer.taskId.startsWith('daily-')) return;
+
+        const task = isTvFile(timer)
+            ? this.resolver.resolveTvFile(timer)
+            : this.resolver.resolveTvInline(timer);
+
+        if (!task) {
+            new Notice(t('notice.timerTargetNotFound'));
+            return;
+        }
+        if (task.statusChar === 'x') return;
+
+        await this.plugin.getTaskIndex().updateTask(task.id, { statusChar: 'x' });
+    }
+
+    /**
      * Update the task's start/end times directly (for 'self' recordMode).
      * This converts the task to SE-Timed type.
      */
