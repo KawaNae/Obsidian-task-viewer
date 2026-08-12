@@ -188,19 +188,19 @@ export class TimerRecorder {
     }
 
     /**
-     * Create a child task at timer start (for 'child' recordMode).
-     * Inserts a placeholder child with startDate/startTime and a blockId for tracking.
-     * Returns the child task ID, or undefined if insertion failed.
+     * 走行中セッションの行（placeholder）を組み立てる。
+     *
+     * 開始時刻だけを持つ未完了行で、`blockId` は書き込んだ後に「どの行が今の
+     * セッションか」を引き直すための目印。セッション行の形はここが唯一の持ち主で、
+     * 子として挿す経路（{@link createChildAtStart}）とグループ変形に同梱する
+     * 経路（フェーズ 3 の wrapTaskInGroup）が同じ行を使う。
      */
-    async createChildAtStart(timer: TimerInstance): Promise<string | undefined> {
-        if (timer.taskId.startsWith('daily-')) return undefined;
-
+    buildSessionPlaceholder(timer: TimerInstance): { line: string; blockId: string } {
         const now = new Date();
         const blockId = this.storageUtils.generateTimerTargetId();
-        const label = timer.customLabel.trim();
 
         const taskObj = this.createTaskObject(
-            label,
+            timer.customLabel.trim(),
             this.formatDate(now),
             this.formatTime(now),
             '', ''
@@ -208,22 +208,36 @@ export class TimerRecorder {
         taskObj.statusChar = ' ';
         taskObj.blockId = blockId;
 
-        const formattedLine = TaskParser.format(taskObj);
-        await this.insertChildRecord(timer, formattedLine);
+        return { line: TaskParser.format(taskObj), blockId };
+    }
 
-        // Wait for scan to pick up the new child, then find it by blockId
+    /**
+     * 書き込んだセッション行を blockId で引き直す。スキャンの完了を待ってから
+     * 探すので、呼び出し側は書き込み直後にそのまま呼んでよい。
+     */
+    async findSessionTaskId(filePath: string, blockId: string): Promise<string | undefined> {
+        const taskIndex = this.plugin.getTaskIndex();
+        await taskIndex.waitForScan(filePath);
+        return taskIndex.getTasks().find(t => t.file === filePath && t.blockId === blockId)?.id;
+    }
+
+    /**
+     * Create a child task at timer start (for 'child' recordMode).
+     * Inserts a placeholder child with startDate/startTime and a blockId for tracking.
+     * Returns the child task ID, or undefined if insertion failed.
+     */
+    async createChildAtStart(timer: TimerInstance): Promise<string | undefined> {
+        if (timer.taskId.startsWith('daily-')) return undefined;
+
+        const { line, blockId } = this.buildSessionPlaceholder(timer);
+        await this.insertChildRecord(timer, line);
+
         const parentTask = isTvFile(timer)
             ? this.resolver.resolveTvFile(timer)
             : this.resolver.resolveTvInline(timer);
         if (!parentTask) return undefined;
 
-        const taskIndex = this.plugin.getTaskIndex();
-        await taskIndex.waitForScan(parentTask.file);
-
-        const child = taskIndex.getTasks().find(t =>
-            t.file === parentTask.file && t.blockId === blockId
-        );
-        return child?.id;
+        return this.findSessionTaskId(parentTask.file, blockId);
     }
 
     /**
