@@ -28,6 +28,26 @@ export function newTimerId(): string {
 
 let timerIdCounter = 0;
 
+/**
+ * セッションの状態。**ticker が回っているか（{@link TimerBase.isRunning}）とは
+ * 別の軸**なので統合しない:
+ *
+ * - `isRunning` は「今カウントしているか」。interval の prepare フェーズは
+ *   ユーザーから見れば一時停止だが `isRunning = true` のまま回るし、開始前
+ *   (`phase === 'idle'`, autoStart なし) は `false`
+ * - `runState` は「セッションが走行中か、記録済みで再開待ちか」
+ *
+ * 統合するには 'idle' を足した 3 値が要り、それは `phase` が 'idle' を兼務して
+ * いる既存の混乱を持ち込むだけになる。
+ *
+ * **不変条件: `runState === 'suspended'` ならば `isRunning === false`。**
+ * 中断は記録を書き終えた状態なので、ticker が回っていてはならない。
+ *
+ * countup / countdown の 4 出口でのみ遷移する。interval / idle は常に
+ * `'running'`（状態機械の対象外）。
+ */
+export type TimerRunState = 'running' | 'suspended';
+
 export interface TimerBase {
     id: string;
     taskId: string;
@@ -43,6 +63,16 @@ export interface TimerBase {
 
     phase: TimerPhase;
     isRunning: boolean;
+    /** {@link TimerRunState} 参照。isRunning とは別軸。 */
+    runState: TimerRunState;
+    /** 記録済みセッション数。中断 / 完了のたびに 1 増える。 */
+    sessionCount: number;
+    /**
+     * 記録済みセッションの経過秒の合計。再開時に `pausedElapsedTime` を 0 へ
+     * 戻す（セッション = レコード単位）ため、中断中に出す「これまでの合計」は
+     * ここからしか作れない。
+     */
+    recordedElapsedTime: number;
     isExpanded: boolean;
     intervalId: number | null;
 
