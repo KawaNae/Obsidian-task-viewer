@@ -8,6 +8,7 @@ import { toDisplayHeightPx, toDisplayTopPx } from '../../../../services/display/
 import { type DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
 import type { DragPlan } from '../../DragPlan';
 import { TRANSIENT_DRAG_CLASSES } from '../../constants';
+import { hostWindow } from '../../../../utils/HostWindow';
 
 /**
  * Timeline (timed タスク, 縦軸) の Move Gesture。
@@ -34,6 +35,8 @@ export class TimelineMoveGesture extends BaseDragStrategy {
     private baseTask: Task | null = null;
 
     private autoScrollTimer: number | null = null;
+    /** autoScrollTimer を発行した window。clearInterval は同じ window に対して行う。 */
+    private autoScrollWin: Window | null = null;
     private scrollContainer: HTMLElement | null = null;
     private lastClientX: number = 0;
     private lastClientY: number = 0;
@@ -363,7 +366,11 @@ export class TimelineMoveGesture extends BaseDragStrategy {
 
     private startAutoScroll(direction: number): void {
         if (this.autoScrollTimer !== null) return;
-        this.autoScrollTimer = window.setInterval(() => {
+        // timer は scroll 対象と同じ window から取る。main window の timer は
+        // 最小化中に throttle されるため、popout のドラッグが引っかかる。
+        // 解除も同じ window に対して行う必要があるので参照を保持する。
+        this.autoScrollWin = hostWindow(this.scrollContainer);
+        this.autoScrollTimer = this.autoScrollWin.setInterval(() => {
             if (!this.scrollContainer) return;
             this.scrollContainer.scrollTop += direction;
             this.processMove(this.lastClientX, this.lastClientY);
@@ -378,8 +385,9 @@ export class TimelineMoveGesture extends BaseDragStrategy {
 
     private stopAutoScroll(): void {
         if (this.autoScrollTimer !== null) {
-            clearInterval(this.autoScrollTimer);
+            (this.autoScrollWin ?? window).clearInterval(this.autoScrollTimer);
             this.autoScrollTimer = null;
+            this.autoScrollWin = null;
         }
     }
 

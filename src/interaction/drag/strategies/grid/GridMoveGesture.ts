@@ -413,7 +413,6 @@ export class GridMoveGesture extends BaseDragStrategy {
     private updateDropZoneHighlight(e: PointerEvent, context: DragContext): void {
         const doc = context.container.ownerDocument || document;
         const elBelow = doc.elementFromPoint(e.clientX, e.clientY);
-        document.body.style.cursor = '';
         this.clearHighlight();
 
         const timelineCol = elBelow?.closest('.timeline-scroll-area__day-column') as HTMLElement;

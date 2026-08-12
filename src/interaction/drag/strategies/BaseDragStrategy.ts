@@ -99,7 +99,6 @@ export abstract class BaseDragStrategy implements DragStrategy {
 
     protected cleanup(): void {
         this.clearHighlight();
-        document.body.style.cursor = '';
 
         if (this.dragEl) {
             this.dragEl.classList.remove(...TRANSIENT_DRAG_CLASSES);
