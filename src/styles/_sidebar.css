@@ -55,7 +55,7 @@
     background-color: rgba(var(--tv-shadow-rgb), 0.35);
     opacity: 0;
     pointer-events: none;
-    z-index: calc(var(--z-overlay) - 1);
+    z-index: calc(var(--z-view-drawer) - 1);
 }
 
 /* Animation rules — applied via JS class toggle */
@@ -133,7 +133,9 @@
     width: min(70%, 300px);
     border-left: 1px solid var(--tv-border);
     box-shadow: -8px 0 24px var(--tv-shadow-medium);
-    z-index: var(--z-overlay);
+    /* leaf 内の面なので梯子 [B]（--z-view-drawer）。--z-overlay は
+       body 直下用で 50 しかなく、カード帯（≤190）に突き抜けられる */
+    z-index: var(--z-view-drawer);
 }
 
 .tv-sidebar--mobile .tv-sidebar__panel--hidden {
