@@ -105,6 +105,18 @@ export class TimerProgressUI {
     }
 
     private static getProgressState(timer: TimerInstance): ProgressState {
+        if (timer.runState === 'suspended') {
+            // 中断中は「記録済みセッションの合計」を静的に見せる。走っていない
+            // 時間を進行リングで表現しても嘘になるので、リングは止めたまま。
+            const fullRotation = 30 * 60;
+            return {
+                progress: Math.max(0, Math.min(1, (timer.recordedElapsedTime % fullRotation) / fullRotation)),
+                displaySeconds: timer.recordedElapsedTime,
+                phaseClass: 'idle',
+                isCountupLike: true,
+            };
+        }
+
         switch (timer.timerType) {
             case 'countup':
             case 'idle': {
