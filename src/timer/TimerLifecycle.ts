@@ -221,6 +221,9 @@ export class TimerLifecycle {
         timer.runState = 'suspended';
         timer.isExpanded = false;
 
+        // 中断は「手を止めた」合図。走行中が居なくなったなら次タスクの提案を出す。
+        this.startIdleTimerIfNothingRunning();
+
         this.ctx.render();
         this.ctx.persistTimersToStorage();
     }
@@ -341,8 +344,8 @@ export class TimerLifecycle {
         this.stopTimerTick(timerId);
         this.ctx.timers.delete(timerId);
 
-        if (!closingIdleTimer && !this.hasNonIdleTimers()) {
-            this.startIdleTimer();
+        if (!closingIdleTimer) {
+            this.startIdleTimerIfNothingRunning();
         }
 
         this.ctx.render();
@@ -366,6 +369,25 @@ export class TimerLifecycle {
             }
         }
         return false;
+    }
+
+    /**
+     * 実際に**走行している**非 idle タイマーがあるか。中断中は非稼働として
+     * 数えない — 中断はユーザーが手を止めた合図なので、次タスクの提案（idle
+     * タイマー）が出てほしい。
+     */
+    hasRunningNonIdleTimers(): boolean {
+        for (const [timerId, timer] of this.ctx.timers) {
+            if (this.isIdleTimer(timerId)) continue;
+            if (timer.runState === 'running') return true;
+        }
+        return false;
+    }
+
+    /** 走行中が 1 本も無ければ idle を起こす。close と中断の共通後始末。 */
+    startIdleTimerIfNothingRunning(): void {
+        if (this.hasRunningNonIdleTimers()) return;
+        this.startIdleTimer();
     }
 
     /**
