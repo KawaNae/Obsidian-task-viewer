@@ -148,11 +148,7 @@ export class TimerLifecycle {
         this.stopTimerTick(timerId);
 
         AudioUtils.playFinishSound();
-        if (timer.recordMode === 'self') {
-            await this.ctx.recorder.updateTaskDirectly(timer);
-        } else {
-            await this.ctx.recorder.addIntervalRecord(timer);
-        }
+        await this.ctx.recorder.recordSessionEnd(timer);
         this.closeTimer(timerId);
     }
 

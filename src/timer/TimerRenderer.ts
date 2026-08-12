@@ -413,11 +413,7 @@ export class TimerRenderer {
                 this.lifecycle.pauseTimer(timer);
                 AudioUtils.playFinishSound();
 
-                if (timer.recordMode === 'self') {
-                    await this.ctx.recorder.updateTaskDirectly(timer);
-                } else {
-                    await this.ctx.recorder.addSessionRecord(timer);
-                }
+                await this.ctx.recorder.recordSessionEnd(timer);
 
                 this.lifecycle.closeTimer(timer.id);
             };
@@ -464,11 +460,7 @@ export class TimerRenderer {
             stopBtn.onclick = async () => {
                 this.lifecycle.pauseTimer(timer);
                 AudioUtils.playFinishSound();
-                if (timer.recordMode === 'self') {
-                    await this.ctx.recorder.updateTaskDirectly(timer);
-                } else {
-                    await this.ctx.recorder.addCountdownRecord(timer);
-                }
+                await this.ctx.recorder.recordSessionEnd(timer);
                 this.lifecycle.closeTimer(timer.id);
             };
             return;
@@ -526,11 +518,7 @@ export class TimerRenderer {
             stopBtn.onclick = async () => {
                 this.lifecycle.pauseOrSnapshotIntervalForStop(timer);
                 AudioUtils.playFinishSound();
-                if (timer.recordMode === 'self') {
-                    await this.ctx.recorder.updateTaskDirectly(timer);
-                } else {
-                    await this.ctx.recorder.addIntervalRecord(timer);
-                }
+                await this.ctx.recorder.recordSessionEnd(timer);
                 this.lifecycle.closeTimer(timer.id);
             };
             return;
@@ -568,11 +556,7 @@ export class TimerRenderer {
         stopBtn.onclick = async () => {
             this.lifecycle.pauseOrSnapshotIntervalForStop(timer);
             AudioUtils.playFinishSound();
-            if (timer.recordMode === 'self') {
-                await this.ctx.recorder.updateTaskDirectly(timer);
-            } else {
-                await this.ctx.recorder.addIntervalRecord(timer);
-            }
+            await this.ctx.recorder.recordSessionEnd(timer);
             this.lifecycle.closeTimer(timer.id);
         };
     }
