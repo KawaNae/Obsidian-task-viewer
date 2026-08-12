@@ -16,6 +16,7 @@ import type {
 import { TimerRecorder } from './TimerRecorder';
 import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
 import { TimerStorageUtils } from './TimerStorageUtils';
+import { looksLikeSessionGroup } from './TimerSessionGroup';
 import { TimerCreator } from './TimerCreator';
 import { TimerLifecycle } from './TimerLifecycle';
 import { TimerRenderer } from './TimerRenderer';
@@ -120,7 +121,16 @@ export class TimerWidget implements TimerContext {
             return;
         }
 
-        const timer = this.creator.createTimer(config);
+        // 既にセッションレコードの子を持つタスク（＝ 育ったグループ）に新しく
+        // タイマーを掛けた場合は **append モードで開始**する。self で始めると
+        // グループ行自身をレコードに変形してしまい、二重グループ化の入口になる。
+        const startsOnExistingGroup = config.timerType !== 'idle'
+            && this.looksLikeSessionGroupTask(config.taskId);
+        const effectiveConfig: TimerStartConfig = startsOnExistingGroup
+            ? { ...config, recordMode: 'child' }
+            : config;
+
+        const timer = this.creator.createTimer(effectiveConfig);
         this.timers.set(timer.id, timer);
 
         if (timer.isRunning) {
@@ -132,7 +142,7 @@ export class TimerWidget implements TimerContext {
 
         // Write start time immediately so the task moves on Timeline
         if (config.timerType !== 'idle' && !config.taskId.startsWith('daily-')) {
-            if (config.recordMode === 'self') {
+            if (effectiveConfig.recordMode === 'self') {
                 void this.recorder.updateTaskStartTime(timer);
             } else {
                 void this.createChildAndTrack(timer);
@@ -143,13 +153,27 @@ export class TimerWidget implements TimerContext {
         this.persistTimersToStorage();
         if (!this.lifecycle.isIdleTimer(timer.id)
             && !timer.taskId.startsWith('daily-')
-            && config.recordMode !== 'child') {
+            && effectiveConfig.recordMode !== 'child') {
             void this.targetManager.ensureTimerTargetId(timer.id);
         }
     }
 
+    /**
+     * そのタスクは既にセッションレコードの子を持つか（= グループとして扱うか）。
+     * 判定はファイルの形から（{@link looksLikeSessionGroup}）。
+     */
+    private looksLikeSessionGroupTask(taskId: string): boolean {
+        if (!taskId || taskId.startsWith('daily-')) return false;
+        const readService = this.plugin.getTaskReadService();
+        return looksLikeSessionGroup(readService.getTask(taskId), (id) => readService.getTask(id));
+    }
+
     private async createChildAndTrack(timer: TimerInstance): Promise<void> {
-        const childTaskId = await this.recorder.createChildAtStart(timer);
+        // 既にグループなら末尾追記（セッションは時系列のログ）。
+        const group = this.recorder.resolveGroup(timer);
+        const childTaskId = group
+            ? await this.recorder.appendSessionAtStart(timer, group)
+            : await this.recorder.createChildAtStart(timer);
         if (childTaskId) {
             timer.recordedChildTaskId = childTaskId;
             this.persistTimersToStorage();
