@@ -44,6 +44,50 @@ describe('FileOperations', () => {
         });
     });
 
+    // ── getIndentUnit (static) ──
+    describe('getIndentUnit', () => {
+        it('reads a tab unit from a tab-indented line', () => {
+            expect(FileOperations.getIndentUnit('\t- [ ] task')).toBe('\t');
+        });
+
+        it('reads a 4-space unit from a space-indented line', () => {
+            expect(FileOperations.getIndentUnit('    - [ ] task')).toBe('    ');
+        });
+
+        it('defaults to 4 spaces when the line carries no indent', () => {
+            expect(FileOperations.getIndentUnit('- [ ] task')).toBe('    ');
+        });
+
+        it('agrees with getChildIndent', () => {
+            for (const line of ['- [ ] a', '    - [ ] a', '\t- [ ] a', '\t\t- [ ] a']) {
+                const indent = line.match(/^\s*/)![0];
+                expect(FileOperations.getChildIndent(line))
+                    .toBe(indent + FileOperations.getIndentUnit(line));
+            }
+        });
+    });
+
+    // ── indentBlock (static) ──
+    describe('indentBlock', () => {
+        it('prefixes every non-blank line with the unit', () => {
+            const result = FileOperations.indentBlock(['- [ ] a', '    memo'], '\t');
+            expect(result).toEqual(['\t- [ ] a', '\t    memo']);
+        });
+
+        it('leaves blank lines untouched', () => {
+            const result = FileOperations.indentBlock(['- [ ] a', '', '    memo'], '    ');
+            expect(result).toEqual(['    - [ ] a', '', '        memo']);
+        });
+
+        it('is the inverse of adjustChildIndentation', () => {
+            const original = ['- [ ] a', '    memo', '        deep'];
+            const round = FileOperations.adjustChildIndentation(
+                FileOperations.indentBlock(original, '\t'), '\t'
+            );
+            expect(round).toEqual(original);
+        });
+    });
+
     // ── adjustChildIndentation (static) ──
     describe('adjustChildIndentation', () => {
         it('preserves empty lines', () => {
@@ -458,6 +502,115 @@ describe('FileOperations', () => {
                 '- [ ] only task',
             ];
             expect(ops.findSiblingGroupStart(lines, 0)).toBe(0);
+        });
+    });
+
+    // ── buildGroupWrap ──
+    // The one-shot structural edit behind the timer's first resume: the record
+    // that already exists gets a group checkbox above it and drops one level,
+    // and the new session line joins it as a sibling.
+    describe('buildGroupWrap', () => {
+        const GROUP = '- [ ] task A @2026-08-13';
+        const SESSION = '- [x] ⏱️ task A @2026-08-13T14:00>2026-08-13T15:00';
+
+        it('wraps a childless record (space indent unit)', () => {
+            const lines = [
+                '# note',
+                '- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00',
+                '- [ ] unrelated',
+            ];
+            expect(ops.buildGroupWrap(lines, 1, GROUP, SESSION)).toEqual([
+                '# note',
+                '- [ ] task A @2026-08-13',
+                '    - [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00',
+                '    - [x] ⏱️ task A @2026-08-13T14:00>2026-08-13T15:00',
+                '- [ ] unrelated',
+            ]);
+        });
+
+        it('takes the indent unit from existing children (tab vault)', () => {
+            const lines = [
+                '- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00',
+                '\tメモ1',
+            ];
+            expect(ops.buildGroupWrap(lines, 0, GROUP, SESSION)).toEqual([
+                '- [ ] task A @2026-08-13',
+                '\t- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00',
+                '\t\tメモ1',
+                '\t- [x] ⏱️ task A @2026-08-13T14:00>2026-08-13T15:00',
+            ]);
+        });
+
+        // Characterization of the accepted limitation: collectChildrenFromLines
+        // stops at a blank line, so メモ2 is NOT pulled into the record. It ends
+        // up as a child of the group and a sibling of the record — no data is
+        // lost, and the shared subtree-range function keeps its meaning.
+        it('leaves post-blank-line memos as siblings of the record', () => {
+            const lines = [
+                '- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00',
+                '    メモ1',
+                '',
+                '    メモ2',
+            ];
+            expect(ops.buildGroupWrap(lines, 0, GROUP, SESSION)).toEqual([
+                '- [ ] task A @2026-08-13',
+                '    - [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00',
+                '        メモ1',
+                '    - [x] ⏱️ task A @2026-08-13T14:00>2026-08-13T15:00',
+                '',
+                '    メモ2',
+            ]);
+        });
+
+        it('moves fenced content verbatim', () => {
+            const lines = [
+                '- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00',
+                '\t```md',
+                '\t- [ ] sample',
+                '\t```',
+            ];
+            const result = ops.buildGroupWrap(lines, 0, GROUP, SESSION)!;
+            expect(result.slice(1, 5)).toEqual([
+                '\t- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00',
+                '\t\t```md',
+                '\t\t- [ ] sample',
+                '\t\t```',
+            ]);
+        });
+
+        it('moves flow child lines and block IDs without touching their bytes', () => {
+            const lines = [
+                '- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00 ^tv-timer-target',
+                '\t- ==> every mon',
+            ];
+            expect(ops.buildGroupWrap(lines, 0, GROUP, SESSION)).toEqual([
+                '- [ ] task A @2026-08-13',
+                '\t- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00 ^tv-timer-target',
+                '\t\t- ==> every mon',
+                '\t- [x] ⏱️ task A @2026-08-13T14:00>2026-08-13T15:00',
+            ]);
+        });
+
+        it('keeps the base indent when the record is itself a child', () => {
+            const lines = [
+                '- [ ] parent',
+                '\t- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00',
+                '\t\tメモ',
+                '- [ ] next',
+            ];
+            expect(ops.buildGroupWrap(lines, 1, GROUP, SESSION)).toEqual([
+                '- [ ] parent',
+                '\t- [ ] task A @2026-08-13',
+                '\t\t- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00',
+                '\t\t\tメモ',
+                '\t\t- [x] ⏱️ task A @2026-08-13T14:00>2026-08-13T15:00',
+                '- [ ] next',
+            ]);
+        });
+
+        it('returns null when the index is out of range', () => {
+            expect(ops.buildGroupWrap(['- [ ] a'], 5, GROUP, SESSION)).toBeNull();
+            expect(ops.buildGroupWrap(['- [ ] a'], -1, GROUP, SESSION)).toBeNull();
         });
     });
 });

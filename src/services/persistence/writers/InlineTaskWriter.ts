@@ -1,6 +1,7 @@
 import { type App, TFile } from 'obsidian';
 import type { Task } from '../../../types';
 import { TaskParser } from '../../parsing/TaskParser';
+import { createTempTask } from '../../data/createTempTask';
 import { collectFlowLineIndices } from '../../flow/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
@@ -149,6 +150,63 @@ export class InlineTaskWriter {
             lines.splice(currentLine, 1 + childrenLines.length);
 
             return lines.join('\n');
+        });
+    }
+
+    /**
+     * Promote a standalone session record into a group: insert a group checkbox
+     * above it, push the record (and its subtree) down one level, and add the
+     * new session line as the record's sibling — all inside one vault.process so
+     * the file never exists in a half-wrapped state.
+     *
+     * This is the *only* entry point for that first transformation. Later
+     * sessions are plain appends via insertLineAfterTask.
+     *
+     * The group line is produced by TaskParser.format from a task carrying only
+     * dates (no times), which is what yields `@YYYY-MM-DD` for a single day and
+     * `@YYYY-MM-DD>YYYY-MM-DD` once the work spans days. Keeping the notation in
+     * the parser's hands is why this does not concatenate the line by hand.
+     *
+     * Updating the group's dates later needs no primitive of its own: the group
+     * line is an ordinary dated checkbox, so updateTaskInFile handles it. Note
+     * that path rebuilds the whole line from the Task model — safe here only
+     * because we author the group line ourselves, so it carries nothing the
+     * model does not model.
+     */
+    async wrapTaskInGroup(
+        task: Task,
+        opts: { groupStartDate: string; groupEndDate?: string; sessionLine: string }
+    ): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) {
+            logWarn(`[InlineTaskWriter] File not found: ${task.file}`);
+            return;
+        }
+
+        const groupLine = TaskParser.format(createTempTask({
+            id: `session-group:${task.id}`,
+            file: task.file,
+            content: task.content,
+            statusChar: ' ',
+            startDate: opts.groupStartDate,
+            endDate: opts.groupEndDate,
+        })).trim();
+
+        await this.app.vault.process(file, (content) => {
+            const lines = content.split('\n');
+
+            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
+            if (currentLine < 0 || currentLine >= lines.length) {
+                logWarn(`[InlineTaskWriter] Task not found in file (wrapTaskInGroup)`);
+                return content;
+            }
+
+            const wrapped = this.fileOps.buildGroupWrap(
+                lines, currentLine, groupLine, opts.sessionLine.trim()
+            );
+            if (!wrapped) return content;
+
+            return wrapped.join('\n');
         });
     }
 

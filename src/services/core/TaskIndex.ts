@@ -612,6 +612,10 @@ export class TaskIndex {
     async insertChildTask(parentTaskId: string, childLine: string): Promise<void> {
         const task = this.store.getTask(parentTaskId);
         if (!task) return;
+        // Read-only parsers (Tasks / dayPlanner) must never be written to.
+        // TaskApi guards this as well, but the menu path reaches the write
+        // service directly and would otherwise bypass it.
+        if (task.isReadOnly) return;
         return this.withNotify(task.file, async () => {
             logInfo(`[insertChildTask] parentId=${parentTaskId}`);
 
@@ -626,6 +630,59 @@ export class TaskIndex {
             } else {
                 const childIndent = FileOperations.getChildIndent(task.originalText);
                 await this.repository.insertLineAsFirstChild(task, childIndent + childLine);
+            }
+
+            await this.scanner.waitForScan(task.file);
+        });
+    }
+
+    /**
+     * Turn a standalone session record into a group and add the next session
+     * under it. One structural edit, applied once per task — every later
+     * session is an appendChildTask.
+     *
+     * Inline only: tv-file tasks already own a permanent group structure, so
+     * they accumulate children instead of being wrapped.
+     */
+    async wrapTaskInGroup(
+        taskId: string,
+        opts: { groupStartDate: string; groupEndDate?: string; sessionLine: string }
+    ): Promise<void> {
+        const task = this.store.getTask(taskId);
+        if (!task) return;
+        if (task.isReadOnly || isTvFile(task)) return;
+        return this.withNotify(task.file, async () => {
+            logInfo(`[wrapTaskInGroup] taskId=${taskId}`);
+
+            this.syncDetector.markLocalEdit(task.file);
+            await this.repository.wrapTaskInGroup(task, opts);
+            await this.scanner.waitForScan(task.file);
+        });
+    }
+
+    /**
+     * Append a child at the end of the parent's subtree, in contrast to
+     * insertChildTask's head insertion. Session records accumulate over time,
+     * so head insertion would print the log backwards.
+     */
+    async appendChildTask(parentTaskId: string, childLine: string): Promise<void> {
+        const task = this.store.getTask(parentTaskId);
+        if (!task) return;
+        if (task.isReadOnly) return;
+        return this.withNotify(task.file, async () => {
+            logInfo(`[appendChildTask] parentId=${parentTaskId}`);
+
+            this.syncDetector.markLocalEdit(task.file);
+
+            if (isTvFile(task)) {
+                await this.repository.insertLineAfterTvFile(
+                    task.file, childLine,
+                    this.settings.tvFileChildHeader,
+                    this.settings.tvFileChildHeaderLevel
+                );
+            } else {
+                const childIndent = FileOperations.getChildIndent(task.originalText);
+                await this.repository.insertLineAfterTask(task, childIndent + childLine);
             }
 
             await this.scanner.waitForScan(task.file);
