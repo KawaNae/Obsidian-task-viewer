@@ -53,28 +53,30 @@ export class TimerRenderer {
         const container = this.ctx.ensureContainer();
         container.empty();
         this.renderPinBadge(container);
-        for (const [taskId] of this.ctx.timers) {
-            this.renderTimerItem(taskId);
+        for (const [timerId] of this.ctx.timers) {
+            this.renderTimerItem(timerId);
         }
     }
 
-    renderTimerItem(taskId: string): void {
+    renderTimerItem(timerId: string): void {
         const container = this.ctx.ensureContainer();
 
-        const timer = this.ctx.timers.get(taskId);
+        const timer = this.ctx.timers.get(timerId);
         if (!timer) return;
 
-        let itemEl = container.querySelector(`[data-task-id="${taskId}"]`) as HTMLElement;
+        // DOM key is the timer id, not the task id: a file rename rewrites
+        // `timer.taskId` and would otherwise strand this node.
+        let itemEl = container.querySelector(`[data-timer-id="${timerId}"]`) as HTMLElement;
         const isNewItem = !itemEl;
 
         if (isNewItem) {
             itemEl = container.createDiv('timer-widget__item');
-            itemEl.dataset.taskId = taskId;
+            itemEl.dataset.timerId = timerId;
             if (timer.taskColor) {
                 TaskStyling.applyTaskColor(itemEl, timer.taskColor);
             }
         }
-        const isIdle = this.lifecycle.isIdleTimer(taskId);
+        const isIdle = this.lifecycle.isIdleTimer(timerId);
         itemEl.toggleClass('timer-widget__item--idle', isIdle);
 
         // Idle item shows a next-task suggestion; rebuild when it changes.
@@ -147,7 +149,7 @@ export class TimerRenderer {
                 setIcon(settingsBtn, 'settings');
                 settingsBtn.onclick = (e) => {
                     e.stopPropagation();
-                    this.showSettingsMenu(e, taskId);
+                    this.showSettingsMenu(e, timerId);
                 };
             }
 
@@ -156,7 +158,7 @@ export class TimerRenderer {
             setIcon(toggleBtn, timer.isExpanded ? 'chevron-down' : 'chevron-right');
             toggleBtn.onclick = () => {
                 timer.isExpanded = !timer.isExpanded;
-                this.renderTimerItem(taskId);
+                this.renderTimerItem(timerId);
                 this.ctx.persistTimersToStorage();
             };
 
@@ -166,32 +168,32 @@ export class TimerRenderer {
             closeBtn.onclick = () => {
                 // Skip confirmation for non-running timers
                 if (!timer.isRunning) {
-                    this.clearCloseConfirmTimer(taskId);
-                    this.lifecycle.closeTimer(taskId);
+                    this.clearCloseConfirmTimer(timerId);
+                    this.lifecycle.closeTimer(timerId);
                     return;
                 }
                 // Idle timers close without confirmation, but ignore accidental clicks
                 // right after the idle timer spawns (e.g. double-clicking a previous close)
                 if (timer.phase === 'idle') {
                     if (Date.now() - timer.startTimeMs < 500) return;
-                    this.clearCloseConfirmTimer(taskId);
-                    this.lifecycle.closeTimer(taskId);
+                    this.clearCloseConfirmTimer(timerId);
+                    this.lifecycle.closeTimer(timerId);
                     return;
                 }
 
                 // Already in confirming state → execute close
                 if (closeBtn.classList.contains('timer-widget__close-btn--confirming')) {
-                    this.clearCloseConfirmTimer(taskId);
-                    this.lifecycle.closeTimer(taskId);
+                    this.clearCloseConfirmTimer(timerId);
+                    this.lifecycle.closeTimer(timerId);
                     return;
                 }
 
                 // Enter confirming state
                 closeBtn.classList.add('timer-widget__close-btn--confirming');
-                this.closeConfirmTimers.set(taskId, window.setTimeout(() => {
+                this.closeConfirmTimers.set(timerId, window.setTimeout(() => {
                     closeBtn.classList.remove('timer-widget__close-btn--confirming');
                     closeBtn.classList.add('timer-widget__close-btn--fading');
-                    this.closeConfirmTimers.delete(taskId);
+                    this.closeConfirmTimers.delete(timerId);
                     window.setTimeout(() => {
                         closeBtn.classList.remove('timer-widget__close-btn--fading');
                     }, 500);
@@ -249,11 +251,11 @@ export class TimerRenderer {
 
     // ─── Private ─────────────────────────────────────────────
 
-    private clearCloseConfirmTimer(taskId: string): void {
-        const id = this.closeConfirmTimers.get(taskId);
+    private clearCloseConfirmTimer(timerId: string): void {
+        const id = this.closeConfirmTimers.get(timerId);
         if (id !== undefined) {
             clearTimeout(id);
-            this.closeConfirmTimers.delete(taskId);
+            this.closeConfirmTimers.delete(timerId);
         }
     }
 
@@ -594,8 +596,8 @@ export class TimerRenderer {
         }
     }
 
-    private showSettingsMenu(e: MouseEvent, taskId: string): void {
-        const timer = this.ctx.timers.get(taskId);
+    private showSettingsMenu(e: MouseEvent, timerId: string): void {
+        const timer = this.ctx.timers.get(timerId);
         if (!timer || timer.timerType !== 'interval' || timer.intervalSource !== 'pomodoro') return;
 
         TimerSettingsMenu.showPomodoroSettings({

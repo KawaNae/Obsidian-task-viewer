@@ -8,6 +8,26 @@ import type { ParserId } from '../types';
 
 export type TimerPhase = 'idle' | 'work' | 'break' | 'prepare';
 
+/**
+ * Identity of a timer instance, stable for its whole life.
+ *
+ * It must NOT be derived from the task: `handleFileRename` rewrites
+ * `timer.taskId` in place, and anything keyed by the old task id (the
+ * `timers` map, the widget DOM node, the tick interval) would be stranded.
+ * Lookups by task go through a scan instead — the map never holds more than a
+ * handful of timers.
+ */
+export function newTimerId(): string {
+    const cryptoObj = globalThis.crypto;
+    if (cryptoObj && typeof cryptoObj.randomUUID === 'function') {
+        return `timer-${cryptoObj.randomUUID()}`;
+    }
+    timerIdCounter += 1;
+    return `timer-${timerIdCounter}-${Math.floor(Math.random() * 1e9).toString(36)}`;
+}
+
+let timerIdCounter = 0;
+
 export interface TimerBase {
     id: string;
     taskId: string;

@@ -13,6 +13,7 @@ import type {
     TimerPhase,
     TimerStartConfig,
 } from './TimerInstance';
+import { newTimerId } from './TimerInstance';
 import { type TimerContext, IDLE_TIMER_ID } from './TimerContext';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 
@@ -26,7 +27,9 @@ export class TimerCreator {
 
     createTimer(config: TimerStartConfig): TimerInstance {
         const autoStart = config.autoStart === true;
-        const id = config.timerType === 'idle' ? IDLE_TIMER_ID : config.taskId;
+        // idle は単一インスタンスの番人なので sentinel id を保つ。それ以外は
+        // タスクから独立した不変 id（rename でキーが取り残されないため）。
+        const id = config.timerType === 'idle' ? IDLE_TIMER_ID : newTimerId();
         const now = Date.now();
         const base = {
             id,

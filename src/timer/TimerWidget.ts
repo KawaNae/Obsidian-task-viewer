@@ -164,8 +164,8 @@ export class TimerWidget implements TimerContext {
         this.renderer.render();
     }
 
-    renderTimerItem(taskId: string): void {
-        this.renderer.renderTimerItem(taskId);
+    renderTimerItem(timerId: string): void {
+        this.renderer.renderTimerItem(timerId);
     }
 
     handleFileRename(oldPath: string, newPath: string): void {
@@ -194,8 +194,8 @@ export class TimerWidget implements TimerContext {
     }
 
     destroy(): void {
-        for (const [taskId] of this.timers) {
-            this.lifecycle.stopTimerTick(taskId);
+        for (const [timerId] of this.timers) {
+            this.lifecycle.stopTimerTick(timerId);
         }
         this.intervalPrepareBaseElapsed.clear();
         this.timers.clear();
