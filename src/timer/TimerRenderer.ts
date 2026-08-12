@@ -78,6 +78,7 @@ export class TimerRenderer {
         }
         const isIdle = this.lifecycle.isIdleTimer(timerId);
         itemEl.toggleClass('timer-widget__item--idle', isIdle);
+        itemEl.toggleClass('timer-widget__item--suspended', timer.runState === 'suspended');
 
         // Idle item shows a next-task suggestion; rebuild when it changes.
         const nextKey = isIdle ? suggestionKey(this.suggester.getSuggestion()) : '';
@@ -124,6 +125,10 @@ export class TimerRenderer {
                 fileSpan.setText(fileName);
             }
 
+            if (timer.runState === 'suspended') {
+                header.createSpan({ cls: 'timer-widget__state-badge', text: t('timer.suspended') });
+            }
+
             if (!timer.isExpanded) {
                 const timeSpan = header.createSpan('timer-widget__header-time');
                 timeSpan.dataset.timeDisplay = 'header';
@@ -166,8 +171,9 @@ export class TimerRenderer {
             const closeBtn = header.createEl('button', { cls: 'timer-widget__close-btn' });
             setIcon(closeBtn, 'x');
             closeBtn.onclick = () => {
-                // Skip confirmation for non-running timers
-                if (!timer.isRunning) {
+                // 中断中は記録済み＝失うものが無いので確認なしで閉じる。
+                // 走行中は 2-tap 確認（走行分は記録せず捨てる）。
+                if (timer.runState === 'suspended' || !timer.isRunning) {
                     this.clearCloseConfirmTimer(timerId);
                     this.lifecycle.closeTimer(timerId);
                     return;
@@ -308,10 +314,8 @@ export class TimerRenderer {
     private renderControls(container: HTMLElement, timer: TimerInstance): void {
         switch (timer.timerType) {
             case 'countup':
-                this.renderCountupControls(container, timer);
-                return;
             case 'countdown':
-                this.renderCountdownControls(container, timer);
+                this.renderSessionControls(container, timer);
                 return;
             case 'interval':
                 this.renderIntervalControls(container, timer);
@@ -385,95 +389,75 @@ export class TimerRenderer {
         });
     }
 
-    private renderCountupControls(container: HTMLElement, timer: CountupTimer): void {
-        if (timer.phase === 'idle') {
-            const startBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--primary'
-            });
-            setIcon(startBtn, 'play');
-            startBtn.createSpan({ text: ` ${t('timer.start')}` });
-            startBtn.onclick = () => {
+    /**
+     * countup / countdown の controls。セッション状態機械の 4 出口のうち 3 つを
+     * 出す（✕ はヘッダ）。
+     *
+     *   未開始   … [▶ 開始]（まだセッションが 1 つも無い状態。出口ではない）
+     *   走行中   … [⏸ 中断][✓ 完了]
+     *   中断中   … [▶ 再開][✓ 完了]
+     *
+     * interval は現行の Pause(prepare)/Stop を維持するので、ここには来ない。
+     */
+    private renderSessionControls(container: HTMLElement, timer: CountupTimer | CountdownTimer): void {
+        const neverStarted = !timer.isRunning
+            && timer.runState === 'running'
+            && timer.sessionCount === 0
+            && timer.elapsedTime === 0;
+
+        if (neverStarted) {
+            this.addControlButton(container, 'primary', 'play', t('timer.start'), () => {
                 timer.phase = 'work';
                 timer.startTimeMs = Date.now();
                 timer.pausedElapsedTime = 0;
                 timer.elapsedTime = 0;
+                if (timer.timerType === 'countdown') {
+                    timer.timeRemaining = timer.totalTime;
+                }
                 timer.isRunning = true;
                 this.lifecycle.startTimerTicker(timer.id);
                 AudioUtils.playStartSound();
                 this.render();
                 this.ctx.persistTimersToStorage();
-            };
-        } else if (timer.isRunning) {
-            const stopBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--secondary'
             });
-            setIcon(stopBtn, 'square');
-            stopBtn.createSpan({ text: ` ${t('timer.stop')}` });
-            stopBtn.onclick = async () => {
-                this.lifecycle.pauseTimer(timer);
-                AudioUtils.playFinishSound();
-
-                await this.ctx.recorder.recordSessionEnd(timer);
-
-                this.lifecycle.closeTimer(timer.id);
-            };
-        } else {
-            const resumeBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--primary'
-            });
-            setIcon(resumeBtn, 'play');
-            resumeBtn.createSpan({ text: ` ${t('timer.resume')}` });
-            resumeBtn.onclick = () => {
-                this.lifecycle.resumeTimer(timer);
-            };
+            return;
         }
+
+        if (timer.runState === 'suspended') {
+            this.addControlButton(container, 'primary', 'play', t('timer.resume'), () => {
+                this.lifecycle.resumeSession(timer);
+            });
+        } else {
+            this.addControlButton(container, 'secondary', 'pause', t('timer.suspend'), () => {
+                AudioUtils.playPauseSound();
+                void this.lifecycle.suspendTimer(timer);
+            });
+        }
+
+        this.addControlButton(container, 'primary', 'check', t('timer.finish'), () => {
+            AudioUtils.playFinishSound();
+            void this.lifecycle.completeTimer(timer);
+        });
     }
 
-    private renderCountdownControls(container: HTMLElement, timer: CountdownTimer): void {
-        if (timer.phase === 'idle' && timer.elapsedTime === 0) {
-            const startBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--primary'
-            });
-            setIcon(startBtn, 'play');
-            startBtn.createSpan({ text: ` ${t('timer.start')}` });
-            startBtn.onclick = () => {
-                timer.phase = 'work';
-                timer.startTimeMs = Date.now();
-                timer.pausedElapsedTime = 0;
-                timer.elapsedTime = 0;
-                timer.timeRemaining = timer.totalTime;
-                timer.isRunning = true;
-                this.lifecycle.startTimerTicker(timer.id);
-                AudioUtils.playStartSound();
-                this.render();
-                this.ctx.persistTimersToStorage();
-            };
-            return;
-        }
-
-        if (timer.isRunning) {
-            const stopBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--secondary'
-            });
-            setIcon(stopBtn, 'square');
-            stopBtn.createSpan({ text: ` ${t('timer.stop')}` });
-            stopBtn.onclick = async () => {
-                this.lifecycle.pauseTimer(timer);
-                AudioUtils.playFinishSound();
-                await this.ctx.recorder.recordSessionEnd(timer);
-                this.lifecycle.closeTimer(timer.id);
-            };
-            return;
-        }
-
-        const resumeBtn = container.createEl('button', {
-            cls: 'timer-widget__btn timer-widget__btn--primary'
+    /**
+     * controls のボタン 1 個。アイコンは **span ラッパー経由** で入れる —
+     * WebKit は inline-flex ボタン直下の SVG を描画しない（既知の iPad 制約）。
+     */
+    private addControlButton(
+        container: HTMLElement,
+        variant: 'primary' | 'secondary',
+        icon: string,
+        label: string,
+        onClick: () => void,
+    ): HTMLButtonElement {
+        const btn = container.createEl('button', {
+            cls: `timer-widget__btn timer-widget__btn--${variant}`,
         });
-        setIcon(resumeBtn, 'play');
-        resumeBtn.createSpan({ text: ` ${t('timer.resume')}` });
-        resumeBtn.onclick = () => {
-            this.lifecycle.resumeTimer(timer);
-        };
+        setIcon(btn.createSpan({ cls: 'timer-widget__btn-icon' }), icon);
+        btn.createSpan({ text: label });
+        btn.onclick = onClick;
+        return btn;
     }
 
     private renderIntervalControls(container: HTMLElement, timer: IntervalTimer): void {
@@ -567,6 +551,9 @@ export class TimerRenderer {
     }
 
     private getTimerDisplayText(timer: TimerInstance): string {
+        if (timer.runState === 'suspended') {
+            return TimeFormatter.formatSeconds(timer.recordedElapsedTime);
+        }
         switch (timer.timerType) {
             case 'countup':
             case 'idle':
