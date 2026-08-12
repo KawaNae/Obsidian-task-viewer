@@ -20,7 +20,7 @@ function today(): string {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function build(options: { groupStartDate?: string; groupEndDate?: string; withGroup?: boolean } = {}) {
+function build(options: { groupStartDate?: string; groupEndDate?: string; withGroup?: boolean; anchorMissing?: boolean } = {}) {
     const updates: { id: string; updates: Record<string, unknown> }[] = [];
     const withGroup = options.withGroup !== false;
 
@@ -55,19 +55,28 @@ function build(options: { groupStartDate?: string; groupEndDate?: string; withGr
         waitForScan: async () => { /* unused */ },
     };
 
+    const writes: { kind: string; parentId?: string; line?: string; opts?: Record<string, unknown> }[] = [];
+    const writeService = {
+        insertChildTask: async (parentId: string, line: string) => { writes.push({ kind: 'insert', parentId, line }); },
+        appendChildTask: async (parentId: string, line: string) => { writes.push({ kind: 'append', parentId, line }); },
+        wrapTaskInGroup: async (taskId: string, opts: Record<string, unknown>) => { writes.push({ kind: 'wrap', parentId: taskId, opts }); },
+    };
+
     const plugin = {
         settings: {},
         getTaskIndex: () => taskIndex,
-        getTaskWriteService: () => ({ insertChildTask: async () => { /* unused */ } }),
+        getTaskWriteService: () => writeService,
     } as unknown as TaskViewerPlugin;
 
-    const recorder = new TimerRecorder({} as App, plugin, {} as unknown as TimerStorageUtils);
-    (recorder as unknown as { resolver: { resolveTvInline: () => Task; resolveTvFile: () => Task } }).resolver = {
-        resolveTvInline: () => record,
-        resolveTvFile: () => record,
+    const recorder = new TimerRecorder({} as App, plugin, {
+        generateTimerTargetId: () => 'tv-timer-new',
+    } as unknown as TimerStorageUtils);
+    (recorder as unknown as { resolver: { resolveTvInline: () => Task | undefined; resolveTvFile: () => Task | undefined } }).resolver = {
+        resolveTvInline: () => (options.anchorMissing ? undefined : record),
+        resolveTvFile: () => (options.anchorMissing ? undefined : record),
     };
 
-    return { recorder, updates, group, record };
+    return { recorder, updates, writes, group, record };
 }
 
 function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
@@ -160,5 +169,65 @@ describe('completeTargetTask', () => {
         // 既に [x] なので触らない。
         await solo.recorder.completeTargetTask(makeTimer());
         expect(solo.updates).toHaveLength(0);
+    });
+});
+
+describe('startNextSession', () => {
+    it('appends under the group once one exists', async () => {
+        const h = build();
+        await h.recorder.startNextSession(makeTimer());
+
+        expect(h.writes).toHaveLength(1);
+        expect(h.writes[0].kind).toBe('append');
+        expect(h.writes[0].parentId).toBe(GROUP_ID);
+    });
+
+    it('wraps the first record into a group on the first resume', async () => {
+        const h = build({ withGroup: false });
+        await h.recorder.startNextSession(makeTimer());
+
+        expect(h.writes).toHaveLength(1);
+        const wrap = h.writes[0];
+        expect(wrap.kind).toBe('wrap');
+        expect(wrap.parentId).toBe(RECORD_ID);
+        expect(wrap.opts?.groupStartDate).toBe('2026-08-13');
+        // レコードがアイコンだけ（child モードで名前を付けていない）なら、
+        // 剥がすと空になるのでタイマーが覚えているタスク名に落ちる。
+        expect(wrap.opts?.groupContent).toBe('task A');
+        expect(wrap.opts?.sessionLine).toContain('tv-timer-new');
+    });
+
+    it('keeps the icon off a named record when wrapping', async () => {
+        const h = build({ withGroup: false });
+        h.record.content = '⏱️ task A';
+        await h.recorder.startNextSession(makeTimer());
+        expect(h.writes[0].opts?.groupContent).toBe('task A');
+    });
+
+    it('is born as a multi-day span when the resume lands on a later day', async () => {
+        const h = build({ withGroup: false });
+        h.record.startDate = '2020-01-01';
+        await h.recorder.startNextSession(makeTimer());
+        expect(h.writes[0].opts?.groupEndDate).toBe(today());
+    });
+
+    it('stays single-day when resumed on the same day', async () => {
+        const h = build({ withGroup: false });
+        h.record.startDate = today();
+        await h.recorder.startNextSession(makeTimer());
+        expect(h.writes[0].opts?.groupEndDate).toBeUndefined();
+    });
+
+    it('falls back to a child insert when the anchor is gone', async () => {
+        // レコード行を消されてもセッションは落とさない（notice も出さない）。
+        const h = build({ withGroup: false, anchorMissing: true });
+        await h.recorder.startNextSession(makeTimer());
+        expect(h.writes.map(w => w.kind)).not.toContain('wrap');
+    });
+
+    it('never wraps a daily-note timer', async () => {
+        const h = build({ withGroup: false });
+        await h.recorder.startNextSession(makeTimer({ taskId: 'daily-2026-08-13' }));
+        expect(h.writes.map(w => w.kind)).not.toContain('wrap');
     });
 });
