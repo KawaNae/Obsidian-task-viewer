@@ -92,18 +92,32 @@ export class FileOperations {
     }
 
     /**
+     * One indent level, inferred from the given line's own indentation.
+     * Obsidian supports only a tab or 4 spaces, so a line already using tabs
+     * implies a tab unit; anything else — including an unindented line, where
+     * there is nothing to read — implies 4 spaces.
+     */
+    static getIndentUnit(line: string): string {
+        const indent = line.match(/^(\s*)/)?.[1] ?? '';
+        return indent.includes('\t') ? '\t' : '    ';
+    }
+
+    /**
      * Compute the indent string for a direct child of the given parent line.
      * Detects tabs vs spaces from the parent and adds one level.
      */
     static getChildIndent(parentLine: string): string {
-        const match = parentLine.match(/^(\s*)/);
-        const parentIndent = match ? match[1] : '';
+        const parentIndent = parentLine.match(/^(\s*)/)?.[1] ?? '';
+        return parentIndent + FileOperations.getIndentUnit(parentLine);
+    }
 
-        if (parentIndent.includes('\t')) {
-            return parentIndent + '\t';
-        }
-
-        return parentIndent + '    ';
+    /**
+     * Add one indent level to every line of a block, leaving blank lines alone.
+     * The inverse of adjustChildIndentation: the unit is only ever prepended,
+     * never rewritten, so deeper indentation inside the block survives verbatim.
+     */
+    static indentBlock(lines: string[], unit: string): string[] {
+        return lines.map(line => (line.trim() === '' ? line : unit + line));
     }
 
     /**
@@ -224,6 +238,54 @@ export class FileOperations {
         }
 
         return -1;
+    }
+
+    /**
+     * Pure core of the session-group transformation: rewrite `lines` so that the
+     * task at `taskLineIndex` and its subtree sit one level under a new group
+     * line, with `sessionLine` added as the subtree's new last sibling.
+     *
+     * The existing lines are only ever *prefixed* — no byte of their content is
+     * rewritten — so block IDs, `- ==>` flow children and fenced blocks travel
+     * unchanged.
+     *
+     * Known limitation, deliberately kept: collectChildrenFromLines stops at a
+     * blank line, so a memo written after one stays where it is. It then reads
+     * as a child of the group and a sibling of the record — nothing is lost, and
+     * the shared subtree-range helper keeps the meaning every other writer
+     * depends on.
+     *
+     * `groupLine` / `sessionLine` are formatted line bodies without indentation.
+     * Returns null when the index is out of range.
+     */
+    buildGroupWrap(
+        lines: string[],
+        taskLineIndex: number,
+        groupLine: string,
+        sessionLine: string
+    ): string[] | null {
+        if (taskLineIndex < 0 || taskLineIndex >= lines.length) return null;
+
+        const taskLine = lines[taskLineIndex];
+        const baseIndent = taskLine.match(/^(\s*)/)?.[1] ?? '';
+        const { childrenLines } = this.collectChildrenFromLines(lines, taskLineIndex);
+
+        // Existing children are the better witness of the vault's indent style:
+        // a top-level task carries no indentation to read.
+        const unitSource = childrenLines.find(l => l.trim() !== '') ?? taskLine;
+        const unit = FileOperations.getIndentUnit(unitSource);
+
+        const moved = FileOperations.indentBlock([taskLine, ...childrenLines], unit);
+
+        const result = [...lines];
+        result.splice(
+            taskLineIndex,
+            1 + childrenLines.length,
+            baseIndent + groupLine,
+            ...moved,
+            baseIndent + unit + sessionLine
+        );
+        return result;
     }
 
     /**

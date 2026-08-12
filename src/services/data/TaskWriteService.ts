@@ -72,6 +72,27 @@ export class TaskWriteService {
         return this.taskIndex.insertChildTask(this.resolveTaskId(parentTaskId), childLine);
     }
 
+    /**
+     * Append a child at the *end* of the parent's subtree. Session records are
+     * a log, so they must accumulate in chronological order — insertChildTask
+     * inserts at the head and would read backwards.
+     */
+    async appendChildTask(parentTaskId: string, childLine: string): Promise<void> {
+        return this.taskIndex.appendChildTask(this.resolveTaskId(parentTaskId), childLine);
+    }
+
+    /**
+     * The one entry point for the first session-group transformation: the
+     * existing record drops one level under a new group checkbox and the next
+     * session joins it as a sibling, in a single atomic write.
+     */
+    async wrapTaskInGroup(
+        taskId: string,
+        opts: { groupStartDate: string; groupEndDate?: string; sessionLine: string }
+    ): Promise<void> {
+        return this.taskIndex.wrapTaskInGroup(this.resolveTaskId(taskId), opts);
+    }
+
     async createTvFileFromData(taskData: Partial<Task>): Promise<string> {
         return this.taskIndex.createTvFileFromData(taskData);
     }
