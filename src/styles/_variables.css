@@ -59,7 +59,18 @@
     --toolbar-padding: 8px;
     --toolbar-gap: 8px;
 
-    /* Z-Index Layers */
+    /* Z-Index Layers
+       There are TWO independent ladders here. Never mix their tokens — the
+       stacking contexts they live in are disjoint, so a value that is "high"
+       in one is meaningless in the other.
+       [A] body-level (Obsidian's modal space, document.body children):
+           --z-overlay (= --layer-modal, 50) < own popovers (+1)
+           < native suggest (60) / menu (65) / tooltip (70)
+       [B] leaf-level (inside .workspace-leaf, which is isolation:isolate):
+           normal cards <= 190 (Z_MAX, TimelineSectionRenderer)
+           < selected card / current-time-indicator 200 < drag ghost 210
+           < sticky band 245 (moon) / 250 (date) / 255 (periodic)
+           < view drawer 260 (sidebar panel) */
     --z-negative: -1;
     --z-base: 0;
     --z-task-card: 1;
@@ -88,7 +99,10 @@
     --z-task-card-selected: 200;
     /* overlay は Obsidian の modal 層（--layer-modal, 50）に立つ。
        Obsidian native の menu(65)/suggest(60)/tooltip(70) はその上に
-       来るのが正しい。自前 popover は calc(+1) で overlay の直上。 */
+       来るのが正しい。自前 popover は calc(+1) で overlay の直上。
+       これは梯子 [A] = body 直下面**専用**のトークン。leaf 内の面に
+       使ってはならない（50 では leaf 内のカード帯 ≤190 に負ける）。
+       leaf 内のドロワー面には --z-view-drawer を使う。 */
     --z-overlay: var(--layer-modal, 50);
     /* 210 = above selected card / now-line (200), below the sticky band
        (245+). The absolute (in-grid) ghost thus stays under sticky
@@ -96,6 +110,13 @@
        document.body, whose stacking context is independent of the leaf,
        so cross-view drag visibility is unaffected by this value. */
     --z-task-card-drag-ghost: 210;
+    /* Drawer surfaces that live INSIDE a leaf (sidebar pinned-list panel).
+       Ladder [B], not [A]: the leaf is isolation:isolate, so the panel's only
+       competitors are this plugin's own layers — it must clear the card band
+       (<= 190) and the sticky header band (245-255). 260 puts it above both,
+       i.e. an open panel covers the headers too. Its backdrop takes
+       calc(-1) = 259: under the panel, over everything else in the leaf. */
+    --z-view-drawer: 260;
 }
 
 body {
