@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { TaskParser } from '../../../src/services/parsing/TaskParser';
 import { createTempTask } from '../../../src/services/data/createTempTask';
+import { TFile } from 'obsidian';
+import { InlineTaskWriter } from '../../../src/services/persistence/writers/InlineTaskWriter';
+import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { makeTask } from '../helpers/makeTask';
@@ -46,6 +49,102 @@ describe('session group line', () => {
     it('does not decorate the content', () => {
         expect(groupLineFor({ content: '⏱️ task A', startDate: '2026-08-13' }))
             .toBe('- [ ] ⏱️ task A @2026-08-13');
+    });
+
+    it('is what buildGroupLine produces', () => {
+        expect(InlineTaskWriter.buildGroupLine('g', 'note.md', 'task A', '2026-08-13', '2026-08-15'))
+            .toBe('- [ ] task A @2026-08-13>2026-08-15');
+    });
+});
+
+// ── wrapTaskInGroup against a fake vault ──
+// Exercises the real writer, so the group-content choice and the wrap itself
+// are pinned by what actually lands in the file.
+function runWrap(
+    fileText: string,
+    task: Task,
+    opts: { groupStartDate: string; groupEndDate?: string; sessionLine: string; groupContent?: string }
+): Promise<string> {
+    let content = fileText;
+    const file = new TFile();
+    const app = {
+        vault: {
+            getAbstractFileByPath: () => file,
+            process: async (_f: TFile, fn: (data: string) => string) => { content = fn(content); },
+        },
+    } as any;
+    const writer = new InlineTaskWriter(app, new FileOperations(app));
+    return writer.wrapTaskInGroup(task, opts).then(() => content);
+}
+
+// By the time wrapTaskInGroup runs, the task is the first session *record*:
+// self-mode recording prefixes the content with the timer's icon (⏱️ / ⏳ /
+// 🍅 / 🔁, TimerRecorder.updateTaskDirectly). That icon marks a record, so it
+// must not reach the group line.
+describe('wrapTaskInGroup', () => {
+    const recordLine = '- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00';
+    const record = makeTask({
+        content: '⏱️ task A',
+        line: 0,
+        originalText: recordLine,
+        statusChar: 'x',
+        startDate: '2026-08-13',
+    });
+    const SESSION = '- [x] ⏱️ task A @2026-08-13T14:00>2026-08-13T15:00';
+
+    it('names the group with the caller-supplied undecorated content', async () => {
+        const result = await runWrap(recordLine, record, {
+            groupStartDate: '2026-08-13',
+            sessionLine: SESSION,
+            groupContent: 'task A',
+        });
+        expect(result.split('\n')).toEqual([
+            '- [ ] task A @2026-08-13',
+            `    ${recordLine}`,
+            `    ${SESSION}`,
+        ]);
+    });
+
+    it('falls back to the record content when no group content is given', async () => {
+        const result = await runWrap(recordLine, record, {
+            groupStartDate: '2026-08-13',
+            sessionLine: SESSION,
+        });
+        expect(result.split('\n')[0]).toBe('- [ ] ⏱️ task A @2026-08-13');
+    });
+
+    it('keeps every timer icon out of the group line', async () => {
+        for (const icon of ['⏱️', '⏳', '🍅', '🔁', '⏲️']) {
+            const line = `- [x] ${icon} task A @2026-08-13T09:00>2026-08-13T10:00`;
+            const iconRecord = makeTask({
+                content: `${icon} task A`, line: 0, originalText: line,
+                statusChar: 'x', startDate: '2026-08-13',
+            });
+            const result = await runWrap(line, iconRecord, {
+                groupStartDate: '2026-08-13',
+                sessionLine: SESSION,
+                groupContent: 'task A',
+            });
+            expect(result.split('\n')[0]).toBe('- [ ] task A @2026-08-13');
+        }
+    });
+
+    it('spans days once the group carries an end date', async () => {
+        const result = await runWrap(recordLine, record, {
+            groupStartDate: '2026-08-13',
+            groupEndDate: '2026-08-15',
+            sessionLine: SESSION,
+            groupContent: 'task A',
+        });
+        expect(result.split('\n')[0]).toBe('- [ ] task A @2026-08-13>2026-08-15');
+    });
+
+    it('leaves the file untouched when the line cannot be resolved', async () => {
+        const other = '- [ ] something else @2026-01-01';
+        const result = await runWrap(other, makeTask({
+            content: 'task A', line: 9, originalText: recordLine, startDate: '2026-08-13',
+        }), { groupStartDate: '2026-08-13', sessionLine: SESSION, groupContent: 'task A' });
+        expect(result).toBe(other);
     });
 });
 

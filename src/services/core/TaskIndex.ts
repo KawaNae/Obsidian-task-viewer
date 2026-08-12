@@ -646,7 +646,12 @@ export class TaskIndex {
      */
     async wrapTaskInGroup(
         taskId: string,
-        opts: { groupStartDate: string; groupEndDate?: string; sessionLine: string }
+        opts: {
+            groupStartDate: string;
+            groupEndDate?: string;
+            sessionLine: string;
+            groupContent?: string;
+        }
     ): Promise<void> {
         const task = this.store.getTask(taskId);
         if (!task) return;
