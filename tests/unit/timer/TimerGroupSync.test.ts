@@ -231,3 +231,50 @@ describe('startNextSession', () => {
         expect(h.writes.map(w => w.kind)).not.toContain('wrap');
     });
 });
+
+/**
+ * ターゲット別の扱い。tvFile / daily は最初から恒久的な器を持つので変形しない
+ * （子を積むだけ）。read-only ターゲットは書き込み層が弾く。
+ */
+describe('target matrix', () => {
+    it('never wraps a tv-file timer — it already owns a container', async () => {
+        const h = build({ withGroup: false });
+        await h.recorder.startNextSession(makeTimer({ parserId: 'tv-file' }));
+
+        expect(h.writes.map(w => w.kind)).not.toContain('wrap');
+        expect(h.writes[0].kind).toBe('insert');
+    });
+
+    it('does not treat a tv-file task as a session group', () => {
+        const h = build();
+        expect(h.recorder.resolveGroup(makeTimer({ parserId: 'tv-file' }))).toBeNull();
+    });
+
+    it('keeps completing the tv-file task itself', async () => {
+        const h = build();
+        await h.recorder.completeTargetTask(makeTimer({ parserId: 'tv-file' }));
+        // グループではなくアンカー（tv-file タスク）が対象。既に [x] なので更新なし。
+        expect(h.updates).toHaveLength(0);
+    });
+
+    it('writes nothing for a daily-note timer on completion', async () => {
+        const h = build();
+        await h.recorder.completeTargetTask(makeTimer({ taskId: 'daily-2026-08-13' }));
+        expect(h.updates).toHaveLength(0);
+    });
+});
+
+/**
+ * 「既にセッションを持つタスクに新しいタイマーを掛けたら append で始める」は
+ * ウィジェットの開始経路が判定する。DOM 無しでは動かせないので、判定を
+ * 通していること自体をソースで固定する。
+ */
+describe('start path consults the group shape', () => {
+    it('TimerWidget asks looksLikeSessionGroup before choosing the record mode', async () => {
+        const { readFileSync } = await import('node:fs');
+        const source = readFileSync('src/timer/TimerWidget.ts', 'utf8');
+        expect(source).toMatch(/looksLikeSessionGroup/);
+        expect(source).toMatch(/recordMode: 'child'/);
+        expect(source).toMatch(/appendSessionAtStart/);
+    });
+});
