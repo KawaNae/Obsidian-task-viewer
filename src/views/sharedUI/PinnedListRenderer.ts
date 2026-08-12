@@ -16,6 +16,7 @@ import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/Ef
 import { TaskPagingController } from './TaskPagingController';
 import { CardReconciler } from './CardReconciler';
 import { shouldRenderForChanges } from './RenderScheduler';
+import { HostFrameScheduler } from '../../utils/HostWindow';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 
 export interface PinnedListCallbacks {
@@ -73,6 +74,8 @@ export class PinnedListRenderer {
     private viewId: string | null = null;
     private unsubscribe: (() => void) | null = null;
     private pendingRaf: number | null = null;
+    /** 再描画フレームは host（= attach された sidebar 要素）の window から取る。 */
+    private readonly frames = new HostFrameScheduler(() => this.host);
 
     constructor(
         private taskRenderer: TaskCardRenderer,
@@ -130,7 +133,7 @@ export class PinnedListRenderer {
         this.callbacks = null;
         this.viewId = null;
         if (this.pendingRaf !== null) {
-            cancelAnimationFrame(this.pendingRaf);
+            this.frames.cancel(this.pendingRaf);
             this.pendingRaf = null;
         }
     }
@@ -142,7 +145,7 @@ export class PinnedListRenderer {
      */
     private scheduleRefresh(): void {
         if (this.pendingRaf !== null) return;
-        this.pendingRaf = requestAnimationFrame(() => {
+        this.pendingRaf = this.frames.request(() => {
             this.pendingRaf = null;
             this.refresh();
         });

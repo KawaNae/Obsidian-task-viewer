@@ -1,9 +1,20 @@
+import { HostFrameScheduler } from '../../utils/HostWindow';
+
 /**
  * Handlers a view supplies to the render scheduler.
  */
 export interface RenderSchedulerHandlers {
     /** Re-render the whole view. The view internally reconciles card DOM. */
     performFull: () => void;
+    /**
+     * The view's container element (resolved lazily — views build it in
+     * onOpen and can be moved between windows afterwards). The coalescing
+     * frame is taken from **this element's own window**, so a popout view is
+     * clocked by the popout: the main window's rAF stops while it is
+     * minimized, and its frames carry no paint-order guarantee for another
+     * window's compositor.
+     */
+    getHost: () => Node | null;
 }
 
 /**
@@ -25,8 +36,11 @@ export interface RenderSchedulerHandlers {
 export class RenderScheduler {
     private rafId: number | null = null;
     private dirty = false;
+    private readonly frames: HostFrameScheduler;
 
-    constructor(private handlers: RenderSchedulerHandlers) {}
+    constructor(private handlers: RenderSchedulerHandlers) {
+        this.frames = new HostFrameScheduler(handlers.getHost);
+    }
 
     /**
      * `readService.onChange` entry point. Skips the render entirely if every
@@ -40,11 +54,11 @@ export class RenderScheduler {
         this.scheduleRender();
     }
 
-    /** Request a render. rAF-coalesced. */
+    /** Request a render. rAF-coalesced on the host window's frame clock. */
     scheduleRender(): void {
         this.dirty = true;
         if (this.rafId !== null) return;
-        this.rafId = requestAnimationFrame(() => {
+        this.rafId = this.frames.request(() => {
             this.rafId = null;
             if (!this.dirty) return;
             this.dirty = false;
@@ -55,7 +69,7 @@ export class RenderScheduler {
     /** Cancel any pending rAF, then render synchronously. */
     performImmediate(): void {
         if (this.rafId !== null) {
-            cancelAnimationFrame(this.rafId);
+            this.frames.cancel(this.rafId);
             this.rafId = null;
         }
         this.dirty = false;
@@ -65,7 +79,7 @@ export class RenderScheduler {
     /** Drop a pending rAF without rendering (used right before a sync render). */
     cancelPending(): void {
         if (this.rafId !== null) {
-            cancelAnimationFrame(this.rafId);
+            this.frames.cancel(this.rafId);
             this.rafId = null;
             this.dirty = false;
         }
@@ -73,10 +87,8 @@ export class RenderScheduler {
 
     /** Tear down on view unload. */
     dispose(): void {
-        if (this.rafId !== null) {
-            cancelAnimationFrame(this.rafId);
-            this.rafId = null;
-        }
+        this.frames.dispose();
+        this.rafId = null;
         this.dirty = false;
     }
 }

@@ -43,6 +43,7 @@ import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 import { RenderScheduler } from '../sharedUI/RenderScheduler';
+import { HostFrameScheduler } from '../../utils/HostWindow';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { codecFor } from '../../services/viewConfig';
 import { TimelineSchema, type TimelineConfig, type TimelineTransient } from './TimelineSchema';
@@ -144,6 +145,8 @@ export class TimelineView extends ItemView {
     // Render coalescing (frame-level): 同一 frame 内に複数の onChange が来ても render は 1 回
     // 実装は RenderScheduler に委譲。
     private renderScheduler: RenderScheduler;
+    /** render 後の多段 scroll 再適用用。container の window に束ねる（popout 対応）。 */
+    private readonly frames = new HostFrameScheduler(() => this.container);
 
     // ==================== Pinch zoom state ====================
     private pinchInitialDistance: number = 0;
@@ -396,6 +399,7 @@ export class TimelineView extends ItemView {
                 this.saveScrollPosition();
                 this.performRender();
             },
+            getHost: () => this.container,
         });
 
         // Subscribe to data changes
@@ -596,6 +600,7 @@ export class TimelineView extends ItemView {
         }
         this.dateHeaderRenderer?.dispose();
         this.renderScheduler?.dispose();
+        this.frames.dispose();
     }
 
     getEffectiveZoomLevel(): number {
@@ -904,21 +909,19 @@ export class TimelineView extends ItemView {
         // residual async layout settle, e.g. data-driven layout flux that
         // may slip past the TaskCardRenderer expand-bar fix). Mirrors the
         // scrollToCurrentTime three-pass pattern from 4029ac9 / 7c44468.
+        // The re-applies run on the container's own window so a popout view
+        // is not waiting on the main window's frame clock.
         const newGrid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (newGrid) {
             if (this.scrollToNowOnNextRender) {
                 this.scrollToNowOnNextRender = false;
                 this.scrollToCurrentTime();
-                requestAnimationFrame(() => {
-                    this.scrollToCurrentTime();
-                    requestAnimationFrame(() => this.scrollToCurrentTime());
-                });
+                this.frames.after(1, () => this.scrollToCurrentTime());
+                this.frames.after(2, () => this.scrollToCurrentTime());
             } else if (this.savedScrollAnchor !== null) {
                 this.applyScrollAnchor();
-                requestAnimationFrame(() => {
-                    this.applyScrollAnchor();
-                    requestAnimationFrame(() => this.applyScrollAnchor());
-                });
+                this.frames.after(1, () => this.applyScrollAnchor());
+                this.frames.after(2, () => this.applyScrollAnchor());
             }
         }
 
