@@ -10,6 +10,7 @@ import type {
     IntervalTimer,
     TimerInstance,
 } from './TimerInstance';
+import { getTimerElapsedSeconds } from './TimerInstance';
 import { type TimerContext, IDLE_TIMER_ID } from './TimerContext';
 import type { TimerCreator } from './TimerCreator';
 
@@ -187,6 +188,100 @@ export class TimerLifecycle {
             default:
                 break;
         }
+    }
+
+    // ─── Session state machine (countup / countdown) ──────────
+
+    /**
+     * ⏸ 中断: 走行分を**記録してから**ウィジェットを生かしたまま停める。
+     *
+     * 現行 Stop との違いは `closeTimer` を呼ばないことだけ — 書き込みの種類は
+     * 変えない（グループ変形はフェーズ 3）。記録を書き終えた以上、次のセッション
+     * は新しいレコードになるので placeholder の紐付けは切る。
+     *
+     * self モードは 1 回目の記録でタスク行そのものがレコードに変形する（＝
+     * `[x]` になる）。仕様上その未完了状態はフェーズ 3 で挿入するグループ
+     * checkbox が持つ。ここでは 2 回目以降が親直下への追記になるよう
+     * `recordMode` を child に落としておく。
+     *
+     * interval / idle は 4 出口の対象外（呼ばれない想定だが安全側で弾く）。
+     */
+    async suspendTimer(timer: TimerInstance): Promise<void> {
+        if (timer.timerType === 'interval' || timer.timerType === 'idle') return;
+        if (timer.runState === 'suspended') return;
+
+        this.pauseTimer(timer);
+        const sessionSeconds = getTimerElapsedSeconds(timer);
+        await this.ctx.recorder.recordSessionEnd(timer);
+
+        timer.recordedElapsedTime += Math.max(0, sessionSeconds);
+        timer.sessionCount += 1;
+        timer.recordedChildTaskId = undefined;
+        timer.recordMode = 'child';
+        timer.runState = 'suspended';
+        timer.isExpanded = false;
+
+        this.ctx.render();
+        this.ctx.persistTimersToStorage();
+    }
+
+    /**
+     * ▶ 再開: 新しいセッションを始める。
+     *
+     * **経過は 0 から**。セッション = レコード単位なので、前のセッションの
+     * 経過を持ち越すと 1 レコードの長さが実際の作業と食い違う（現行
+     * {@link resumeTimer} の累積保持と違う点）。合計は
+     * `recordedElapsedTime` が持っている。
+     *
+     * 走行中がタイムラインに見えるよう、child モードの慣習どおりセッション行は
+     * 開始時に書く。
+     */
+    resumeSession(timer: TimerInstance): void {
+        if (timer.runState !== 'suspended') return;
+
+        timer.runState = 'running';
+        timer.startTimeMs = Date.now();
+        timer.pausedElapsedTime = 0;
+        timer.isRunning = true;
+        timer.isExpanded = true;
+
+        if (timer.timerType === 'countup') {
+            timer.elapsedTime = 0;
+        } else if (timer.timerType === 'countdown') {
+            timer.elapsedTime = 0;
+            timer.timeRemaining = timer.totalTime;
+            timer.phase = 'work';
+        }
+
+        this.stopIdleTimer();
+        this.startTimerTicker(timer.id);
+        AudioUtils.playStartSound();
+
+        void this.ctx.recorder.createChildAtStart(timer).then((childTaskId) => {
+            if (!childTaskId) return;
+            timer.recordedChildTaskId = childTaskId;
+            this.ctx.persistTimersToStorage();
+        });
+
+        this.ctx.render();
+        this.ctx.persistTimersToStorage();
+    }
+
+    /**
+     * ✓ 完了: 走行中なら記録してから、対象タスクを完了にしてウィジェットを畳む。
+     */
+    async completeTimer(timer: TimerInstance): Promise<void> {
+        if (timer.runState === 'running' && timer.timerType !== 'idle') {
+            this.pauseTimer(timer);
+            const sessionSeconds = getTimerElapsedSeconds(timer);
+            await this.ctx.recorder.recordSessionEnd(timer);
+            timer.recordedElapsedTime += Math.max(0, sessionSeconds);
+            timer.sessionCount += 1;
+            timer.recordedChildTaskId = undefined;
+        }
+
+        await this.ctx.recorder.completeTargetTask(timer);
+        this.closeTimer(timer.id);
     }
 
     pauseIntervalToPrepare(timer: IntervalTimer): void {
