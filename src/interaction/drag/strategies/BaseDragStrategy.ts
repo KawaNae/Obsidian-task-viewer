@@ -1,5 +1,5 @@
 import type { DragStrategy, DragContext } from '../DragStrategy';
-import { TRANSIENT_DRAG_CLASSES } from '../constants';
+import { DropReveal } from '../DropReveal';
 import type { Task } from '../../../types';
 import { materializeRawDates, NO_TASK_LOOKUP, toDisplayTask } from '../../../services/display/DisplayTaskConverter';
 import { getTaskDateRange } from '../../../services/display/VisualDateRange';
@@ -17,6 +17,8 @@ export abstract class BaseDragStrategy implements DragStrategy {
     // 共通プロパティ
     protected dragTask: Task | null = null;
     protected dragEl: HTMLElement | null = null;
+    /** ドロップ確定時の再可視化ゲート。1 drag = 1 Strategy インスタンス。 */
+    protected readonly dropReveal = new DropReveal();
     protected lastHighlighted: HTMLElement | null = null;
     protected hasMoved: boolean = false;
     protected currentContext: DragContext | null = null;
@@ -62,15 +64,58 @@ export abstract class BaseDragStrategy implements DragStrategy {
      * 各 finish は visual edits の組み立てに専念し、raw `Partial<Task>` を
      * 直接作らない。これにより endDate inclusive/exclusive の dual semantic を
      * 1 箇所（materializeRawDates）に閉じ込める。
+     *
+     * @returns 実際に書き戻したか。false は「掴んだが値は変わっていない」＝
+     *          ソースカードの旧ジオメトリがそのまま正しい、を意味する
+     *          （{@link commitAndReveal} の再可視化判断に使う）。
      */
-    protected async commitPlan(context: DragContext, plan: DragPlan | null, taskId: string): Promise<void> {
-        if (!plan) return;
+    protected async commitPlan(context: DragContext, plan: DragPlan | null, taskId: string): Promise<boolean> {
+        if (!plan) return false;
         const { edits, baseTask } = plan;
         const startHour = context.plugin.settings.startHour;
         const updates = this.diffUpdates(materializeRawDates(edits, baseTask, startHour), baseTask);
-        if (Object.keys(updates).length === 0) return;
+        if (Object.keys(updates).length === 0) return false;
         await context.writeService.updateTask(taskId, updates);
         this.restoreSelection(context, taskId);
+        return true;
+    }
+
+    /**
+     * ドロップ確定の唯一の入口。commit → 確定ジオメトリ反映 → 再可視化 →
+     * ghost 撤去 の順序を **await を挟まない 1 ブロック** で固定する。
+     *
+     * この順序が {@link DropReveal} の不変条件（旧ジオメトリのソースカードが
+     * 可視なフレームを作らない）の本体。ゲスチャ側の暗黙知にすると、過去
+     * d97e38b のように別のリファクタで静かに壊れる — 壊れたときに落ちるのが
+     * ここ 1 箇所になるよう API 境界に束ねている。
+     *
+     * `applyGeometry` は commit した値でソースカードを描き直し、描き直せた
+     * 要素を {@link DropReveal.markApplied} する責務を持つ。反映できなかった
+     * 要素は隠したまま次 render に委ねられる。
+     *
+     * 書き戻しが起きなかったとき（plan なし / 値が変わっていない）は旧ジオメトリ
+     * がそのまま正しいので、ゲートを立てずに全要素を可視へ戻す。ここを取り違えると
+     * 「render が来ないので永久に隠れたまま」の逆バグになる。
+     */
+    protected async commitAndReveal(params: {
+        context: DragContext;
+        plan: DragPlan | null;
+        taskId: string;
+        /** drag 中に隠した/淡くした全ソース要素。 */
+        sourceElements: readonly HTMLElement[];
+        applyGeometry: () => void;
+        clearGhosts: () => void;
+    }): Promise<void> {
+        const { context, plan, taskId, sourceElements, applyGeometry, clearGhosts } = params;
+        const wrote = await this.commitPlan(context, plan, taskId);
+
+        // ---- ここから paint を挟まない。順序を入れ替えないこと ----
+        if (wrote) {
+            this.dropReveal.gate();
+            applyGeometry();
+        }
+        this.dropReveal.finish(sourceElements);
+        clearGhosts();
     }
 
     /**
@@ -101,9 +146,16 @@ export abstract class BaseDragStrategy implements DragStrategy {
         this.clearHighlight();
 
         if (this.dragEl) {
-            this.dragEl.classList.remove(...TRANSIENT_DRAG_CLASSES);
-            this.dragEl.style.zIndex = '';
+            // 再可視化は DropReveal のゲート越し。commit したのに確定ジオメトリを
+            // 反映できなかった要素はここでも隠したままにする。
+            this.dropReveal.finish([this.dragEl]);
             this.dragEl.style.transform = '';
+            // inline z は decorateLane が所有する lane z。可視に戻す要素では
+            // 消さない（1 フレームだけ重なり順が崩れるのを避ける）。隠したまま
+            // の要素は次 render で作り直されるのでどちらでもよい。
+            if (!this.dropReveal.isRevealable(this.dragEl)) {
+                this.dragEl.style.zIndex = '';
+            }
         }
 
         this.dragTask = null;
