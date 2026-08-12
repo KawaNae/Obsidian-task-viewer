@@ -1,5 +1,4 @@
 import { BaseDragStrategy } from '../BaseDragStrategy';
-import { TRANSIENT_DRAG_CLASSES } from '../../constants';
 import type { DragContext } from '../../DragStrategy';
 import type { Task } from '../../../../types';
 import { DateUtils } from '../../../../utils/DateUtils';
@@ -170,11 +169,10 @@ export class GridMoveGesture extends BaseDragStrategy {
         if (!this.dragTask || !this.dragEl || !this.gridSurface || !this.baseTask) return;
 
         this.clearHighlight();
-        // 以後 ghost は不要 (commit 後 re-render で fresh card が出る)
-        this.ghostRenderer?.clear();
 
         if (!this.hasMoved) {
             // drag せず press-release → 単純な card click として selection 設定
+            this.ghostRenderer?.clear();
             context.onTaskClick(this.dragTask.id);
             this.cleanup();
             return;
@@ -182,8 +180,49 @@ export class GridMoveGesture extends BaseDragStrategy {
 
         const target = this.resolveTarget(e, context);
         const plan = this.planChange(target, e, context);
-        await this.commit(context, plan);
+        // ghost の撤去は commit → 確定ジオメトリ反映のあと。旧実装はここに来る
+        // 前（await の手前）で clear していたため、ソースカードが旧位置で
+        // 再表示される時間が write の往復ぶんだけ伸びていた。
+        await this.commitAndReveal({
+            context,
+            plan: plan.commit ? { edits: plan.commit.edits, baseTask: plan.commit.baseTask } : null,
+            taskId: this.dragTask.id,
+            sourceElements: this.hiddenElements,
+            applyGeometry: () => this.applyCommittedGeometry(plan),
+            clearGhosts: () => this.ghostRenderer?.clear(),
+        });
         this.cleanup();
+    }
+
+    /**
+     * ドロップ確定位置をソースカードへ反映する（{@link DropReveal} の許可証）。
+     *
+     * grid 内 move では ghost が既に確定 grid 座標で描かれているので、その
+     * `gridColumn` / `gridRow` をソースカードへそのまま移すだけでよい。
+     * grid 座標は render 側が毎回書き直すキーなので次 render で自己修復する。
+     *
+     * cross-view drop (AllDay→Timeline) は反映しない: カードは別 section へ
+     * 移るので旧要素は確定 stale であり、reconciler が detach して消す。
+     * ここで可視に戻すと「移動元に一瞬だけ戻る」フラッシュそのものになる。
+     */
+    private applyCommittedGeometry(plan: GridMovePlan): void {
+        if (plan.render.mode !== 'preview') return;
+
+        const ghostPlans = plan.render.ghostPlans;
+        const count = Math.min(this.hiddenElements.length, ghostPlans.length);
+        for (let i = 0; i < count; i++) {
+            const el = this.hiddenElements[i];
+            const ghost = ghostPlans[i];
+            if (ghost.layout !== 'grid') continue;
+
+            el.style.gridColumn = ghost.gridColumn;
+            el.style.gridRow = ghost.gridRow;
+
+            el.classList.remove('task-card--split-continues-before', 'task-card--split-continues-after');
+            for (const cls of ghost.splitClasses) el.classList.add(cls);
+
+            this.dropReveal.markApplied(el);
+        }
     }
 
     // ========== Pipeline 4 段 ==========
@@ -311,11 +350,6 @@ export class GridMoveGesture extends BaseDragStrategy {
         this.updateArrowPosition(plan.render.arrowEndLine);
     }
 
-    private async commit(context: DragContext, plan: GridMovePlan): Promise<void> {
-        if (!plan.commit || !this.dragTask) return;
-        await this.commitPlan(context, { edits: plan.commit.edits, baseTask: plan.commit.baseTask }, this.dragTask.id);
-    }
-
     // ========== Pure helpers (unit-testable) ==========
 
     /**
@@ -423,9 +457,9 @@ export class GridMoveGesture extends BaseDragStrategy {
     }
 
     protected cleanup(): void {
-        for (const el of this.hiddenElements) {
-            el.classList.remove(...TRANSIENT_DRAG_CLASSES);
-        }
+        // 再可視化はゲート越し（DropReveal 参照）。cross-view drop のように
+        // 確定ジオメトリを持てなかった要素は隠したまま次 render に渡る。
+        this.dropReveal.finish(this.hiddenElements);
         this.ghostRenderer?.clear();
         this.ghostRenderer = null;
         super.cleanup();
