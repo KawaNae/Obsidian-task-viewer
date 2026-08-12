@@ -14,7 +14,7 @@ import { type Task, isTvFile } from '../types';
 import { createTempTask } from '../services/data/createTempTask';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
-import { resolveSessionGroup } from './TimerSessionGroup';
+import { looksLikeSessionGroup, resolveSessionGroup } from './TimerSessionGroup';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 
 export class TimerRecorder {
@@ -312,12 +312,34 @@ export class TimerRecorder {
     /**
      * 形成済みのセッショングループ。未形成 / tvFile / daily なら null。
      * tvFile は最初から恒久的な器を持つので変形の対象外。
+     *
+     * アンカー自身が既にグループの場合（＝ セッションレコードの子を持つタスクに
+     * 新しくタイマーを掛けた append モード）と、アンカーが 1 回目のレコードで
+     * その親がグループの場合の両方を引く。
      */
     resolveGroup(timer: TimerInstance): Task | null {
         if (!timer.taskId || timer.taskId.startsWith('daily-')) return null;
         if (isTvFile(timer)) return null;
+
         const taskIndex = this.plugin.getTaskIndex();
-        return resolveSessionGroup(this.resolveAnchorTask(timer), (id) => taskIndex.getTask(id));
+        const getTask = (id: string) => taskIndex.getTask(id);
+        const anchor = this.resolveAnchorTask(timer);
+
+        if (looksLikeSessionGroup(anchor, getTask)) return anchor ?? null;
+        return resolveSessionGroup(anchor, getTask);
+    }
+
+    /**
+     * セッション行を親の **末尾** に追記して走行を開始する。
+     *
+     * グループ配下のセッションは時系列のログなので、先頭挿入
+     * （{@link createChildAtStart} が使う insertChildTask）だと新しい順に並んで
+     * 読みにくい。
+     */
+    async appendSessionAtStart(timer: TimerInstance, parent: Task): Promise<string | undefined> {
+        const { line, blockId } = this.buildSessionPlaceholder(timer);
+        await this.plugin.getTaskWriteService().appendChildTask(parent.id, line);
+        return this.findSessionTaskId(parent.file, blockId);
     }
 
     /**
