@@ -29,8 +29,8 @@ export interface TimerContext {
     /** Trigger a full UI re-render. */
     render(): void;
 
-    /** Partial update for a single timer item (tick path). */
-    renderTimerItem(taskId: string): void;
+    /** Partial update for a single timer item (tick path). Keyed by timer id. */
+    renderTimerItem(timerId: string): void;
 
     /** Persist all timer state to localStorage. */
     persistTimersToStorage(): void;

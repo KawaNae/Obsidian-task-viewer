@@ -22,8 +22,8 @@ export class TimerTargetManager {
 
     // ─── Ensure ──────────────────────────────────────────────
 
-    async ensureTimerTargetId(taskId: string): Promise<void> {
-        const timer = this.ctx.timers.get(taskId);
+    async ensureTimerTargetId(timerId: string): Promise<void> {
+        const timer = this.ctx.timers.get(timerId);
         if (!timer) return;
         if (timer.taskId.startsWith('daily-')) return;
 

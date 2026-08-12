@@ -21,8 +21,8 @@ export class TimerLifecycle {
 
     // ─── Tick ─────────────────────────────────────────────────
 
-    startTimerTicker(taskId: string): void {
-        const timer = this.ctx.timers.get(taskId);
+    startTimerTicker(timerId: string): void {
+        const timer = this.ctx.timers.get(timerId);
         if (!timer) return;
         if (timer.intervalId !== null) {
             window.clearInterval(timer.intervalId);
@@ -30,20 +30,20 @@ export class TimerLifecycle {
         }
 
         timer.intervalId = window.setInterval(() => {
-            this.tick(taskId);
+            this.tick(timerId);
         }, 1000);
     }
 
-    stopTimerTick(taskId: string): void {
-        const timer = this.ctx.timers.get(taskId);
+    stopTimerTick(timerId: string): void {
+        const timer = this.ctx.timers.get(timerId);
         if (!timer || timer.intervalId === null) return;
 
         window.clearInterval(timer.intervalId);
         timer.intervalId = null;
     }
 
-    private tick(taskId: string): void {
-        const timer = this.ctx.timers.get(taskId);
+    private tick(timerId: string): void {
+        const timer = this.ctx.timers.get(timerId);
         if (!timer || !timer.isRunning) return;
 
         const now = Date.now();
@@ -54,25 +54,25 @@ export class TimerLifecycle {
             case 'countup':
             case 'idle':
                 timer.elapsedTime = totalElapsed;
-                this.ctx.renderTimerItem(taskId);
+                this.ctx.renderTimerItem(timerId);
                 return;
             case 'countdown':
                 timer.elapsedTime = totalElapsed;
                 timer.timeRemaining = timer.totalTime - totalElapsed;
                 timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
-                this.ctx.renderTimerItem(taskId);
+                this.ctx.renderTimerItem(timerId);
                 return;
             case 'interval': {
                 if (timer.phase === 'prepare') {
-                    const baseElapsed = this.ctx.intervalPrepareBaseElapsed.get(taskId) ?? timer.totalElapsedTime;
+                    const baseElapsed = this.ctx.intervalPrepareBaseElapsed.get(timerId) ?? timer.totalElapsedTime;
                     timer.totalElapsedTime = baseElapsed + Math.max(0, currentSessionElapsed);
-                    this.ctx.renderTimerItem(taskId);
+                    this.ctx.renderTimerItem(timerId);
                     return;
                 }
 
                 const segment = this.creator.getCurrentIntervalSegment(timer);
                 if (!segment) {
-                    void this.finishIntervalTimer(taskId, timer);
+                    void this.finishIntervalTimer(timerId, timer);
                     return;
                 }
                 const segmentElapsed = Math.max(0, timer.pausedElapsedTime + currentSessionElapsed);
@@ -87,9 +87,9 @@ export class TimerLifecycle {
                     if (timer.segmentTimeRemaining <= 3) {
                         AudioUtils.playWarningBeep();
                     }
-                    this.ctx.renderTimerItem(taskId);
+                    this.ctx.renderTimerItem(timerId);
                 } else {
-                    void this.handleIntervalSegmentComplete(taskId, timer);
+                    void this.handleIntervalSegmentComplete(timerId, timer);
                 }
                 return;
             }
@@ -98,11 +98,11 @@ export class TimerLifecycle {
         }
     }
 
-    async handleIntervalSegmentComplete(taskId: string, timer: IntervalTimer): Promise<void> {
-        this.stopTimerTick(taskId);
+    async handleIntervalSegmentComplete(timerId: string, timer: IntervalTimer): Promise<void> {
+        this.stopTimerTick(timerId);
         const currentSegment = this.creator.getCurrentIntervalSegment(timer);
         if (!currentSegment) {
-            await this.finishIntervalTimer(taskId, timer);
+            await this.finishIntervalTimer(timerId, timer);
             return;
         }
 
@@ -113,7 +113,7 @@ export class TimerLifecycle {
 
         const moved = this.creator.advanceIntervalSegment(timer);
         if (!moved) {
-            await this.finishIntervalTimer(taskId, timer);
+            await this.finishIntervalTimer(timerId, timer);
             return;
         }
 
@@ -121,7 +121,7 @@ export class TimerLifecycle {
 
         const nextSegment = this.creator.getCurrentIntervalSegment(timer);
         if (!nextSegment) {
-            await this.finishIntervalTimer(taskId, timer);
+            await this.finishIntervalTimer(timerId, timer);
             return;
         }
 
@@ -130,13 +130,13 @@ export class TimerLifecycle {
         timer.startTimeMs = Date.now();
         timer.pausedElapsedTime = 0;
         timer.isRunning = true;
-        this.startTimerTicker(taskId);
+        this.startTimerTicker(timerId);
         this.ctx.render();
         this.ctx.persistTimersToStorage();
     }
 
-    private async finishIntervalTimer(taskId: string, timer: IntervalTimer): Promise<void> {
-        this.ctx.intervalPrepareBaseElapsed.delete(taskId);
+    private async finishIntervalTimer(timerId: string, timer: IntervalTimer): Promise<void> {
+        this.ctx.intervalPrepareBaseElapsed.delete(timerId);
         if (timer.totalDuration > 0) {
             timer.totalElapsedTime = timer.totalDuration;
         }
@@ -145,7 +145,7 @@ export class TimerLifecycle {
         timer.isRunning = false;
         timer.startTimeMs = 0;
         timer.pausedElapsedTime = timer.totalElapsedTime;
-        this.stopTimerTick(taskId);
+        this.stopTimerTick(timerId);
 
         AudioUtils.playFinishSound();
         if (timer.recordMode === 'self') {
@@ -153,7 +153,7 @@ export class TimerLifecycle {
         } else {
             await this.ctx.recorder.addIntervalRecord(timer);
         }
-        this.closeTimer(taskId);
+        this.closeTimer(timerId);
     }
 
     // ─── Pause / Resume / Close ───────────────────────────────
@@ -241,14 +241,14 @@ export class TimerLifecycle {
         this.ctx.persistTimersToStorage();
     }
 
-    closeTimer(taskId: string): void {
-        const timer = this.ctx.timers.get(taskId);
+    closeTimer(timerId: string): void {
+        const timer = this.ctx.timers.get(timerId);
         if (!timer) return;
-        const closingIdleTimer = this.isIdleTimer(taskId);
+        const closingIdleTimer = this.isIdleTimer(timerId);
 
-        this.ctx.intervalPrepareBaseElapsed.delete(taskId);
-        this.stopTimerTick(taskId);
-        this.ctx.timers.delete(taskId);
+        this.ctx.intervalPrepareBaseElapsed.delete(timerId);
+        this.stopTimerTick(timerId);
+        this.ctx.timers.delete(timerId);
 
         if (!closingIdleTimer && !this.hasNonIdleTimers()) {
             this.startIdleTimer();
@@ -264,34 +264,35 @@ export class TimerLifecycle {
 
     // ─── Idle Timer ───────────────────────────────────────────
 
-    isIdleTimer(taskId: string): boolean {
-        return taskId === IDLE_TIMER_ID;
+    isIdleTimer(timerId: string): boolean {
+        return timerId === IDLE_TIMER_ID;
     }
 
     hasNonIdleTimers(): boolean {
-        for (const taskId of this.ctx.timers.keys()) {
-            if (!this.isIdleTimer(taskId)) {
+        for (const timerId of this.ctx.timers.keys()) {
+            if (!this.isIdleTimer(timerId)) {
                 return true;
             }
         }
         return false;
     }
 
+    /**
+     * Whether some timer is already tracking `taskId`. The map is keyed by
+     * timer id, so this scans by task — which also keeps working after a file
+     * rename rewrites `timer.taskId` (the old code asked `timers.has(taskId)`,
+     * which silently allowed a second timer on the renamed task).
+     */
     hasActiveTimerForTask(taskId: string, timerTargetId?: string): boolean {
         if (this.isIdleTimer(taskId)) {
-            return this.ctx.timers.has(taskId);
-        }
-
-        if (this.ctx.timers.has(taskId)) {
-            return true;
-        }
-
-        if (!timerTargetId) {
-            return false;
+            return this.ctx.timers.has(IDLE_TIMER_ID);
         }
 
         for (const timer of this.ctx.timers.values()) {
-            if (timer.timerTargetId === timerTargetId) {
+            if (timer.taskId === taskId) {
+                return true;
+            }
+            if (timerTargetId && timer.timerTargetId === timerTargetId) {
                 return true;
             }
         }
