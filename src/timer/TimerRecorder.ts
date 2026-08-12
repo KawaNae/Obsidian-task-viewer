@@ -100,6 +100,22 @@ export class TimerRecorder {
     }
 
     /**
+     * ストップ時の記録の **唯一の入口**。recordMode に応じてタスク自身の更新か
+     * セッションレコードかを選ぶ。
+     *
+     * ここを通さずに `addCountdownRecord` / `addIntervalRecord` を直接呼ぶと、
+     * child モードで開始時に作った placeholder（{@link createChildAtStart}）が
+     * 更新されず、1 セッションが 2 行になる。停止経路は必ずこれを呼ぶこと。
+     */
+    async recordSessionEnd(timer: TimerInstance): Promise<void> {
+        if (timer.recordMode === 'self') {
+            await this.updateTaskDirectly(timer);
+            return;
+        }
+        await this.addSessionRecord(timer);
+    }
+
+    /**
      * Record for stopwatch-style modes; idle is intentionally ignored.
      * If a child task was created at start (recordedChildTaskId), update it instead.
      */
