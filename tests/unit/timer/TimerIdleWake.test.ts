@@ -24,6 +24,7 @@ function build() {
             recordSessionEnd: async () => { /* unused */ },
             completeTargetTask: async () => { /* unused */ },
             createChildAtStart: async () => undefined,
+            startNextSession: async () => undefined,
             syncGroupDateSpan: async () => { /* グループ未形成なら no-op */ },
         } as unknown as TimerContext['recorder'],
         plugin: { settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 } } as unknown as TimerContext['plugin'],

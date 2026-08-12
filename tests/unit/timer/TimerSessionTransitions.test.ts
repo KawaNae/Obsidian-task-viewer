@@ -21,15 +21,17 @@ interface RecorderCalls {
     recordSessionEnd: number;
     completeTargetTask: number;
     createChildAtStart: number;
+    startNextSession: number;
     order: string[];
 }
 
 function build() {
-    const calls: RecorderCalls = { recordSessionEnd: 0, completeTargetTask: 0, createChildAtStart: 0, order: [] };
+    const calls: RecorderCalls = { recordSessionEnd: 0, completeTargetTask: 0, createChildAtStart: 0, startNextSession: 0, order: [] };
     const recorder = {
         recordSessionEnd: async () => { calls.recordSessionEnd++; calls.order.push('record'); },
         completeTargetTask: async () => { calls.completeTargetTask++; calls.order.push('complete'); },
         createChildAtStart: async () => { calls.createChildAtStart++; calls.order.push('placeholder'); return 'tv-inline:notes/a.md:ln:4'; },
+        startNextSession: async () => { calls.startNextSession++; calls.order.push('nextSession'); return 'tv-inline:notes/a.md:ln:4'; },
         syncGroupDateSpan: async () => { calls.order.push('groupDate'); },
     };
 
@@ -153,7 +155,9 @@ describe('resume', () => {
         await Promise.resolve();
         await Promise.resolve();
 
-        expect(h.calls.createChildAtStart).toBe(1);
+        // 書き先（変形 or 追記）の判断は recorder 側。ここでは「開始時に 1 本
+        // セッション行を書く」ことだけを見る。
+        expect(h.calls.startNextSession).toBe(1);
         expect(timer.recordedChildTaskId).toBe('tv-inline:notes/a.md:ln:4');
     });
 
@@ -174,7 +178,7 @@ describe('resume', () => {
     it('is a no-op for a running timer', () => {
         const timer = startCountup(h.ctx);
         h.lifecycle.resumeSession(timer);
-        expect(h.calls.createChildAtStart).toBe(0);
+        expect(h.calls.startNextSession).toBe(0);
     });
 });
 

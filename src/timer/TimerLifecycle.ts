@@ -262,7 +262,8 @@ export class TimerLifecycle {
         this.startTimerTicker(timer.id);
         AudioUtils.playStartSound();
 
-        void this.ctx.recorder.createChildAtStart(timer).then((childTaskId) => {
+        // 遅延グループ化の分岐は recorder が持つ（初回再開なら変形、以後は追記）。
+        void this.ctx.recorder.startNextSession(timer).then((childTaskId) => {
             if (!childTaskId) return;
             timer.recordedChildTaskId = childTaskId;
             this.ctx.persistTimersToStorage();

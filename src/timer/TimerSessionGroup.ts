@@ -22,6 +22,20 @@ import type { Task } from '../types';
  */
 export const SESSION_RECORD_ICONS = ['⏱️', '⏲️', '⏳', '🍅', '🔁'] as const;
 
+/**
+ * 先頭のセッションアイコンを落とした表示名。
+ *
+ * グループ行はレコードではないのでアイコンを持たない。変形時に渡す名前は
+ * 1 回目のレコード（`⏱️ タスク名`）から作るので、ここで剥がす。
+ */
+export function stripSessionIcon(content: string): string {
+    const trimmed = content.trim();
+    for (const icon of SESSION_RECORD_ICONS) {
+        if (trimmed.startsWith(icon)) return trimmed.slice(icon.length).trim();
+    }
+    return trimmed;
+}
+
 /** その行は「タイマーが書いたセッションレコード」の形か。 */
 export function isSessionRecord(task: Task | undefined): boolean {
     if (!task) return false;

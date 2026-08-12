@@ -14,7 +14,7 @@ import { type Task, isTvFile } from '../types';
 import { createTempTask } from '../services/data/createTempTask';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
-import { looksLikeSessionGroup, resolveSessionGroup } from './TimerSessionGroup';
+import { isSessionRecord, looksLikeSessionGroup, resolveSessionGroup, stripSessionIcon } from './TimerSessionGroup';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 
 export class TimerRecorder {
@@ -327,6 +327,53 @@ export class TimerRecorder {
 
         if (looksLikeSessionGroup(anchor, getTask)) return anchor ?? null;
         return resolveSessionGroup(anchor, getTask);
+    }
+
+    /**
+     * 再開時にセッション行を書いて次の走行を始める。**遅延グループ化**の分岐点。
+     *
+     *   グループ形成済み          → 末尾に追記
+     *   未形成 + 1 回目のレコードがタスク行そのもの（tvInline）
+     *                             → グループ変形（1 回きり・1 vault.process）
+     *   それ以外（tvFile / daily / アンカー解決不能）
+     *                             → 従来の child 追記（変形しない）
+     *
+     * 最後の枝はフォールバックでもある: レコード行をユーザーが消してアンカーを
+     * 失っても、記録そのものは落とさない。
+     */
+    async startNextSession(timer: TimerInstance): Promise<string | undefined> {
+        const group = this.resolveGroup(timer);
+        if (group) return this.appendSessionAtStart(timer, group);
+
+        const record = this.resolveAnchorTask(timer);
+        const canWrap = !!record
+            && !isTvFile(timer)
+            && !timer.taskId.startsWith('daily-')
+            && isSessionRecord(record);
+
+        return canWrap ? this.wrapIntoSessionGroup(timer, record) : this.createChildAtStart(timer);
+    }
+
+    /**
+     * 1 回目のレコードをグループの下へ落とし、新しいセッション行をその隣に置く。
+     * 変形は書き込み層の `wrapTaskInGroup` が 1 回の vault.process で行うので、
+     * 半端に包まれた状態がファイルに現れる瞬間は無い。
+     */
+    private async wrapIntoSessionGroup(timer: TimerInstance, record: Task): Promise<string | undefined> {
+        const { line, blockId } = this.buildSessionPlaceholder(timer);
+        const today = this.formatDate(new Date());
+        const groupStartDate = record.startDate ?? today;
+
+        await this.plugin.getTaskWriteService().wrapTaskInGroup(record.id, {
+            groupStartDate,
+            // 日を跨いで再開したなら、グループは生まれた時点で複数日の帯になる。
+            groupEndDate: today > groupStartDate ? today : undefined,
+            sessionLine: line,
+            // グループはレコードではないのでアイコンを持たない。
+            groupContent: stripSessionIcon(record.content) || timer.taskName,
+        });
+
+        return this.findSessionTaskId(record.file, blockId);
     }
 
     /**
