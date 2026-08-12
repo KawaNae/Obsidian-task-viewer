@@ -14,6 +14,7 @@ import { type Task, isTvFile } from '../types';
 import { createTempTask } from '../services/data/createTempTask';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
+import { resolveSessionGroup } from './TimerSessionGroup';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 
 export class TimerRecorder {
@@ -301,12 +302,49 @@ export class TimerRecorder {
         return 'Timer';
     }
 
+    /** タイマーのアンカーが指す行（1 回目のレコード / 対象タスク）を引く。 */
+    private resolveAnchorTask(timer: TimerInstance): Task | undefined {
+        return isTvFile(timer)
+            ? this.resolver.resolveTvFile(timer)
+            : this.resolver.resolveTvInline(timer);
+    }
+
     /**
-     * ✓ 完了: **対象タスク自身**を完了にする。
+     * 形成済みのセッショングループ。未形成 / tvFile / daily なら null。
+     * tvFile は最初から恒久的な器を持つので変形の対象外。
+     */
+    resolveGroup(timer: TimerInstance): Task | null {
+        if (!timer.taskId || timer.taskId.startsWith('daily-')) return null;
+        if (isTvFile(timer)) return null;
+        const taskIndex = this.plugin.getTaskIndex();
+        return resolveSessionGroup(this.resolveAnchorTask(timer), (id) => taskIndex.getTask(id));
+    }
+
+    /**
+     * グループ行の日付を作業実績に合わせて伸ばす。
      *
-     * child モードでセッションを子に積んでいる場合でも、完了するのはレコード
-     * ではなく親タスク（レコードは事実、状態はタスクが持つ）。self モードは
-     * 記録の時点で既に `[x]` になっているので、その場合は何もしない。
+     * グループは**日付のみ**（時刻なし）の allday で、初回作業日から最終作業日
+     * までの帯。日を跨いで作業したらそのぶん `@初回>最終` に伸ばす。後退はさせ
+     * ない（過去日のセッションを足しても縮めない）。
+     */
+    async syncGroupDateSpan(timer: TimerInstance): Promise<void> {
+        const group = this.resolveGroup(timer);
+        if (!group?.startDate) return;
+
+        const today = this.formatDate(new Date());
+        if (today <= group.startDate) return;
+        if (group.endDate && today <= group.endDate) return;
+
+        await this.plugin.getTaskIndex().updateTask(group.id, { endDate: today });
+    }
+
+    /**
+     * ✓ 完了: 状態を持つ行を完了にする。
+     *
+     * グループが形成済みならグループ行が状態の持ち主（レコードは事実であって
+     * 状態ではないので常に `[x]` のまま触らない）。未形成なら対象タスク自身。
+     * child モードでセッションを子に積んでいる場合も、完了するのはレコードでは
+     * なく親。self モードは記録の時点で既に `[x]` なので何もしない。
      *
      * flow 付きタスクは self が安全でないため child モードに退避されているが、
      * ここで `[x]` にすると flow が発火する。完了は本物の完了意図なので、これは
@@ -315,17 +353,15 @@ export class TimerRecorder {
     async completeTargetTask(timer: TimerInstance): Promise<void> {
         if (!timer.taskId || timer.taskId.startsWith('daily-')) return;
 
-        const task = isTvFile(timer)
-            ? this.resolver.resolveTvFile(timer)
-            : this.resolver.resolveTvInline(timer);
+        const target = this.resolveGroup(timer) ?? this.resolveAnchorTask(timer);
 
-        if (!task) {
+        if (!target) {
             new Notice(t('notice.timerTargetNotFound'));
             return;
         }
-        if (task.statusChar === 'x') return;
+        if (target.statusChar === 'x') return;
 
-        await this.plugin.getTaskIndex().updateTask(task.id, { statusChar: 'x' });
+        await this.plugin.getTaskIndex().updateTask(target.id, { statusChar: 'x' });
     }
 
     /**

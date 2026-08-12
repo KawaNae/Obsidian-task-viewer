@@ -219,6 +219,8 @@ export class TimerLifecycle {
         timer.recordedChildTaskId = undefined;
         timer.recordMode = 'child';
         timer.runState = 'suspended';
+        // グループが育っていれば、その帯を今日まで伸ばす（日跨ぎ作業）。
+        await this.ctx.recorder.syncGroupDateSpan(timer);
         timer.isExpanded = false;
 
         // 中断は「手を止めた」合図。走行中が居なくなったなら次タスクの提案を出す。
@@ -281,6 +283,7 @@ export class TimerLifecycle {
             timer.recordedElapsedTime += Math.max(0, sessionSeconds);
             timer.sessionCount += 1;
             timer.recordedChildTaskId = undefined;
+            await this.ctx.recorder.syncGroupDateSpan(timer);
         }
 
         await this.ctx.recorder.completeTargetTask(timer);

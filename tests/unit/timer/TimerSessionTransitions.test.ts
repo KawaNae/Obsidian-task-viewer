@@ -30,6 +30,7 @@ function build() {
         recordSessionEnd: async () => { calls.recordSessionEnd++; calls.order.push('record'); },
         completeTargetTask: async () => { calls.completeTargetTask++; calls.order.push('complete'); },
         createChildAtStart: async () => { calls.createChildAtStart++; calls.order.push('placeholder'); return 'tv-inline:notes/a.md:ln:4'; },
+        syncGroupDateSpan: async () => { calls.order.push('groupDate'); },
     };
 
     let persisted = 0;
@@ -185,7 +186,8 @@ describe('complete', () => {
         const timer = startCountup(h.ctx);
         await h.lifecycle.completeTimer(timer);
 
-        expect(h.calls.order).toEqual(['record', 'complete']);
+        // 記録 → グループ帯の更新 → 完了 の順（グループ未形成なら更新は no-op）
+        expect(h.calls.order).toEqual(['record', 'groupDate', 'complete']);
         expect(timer.sessionCount).toBe(1);
         expect(h.ctx.timers.has(timer.id)).toBe(false);
     });
