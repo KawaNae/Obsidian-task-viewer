@@ -11,6 +11,7 @@ import type {
     IntervalTimer,
     TimerInstance,
     TimerPhase,
+    TimerRunState,
     TimerStartConfig,
 } from './TimerInstance';
 import { newTimerId } from './TimerInstance';
@@ -45,6 +46,10 @@ export class TimerCreator {
             pausedElapsedTime: 0,
             phase: config.timerType === 'idle' ? 'idle' : (autoStart ? 'work' : 'idle') as TimerPhase,
             isRunning: config.timerType === 'idle' ? true : autoStart,
+            // 新規タイマーは常に走行側から始まる（中断は既存タイマーの遷移）。
+            runState: 'running' as TimerRunState,
+            sessionCount: 0,
+            recordedElapsedTime: 0,
             isExpanded: true,
             intervalId: null,
             customLabel: '',
